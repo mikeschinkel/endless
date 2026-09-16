@@ -419,7 +419,7 @@ def list_worktrees(state_filter: str | None, as_json: bool,
         rows = [r for r in rows if r["state"] == state_filter]
 
     if as_json:
-        click.echo(json.dumps(rows, indent=2))
+        click.echo(json.dumps(provenance.attach(rows), indent=2))
         return
 
     if not rows:
@@ -487,7 +487,7 @@ def current_worktree(as_json: bool) -> None:
         )
 
     if as_json:
-        click.echo(json.dumps(match, indent=2))
+        click.echo(json.dumps(provenance.attach(match), indent=2))
         return
 
     click.echo(f"State:   {match['state']}")
@@ -770,7 +770,7 @@ def show_worktree(name_or_path: str, as_json: bool) -> None:
         raise click.ClickException(f"No worktree matches: {name_or_path}")
 
     if as_json:
-        click.echo(json.dumps(target, indent=2))
+        click.echo(json.dumps(provenance.attach(target), indent=2))
         return
 
     click.echo(f"State:   {target['state']}")
@@ -780,7 +780,7 @@ def show_worktree(name_or_path: str, as_json: bool) -> None:
     if target["companion"]:
         sc = target["companion"]
         click.echo(f"--- companion ---")
-        click.echo(json.dumps(sc, indent=2))
+        click.echo(json.dumps(provenance.attach(sc), indent=2))
     if target["locked"]:
         click.echo(f"Locked:  {target.get('lock_reason') or 'yes'}")
     if target["prunable"]:
@@ -805,18 +805,19 @@ def for_task(task_id: str, as_json: bool) -> None:
 
     if match is None:
         if as_json:
-            click.echo(json.dumps({"task_id": canonical, "worktree": None}))
+            click.echo(json.dumps(
+                provenance.attach({"task_id": canonical, "worktree": None})))
         else:
             click.echo(f"No endless-managed worktree for {canonical}.")
         return
 
     if as_json:
-        click.echo(json.dumps({
+        click.echo(json.dumps(provenance.attach({
             "task_id": canonical,
             "worktree": match["path"],
             "branch": match["branch"],
             "head": match["head"],
-        }))
+        })))
     else:
         click.echo(match["path"])
 

@@ -16,6 +16,7 @@ import (
 
 	"github.com/mikeschinkel/go-dt"
 
+	"github.com/mikeschinkel/endless/internal/dbprovenance"
 	"github.com/mikeschinkel/endless/internal/events"
 	"github.com/mikeschinkel/endless/internal/kairos"
 	"github.com/mikeschinkel/endless/internal/monitor"
@@ -253,8 +254,11 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 			"kind": kindStr,
 			"id":   fmt.Sprintf("%s%d", idPrefix, newID),
 		}
-		outJSON, _ := json.Marshal(output)
-		fmt.Println(string(outJSON))
+		// E-1668: a write names the database it landed in. E-1429's founding
+		// incident was a write — a test `endless task add` that became E-1425 in
+		// the REAL ledger — and a write to the wrong store is the damaging case,
+		// where a wrong read only misleads.
+		_ = dbprovenance.Encode(os.Stdout, output)
 
 	} else {
 		// Events-authoritative flow for updates/deletes:
@@ -330,8 +334,11 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 				output["markdown"] = execRes.Markdown
 			}
 		}
-		outJSON, _ := json.Marshal(output)
-		fmt.Println(string(outJSON))
+		// E-1668: a write names the database it landed in. E-1429's founding
+		// incident was a write — a test `endless task add` that became E-1425 in
+		// the REAL ledger — and a write to the wrong store is the damaging case,
+		// where a wrong read only misleads.
+		_ = dbprovenance.Encode(os.Stdout, output)
 	}
 
 	return nil
@@ -501,8 +508,7 @@ func runProjectNextRevise(evtKind events.Kind, project, entityType, entityID,
 		out.PriorRevision = execRes.ProjectNext.PriorRevision
 		out.State = execRes.ProjectNext.State
 	}
-	outJSON, _ := json.Marshal(out)
-	fmt.Println(string(outJSON))
+	_ = dbprovenance.Encode(os.Stdout, out)
 	return nil
 }
 
@@ -794,8 +800,7 @@ func runBackup() {
 	payload["status"] = status
 	payload["path"] = res.Path
 	payload["pruned"] = res.Pruned
-	b, _ := json.Marshal(payload)
-	fmt.Println(string(b))
+	_ = dbprovenance.Encode(os.Stdout, payload)
 }
 
 func emitChangeResult(name, status, reason string) {
@@ -803,8 +808,7 @@ func emitChangeResult(name, status, reason string) {
 	if reason != "" {
 		out["reason"] = reason
 	}
-	b, _ := json.Marshal(out)
-	fmt.Println(string(b))
+	_ = dbprovenance.Encode(os.Stdout, out)
 }
 
 func emitChangeErr(name, msg string) {
@@ -812,7 +816,6 @@ func emitChangeErr(name, msg string) {
 	if name != "" {
 		out["name"] = name
 	}
-	b, _ := json.Marshal(out)
-	fmt.Println(string(b))
+	_ = dbprovenance.Encode(os.Stdout, out)
 	os.Exit(1)
 }

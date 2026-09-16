@@ -87,12 +87,17 @@ func defaultSandboxName(worktree string) string {
 // out any commit that changes the file: one commit to .claude/settings.json on
 // main blocked the rebase in every live worktree at once.
 //
-// Since E-1368 the Go binary self-detects the sandbox from cwd
-// (monitor.SelfDetectWorktreeSandbox), so this env block is no longer the only
-// routing mechanism — but it is retained because the Python CLI still resolves
-// its default config dir from XDG_CONFIG_HOME, and it keeps Go config.json/log
-// reads on the sandbox even when a binary is invoked with a cwd outside the
-// worktree.
+// This env block is how CONFIG and LOGS reach the sandbox, and since E-1668 it
+// is the only thing that does it. E-1368 briefly had the Go binary route itself
+// from cwd; E-1668 deleted that, because the same routing also satisfied the
+// E-1429 gate and so let a database be opened that nobody had chosen.
+//
+// What went with it is permission, not address: a hook process launched by a
+// Claude session in this worktree still reads config.json and writes its logs
+// under the sandbox, because it inherits XDG_CONFIG_HOME from here. What it can
+// no longer do is treat that as consent to open the sandbox's DATABASE — that
+// takes --db, per invocation. The Python CLI resolves its default config dir
+// from the same variable.
 //
 // We deliberately do NOT modify PATH here. Claude Code does not interpolate
 // ${PATH} in env values, so writing "PATH": "<dir>:${PATH}" leaves "${PATH}"

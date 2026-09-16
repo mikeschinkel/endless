@@ -312,6 +312,28 @@ func dbContextExplicit() bool {
 	return dbContextDir != "" || dbPathOverride != ""
 }
 
+// dbOpened records that this process actually opened the database. Set by DB()
+// once, on the path where a connection exists.
+var dbOpened bool
+
+// DBOpened reports whether this process has opened the database (E-1668).
+//
+// It is what keeps the provenance trace honest: a subcommand that answered from
+// git alone — `worktree ledger-orphans`, `session-query worktree-unsettled` —
+// must not print a line naming a database it never consulted. Asked of the
+// store rather than judged per command, so a verb that starts reading the
+// database later begins announcing it without anyone remembering to.
+func DBOpened() bool { return dbOpened }
+
+// DBContextPinned reports whether this process's database was chosen IN CODE
+// rather than by its caller — PinMainDB (tmux, session-status, project-status)
+// or ForceRealDB (the hook), both of which signal through dbPathOverride.
+//
+// It is E-1668's announce exemption. If the caller could not have influenced the
+// choice there is nothing to disambiguate, and the tmux status line has no room
+// for it besides. A pin is not a resolution.
+func DBContextPinned() bool { return dbPathOverride != "" }
+
 // pinnedToForeignRealDB reports whether this process has been pinned onto the
 // real database at ~/.config/endless via ForceRealDB() (the Claude hook) or
 // PinMainDB() (`endless-go tmux`) — the automatic entry points that
@@ -758,6 +780,8 @@ func DB() (*sql.DB, error) {
 			dbConn = nil
 			return
 		}
+		// E-1668: the store has answered, so an answer may now name it.
+		dbOpened = true
 		// SQLite is single-writer; one connection ensures BEGIN IMMEDIATE
 		// works correctly with Go's connection pool.
 		dbConn.SetMaxOpenConns(1)
@@ -1124,4 +1148,68 @@ func ProjectRootFromCwd() (string, error) {
 		}
 		dir = parent
 	}
+}
+
+// enclosingProjectRoot returns the project root that encloses dir, or "" when
+// dir is inside no registered project.
+//
+// Inside a .endless/worktrees/e-NNN worktree that is the MAIN checkout above the
+// worktree segment, not the worktree itself — a worktree is a checkout of the
+// project, not a second project. Otherwise it is the nearest ancestor holding a
+// .endless/config.json. Mirrors Python's config.enclosing_project_root, so the
+// two layers answer "which project am I in" the same way.
+func enclosingProjectRoot(dir string) string {
+	if root := selfDevProjectRoot(dir); root != "" {
+		return root
+	}
+	for d := dir; ; {
+		if _, err := os.Stat(filepath.Join(d, ".endless", "config.json")); err == nil {
+			return d
+		}
+		parent := filepath.Dir(d)
+		if parent == d {
+			return ""
+		}
+		d = parent
+	}
+}
+
+// DBProvenance describes the database that answered this process, for an output
+// surface to state (E-1668): a short name a human reads, and the resolved
+// directory, which is the unambiguous form.
+//
+// ok is false when there is nothing to announce, and the two cases are the rule
+// rather than exceptions to it:
+//
+//   - The process never opened the database, so no answer came from one.
+//   - The context was PINNED IN CODE (hook, tmux, the two status views). The
+//     caller could not have influenced it, so there is nothing to disambiguate.
+//   - The enclosing project is not self-dev, so it has exactly one database and
+//     naming it says nothing that could have been otherwise.
+//
+// The name is derived from the directory that was RESOLVED rather than from the
+// flag that was typed, so it describes what happened rather than what was asked
+// for.
+func DBProvenance() (name, dir string, ok bool) {
+	if !dbOpened || DBContextPinned() {
+		return "", "", false
+	}
+	cwd, err := os.Getwd()
+	if err != nil {
+		return "", "", false
+	}
+	root := enclosingProjectRoot(cwd)
+	if root == "" || !projectIsSelfDev(root) {
+		return "", "", false
+	}
+	dir = ConfigDir()
+	if main, err := mainConfigDir(); err == nil && dir == main {
+		return "main", dir, true
+	}
+	if n := worktreeDirName(cwd); n != "" {
+		if dir == filepath.Join(CacheDir(), "sandboxes", n, "endless") {
+			return "sandbox (" + n + ")", dir, true
+		}
+	}
+	return dir, dir, true
 }

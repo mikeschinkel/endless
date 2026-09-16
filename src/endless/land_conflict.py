@@ -843,6 +843,10 @@ def render_human(ev: ConflictEvidence, cl: Classification) -> str:
 
 
 def render_json(ev: ConflictEvidence, cl: Classification) -> str:
+    from endless import provenance
+
     return json.dumps(
-        {"evidence": ev.to_dict(), "classification": cl.to_dict()}, indent=2
+        provenance.attach(
+            {"evidence": ev.to_dict(), "classification": cl.to_dict()}),
+        indent=2,
     ) + "\n"

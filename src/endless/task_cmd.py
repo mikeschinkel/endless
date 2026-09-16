@@ -17,6 +17,7 @@ from tabulate import tabulate
 
 from endless import agent_help, authority
 from endless import db, config
+from endless import provenance
 from endless import rowcap
 from endless import session_states
 from endless import statuses
@@ -699,6 +700,11 @@ def _resolve_project(name: str | None) -> tuple[int, str]:
         raise click.ClickException(
             f"No project found with name '{name}'"
         )
+    # E-1668: record what this invocation resolved, so the provenance trace can
+    # say so when it is not the project enclosing cwd. Recorded at the RESOLVERS
+    # rather than per command because "which project answered" is their answer,
+    # and a command that resolves none has nothing to declare.
+    provenance.record_project(row[0]["name"])
     return row[0]["id"], row[0]["name"]
 
 
@@ -1150,6 +1156,7 @@ def show_plan(
     footer can name an exact remainder and the confirmed tally below stays a
     tally of the whole set rather than of the rendered page.
     """
+
     cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     project_id, proj_name = _resolve_project(project_name)
 
@@ -1274,10 +1281,17 @@ def show_plan(
             }
             for row in rows
         ]
-        click.echo(json.dumps(out, indent=2))
+        click.echo(json.dumps(provenance.attach(out), indent=2))
         rowcap.echo_footer(hidden, agent=True, err=True)
         return
 
+    # E-1668: the leading copy of the provenance trace. Paired with the trailing
+    # copy the root group emits at close and byte-identical to it, on E-2097's
+    # rule — whichever end a truncating pipe leaves has to be sufficient alone,
+    # and an agent's `| head` and `| tail` are both routine. Placed here rather
+    # than at the top of the function because the trace is only true once the
+    # read has happened: the store it names is the one that just answered.
+    provenance.echo_head()
     if agent:
         click.echo(f"# {proj_name} (removed)" if removed_only else f"# {proj_name}")
         for row in rows:
@@ -1339,6 +1353,7 @@ def next_tasks(
     parent_id: int | None = None,
 ):
     """Show top actionable leaf tasks, ranked by priority."""
+
     cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     # E-1845: `untriaged` is excluded — a task nobody has looked at yet is not
     # actionable work, and offering it here would present it as a ready-to-pick-
@@ -1432,10 +1447,17 @@ def next_tasks(
             }
             for row in rows
         ]
-        click.echo(json.dumps(out, indent=2))
+        click.echo(json.dumps(provenance.attach(out), indent=2))
         rowcap.echo_footer(hidden, agent=True, err=True)
         return
 
+    # E-1668: the leading copy of the provenance trace. Paired with the trailing
+    # copy the root group emits at close and byte-identical to it, on E-2097's
+    # rule — whichever end a truncating pipe leaves has to be sufficient alone,
+    # and an agent's `| head` and `| tail` are both routine. Placed here rather
+    # than at the top of the function because the trace is only true once the
+    # read has happened: the store it names is the one that just answered.
+    provenance.echo_head()
     # Group by project
     groups: dict[str, list] = {}
     for row in rows:
@@ -1533,7 +1555,7 @@ def revise_next_list(
         click.echo(collision, err=True)
         if warning:
             click.echo(f"warning: {warning}", err=True)
-        click.echo(json.dumps(state, indent=2))
+        click.echo(json.dumps(provenance.attach(state), indent=2))
     else:
         click.echo(collision)
         if warning:
@@ -1564,6 +1586,7 @@ def active_tasks(
     parent_id: int | None = None,
 ):
     """Show tasks that are underway or awaiting verification."""
+
     where = f"WHERE t.status IN ({statuses.sql_list('active')})"
     params: list = []
 
@@ -1619,9 +1642,16 @@ def active_tasks(
             }
             for row in rows
         ]
-        click.echo(json.dumps(out, indent=2))
+        click.echo(json.dumps(provenance.attach(out), indent=2))
         return
 
+    # E-1668: the leading copy of the provenance trace. Paired with the trailing
+    # copy the root group emits at close and byte-identical to it, on E-2097's
+    # rule — whichever end a truncating pipe leaves has to be sufficient alone,
+    # and an agent's `| head` and `| tail` are both routine. Placed here rather
+    # than at the top of the function because the trace is only true once the
+    # read has happened: the store it names is the one that just answered.
+    provenance.echo_head()
     # Group by project
     groups: dict[str, list] = {}
     for row in rows:
@@ -1653,6 +1683,7 @@ def recent_tasks(
     parent_id: int | None = None,
 ):
     """Show most recently updated tasks."""
+
     cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     where = "WHERE 1=1"
     params: list = []
@@ -1710,10 +1741,17 @@ def recent_tasks(
             }
             for row in rows
         ]
-        click.echo(json.dumps(out, indent=2))
+        click.echo(json.dumps(provenance.attach(out), indent=2))
         rowcap.echo_footer(hidden, agent=True, err=True)
         return
 
+    # E-1668: the leading copy of the provenance trace. Paired with the trailing
+    # copy the root group emits at close and byte-identical to it, on E-2097's
+    # rule — whichever end a truncating pipe leaves has to be sufficient alone,
+    # and an agent's `| head` and `| tail` are both routine. Placed here rather
+    # than at the top of the function because the trace is only true once the
+    # read has happened: the store it names is the one that just answered.
+    provenance.echo_head()
     # Group by project
     groups: dict[str, list] = {}
     for row in rows:
@@ -1781,6 +1819,7 @@ def landed_list(
     as_json: bool = False,
 ):
     """List tasks that have landed at least once, most-recent landing first (E-1478)."""
+
     cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     where = "WHERE 1=1"
     params: list = []
@@ -1832,10 +1871,17 @@ def landed_list(
             }
             for r in rows
         ]
-        click.echo(json.dumps(out, indent=2))
+        click.echo(json.dumps(provenance.attach(out), indent=2))
         rowcap.echo_footer(hidden, agent=True, err=True)
         return
 
+    # E-1668: the leading copy of the provenance trace. Paired with the trailing
+    # copy the root group emits at close and byte-identical to it, on E-2097's
+    # rule — whichever end a truncating pipe leaves has to be sufficient alone,
+    # and an agent's `| head` and `| tail` are both routine. Placed here rather
+    # than at the top of the function because the trace is only true once the
+    # read has happened: the store it names is the one that just answered.
+    provenance.echo_head()
     # Group by project
     groups: dict[str, list] = {}
     for r in rows:
@@ -1861,6 +1907,7 @@ def landed_list(
 
 def landed_item(item_id: int, agent: bool = False, as_json: bool = False):
     """Show the full landing history for a single task, newest first (E-1478)."""
+
     row = db.query(
         "SELECT t.id, COALESCE(t.title, t.description) AS title, "
         "p.name AS project_name "
@@ -1887,9 +1934,16 @@ def landed_item(item_id: int, agent: bool = False, as_json: bool = False):
                 for land in landings
             ],
         }
-        click.echo(json.dumps(out, indent=2))
+        click.echo(json.dumps(provenance.attach(out), indent=2))
         return
 
+    # E-1668: the leading copy of the provenance trace. Paired with the trailing
+    # copy the root group emits at close and byte-identical to it, on E-2097's
+    # rule — whichever end a truncating pipe leaves has to be sufficient alone,
+    # and an agent's `| head` and `| tail` are both routine. Placed here rather
+    # than at the top of the function because the trace is only true once the
+    # read has happened: the store it names is the one that just answered.
+    provenance.echo_head()
     if agent:
         click.echo(f"# E-{item['id']} {item['title']}")
         if not landings:
@@ -2030,6 +2084,7 @@ def unlanded_list(
     as_json: bool = False,
 ):
     """Survey finished tasks whose work has not reached the base branch (E-2095)."""
+
     cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     reports = []
     for project_id, proj_name in _unlanded_targets(project_name, show_all):
@@ -2039,7 +2094,7 @@ def unlanded_list(
 
     if as_json:
         import json
-        click.echo(json.dumps([
+        click.echo(json.dumps(provenance.attach([
             {
                 "project": name,
                 # Named once per report, never per row: `task unsettled` set the
@@ -2050,9 +2105,16 @@ def unlanded_list(
                 "unrecorded": [_unlanded_json(r) for r in unrecorded],
             }
             for name, base, outstanding, unrecorded in reports
-        ], indent=2))
+        ]), indent=2))
         return
 
+    # E-1668: the leading copy of the provenance trace. Paired with the trailing
+    # copy the root group emits at close and byte-identical to it, on E-2097's
+    # rule — whichever end a truncating pipe leaves has to be sufficient alone,
+    # and an agent's `| head` and `| tail` are both routine. Placed here rather
+    # than at the top of the function because the trace is only true once the
+    # read has happened: the store it names is the one that just answered.
+    provenance.echo_head()
     if agent:
         for name, base, outstanding, unrecorded in reports:
             click.echo(f"# {name} base={base or 'unresolved'}")
@@ -2282,6 +2344,7 @@ def unsettled_list(
     `include_settled` additionally lists the settled worktrees, so the command
     can answer "is anything outstanding?" with a complete picture, not silence.
     """
+
     cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     project_id, proj_name = _resolve_project(project_name)
     from endless.worktree_cmd import _project_root
@@ -2298,7 +2361,7 @@ def unsettled_list(
 
     if as_json:
         import json
-        click.echo(json.dumps([
+        click.echo(json.dumps(provenance.attach([
             {
                 "id": task_id_display(r["id"]),
                 "title": r["title"],
@@ -2308,7 +2371,7 @@ def unsettled_list(
                 **r["probe"],
             }
             for r in shown
-        ], indent=2))
+        ]), indent=2))
         rowcap.echo_footer(hidden, agent=True, err=True)
         return
 
@@ -2320,6 +2383,13 @@ def unsettled_list(
                        " No unsettled worktrees — everything is committed and landed")
         return
 
+    # E-1668: the leading copy of the provenance trace. Paired with the trailing
+    # copy the root group emits at close and byte-identical to it, on E-2097's
+    # rule — whichever end a truncating pipe leaves has to be sufficient alone,
+    # and an agent's `| head` and `| tail` are both routine. Placed here rather
+    # than at the top of the function because the trace is only true once the
+    # read has happened: the store it names is the one that just answered.
+    provenance.echo_head()
     if agent:
         click.echo(f"# {proj_name}")
         for r in shown:
@@ -2392,6 +2462,7 @@ def _echo_probe_errors(probe: dict) -> None:
 
 def unsettled_item(item_id: int, agent: bool = False, as_json: bool = False):
     """Explain exactly why one task's worktree is unsettled (E-1865)."""
+
     row = db.query(
         "SELECT t.id, COALESCE(t.title, t.description) AS title, t.status, "
         "p.name AS project_name "
@@ -2430,15 +2501,22 @@ def unsettled_item(item_id: int, agent: bool = False, as_json: bool = False):
 
     if as_json:
         import json
-        click.echo(json.dumps({
+        click.echo(json.dumps(provenance.attach({
             "id": task_id_display(item["id"]),
             "title": item["title"],
             "status": item["status"],
             "project": item["project_name"],
             **probe,
-        }, indent=2))
+        }), indent=2))
         return
 
+    # E-1668: the leading copy of the provenance trace. Paired with the trailing
+    # copy the root group emits at close and byte-identical to it, on E-2097's
+    # rule — whichever end a truncating pipe leaves has to be sufficient alone,
+    # and an agent's `| head` and `| tail` are both routine. Placed here rather
+    # than at the top of the function because the trace is only true once the
+    # read has happened: the store it names is the one that just answered.
+    provenance.echo_head()
     if agent:
         click.echo(f"# {task_id_display(item['id'])} {item['title']}")
         click.echo(f"# {probe['reason']}")
@@ -6050,6 +6128,7 @@ def detail_item(
     # removed row: `task show E-NNN` on an id that is now a hole explains itself
     # — who filed it, what it said, that it was removed — instead of erroring as
     # if the id had never existed. Every OTHER read here goes through live_tasks.
+
     row = db.query(
         "SELECT t.id, t.title, t.description, t.analysis, t.plan, t.phase, t.status, "
         "COALESCE(tt.slug, '') AS type, "
@@ -6194,9 +6273,16 @@ def detail_item(
                  "status": c["status"], "phase": c["phase"]}
                 for c in children
             ]
-        click.echo(json.dumps(out, indent=2))
+        click.echo(json.dumps(provenance.attach(out), indent=2))
         return
 
+    # E-1668: the leading copy of the provenance trace. Paired with the trailing
+    # copy the root group emits at close and byte-identical to it, on E-2097's
+    # rule — whichever end a truncating pipe leaves has to be sufficient alone,
+    # and an agent's `| head` and `| tail` are both routine. Placed here rather
+    # than at the top of the function because the trace is only true once the
+    # read has happened: the store it names is the one that just answered.
+    provenance.echo_head()
     if agent:
         if caveat_line:
             click.echo(caveat_line)
@@ -6957,6 +7043,7 @@ def search_tasks(
     silently truncated table is the exact sentence that produced two false
     "no existing task" conclusions.
     """
+
     cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     project_id, proj_name = _resolve_project(project_name)
 
@@ -7041,10 +7128,17 @@ def search_tasks(
             }
             for row in rows
         ]
-        click.echo(json.dumps(out, indent=2))
+        click.echo(json.dumps(provenance.attach(out), indent=2))
         rowcap.echo_footer(hidden, agent=True, err=True)
         return
 
+    # E-1668: the leading copy of the provenance trace. Paired with the trailing
+    # copy the root group emits at close and byte-identical to it, on E-2097's
+    # rule — whichever end a truncating pipe leaves has to be sufficient alone,
+    # and an agent's `| head` and `| tail` are both routine. Placed here rather
+    # than at the top of the function because the trace is only true once the
+    # read has happened: the store it names is the one that just answered.
+    provenance.echo_head()
     if agent:
         click.echo(f"# {proj_name} search: {query}")
         for row in rows:
@@ -7979,7 +8073,7 @@ def show_relations(item_id: int, agent: bool = False, as_json: bool = False):
     if as_json:
         import json
         links = _flatten_relations(item_id)
-        click.echo(json.dumps({
+        click.echo(json.dumps(provenance.attach({
             "id": task_id_display(item_id),
             # Always present, so `[]` says "no relations" rather than an absent
             # key leaving it unsaid (E-1956's rule for `replaced_by`).
@@ -7991,9 +8085,16 @@ def show_relations(item_id: int, agent: bool = False, as_json: bool = False):
                 }
                 for r in links
             ],
-        }, indent=2))
+        }), indent=2))
         return
 
+    # E-1668: the leading copy of the provenance trace. Paired with the trailing
+    # copy the root group emits at close and byte-identical to it, on E-2097's
+    # rule — whichever end a truncating pipe leaves has to be sufficient alone,
+    # and an agent's `| head` and `| tail` are both routine. Placed here rather
+    # than at the top of the function because the trace is only true once the
+    # read has happened: the store it names is the one that just answered.
+    provenance.echo_head()
     if agent:
         click.echo(f"# Relations for E-{item_id}")
         links = _flatten_relations(item_id)

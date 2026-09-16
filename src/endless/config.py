@@ -24,6 +24,13 @@ DB_PATH = CONFIG_DIR / "endless.db"
 # worktree gate and (b) is threaded to Go subprocesses as --db main|sandbox.
 RESOLVED_CONFIG_DIR: Path | None = None
 
+# PINNED_DB_CONTEXT records that the DB context was chosen IN CODE rather than
+# by the caller — `default_db_to_main()`, the Python analogue of the Go side's
+# PinMainDB. It is the E-1668 announce exemption: if the caller could not have
+# influenced the choice there is nothing to disambiguate, so a pinned context
+# says nothing about itself. A pin is not a resolution.
+PINNED_DB_CONTEXT: bool = False
+
 # NO_SESSION records the global `--no-session` flag (E-1444). When True,
 # emit_event downgrades actor_kind from cli/hook to system and skips session
 # resolution — for plain-shell triage filings, cron, and scripts with no Claude
@@ -644,8 +651,11 @@ def default_db_to_main():
     apply-change run in downstream non-self-dev projects too), so it must bypass
     apply_db_choice's self-dev gate on the --db flag.
     """
+    global PINNED_DB_CONTEXT
     if RESOLVED_CONFIG_DIR is None:
         set_db_context(main_config_dir())
+        # Chosen here, not by the caller — so nothing announces it (E-1668).
+        PINNED_DB_CONTEXT = True
 
 
 def require_db_context():
@@ -700,6 +710,11 @@ def go_db_context_args() -> list[str]:
     binary, so a missing --db refuses with the friendly message before the Go
     backstop refuses with its terser one.
     """
+    # The shellout opens a database, so this invocation has touched the store
+    # even though no SQLite handle was opened in this process (E-1668).
+    from endless import provenance
+
+    provenance.mark_touched()
     if RESOLVED_CONFIG_DIR is None:
         return []
     if RESOLVED_CONFIG_DIR == main_config_dir():

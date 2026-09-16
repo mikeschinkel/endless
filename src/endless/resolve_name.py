@@ -2,7 +2,7 @@
 
 import click
 
-from endless import db
+from endless import db, provenance
 from endless.project_path import stored
 
 
@@ -32,6 +32,11 @@ def resolve_project(name: str, path_hint: str | None = None) -> dict:
         )
 
     if len(rows) == 1:
+    # E-1668: record what this invocation resolved, so the provenance trace can
+    # say so when it is not the project enclosing cwd. Recorded at the RESOLVERS
+    # rather than per command because "which project answered" is their answer,
+    # and a command that resolves none has nothing to declare.
+        provenance.record_project(rows[0]["name"])
         return dict(rows[0])
 
     # Multiple matches — need disambiguation

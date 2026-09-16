@@ -8,7 +8,7 @@ from typing import NamedTuple
 
 import click
 
-from endless import config, statuses
+from endless import config, provenance, statuses
 from endless.config import ensure_config_dir
 
 _conn: sqlite3.Connection | None = None
@@ -33,6 +33,10 @@ def get_db() -> sqlite3.Connection:
     # E-1429: refuse a direct DB read inside a self-dev worktree unless an
     # explicit --db was resolved. Choke point for the Python-side gate.
     config.require_db_context()
+    # E-1668: and the choke point for saying which store answered. Marked here
+    # rather than per command because this is the one place a direct read can
+    # begin — a command cannot reach SQLite and forget to declare it.
+    provenance.mark_touched()
     if _conn is not None:
         return _conn
     ensure_config_dir()

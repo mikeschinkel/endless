@@ -120,7 +120,7 @@ def list_phrases(
         rows.append(m)
 
     if as_json:
-        click.echo(json.dumps(rows, indent=2))
+        click.echo(json.dumps(provenance.attach(rows), indent=2))
         return
 
     if not rows:

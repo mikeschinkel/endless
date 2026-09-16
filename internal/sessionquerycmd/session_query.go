@@ -14,6 +14,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/mikeschinkel/endless/internal/dbprovenance"
 	"github.com/mikeschinkel/endless/internal/gatekind"
 	"github.com/mikeschinkel/endless/internal/monitor"
 	_ "modernc.org/sqlite"
@@ -362,7 +363,7 @@ func runTaskReport(args []string) error {
 	if err != nil {
 		return fmt.Errorf("build report facts for E-%d: %w", *id, err)
 	}
-	return json.NewEncoder(os.Stdout).Encode(facts)
+	return dbprovenance.Encode(os.Stdout, facts)
 }
 
 // defaultUntriagedLimit caps a triage sweep that names no limit. It exists so
@@ -389,7 +390,7 @@ func runUntriagedTasks(args []string) error {
 	if err != nil {
 		return fmt.Errorf("read untriaged queue: %w", err)
 	}
-	return json.NewEncoder(os.Stdout).Encode(tasks)
+	return dbprovenance.Encode(os.Stdout, tasks)
 }
 
 // runTriageContext prints one task's triage context (E-1859) as JSON: the
@@ -409,7 +410,7 @@ func runTriageContext(args []string) error {
 	if err != nil {
 		return fmt.Errorf("build triage context for E-%d: %w", *id, err)
 	}
-	return json.NewEncoder(os.Stdout).Encode(ctx)
+	return dbprovenance.Encode(os.Stdout, ctx)
 }
 
 // runTriageClaim takes the per-task triage claim (E-1859) and prints "1" when
@@ -486,7 +487,7 @@ func runResumeTarget(args []string) error {
 	if err != nil {
 		return err
 	}
-	return json.NewEncoder(os.Stdout).Encode(target)
+	return dbprovenance.Encode(os.Stdout, target)
 }
 
 // runGateClear closes the session's open gate of the given kind, recording the
@@ -639,9 +640,7 @@ func runWorktreeUnsettled(args []string) error {
 	for _, p := range paths {
 		out = append(out, newWorktreeUnsettledJSON(monitor.WorktreeUnsettledDetailAt(ctx, p)))
 	}
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	return enc.Encode(out)
+	return dbprovenance.EncodeIndent(os.Stdout, out, "  ")
 }
 
 // runTaskLandedness emits the landedness verdict for each branch given as a
@@ -695,9 +694,7 @@ func runTaskLandedness(args []string) error {
 			ProbeErr:      l.ProbeErr,
 		})
 	}
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	return enc.Encode(out)
+	return dbprovenance.EncodeIndent(os.Stdout, out, "  ")
 }
 
 // taskLandednessJSON is the wire shape of one task's landedness. Declared
@@ -814,14 +811,14 @@ func runListLive(args []string) error {
 	if projectID == 0 {
 		// Unregistered cwd: empty result rather than error so the Python
 		// caller can treat "no project" and "no live sessions" uniformly.
-		return json.NewEncoder(os.Stdout).Encode([]monitor.LiveSession{})
+		return dbprovenance.Encode(os.Stdout, []monitor.LiveSession{})
 	}
 
 	sessions, err := monitor.ListLiveSessions(projectID)
 	if err != nil {
 		return fmt.Errorf("list live sessions: %w", err)
 	}
-	return json.NewEncoder(os.Stdout).Encode(sessions)
+	return dbprovenance.Encode(os.Stdout, sessions)
 }
 
 // runEnsureClaudeID prints the integer sessions.id for an env-identified

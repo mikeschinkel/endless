@@ -8,7 +8,7 @@ from pathlib import Path
 
 import click
 
-from endless import db, rowcap, session_states, statuses
+from endless import db, provenance, rowcap, session_states, statuses
 from endless.project_path import match_project_path, resolved
 
 
@@ -969,7 +969,7 @@ def show_history(
             }
             for r in rows
         ]
-        click.echo(json.dumps(out, indent=2))
+        click.echo(json.dumps(provenance.attach(out), indent=2))
         rowcap.echo_footer(hidden, agent=True, err=True)
         return
 
@@ -1324,7 +1324,7 @@ def list_sessions(
             }
             for r in rows
         ]
-        click.echo(json.dumps(out, indent=2))
+        click.echo(json.dumps(provenance.attach(out), indent=2))
         rowcap.echo_footer(hidden, agent=True, err=True)
         return
 
@@ -1467,7 +1467,7 @@ def search_sessions(
             }
             for r in rows
         ]
-        click.echo(json.dumps(out, indent=2))
+        click.echo(json.dumps(provenance.attach(out), indent=2))
         rowcap.echo_footer(hidden, agent=True, err=True)
         return
 

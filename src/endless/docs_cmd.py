@@ -5,7 +5,7 @@ from pathlib import Path
 import click
 from tabulate import tabulate
 
-from endless import db
+from endless import db, provenance
 from endless.doc_types import DOC_TYPE_NAMES
 from endless.project_path import project_name_for_cwd
 
@@ -37,6 +37,9 @@ def _resolve_project(name: str | None) -> tuple[int, str, str]:
         raise click.ClickException(
             f"No project found with name '{name}'"
         )
+    # E-1668: record what this invocation resolved, so the provenance trace can
+    # say so when it is not the project enclosing cwd.
+    provenance.record_project(row[0]["name"])
     return row[0]["id"], row[0]["name"], row[0]["path"]
 
 

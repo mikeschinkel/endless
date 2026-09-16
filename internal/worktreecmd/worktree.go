@@ -19,11 +19,11 @@
 package worktreecmd
 
 import (
-	"encoding/json"
 	"flag"
 	"fmt"
 	"os"
 
+	"github.com/mikeschinkel/endless/internal/dbprovenance"
 	"github.com/mikeschinkel/endless/internal/events"
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
@@ -112,9 +112,7 @@ func runInUse(args []string) int {
 // still distinguishes the two so a caller can tell "in use" from "broken".
 func report(asJSON bool, out inUseJSON) int {
 	if asJSON {
-		enc := json.NewEncoder(os.Stdout)
-		enc.SetIndent("", "  ")
-		_ = enc.Encode(out)
+		_ = dbprovenance.EncodeIndent(os.Stdout, out, "  ")
 	} else if out.Reason != "" {
 		fmt.Fprintln(os.Stdout, out.Reason)
 	}
@@ -165,9 +163,7 @@ func runLedgerOrphans(args []string) int {
 		fmt.Fprintf(os.Stderr, "endless-go worktree ledger-orphans: %s\n", err)
 		return exitUndetermined
 	}
-	enc := json.NewEncoder(os.Stdout)
-	enc.SetIndent("", "  ")
-	if err = enc.Encode(rpt); err != nil {
+	if err = dbprovenance.EncodeIndent(os.Stdout, rpt, "  "); err != nil {
 		fmt.Fprintf(os.Stderr, "endless-go worktree ledger-orphans: %s\n", err)
 		return exitUndetermined
 	}

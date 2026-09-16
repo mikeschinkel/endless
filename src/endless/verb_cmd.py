@@ -60,7 +60,7 @@ def list_verbs(as_json: bool, limit: int | None = None,
     cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     verbs = matchers.load_all_verbs()
     if as_json:
-        click.echo(json.dumps(verbs, indent=2))
+        click.echo(json.dumps(provenance.attach(verbs), indent=2))
         return
     if not verbs:
         click.echo("No verbs registered.")

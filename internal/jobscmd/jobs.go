@@ -18,6 +18,7 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/mikeschinkel/endless/internal/dbprovenance"
 	"github.com/mikeschinkel/endless/internal/jobs"
 )
 
@@ -27,6 +28,13 @@ func Run(args []string) {
 		usage(os.Stderr)
 		os.Exit(2)
 	}
+
+	// E-1668: say which database answered, after the output rather than before
+	// it — these are tables a human reads top-down. Deferred once here instead
+	// of at each verb's end so a new verb inherits it. A verb that leaves
+	// through os.Exit prints nothing, which is the intent: a refusal is not an
+	// answer, so it has no store to attribute.
+	defer dbprovenance.Echo(os.Stdout)
 
 	switch args[0] {
 	case "list":

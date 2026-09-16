@@ -17,6 +17,7 @@ import click
 
 from endless import authority
 from endless import db
+from endless import provenance
 from endless import rowcap
 from endless.project_path import resolved
 from endless.task_cmd import (
@@ -101,6 +102,7 @@ def list_decisions(
     no_limit: bool = False,
 ):
     """List decisions for a project (or all projects with --all)."""
+
     cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     where = "WHERE 1=1"
     params: list = []
@@ -167,10 +169,17 @@ def list_decisions(
             }
             for row in rows
         ]
-        click.echo(json.dumps(out, indent=2))
+        click.echo(json.dumps(provenance.attach(out), indent=2))
         rowcap.echo_footer(hidden, agent=True, err=True)
         return
 
+    # E-1668: the leading copy of the provenance trace. Paired with the trailing
+    # copy the root group emits at close and byte-identical to it, on E-2097's
+    # rule — whichever end a truncating pipe leaves has to be sufficient alone,
+    # and an agent's `| head` and `| tail` are both routine. Placed here rather
+    # than at the top of the function because the trace is only true once the
+    # read has happened: the store it names is the one that just answered.
+    provenance.echo_head()
     if agent:
         click.echo(f"# {proj_name} decisions")
         for row in rows:
@@ -298,6 +307,7 @@ def _fetch_decision_relations(decision_id: int) -> list[dict]:
 
 def detail_decision(item_id: int, agent: bool = False, as_json: bool = False):
     """Show full detail for a decision."""
+
     row = db.query(
         "SELECT d.id, d.title, d.description, d.text, d.status, "
         "d.origin_task_id, d.notes, d.rejection_reason, d.obsolete_reason, "
@@ -360,9 +370,16 @@ def detail_decision(item_id: int, agent: bool = False, as_json: bool = False):
                 for r in relations
             ],
         }
-        click.echo(json.dumps(out, indent=2))
+        click.echo(json.dumps(provenance.attach(out), indent=2))
         return
 
+    # E-1668: the leading copy of the provenance trace. Paired with the trailing
+    # copy the root group emits at close and byte-identical to it, on E-2097's
+    # rule — whichever end a truncating pipe leaves has to be sufficient alone,
+    # and an agent's `| head` and `| tail` are both routine. Placed here rather
+    # than at the top of the function because the trace is only true once the
+    # read has happened: the store it names is the one that just answered.
+    provenance.echo_head()
     if agent:
         if caveat_line:
             click.echo(caveat_line)

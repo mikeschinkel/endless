@@ -298,6 +298,7 @@ func TestWorktreeDirName(t *testing.T) {
 		})
 	}
 }
+
 // newGatedWorktree builds <root>/.endless/{config.json, worktrees/<name>} and
 // the matching sandbox config dir under XDG_CACHE_HOME, returning the worktree
 // dir to chdir into and the sandbox dir `--db sandbox` must resolve to.
@@ -499,9 +500,9 @@ func TestGateRefusesWithoutAFlag(t *testing.T) {
 //
 //  1. Developing endless (a real dev session): no flag is passed, so
 //     HasExplicitDBContext() is false and session/pane-state writes are pinned
-//     to MAIN — where the spawned task exists. This used to depend on
-//     setDetectedContextDir deliberately NOT marking its guess explicit; with
-//     the guess gone it falls out of "no flag, no context".
+//     to MAIN — where the spawned task exists. This used to depend on the cwd
+//     self-detect deliberately NOT marking its guess explicit; with the guess
+//     gone it falls out of "no flag, no context".
 //  2. Testing endless (an explicit --db-dir): the pin is suppressed so writes
 //     go to the chosen temp DB.
 func TestMainPinRoutingSurvivesTheDeletion(t *testing.T) {
@@ -544,6 +545,118 @@ func TestMainPinRoutingSurvivesTheDeletion(t *testing.T) {
 
 		if got := DBPath(); got != filepath.Join(explicit, "endless.db") {
 			t.Errorf("DBPath() = %q, want explicit %q (flag beats the main pin)", got, filepath.Join(explicit, "endless.db"))
+		}
+	})
+}
+
+// TestDBProvenance pins the rule an answer's provenance line obeys: ANNOUNCE
+// WHAT THE INVOCATION RESOLVED, WHEN IT COULD HAVE RESOLVED OTHERWISE (E-1668).
+//
+// The three silent cases below are that rule, not exceptions to it, which is
+// why they are tested together with the speaking ones rather than as a list of
+// special cases somewhere else.
+func TestDBProvenance(t *testing.T) {
+	// openedDB fakes what DB() records on a successful open. The provenance is
+	// about which store ANSWERED, so nothing may speak before one has.
+	openedDB := func(t *testing.T) {
+		t.Helper()
+		prev := dbOpened
+		dbOpened = true
+		t.Cleanup(func() { dbOpened = prev })
+	}
+
+	t.Run("no database opened -> silent", func(t *testing.T) {
+		resetDBContext(t)
+		wt, _ := newGatedWorktree(t, "e-1668", true)
+		t.Chdir(wt)
+		prev := dbOpened
+		dbOpened = false
+		t.Cleanup(func() { dbOpened = prev })
+
+		if _, _, ok := DBProvenance(); ok {
+			t.Error("a verb that answered from git alone must not name a database")
+		}
+	})
+
+	t.Run("pinned in code -> silent", func(t *testing.T) {
+		resetDBContext(t)
+		openedDB(t)
+		wt, _ := newGatedWorktree(t, "e-1668", true)
+		t.Chdir(wt)
+		PinMainDB() // the hook / tmux / status-view surfaces
+
+		if !DBContextPinned() {
+			t.Fatal("PinMainDB must register as a pin")
+		}
+		if _, _, ok := DBProvenance(); ok {
+			t.Error("a pin is not a resolution: the caller could not have influenced it")
+		}
+	})
+
+	t.Run("not a self-dev project -> silent", func(t *testing.T) {
+		resetDBContext(t)
+		openedDB(t)
+		wt, _ := newGatedWorktree(t, "e-1668", false)
+		t.Chdir(wt)
+
+		if _, _, ok := DBProvenance(); ok {
+			t.Error("one database means nothing could have resolved otherwise")
+		}
+	})
+
+	t.Run("--db main -> names main", func(t *testing.T) {
+		resetDBContext(t)
+		openedDB(t)
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		wt, _ := newGatedWorktree(t, "e-1668", true)
+		t.Chdir(wt)
+		if err := consume(t, "--db", "main"); err != nil {
+			t.Fatal(err)
+		}
+
+		name, dir, ok := DBProvenance()
+		if !ok || name != "main" {
+			t.Errorf("DBProvenance() = (%q, %q, %v), want main", name, dir, ok)
+		}
+		if dir != filepath.Join(home, ".config", "endless") {
+			t.Errorf("dir = %q, want the main config dir under this HOME", dir)
+		}
+	})
+
+	t.Run("--db sandbox -> names WHICH sandbox", func(t *testing.T) {
+		resetDBContext(t)
+		openedDB(t)
+		wt, sandboxDir := newGatedWorktree(t, "e-1668", true)
+		t.Chdir(wt)
+		if err := consume(t, "--db", "sandbox"); err != nil {
+			t.Fatal(err)
+		}
+
+		name, dir, ok := DBProvenance()
+		// "sandbox" alone would not say whose, and with many worktrees live at
+		// once that is the entire question.
+		if !ok || name != "sandbox (e-1668)" {
+			t.Errorf("DBProvenance() = (%q, %q, %v), want sandbox (e-1668)", name, dir, ok)
+		}
+		if dir != sandboxDir {
+			t.Errorf("dir = %q, want %q", dir, sandboxDir)
+		}
+	})
+
+	t.Run("--db-dir -> names the directory itself", func(t *testing.T) {
+		resetDBContext(t)
+		openedDB(t)
+		wt, _ := newGatedWorktree(t, "e-1668", true)
+		t.Chdir(wt)
+		explicit := t.TempDir()
+		if err := consume(t, "--db-dir", explicit); err != nil {
+			t.Fatal(err)
+		}
+
+		name, dir, ok := DBProvenance()
+		if !ok || name != explicit || dir != explicit {
+			t.Errorf("DBProvenance() = (%q, %q, %v), want the directory", name, dir, ok)
 		}
 	})
 }

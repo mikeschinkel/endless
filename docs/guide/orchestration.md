@@ -96,10 +96,53 @@ endless db path --db=sandbox                    # print a DB path without openin
 ```
 
 The flag is **mandatory by design** inside such a worktree, and is never an
-environment variable: an exported value could silently route every later
-command to the wrong DB. Outside a self-dev worktree (the main checkout, or any
-downstream project that uses endless as a tool) `--db` is neither required nor
-needed.
+environment variable — nor cwd: either could silently route every later command
+to the wrong DB, and cwd does it without even an export. Outside a self-dev
+worktree (the main checkout, or any downstream project that uses endless as a
+tool) `--db` is neither required nor needed.
+
+`endless-go` takes the same two words, so one vocabulary serves both layers:
+
+```bash
+endless-go --db main session-query list-live --project-root <path>
+endless-go --db-dir /tmp/throwaway event emit …   # name a directory outright
+```
+
+Run a DB-opening `endless-go` subcommand inside a self-dev worktree without one
+and it **refuses**, naming the remedy. That refusal is the backstop for the case
+the Python CLI never sees: a binary invoked directly from inside a worktree.
+Without it such a command answers from the worktree's sandbox and says nothing,
+which reads as a short but plausible answer rather than as a mistake.
+
+### Which database answered (the provenance line)
+
+Every command that opens a database says which one, so a wrong answer is not
+indistinguishable from a right one:
+
+```
+$ endless --db sandbox task active
+E-101  now  underway  …
+# db: sandbox (e-101)
+```
+
+The rule is **announce what the invocation resolved, when it could have
+resolved otherwise** — so the database is named in a self-dev project (either
+one could have been right), the project only when it is not the one enclosing
+cwd, and nothing at all for a surface pinned in code (the hook, tmux, the status
+views), where you could not have influenced the choice.
+
+Where it appears:
+
+- **Agent-facing output** carries it at BOTH ends, byte-identical, so `| head`
+  and `| tail` each leave something sufficient on its own.
+- **Human output** carries the trailing copy, dimmed.
+- **`--json`** carries it as an `_answered_from` field — at the top level of an
+  object payload, on each row of an array one — so it survives `| jq`. The line
+  is never written to a machine render.
+- **`--tsv`** carries nothing: its rows are the columns of arbitrary SQL, with
+  no header row, so an extra column would silently change what every
+  `cut`/`read` consumer sees.
+- A command that never opened a database says nothing.
 
 ### Inspecting
 

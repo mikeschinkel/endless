@@ -617,6 +617,28 @@ def main(ctx):
     # (more specific) diagnosis first.
     _refuse_unsupported_agent(ctx)
 
+    # E-1668: arrange for every command's output to say which store answered it.
+    # The trailing copy itself is the result callback below; this only decides
+    # whether stdout is carrying a payload the line must stay out of.
+    from endless import provenance
+
+    provenance.install(ctx)
+
+
+@main.result_callback()
+@click.pass_context
+def _announce_provenance(ctx, result, **kwargs):
+    """Say which store answered, after every command that reached one (E-1668).
+
+    One place rather than forty: a new command inherits the trace without
+    knowing it exists, and cannot forget it. It fires only on a command that
+    RETURNED — a refusal raises instead, and E-2097 requires a refusal's first
+    and last lines to stay byte-identical.
+    """
+    from endless import provenance
+
+    provenance.echo_tail()
+
 
 @main.group("project")
 def project_cmd():
