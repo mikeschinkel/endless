@@ -1894,7 +1894,7 @@ def _bootstrap_task_worktree(
     """Post-`git worktree add` bootstrap shared by claim and session recovery.
 
     Writes the companion marker (`.endless/worktree.json` + scratch dir),
-    materializes the task's doc mirrors, binds the self-dev DB sandbox, then runs
+    materializes the task's doc mirrors, creates the worktree's sandbox, then runs
     the project's post-worktree-create hook (go-work-init, bin copy,
     claude-settings-init, ...). It performs NO status transition: `task claim`
     flips the task to `underway`, while `session resume --review`/`--reopen`
@@ -1922,7 +1922,7 @@ def _bootstrap_task_worktree(
         json.dumps(companion, indent=2) + "\n"
     )
     _materialize_task_docs(task_id, wt_dir)
-    _maybe_auto_sandbox_bind(project_root, wt_dir, task_id)
+    provision_worktree_sandbox(wt_dir)
     # E-2128: the branch was just cut at the base, so its unlanded verdict is
     # known without comparing anything. Recording it here means the row this
     # session is about to look at reads a verdict rather than `~`. Before the
@@ -2008,8 +2008,14 @@ POST_WORKTREE_CREATE_HOOK = ".endless/hooks/post-worktree-create.sh"
 POST_LAND_HOOK_DIR = ".endless/hooks/post-land"
 
 
-def _run_post_worktree_create_hook(project_root: Path, worktree_path: Path) -> None:
+def _run_post_worktree_create_hook(project_root: Path, worktree_path: Path) -> bool:
     """Run the project's post-worktree-create bootstrap hook, if present (E-986).
+
+    Returns True when the hook ran cleanly or there was none to run, False on
+    every failure path. The bool exists for `sandbox migrate`, which runs this
+    across a whole fleet of worktrees and has to report "3 hook failures"
+    separately from what it moved; a caller bootstrapping ONE worktree can go
+    on ignoring it, since the loud message below is the whole report there.
 
     Worktree creation can't bake in every project's bootstrap needs (Go go.mod
     replace paths, npm install, venv recreation, Rust target/ cleanup, ...).
@@ -2033,7 +2039,7 @@ def _run_post_worktree_create_hook(project_root: Path, worktree_path: Path) -> N
     """
     hook = project_root / POST_WORKTREE_CREATE_HOOK
     if not hook.exists():
-        return
+        return True
     if not os.access(hook, os.X_OK):
         click.echo(
             click.style("⚠ post-worktree-create hook is not executable", fg="yellow")
@@ -2043,7 +2049,7 @@ def _run_post_worktree_create_hook(project_root: Path, worktree_path: Path) -> N
             f"        cd {_tilde(worktree_path)} && {_tilde(hook)} {_tilde(worktree_path)}",
             err=True,
         )
-        return
+        return False
     click.echo(
         click.style("•", fg="cyan")
         + f" running post-worktree-create hook: {_tilde(hook)}"
@@ -2060,7 +2066,7 @@ def _run_post_worktree_create_hook(project_root: Path, worktree_path: Path) -> N
             f"        cd {_tilde(worktree_path)} && {_tilde(hook)} {_tilde(worktree_path)}",
             err=True,
         )
-        return
+        return False
     if result.returncode != 0:
         click.echo(
             click.style(
@@ -2073,6 +2079,8 @@ def _run_post_worktree_create_hook(project_root: Path, worktree_path: Path) -> N
             f"        cd {_tilde(worktree_path)} && {_tilde(hook)} {_tilde(worktree_path)}",
             err=True,
         )
+        return False
+    return True
 
 
 def _run_post_land_script(
@@ -2394,58 +2402,63 @@ def _commit_plan_file_in_worktree(
     )
 
 
-def _maybe_auto_sandbox_bind(project_root: Path, worktree_path: Path, task_id: int) -> None:
-    """If the project opts in, provision and bind a per-worktree sandbox DB.
+# Content endless writes at the root of every sandbox it creates. Mirrors
+# sandboxcmd.SandboxGitignore on the Go side; the two must stay identical, or a
+# worktree provisioned by one and re-provisioned by the other shows a diff.
+#
+# The sandbox self-ignores rather than being listed in the project's own
+# .gitignore, and that is what makes adoption free: `*` ignores every path in
+# this directory including this file, so git sees the directory as empty and
+# never reports it. A rule in the project's .gitignore would be endless editing
+# a file in a repo that is not its own, once per project, forever.
+_SANDBOX_GITIGNORE = """\
+# Endless per-worktree sandbox (ED-1554): isolated state this worktree's task
+# is exercised against, with a lifetime exactly equal to this worktree's.
+# Self-ignoring — '*' covers every path here, this file included — so the
+# project's own .gitignore needs no entry for it.
+*
+"""
 
-    Triggered by `self_dev: true` in the project's .endless/config.json
-    (see config.project_is_self_dev). Endless's own config has the flag set
-    so dev-time worktrees don't pollute the user's real DB; downstream
-    projects using endless as a tool leave it unset.
 
-    Failures are surfaced as warnings rather than aborting the worktree
-    creation — a failed sandbox setup is recoverable via `just dev-sandbox-init`
-    or direct `endless-go sandbox init` / `bind` invocation.
+def provision_worktree_sandbox(worktree_path: Path) -> Path:
+    """Create this worktree's sandbox: an EMPTY directory that self-ignores.
+
+    Every project, not just endless (ED-1554). A sandbox is where a worktree
+    keeps the state its task is exercised against — a throwaway database, a
+    fixture spreadsheet, an API document, credentials that must not be the real
+    ones — and essentially no real project has none of that. The `self_dev`
+    flag that used to gate this now gates only whether endless routes its OWN
+    database here.
+
+    Empty, and seeded with nothing. Endless cannot know which of a checkout's
+    files a task needs, and copying them in is the exact failure a sandbox
+    exists to prevent: a worktree quietly pointed at the real database or a live
+    account. What goes in is the project's declaration, made in its own
+    post-worktree-create hook, which the caller runs immediately after this.
+
+    Pure Python, no shellout. Provisioning is now on the path of every worktree
+    for every project, so it must not depend on a Go binary being installed and
+    findable — the old `endless-go sandbox init && sandbox bind` pair degraded
+    to a warning and no sandbox when it was not.
+
+    Returns the sandbox directory, and is idempotent: an existing sandbox keeps
+    its contents.
     """
     from endless import config
-    if not config.project_is_self_dev(project_root):
-        return
-    binary = shutil.which("endless-go")
-    if not binary:
-        click.echo(
-            "  warning: endless-go binary not found on PATH; "
-            "sandbox setup skipped.",
-            err=True,
-        )
-        return
-    name = worktree_path.name
-    for cmd in (
-        [binary, "sandbox", "init", "--mode", "worktree", name],
-        [binary, "sandbox", "bind", str(worktree_path), name],
-    ):
-        try:
-            # cwd is the worktree so `init --mode worktree` can resolve the
-            # main checkout via git-common-dir from there.
-            result = subprocess.run(
-                cmd, capture_output=True, text=True, cwd=str(worktree_path),
-            )
-        except OSError as e:
-            click.echo(f"  warning: {' '.join(cmd)}: {e}", err=True)
-            return
-        if result.returncode != 0:
-            click.echo(
-                f"  warning: {' '.join(cmd)} failed: "
-                f"{(result.stderr or result.stdout).strip()}",
-                err=True,
-            )
-            return
-    # Silent on success (E-1428). This used to print the sandbox cache path as
-    # a bullet directly above the worktree path, and readers scanning a claim
-    # for somewhere to cd took the first path they saw — landing in a cache
-    # directory that is not a project, so every endless command after it failed
-    # with "Not in a registered project directory". The path has no routine
-    # user-facing purpose; `endless worktree sandbox` prints it on demand for
-    # the rare case (pointing a SQL client at a worktree's database) that wants
-    # it.
+
+    sandbox = config.sandbox_root(worktree_path)
+    sandbox.mkdir(parents=True, exist_ok=True)
+    gitignore = sandbox / ".gitignore"
+    if not gitignore.exists() or gitignore.read_text() != _SANDBOX_GITIGNORE:
+        gitignore.write_text(_SANDBOX_GITIGNORE)
+    # Silent on success (E-1428). This used to print the sandbox path as a
+    # bullet directly above the worktree path, and readers scanning a claim for
+    # somewhere to cd took the first path they saw — landing somewhere that is
+    # not a project, so every endless command after it failed with "Not in a
+    # registered project directory". `endless worktree sandbox` prints it on
+    # demand for the rare case (pointing a SQL client at a worktree's database)
+    # that wants it.
+    return sandbox
 
 
 def _resolve_land_endless_go(worktree_path: Path, project_root: Path) -> str | None:

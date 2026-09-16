@@ -513,35 +513,118 @@ def main_config_dir() -> Path:
 
 def main_cache_dir() -> Path:
     """The main database's cache dir: ~/.cache/endless, ignoring any injected
-    XDG_CACHE_HOME (mirror of main_config_dir for the cache root; sandboxes live
-    under here at ~/.cache/endless/sandboxes/<worktree>/)."""
+    XDG_CACHE_HOME (mirror of main_config_dir for the cache root)."""
     return Path.home() / ".cache" / "endless"
 
 
-def sandbox_root(worktree_dir_name: str) -> Path:
+# The directory a sandbox occupies inside its worktree, under the worktree's own
+# `.endless/` so a project sees one endless-owned directory in its tree, not two.
+SANDBOX_DIR_NAME = "sandbox"
+
+
+def project_sandbox_override(project_path: Path) -> Path | None:
+    """The project's out-of-tree sandbox parent, or None for in-tree placement.
+
+    Set by adding `"sandbox_root": "<path>"` to <project>/.endless/config.json.
+    It exists for the tree that cannot take extra files — one whose worktree
+    contents are themselves a git repository, a build that must stay hermetic,
+    CI that runs `git clean -xdff` between steps. Project level, never worktree
+    level: worktrees that disagreed about where their state lives would be a
+    fleet nobody could reason about.
+
+    Mirrors monitor.readProjectConfig().SandboxRoot on the Go side.
+    """
+    cfg = project_config_read(project_path)
+    if cfg is None:
+        return None
+    root = cfg.get("sandbox_root")
+    if not root:
+        return None
+    return Path(str(root)).expanduser()
+
+
+def worktree_path(cwd: Path | None = None) -> Path | None:
+    """The task worktree enclosing cwd (<root>/.endless/worktrees/e-NNN), or
+    None. Pure: no filesystem reads, no existence check. Mirrors
+    monitor.WorktreeRoot."""
+    s = str(cwd if cwd is not None else Path.cwd())
+    m = _WORKTREE_PATH_RE.search(s)
+    if not m:
+        return None
+    return Path(s[: m.start()]) / ".endless" / "worktrees" / m.group(1)
+
+
+def sandbox_root(worktree: Path) -> Path:
     """A worktree's per-worktree sandbox: the isolated state that belongs to
     that worktree and shares its lifetime.
 
-    Sandbox dir basename is the worktree dir's basename (e-NNN), so each
-    worktree maps 1-to-1 to its own sandbox.
+    The single seam every sandbox path composes from — callers name what they
+    want UNDER the sandbox and never spell out where the sandbox is. ED-1554
+    moved it, and this is the one function that moved: from
+    `<cache>/endless/sandboxes/<name>` to inside the worktree itself.
 
-    The single seam every sandbox path composes from, so a sandbox that moves
-    moves here and nowhere else — which is what ED-1554 (relocating sandboxes
-    into the worktree itself) will do. Callers name what they want UNDER the
-    sandbox; they do not spell out where the sandbox is.
+    In-tree placement makes the path pure composition — a fixed relative segment
+    from a directory the caller already holds. No environment variable is read
+    and none is set, which is what stops a stale export from pointing a later
+    command at another worktree's state.
+
+    One branch: a project may move its sandboxes out of tree entirely (see
+    project_sandbox_override). The worktree's directory basename is still the
+    leaf either way, so the 1-to-1 worktree↔sandbox mapping holds.
+
+    Takes the worktree PATH, not its basename. In-tree composition needs the
+    path, and a basename that could disagree with the worktree it names is a
+    basename that eventually does.
+
+    Mirrors monitor.WorktreeSandboxDir; the two must agree byte for byte,
+    because Python resolves this path for `--db sandbox` and threads it to Go,
+    and Go resolves it again from cwd.
     """
-    return _cache_root() / "endless" / "sandboxes" / worktree_dir_name
+    override = project_sandbox_override(_project_root_of_worktree(worktree))
+    if override is not None:
+        return override / worktree.name
+    return worktree / ".endless" / SANDBOX_DIR_NAME
 
 
-def sandbox_config_dir(worktree_dir_name: str) -> Path:
+def sandbox_config_dir(worktree: Path) -> Path:
     """The endless config dir inside a worktree's per-worktree sandbox.
 
     Endless appends its own "endless" segment (as ConfigDir does to
-    XDG_CONFIG_HOME), so the DB lives at
-    <sandbox_root>/endless/endless.db. Endless is one client of the sandbox
-    among however many the project has, and this is its corner of it.
+    XDG_CONFIG_HOME), so the DB lives at <sandbox_root>/endless/endless.db.
+    Endless is one client of the sandbox among however many the project has, and
+    this is its corner of it.
     """
-    return sandbox_root(worktree_dir_name) / "endless"
+    return sandbox_root(worktree) / "endless"
+
+
+def _project_root_of_worktree(worktree: Path) -> Path:
+    """The main checkout a worktree belongs to: everything above the
+    `.endless/worktrees/e-NNN` segment."""
+    s = str(worktree)
+    m = _WORKTREE_PATH_RE.search(s)
+    if not m:
+        return worktree
+    return Path(s[: m.start()])
+
+
+def sandbox_missing_refusal(worktree: Path, sandbox: Path) -> str:
+    """Refusal for a worktree whose sandbox is not on disk (E-1964).
+
+    Nothing creates one on demand: a path resolver that mutated the filesystem
+    would race two sessions on one worktree, and a silent rebuild would hide the
+    fact that a directory endless expects to exist does not. Plain wording, no
+    ticket refs (user-facing).
+    """
+    return (
+        "this worktree has no sandbox, and nothing creates one on demand:\n\n"
+        f"  worktree: {worktree}\n"
+        f"  expected: {sandbox}\n\n"
+        "Run `endless sandbox migrate` — it relocates a sandbox left in the old\n"
+        "cache root and provisions one for any worktree that never had it.\n\n"
+        "If migration has already run on this machine, this is not a chore:\n"
+        "something removed a directory endless expects to exist, and that is\n"
+        "worth understanding before carrying on."
+    )
 
 
 def worktree_dir_name(cwd: Path | None = None) -> str | None:
@@ -614,15 +697,23 @@ def apply_db_choice(choice: str):
             raise ValueError(DB_NOT_SELF_DEV_REFUSAL)
         set_db_context(main_config_dir())
     elif choice == "sandbox":
-        dir_name = worktree_dir_name()
-        if dir_name is None:
+        worktree = worktree_path()
+        if worktree is None:
             raise ValueError(
                 "--db sandbox only applies inside a self-dev worktree "
                 "(.endless/worktrees/e-NNN); cwd is not in one"
             )
         if not enclosing_project_is_self_dev():
             raise ValueError(DB_NOT_SELF_DEV_REFUSAL)
-        set_db_context(sandbox_config_dir(dir_name))
+        # Refuse a missing sandbox rather than pin a path that is not there
+        # (E-1964). Without this the flag would resolve, thread --config-dir to
+        # every Go subprocess, and the first write would create a fresh empty
+        # database at the absent path — the silent rebuild this design exists to
+        # rule out, arriving through the one door that bypasses the Go gate.
+        sandbox = sandbox_dir(worktree)
+        if not sandbox.is_dir():
+            raise ValueError(sandbox_missing_refusal(worktree, sandbox))
+        set_db_context(sandbox_config_dir(worktree))
     else:
         raise ValueError(
             f"unknown --db value {choice!r}: expected 'main' or 'sandbox'"
@@ -828,13 +919,13 @@ def resolved_worktree_endless_go(cwd: Path | None = None) -> Path | None:
     """
     if RESOLVED_CONFIG_DIR is None:
         return None
-    dir_name = worktree_dir_name(cwd)
-    if dir_name is None:
+    worktree = worktree_path(cwd)
+    if worktree is None:
         return None
     # Only fire when RESOLVED_CONFIG_DIR is EXACTLY the sandbox path for this
     # worktree. Anything else (--db main, conftest's tmp config dir, a stray
     # external override) keeps the PATH-resolved global.
-    if RESOLVED_CONFIG_DIR != sandbox_config_dir(dir_name):
+    if RESOLVED_CONFIG_DIR != sandbox_config_dir(worktree):
         return None
     return worktree_endless_go(cwd)
 

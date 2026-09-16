@@ -300,10 +300,12 @@ func TestWorktreeDirName(t *testing.T) {
 }
 
 // newGatedWorktree builds <root>/.endless/{config.json, worktrees/<name>} and
-// the matching sandbox config dir under XDG_CACHE_HOME, returning the worktree
-// dir to chdir into and the sandbox dir `--db sandbox` must resolve to.
-// CacheDir() reads the same XDG_CACHE_HOME string, so expected and computed
-// paths match exactly (no symlink-resolution mismatch).
+// that worktree's own sandbox, returning the worktree dir to chdir into and the
+// sandbox config dir `--db sandbox` must resolve to.
+//
+// Since E-1964 the sandbox is composed from the worktree path, so the fixture
+// needs no environment variable to place it and the expected path is spelled
+// out here rather than derived from one.
 func newGatedWorktree(t *testing.T, name string, selfDev bool) (wt, sandboxDir string) {
 	t.Helper()
 	root := t.TempDir()
@@ -319,9 +321,7 @@ func newGatedWorktree(t *testing.T, name string, selfDev bool) (wt, sandboxDir s
 	if err := os.WriteFile(filepath.Join(endless, "config.json"), []byte(body), 0644); err != nil {
 		t.Fatal(err)
 	}
-	cache := t.TempDir()
-	t.Setenv("XDG_CACHE_HOME", cache)
-	sandboxDir = filepath.Join(cache, "endless", "sandboxes", name, "endless")
+	sandboxDir = filepath.Join(wt, ".endless", "sandbox", "endless")
 	if err := os.MkdirAll(sandboxDir, 0755); err != nil {
 		t.Fatal(err)
 	}
@@ -370,7 +370,6 @@ func TestConsumeDBFlags_Choices(t *testing.T) {
 
 	t.Run("--db sandbox outside a self-dev worktree is refused", func(t *testing.T) {
 		resetDBContext(t)
-		t.Setenv("XDG_CACHE_HOME", t.TempDir())
 		t.Chdir(t.TempDir())
 		err := consume(t, "--db", "sandbox")
 		if err == nil {

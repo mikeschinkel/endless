@@ -108,10 +108,9 @@ install mode="":
         uv tool install -e . --force
         exit 0
     fi
-    # Worktree-scoped install: bundle the existing injection-based recipes and
-    # NEVER run `ln -sfn` or `uv tool install`. dev-sandbox-init runs before
-    # claude-settings-init so the latter preserves the env block 'sandbox bind'
-    # wrote.
+    # Worktree-scoped install: bundle the existing worktree recipes and NEVER
+    # run `ln -sfn` or `uv tool install`. dev-sandbox-init runs before
+    # claude-settings-init so the latter sees the seeded sandbox.
     just go-work-init
     just build
     just dev-sandbox-init
@@ -416,18 +415,22 @@ claude-settings-init:
     PY
     echo "claude-settings-init: $worktree_root/.claude/settings.local.json"
 
-# Provision a per-worktree sandbox DB for self-dev work (E-1281).
+# Seed this worktree's sandbox DB for self-dev work (E-1281, relocated by E-1964).
 #
-# Creates the sandbox DB at ~/.cache/endless/sandboxes/e-NNN[-slug]/ and writes
-# XDG_CONFIG_HOME into <worktree>/.claude/settings.local.json so Claude-spawned
-# subprocesses route there. The endless-go binary also self-detects this
-# sandbox from cwd (E-1368), so bare-shell `./bin/endless-go ...` inside the
-# worktree routes to it without any wrapper or env export.
+# Endless creates the sandbox itself — an empty <worktree>/.endless/sandbox/ —
+# at worktree-create time, for every project. What goes IN it is the project's
+# business, and this is endless's answer for its own repo: the endless.db a
+# self-dev session reads under `--db sandbox`, seeded with the project and
+# session rows the CLI needs on first use.
 #
-# Auto-invoked by 'endless task claim' and 'endless task spawn' when the
-# project's .endless/config.json has "self_dev": true (endless's own
-# config does). Run manually for worktrees created by hand or to re-wire after
-# moving binaries.
+# Called from .endless/hooks/post-worktree-create.sh, which is what makes it
+# the project's declaration rather than something endless does to everybody.
+# Run it by hand for a worktree created before the hook did this, or after
+# `sandbox init --force` to rebuild a sandbox DB whose schema has drifted.
+#
+# No name and no bind: the sandbox is composed from the worktree, and nothing is
+# written into the environment (E-1964 deleted the XDG_CONFIG_HOME injection).
+# `--db sandbox` resolves the same path through the same resolver.
 #
 # Recipe must run from a worktree (not main). Refuses otherwise.
 dev-sandbox-init:
@@ -439,14 +442,6 @@ dev-sandbox-init:
         echo "dev-sandbox-init: must run from a worktree, not main." >&2
         exit 1
     fi
-    name="$(basename "$(pwd)")"
-    case "$name" in
-        e-[0-9]*) ;;
-        *)
-            echo "dev-sandbox-init: cannot derive sandbox name from $(pwd) (expected .endless/worktrees/e-NNN[-slug])" >&2
-            exit 1
-            ;;
-    esac
     # Prefer the worktree-built binary so changes to the sandbox subcommand
     # itself are exercised in self-dev. Fall back to PATH for fresh worktrees.
     if [ -x "$(pwd)/bin/endless-go" ]; then
@@ -454,8 +449,7 @@ dev-sandbox-init:
     else
         sandbox_bin=endless-go
     fi
-    "$sandbox_bin" sandbox init --mode worktree "$name"
-    "$sandbox_bin" sandbox bind "$(pwd)" "$name"
+    "$sandbox_bin" sandbox init --mode worktree
 
 # Run Python tests
 test:

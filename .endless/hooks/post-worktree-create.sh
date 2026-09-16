@@ -29,12 +29,19 @@
 #      copying is the identical result, instantly. Without bin/endless-go the
 #      per-worktree sandbox CLI falls back to the global/main binary (E-1662/
 #      E-1281). The agent rebuilds with `just build` only once it edits Go.
-#   3. `just claude-settings-init` writes the per-worktree hook override to
+#   3. SEED this worktree's sandbox (E-1964). Endless creates the sandbox — an
+#      empty <worktree>/.endless/sandbox/ — before running this hook, for every
+#      project, and it seeds nothing: what a worktree's isolated state consists
+#      of is the project's business, declared here. Endless's answer for its own
+#      repo is an endless.db that `--db sandbox` reads, so dev-time worktrees
+#      never write to the real ledger. A downstream project puts its own
+#      fixtures, throwaway database or dummy credentials here instead, and never
+#      this.
+#   4. `just claude-settings-init` writes the per-worktree hook override to
 #      .claude/settings.local.json so the PostToolUse hook fires THIS worktree's
 #      bin/endless-go (E-998), not the global one. Runs last so it sees the
-#      copied binary and preserves the XDG_CONFIG_HOME env block that the
-#      sandbox bind step (run before this hook) wrote to the same file. The
-#      LOCAL file, not the tracked .claude/settings.json — see E-1347.
+#      copied binary. The LOCAL file, not the tracked .claude/settings.json —
+#      see E-1347.
 
 set -euo pipefail
 
@@ -61,6 +68,12 @@ fi
 echo "post-worktree-create: copying ${src_bin} -> ${worktree}/bin/endless-go"
 mkdir -p "${worktree}/bin"
 cp -p "${src_bin}" "${worktree}/bin/endless-go"
+
+# Seed the sandbox endless creates (and leaves empty) before this hook runs.
+# Uses the binary just copied above, not the global one: a sandbox DB must be
+# built by the same schema the worktree's own commands will read it with.
+echo "post-worktree-create: seeding sandbox endless.db"
+just dev-sandbox-init
 
 echo "post-worktree-create: installing per-worktree Claude hook override"
 just claude-settings-init

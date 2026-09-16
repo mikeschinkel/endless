@@ -599,8 +599,8 @@ def _child_db_args() -> list[str]:
         return []
     if resolved == config.main_config_dir():
         return ["--db", "main"]
-    dir_name = config.worktree_dir_name()
-    if dir_name and resolved == config.sandbox_config_dir(dir_name):
+    worktree = config.worktree_path()
+    if worktree and resolved == config.sandbox_config_dir(worktree):
         return ["--db", "sandbox"]
     return []
 

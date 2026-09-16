@@ -4236,6 +4236,33 @@ def worktree_check():
     check_worktree()
 
 
+@main.group("sandbox")
+def sandbox_cmd():
+    """Per-worktree sandboxes: isolated state a task is exercised against."""
+    pass
+
+
+@sandbox_cmd.command("migrate")
+@click.option("--dry-run", is_flag=True,
+              help="Report what would change without renaming, creating or "
+                   "running anything.")
+def sandbox_migrate(dry_run):
+    """Move this project's sandboxes into their worktrees, and fill the gaps.
+
+    One-shot and idempotent. Relocates every sandbox an older endless left under
+    ~/.cache/endless/sandboxes/, provisions one for each worktree that never had
+    one (running the project's post-worktree-create hook, as worktree creation
+    does), and drops the dead XDG_CONFIG_HOME injection from each worktree's
+    Claude settings.
+
+    Deletes nothing. A sandbox with no surviving worktree is reported as an
+    orphan and left where it is; a worktree that somehow has BOTH is reported as
+    a collision, left untouched, and exits 1.
+    """
+    from endless.sandbox_cmd import migrate_sandboxes
+    migrate_sandboxes(dry_run)
+
+
 @main.group("jobs")
 def jobs_cmd():
     """Inspect and drive the fire-once background job runner."""

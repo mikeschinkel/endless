@@ -78,19 +78,39 @@ func CacheDir() string {
 }
 
 // IsSandboxActive reports whether the current process is reading/writing
-// through an E-1281 per-worktree sandbox. Detection: ConfigDir() resolves
-// under CacheDir()/sandboxes/. ForceRealDB() uses this to decide whether
-// hook-fired DB writes must be redirected to the real database. (Originally
-// added for the plan-snapshot sandbox-skip removed in E-1449; reintroduced
-// here as E-1362's ledger entry anticipated it might be "useful elsewhere".)
-// See E-1450.
+// through a per-worktree sandbox (E-1281). ForceRealDB() uses it to decide
+// whether hook-fired DB writes must be redirected to the real database, and
+// eventcmd uses it to keep the sandbox's ledger out of git. See E-1450, E-1729.
+//
+// Detection asks the resolver rather than matching a path prefix (E-1964).
+// Prefix-matching worked only while every sandbox sat under one root; a sandbox
+// that lives inside its own worktree has no shared root to match against, and a
+// project that moved its sandboxes out of tree has a root endless does not know
+// until it reads that project's config.
+//
+// Two questions, because a sandbox path names its worktree in the normal layout
+// and does not under an override:
+//
+//  1. Does ConfigDir() resolve to the sandbox of the worktree ConfigDir() is
+//     itself inside? True for the in-tree layout, and needs nothing but the
+//     path already in hand.
+//  2. Failing that, does it resolve to the sandbox of the worktree CWD is
+//     inside? The out-of-tree case, where the path names no worktree and only
+//     cwd can say which worktree it belongs to.
 func IsSandboxActive() bool {
-	sandboxRoot := filepath.Join(CacheDir(), "sandboxes")
-	rel, err := filepath.Rel(sandboxRoot, ConfigDir())
+	configDir := ConfigDir()
+	if configDir == "" {
+		return false
+	}
+	if sandbox := WorktreeSandboxConfigDir(configDir); sandbox != "" && sandbox == configDir {
+		return true
+	}
+	cwd, err := os.Getwd()
 	if err != nil {
 		return false
 	}
-	return rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	sandbox := WorktreeSandboxConfigDir(cwd)
+	return sandbox != "" && sandbox == configDir
 }
 
 // DBPath returns the path to the Endless SQLite database.
@@ -170,8 +190,17 @@ func mainConfigDir() (string, error) {
 // cwd is read here and that is not the E-1368 guess returning: the flag is what
 // grants permission to open a database, and cwd only supplies the address of
 // the one permitted. Refused outside a self-dev worktree for the same reason
-// Python's config.apply_db_choice refuses it — there is no sandbox to name, and
-// inventing one would mkdir a stray database in the cache.
+// Python's config.apply_db_choice refuses it — there is no sandbox to name.
+//
+// The address comes from WorktreeSandboxConfigDir (E-1964), which composes it
+// from the worktree rather than from the cache root, so this function no longer
+// knows a sandbox layout — it knows only that the resolver has one.
+//
+// A missing sandbox is REFUSED, not created. Inventing one used to mean a stray
+// database in the cache; now it would mean a fresh empty database inside the
+// worktree, which is worse, because it looks exactly like the real thing. The
+// last moment a missing sandbox is expected is `endless sandbox migrate`, and
+// the refusal says so.
 func sandboxConfigDirForCwd() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -179,18 +208,23 @@ func sandboxConfigDirForCwd() (string, error) {
 	}
 	root := selfDevProjectRoot(cwd)
 	if root == "" || !projectIsSelfDev(root) {
-		return "", errors.New(
-			"--db sandbox only applies inside a self-dev worktree " +
-				"(.endless/worktrees/e-NNN); cwd is not in one")
+		return "", errNotInSelfDevWorktree
 	}
-	name := worktreeDirName(cwd)
-	if name == "" {
-		return "", errors.New(
-			"--db sandbox only applies inside a self-dev worktree " +
-				"(.endless/worktrees/e-NNN); cwd is not in one")
+	sandbox := WorktreeSandboxDir(cwd)
+	if sandbox == "" {
+		return "", errNotInSelfDevWorktree
 	}
-	return filepath.Join(CacheDir(), "sandboxes", name, "endless"), nil
+	if !isDir(sandbox) {
+		return "", sandboxMissingError(WorktreeRoot(cwd), sandbox)
+	}
+	return filepath.Join(sandbox, "endless"), nil
 }
+
+// errNotInSelfDevWorktree is the one refusal both of sandboxConfigDirForCwd's
+// "there is no sandbox to name" branches return.
+var errNotInSelfDevWorktree = errors.New(
+	"--db sandbox only applies inside a self-dev worktree " +
+		"(.endless/worktrees/e-NNN); cwd is not in one")
 
 // PinMainDB unconditionally routes the DB (DBPath() and DB()) to the real
 // database under ~/.config/endless and satisfies the E-1429 worktree gate.
@@ -482,18 +516,12 @@ func worktreeDirName(dir string) string {
 // "self_dev": true. Mirrors the Python config.project_is_self_dev. A missing
 // or unreadable config (or the flag unset) is false, so non-self-dev projects
 // never trip the gate.
+//
+// Since ED-1554 this answers only "does endless route its OWN database into
+// this project's sandboxes" — it no longer decides whether a sandbox exists,
+// which is now true of every project.
 func projectIsSelfDev(root string) bool {
-	data, err := os.ReadFile(filepath.Join(root, ".endless", "config.json"))
-	if err != nil {
-		return false
-	}
-	var cfg struct {
-		SelfDev bool `json:"self_dev"`
-	}
-	if err := json.Unmarshal(data, &cfg); err != nil {
-		return false
-	}
-	return cfg.SelfDev
+	return readProjectConfig(root).SelfDev
 }
 
 // ProjectIsSelfDev reports whether <root>/.endless/config.json sets
@@ -760,7 +788,44 @@ func guardWorktreeDBContext() error {
 	if root == "" || !projectIsSelfDev(root) {
 		return nil
 	}
+	if sandbox := WorktreeSandboxDir(cwd); sandbox != "" && !isDir(sandbox) {
+		return sandboxMissingError(WorktreeRoot(cwd), sandbox)
+	}
 	return worktreeDBContextRefusal
+}
+
+// isDir reports whether path exists and is a directory.
+func isDir(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && info.IsDir()
+}
+
+// sandboxMissingError is the refusal for a self-dev worktree whose sandbox is
+// not there (E-1964). It replaces the generic "no explicit DB context" wording
+// for that one case, because the two have different remedies and only this one
+// is an anomaly.
+//
+// Nothing rebuilds the sandbox — not here, not in the resolver, not on the next
+// command. A silent recovery would hide the fact that a directory endless
+// expects to exist does not, and would act on a state nobody has understood;
+// after `endless sandbox migrate` has run once, reaching this message means
+// something happened that this design did not anticipate.
+func sandboxMissingError(worktree, sandbox string) error {
+	if worktree == "" {
+		worktree = "(unknown)"
+	}
+	return fmt.Errorf(
+		"refusing to open the database: this worktree has no sandbox.\n\n"+
+			"  worktree: %s\n"+
+			"  expected: %s\n\n"+
+			"A sandbox is expected here and nothing creates one on demand. Run:\n\n"+
+			"    endless sandbox migrate\n\n"+
+			"which relocates a sandbox left in the old cache root and provisions "+
+			"one for any worktree that never had it. If migration has already run "+
+			"on this machine, this is not a chore — something removed a directory "+
+			"endless expects to exist, and that is worth understanding before "+
+			"carrying on.",
+		worktree, sandbox)
 }
 
 // DB returns a connection to the Endless SQLite database.
@@ -1212,7 +1277,7 @@ func DBProvenance() (name, dir string, ok bool) {
 		return "main", dir, true
 	}
 	if n := worktreeDirName(cwd); n != "" {
-		if dir == filepath.Join(CacheDir(), "sandboxes", n, "endless") {
+		if dir == WorktreeSandboxConfigDir(cwd) {
 			return "sandbox (" + n + ")", dir, true
 		}
 	}

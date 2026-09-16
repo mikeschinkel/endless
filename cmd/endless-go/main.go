@@ -324,7 +324,7 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  event          emit|validate-db|rebuild-db|apply-change|backup|reap-worktrees")
 	fmt.Fprintln(w, "  hook           prompt|claude|codex")
-	fmt.Fprintln(w, "  sandbox        run|enter|init|bind|list|prune|destroy")
+	fmt.Fprintln(w, "  sandbox        run|enter|init|list|prune|destroy")
 	fmt.Fprintln(w, "  tmux           apply|status-line|active-id|show-menu")
 	fmt.Fprintln(w, "  session-query  list-live|task-plan|resume-target")
 	fmt.Fprintln(w, "  worktree       in-use  (is this worktree still in use?)")
