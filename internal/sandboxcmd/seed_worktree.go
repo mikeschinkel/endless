@@ -59,7 +59,10 @@ func seedFromWorktree(sandboxDir string) error {
 	}
 	defer sandboxDB.Close()
 
-	if _, err := sandboxDB.Exec(schema.SQL); err != nil {
+	// A sandbox DB is built by replaying the migration set (E-2019), so a fresh
+	// sandbox is the same artifact a fresh install gets rather than a second
+	// construction path that happens to agree.
+	if err := schema.Migrate(sandboxDB); err != nil {
 		return fmt.Errorf("applying schema to sandbox DB: %w", err)
 	}
 

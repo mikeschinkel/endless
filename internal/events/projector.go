@@ -27,7 +27,6 @@ type ProjectResult struct {
 // Returns the path to the temp DB and the projection result.
 // The caller is responsible for removing the temp DB when done.
 func ProjectToTempDB(projectRoot string) (string, *ProjectResult, error) {
-	schemaSQL := schema.SQL
 	// Read all events
 	events, err := ReadAllEvents(projectRoot)
 	if err != nil {
@@ -49,8 +48,10 @@ func ProjectToTempDB(projectRoot string) (string, *ProjectResult, error) {
 	}
 	defer tempDB.Close()
 
-	// Initialize schema
-	if _, err := tempDB.Exec(schemaSQL); err != nil {
+	// Initialize schema. The projection database is built the same way every
+	// other one is (E-2019) — a replay compared against the real ledger has to
+	// be built by the same mechanism or the comparison is about the builder.
+	if err := schema.Migrate(tempDB); err != nil {
 		os.Remove(tempPath)
 		return "", nil, fmt.Errorf("projector: init schema: %w", err)
 	}

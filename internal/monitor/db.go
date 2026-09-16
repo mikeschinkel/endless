@@ -340,14 +340,15 @@ func DBContextPinned() bool { return dbPathOverride != "" }
 // redirect a sandbox/worktree-context binary's DATA writes onto the main database
 // (E-1450/E-1700). The pin is signalled by dbPathOverride != "".
 //
-// Invariant (E-1818): only a database's OWNING binary applies schema.SQL (DDL +
-// seed) and the enum integrity gates to it. A candidate (self-dev worktree)
-// binary pinned here for session-state writes opens the real DB schema-passive:
-// it uses the deployed schema as-is and never mutates structure or seed rows,
-// and never runs the fail-close enum integrity checks against a schema it does
-// not own. Otherwise an unlanded binary could migrate — or, via a destructive
-// schema.SQL, corrupt — a real DB it does not own the instant a hook fires,
-// before any land, review, or explicit action (the E-1659 incident).
+// Invariant (E-1818): only a database's OWNING binary applies the schema (the
+// migration set plus the enum seeds, E-2019) and the enum integrity gates to it.
+// A candidate (self-dev worktree) binary pinned here for session-state writes
+// opens the real DB schema-passive: it uses the deployed schema as-is and never
+// mutates structure or seed rows, and never runs the fail-close enum integrity
+// checks against a schema it does not own. Otherwise an unlanded binary could
+// migrate — or, via a destructive migration, corrupt — a real DB it does not own
+// the instant a hook fires, before any land, review, or explicit action (the
+// E-1659 incident).
 //
 // The gate is DB-path only: it does not fire for the deployed global binary or
 // a self-detected sandbox open of a DB the binary owns (dbPathOverride == ""),
@@ -374,7 +375,7 @@ func pinnedToForeignRealDB() bool {
 // --db main to every endless-go shellout; run from a worktree
 // that is the WORKTREE's binary — unlanded code — and because the explicit flag
 // left override empty this returned false, so monitor.DB() applied the branch's
-// schema.SQL to the user's real database. A branch that adds a table created it
+// own schema to the user's real database. A branch that adds a table created it
 // in the main database the first time an agent ran a routine command, days before
 // the branch landed and whether or not it ever did.
 //
@@ -803,17 +804,21 @@ func DB() (*sql.DB, error) {
 		// PRAGMAs above stay on both paths — they configure the connection, they
 		// do not mutate schema.
 		if !pinnedToForeignRealDB() {
-			// schema.SQL is the authoritative schema, all CREATE ... IF NOT EXISTS:
-			// it creates every table on a fresh DB and is a no-op on a populated
-			// one. Destructive, one-off changes are applied separately at land
-			// time via `endless db apply-change`, not here.
-			if _, err := dbConn.Exec(schema.SQL); err != nil {
+			// E-2019: the schema comes from the embedded goose migration set, not
+			// from schema.sql. WHEN it is applied has not changed — still every
+			// connect — only where it comes from; E-2020 is what replaces this
+			// with version verification. A database built before versioning
+			// existed is stamped at the baseline rather than replayed onto, so
+			// this is a no-op against the real ledger. Destructive, one-off
+			// changes are still applied separately at land time via
+			// `endless db apply-change`, not here.
+			if err := schema.Migrate(dbConn); err != nil {
 				dbErr = fmt.Errorf("applying schema to %s: %w", path, err)
 				dbConn = nil
 				return
 			}
 			// E-1538: enum/table integrity check. task_types is seeded by
-			// schema.SQL on every connection; if a row is missing or drifted from
+			// seeds.sql on every connection; if a row is missing or drifted from
 			// the Go TaskType enum we fail closed, since downstream INSERTs would
 			// either violate the FK or write an id that has no enum constant.
 			// Skipped on populated DBs that have not yet had the E-1538 migration
