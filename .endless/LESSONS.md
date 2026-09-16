@@ -6293,3 +6293,7 @@ Second, the grown-scope reporting instruction says to 'say so in your reply draf
 
 The rule: when the turn has already recorded something durably — a plan, an outcome, a lesson, a commit message — the handoff names its existence and location and stops. Reserve handoff prose for what exists nowhere else: the one verify command, the one-line regression result, and anything that genuinely needs a decision from Mike. If I catch myself writing a second paragraph, the content belongs in the ledger and probably already is.
 - **Project**: endless
+
+### [2026-09-16] Omissions justified differently do not share a sentence — verify each before compressing them
+Summarizing E-1916 I dropped two clauses the plan named and told Mike 'both are covered elsewhere now (E-2023)'. True of one: the runner clause really is refused inside `endless task verify`, and `just verify` routes there — verified by reading the recipe through to `endless --db sandbox task verify`. False of the other: the retired `tests/tasks/` path is not covered, it is merely almost-empty on main. 63 retained worktrees still hold those scripts, 11 of them on non-terminal tasks, where a legacy suite has no guard at all. Mike had to ask 'will it break things?' to surface the difference, and the answer changed what he was deciding. Each thing you chose NOT to build carries its own justification. Before compressing several omissions into one clause, re-check each against live evidence; if they do not share a justification, they do not share a sentence.
+- **Project**: endless
