@@ -23,7 +23,7 @@
 #      is seeded with the new name, and — the part a rename usually gets wrong —
 #      a POPULATED database seeded under the old name reconciles itself on the
 #      next connect, with no change file, because the seed is an upsert (the
-#      E-1659 pattern task_types and process_kinds already use). Relation ids
+#      E-1659 pattern task_types and session_kinds already use). Relation ids
 #      are what session_tasks persists, so no row moves.
 #   B. The guard. A task whose only claimant ENDED is refused; the refusal names
 #      that session and routes to `session goto --resume`; `--revisit` appears

@@ -453,22 +453,14 @@ conn.close()
     assert_eq "POST: _migrate_v3 does NOT re-add the column (db.py guard)" \
         "0" "$(sqlite3 "${mdir}/endless.db" \
             "SELECT count(*) FROM pragma_table_info('sessions') WHERE name='transcript_path';")"
-    # `transcript_offset` and `hidden` are the ALTERs _migrate_v3 still owns:
-    # needs_recap / summary_seq went with E-1906, transcript_path with this
-    # task, and `summary` with E-2074 — each for the same reason this check
-    # exists, that a migrator running on every connect must not re-add a column
-    # a land-time change file just dropped.
+    # `summary` and `transcript_offset` are the ALTERs _migrate_v3 still owns:
+    # needs_recap / summary_seq went with E-1906, transcript_path with this task.
     assert_eq "POST: _migrate_v3 still maintains its OTHER sessions columns" \
         "1|1" \
         "$(sqlite3 "${mdir}/endless.db" \
             "SELECT (SELECT count(*) FROM pragma_table_info('sessions') WHERE name='transcript_offset')
                     ||'|'||
-                    (SELECT count(*) FROM pragma_table_info('sessions') WHERE name='hidden');")"
-
-    # The same guard, for the column E-2074 dropped.
-    assert_eq "POST: _migrate_v3 does NOT re-add summary (E-2074 guard)" \
-        "0" "$(sqlite3 "${mdir}/endless.db" \
-            "SELECT count(*) FROM pragma_table_info('sessions') WHERE name='summary';")"
+                    (SELECT count(*) FROM pragma_table_info('sessions') WHERE name='summary');")"
 }
 
 # ─── layer F — project-wide regression ──────────────────────────────────────

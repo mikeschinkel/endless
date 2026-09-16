@@ -35,9 +35,8 @@
 #   1. No reference survives anywhere in the source tree.
 #   2. The two dead Go files are actually deleted, not just unreferenced.
 #   3. schema.sql declares neither column, and a DB built from it has neither —
-#      while `hidden`, which sits beside them on the same table, is still
-#      there. The overreach guard. (`summary` and `short_id` stood here until
-#      E-2074 dropped them; the guard moved to a column that survives.)
+#      while `summary`, which is set independently and rendered by three
+#      surfaces, is still there. The overreach guard.
 #   4. The change file really migrates: a POPULATED old-shape DB loses both
 #      columns and keeps its rows and their summaries.
 #   5. Every CLI surface is gone from both the Go and the Python entry points.
@@ -285,16 +284,13 @@ check_files_deleted() {
     assert_absent "internal/hookcmd/recap.go is gone" "internal/hookcmd/recap.go"
 }
 
-# 3. The schema no longer declares the columns — and the overreach guard: a
-# DROP COLUMN pair must take exactly its two columns and no neighbor.
-#
-# The guard originally named `summary`, which E-1906 deliberately kept: it was
-# set from the first assistant response and rendered by three surfaces, and only
-# the recap generator ever wrote it alongside summary_seq. E-2074 dropped it —
-# and `short_id` with it — so this now guards `hidden`, which still sits on the
-# table beside where they were.
+# 3. The schema no longer declares the columns — and the overreach guard:
+# sessions.summary is NOT recap state. It is set from the first assistant
+# response (monitor.setSessionSummary) and rendered by `session list`, the
+# live-session query and session navigation. Only the recap generator ever
+# wrote it alongside summary_seq.
 check_schema_shape() {
-    section "3 — schema.sql drops both columns and keeps its neighbors"
+    section "3 — schema.sql drops both columns and keeps \`summary\`"
 
     assert_file_lacks "schema.sql does not declare needs_recap" \
         "internal/schema/schema.sql" "needs_recap"
@@ -312,8 +308,8 @@ check_schema_shape() {
     cols=$(sqlite3 "${db}" "SELECT group_concat(name) FROM pragma_table_info('sessions');")
     assert_not_contains "a fresh DB's sessions has no needs_recap" "${cols}" "needs_recap"
     assert_not_contains "a fresh DB's sessions has no summary_seq" "${cols}" "summary_seq"
-    assert_contains "a fresh DB's sessions KEEPS hidden" "${cols}" "hidden"
-    assert_contains "a fresh DB's sessions KEEPS transcript_offset" "${cols}" "transcript_offset"
+    assert_contains "a fresh DB's sessions KEEPS summary" "${cols}" "summary"
+    assert_contains "a fresh DB's sessions KEEPS short_id" "${cols}" "short_id"
 }
 
 # 4. The change file is what runs against the real populated DB at land time,
