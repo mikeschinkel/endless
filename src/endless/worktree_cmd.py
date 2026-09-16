@@ -2459,6 +2459,15 @@ def _resolve_land_endless_go(worktree_path: Path, project_root: Path) -> str | N
     mask by sliding to the stale global — E-1662); a missing build silently
     standing in is the exact skew that produced the original failure.
 
+    ED-1571 took the APPLYING away from this binary and left the RECORDING with
+    it, and the split is the point. Applying is forbidden to a candidate build
+    (ED-1567), so a separate migration-only executable does it — see
+    `_resolve_land_migrate_bin`. Recording is a DATA write, which a candidate
+    build has always been allowed to make against the real database (E-1450), and
+    it is the write whose enum constants must agree with the rows the migration
+    just inserted. So this half of E-1664 survives unchanged: the worktree's
+    endless-go records the landing, against a ledger something else migrated.
+
     Returns None for a non-self_dev project, where the global is correct and no
     worktree binary exists (downstream users never build endless-go).
     """
@@ -2533,6 +2542,133 @@ def _rebuild_worktree_binary(worktree_path: Path, canonical: str) -> None:
     )
 
 
+def _resolve_land_migrate_bin(worktree_path: Path, project_root: Path) -> str | None:
+    """The migration-only executable a self_dev land must migrate with, or None.
+
+    ED-1571. Under ED-1567 a CANDIDATE binary may never migrate the real ledger,
+    and a self_dev land has only candidates to offer: the worktree's own
+    endless-go is the one whose embedded schema and enums match the rows the land
+    just wrote (E-1664), and its path carries the worktree marker, which is what
+    `candidateBuild()` means by unlanded code. The installed binary is permitted
+    but does not carry the change being landed. Neither can apply it.
+
+    So the apply step runs neither. It runs <worktree>/bin/endless-migrate, built
+    from the landing branch by `_build_migration_executable`, which carries the
+    migration set and nothing else — no hook, no task command, no query, no
+    schema of its own — and therefore has no expectation of the database it is
+    about to change. Having none is precisely what makes it safe where a
+    candidate endless-go is not.
+
+    Missing means a bug to surface, not to mask: the land built this binary a
+    moment ago, before the ff-merge, so an absent one says the build silently did
+    not happen rather than that the global would do instead (E-1662).
+
+    Returns None for a non-self_dev project, which has no land, no worktree
+    binaries and no business applying endless's own schema changes.
+    """
+    from endless import config
+
+    if not config.project_is_self_dev(project_root):
+        return None
+    migrate_bin = worktree_path / "bin" / "endless-migrate"
+    if not migrate_bin.is_file() or not os.access(migrate_bin, os.X_OK):
+        raise click.ClickException(
+            f"The land-time migration executable is missing or not "
+            f"executable:\n\n    {_display_path(migrate_bin)}\n\n"
+            f"It is built from the landing branch by the land itself; if you "
+            f"are running one by hand, build it with `just migrate-bin` in the "
+            f"worktree."
+        )
+    return str(migrate_bin)
+
+
+def _build_migration_executable(worktree_path: Path, canonical: str) -> None:
+    """Build ED-1571's migration executable from the landing branch.
+
+    Called only when the branch actually ADDS a schema change, and only in
+    self_dev. A land carrying no migration builds nothing: there is nothing for
+    the executable to apply, and building a tool to not use it would make its
+    absence untestable.
+
+    Placed BEFORE the ff-merge, for E-1941's reason applied to a second binary: a
+    broken build must abort while base and the database are still untouched. The
+    executable is *invoked* at the apply step, between the ff-merge and the
+    record, where a failure leaves the DB merely lagging code already on base —
+    but a tree that cannot compile its own migration tool should never get as far
+    as advancing base.
+
+    Runs `just migrate-bin` rather than an inlined `go build`, so the build
+    command has one definition and the land runs the same one a developer would.
+
+    self_dev only: downstream users never build endless's binaries.
+    """
+    from endless import config
+    if not config.project_is_self_dev(worktree_path):
+        return
+    if shutil.which("just") is None:
+        raise click.ClickException(
+            f"cannot land {canonical}: `just` is not on PATH, so the "
+            f"migration-only executable cannot be built from the landing "
+            f"branch. That build is what lets this land apply its own schema "
+            f"change at all — a binary built inside a task worktree is "
+            f"unlanded code and may not migrate the real database."
+        )
+    result = subprocess.run(
+        ["just", "migrate-bin"], cwd=str(worktree_path),
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise click.ClickException(
+            f"cannot land {canonical}: building the migration-only executable "
+            f"from the landing branch failed.\n\n"
+            f"{(result.stderr or result.stdout).strip()}\n\n"
+            f"Nothing has been merged or migrated — base and the database are "
+            f"untouched. Fix the build and retry."
+        )
+    click.echo(
+        click.style("•", fg="cyan")
+        + " Built the migration executable from the landing branch"
+    )
+
+
+def _migrate_change(migrate_bin: str, change_path: Path) -> dict:
+    """Apply one schema change through the migration-only executable.
+
+    Shells to `endless-migrate apply <path>` and returns its parsed JSON —
+    {"name", "status", "db"[, "reason"]}, the same document `endless-go event
+    apply-change` prints plus the database it opened. Raises click.ClickException
+    on failure; the executable reports its cause in the JSON's "error" field, as
+    the event bridge's apply_change does.
+
+    The DB context is threaded as --config-dir exactly as it is to every other Go
+    shellout (E-1429): a per-invocation flag, never an environment variable, so a
+    stale export cannot silently redirect a migration. `land_worktree` has
+    already pinned main, so during a land this always names the real ledger.
+    """
+    from endless import config
+
+    config.require_db_context()
+    result = subprocess.run(
+        [migrate_bin, *config.go_db_context_args(), "apply", str(change_path)],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        try:
+            payload = json.loads(result.stdout.strip()) if result.stdout.strip() else {}
+        except json.JSONDecodeError:
+            payload = {}
+        msg = (
+            payload.get("error")
+            or result.stderr.strip()
+            or "the migration executable failed"
+        )
+        raise click.ClickException(f"apply-change failed: {msg}")
+
+    if not result.stdout.strip():
+        return {}
+    return json.loads(result.stdout.strip())
+
+
 def _branch_schema_changes(worktree_path: Path, base_branch: str) -> list[str]:
     """Repo-relative schema-change files this branch ADDS since base (E-1941).
 
@@ -2562,6 +2698,7 @@ def _apply_branch_schema_changes(
     canonical: str,
     base_branch: str,
     endless_go_bin: str | None,
+    migrate_bin: str | None,
 ) -> None:
     """Back up, then apply this branch's schema changes — AFTER the ff-merge.
 
@@ -2581,8 +2718,21 @@ def _apply_branch_schema_changes(
     several files, so one can apply and the next fail, leaving a partial
     migration no re-run heals — and there is still no `endless db restore`
     (E-1942).
+
+    WHAT APPLIES THEM changed with ED-1571. It used to be `endless db
+    apply-change` running on the worktree's endless-go, and that binary is a
+    candidate build (E-1664 made using it an invariant, and ED-1567 forbids a
+    candidate migrating the real ledger — the two point opposite ways). It is now
+    `migrate_bin`: the migration-only executable, built from this same branch a
+    step ago, which carries the change set and no application at all.
+
+    The BACKUP still runs on the worktree's endless-go, and deliberately. It is a
+    VACUUM INTO of the file — monitor.BackupDB opens the database itself and never
+    goes through the application's connect, so it has no schema expectation to
+    disappoint and no gate to fall foul of. Moving it would buy nothing and give
+    the migration executable a second job.
     """
-    from endless.event_bridge import apply_change, backup_db
+    from endless.event_bridge import backup_db
 
     def _post_merge_failure(what: str, detail: str) -> click.ClickException:
         return click.ClickException(
@@ -2604,10 +2754,17 @@ def _apply_branch_schema_changes(
         detail = e.message if isinstance(e, click.ClickException) else str(e)
         raise _post_merge_failure("the pre-apply database backup", detail)
 
+    if migrate_bin is None:
+        raise _post_merge_failure(
+            "applying this branch's schema changes",
+            "no migration executable was resolved for a self_dev land; this is "
+            "a bug in the land, not in the branch.",
+        )
+
     for rel in rel_paths:
         click.echo(click.style("•", fg="cyan") + f" Applying schema change: {rel}")
         try:
-            apply_change(str(worktree_path / rel), endless_go_bin=endless_go_bin)
+            _migrate_change(migrate_bin, worktree_path / rel)
         except Exception as e:
             detail = e.message if isinstance(e, click.ClickException) else str(e)
             raise _post_merge_failure(f"applying schema change {rel}", detail)
@@ -3208,6 +3365,17 @@ def land_worktree(
                 f"listing schema changes on the branch failed: {e.stderr or e}"
             )
 
+        # Step 4.6 (ED-1571): with the change list known and base still
+        # unadvanced, build the migration-only executable from the landing
+        # branch. Conditional on there being a change to apply — a land carrying
+        # no migration builds nothing — and before Step 5 for E-1941's reason: a
+        # tree that cannot compile its own migration tool must abort while base
+        # and the database are untouched. It is INVOKED at Step 5.5.
+        migrate_bin = None
+        if schema_changes and config.project_is_self_dev(main_root):
+            _build_migration_executable(worktree_path, canonical)
+            migrate_bin = _resolve_land_migrate_bin(worktree_path, main_root)
+
         # Step 5: ff-merge.
         try:
             _git_run(["merge", "--ff-only", branch], cwd=main_root)
@@ -3224,16 +3392,24 @@ def land_worktree(
         # HAS advanced. Before the merge this was the irreversible case (DB
         # migrated, code not landed, no installed binary able to read it);
         # after it, a failure merely leaves the DB lagging code that is already
-        # on main, which a re-run fixes. Must precede Step 6, which runs this
-        # same binary against the real DB and needs the rows these changes
-        # write (E-1664 inverted).
+        # on main, which a re-run fixes. Must precede Step 6, which runs the
+        # worktree's endless-go against the real DB and needs the rows these
+        # changes write (E-1664 inverted).
+        #
+        # ED-1571: the applier is the migration executable built at Step 4.6,
+        # NOT the endless-go Step 6 uses. A candidate binary may not migrate the
+        # real ledger (ED-1567) and a self_dev land has only candidates, so the
+        # two steps now run two different programs against one database — one
+        # that carries migrations and no schema expectation, then one whose
+        # embedded schema matches what the first just wrote.
+        #
         # self_dev only: `internal/schema/changes/` is endless's OWN schema, so a
         # downstream branch has no business migrating the user's DB even if a
         # path happened to match.
         if schema_changes and config.project_is_self_dev(main_root):
             _apply_branch_schema_changes(
                 schema_changes, worktree_path, canonical, base_branch,
-                endless_go_bin,
+                endless_go_bin, migrate_bin,
             )
 
         # Step 6 (E-1337): record the landing in task_landings via the

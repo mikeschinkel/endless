@@ -21,29 +21,28 @@
 // the _schema_version marker, wraps the callback in a BEGIN IMMEDIATE
 // transaction, records the marker on success, and exits the process with the
 // right status. There is no registry and no init() registration: the only
-// thing that knows a change exists is its file on disk, applied at land time
-// by `endless db apply-change`.
+// thing that knows a change exists is its file on disk.
+//
+// Two programs compile and run these scripts, and neither is the application:
+// `endless-go event apply-change` (the installed binary, and the only path
+// outside self_dev) and ED-1571's cmd/endless-migrate, which a self_dev land
+// uses because ED-1567 forbids its candidate endless-go migrating the real
+// ledger. Both pass the database they resolved through
+// schemachange.ChangeDBEnvVar, so the script never picks a file of its own.
 package runner
 
 import (
 	"database/sql"
 	"log"
 	"os"
-	"path/filepath"
-	"strings"
 
 	_ "modernc.org/sqlite"
 
-	"github.com/mikeschinkel/endless/internal/monitor"
-)
+	"github.com/mikeschinkel/go-dt"
 
-// schemaVersionDDL matches the shape in internal/schema/schema.sql. Created
-// defensively so a `.go` change run against a DB that has never had schema.SQL
-// applied still has somewhere to record its marker.
-const schemaVersionDDL = `CREATE TABLE IF NOT EXISTS _schema_version (
-	name       TEXT PRIMARY KEY,
-	applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
-)`
+	"github.com/mikeschinkel/endless/internal/dbcontext"
+	"github.com/mikeschinkel/endless/internal/schemachange"
+)
 
 // Run applies one .go change inside a transaction and exits the process.
 // On success (callback returns nil) it inserts the change's _schema_version
@@ -61,7 +60,7 @@ func Run(apply func(*sql.Tx) error) {
 	defer db.Close()
 	db.SetMaxOpenConns(1)
 
-	if _, err = db.Exec(schemaVersionDDL); err != nil {
+	if _, err = db.Exec(schemachange.VersionTableDDL); err != nil {
 		fail(name, "ensure _schema_version", err)
 	}
 
@@ -99,24 +98,33 @@ func Run(apply func(*sql.Tx) error) {
 	os.Exit(0)
 }
 
-// dbPath is the DB the change writes to. The apply-change dispatcher passes the
-// resolved path via ENDLESS_CHANGE_DB so the subprocess targets the exact same
-// file (honoring any ForceRealDB redirect). A developer running the script
-// directly falls back to the default location.
+// dbPath is the DB the change writes to. Whichever program applies the change
+// passes the path it resolved via ENDLESS_CHANGE_DB, so this subprocess targets
+// the exact same file (honoring any ForceRealDB redirect) instead of resolving
+// one of its own. A developer running the script directly falls back to the
+// default location.
+//
+// The default comes from internal/dbcontext rather than internal/monitor, so a
+// compiled change script links the migration machinery and nothing else — the
+// same property ED-1571's executable rests on, and for the same reason: a
+// migration must not carry code that expects a schema. The answer is identical
+// either way; monitor's extra routing (the hook pin, cwd sandbox detection, the
+// --config-dir flag) is all set by callers this process does not have.
 func dbPath() string {
-	if p := os.Getenv("ENDLESS_CHANGE_DB"); p != "" {
+	if p := os.Getenv(schemachange.ChangeDBEnvVar); p != "" {
 		return p
 	}
-	return monitor.DBPath()
+	return string(dbcontext.DBPath(dt.DirPath("")))
 }
 
 // changeName derives the marker key from the program name. `go run
 // internal/schema/changes/e-NNN-slug.go` compiles to a temp binary named
-// "e-NNN-slug", so the key matches the source basename without extension —
-// the same key the dispatcher computes for .sql changes.
+// "e-NNN-slug", so the key matches the source basename without extension — and
+// it is computed by the same function the applying program uses on the source
+// path, which is what makes the two agree by construction rather than by
+// coincidence.
 func changeName() string {
-	base := filepath.Base(os.Args[0])
-	return strings.TrimSuffix(base, filepath.Ext(base))
+	return schemachange.Name(dt.Filepath(os.Args[0]))
 }
 
 func fail(name, phase string, err error) {

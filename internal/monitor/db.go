@@ -13,6 +13,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/mikeschinkel/go-dt"
+
+	"github.com/mikeschinkel/endless/internal/dbcontext"
 	"github.com/mikeschinkel/endless/internal/gatekind"
 	"github.com/mikeschinkel/endless/internal/processkind"
 	"github.com/mikeschinkel/endless/internal/schema"
@@ -58,16 +61,15 @@ var (
 // ConfigDir returns the Endless configuration directory. When an explicit DB
 // context was provided (--config-dir, via ConsumeDBContextFlag), it wins over
 // XDG_CONFIG_HOME so config.json and logs follow the same target as the DB.
+//
+// The resolution itself lives in internal/dbcontext, because ED-1571's
+// migration-only executable needs the same answer and may not link this
+// package to get it — importing internal/monitor would put the whole
+// application, schema-applying connect included, into a binary whose safety
+// rests on carrying nothing but migrations. This is the routing layer on top:
+// the explicit context, and (in DBPath) the hook/tmux main pin.
 func ConfigDir() string {
-	if dbContextDir != "" {
-		return dbContextDir
-	}
-	configDir := os.Getenv("XDG_CONFIG_HOME")
-	if configDir == "" {
-		home, _ := os.UserHomeDir()
-		configDir = filepath.Join(home, ".config")
-	}
-	return filepath.Join(configDir, "endless")
+	return string(dbcontext.ConfigDir(dt.DirPath(dbContextDir)))
 }
 
 // CacheDir returns the Endless cache directory.
@@ -101,7 +103,7 @@ func DBPath() string {
 	if dbPathOverride != "" {
 		return dbPathOverride
 	}
-	return filepath.Join(ConfigDir(), "endless.db")
+	return string(dbcontext.DBPath(dt.DirPath(dbContextDir)))
 }
 
 // ForceRealDB routes monitor.DB() and DBPath()-derived artifacts (e.g. backups)
@@ -194,24 +196,9 @@ func PinMainDB() {
 // exported env var could silently satisfy the gate for every later command,
 // which is exactly the silent-wrong-DB failure mode E-1429 exists to prevent.
 func ConsumeDBContextFlag() {
-	args := os.Args
-	cleaned := make([]string, 0, len(args))
-	if len(args) > 0 {
-		cleaned = append(cleaned, args[0])
-	}
-	for i := 1; i < len(args); i++ {
-		a := args[i]
-		switch {
-		case a == "--config-dir":
-			if i+1 < len(args) {
-				SetDBContextDir(args[i+1])
-				i++
-			}
-		case strings.HasPrefix(a, "--config-dir="):
-			SetDBContextDir(strings.TrimPrefix(a, "--config-dir="))
-		default:
-			cleaned = append(cleaned, a)
-		}
+	cleaned, dir, found := dbcontext.ConsumeConfigDirFlag(os.Args)
+	if found {
+		SetDBContextDir(string(dir))
 	}
 	os.Args = cleaned
 }

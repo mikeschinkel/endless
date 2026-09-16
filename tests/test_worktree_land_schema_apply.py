@@ -22,11 +22,20 @@ asked a proxy question, got it wrong three times, and even once tuned blocked
 every worktree continuously (main takes a Go commit every few hours) while
 directing users to hand-rebase — the operation that risks the E-1943 conflict.
 
+ED-1571/E-2088 changed WHAT applies a change, not WHEN. The apply step no longer
+runs `endless db apply-change` on the worktree's endless-go — that binary is a
+candidate build and ED-1567 forbids a candidate migrating the real ledger — but a
+migration-only executable built from the landing branch, which the land builds at
+Step 4.6 (before the ff-merge, so a broken build aborts with base untouched) and
+invokes at Step 5.5 (after it, in the same window as before). The recording at
+Step 6 still runs the worktree's endless-go, which is the half of E-1664 that
+survives. The ordering assertions below cover both binaries.
+
 Three layers:
   1. Unit — `_rebuild_worktree_binary` and `_branch_schema_changes` against real
      throwaway repos.
   2. Ordering — a genuine land (real rebase + ff-merge) recording the sequence of
-     rebuild / apply / record calls and main's SHA at each point.
+     rebuild / build-migrate / apply / record calls and main's SHA at each point.
   3. Failure surfacing — an apply that raises must report main as advanced and
      must not unwind the merge.
 """
@@ -47,6 +56,7 @@ from endless.worktree_cmd import (
 
 CANON = "E-1941"
 CHANGE = "internal/schema/changes/0099-add-thing.sql"
+MIGRATE_BIN = "/bin/echo"
 
 
 # ---------------------------------------------------------------------------
@@ -138,6 +148,14 @@ def _patch_land(monkeypatch, main, worktree, *, self_dev=True):
     # justfile. Tests that care about its position record it instead.
     monkeypatch.setattr(
         worktree_cmd, "_rebuild_worktree_binary", lambda wt, canon: None
+    )
+    # Step 4.6 (ED-1571) shells out to `just migrate-bin` and then looks for the
+    # binary it built; same treatment, same reason.
+    monkeypatch.setattr(
+        worktree_cmd, "_build_migration_executable", lambda wt, canon: None
+    )
+    monkeypatch.setattr(
+        worktree_cmd, "_resolve_land_migrate_bin", lambda wt, root: MIGRATE_BIN
     )
 
 
@@ -267,17 +285,27 @@ def test_apply_runs_after_merge_and_before_record(landable, monkeypatch):
 
     monkeypatch.setattr(worktree_cmd, "_rebuild_worktree_binary", fake_rebuild)
 
+    main_at_build_migrate = {}
+
+    def fake_build_migrate(wt, canon):
+        calls.append(("build-migrate", canon))
+        main_at_build_migrate["sha"] = _head(main, "main")
+
+    monkeypatch.setattr(
+        worktree_cmd, "_build_migration_executable", fake_build_migrate
+    )
+
     def fake_backup(endless_go_bin=None):
         calls.append(("backup", endless_go_bin))
         return {}
 
-    def fake_apply(path, endless_go_bin=None):
-        calls.append(("apply", path))
+    def fake_apply(migrate_bin, change_path):
+        calls.append(("apply", str(change_path)))
         main_at_apply["sha"] = _head(main, "main")
         return {}
 
     monkeypatch.setattr("endless.event_bridge.backup_db", fake_backup)
-    monkeypatch.setattr("endless.event_bridge.apply_change", fake_apply)
+    monkeypatch.setattr(worktree_cmd, "_migrate_change", fake_apply)
     def fake_record(item_id, proj_name, branch, base_branch, canonical,
                     merge_sha, endless_go_bin=None):
         calls.append(("record", merge_sha))
@@ -287,15 +315,19 @@ def test_apply_runs_after_merge_and_before_record(landable, monkeypatch):
     feat_tip = _head(wt)
     land_worktree(CANON, dry_run=False)
 
-    assert [c[0] for c in calls] == ["rebuild", "backup", "apply", "record"]
-    # The rebuild happens BEFORE main advances, so a broken build aborts with
-    # base and the DB untouched.
+    assert [c[0] for c in calls] == [
+        "rebuild", "build-migrate", "backup", "apply", "record",
+    ]
+    # Both builds happen BEFORE main advances, so a broken build of either
+    # binary aborts with base and the DB untouched.
     assert main_at_rebuild["sha"] != feat_tip
+    assert main_at_build_migrate["sha"] != feat_tip
     # The apply saw main ALREADY advanced — the ordering the incident inverted.
     assert main_at_apply["sha"] == feat_tip
     by_name = dict(calls)
     assert by_name["apply"].endswith(CHANGE)
-    # The pinned worktree binary reaches the DB calls (E-1664's invariant).
+    # The pinned worktree binary still reaches the backup (E-1664's invariant,
+    # and the half of it ED-1571 left alone).
     assert by_name["backup"] == "/bin/echo"
 
 
@@ -312,8 +344,12 @@ def test_no_schema_changes_skips_backup_and_apply(landable, monkeypatch):
         lambda endless_go_bin=None: calls.append("backup"),
     )
     monkeypatch.setattr(
-        "endless.event_bridge.apply_change",
-        lambda path, endless_go_bin=None: calls.append("apply"),
+        worktree_cmd, "_migrate_change",
+        lambda migrate_bin, change_path: calls.append("apply"),
+    )
+    monkeypatch.setattr(
+        worktree_cmd, "_build_migration_executable",
+        lambda wt_, canon: calls.append("build-migrate"),
     )
     monkeypatch.setattr(worktree_cmd, "_record_landing", _noop_record)
 
@@ -338,8 +374,12 @@ def test_non_self_dev_land_never_applies(landable, monkeypatch):
         lambda endless_go_bin=None: calls.append("backup"),
     )
     monkeypatch.setattr(
-        "endless.event_bridge.apply_change",
-        lambda path, endless_go_bin=None: calls.append("apply"),
+        worktree_cmd, "_migrate_change",
+        lambda migrate_bin, change_path: calls.append("apply"),
+    )
+    monkeypatch.setattr(
+        worktree_cmd, "_build_migration_executable",
+        lambda wt_, canon: calls.append("build-migrate"),
     )
     monkeypatch.setattr(worktree_cmd, "_record_landing", _noop_record)
 
@@ -362,10 +402,10 @@ def test_apply_failure_reports_main_advanced_and_keeps_the_merge(
         "endless.event_bridge.backup_db", lambda endless_go_bin=None: {}
     )
 
-    def boom(path, endless_go_bin=None):
+    def boom(migrate_bin, change_path):
         raise click.ClickException("no such table: thing")
 
-    monkeypatch.setattr("endless.event_bridge.apply_change", boom)
+    monkeypatch.setattr(worktree_cmd, "_migrate_change", boom)
     recorded = []
 
     def fake_record(item_id, proj_name, branch, base_branch, canonical,
@@ -400,8 +440,8 @@ def test_backup_failure_is_also_surfaced_as_post_merge(landable, monkeypatch):
     monkeypatch.setattr("endless.event_bridge.backup_db", boom)
     applied = []
     monkeypatch.setattr(
-        "endless.event_bridge.apply_change",
-        lambda path, endless_go_bin=None: applied.append(path),
+        worktree_cmd, "_migrate_change",
+        lambda migrate_bin, change_path: applied.append(str(change_path)),
     )
     monkeypatch.setattr(worktree_cmd, "_record_landing", _noop_record)
 

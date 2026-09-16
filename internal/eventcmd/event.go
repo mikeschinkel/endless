@@ -5,22 +5,21 @@ package eventcmd
 
 import (
 	"context"
-	"database/sql"
 	"encoding/json"
-	"errors"
 	"flag"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
 
+	"github.com/mikeschinkel/go-dt"
+
 	"github.com/mikeschinkel/endless/internal/events"
 	"github.com/mikeschinkel/endless/internal/kairos"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/schemachange"
 )
 
 func Run(args []string) {
@@ -726,18 +725,20 @@ func runReapWorktrees(args []string) {
 	}
 }
 
-// schemaVersionDDL matches the shape in internal/schema/schema.sql. Created
-// defensively before checking/recording the applied marker.
-const schemaVersionDDL = `CREATE TABLE IF NOT EXISTS _schema_version (
-	name       TEXT PRIMARY KEY,
-	applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
-)`
-
 // runApplyChange applies one per-ticket schema-change file
 // (internal/schema/changes/<name>.{sql,go}) and records it in _schema_version.
-// The change name is the file's basename without extension; the same name is
-// used both as the applied marker and (for .go) by the runner helper. Already
-// applied changes are skipped. Effects and the marker insert commit together.
+//
+// This is the INSTALLED binary's path, and outside self_dev the only one: it
+// opens through monitor.DB(), the application's connect, which applies
+// schema.sql, seeds the enum mirrors and runs the fail-closed integrity gates
+// before a change is applied at all.
+//
+// In self_dev at land time it is NOT the path. ED-1567 forbids a candidate
+// binary migrating the real ledger and a self_dev land only ever has one
+// (E-1664), so `worktree land` runs ED-1571's cmd/endless-migrate instead — the
+// same internal/schemachange logic reached through a direct file open rather
+// than through this connect. The difference between the two programs is exactly
+// that handle, which is why the applying itself lives in one place.
 func runApplyChange(args []string) {
 	fs := flag.NewFlagSet("apply-change", flag.ExitOnError)
 	fs.Parse(args)
@@ -750,83 +751,19 @@ func runApplyChange(args []string) {
 	if err != nil {
 		emitChangeErr("", fmt.Sprintf("resolve path: %v", err))
 	}
-	if _, err = os.Stat(path); err != nil {
-		emitChangeErr("", fmt.Sprintf("change file not found: %s", path))
-	}
-
-	ext := strings.ToLower(filepath.Ext(path))
-	name := strings.TrimSuffix(filepath.Base(path), filepath.Ext(path))
 
 	db, err := monitor.DB()
 	if err != nil {
-		emitChangeErr(name, fmt.Sprintf("open db: %v", err))
-	}
-	if _, err = db.Exec(schemaVersionDDL); err != nil {
-		emitChangeErr(name, fmt.Sprintf("ensure _schema_version: %v", err))
-	}
-	var applied int
-	db.QueryRow("SELECT count(*) FROM _schema_version WHERE name = ?", name).Scan(&applied)
-	if applied > 0 {
-		emitChangeResult(name, "skipped", "already applied")
-		return
+		emitChangeErr(schemachange.Name(dt.Filepath(path)), fmt.Sprintf("open db: %v", err))
 	}
 
-	switch ext {
-	case ".sql":
-		applySQLChange(db, path, name)
-	case ".go":
-		applyGoChange(path, name)
-	default:
-		emitChangeErr(name, fmt.Sprintf("unsupported change extension %q (only .sql and .go)", ext))
-	}
-}
-
-// applySQLChange runs a .sql change file's statements and the marker insert in
-// a single BEGIN IMMEDIATE transaction on the shared single connection. The
-// file may itself reshape _schema_version (as the E-1459 reshape does); the
-// marker insert runs after the file's statements, against whatever shape the
-// file leaves behind.
-func applySQLChange(db *sql.DB, path, name string) {
-	content, err := os.ReadFile(path)
+	// os.Stderr for a .go change's own logs: this process's stdout is one JSON
+	// document and nothing else.
+	res, err := schemachange.Apply(db, dt.Filepath(monitor.DBPath()), dt.Filepath(path), os.Stderr)
 	if err != nil {
-		emitChangeErr(name, fmt.Sprintf("read change file: %v", err))
+		emitChangeErr(res.Name, err.Error())
 	}
-	if _, err = db.Exec("BEGIN IMMEDIATE TRANSACTION"); err != nil {
-		emitChangeErr(name, fmt.Sprintf("begin: %v", err))
-	}
-	if _, err = db.Exec(string(content)); err != nil {
-		db.Exec("ROLLBACK")
-		emitChangeErr(name, fmt.Sprintf("apply: %v", err))
-	}
-	if _, err = db.Exec("INSERT INTO _schema_version (name) VALUES (?)", name); err != nil {
-		db.Exec("ROLLBACK")
-		emitChangeErr(name, fmt.Sprintf("record marker: %v", err))
-	}
-	if _, err = db.Exec("COMMIT"); err != nil {
-		db.Exec("ROLLBACK")
-		emitChangeErr(name, fmt.Sprintf("commit: %v", err))
-	}
-	emitChangeResult(name, "applied", "")
-}
-
-// applyGoChange runs a .go change via `go run`. The script uses the runner
-// helper to do its own BEGIN IMMEDIATE + work + marker insert + COMMIT. The DB
-// path is passed via ENDLESS_CHANGE_DB so the subprocess targets the exact same
-// file this process resolved. The script's logs go to stderr; this process's
-// stdout stays clean JSON. The runner's exit code is propagated on failure.
-func applyGoChange(path, name string) {
-	cmd := exec.Command("go", "run", path)
-	cmd.Env = append(os.Environ(), "ENDLESS_CHANGE_DB="+monitor.DBPath())
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-	if err := cmd.Run(); err != nil {
-		var exitErr *exec.ExitError
-		if errors.As(err, &exitErr) {
-			os.Exit(exitErr.ExitCode())
-		}
-		emitChangeErr(name, fmt.Sprintf("go run %s: %v", path, err))
-	}
-	emitChangeResult(name, "applied", "")
+	emitChangeResult(res.Name, string(res.Status), res.Reason)
 }
 
 // runBackup reports the destination path so the CLI can name the file it just

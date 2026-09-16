@@ -556,6 +556,20 @@ lifecycle-check:
 go:
     go build -o bin/endless-go ./cmd/endless-go
 
+# Build just the land-time migration-only executable (ED-1571, E-2088).
+#
+# Deliberately NOT part of `just build` / `just go`. This binary exists for one
+# moment — a self_dev land whose branch adds a schema change — and `endless
+# worktree land` builds it then, from the landing branch, only when there is a
+# change to apply. A land carrying no migration never builds it, and neither
+# does an ordinary development build.
+#
+# It is a recipe rather than an inlined `go build` inside the land for the same
+# reason `just go` is: the build command has one definition, and the land runs
+# the same one a developer would.
+migrate-bin:
+    go build -o bin/endless-migrate ./cmd/endless-migrate
+
 # Run Go tests across every internal/ package (E-1506: was a hand-maintained
 # list of five; the wildcard auto-includes new packages as they grow tests).
 test-go:
