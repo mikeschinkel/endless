@@ -6317,3 +6317,14 @@ The constraint was not real. A custom click.ParamType controls the help metavar 
 
 Before writing an option that says 'X, but you lose Y': check whether X actually costs Y in the framework being used. Presenting a false trade-off does not just waste a question — it invites a worse answer, because the user is choosing between alternatives that need not have been alternatives.
 - **Project**: endless
+
+### [2026-09-16] Re-derive a CLI surface from the live command tree; a task description's count of it goes stale
+E-1504's description named '12 commands carrying both flags' and '16 commands with --json and no agent view'. Both were wrong, in ways that changed the work:
+
+  - 15 commands carried --llm, not 12. Two of them (task landed, task unlanded) take their options from a shared decorator factory, so grepping the source for the option declaration misses them entirely. A description written by grep inherits the grep's blind spot.
+  - Of the 16, two carry a --json that names the command's INPUT, not a rendering: session order parses its SPEC argument as JSON, task import names a file to read. Sweeping them into an output-flag change would have added --format to commands that render nothing.
+
+Walk the Click tree instead: recurse cmd.commands, read each command's params, and classify by what the flag DOES, not by its spelling. Then write the derived count into the plan so the next reader gets the corrected one.
+
+Where a surface must stay uniform, encode the invariant as a test that walks the same tree — and name the deliberate exceptions in it, so a third one is an act with a test to change rather than a silent omission. --llm had drifted to 15 of 30 commands precisely because nothing asserted the flags travel together.
+- **Project**: endless
