@@ -306,12 +306,13 @@ def rows_of(payload):
     return payload if isinstance(payload, list) else []
 
 
-def line(*, llm: bool = False) -> str | None:
+def line(*, agent: bool = False) -> str | None:
     """The in-band trace, or None when there is nothing to announce.
 
     `#`-prefixed for the agent-facing mode, matching `rowcap.footer`'s idiom so
     an agent meets one comment convention across Endless's output rather than
-    one per surface.
+    one per surface. The parameter is spelled `agent` for the same reason the
+    flag is (E-1504): one fact wears one spelling across every rendering.
     """
     if not _touched:
         return None
@@ -325,7 +326,7 @@ def line(*, llm: bool = False) -> str | None:
     if not parts:
         return None
     body = " · ".join(parts)
-    return f"# {body}" if llm else body
+    return f"# {body}" if agent else body
 
 
 def _agent_mode() -> bool:
@@ -353,7 +354,7 @@ def echo_head() -> None:
 
     Not gated on `_agent_mode()`, unlike `authority.banner`: the call sites ARE
     the agent-facing renders, so reaching here already answers that question. A
-    human's render calls this only under `--llm`, which is a human asking to see
+    human's render calls this only under `--agent`, which is a human asking to see
     what an agent sees — the same reason `--agent-view` exists.
 
     A human's ordinary render gets the trailing copy only. They read top-down,
@@ -366,7 +367,7 @@ def echo_head() -> None:
     global _head_done
     if _head_done or _machine:
         return
-    text = line(llm=True)
+    text = line(agent=True)
     if text is None:
         return
     _head_done = True
@@ -384,11 +385,11 @@ def echo_tail() -> None:
     """
     if _machine:
         return
-    llm = _agent_mode()
-    text = line(llm=llm)
+    agent = _agent_mode()
+    text = line(agent=agent)
     if text is None:
         return
-    click.echo(text if llm else click.style(text, dim=True))
+    click.echo(text if agent else click.style(text, dim=True))
 
 
 def begin(argv) -> None:

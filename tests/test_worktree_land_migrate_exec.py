@@ -32,7 +32,9 @@ What this module pins, and nothing else does:
      worktree's endless-go backs up and records. That pairing is the half of
      E-1664 that survives E-2088 and nothing else covers it.
   5. `_migrate_change` invokes the executable the way every other Go shellout is
-     invoked — `--config-dir` as a per-invocation flag (E-1429) — and surfaces
+     invoked — `--config-dir` as a per-invocation flag (E-1429; endless-migrate
+     keeps that flag where endless-go moved to --db, see
+     config.migrate_db_context_args) — and surfaces
      the executable's own error text rather than a generic one.
 
 The ordering of the whole land, and the post-merge failure surfacing, live in
@@ -275,8 +277,12 @@ def test_invocation_threads_config_dir_and_the_change_path(
         "exit 0\n",
     )
     monkeypatch.setattr("endless.config.require_db_context", lambda: None)
+    # E-1668 split the two binaries' spellings: endless-go takes
+    # --db main|sandbox, endless-migrate keeps --config-dir. Stubbing the WRONG
+    # one here would let this test pass while a land threaded a flag the
+    # executable cannot parse.
     monkeypatch.setattr(
-        "endless.config.go_db_context_args", lambda: ["--config-dir", "/cfg"]
+        "endless.config.migrate_db_context_args", lambda: ["--config-dir", "/cfg"]
     )
 
     res = _migrate_change(str(binary), wt / CHANGE)

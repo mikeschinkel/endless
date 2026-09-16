@@ -69,7 +69,7 @@ def test_names_the_database_in_a_self_dev_project(tmp_path, monkeypatch):
     provenance.mark_touched()
 
     assert provenance.line() == "db: main"
-    assert provenance.line(llm=True) == "# db: main"
+    assert provenance.line(agent=True) == "# db: main"
     assert provenance.fields()["db"] == "main"
 
 
@@ -329,3 +329,44 @@ def test_begin_reads_the_argv_it_is_given_not_sys_argv():
 
     provenance.begin(["task", "list"])
     assert provenance._machine is False
+
+
+# --- the two binaries' flag vocabularies -------------------------------------
+#
+# E-1668 gave `endless-go` --db main|sandbox and retired --config-dir from it.
+# ED-1571's `endless-migrate` landed separately and KEEPS --config-dir: it links
+# none of the application and resolves its target from what the caller named,
+# never from cwd. Two contracts, so two spellings — and threading the wrong one
+# is not a cosmetic slip. `--db` survives endless-migrate's strip, lands in
+# argv[1] where the subcommand belongs, and the migration fails during a land.
+
+
+def test_the_two_binaries_get_different_flags(tmp_path, monkeypatch):
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", config.main_config_dir())
+
+    assert config.go_db_context_args() == ["--db", "main"]
+    assert config.migrate_db_context_args() == [
+        "--config-dir",
+        str(config.main_config_dir()),
+    ]
+
+
+def test_neither_threads_anything_without_a_resolved_context(monkeypatch):
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
+
+    assert config.go_db_context_args() == []
+    assert config.migrate_db_context_args() == []
+
+
+def test_the_migrate_spelling_is_a_directory_not_a_word(tmp_path, monkeypatch):
+    """endless-migrate cannot resolve `sandbox` — it has no cwd routing at all —
+    so its flag must always carry the path itself."""
+    wt = _self_dev_project(tmp_path, monkeypatch)[1]
+    monkeypatch.setattr(
+        config, "RESOLVED_CONFIG_DIR", config.sandbox_config_dir(wt.name)
+    )
+
+    assert config.go_db_context_args() == ["--db", "sandbox"]
+    args = config.migrate_db_context_args()
+    assert args[0] == "--config-dir"
+    assert args[1] == str(config.sandbox_config_dir(wt.name))

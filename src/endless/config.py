@@ -725,6 +725,32 @@ def go_db_context_args() -> list[str]:
     return ["--db-dir", str(RESOLVED_CONFIG_DIR)]
 
 
+def migrate_db_context_args() -> list[str]:
+    """The flag pair that threads the resolved DB context to `endless-migrate`.
+
+    A SECOND spelling, and deliberately not a duplicate of the one above: the two
+    binaries have different contracts, so one function cannot serve both.
+
+    `endless-go` is an application surface. It resolves a database the way every
+    other surface does — `--db main|sandbox`, with cwd supplying the address of a
+    worktree's sandbox — and E-1668 gave it that vocabulary so the word a user
+    types is the word the binary hears.
+
+    `endless-migrate` is the opposite by design (ED-1571): a migration-only
+    executable that links none of the application and resolves its target from
+    what the caller NAMED, never from where it happens to be standing. So it
+    takes a directory outright, through `internal/dbcontext`, and `--config-dir`
+    is its flag rather than a retired one.
+
+    Threading `--db main` to it would not be a rename, it would be an argument it
+    cannot parse: `--db` survives the strip, lands in `args[1]` where the
+    subcommand belongs, and the migration fails during a land.
+    """
+    if RESOLVED_CONFIG_DIR is None:
+        return []
+    return ["--config-dir", str(RESOLVED_CONFIG_DIR)]
+
+
 def resolution_cwd() -> Path:
     """Effective cwd for project resolution.
 

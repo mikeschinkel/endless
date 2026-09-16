@@ -4,8 +4,8 @@
 //
 // It exists because two very different programs need the same answer.
 // internal/monitor needs it for every application surface and layers its own
-// routing on top — the hook's main-database pin, a cwd-self-detected worktree
-// sandbox, the E-1429 gate. ED-1571's migration-only executable
+// routing on top — the hook's main-database pin, the --db main|sandbox flag,
+// the E-1429 gate. ED-1571's migration-only executable
 // (cmd/endless-migrate) needs the same answer and must link none of that: its
 // whole claim to safety is that it carries the migration set and nothing else,
 // so importing internal/monitor for one path join would pull the entire
@@ -16,11 +16,16 @@
 // they layer on top. internal/schemachange/executable_test.go asserts that the
 // executable links nothing but this package and the change applier.
 //
-// Deliberately absent: any cwd-derived routing. monitor.SelfDetectWorktreeSandbox
-// reads the working directory and may redirect a process to a per-worktree
-// sandbox. That is right for an application surface and wrong for a migration —
-// a tool that rewrites a schema resolves its target from what the caller named,
-// never from where it happens to be standing.
+// Deliberately absent: any cwd-derived routing. monitor resolves `--db sandbox`
+// by reading the working directory to find WHICH worktree's sandbox is meant.
+// That is right for an application surface and wrong for a migration — a tool
+// that rewrites a schema resolves its target from what the caller named, never
+// from where it happens to be standing.
+//
+// E-1368 once let cwd route a process on its own, with no flag at all; E-1668
+// removed that, because the same routing satisfied the E-1429 gate and so let a
+// database be opened that nobody had chosen. Detection may decide where to look;
+// only a flag decides that you may open it.
 package dbcontext
 
 import (

@@ -194,27 +194,51 @@ fi
 # ── 4. one vocabulary across both layers ────────────────────────────────────
 section "4. --db main|sandbox, and --db-dir as the only escape"
 
-# --config-dir may survive ONLY in prose explaining why it retired.
-leaks=$(grep -rn --exclude-dir=__pycache__ --binary-files=without-match \
-        -- "--config-dir" "${WT}/internal" "${WT}/cmd" "${WT}/src" "${WT}/tests" 2>/dev/null \
-        | grep -v 'the user saying --db and the Go binary hearing' \
-        | grep -v 'which stopped being true in E-1668' \
-        | grep -v 'not a directory under a flag name')
-if [[ -z "${leaks}" ]]; then
-    report_pass "no --config-dir survives outside the prose that retires it"
-else
-    report_fail "no --config-dir survives outside the prose that retires it" \
-        "no live references" "${leaks}"
-fi
+# --config-dir retired from ENDLESS-GO — asserted on the BINARY, not by grepping
+# the tree. A grep here kept flagging `cmd/endless-migrate`, `internal/dbcontext`
+# and their tests, all of which name the flag legitimately, and an exclusion list
+# long enough to silence them would stop proving anything. What this task
+# actually promised is that endless-go no longer ACCEPTS the flag, and the binary
+# can be asked directly.
+out=$("${GO_BIN}" --config-dir /tmp/does-not-matter session-query list-live \
+    --project-root "${WT}" 2>&1)
+assert_contains "endless-go no longer consumes --config-dir" \
+    'unknown subcommand "--config-dir"' "${out}"
 
-# The Python threading site speaks the word the user typed, derived from what
-# was resolved — so --db-dir stays an escape rather than the normal case.
+# The other half: it does not silently ROUTE to that directory either. If the
+# flag were still stripped but ignored, the line above would not fire.
+assert_not_contains "and it did not quietly route there instead" \
+    "does-not-matter" "$(printf '%s' "${out}" | grep -v 'unknown subcommand' || true)"
+
+# The Python side agrees: the endless-go threading function emits the new words.
 if grep -q 'return \["--db", "main"\]' "${CONFIG_PY}" \
         && grep -q 'return \["--db", "sandbox"\]' "${CONFIG_PY}"; then
     report_pass "go_db_context_args threads --db main / --db sandbox"
 else
     report_fail "go_db_context_args threads --db main / --db sandbox" \
         "both named-database branches" "absent"
+fi
+
+# And the migrate binary's own flag still works, so the retirement did not reach
+# past its scope and break a binary this task never set out to touch.
+if grep -q 'ConfigDirFlag = "--config-dir"' "${WT}/internal/dbcontext/dbcontext.go"; then
+    report_pass "cmd/endless-migrate keeps --config-dir (a different binary's contract)"
+else
+    report_fail "cmd/endless-migrate keeps --config-dir" \
+        "dbcontext.ConfigDirFlag intact" "removed by an over-broad retirement"
+fi
+
+# The near-miss worth pinning: `worktree land` shells to endless-migrate, and it
+# threaded config.go_db_context_args() — which this task changed to emit
+# `--db main`, a flag that executable cannot parse. `--db` would survive its
+# strip, land in argv[1] where the subcommand belongs, and break a land. The two
+# spellings are now separate functions, and the land uses the migrate one.
+if grep -q 'config.migrate_db_context_args()' "${WT}/src/endless/worktree_cmd.py"; then
+    report_pass "worktree land threads endless-migrate's own flag, not endless-go's"
+else
+    report_fail "worktree land threads endless-migrate's own flag" \
+        "a migrate_db_context_args call in _migrate_change" \
+        "still go_db_context_args — a land would fail"
 fi
 
 out=$("${GO_BIN}" --db nonsense session-query list-live --project-root "${WT}" 2>&1)
