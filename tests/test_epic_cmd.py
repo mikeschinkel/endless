@@ -107,7 +107,7 @@ def test_epic_list_json_roundtrips(isolated_env):
         main, ["epic", "list", "--project", "test", "--json"]
     )
     assert result.exit_code == 0, result.output
-    out = json.loads(result.output)
+    out = json.loads(result.output)["rows"]
     assert len(out) == 1
     assert out[0]["id"] == f"E-{eid}"
 

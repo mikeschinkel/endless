@@ -186,24 +186,61 @@ def test_object_payload_carries_it_once_at_top_level(tmp_path, monkeypatch):
     assert out[provenance.FIELD]["db"] == "main"
 
 
-def test_array_payload_carries_it_per_row(tmp_path, monkeypatch):
-    """Per row rather than in a new envelope: an envelope is a breaking change
-    to every consumer and an added key is not."""
+def test_array_payload_is_enveloped_once(tmp_path, monkeypatch):
+    """Stated once for the answer, not once per row — and the rows themselves
+    come back untouched."""
     _touched_in_main(tmp_path, monkeypatch)
     out = provenance.attach([{"id": "E-1"}, {"id": "E-2"}])
 
-    assert [r["id"] for r in out] == ["E-1", "E-2"]
-    assert all(r[provenance.FIELD]["db"] == "main" for r in out)
+    assert [r["id"] for r in out["rows"]] == ["E-1", "E-2"]
+    assert out[provenance.FIELD]["db"] == "main"
+    assert all(provenance.FIELD not in r for r in out["rows"])
+
+
+def test_an_empty_result_still_names_its_store(tmp_path, monkeypatch):
+    """THE case the envelope exists for. Per-row injection said nothing here,
+    and "no matches" from the wrong database reads exactly like "no matches"
+    from the right one — the founding incident's own shape."""
+    _touched_in_main(tmp_path, monkeypatch)
+    out = provenance.attach([])
+
+    assert out["rows"] == []
+    assert out[provenance.FIELD]["db"] == "main"
+
+
+def test_the_shape_does_not_depend_on_having_something_to_say(
+    tmp_path, monkeypatch
+):
+    """A shape that appeared only when there was provenance would hand a
+    consumer an array on one invocation and an object on the next."""
+    _self_dev_project(tmp_path, monkeypatch, self_dev=False)  # nothing to announce
+    provenance.mark_touched()
+    out = provenance.attach([{"id": "E-1"}])
+
+    assert provenance.fields() is None
+    assert out == {"rows": [{"id": "E-1"}]}
+
+
+def test_rows_of_unwraps_either_shape(tmp_path, monkeypatch):
+    """The one place Python unwraps a Go payload, so the four call sites that
+    read one agree by construction."""
+    assert provenance.rows_of({"rows": [{"id": "E-1"}]}) == [{"id": "E-1"}]
+    assert provenance.rows_of({"rows": []}) == []
+    # A bare list keeps working: the deployed endless-go and the Python CLI are
+    # installed separately and are not always the same age.
+    assert provenance.rows_of([{"id": "E-1"}]) == [{"id": "E-1"}]
+    assert provenance.rows_of({}) == []
 
 
 def test_a_payload_with_nowhere_to_put_it_is_returned_unchanged(
     tmp_path, monkeypatch
 ):
-    """Reshaping a payload to make room would break the consumer this is meant
-    to inform."""
+    """A string or a number has nothing for a consumer to index, so it is
+    returned as-is. (A list of scalars IS enveloped — it is still rows.)"""
     _touched_in_main(tmp_path, monkeypatch)
-    assert provenance.attach([1, 2, 3]) == [1, 2, 3]
     assert provenance.attach("plain") == "plain"
+    assert provenance.attach(7) == 7
+    assert provenance.attach([1, 2, 3])["rows"] == [1, 2, 3]
 
 
 def test_attaching_suppresses_the_in_band_line(tmp_path, monkeypatch):
@@ -218,7 +255,9 @@ def test_attaching_suppresses_the_in_band_line(tmp_path, monkeypatch):
 def test_the_payload_stays_valid_json(tmp_path, monkeypatch):
     _touched_in_main(tmp_path, monkeypatch)
     payload = provenance.attach([{"id": "E-1"}])
-    assert json.loads(json.dumps(payload))[0][provenance.FIELD]["db"] == "main"
+    round_tripped = json.loads(json.dumps(payload))
+    assert round_tripped[provenance.FIELD]["db"] == "main"
+    assert round_tripped["rows"] == [{"id": "E-1"}]
 
 
 # --- the head/tail pair ------------------------------------------------------
@@ -267,18 +306,26 @@ def test_neither_end_writes_into_a_machine_render(tmp_path, monkeypatch, capsys)
     ["task", "list", "--json"],
     ["task", "list", "--tsv"],
     ["sql", "SELECT 1", "--tsv"],
+    ["--json", "task", "list"],
 ])
-def test_a_machine_flag_anywhere_in_argv_suppresses_the_line(
-    monkeypatch, argv
-):
+def test_a_machine_flag_anywhere_in_argv_suppresses_the_line(argv):
     """Belt and braces with `attach`: a machine surface that was never converted
     still suppresses the line. The cost of a missed `attach` is a missing field;
     the cost of a missed suppression is a corrupted payload, so the two
     mechanisms fail in the safe direction."""
-    monkeypatch.setattr("sys.argv", ["endless", *argv])
-    assert provenance._scan_argv_for_machine_format() is True
+    assert provenance._asks_for_a_machine_format(argv) is True
 
 
-def test_a_human_render_is_not_mistaken_for_a_machine_one(monkeypatch):
-    monkeypatch.setattr("sys.argv", ["endless", "task", "list"])
-    assert provenance._scan_argv_for_machine_format() is False
+def test_a_human_render_is_not_mistaken_for_a_machine_one():
+    assert provenance._asks_for_a_machine_format(["task", "list"]) is False
+
+
+def test_begin_reads_the_argv_it_is_given_not_sys_argv():
+    """The bug this signature exists to stop: CliRunner passes its arguments to
+    Command.main directly and leaves sys.argv as the test runner's, so a scan of
+    sys.argv fired in production and silently did not under test."""
+    provenance.begin(["sql", "SELECT 1", "--tsv"])
+    assert provenance._machine is True
+
+    provenance.begin(["task", "list"])
+    assert provenance._machine is False

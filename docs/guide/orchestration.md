@@ -136,9 +136,23 @@ Where it appears:
 - **Agent-facing output** carries it at BOTH ends, byte-identical, so `| head`
   and `| tail` each leave something sufficient on its own.
 - **Human output** carries the trailing copy, dimmed.
-- **`--json`** carries it as an `_answered_from` field — at the top level of an
-  object payload, on each row of an array one — so it survives `| jq`. The line
-  is never written to a machine render.
+- **`--json`** carries it as an `_answered_from` field, so it survives `| jq`.
+  The line is never written to a machine render.
+
+  A payload that was a bare array is now an object with a `rows` key — the shape
+  `session status --json` and `project status --json` already used:
+
+  ```
+  $ endless task active --json
+  {
+    "_answered_from": {"db": "main", "db_dir": "…"},
+    "rows": [{"id": "E-101", …}]
+  }
+  ```
+
+  The wrap happens whether or not there is anything to announce, so the shape
+  never varies between invocations — and a result with NO rows still names the
+  database it asked, which is the case where it matters most.
 - **`--tsv`** carries nothing: its rows are the columns of arbitrary SQL, with
   no header row, so an extra column would silently change what every
   `cut`/`read` consumer sees.

@@ -213,7 +213,7 @@ def test_task_list_agent_puts_the_note_after_the_status(
 def test_task_list_json_emits_the_relation_ungated(seeded_project_at_cwd, capsys):
     dupe, keeper = _duplicate_pair(status="unverified")
     task_cmd.show_plan(show_all=True, as_json=True)
-    rows = {r["id"]: r for r in json.loads(capsys.readouterr().out)}
+    rows = {r["id"]: r for r in json.loads(capsys.readouterr().out)["rows"]}
     assert rows[f"E-{dupe}"]["duplicates"] == [f"E-{keeper}"]
     assert rows[f"E-{keeper}"]["duplicates"] == []
 

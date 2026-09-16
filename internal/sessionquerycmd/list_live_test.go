@@ -72,12 +72,16 @@ func TestListLive_BinaryReturnsLiveSessionsForProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("binary exec failed: %v\nstdout: %s", err, out)
 	}
-	var got []map[string]any
+	// E-1668 wraps array payloads as {"_answered_from": …, "rows": [...]} so a
+	// result with NO rows can still name the database it came from.
+	var got struct {
+		Rows []map[string]any `json:"rows"`
+	}
 	if err := json.Unmarshal(out, &got); err != nil {
 		t.Fatalf("decode json output: %v\nraw: %s", err, out)
 	}
-	if len(got) != 2 {
-		t.Errorf("got %d live sessions, want 2; raw: %s", len(got), out)
+	if len(got.Rows) != 2 {
+		t.Errorf("got %d live sessions, want 2; raw: %s", len(got.Rows), out)
 	}
 }
 
@@ -104,12 +108,14 @@ func TestListLive_BinaryUnregisteredRootReturnsEmptyArray(t *testing.T) {
 	// ProjectIDForPath auto-registers unknown paths as anonymous, so the
 	// unregistered path becomes its own project with no sessions; the
 	// list is empty either way.
-	var got []map[string]any
+	var got struct {
+		Rows []map[string]any `json:"rows"`
+	}
 	if err := json.Unmarshal(out, &got); err != nil {
 		t.Fatalf("decode json: %v\nraw: %s", err, out)
 	}
-	if len(got) != 0 {
-		t.Errorf("got %d sessions for unregistered root, want 0; raw: %s", len(got), out)
+	if len(got.Rows) != 0 {
+		t.Errorf("got %d sessions for unregistered root, want 0; raw: %s", len(got.Rows), out)
 	}
 }
 

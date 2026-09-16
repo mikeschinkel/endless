@@ -462,6 +462,20 @@ class DBAwareGroup(click.Group):
 
         argv = list(args) if args is not None else sys.argv[1:]
 
+        # E-1668: an invocation starts here. Clear the last one's provenance
+        # state and decide whether stdout will carry a machine payload, using
+        # the argv this method already holds — CliRunner passes its arguments
+        # here and leaves sys.argv as the test runner's, so a scan of sys.argv
+        # would be right in production and silently wrong under test.
+        from endless import provenance
+
+        provenance.begin(argv)
+        # Per-invocation too, and reset for the same reason NO_SESSION is set
+        # here: a process runs one command, but a test session runs thousands,
+        # and a latched pin would silence every announcement after the first
+        # always-main operation.
+        config.PINNED_DB_CONTEXT = False
+
         # E-1513: under `--db sandbox` inside a self-dev worktree, re-exec into
         # the worktree's Python source via `uv run --directory <worktree>
         # endless ...`. The global `endless` script is the editable install of
@@ -617,12 +631,6 @@ def main(ctx):
     # (more specific) diagnosis first.
     _refuse_unsupported_agent(ctx)
 
-    # E-1668: arrange for every command's output to say which store answered it.
-    # The trailing copy itself is the result callback below; this only decides
-    # whether stdout is carrying a payload the line must stay out of.
-    from endless import provenance
-
-    provenance.install(ctx)
 
 
 @main.result_callback()

@@ -78,7 +78,9 @@ def _go_resolution(endless_go: Path, repo: Path) -> tuple[str, str]:
         [str(endless_go), "session-query", "worktree-unsettled", str(repo)],
         capture_output=True, text=True, check=True,
     )
-    probe = json.loads(res.stdout)[0]
+    # E-1668: session-query wraps array payloads so an empty result can still
+    # name the database it came from.
+    probe = json.loads(res.stdout)["rows"][0]
     return probe.get("base", ""), probe.get("base_error", "")
 
 

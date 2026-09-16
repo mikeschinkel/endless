@@ -171,7 +171,7 @@ def test_task_list_json_keeps_the_relation(seeded_project_at_cwd, capsys):
     _link(new, closed, "replaces")
 
     task_cmd.show_plan(show_all=True, as_json=True)
-    rows = {r["id"]: r for r in json.loads(capsys.readouterr().out)}
+    rows = {r["id"]: r for r in json.loads(capsys.readouterr().out)["rows"]}
     assert rows[f"E-{closed}"]["replaced_by"] == [f"E-{new}"]
 
 
@@ -234,5 +234,5 @@ def test_decision_list_json_keeps_the_relation(seeded_project_at_cwd, capsys):
     _link_supersedes(new, old)
 
     decision_cmd.list_decisions(as_json=True)
-    rows = {r["id"]: r for r in json.loads(capsys.readouterr().out)}
+    rows = {r["id"]: r for r in json.loads(capsys.readouterr().out)["rows"]}
     assert rows[f"ED-{old}"]["superseded_by"] == [f"ED-{new}"]

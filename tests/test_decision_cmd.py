@@ -158,7 +158,7 @@ def test_decision_list_json(isolated_env):
     assert result.exit_code == 0, result.output
     import json
 
-    out = json.loads(result.output)
+    out = json.loads(result.output)["rows"]
     assert out[0]["id"] == f"ED-{did}"
     assert out[0]["status"] == "accepted"
 

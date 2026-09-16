@@ -112,44 +112,62 @@ func encode(w io.Writer, v any, indent string) error {
 	return err
 }
 
-// inject adds the provenance to an already-marshalled payload: once at top
-// level for an object, and per ELEMENT for an array.
+// Rows is the key an enveloped array payload's elements live under. It matches
+// what `session-status --json` and `project-status --json` have always
+// returned — the two richest JSON surfaces in this binary were already objects
+// with a `rows` array, so enveloping the rest makes them agree rather than
+// diverge.
+const Rows = "rows"
+
+// inject gives an already-marshalled payload its provenance.
 //
-// Per-element rather than in a new envelope because an envelope is a breaking
-// change to every consumer and an added key is not — and these rows already
-// carry per-row context of exactly this kind (`list-live`'s `project_id`).
+// An OBJECT takes it as one more top-level key. An ARRAY is WRAPPED:
+// `{"_answered_from": …, "rows": [...]}`.
+//
+// The wrap is UNCONDITIONAL — it happens whether or not there is anything to
+// announce. A shape that depended on the provenance being present would hand a
+// consumer an array on one invocation and an object on the next, which is a
+// worse contract than either shape on its own.
+//
+// The first draft put a copy on every element instead, to avoid changing the
+// shape. That said nothing at all for an EMPTY array — which is precisely the
+// shape the incident took, a short and plausible answer from the wrong store —
+// and repeated one identical object once per row besides.
 //
 // Done by surgery on the encoded bytes rather than by round-tripping through
 // map[string]any, which would reorder every object's keys (Go sorts map keys on
 // marshal) and turn a readable diff of this binary's output into noise. A
-// payload with nowhere to put a key — a bare array of scalars, a string, null —
-// is returned untouched rather than reshaped.
+// payload that is neither object nor array — a string, a number, null — is
+// returned untouched: there is nothing there for a consumer to index.
 func inject(raw []byte, fields map[string]string) ([]byte, error) {
-	if len(fields) == 0 {
-		return raw, nil
-	}
-	encoded, err := json.Marshal(fields)
-	if err != nil {
-		return nil, err
-	}
-	entry := append([]byte(`"`+Field+`":`), encoded...)
-
 	trimmed := bytes.TrimSpace(raw)
+
+	var entry []byte
+	if len(fields) > 0 {
+		encoded, err := json.Marshal(fields)
+		if err != nil {
+			return nil, err
+		}
+		entry = append([]byte(`"`+Field+`":`), encoded...)
+	}
+
 	switch {
+	case bytes.HasPrefix(trimmed, []byte("[")):
+		// The envelope, always — see the unconditional note above.
+		out := make([]byte, 0, len(trimmed)+len(entry)+16)
+		out = append(out, '{')
+		if entry != nil {
+			out = append(out, entry...)
+			out = append(out, ',')
+		}
+		out = append(out, `"`+Rows+`":`...)
+		out = append(out, trimmed...)
+		out = append(out, '}')
+		return out, nil
+	case entry == nil:
+		return raw, nil
 	case bytes.HasPrefix(trimmed, []byte("{")):
 		return injectObject(trimmed, entry), nil
-	case bytes.HasPrefix(trimmed, []byte("[")):
-		var elems []json.RawMessage
-		if err := json.Unmarshal(trimmed, &elems); err != nil {
-			return raw, nil
-		}
-		for i, e := range elems {
-			et := bytes.TrimSpace(e)
-			if bytes.HasPrefix(et, []byte("{")) {
-				elems[i] = injectObject(et, entry)
-			}
-		}
-		return json.Marshal(elems)
 	default:
 		return raw, nil
 	}

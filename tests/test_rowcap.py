@@ -264,7 +264,7 @@ def test_json_is_uncapped_by_default(argv):
     _seed_tasks(35)
     result = _run(argv + PROJECT + ["--json"])
     assert result.exit_code == 0, result.output
-    assert len(json.loads(result.output)) == 35
+    assert len(json.loads(result.output)["rows"]) == 35
 
 
 @pytest.mark.parametrize("argv", TASK_LISTINGS, ids=lambda a: " ".join(a))
@@ -273,7 +273,7 @@ def test_json_stays_parseable_when_an_explicit_limit_truncates_it(argv):
     _seed_tasks(35)
     result = CliRunner().invoke(main, argv + PROJECT + ["--json", "--limit", "5"])
     assert result.exit_code == 0, result.output
-    assert len(json.loads(result.stdout)) == 5
+    assert len(json.loads(result.stdout)["rows"]) == 5
     assert "30 more rows" in result.stderr
 
 

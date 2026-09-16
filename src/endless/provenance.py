@@ -142,20 +142,25 @@ def record_project(name: str | None) -> None:
         _project = name
 
 
-def _scan_argv_for_machine_format() -> bool:
-    """Whether argv asks for a machine format, by the same pre-Click scan
-    `DBAwareGroup.main` already uses for `--db`.
+def _asks_for_a_machine_format(argv) -> bool:
+    """Whether argv asks for a machine format.
 
     `--json` and `--tsv` are boolean flags everywhere they appear in this CLI,
-    so a bare occurrence in argv means the flag was passed. `endless task import
-    --json FILE` and `endless session order --json SPEC` take a VALUE — but both
-    are inputs to a command whose stdout is not a payload, so treating them as
+    so a bare occurrence means the flag was passed. `endless task import --json
+    FILE` and `endless session order --json SPEC` take a VALUE — but both are
+    inputs to a command whose stdout is not a payload, so treating them as
     machine renders costs a line neither would have printed usefully anyway.
-    """
-    import sys
 
+    Takes argv as an ARGUMENT rather than reading sys.argv. Reading sys.argv was
+    wrong in a way that hid itself: click.testing.CliRunner passes its arguments
+    to Command.main directly and leaves sys.argv as pytest's, so the scan saw no
+    --tsv and the suppression silently did not fire — a failure that showed up
+    only as test-order-dependent noise, which is the worst way for it to show up.
+    `DBAwareGroup.main` holds the real argv and is where `--db` is already
+    pre-scanned, so the question is asked there.
+    """
     return any(a in ("--json", "--tsv") or a.startswith(("--json=", "--tsv="))
-               for a in sys.argv[1:])
+               for a in argv)
 
 
 def _describe_db() -> tuple[str, str] | None:
@@ -222,29 +227,83 @@ def fields() -> dict | None:
     return out or None
 
 
+# The key an enveloped list payload's rows live under. Spelled once, and chosen
+# to match what `session-status --json` and `project-status --json` have always
+# returned — those two are the richest JSON surfaces Endless has, and they were
+# already objects with a `rows` array. Enveloping the list surfaces makes them
+# agree with those rather than diverge from them.
+ROWS = "rows"
+
+
 def attach(payload):
     """Return `payload` carrying its provenance, and mark stdout as machine.
 
-    Per the plan's shape rule: once at top level for an object payload, per ROW
-    for an array one. Per-row rather than in a new envelope because an envelope
-    is a breaking change to every consumer, while an added key is not — and
-    these rows already carry per-row context of exactly this kind (`list-live`'s
-    `project_id`).
+    An OBJECT payload takes the provenance as one more top-level key.
 
-    A payload that is neither a dict nor a list of dicts (a bare list of scalars,
-    a string) has nowhere to put a key, and is returned untouched rather than
-    reshaped. Marking machine still happens, so such a render stays uncorrupted.
+    A LIST payload is wrapped: `{"_answered_from": …, "rows": [...]}`. The first
+    draft put a copy on every row instead, to avoid changing the shape — and
+    that was wrong three times over. It said nothing at all when there were NO
+    rows, which is exactly the shape the founding incident took (a short,
+    plausible answer from the wrong database). It repeated one identical object
+    once per row — 460 copies on a full `task list`. And it left Endless with
+    two JSON shapes for one question, when `session-status` and `project-status`
+    had been returning `{…, "rows": [...]}` all along.
+
+    The wrap is UNCONDITIONAL — it happens whether or not there is anything to
+    announce. A shape that depended on the provenance being present would hand
+    a consumer an array on one invocation and an object on the next, which is a
+    worse contract than either shape alone.
+
+    A payload that is neither (a string, a number) is returned untouched rather
+    than reshaped; there is nothing there for a consumer to index. Marking
+    machine still happens, so such a render stays uncorrupted.
     """
     mark_machine()
     value = fields()
-    if value is None:
-        return payload
-    if isinstance(payload, dict):
-        return {**payload, FIELD: value}
     if isinstance(payload, list):
-        return [{**row, FIELD: value} if isinstance(row, dict) else row
-                for row in payload]
+        out = {ROWS: payload}
+        return {FIELD: value, **out} if value is not None else out
+    if isinstance(payload, dict) and value is not None:
+        return {**payload, FIELD: value}
     return payload
+
+
+def empty_rows_json() -> str:
+    """The rendered payload for a list render that matched nothing.
+
+    A surface with no rows still has a database to name, and it is the case that
+    most needs one: "no matches" from the wrong store reads exactly like "no
+    matches" from the right one — the founding incident's own shape, where a
+    short answer from the sandbox was read as the truth about main.
+
+    Returns the serialized string rather than the object so the seven
+    empty-result paths need nothing in scope but this module, and so the shape
+    they emit cannot drift from the one `attach` produces for a populated
+    render.
+    """
+    import json
+
+    return json.dumps(attach([]), indent=2)
+
+
+def rows_of(payload):
+    """The rows out of an enveloped machine payload (E-1668).
+
+    `endless-go` wraps every array payload as `{"_answered_from": …, "rows":
+    [...]}` so that a result with NO rows can still name the database it came
+    from. This is the one place Python unwraps it, so the four call sites that
+    read a Go array agree by construction rather than by four people
+    remembering.
+
+    A bare list is accepted and returned as-is. That is not defensive
+    programming: it keeps this readable against a binary from either side of the
+    change, which matters because the deployed `endless-go` and the Python CLI
+    are installed separately and are not always the same age.
+    """
+    if isinstance(payload, dict):
+        rows = payload.get("rows")
+        return rows if isinstance(rows, list) else []
+    return payload if isinstance(payload, list) else []
 
 
 def line(*, llm: bool = False) -> str | None:
@@ -332,22 +391,23 @@ def echo_tail() -> None:
     click.echo(text if llm else click.style(text, dim=True))
 
 
-def install(ctx: click.Context) -> None:
-    """Wire this invocation up: suppress the line for a machine render, and
-    arrange the trailing copy. Called once, from the root group.
+def begin(argv) -> None:
+    """Start an invocation: clear the last one's state, and decide up front
+    whether stdout will be carrying a machine payload.
 
-    Deliberately NOT `ctx.call_on_close`, which fires on the way out of a
-    REFUSAL too. E-2097 guarantees that an agent-facing refusal's first and last
-    lines are byte-identical, so that whichever end a truncating pipe leaves
-    still carries the verdict; a provenance line appended after the closing copy
-    breaks that guarantee — and breaks it on the output where being understood
-    matters most. A refusal is not an answer, so it has no store to attribute.
+    Called from `DBAwareGroup.main`, which holds the real argv and already
+    pre-scans it for `--db`.
 
-    The root group's result callback is the mechanism that says exactly this: it
-    runs on the value a command RETURNED, so it does not run when the command
-    raised or exited instead. It fires for nested subcommands too, because each
-    group's invoke returns its child's result up to this one.
+    The trailing copy itself is NOT wired here. It is the root group's result
+    callback, which runs on the value a command RETURNED — so it does not run
+    when the command raised or exited instead. That is deliberate and not
+    incidental: `ctx.call_on_close` would fire on the way out of a REFUSAL too,
+    and E-2097 guarantees an agent-facing refusal's first and last lines are
+    byte-identical, so that whichever end a truncating pipe leaves still carries
+    the verdict. A line appended after the closing copy breaks that guarantee,
+    on the output where being understood matters most. A refusal is not an
+    answer, so it has no store to attribute.
     """
     reset()
-    if _scan_argv_for_machine_format():
+    if _asks_for_a_machine_format(argv):
         mark_machine()

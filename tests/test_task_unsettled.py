@@ -323,11 +323,13 @@ def test_list_limit_reports_what_it_hid(registered_project, stub_rows, capsys):
     assert "3 more rows (--no-limit)" in out
 
 
-def test_list_json_is_a_flat_array(registered_project, stub_rows, capsys):
+def test_list_json_rows_are_flat(registered_project, stub_rows, capsys):
+    """E-1668 wrapped list payloads so an empty result can still name its
+    database. The ROWS stay flat — that is what this always guarded."""
     stub_rows([_row(1, unsettled=True, unlanded=True,
                     reason="unlanded (1 commit)", unlanded_count=1)])
     task_cmd.unsettled_list(project_name="my-project", as_json=True)
-    out = json.loads(capsys.readouterr().out)
+    out = json.loads(capsys.readouterr().out)["rows"]
     assert len(out) == 1
     assert out[0]["id"] == "E-1"
     assert out[0]["unlanded_count"] == 1

@@ -230,7 +230,7 @@ def test_json_gains_task_id_and_keeps_the_raw_state(one_project):
     result = _run("session", "list", "--project", "probe", "--json")
 
     assert result.exit_code == 0, result.output
-    rows = {r["id"]: r for r in json.loads(result.output)}
+    rows = {r["id"]: r for r in json.loads(result.output)["rows"]}
     assert rows[982]["task_id"] == 1596
     assert rows[963]["task_id"] == 1902
     # No icon substitution in JSON: consumers must not have to learn the glyphs.

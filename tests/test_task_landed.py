@@ -124,7 +124,7 @@ def test_landed_list_json_includes_count(registered_project, capsys):
     _insert_landing(9103, "3333333", "2026-05-20T10:00:00")
     _insert_landing(9103, "4444444", "2026-05-21T10:00:00")
     task_cmd.landed_list(show_all=True, as_json=True)
-    payload = json.loads(capsys.readouterr().out)
+    payload = json.loads(capsys.readouterr().out)["rows"]
     row = next(r for r in payload if r["id"] == "E-9103")
     assert row["count"] == 2
 

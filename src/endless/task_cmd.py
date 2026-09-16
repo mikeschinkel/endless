@@ -1228,7 +1228,10 @@ def show_plan(
     noun = "removed tasks" if removed_only else "tasks"
     if not rows:
         if as_json:
-            click.echo("[]")
+            # E-1668: a no-match render still names the store it asked. "No
+            # matches" from the wrong database reads exactly like "no matches"
+            # from the right one, which is the founding incident's own shape.
+            click.echo(provenance.empty_rows_json())
         elif agent:
             click.echo(f"# {proj_name}\n(no {noun})")
         else:
@@ -1422,7 +1425,10 @@ def next_tasks(
 
     if not rows:
         if as_json:
-            click.echo("[]")
+            # E-1668: a no-match render still names the store it asked. "No
+            # matches" from the wrong database reads exactly like "no matches"
+            # from the right one, which is the founding incident's own shape.
+            click.echo(provenance.empty_rows_json())
         elif agent:
             click.echo("# no actionable tasks")
         else:
@@ -1620,7 +1626,10 @@ def active_tasks(
 
     if not rows:
         if as_json:
-            click.echo("[]")
+            # E-1668: a no-match render still names the store it asked. "No
+            # matches" from the wrong database reads exactly like "no matches"
+            # from the right one, which is the founding incident's own shape.
+            click.echo(provenance.empty_rows_json())
         elif agent:
             click.echo("# no active tasks")
         else:
@@ -1716,7 +1725,10 @@ def recent_tasks(
 
     if not rows:
         if as_json:
-            click.echo("[]")
+            # E-1668: a no-match render still names the store it asked. "No
+            # matches" from the wrong database reads exactly like "no matches"
+            # from the right one, which is the founding incident's own shape.
+            click.echo(provenance.empty_rows_json())
         elif agent:
             click.echo("# no recent tasks")
         else:
@@ -1848,7 +1860,10 @@ def landed_list(
 
     if not rows:
         if as_json:
-            click.echo("[]")
+            # E-1668: a no-match render still names the store it asked. "No
+            # matches" from the wrong database reads exactly like "no matches"
+            # from the right one, which is the founding incident's own shape.
+            click.echo(provenance.empty_rows_json())
         elif agent:
             click.echo("# no landed tasks")
         else:
@@ -2265,7 +2280,7 @@ def _unsettled_probe(paths: list[Path]) -> list[dict]:
         )
     import json
     try:
-        return json.loads(result.stdout)
+        return provenance.rows_of(json.loads(result.stdout))
     except ValueError as exc:
         raise click.ClickException(f"unreadable probe output: {exc}") from exc
 
@@ -5782,7 +5797,7 @@ def _landedness_probe(root: Path, branches: list[str]) -> list[dict]:
             continue
         import json
         try:
-            return json.loads(result.stdout)
+            return provenance.rows_of(json.loads(result.stdout))
         except ValueError as exc:
             detail = f"unreadable probe output: {exc}"
     return [_landedness_failure(b, detail or "endless-go not found on PATH")
@@ -7103,7 +7118,10 @@ def search_tasks(
 
     if not rows:
         if as_json:
-            click.echo("[]")
+            # E-1668: a no-match render still names the store it asked. "No
+            # matches" from the wrong database reads exactly like "no matches"
+            # from the right one, which is the founding incident's own shape.
+            click.echo(provenance.empty_rows_json())
         elif agent:
             click.echo(f"# {proj_name}\n(no matches for '{query}')")
         else:

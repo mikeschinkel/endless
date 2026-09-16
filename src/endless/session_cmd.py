@@ -1743,7 +1743,7 @@ def _live_sessions(project_root: Path, harness: str = "claude") -> list[dict]:
     if result.returncode != 0:
         return []
     try:
-        raw = json_mod.loads(result.stdout) or []
+        raw = provenance.rows_of(json_mod.loads(result.stdout))
     except ValueError:
         return []
     if not isinstance(raw, list):

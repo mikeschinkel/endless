@@ -57,23 +57,74 @@ func TestInject_PreservesKeyOrder(t *testing.T) {
 	}
 }
 
-func TestInject_ArrayIsPerRow(t *testing.T) {
+// An array is WRAPPED, and the rows inside it are handed back untouched — the
+// provenance is stated once for the answer, not once per row.
+func TestInject_ArrayIsEnveloped(t *testing.T) {
 	got, err := inject([]byte(`[{"id":"E-1"},{"id":"E-2"}]`), fields)
 	if err != nil {
 		t.Fatal(err)
 	}
-	var out []map[string]any
+	var out struct {
+		Prov map[string]any   `json:"_answered_from"`
+		Rows []map[string]any `json:"rows"`
+	}
 	if err := json.Unmarshal(got, &out); err != nil {
 		t.Fatalf("payload is not valid JSON: %v (%s)", err, got)
 	}
-	if len(out) != 2 {
-		t.Fatalf("row count changed: %s", got)
+	if out.Prov["db"] != "sandbox (e-1668)" {
+		t.Errorf("envelope lost its provenance: %s", got)
 	}
-	for i, row := range out {
-		prov, ok := row[Field].(map[string]any)
-		if !ok || prov["db"] != "sandbox (e-1668)" {
-			t.Errorf("row %d lost its provenance: %s", i, got)
+	if len(out.Rows) != 2 || out.Rows[0]["id"] != "E-1" || out.Rows[1]["id"] != "E-2" {
+		t.Errorf("rows changed: %s", got)
+	}
+	for i, row := range out.Rows {
+		if _, ok := row[Field]; ok {
+			t.Errorf("row %d carries a redundant copy: %s", i, got)
 		}
+	}
+}
+
+// THE case this envelope exists for. Per-row injection said nothing at all
+// here, and "no rows" from the wrong database reads exactly like "no rows" from
+// the right one — which is the founding incident's own shape.
+func TestInject_EmptyArrayStillNamesTheStore(t *testing.T) {
+	got, err := inject([]byte(`[]`), fields)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out struct {
+		Prov map[string]any    `json:"_answered_from"`
+		Rows []json.RawMessage `json:"rows"`
+	}
+	if err := json.Unmarshal(got, &out); err != nil {
+		t.Fatalf("payload is not valid JSON: %v (%s)", err, got)
+	}
+	if out.Prov["db"] != "sandbox (e-1668)" {
+		t.Errorf("an empty result must still name its store: %s", got)
+	}
+	if out.Rows == nil || len(out.Rows) != 0 {
+		t.Errorf("want an empty rows array, got %s", got)
+	}
+}
+
+// The shape must not depend on whether there is anything to announce, or a
+// consumer gets an array on one invocation and an object on the next.
+func TestInject_ArrayIsEnvelopedEvenWithNothingToSay(t *testing.T) {
+	got, err := inject([]byte(`[{"id":"E-1"}]`), nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var out struct {
+		Rows []map[string]any `json:"rows"`
+	}
+	if err := json.Unmarshal(got, &out); err != nil {
+		t.Fatalf("an array must be wrapped unconditionally: %v (%s)", err, got)
+	}
+	if len(out.Rows) != 1 {
+		t.Errorf("rows changed: %s", got)
+	}
+	if bytes.Contains(got, []byte(Field)) {
+		t.Errorf("nothing to announce, so no provenance key: %s", got)
 	}
 }
 
@@ -91,10 +142,11 @@ func TestInject_EmptyObject(t *testing.T) {
 	}
 }
 
-// A payload with nowhere to put a key is returned untouched rather than
-// reshaped: reshaping would break the consumer this exists to inform.
+// A payload that is neither object nor array has nothing for a consumer to
+// index, so it is returned untouched rather than reshaped. (An array of scalars
+// IS enveloped — it is still a list of rows.)
 func TestInject_NothingToAttachTo(t *testing.T) {
-	for _, raw := range []string{`[1,2,3]`, `"plain"`, `null`, `42`} {
+	for _, raw := range []string{`"plain"`, `null`, `42`} {
 		got, err := inject([]byte(raw), fields)
 		if err != nil {
 			t.Fatalf("%s: %v", raw, err)
@@ -119,6 +171,9 @@ func TestInject_NoFieldsIsAPassthrough(t *testing.T) {
 
 // Encode must remain a drop-in for json.NewEncoder(w).Encode: compact, exactly
 // one trailing newline. A second newline would break a caller reading one line.
+// For an OBJECT payload with nothing to announce, Encode stays byte-identical
+// to the encoder it replaced. (An array is deliberately reshaped — see
+// TestInject_ArrayIsEnveloped.)
 func TestEncode_MatchesTheEncoderItReplaced(t *testing.T) {
 	var got bytes.Buffer
 	if err := Encode(&got, map[string]string{"a": "b"}); err != nil {
@@ -140,7 +195,9 @@ func TestEncodeIndent_IsValidAndIndented(t *testing.T) {
 	if err := EncodeIndent(&buf, []map[string]string{{"a": "b"}}, "  "); err != nil {
 		t.Fatal(err)
 	}
-	var out []map[string]any
+	var out struct {
+		Rows []map[string]any `json:"rows"`
+	}
 	if err := json.Unmarshal(buf.Bytes(), &out); err != nil {
 		t.Fatalf("not valid JSON: %v (%s)", err, buf.String())
 	}

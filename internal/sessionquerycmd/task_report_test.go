@@ -3,6 +3,7 @@ package sessionquerycmd
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -96,8 +97,24 @@ func TestTaskReport_BinaryEmitsFacts(t *testing.T) {
 	if _, ok := raw["children"]; ok {
 		t.Errorf("facts JSON still carries a children key: %s", out)
 	}
-	if strings.Contains(string(out), "12") {
-		t.Errorf("facts JSON still names the child E-12: %s", out)
+	// Asserted against the DECODED payload, not a substring of it. A bare
+	// strings.Contains(out, "12") matched any "12" anywhere — a timestamp, a
+	// row count, and (E-1668) a temp path in the provenance field — so it
+	// could fail without the child being present and pass while it was, if the
+	// id were spelled across a line break. The property is "no key of this
+	// payload names E-12", so read the keys.
+	for key, value := range raw {
+		// task_id IS 10 and may legitimately contain the digits; keys prefixed
+		// with "_" are metadata ABOUT the answer rather than facts in it, and
+		// one of them carries a t.TempDir() path whose random digits contain
+		// "12" roughly one run in ten. That is what made the old
+		// strings.Contains(out, "12") flaky rather than wrong-once.
+		if key == "task_id" || strings.HasPrefix(key, "_") {
+			continue
+		}
+		if strings.Contains(fmt.Sprint(value), "12") {
+			t.Errorf("facts JSON still names the child E-12 under %q: %s", key, out)
+		}
 	}
 }
 

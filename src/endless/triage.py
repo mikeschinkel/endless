@@ -43,6 +43,7 @@ from pathlib import Path
 
 import click
 
+from endless import provenance
 from endless import config
 
 # How long one sufficiency call may take. Generous: the prompt carries a
@@ -116,7 +117,7 @@ def select_untriaged(
     if not out:
         return []
     try:
-        return json.loads(out) or []
+        return provenance.rows_of(json.loads(out))
     except json.JSONDecodeError as exc:
         raise TriageError(f"untriaged-tasks returned non-JSON: {exc}") from exc
 

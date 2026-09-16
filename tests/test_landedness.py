@@ -264,7 +264,7 @@ def test_the_two_sections_are_split_and_labelled(stub_probe, monkeypatch):
         ]
 
     monkeypatch.setattr(task_cmd, "_landedness_probe", fake)
-    out = json.loads(_unlanded("--json"))[0]
+    out = json.loads(_unlanded("--json"))["rows"][0]
     assert [r["id"] for r in out["outstanding"]] == [f"E-{outstanding}"]
     assert [r["id"] for r in out["unrecorded"]] == [f"E-{unrecorded}"]
 
@@ -273,7 +273,7 @@ def test_an_undetermined_row_is_outstanding_not_unrecorded(stub_probe):
     """It must never read as "nothing to land". Nobody knows whether there is."""
     stub_probe(undetermined=True, probe_error="git merge-base: fatal: bad object")
     _add_task("Fix the thing", "assumed")
-    out = json.loads(_unlanded("--json"))[0]
+    out = json.loads(_unlanded("--json"))["rows"][0]
     assert len(out["outstanding"]) == 1
     assert out["outstanding"][0]["reason"] == "undetermined (git merge-base failed)"
     assert out["unrecorded"] == []
@@ -283,14 +283,14 @@ def test_an_interrupted_row_is_outstanding_and_says_interrupted(stub_probe):
     stub_probe(undetermined=True, interrupted=True,
                probe_error="git merge-base: signal: interrupt")
     _add_task("Fix the thing", "assumed")
-    out = json.loads(_unlanded("--json"))[0]
+    out = json.loads(_unlanded("--json"))["rows"][0]
     assert out["outstanding"][0]["reason"] == "undetermined (git merge-base interrupted)"
 
 
 def test_a_landed_task_with_a_clean_branch_is_in_neither_section(stub_probe):
     task_id = _add_task("Fix the thing", "assumed")
     _record_landing(task_id)
-    out = json.loads(_unlanded("--json"))[0]
+    out = json.loads(_unlanded("--json"))["rows"][0]
     assert out["outstanding"] == []
     assert out["unrecorded"] == []
 
@@ -301,7 +301,7 @@ def test_a_landed_task_whose_branch_moved_on_is_outstanding(stub_probe):
     task_id = _add_task("Fix the thing", "assumed")
     _record_landing(task_id)
     stub_probe(unlanded_count=1)
-    out = json.loads(_unlanded("--json"))[0]
+    out = json.loads(_unlanded("--json"))["rows"][0]
     assert [r["id"] for r in out["outstanding"]] == [f"E-{task_id}"]
 
 
@@ -310,7 +310,7 @@ def test_the_base_branch_is_named_once_per_report(stub_probe):
     "not on <base>" falsifiable without paying for the name on every line."""
     stub_probe(base="trunk", unlanded_count=1)
     _add_task("Fix the thing", "assumed")
-    report = json.loads(_unlanded("--json"))[0]
+    report = json.loads(_unlanded("--json"))["rows"][0]
     assert report["base"] == "trunk"
 
     human = _unlanded()

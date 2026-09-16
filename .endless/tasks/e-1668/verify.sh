@@ -47,7 +47,8 @@
 #   4. --config-dir retired; --db-dir is the only directory-naming spelling.
 #   5. Provenance on READS, against a seeded pair of databases: the same read
 #      under --db main and --db sandbox reports DIFFERENT stores and different
-#      rows, so the difference is checkable rather than asserted.
+#      rows, so the difference is checkable rather than asserted — and an EMPTY
+#      result still names its store, which is the shape the incident took.
 #   6. Provenance on WRITES. E-1429's founding incident was a write that landed
 #      in the real ledger as E-1425; this is that incident inverted into a test.
 #   7. The downstream rule: the project is named only when it is not the one
@@ -275,8 +276,9 @@ read_rows() {
 main_out=$(read_rows main)
 sand_out=$(read_rows sandbox)
 
-main_n=$(printf '%s' "${main_out}" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))' 2>/dev/null)
-sand_n=$(printf '%s' "${sand_out}" | python3 -c 'import json,sys; print(len(json.load(sys.stdin)))' 2>/dev/null)
+rows_len() { python3 -c 'import json,sys; print(len(json.load(sys.stdin)["rows"]))' 2>/dev/null; }
+main_n=$(printf '%s' "${main_out}" | rows_len)
+sand_n=$(printf '%s' "${sand_out}" | rows_len)
 
 assert_eq "--db main reads main's rows" "3" "${main_n:-unparseable}"
 assert_eq "--db sandbox reads the sandbox's rows" "1" "${sand_n:-unparseable}"
@@ -288,13 +290,33 @@ assert_contains "the main read names the store it answered from" \
 assert_contains "the sandbox read names WHICH sandbox" \
     "sandbox (${WT_NAME})" "$(printf '%s' "${sand_out}" | python3 -m json.tool 2>&1)"
 
-# Per ROW for an array payload, so a consumer that destructures a row sees it.
-rows_tagged=$(printf '%s' "${main_out}" | python3 -c '
+# Stated ONCE for the answer, not once per row — and the rows come back
+# untouched, so a consumer that destructures one is unaffected.
+rows_clean=$(printf '%s' "${main_out}" | python3 -c '
 import json, sys
-rows = json.load(sys.stdin)
-print(sum(1 for r in rows if r.get("_answered_from", {}).get("db") == "main"))
+doc = json.load(sys.stdin)
+print(sum(1 for r in doc["rows"] if "_answered_from" not in r))
 ' 2>/dev/null)
-assert_eq "every row carries it, not just the first" "3" "${rows_tagged:-0}"
+assert_eq "the rows themselves are untouched" "3" "${rows_clean:-0}"
+
+# THE case the envelope exists for, and the one per-row injection could not
+# reach: an empty result still names the store it asked. "No matches" from the
+# wrong database reads exactly like "no matches" from the right one.
+# stdout only: an unregistered path auto-registers and logs a line to stderr,
+# and folding that in would make the payload unparseable for reasons that have
+# nothing to do with what is being asserted.
+empty_out=$("${GO_BIN}" --db main session-query list-live \
+    --project-root "${RUN_DIR}/not-a-project" 2>/dev/null)
+assert_contains "an EMPTY result still names its store" \
+    '"db": "main"' "$(printf '%s' "${empty_out}" | python3 -m json.tool 2>&1)"
+assert_contains "an empty result still has a rows array" \
+    '"rows": []' "$(printf '%s' "${empty_out}" | python3 -m json.tool 2>&1)"
+
+# The shape must not depend on there being something to announce, or a consumer
+# gets an array on one invocation and an object on the next.
+shape=$(cd "${DOWN_PROBE:-${WT}}" 2>/dev/null; printf '%s' "${main_out}" \
+    | python3 -c 'import json,sys; print(type(json.load(sys.stdin)).__name__)' 2>/dev/null)
+assert_eq "an array payload is always an object with rows" "dict" "${shape:-none}"
 
 # ── 6. provenance on writes ─────────────────────────────────────────────────
 section "6. A write names the store it landed in"

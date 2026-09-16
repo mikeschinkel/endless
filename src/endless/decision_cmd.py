@@ -134,7 +134,10 @@ def list_decisions(
 
     if not rows:
         if as_json:
-            click.echo("[]")
+            # E-1668: a no-match render still names the store it asked. "No
+            # matches" from the wrong database reads exactly like "no matches"
+            # from the right one, which is the founding incident's own shape.
+            click.echo(provenance.empty_rows_json())
         elif agent:
             click.echo(f"# {proj_name}\n(no decisions)")
         else:
