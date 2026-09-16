@@ -6328,3 +6328,15 @@ Walk the Click tree instead: recurse cmd.commands, read each command's params, a
 
 Where a surface must stay uniform, encode the invariant as a test that walks the same tree — and name the deliberate exceptions in it, so a third one is an act with a test to change rather than a silent omission. --llm had drifted to 15 of 30 commands precisely because nothing asserted the flags travel together.
 - **Project**: endless
+
+### [2026-09-16] An unlanded commit goes on the /whats-left report; never argue it off by judging its content
+E-1504 had already landed and been assumed. Then, doing the agent-side half of /whats-left, I filed ED-1593 from inside the worktree — and Endless auto-committed the decision mirror onto the task branch. I ran git log main..HEAD, SAW that commit, and reasoned it away: the ledger entry was already on main, so the stranded file was 'a convenience artifact, not durable state'. I dropped it from the report. Mike had to notice and land E-1504 a second time himself.
+
+Two failures, and the second is the one that generalizes:
+
+1. The report already names this case: 'work committed in a worktree but not yet landed'. It does not say 'unless you judge the content unimportant'. A branch ahead of main is an unlanded loose end, full stop — landing is Mike's call, not mine, so my read on whether the content matters is not the question being asked.
+
+2. My own /whats-left housekeeping CREATES commits. Filing a decision or writing a lesson from a worktree auto-commits a mirror onto the task branch — which means a task that was clean when the report started is not clean when it ends. Re-run git log main..HEAD as the LAST thing before writing the report, after the filing, not during it.
+
+The shape to watch for: I found the evidence, then built an argument for why the rule did not apply. When a rule and my reasoning disagree about a one-line report item, the rule wins — the cost of a spurious line is one line, and the cost of a dropped one is Mike discovering it himself.
+- **Project**: endless
