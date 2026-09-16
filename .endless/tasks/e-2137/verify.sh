@@ -30,6 +30,13 @@
 #      beside them is not. Before E-2137 the gate lived on a directory nothing
 #      else used, so over-matching cost nothing; it now shares a directory with
 #      files sessions write constantly.
+#
+#      This section establishes its own precondition with a positive control and
+#      SKIPS rather than fails when it cannot. An unregistered project makes the
+#      hook exit 0 with no output, which is indistinguishable from a gate that
+#      matched nothing — and the first version of this suite reported that as
+#      seven failures of working code. Sections B and E prove the matcher and the
+#      call site without needing any environment at all.
 #   E. The writers that are gone are GONE. Five functions used to put mirrors
 #      into worktrees; a grep is the cheapest way to prove none came back.
 #
@@ -249,18 +256,41 @@ assert_eq "so the branch holds no commit of its own" "0" \
 # ---------------------------------------------------------------------------
 section "D. The hook gate discriminates WITHIN the task's directory"
 # ---------------------------------------------------------------------------
-# A second scratch repository, REGISTERED, because the gate only runs for a
-# registered project. The runner's isolation gives this suite a temp HOME; the
-# Go side resolves its database under $HOME/.config/endless, so the Python CLI
-# is pointed at exactly that directory and both halves agree about which
-# database "registered" means.
+# A second scratch repository, REGISTERED, because `handlePreToolUse` returns
+# early for an unregistered project and no gate below that point ever runs.
 #
-# Every command below runs with cwd INSIDE the scratch repository rather than
-# this worktree. That is not tidiness: the hook compares its own executable
-# against the one a self_dev worktree expects, and running it from here would
-# make a scratch build look like a provisioning fault.
+# That early return is why this section establishes its precondition out loud
+# rather than assuming it. An unregistered project produces an empty, exit-0
+# hook — which is indistinguishable from a gate that matched nothing. The first
+# version of this suite could not tell those apart and reported "the gate did
+# not refuse" as SEVEN failures on a machine where the only thing wrong was the
+# setup. A check that accuses the code when the environment is at fault is worse
+# than no check, so: a positive control first, and every assertion below it is
+# SKIPPED, not failed, if that control does not hold.
+#
+# Two robustness rules copied from the runner's own pytest driver, which learned
+# them the same way:
+#
+#   - Prefer the project's `.venv/bin/endless` over `uv run`. A temp HOME means
+#     a cold uv cache, and a cold cache can try to sync.
+#   - When `uv run` is the only option, pass --no-sync for the same reason.
+#
+# Every command runs with cwd INSIDE the scratch repository rather than this
+# worktree. That is not tidiness: the hook compares its own executable against
+# the one a self_dev worktree expects, and running it from here would make a
+# scratch build look like a provisioning fault.
+
+# GATE_READY is empty while the precondition holds, and otherwise carries a
+# SHORT reason — it is repeated on every skipped line, so the full diagnostic
+# goes in GATE_DETAIL and is printed once.
+GATE_READY=""
+GATE_DETAIL=""
+
 HOOKHOME="${TMP}/home"
 HOOKCFG="${HOOKHOME}/.config"
+# The Go side resolves its database under $HOME/.config/endless. XDG_CONFIG_HOME
+# is set to that same directory so the Python CLI, which honours XDG, registers
+# into the database the hook will read.
 mkdir -p "${HOOKCFG}/endless" || setup_error "cannot create a scratch config dir"
 
 REPO2="${TMP}/hooked"
@@ -271,17 +301,31 @@ printf 'x\n' >"${REPO2}/f.txt"
 git -C "${REPO2}" add f.txt >/dev/null 2>&1
 git -C "${REPO2}" commit -qm initial || setup_error "git commit failed"
 
-if ! ( cd "${REPO2}" && HOME="${HOOKHOME}" XDG_CONFIG_HOME="${HOOKCFG}" \
-        uv run --project "${WT}" endless project register "${REPO2}" \
-        --name e2137hookprobe --label t --desc t --lang go --status active \
-        >/dev/null 2>&1 ); then
-    setup_error "cannot register the scratch project the gate needs"
+if [[ -x "${WT}/.venv/bin/endless" ]]; then
+    REG_CMD=("${WT}/.venv/bin/endless")
+else
+    REG_CMD=(uv run --no-sync --project "${WT}" endless)
+fi
+
+REG_OUT=$( cd "${REPO2}" && HOME="${HOOKHOME}" XDG_CONFIG_HOME="${HOOKCFG}" \
+    "${REG_CMD[@]}" project register "${REPO2}" \
+    --name e2137hookprobe --label t --desc t --lang go --status active 2>&1 )
+REG_RC=$?
+if [[ ${REG_RC} -ne 0 ]]; then
+    GATE_READY="the scratch project could not be registered"
+    GATE_DETAIL="${REG_CMD[*]} project register exited ${REG_RC}:
+$(printf '%s' "${REG_OUT}" | tail -5)"
 fi
 
 # The phrase the doc-mirror gate — and only it — prints. Matching on it means a
 # refusal by the WORKTREE gate (which also fires in some of these cases) is not
 # mistaken for this one.
 GATE_PHRASE="task document mirror"
+
+# The phrase the WORKTREE gate prints for an edit in a registered project's main
+# checkout. It is the positive control: it can only appear if the hook got past
+# the registration gate, which is exactly the precondition in doubt.
+REGISTERED_PHRASE="Edits in main"
 
 run_hook() { # run_hook TOOL KEY PATH
     local tool="$1" key="$2" path="$3" payload
@@ -292,7 +336,35 @@ run_hook() { # run_hook TOOL KEY PATH
     HOOK_RC=$?
 }
 
+if [[ -z "${GATE_READY}" ]]; then
+    run_hook "Write" "file_path" "${REPO2}/f.txt"
+    if [[ "${HOOK_RC}" -eq 2 && "${HOOK_OUT}" == *"${REGISTERED_PHRASE}"* ]]; then
+        report_pass "the hook sees the scratch project as registered, so the gates below run"
+    else
+        GATE_READY="the hook does not see the scratch project as registered"
+        GATE_DETAIL="a Write in the registered main checkout should have been refused
+with \"${REGISTERED_PHRASE}\"; the hook exited ${HOOK_RC} saying:
+$(printf '%s' "${HOOK_OUT}" | head -5)"
+    fi
+fi
+
+if [[ -n "${GATE_READY}" ]]; then
+    # Once, in full. The per-check skips carry only the short reason, because a
+    # 300-character diagnostic repeated twelve times is not a report.
+    printf '\n  %sCannot run the live gate checks here: %s%s\n' \
+        "${DIM}" "${GATE_READY}" "${RESET}"
+    printf '%s\n' "${GATE_DETAIL}" | sed 's/^/      /'
+    printf '  %sSections B and E prove the matcher and the call site without an\n' "${DIM}"
+    printf '  environment, so this is a skip, not a failure.%s\n\n' "${RESET}"
+    report_skip "the hook sees the scratch project as registered, so the gates below run" \
+        "${GATE_READY}"
+fi
+
 check_refused() { # check_refused DESC
+    if [[ -n "${GATE_READY}" ]]; then
+        report_skip "$1" "${GATE_READY}"
+        return
+    fi
     if [[ "${HOOK_RC}" -eq 2 && "${HOOK_OUT}" == *"${GATE_PHRASE}"* ]]; then
         report_pass "$1"
         return
@@ -302,6 +374,10 @@ check_refused() { # check_refused DESC
 }
 
 check_silent() { # check_silent DESC
+    if [[ -n "${GATE_READY}" ]]; then
+        report_skip "$1" "${GATE_READY}"
+        return
+    fi
     if [[ "${HOOK_OUT}" != *"${GATE_PHRASE}"* ]]; then
         report_pass "$1"
         return
@@ -310,35 +386,48 @@ check_silent() { # check_silent DESC
         "rc=${HOOK_RC} | out=$(printf '%s' "${HOOK_OUT}" | head -3)"
 }
 
+# run_hook is skipped along with its check when the precondition failed: driving
+# the binary would only produce output nothing reads.
+probe() { # probe TOOL KEY PATH
+    [[ -n "${GATE_READY}" ]] && return 0
+    run_hook "$1" "$2" "$3"
+}
+
 for stem in plan outcome analysis; do
-    run_hook "Write" "file_path" "${REPO2}/.endless/tasks/e-999/${stem}.md"
+    probe "Write" "file_path" "${REPO2}/.endless/tasks/e-999/${stem}.md"
     check_refused "Write .endless/tasks/e-999/${stem}.md → refused"
 done
 
-run_hook "Edit" "file_path" "${REPO2}/.endless/tasks/e-999/plan.md"
+probe "Edit" "file_path" "${REPO2}/.endless/tasks/e-999/plan.md"
 check_refused "Edit the same file → refused"
 
-run_hook "NotebookEdit" "notebook_path" "${REPO2}/.endless/tasks/e-999/plan.md"
+probe "NotebookEdit" "notebook_path" "${REPO2}/.endless/tasks/e-999/plan.md"
 check_refused "NotebookEdit the same file → refused"
 
-run_hook "Write" "file_path" "${REPO2}/.endless/plans/E-999.md"
+probe "Write" "file_path" "${REPO2}/.endless/plans/E-999.md"
 check_refused "a legacy .endless/plans/E-999.md → still refused"
 
-assert_contains "and the refusal names the three commands that replace it" \
-    "--plan-file" "${HOOK_OUT}"
+if [[ -n "${GATE_READY}" ]]; then
+    report_skip "and the refusal names the three commands that replace it" "${GATE_READY}"
+else
+    assert_contains "and the refusal names the three commands that replace it" \
+        "--plan-file" "${HOOK_OUT}"
+fi
 
 # The half that would be expensive to get wrong: a session's own files, in the
-# very same directory.
-run_hook "Write" "file_path" "${REPO2}/.endless/tasks/e-999/verify.sh"
+# very same directory. These are refused by the WORKTREE gate (they are edits in
+# a main checkout), which is why the assertion is about the doc-mirror gate's
+# phrase being ABSENT rather than about the exit code.
+probe "Write" "file_path" "${REPO2}/.endless/tasks/e-999/verify.sh"
 check_silent "Write .endless/tasks/e-999/verify.sh → gate silent (the task's own)"
 
-run_hook "Write" "file_path" "${REPO2}/.endless/tasks/e-999/verify.toml"
+probe "Write" "file_path" "${REPO2}/.endless/tasks/e-999/verify.toml"
 check_silent "Write .endless/tasks/e-999/verify.toml → gate silent"
 
-run_hook "Write" "file_path" "${REPO2}/.endless/tasks/CLAUDE.md"
+probe "Write" "file_path" "${REPO2}/.endless/tasks/CLAUDE.md"
 check_silent "Write .endless/tasks/CLAUDE.md → gate silent"
 
-run_hook "Write" "file_path" "${REPO2}/src/endless/task_cmd.py"
+probe "Write" "file_path" "${REPO2}/src/endless/task_cmd.py"
 check_silent "Write a normal source file → gate silent"
 
 # ---------------------------------------------------------------------------
