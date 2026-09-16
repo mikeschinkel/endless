@@ -6233,3 +6233,17 @@ Mike asked what 'badge' referred to. I answered that it was 'the product's own n
 ### [2026-09-15] 'No current caller' is not 'dead code' — check for the obvious next caller
 Removing the one-hour warning expiry left monitor.ActiveSecondsSince with no caller, and I proposed deleting it as dead code. Mike: 'The badge was its only CURRENT caller. You do the math.' ActiveSecondsSince measures time the user was actually at the keyboard — exactly what an error-detail view needs in order to say how long ago a fault last fired. Losing a caller is not evidence a primitive is worthless; it is a prompt to ask what the primitive is FOR and whether the next surface that needs it is already visible. Default to keeping a general, well-tested primitive whose purpose is still real, and never propose deleting one in the same breath as removing its only consumer.
 - **Project**: endless
+
+### [2026-09-15] Do not relay to Mike what is already in the artifact that will be read
+I closed a session by giving Mike a 'handoff note for whoever picks up E-1668' — a caveat about the --config-dir audit. The caveat was already written into E-1668's plan, in the section it belongs to, and had been there before he spawned the task. The spawned session reads the plan. He does not need to carry it there.
+
+His reaction: 'Why did you give me a handoff note instead of just putting that note into the plan for E-1668?!?' — which assumed I had failed to record it. I had recorded it. The real failure was worse-shaped: having put it in the right durable place, I told him anyway, turning him into a courier for a message already delivered.
+
+Note both branches are wrong. If it had NOT been in the plan, telling Mike would still be the wrong remedy — the remedy would be to put it in the plan. There is no version of this where relaying it to him is the right move.
+
+The driver was treating 'I know something useful' as sufficient reason to say it. It is not. The test before adding anything to a closing message: WHO NEEDS THIS, AND WILL THEY ALREADY HAVE IT? If the consumer is a future session and the fact lives in the plan, analysis or code comment that session will read, saying it again to Mike delivers nothing and costs attention.
+
+A closing message carries what is PENDING FOR MIKE — decisions only he can make, commands only he can run, state only he can change. It is not a recap of work already delivered through its proper channel, and 'here is a useful thing I noticed' is a recap wearing a helpful hat.
+
+Related but distinct from the over-filing lesson: that one was about spending his attention on a second TASK; this is about spending it on a second COPY. Same scarce resource, same reflex — producing volume and mistaking it for diligence.
+- **Project**: endless
