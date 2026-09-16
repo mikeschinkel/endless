@@ -6261,3 +6261,13 @@ This compounds with the report-density contract already in the guide (run the re
 ### [2026-09-15] A verify.sh grep for absent code matches the comment explaining the absence
 This codebase comments deliberate absences at length, directly above the code that does not do the thing. So a source-level verify.sh assertion of the form `grep -q 'enforceReportGate' file || pass` reports the OPPOSITE of the truth: the handler's doc comment says 'NOT carried over from Stop: the report gate (enforceReportGate)...', and the grep matches that sentence. Same for 'failed bool' in a comment reading 'a helper taking a `failed bool` would...'. Strip comments first — `code_only() { sed -e 's://.*::' "$@"; }` — and grep that. Applies to every absence-assertion in a verify suite, and only bites on absences: presence-assertions get the right answer for the wrong reason.
 - **Project**: endless
+
+### [2026-09-16] Don't use jargon like 'choke point' — say what it means in plain words
+I described the provenance design to Mike as running 'from a single choke point' three separate times without ever defining it. He had to ask what it meant.
+
+'Choke point' appears in the codebase's own comments, so it felt like house vocabulary — but a term that is fine inside a comment next to the code it describes is not automatically fine in a reply, where the reader has no code in front of them and no reason to decode a metaphor.
+
+What I actually meant was ordinary: 'routed through a single shared function.' That is shorter than the jargon AND clearer.
+
+The rule: in a reply, prefer the plain phrase over the term of art. If a term genuinely earns its place, define it the first time in the same sentence. Never let the reader do the decoding.
+- **Project**: endless
