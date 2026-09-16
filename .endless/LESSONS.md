@@ -6344,3 +6344,21 @@ The shape to watch for: I found the evidence, then built an argument for why the
 ### [2026-09-16] An accepted decision that already routes a finding is the answer — read it before asking whether to file
 During E-2083 I found an out-of-scope defect in shared code (_harness.sh corrupting the runner's TAP stream) and put a file/drop question to Mike with a recommendation to file. His answer was 'Fix it in E-2083 (grow scope); see ED-1550' — ED-1550 is accepted and already says filing is the exception and a finding folds into an OPEN task. The question cost him a turn to answer something the ledger had already decided. Before asking whether to file, search the accepted decisions for one that governs the case (endless decision list) and act on it; ask only when no decision routes it, or when the finding's size genuinely tests the decision's bound.
 - **Project**: endless
+
+### [2026-09-16] A verify check that needs a precondition must prove the precondition, or skip
+E-2137's verify suite drove the real hook binary against a scratch project to prove the doc-mirror gate fires. It passed for me three times and failed for Mike with seven failures — all of them 'the gate did not refuse'.
+
+The gate was fine. `handlePreToolUse` returns early for an UNREGISTERED project, and an unregistered project makes the hook exit 0 with no output — which is byte-for-byte indistinguishable from a gate that matched nothing. My setup registered a scratch project via `uv run --project <worktree> endless project register` under a second, colder temp HOME. The runner's own pytest driver already knows that is fragile: internal/verify/driver_pytest.go prefers the project's .venv/bin/pytest and passes --no-sync to uv precisely because 'a cold uv cache under the temp HOME cannot trigger a network sync'. I reintroduced the fragility it had already engineered around, then reported the fallout as seven failures of working code.
+
+Three rules, in order of importance:
+
+1. If a check needs a precondition the environment might not provide, PROVE the precondition with a positive control before asserting anything. Here: a Write into the registered main checkout must be refused with 'Edits in main' — that refusal can only happen past the registration gate, which is exactly the thing in doubt.
+
+2. When the control fails, report_skip, never report_fail. A skip is 'I could not run this'; a failure is 'your code is wrong'. Accusing the code when the environment is at fault is worse than having no check, because someone will go change working code to satisfy it.
+
+3. Silence is not evidence. Four of my checks asserted a phrase was ABSENT and passed happily while the hook was never reaching the gate at all. A negative assertion needs a positive control alongside it or it proves nothing.
+
+Also: the skip reason is printed on every skipped line, so keep it to one short clause and print the full diagnostic once. My first version repeated a 300-character string twelve times.
+
+And one process error of mine: a failing verify run leaves a CTRF report behind (the runner prints its path), and my first instinct was to re-run the suite — which overwrote Mike's evidence with my passing run. Read the report BEFORE re-running.
+- **Project**: endless
