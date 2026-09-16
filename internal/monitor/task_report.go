@@ -79,11 +79,13 @@ func taskReportFacts(db *sql.DB, taskID int64) (TaskReportFacts, error) {
 		return facts, fmt.Errorf("read status for E-%d: %w", taskID, err)
 	}
 
-	err = db.QueryRow(
-		"SELECT EXISTS(SELECT 1 FROM task_landings WHERE task_id = ?)", taskID,
-	).Scan(&facts.Landed)
+	// Through taskHasLanded rather than its own copy of the query: the verify
+	// runner's own-task-only refusal and the PreToolUse hook's landed-suite
+	// gate (E-1916) both read landed-ness from there, and a second spelling of
+	// it here is a second notion of landed-ness waiting to drift from the first.
+	facts.Landed, err = taskHasLanded(db, taskID)
 	if err != nil {
-		return facts, fmt.Errorf("read landed for E-%d: %w", taskID, err)
+		return facts, err
 	}
 
 	facts.Successors, err = taskSuccessors(db, taskID)

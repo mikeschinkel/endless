@@ -915,6 +915,12 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 	// per-task tracking is in 'off' mode.
 	if payload.ToolName == "Bash" {
 		blockCommitOnMainIfApplicable(payload)
+
+		// E-1916 Arm 2: refuse a direct run of a landed, foreign task's
+		// verification suite. Registered-only, and symmetric with Arm 1 below:
+		// an unregistered project has no landings to protect, so the gate has
+		// nothing to say there — and this way it costs no database read.
+		blockLandedSuiteRunIfApplicable(payload)
 	}
 
 	// E-1586: cwd-invariant gate for ALL tools (no allowlist). If this session
@@ -942,6 +948,12 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 	// redirect to `endless task update --plan` rather than the generic
 	// "edits in main" refusal. Independent of tracking_mode.
 	blockPlanFileWriteIfApplicable(payload)
+
+	// E-1916 Arm 1: refuse an edit of a landed, foreign task's verification
+	// suite. Placed beside the plan-file gate for the same reason it is — both
+	// name a specific path that must not be hand-edited, and both want their
+	// own refusal to arrive ahead of the worktree gate's generic one.
+	blockLandedSuiteEditIfApplicable(payload)
 
 	// Worktree gate (E-971 Layer D). Independent of tracking_mode, like
 	// E-1012: even with per-task tracking off, edits in main and edits
