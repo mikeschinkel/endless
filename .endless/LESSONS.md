@@ -6281,3 +6281,15 @@ The failure is specific: I used the SIZE of an imagined blast radius as a reason
 
 The rule: before naming a cost as the reason to skip work, count it.  the consumers, list them, and put the number in the reply. If the number turns out small, do the work.
 - **Project**: endless
+
+### [2026-09-16] The handoff is one command and one regression line — what I just wrote to the plan gets named, not restated
+E-2088's handoff ran five sections: what the executable is, the two questions the plan left open, three paragraphs of grown scope, the regression line, and the command. Mike answered it with /tl-dr — 'what from that wall of text is an action item that I NEED to know?' The answer was one line, and the other four sections were the problem.
+
+Two things were wrong and only one of them is length.
+
+First, I had just written every one of those paragraphs into the plan with 'task update --plan-file' in the turn before. The handoff then said them again, in prose, to the person who owns the ledger they were recorded in. The orchestration guide is explicit that verification is DENSE: one line the user runs, one prose sentence on regression, done. A handoff that explains the work is competing with the record of the work, and the record wins — it is durable, searchable, and already written.
+
+Second, the grown-scope reporting instruction says to 'say so in your reply draft'. Saying so is one clause naming what grew and where it is recorded, not a reproduction of the plan section. 'Also extracted internal/dbcontext and internal/schemachange; both recorded on the plan' discharges it completely.
+
+The rule: when the turn has already recorded something durably — a plan, an outcome, a lesson, a commit message — the handoff names its existence and location and stops. Reserve handoff prose for what exists nowhere else: the one verify command, the one-line regression result, and anything that genuinely needs a decision from Mike. If I catch myself writing a second paragraph, the content belongs in the ledger and probably already is.
+- **Project**: endless
