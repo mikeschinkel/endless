@@ -25,13 +25,14 @@ func freshDB(t *testing.T) *sql.DB {
 	return db
 }
 
-// applySchema executes schema.SQL against db — the same call monitor.DB() makes
-// on every connection. schema.SQL is the authoritative schema (all CREATE ...
-// IF NOT EXISTS), so this creates every table on a fresh DB and is a no-op on a
-// populated one. Tests use it where they previously called the deleted migrate().
+// applySchema brings db up to the latest schema version — the same call
+// monitor.DB() makes on every connection. The migration set is the authoritative
+// schema (E-2019), so this builds a fresh DB and is a no-op on one already at
+// the latest version. Tests use it where they previously called the deleted
+// migrate(), and before that exec'd schema.SQL directly.
 func applySchema(t *testing.T, db *sql.DB) {
 	t.Helper()
-	if _, err := db.Exec(schema.SQL); err != nil {
+	if err := schema.Migrate(db); err != nil {
 		t.Fatalf("apply schema: %v", err)
 	}
 }
@@ -113,11 +114,11 @@ func tempProjectRoot(t *testing.T) string {
 	return root
 }
 
-// TestSchemaFreshDB_CreatesAllTables verifies that applying schema.SQL to an
-// empty database produces every table the rest of the codebase expects to
-// exist. With the V-migration framework gone, schema.sql is the single source
-// of truth, so all of these (formerly split between schema.sql and migrateV*)
-// must be present after one apply.
+// TestSchemaFreshDB_CreatesAllTables verifies that migrating an empty database
+// produces every table the rest of the codebase expects to exist. The migration
+// set is the single source of truth, so all of these — once split between
+// schema.sql and migrateV*, then held by schema.sql alone — must be present
+// after one run.
 func TestSchemaFreshDB_CreatesAllTables(t *testing.T) {
 	db := freshDB(t)
 	applySchema(t, db)
@@ -143,15 +144,16 @@ func TestSchemaFreshDB_CreatesAllTables(t *testing.T) {
 	}
 	for _, name := range wantTables {
 		if !hasTable(db, name) {
-			t.Errorf("expected table %q to exist after applying schema.sql; missing", name)
+			t.Errorf("expected table %q to exist after migrating; missing", name)
 		}
 	}
 }
 
-// TestSchemaReexecIdempotent verifies that applying schema.SQL twice on the
-// same DB is a no-op on the second pass: no errors and no duplicated objects.
-// Idempotency is now a property of schema.sql itself (every statement is
-// IF NOT EXISTS), which monitor.DB() relies on running schema.SQL per connect.
+// TestSchemaReexecIdempotent verifies that migrating the same DB twice is a
+// no-op on the second pass: no errors and no duplicated objects. monitor.DB()
+// relies on that, because it migrates on every connect. Idempotency comes from
+// goose's version table now rather than from IF NOT EXISTS on every statement —
+// the second run has nothing left to apply and does not look.
 func TestSchemaReexecIdempotent(t *testing.T) {
 	db := freshDB(t)
 	applySchema(t, db) // applySchema t.Fatalf's on any error...

@@ -56,8 +56,8 @@ func openDBAtPath(t *testing.T, path string, pinned bool) (*sql.DB, error) {
 // legacy Parse alias, never what String() emits). This models the E-1659
 // incident: a real DB still on the old slug vs. a candidate worktree binary
 // whose enum has moved on. The absence of the `tasks` table is the
-// schema-passive probe — schema.SQL would create it, so its continued absence
-// after an open proves schema.SQL never ran.
+// schema-passive probe — migrating would create it, so its continued absence
+// after an open proves no schema was applied.
 func seedTaskTypesOnly(t *testing.T, path string) {
 	t.Helper()
 	db, err := sql.Open("sqlite", path)
@@ -120,9 +120,9 @@ func taskTypeSlug(t *testing.T, db *sql.DB, id int) string {
 
 // TestDBSchemaPassiveOnRealDBPin is the E-1818 regression: a candidate binary
 // pinned to a real DB it does not own (dbPathOverride != "") must open the DB
-// schema-passive — no schema.SQL exec, no enum integrity gate. Before the fix,
-// DB() ran schema.SQL + VerifyIntegrity on the pinned path, so a drifted enum
-// fail-closed (err != nil) and a destructive schema.SQL could rewrite rows the
+// schema-passive — no migration, no enum integrity gate. Before the fix,
+// DB() applied the schema + VerifyIntegrity on the pinned path, so a drifted enum
+// fail-closed (err != nil) and a destructive migration could rewrite rows the
 // binary does not own. This is the exact vector that corrupted the real DB
 // during E-1659.
 func TestDBSchemaPassiveOnRealDBPin(t *testing.T) {
@@ -136,9 +136,9 @@ func TestDBSchemaPassiveOnRealDBPin(t *testing.T) {
 	if db == nil {
 		t.Fatal("pinned open returned nil db without error")
 	}
-	// schema.SQL must NOT have run: the `tasks` table it would create is absent.
+	// No migration must have run: the `tasks` table it would create is absent.
 	if tableExists(t, db, "tasks") {
-		t.Error("pinned open created the `tasks` table; schema.SQL must be skipped on a foreign real DB")
+		t.Error("pinned open created the `tasks` table; migration must be skipped on a foreign real DB")
 	}
 	// The pre-existing drifted seed row must be byte-for-byte untouched.
 	if got := taskTypeSlug(t, db, 1); got != "task" {
@@ -147,7 +147,7 @@ func TestDBSchemaPassiveOnRealDBPin(t *testing.T) {
 }
 
 // TestDBOwnerPathMigratesAndVerifies pins nothing (dbPathOverride == ""), so
-// DB() takes the owner path: schema.SQL applies and the enum integrity gate
+// DB() takes the owner path: the migration set applies and the enum integrity gate
 // runs — the behavior land-time `apply-change` and `just install` rely on. Two
 // cases prove the E-1818 gate did not weaken the owner path.
 func TestDBOwnerPathMigratesAndVerifies(t *testing.T) {
@@ -158,7 +158,7 @@ func TestDBOwnerPathMigratesAndVerifies(t *testing.T) {
 			t.Fatalf("owner open of a fresh DB must succeed, got: %v", err)
 		}
 		if !tableExists(t, db, "tasks") {
-			t.Error("owner open of a fresh DB did not create `tasks`; schema.SQL must run")
+			t.Error("owner open of a fresh DB did not create `tasks`; the migration must run")
 		}
 		if got := taskTypeSlug(t, db, 1); got != "todo" {
 			t.Errorf("seeded task_types id=1 slug = %q, want %q", got, "todo")
@@ -197,7 +197,7 @@ func TestDBOwnerPathMigratesAndVerifies(t *testing.T) {
 // redirected HOME (so DBPath() resolves to $HOME/.config/endless/endless.db, the
 // main database location) and opens a fully schema'd DB whose task_types slug has
 // been diverged from the running enum — the exact E-1659 scenario. Before the
-// fix the pinned open ran schema.SQL + VerifyIntegrity and fail-closed; after
+// fix the pinned open applied the schema + VerifyIntegrity and fail-closed; after
 // it, the open succeeds and the drifted row is untouched.
 func TestDBSchemaPassiveViaPinMainDB(t *testing.T) {
 	home := t.TempDir()
@@ -215,7 +215,7 @@ func TestDBSchemaPassiveViaPinMainDB(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open seed db: %v", err)
 	}
-	if _, err := seed.Exec(schema.SQL); err != nil {
+	if err := schema.Migrate(seed); err != nil {
 		seed.Close()
 		t.Fatalf("apply schema: %v", err)
 	}

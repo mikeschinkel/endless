@@ -59,7 +59,7 @@ func TestSessionStartBind_CwdFallbackOnSpawnMarkerRace(t *testing.T) {
 	if _, err = db.Exec("PRAGMA foreign_keys=ON"); err != nil {
 		t.Fatalf("enable fks: %v", err)
 	}
-	if _, err = db.Exec(schema.SQL); err != nil {
+	if err = schema.Migrate(db); err != nil {
 		t.Fatalf("apply schema: %v", err)
 	}
 	restore := monitor.SetTestDB(db)

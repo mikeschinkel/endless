@@ -80,7 +80,7 @@ func initSchemaDB(t *testing.T, cfgDir string) string {
 		t.Fatalf("open seed db: %v", err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(schema.SQL); err != nil {
+	if err := schema.Migrate(db); err != nil {
 		t.Fatalf("apply schema: %v", err)
 	}
 	return dbPath

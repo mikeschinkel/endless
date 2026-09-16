@@ -29,19 +29,8 @@ func newLandingTestDB(t *testing.T) *sql.DB {
 	}
 	t.Cleanup(func() { db.Close() })
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema.SQL); err != nil {
+	if err := schema.Migrate(db); err != nil {
 		t.Fatalf("apply schema: %v", err)
-	}
-	// session_tasks (V9) lives outside schema.SQL; create it so the
-	// executor's session-touch upsert succeeds when actor has a session.
-	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS session_tasks (
-		session_id INTEGER NOT NULL,
-		task_id    INTEGER NOT NULL,
-		created_at TEXT    NOT NULL,
-		updated_at TEXT    NOT NULL,
-		UNIQUE(session_id, task_id)
-	)`); err != nil {
-		t.Fatalf("create session_tasks: %v", err)
 	}
 	if _, err := db.Exec(`PRAGMA foreign_keys=ON`); err != nil {
 		t.Fatalf("set fks: %v", err)

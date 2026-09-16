@@ -20,13 +20,14 @@ import (
 	"github.com/mikeschinkel/endless/internal/events"
 	"github.com/mikeschinkel/endless/internal/kairos"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/schema"
 	"github.com/mikeschinkel/endless/internal/schemachange"
 )
 
 func Run(args []string) {
 	if len(args) < 1 {
 		fmt.Fprintf(os.Stderr, "Usage: endless-go event <command> [flags]\n")
-		fmt.Fprintf(os.Stderr, "Commands: emit, validate-db, rebuild-db, apply-change, backup, reap-worktrees, commit-doc\n")
+		fmt.Fprintf(os.Stderr, "Commands: emit, validate-db, rebuild-db, migrate, apply-change, backup, reap-worktrees, commit-doc\n")
 		os.Exit(1)
 	}
 
@@ -39,6 +40,8 @@ func Run(args []string) {
 		runValidateDB(args[1:])
 	case "rebuild-db":
 		runRebuildDB(args[1:])
+	case "migrate":
+		runMigrate()
 	case "apply-change":
 		runApplyChange(args[1:])
 	case "backup":
@@ -783,6 +786,48 @@ func runApplyChange(args []string) {
 // retention failure rides out as a warning instead, and the Python CLI prints
 // it, because a directory that has stopped being pruned is worth saying out loud
 // exactly once rather than never (E-2121).
+// runMigrate brings the database at the resolved DB context up to the latest
+// schema version, creating it if it does not exist.
+//
+// It exists so the Python CLI can build a database without owning a migration
+// runner. db.py used to read internal/schema/schema.sql off disk and
+// executescript() it, which meant two programs applied the schema by two
+// mechanisms and only one of them could be told about a new migration — and
+// which only worked at all when endless was installed from a source checkout,
+// since the file it reached for is not shipped. This is the same shell-out
+// shape `apply-change` and `backup` already use.
+//
+// The work itself is monitor.DB(): the connect IS the migration (E-2019), so
+// this verb opens the database and reports where it ended up rather than
+// running anything of its own. That keeps one definition of what connecting
+// means, gates included — the E-1818 schema-passive check still refuses to let
+// a candidate binary migrate a real ledger it was merely pinned onto, and this
+// verb inherits that refusal instead of routing around it.
+func runMigrate() {
+	db, err := monitor.DB()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "endless-go event migrate: %v\n", err)
+		os.Exit(1)
+	}
+	version, err := schema.DBVersion(context.Background(), db)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "endless-go event migrate: %v\n", err)
+		os.Exit(1)
+	}
+	latest, err := schema.LatestVersion()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "endless-go event migrate: %v\n", err)
+		os.Exit(1)
+	}
+	b, _ := json.Marshal(map[string]any{
+		"status":  "ok",
+		"db":      monitor.DBPath(),
+		"version": version,
+		"latest":  latest,
+	})
+	fmt.Println(string(b))
+}
+
 func runBackup() {
 	payload := map[string]any{}
 	res, err := monitor.BackupDB()

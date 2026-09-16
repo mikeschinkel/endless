@@ -30,7 +30,7 @@ func newSessionTasksTestDB(t *testing.T) *sql.DB {
 	// the claim/release executors) to an isolated temp dir so tests never append
 	// to the developer's real ~/.config/endless log.
 	t.Cleanup(monitor.SetTestDB(db))
-	if _, err := db.Exec(schema.SQL); err != nil {
+	if err := schema.Migrate(db); err != nil {
 		t.Fatalf("apply schema: %v", err)
 	}
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS session_tasks (

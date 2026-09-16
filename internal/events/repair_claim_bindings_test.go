@@ -31,7 +31,7 @@ func newRepairTestDB(t *testing.T, root string) *sql.DB {
 	t.Cleanup(func() { db.Close() })
 	db.SetMaxOpenConns(1)
 	t.Cleanup(monitor.SetTestDB(db))
-	if _, err := db.Exec(schema.SQL); err != nil {
+	if err := schema.Migrate(db); err != nil {
 		t.Fatalf("apply schema: %v", err)
 	}
 	if _, err := db.Exec(

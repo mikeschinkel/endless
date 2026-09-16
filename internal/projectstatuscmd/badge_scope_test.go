@@ -42,7 +42,7 @@ func bindFaultStoreWithProjects(t *testing.T) (alpha, beta int64) {
 			t.Errorf("close db: %v", cerr)
 		}
 	})
-	if _, err = db.Exec(schema.SQL); err != nil {
+	if err = schema.Migrate(db); err != nil {
 		t.Fatalf("apply schema: %v", err)
 	}
 	if _, err = db.Exec(

@@ -168,7 +168,7 @@ func TestRevisitGateDecision_Lifecycle(t *testing.T) {
 	}
 }
 
-// newSchemaDB opens a fresh file-backed SQLite DB with schema.SQL applied.
+// newSchemaDB opens a fresh file-backed SQLite DB at the latest schema version.
 func newSchemaDB(t *testing.T) *sql.DB {
 	t.Helper()
 	path := filepath.Join(t.TempDir(), "endless.db")
@@ -178,7 +178,7 @@ func newSchemaDB(t *testing.T) *sql.DB {
 	}
 	t.Cleanup(func() { db.Close() })
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema.SQL); err != nil {
+	if err := schema.Migrate(db); err != nil {
 		t.Fatalf("apply schema: %v", err)
 	}
 	return db

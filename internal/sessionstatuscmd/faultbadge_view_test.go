@@ -34,7 +34,7 @@ func bindFaultStore(t *testing.T) {
 			t.Errorf("close db: %v", cerr)
 		}
 	})
-	if _, err = db.Exec(schema.SQL); err != nil {
+	if err = schema.Migrate(db); err != nil {
 		t.Fatalf("apply schema: %v", err)
 	}
 	// A registered project, so a test can file a fault under one and have the

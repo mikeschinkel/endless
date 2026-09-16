@@ -57,10 +57,41 @@ func MigrateContext(ctx context.Context, db *sql.DB) error {
 	if err != nil {
 		return err
 	}
+	if err = enforceForeignKeys(ctx, db); err != nil {
+		return err
+	}
 	if _, err = provider.Up(ctx); err != nil {
 		return fmt.Errorf("applying migrations: %w", err)
 	}
 	return Seed(db)
+}
+
+// enforceForeignKeys turns foreign key enforcement on for db's connection.
+//
+// This is the one piece of connection state Migrate owns, and it owns it
+// because schema.sql used to. Its first three lines were PRAGMAs, so every
+// `Exec(schema.SQL)` configured the connection as a side effect of applying the
+// schema; dropping all three silently disarmed every FK declaration the schema
+// makes, in production and in 34 test files, and the only visible symptom was
+// one faults test noticing that a deliberately dangling project id was no
+// longer rejected. Behaviour that is load-bearing somewhere and invisible
+// everywhere else does not get to leave by accident.
+//
+// The other two do NOT come along. journal_mode and busy_timeout are durability
+// and concurrency policy, chosen per opener and, in journal_mode's case,
+// persisted in the file — a migration has no business deciding either. Foreign
+// keys are different in kind: the schema DECLARES them, so enforcing them is
+// part of what it means for a database to have this schema.
+//
+// Set before Up, not inside it: SQLite ignores this pragma within a
+// transaction, and goose wraps a migration in one. A future migration that
+// needs enforcement off for a table rebuild has to declare itself
+// `-- +goose NO TRANSACTION` and turn it off for itself.
+func enforceForeignKeys(ctx context.Context, db *sql.DB) error {
+	if _, err := db.ExecContext(ctx, "PRAGMA foreign_keys=ON"); err != nil {
+		return fmt.Errorf("enabling foreign key enforcement: %w", err)
+	}
+	return nil
 }
 
 // Seed applies the enum mirror upserts. Migrate calls it; it is exported for

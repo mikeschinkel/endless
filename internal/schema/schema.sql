@@ -1299,7 +1299,13 @@ CREATE TABLE IF NOT EXISTS minimizer_evals (
     corpus_ids       TEXT NOT NULL,
     wins             INTEGER NOT NULL DEFAULT 0,
     losses           INTEGER NOT NULL DEFAULT 0,
-    ties             INTEGER NOT NULL DEFAULT 0,
+    -- Quoted because TIES is a reserved word in sqlc's SQLite grammar (it is
+    -- half of SQLite's `EXCLUDE TIES` window-frame syntax). SQLite itself is
+    -- happy either way and the column is identical; the quotes are what let a
+    -- schema parser other than SQLite's own read this file. Verified with
+    -- sqlc 1.31.1: unquoted, it is the ONLY statement in the whole schema that
+    -- fails to parse. See E-2021's analysis.
+    "ties"           INTEGER NOT NULL DEFAULT 0,
     vetoes           INTEGER NOT NULL DEFAULT 0,
     promoted         INTEGER NOT NULL DEFAULT 0,
     verdict          TEXT,

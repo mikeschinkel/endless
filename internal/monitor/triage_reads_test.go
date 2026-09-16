@@ -21,7 +21,7 @@ func triageTestDB(t *testing.T) *sql.DB {
 		t.Fatalf("open db: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
-	if _, err = db.Exec(schema.SQL); err != nil {
+	if err = schema.Migrate(db); err != nil {
 		t.Fatalf("apply schema: %v", err)
 	}
 	if _, err = db.Exec(

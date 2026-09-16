@@ -8,12 +8,15 @@ from typing import NamedTuple
 
 import click
 
-from endless import config, provenance, statuses
+from endless import config, event_bridge, provenance, statuses
 from endless.config import ensure_config_dir
 
 _conn: sqlite3.Connection | None = None
 
-# Find schema.sql relative to this package (temporary until E-894 moves all SQL to Go)
+# Where internal/schema/ sits relative to this package. Python no longer reads
+# schema.sql -- Go owns the schema and applies it through `endless-go event
+# migrate` (E-2019) -- so this survives only to locate the change directory
+# below, and goes when E-2158 deletes that.
 _SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent / "internal" / "schema" / "schema.sql"
 
 # The per-ticket schema changes that carry an existing DB from one shape to the
@@ -41,6 +44,12 @@ def get_db() -> sqlite3.Connection:
         return _conn
     ensure_config_dir()
     is_new = not config.DB_PATH.exists()
+    if is_new:
+        # E-2019: Go owns the schema. The migration set is embedded in
+        # endless-go, so this works from an installed tool as well as a source
+        # checkout -- which reading internal/schema/schema.sql off disk never did.
+        # Done BEFORE connecting, so the file opened below is already built.
+        _init_schema()
     _conn = sqlite3.connect(str(config.DB_PATH))
     _conn.row_factory = sqlite3.Row
     # Decode TEXT leniently (E-1914). sqlite3's default text_factory raises
@@ -66,7 +75,13 @@ def get_db() -> sqlite3.Connection:
     _conn.execute("PRAGMA busy_timeout=5000")
     _conn.execute("PRAGMA foreign_keys=ON")
     if is_new:
-        _init_schema(_conn)
+        # Just built, at the latest version. Nothing below applies to it, and
+        # _migrate() in particular MUST not see it: that ladder is for databases
+        # that predate the Go schema, it short-circuits on PRAGMA user_version
+        # rather than on anything goose writes, and it takes a backup before it
+        # looks. A fresh database would take the whole ladder and leave a backup
+        # file behind every time one was created.
+        pass
     elif not _has_table(_conn, "projects"):
         # File exists but lacks the foundational schema. Don't try to migrate
         # (it would crash with a raw OperationalError). Surface a clear error
@@ -79,11 +94,14 @@ def get_db() -> sqlite3.Connection:
     return _conn
 
 
-def _init_schema(conn: sqlite3.Connection):
-    if not _SCHEMA_PATH.exists():
-        raise FileNotFoundError(f"Schema not found: {_SCHEMA_PATH}")
-    schema = _SCHEMA_PATH.read_text()
-    conn.executescript(schema)
+def _init_schema():
+    """Create the database at the resolved DB context, at the latest version.
+
+    Shells out to `endless-go event migrate`; Python applies no DDL of its own
+    (E-2019). Called before the first connect, so the file sqlite3.connect()
+    opens below is already built rather than empty.
+    """
+    event_bridge.init_schema()
 
 
 def _backup_db():

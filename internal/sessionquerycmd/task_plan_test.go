@@ -64,7 +64,7 @@ func seedTaskDB(t *testing.T, cfgDir string, id int64, plan string) {
 		t.Fatalf("open seed db: %v", err)
 	}
 	defer db.Close()
-	if _, err := db.Exec(schema.SQL); err != nil {
+	if err := schema.Migrate(db); err != nil {
 		t.Fatalf("apply schema to seed db: %v", err)
 	}
 	if _, err := db.Exec(

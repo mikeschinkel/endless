@@ -26,7 +26,7 @@ func freshTaskDB(t *testing.T, dir string, dbName string) (*sql.DB, string) {
 	}
 	t.Cleanup(func() { db.Close() })
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema.SQL); err != nil {
+	if err := schema.Migrate(db); err != nil {
 		t.Fatalf("apply schema to %s: %v", dbName, err)
 	}
 	if _, err := db.Exec(

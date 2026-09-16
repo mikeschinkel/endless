@@ -269,6 +269,35 @@ def apply_change(path: str, endless_go_bin: str | None = None) -> dict:
     return json.loads(result.stdout.strip())
 
 
+def init_schema(endless_go_bin: str | None = None) -> dict:
+    """Shell out to `endless-go event migrate` to build or update the schema.
+
+    Python does not own a migration runner. It used to: db.py read
+    internal/schema/schema.sql off disk and executescript() it, which made the
+    Python CLI a second applier of the schema that nothing would remember to
+    tell about a new migration, and which only worked when endless was installed
+    from a source checkout -- the file it reached for is not shipped with the
+    tool. Go embeds the migration set in the binary, so it always has one.
+
+    Returns {"status", "db", "version", "latest"}. Raises click.ClickException
+    on failure (binary missing or non-zero exit), like apply_change and
+    backup_db, whose shape this follows.
+    """
+    config.require_db_context()  # E-1429
+    event_bin = _resolve_endless_go(override=endless_go_bin)
+    result = subprocess.run(
+        [event_bin, *config.go_db_context_args(), "event", "migrate"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        msg = result.stderr.strip() or "migrate failed"
+        raise click.ClickException(f"schema initialization failed: {msg}")
+
+    if not result.stdout.strip():
+        return {"status": "ok"}
+    return json.loads(result.stdout.strip())
+
+
 def backup_db(endless_go_bin: str | None = None) -> dict:
     """Shell out to `endless-go event backup` (VACUUM INTO a timestamped copy).
 

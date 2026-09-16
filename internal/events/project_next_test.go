@@ -21,7 +21,7 @@ func newProjectNextTestDB(t *testing.T) *sql.DB {
 	}
 	t.Cleanup(func() { db.Close() })
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema.SQL); err != nil {
+	if err := schema.Migrate(db); err != nil {
 		t.Fatalf("apply schema: %v", err)
 	}
 	if _, err := db.Exec(`PRAGMA foreign_keys=ON`); err != nil {
@@ -287,7 +287,7 @@ func TestProjectNextRevise_ConcurrentBeginImmediateConflicts(t *testing.T) {
 	}
 
 	a := open()
-	if _, err := a.Exec(schema.SQL); err != nil {
+	if err := schema.Migrate(a); err != nil {
 		t.Fatalf("schema: %v", err)
 	}
 	b := open()

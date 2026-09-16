@@ -54,7 +54,7 @@ func initTestMainCheckoutWithWorktree(t *testing.T, projectName string) (string,
 	if err != nil {
 		t.Fatalf("open main DB: %v", err)
 	}
-	if _, err := db.Exec(schema.SQL); err != nil {
+	if err := schema.Migrate(db); err != nil {
 		t.Fatalf("apply schema: %v", err)
 	}
 	_, err = db.Exec(
@@ -241,7 +241,7 @@ func TestSeedFromWorktree_ErrorsWhenNoMatchingProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open: %v", err)
 	}
-	if _, err := db.Exec(schema.SQL); err != nil {
+	if err := schema.Migrate(db); err != nil {
 		t.Fatalf("schema: %v", err)
 	}
 	_, err = db.Exec(

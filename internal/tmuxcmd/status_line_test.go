@@ -28,7 +28,7 @@ func withMonitorDB(t *testing.T) *sql.DB {
 	}
 	t.Cleanup(func() { db.Close() })
 	db.SetMaxOpenConns(1)
-	if _, err := db.Exec(schema.SQL); err != nil {
+	if err := schema.Migrate(db); err != nil {
 		t.Fatalf("schema: %v", err)
 	}
 	restore := monitor.SetTestDB(db)

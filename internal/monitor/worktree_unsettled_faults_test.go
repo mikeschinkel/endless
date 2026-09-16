@@ -30,7 +30,7 @@ func bindFaultsForTest(t *testing.T) *sql.DB {
 	}
 	db.SetMaxOpenConns(1)
 	t.Cleanup(func() { _ = db.Close() })
-	if _, err = db.Exec(schema.SQL); err != nil {
+	if err = schema.Migrate(db); err != nil {
 		t.Fatalf("apply schema: %v", err)
 	}
 	logDir := t.TempDir()

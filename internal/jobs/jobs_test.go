@@ -58,7 +58,7 @@ func newTestDB(t *testing.T) *sql.DB {
 		}
 	})
 
-	if _, err = db.Exec(schema.SQL); err != nil {
+	if err = schema.Migrate(db); err != nil {
 		t.Fatalf("apply schema: %v", err)
 	}
 
