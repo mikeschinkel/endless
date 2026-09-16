@@ -6340,3 +6340,7 @@ Two failures, and the second is the one that generalizes:
 
 The shape to watch for: I found the evidence, then built an argument for why the rule did not apply. When a rule and my reasoning disagree about a one-line report item, the rule wins — the cost of a spurious line is one line, and the cost of a dropped one is Mike discovering it himself.
 - **Project**: endless
+
+### [2026-09-16] An accepted decision that already routes a finding is the answer — read it before asking whether to file
+During E-2083 I found an out-of-scope defect in shared code (_harness.sh corrupting the runner's TAP stream) and put a file/drop question to Mike with a recommendation to file. His answer was 'Fix it in E-2083 (grow scope); see ED-1550' — ED-1550 is accepted and already says filing is the exception and a finding folds into an OPEN task. The question cost him a turn to answer something the ledger had already decided. Before asking whether to file, search the accepted decisions for one that governs the case (endless decision list) and act on it; ask only when no decision routes it, or when the finding's size genuinely tests the decision's bound.
+- **Project**: endless
