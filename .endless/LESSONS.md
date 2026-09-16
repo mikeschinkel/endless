@@ -6309,3 +6309,11 @@ Two fields, two jobs:
 
 Do this without being asked. A session that answers a design question in chat and implements it has left no durable record of the choice.
 - **Project**: endless
+
+### [2026-09-16] Do not offer a trade-off in AskUserQuestion without checking that the constraint is real
+During E-1504 I offered three options for what a missing rendering should do, and framed one as 'better message, but --help then advertises a value that command cannot honour'. Mike's answer was not a choice between them: 'Must option 2 advertise agent as being available? If yes, do option 1. If no, do option 2.'
+
+The constraint was not real. A custom click.ParamType controls the help metavar and the error message independently, so the page could advertise [text|json] and still recognise and refuse 'agent' by name. The two halves I presented as a trade-off were separable, and the answer was to have both.
+
+Before writing an option that says 'X, but you lose Y': check whether X actually costs Y in the framework being used. Presenting a false trade-off does not just waste a question — it invites a worse answer, because the user is choosing between alternatives that need not have been alternatives.
+- **Project**: endless
