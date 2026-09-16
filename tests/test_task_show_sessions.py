@@ -261,14 +261,14 @@ def test_non_claimants_keep_their_own_labels(seeded_project_at_cwd):
     assert f"- Revisited:  ES-994 (E-{other}) [idle]" in out
 
 
-def test_json_and_llm_carry_the_claimed_relation(seeded_project_at_cwd):
+def test_json_and_agent_carry_the_claimed_relation(seeded_project_at_cwd):
     tid = _add_task("Target")
     _add_session(1046, state="ended", task_id=tid)
     _touch(1046, tid, _REVISITED, "2026-08-01T00:00:00")
 
     payload = json.loads(_show(tid, "--json"))
     assert [t["relation"] for t in payload["touched_by"]] == ["claimed"]
-    assert f"touched_by=claimed ES-1046 (E-{tid}) [ended]" in _show(tid, "--llm")
+    assert f"touched_by=claimed ES-1046 (E-{tid}) [ended]" in _show(tid, "--agent")
 
 
 def test_touched_by_survives_a_deleted_session(seeded_project_at_cwd):
@@ -333,7 +333,7 @@ def test_touched_by_follows_this_task(seeded_project_at_cwd):
 
 
 # --------------------------------------------------------------------------
-# --json / --llm carry the same facts
+# --json / --agent carry the same facts
 # --------------------------------------------------------------------------
 
 
@@ -364,20 +364,20 @@ def test_json_created_by_is_null_without_a_creator(seeded_project_at_cwd):
     assert payload["touched_by"] == []
 
 
-def test_llm_reports_created_by_and_touched_by(seeded_project_at_cwd):
+def test_agent_reports_created_by_and_touched_by(seeded_project_at_cwd):
     tid = _add_task("Target")
     a = _add_task("A")
     _add_session(994, state="idle", task_id=a)
     _touch(994, tid, _SURFACED, "2026-08-01T00:00:00")
 
-    out = _show(tid, "--llm")
+    out = _show(tid, "--agent")
     assert f"created_by=ES-994 (E-{a})" in out
     assert f"touched_by=surfaced ES-994 (E-{a}) [idle]" in out
 
 
-def test_llm_omits_both_lines_when_untouched(seeded_project_at_cwd):
+def test_agent_omits_both_lines_when_untouched(seeded_project_at_cwd):
     tid = _add_task("Target")
-    out = _show(tid, "--llm")
+    out = _show(tid, "--agent")
     assert "created_by=" not in out
     assert "touched_by=" not in out
 

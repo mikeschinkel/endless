@@ -1,6 +1,6 @@
 """Tests for E-1478: surface task landings in the read CLI.
 
-Covers the `Landed:` line in `task show` (human / --llm / --json) and the
+Covers the `Landed:` line in `task show` (human / --agent / --json) and the
 `task landed` command (bare list + per-task history). Landing data lives in
 the `task_landings` table, written append-only by `endless worktree land`.
 """
@@ -80,10 +80,10 @@ def test_show_human_omits_landed_line_when_never_landed(registered_project, caps
     assert "Landed:" not in out
 
 
-def test_show_llm_emits_landed_field(registered_project, capsys):
+def test_show_agent_emits_landed_field(registered_project, capsys):
     _insert_task(9003)
     _insert_landing(9003, "ccccccc3", "2026-05-25T16:09:00")
-    task_cmd.detail_item(9003, llm=True)
+    task_cmd.detail_item(9003, agent=True)
     out = capsys.readouterr().out
     assert "landed=" in out
     assert "ccccccc" in out

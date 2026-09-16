@@ -207,7 +207,7 @@ def test_brief_wins_over_the_display_flags_in_the_human_render(seeded_project_at
 
 def test_brief_reveals_a_gated_field_as_a_preview(seeded_project_at_cwd):
     """--brief alone shows what the placeholder would have hidden, truncated —
-    the human counterpart of `--llm --brief` upgrading a bare count."""
+    the human counterpart of `--agent --brief` upgrading a bare count."""
     tid = _add_task("Sample", analysis="a" * 400)
     out = _run(f"E-{tid}", "--brief=30")
     assert "— Analysis —" in out
@@ -244,14 +244,14 @@ def test_default_human_render_still_hides_the_bodies(seeded_project_at_cwd):
     assert "— Analysis —" not in out
 
 
-def test_llm_default_output_is_unchanged_but_for_the_children_lines(
+def test_agent_default_output_is_unchanged_but_for_the_children_lines(
         seeded_project_at_cwd):
     """The regression most likely to go unseen, pinned line by line. A childless
-    task emits no children lines at all, so this is E-1601's `--llm` output
+    task emits no children lines at all, so this is E-1601's `--agent` output
     verbatim."""
     tid = _add_task("Sample", description="Sample", analysis="a" * 12,
                     plan="t" * 34, outcome="o" * 56)
-    assert _run(f"E-{tid}", "--llm").splitlines() == [
+    assert _run(f"E-{tid}", "--agent").splitlines() == [
         f"# E-{tid} Sample",
         "project=test",
         "type=todo phase=now status=ready",
@@ -263,9 +263,9 @@ def test_llm_default_output_is_unchanged_but_for_the_children_lines(
     ]
 
 
-def test_llm_brief_upgrades_a_bare_count_to_a_preview(seeded_project_at_cwd):
+def test_agent_brief_upgrades_a_bare_count_to_a_preview(seeded_project_at_cwd):
     tid = _add_task("Sample", analysis="a" * 400)
-    out = _run(f"E-{tid}", "--llm", "--brief=30")
+    out = _run(f"E-{tid}", "--agent", "--brief=30")
     assert "## Analysis" in out
     assert "a" * 30 + "…" in out
     assert "analysis_chars=" not in out
@@ -308,16 +308,16 @@ def test_children_list_stays_gated_behind_the_flag(seeded_project_at_cwd):
     assert len(_json(f"E-{parent}", "--children")["children"]) == 1
 
 
-def test_llm_emits_children_lines_only_when_there_are_children(
+def test_agent_emits_children_lines_only_when_there_are_children(
         seeded_project_at_cwd):
     parent = _add_task("Parent", type_id=4)
     _add_task("t1", type_id=1, parent=parent)
     _add_task("t2", type_id=1, parent=parent)
     _add_task("b1", type_id=2, parent=parent)
-    out = _run(f"E-{parent}", "--llm")
+    out = _run(f"E-{parent}", "--agent")
     assert "children_count=3" in out
     assert "children_by_type=todo:2,bugfix:1" in out
-    assert "children_count=" not in _run(f"E-{_add_task('Lonely')}", "--llm")
+    assert "children_count=" not in _run(f"E-{_add_task('Lonely')}", "--agent")
 
 
 def test_children_header_line_single_type(seeded_project_at_cwd):

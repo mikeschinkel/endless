@@ -166,9 +166,9 @@ def test_head_and_tail_each_keep_the_caveat(seeded_project_at_cwd, as_agent):
     assert any(agent_help.ERROR_SENTINEL in ln for ln in lines[-3:]), lines[-3:]
 
 
-def test_llm_mode_brackets_it_too(seeded_project_at_cwd, as_agent):
+def test_agent_mode_brackets_it_too(seeded_project_at_cwd, as_agent):
     task_id = _add_task("Add the retired thing", "obsolete")
-    lines = _lines(_run("task", "show", f"E-{task_id}", "--llm"))
+    lines = _lines(_run("task", "show", f"E-{task_id}", "--agent"))
     assert lines[0] == lines[-1], "\n".join(lines)
 
 

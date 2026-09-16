@@ -41,8 +41,9 @@ endless task list --parent E-101
 endless task list --parent none                      # roots only
 endless task list --related-to <id> --rel-type blocks
 endless task list --sort status                      # id, status, phase, tier, created, title
-endless task list --llm                              # token-efficient agent output
+endless task list --agent                            # token-efficient agent output
 endless task list --json
+endless task list --format agent                     # the long form of --agent
 
 # Detail for one task
 endless task show <id>
@@ -54,7 +55,7 @@ endless task show <id> --outcome
 endless task show <id> --no-description
 endless task show <id> --brief                       # previews, not bodies (256 chars)
 endless task show <id> --brief=40                    # ...cut to 40 instead
-endless task show <id> --llm
+endless task show <id> --agent
 endless task show <id> --json                        # every body, no flag needed
 
 # Has the work landed?
@@ -68,7 +69,7 @@ endless task next --limit 5
 endless task next --all                              # across all projects
 endless task next --tier 1
 endless task next --phase now
-endless task next --llm
+endless task next --agent
 
 # Other reads
 endless task id                                      # the task THIS session is on
@@ -79,7 +80,18 @@ endless task search "query" --plan                   # also search the plan fiel
 endless task handoff <id>                            # render the spawn handoff
 ```
 
-Reach for `--llm` whenever you're parsing output yourself — it's token-efficient.
+Reach for `--agent` whenever you're parsing output yourself — it's token-efficient.
+
+`--agent` and `--json` each have a long form: `--format agent`, `--format json`,
+and `--format text` for the human rendering. One spelling that works on every
+command that renders a result, so there is no per-command subset to remember.
+Commands that have no agent rendering yet accept `--format text|json` and refuse
+`--format agent` by name rather than quietly handing back the human view.
+Naming two different renderings at once (`--json --agent`) is refused, not
+silently resolved.
+
+`--llm` was the old name for `--agent`. It is still recognised and no longer
+works: it refuses with a pointer at the new spelling.
 
 `--json` carries every field's body with no flag passed. The display flags
 (`--all-fields`, `--analysis`, `--plan`, `--outcome`, `--no-description`) shape
@@ -194,7 +206,7 @@ nothing to resolve. `endless tmux task` is an alias for it.
 
   **Claimed** is read off `sessions.task_id`, the write-once ownership record, not off the touch — so a session that filed a task and later claimed it reads `Claimed`, not the `Surfaced` its touch row was stamped with, and a session that claimed the task without ever recording a touch is listed too. That is the same column `task spawn` refuses on, so this block and that refusal cannot disagree.
 
-Sessions render as **`ES-NNNN`** and tasks as `E-NNNN` — separate id spaces that would otherwise be indistinguishable side by side. Feed an `ES-NNNN` straight to `endless session goto ES-101` to jump there. `--json` reports the same facts as `created_by` / `touched_by`; `--llm` as `created_by=` / `touched_by=` lines.
+Sessions render as **`ES-NNNN`** and tasks as `E-NNNN` — separate id spaces that would otherwise be indistinguishable side by side. Feed an `ES-NNNN` straight to `endless session goto ES-101` to jump there. `--json` reports the same facts as `created_by` / `touched_by`; `--agent` as `created_by=` / `touched_by=` lines.
 
 ---
 
@@ -444,7 +456,7 @@ status is about not overwriting which terminal the work actually reached — the
 supersession rides on the relation either way. A **terminal**
 status then shows the supersession alongside it — `assumed (replaced by E-101)`
 on `task show`'s `Status:` line, appended to the row in `session status`, and as
-a `replaced_by` key in the `--llm` and `--json` modes of both. So a superseded
+a `replaced_by` key in the `--agent` and `--json` modes of both. So a superseded
 task reads as *handed on*, not *abandoned*, without anyone having to go looking
 for its relations.
 
@@ -849,7 +861,7 @@ endless task update E-101 --duplicates E-102             # same fact, no --type 
 
 Once the redundant task **is** closed, the relation rides along with its status
 — `obsolete (duplicates E-102)` in `task show` and `session status`, and as a
-`duplicates` key in their `--llm` and `--json` modes. This is the same rule
+`duplicates` key in their `--agent` and `--json` modes. This is the same rule
 `replaces` follows, applied for the same reason: a terminal status reads as the
 end of the story, and `obsolete` alone says "no longer needs doing" rather than
 "already being done over there". It follows that rule's exception too: the human tables

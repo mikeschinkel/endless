@@ -1,6 +1,6 @@
 """Tests for E-1911 part 4: `task show --children` lists EVERY direct child.
 
-The three render paths (human, --llm, --json) each carried
+The three render paths (human, --agent, --json) each carried
 `AND status != 'confirmed'` in their child query. It excluded exactly one
 status, so an epic rendered its `obsolete` and `declined` children while
 dropping the ones that were verified and landed — E-1906 vanished from
@@ -44,8 +44,8 @@ def test_human_lists_the_confirmed_child(registered_project, capsys):
         assert eid in out, f"{eid} missing from --children:\n{out}"
 
 
-def test_llm_lists_the_confirmed_child(registered_project, capsys):
-    task_cmd.detail_item(_seed_epic(), show_children=True, llm=True)
+def test_agent_lists_the_confirmed_child(registered_project, capsys):
+    task_cmd.detail_item(_seed_epic(), show_children=True, agent=True)
     out = capsys.readouterr().out
     assert "E-8801 now confirmed Verified and landed" in out
 

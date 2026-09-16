@@ -18,7 +18,7 @@ Two escapes, and only two:
 
 MACHINE-READABLE renders (`--json`, `--tsv`) are UNCAPPED by default. Capping
 them would be strictly worse than the original problem: a consumer parsing 20 of
-1360 rows has no footer to read and no way to notice. `--llm` is capped, because
+1360 rows has no footer to read and no way to notice. `--agent` is capped, because
 it is prose an agent reads and the footer lands in it like any other line. An
 explicit `--limit N` still caps a machine render — explicit is explicit.
 """
@@ -113,19 +113,19 @@ def probe_limit(cap: int | None) -> int | None:
     return None if cap is None else cap + 1
 
 
-def footer(hidden: int, *, llm: bool = False) -> str:
+def footer(hidden: int, *, agent: bool = False) -> str:
     """The omission trace, in the session-status idiom ('… N hidden (--flag)').
 
     Names the count and the flag, so a truncated listing documents its own way
     out. Never called with hidden == 0; `echo_footer` is the guard.
     """
     noun = "row" if hidden == 1 else "rows"
-    if llm:
+    if agent:
         return f"# {hidden} more {noun} ({NO_LIMIT_FLAG})"
     return f"… {hidden} more {noun} ({NO_LIMIT_FLAG})"
 
 
-def echo_footer(hidden: int, *, llm: bool = False, err: bool = False) -> None:
+def echo_footer(hidden: int, *, agent: bool = False, err: bool = False) -> None:
     """Print the omission trace when anything was omitted, and nothing when not.
 
     The footer is REQUIRED whenever the count is non-zero — that is the whole
@@ -140,8 +140,8 @@ def echo_footer(hidden: int, *, llm: bool = False, err: bool = False) -> None:
     """
     if hidden <= 0:
         return
-    line = footer(hidden, llm=llm)
-    click.echo(line if (llm or err) else click.style(line, dim=True), err=err)
+    line = footer(hidden, agent=agent)
+    click.echo(line if (agent or err) else click.style(line, dim=True), err=err)
 
 
 def limit_options_for(default: int = DEFAULT_ROW_CAP, unit: str = "rows to render"):

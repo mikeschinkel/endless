@@ -247,7 +247,7 @@ endless task update <id> --status revisit        # hand the task back, then: tas
 endless task spawn <id>                          # or spawn a fresh Claude session on it now
 
 # Read a task you didn't claim — no claim needed for reads
-endless task show <id> --all-fields --llm
+endless task show <id> --all-fields --agent
 ```
 
 ## Sections
@@ -337,7 +337,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 - **Don't mark research or brainstorm items `completed`.** Set them to `unreviewed` with `--outcome` and let your user read the outcome first. A self-declared finish is not the last word on work whose deliverable is information.
 - **Always claim before writing code.** Even when enforcement is off, claiming registers your session and creates the worktree.
 - **Use the worktree.** Don't make project changes in the `main` checkout's working tree.
-- **Use `--llm` for agent-friendly output.** `task list --llm`, `task show --llm`, `task next --llm`, etc.
+- **Use `--agent` for agent-friendly output.** `task list --agent`, `task show --agent`, `task next --agent`, etc. `--format agent` is the same thing spelled long, and works the same way on every command that renders a result. (`--llm` was the old name; it now refuses with a pointer at `--agent`.)
 - **Tasks have hierarchy.** Use `--parent <id>` when adding child items.
 - **Verify preferences before recording prohibitions.** Soft signals ("ideally", "usually", "I'd prefer") are not rules. See `endless guide decisions`.
 - **Use the literal task ID printed by `task add`.** IDs advance globally across parallel sessions — never guess.

@@ -970,7 +970,7 @@ def show_history(
             for r in rows
         ]
         click.echo(json.dumps(out, indent=2))
-        rowcap.echo_footer(hidden, llm=True, err=True)
+        rowcap.echo_footer(hidden, agent=True, err=True)
         return
 
     # If reverse chron, reverse for display so newest is at bottom (natural reading)
@@ -1325,7 +1325,7 @@ def list_sessions(
             for r in rows
         ]
         click.echo(json.dumps(out, indent=2))
-        rowcap.echo_footer(hidden, llm=True, err=True)
+        rowcap.echo_footer(hidden, agent=True, err=True)
         return
 
     try:
@@ -1468,7 +1468,7 @@ def search_sessions(
             for r in rows
         ]
         click.echo(json.dumps(out, indent=2))
-        rowcap.echo_footer(hidden, llm=True, err=True)
+        rowcap.echo_footer(hidden, agent=True, err=True)
         return
 
     click.echo()

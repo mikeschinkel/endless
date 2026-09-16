@@ -155,13 +155,13 @@ def test_task_show_keeps_the_note(seeded_project_at_cwd, capsys):
     assert f"(replaced by E-{new})" in status_line
 
 
-def test_task_list_llm_keeps_the_note(seeded_project_at_cwd, capsys):
-    """--llm is one line per row with no shared column, so it pays no width."""
+def test_task_list_agent_keeps_the_note(seeded_project_at_cwd, capsys):
+    """--agent is one line per row with no shared column, so it pays no width."""
     closed, _ = _seed_rows()
     new = _add_task("The replacement")
     _link(new, closed, "replaces")
 
-    task_cmd.show_plan(show_all=True, llm=True)
+    task_cmd.show_plan(show_all=True, agent=True)
     assert f"obsolete replaced_by=E-{new}" in capsys.readouterr().out
 
 
@@ -219,12 +219,12 @@ def test_superseded_by_does_not_change_the_decision_table(
     assert "(by ED-" not in after
 
 
-def test_decision_list_llm_keeps_the_note(seeded_project_at_cwd, capsys):
+def test_decision_list_agent_keeps_the_note(seeded_project_at_cwd, capsys):
     old = _add_decision("The rule that was retired", status="superseded")
     new = _add_decision("The rule that took over")
     _link_supersedes(new, old)
 
-    decision_cmd.list_decisions(llm=True)
+    decision_cmd.list_decisions(agent=True)
     assert f"superseded (by ED-{new})" in capsys.readouterr().out
 
 

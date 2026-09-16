@@ -4,7 +4,7 @@ Three things ship here and all three trace to one root cause — `obsolete` read
 as "never happened", and nothing on a status display said otherwise:
 
 1. The supersession renders inline with a TERMINAL status wherever status is
-   shown (`task show`, `task list`, and their --llm/--json modes; the Go
+   shown (`task show`, `task list`, and their --agent/--json modes; the Go
    `session status` side is covered by the Go tests). E-2064 later pulled it
    back out of the human TABLES — see tests/test_status_column_width.py — so
    `task list`'s human assertion here is now the negative one.
@@ -132,18 +132,18 @@ def test_task_show_human_puts_the_note_on_the_status_line(
     pytest.fail("no Status: line in `task show` output")
 
 
-def test_task_show_llm_puts_the_note_on_the_status_line(
+def test_task_show_agent_puts_the_note_on_the_status_line(
     seeded_project_at_cwd, capsys
 ):
     old, new = _superseded_pair()
-    task_cmd.detail_item(old, llm=True)
+    task_cmd.detail_item(old, agent=True)
     out = capsys.readouterr().out
     # key=value, in the status line's own position — not buried in `links=`.
     assert f"status=assumed replaced_by=E-{new}" in out
 
 
 def test_task_show_json_emits_the_relation_ungated(seeded_project_at_cwd, capsys):
-    # `unverified` is NOT terminal, so the human/--llm note is suppressed — but
+    # `unverified` is NOT terminal, so the human/--agent note is suppressed — but
     # --json is data, and the relation is emitted anyway.
     old, new = _superseded_pair(status="unverified")
     task_cmd.detail_item(old, as_json=True)
@@ -178,9 +178,9 @@ def test_task_list_default_view_is_unchanged(seeded_project_at_cwd, capsys):
     assert "replaced by" not in out
 
 
-def test_task_list_llm_puts_the_note_after_the_status(seeded_project_at_cwd, capsys):
+def test_task_list_agent_puts_the_note_after_the_status(seeded_project_at_cwd, capsys):
     old, new = _superseded_pair()
-    task_cmd.show_plan(show_all=True, llm=True)
+    task_cmd.show_plan(show_all=True, agent=True)
     out = capsys.readouterr().out
     assert f"E-{old} now assumed replaced_by=E-{new} " in out
 

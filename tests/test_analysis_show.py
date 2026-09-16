@@ -84,16 +84,16 @@ def test_all_fields_emits_every_content_section(seeded_project_at_cwd):
     assert f"E-{child}" in result.output
 
 
-def test_analysis_in_llm_output(seeded_project_at_cwd):
+def test_analysis_in_agent_output(seeded_project_at_cwd):
     tid = _add_task("Audit the X system")
-    _set_fields(tid, analysis="llm-mode analysis")
+    _set_fields(tid, analysis="agent-mode analysis")
     runner = CliRunner()
     result = runner.invoke(
-        main, ["task", "show", f"E-{tid}", "--analysis", "--llm"]
+        main, ["task", "show", f"E-{tid}", "--analysis", "--agent"]
     )
     assert result.exit_code == 0, result.output
     assert "## Analysis" in result.output
-    assert "llm-mode analysis" in result.output
+    assert "agent-mode analysis" in result.output
 
 
 def test_analysis_in_json_output(seeded_project_at_cwd):

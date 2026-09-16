@@ -51,7 +51,7 @@ def list_epics(
     tier_filter: int | None = None,
     parent_id: int | None = None,
     sort_by: str | None = None,
-    llm: bool = False,
+    agent: bool = False,
     as_json: bool = False,
     limit: int | None = None,
     no_limit: bool = False,
@@ -65,7 +65,7 @@ def list_epics(
         tier_filter=tier_filter,
         parent_id=parent_id,
         sort_by=sort_by,
-        llm=llm,
+        agent=agent,
         as_json=as_json,
         type_filter="epic",
         limit=limit,
@@ -80,7 +80,7 @@ def show_epic(
     show_plan: bool = False,
     show_children: bool = True,
     show_outcome: bool = False,
-    llm: bool = False,
+    agent: bool = False,
     as_json: bool = False,
 ):
     """Show an epic's detail (wraps detail_item; children on by default)."""
@@ -91,7 +91,7 @@ def show_epic(
         show_plan=show_plan,
         show_children=show_children,
         show_outcome=show_outcome,
-        llm=llm,
+        agent=agent,
         as_json=as_json,
     )
 

@@ -470,14 +470,14 @@ def test_task_show_renders_links_section(isolated_env):
     assert out.index("Created:") < out.index("This task:")  # multi-line block sits last
 
 
-def test_task_show_llm_links_line(isolated_env):
-    """E-1477: `task show --llm` emits a single compact links= line."""
+def test_task_show_agent_links_line(isolated_env):
+    """E-1477: `task show --agent` emits a single compact links= line."""
     _seed_project()
     a = _add_task("A")
     b = _add_task("B")
     _add_dep(a, b, "blocks")
 
-    out = _invoke("task", "show", str(a), "--llm")
+    out = _invoke("task", "show", str(a), "--agent")
     assert f"links=E-{b} (blocks)" in out
     assert "blocked_by=" not in out            # old per-type key gone
     assert "blocks=" not in out
@@ -501,14 +501,14 @@ def test_task_relations_renders_links_section(isolated_env):
     assert "(relates to)" not in out
 
 
-def test_task_relations_llm_links_line(isolated_env):
-    """E-1477: `task relations --llm` emits a single Links: line."""
+def test_task_relations_agent_links_line(isolated_env):
+    """E-1477: `task relations --agent` emits a single Links: line."""
     _seed_project()
     a = _add_task("A")
     b = _add_task("B")
     _add_dep(a, b, "relates_to")
 
-    out = _invoke("task", "relations", str(a), "--llm")
+    out = _invoke("task", "relations", str(a), "--agent")
     assert f"Links: E-{b} (relates to)" in out
 
 
@@ -598,17 +598,17 @@ def test_duplicates_renders_in_links_section(isolated_env):
     assert "Duplicated by:" in _invoke("task", "relations", str(keeper))
 
 
-def test_duplicates_llm_line(isolated_env):
-    """E-1185: the --llm line carries the directional phrase, not a raw type."""
+def test_duplicates_agent_line(isolated_env):
+    """E-1185: the --agent line carries the directional phrase, not a raw type."""
     _seed_project()
     dupe = _add_task("Filed twice")
     keeper = _add_task("Filed first")
     _add_dep(dupe, keeper, "duplicates")
 
     assert f"Links: E-{keeper} (duplicates)" in _invoke(
-        "task", "relations", str(dupe), "--llm")
+        "task", "relations", str(dupe), "--agent")
     assert f"Links: E-{dupe} (duplicated by)" in _invoke(
-        "task", "relations", str(keeper), "--llm")
+        "task", "relations", str(keeper), "--agent")
 
 
 def test_task_link_help_lists_duplicates():

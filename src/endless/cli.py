@@ -1,5 +1,6 @@
 """Endless CLI — Click entry point."""
 
+import functools
 import os
 import re
 import sys
@@ -167,6 +168,161 @@ def retired_content_options(old, new):
             retired_option(f"--{old}", f"--{new}")(fn)
         )
     return _decorate
+
+
+# ─── the output-format flag surface (E-1504) ─────────────────────────────────
+# Three spellings of ONE setting: which rendering the command emits. `--agent`
+# and `--json` are the short forms; `--format <fmt>` is the long form that works
+# the same way everywhere, so an agent has one spelling to learn rather than a
+# per-command subset to discover.
+#
+# A command declares the single fact `output_options` needs — whether it HAS an
+# agent rendering — and the decorator derives the flags, the help, the refusals
+# and the resolution from that. Thirty commands carry this surface; without one
+# source they drift, which is how `--llm` came to sit on 15 of them and `--json`
+# on 28 with no command able to say which renderings it actually had.
+
+TEXT_FORMAT = "text"
+JSON_FORMAT = "json"
+AGENT_FORMAT = "agent"
+
+
+class FormatArg(click.ParamType):
+    """`--format <fmt>`, whose ACCEPTED set is wider than its ADVERTISED set.
+
+    A command with no agent rendering advertises `[text|json]` — nothing should
+    learn a value that command cannot honour — but still recognises `agent`, so
+    it can refuse it by name.
+
+    `click.Choice` cannot express that: it advertises exactly what it accepts, so
+    `--format agent` on such a command would earn the generic "'agent' is not one
+    of 'text', 'json'". That tells a reader the spelling was wrong. The true
+    answer is that the spelling was right and this command has no agent view yet
+    — a different fact, with a different remedy, which is why the message is
+    written rather than generated.
+
+    Remedy order is ED-1584: the remedy that works leads, rationale comes last
+    where it cannot be mistaken for an instruction.
+    """
+
+    name = "fmt"
+
+    def __init__(self, *, agent: bool):
+        self.agent = agent
+
+    def _accepted(self) -> tuple[str, ...]:
+        if self.agent:
+            return (TEXT_FORMAT, JSON_FORMAT, AGENT_FORMAT)
+        return (TEXT_FORMAT, JSON_FORMAT)
+
+    # Click 8.2 grew the `ctx` parameter; pyproject pins only click>=8.0, where
+    # this is called as get_metavar(param). Defaulted, so both arities work.
+    def get_metavar(self, param=None, ctx=None):
+        return "[" + "|".join(self._accepted()) + "]"
+
+    def convert(self, value, param, ctx):
+        v = str(value).strip().lower()
+        if v in self._accepted():
+            return v
+        if v == AGENT_FORMAT:
+            where = ctx.command_path if ctx is not None else "this command"
+            self.fail(
+                f"{where} has no agent rendering yet.\n"
+                f"  Use --format json — the machine-readable rendering it does "
+                f"have, and the one an agent should read here.\n"
+                f"  Agent renderings are arriving command by command; --help "
+                f"names the ones this command accepts.",
+                param, ctx,
+            )
+        accepted = self._accepted()
+        self.fail(
+            f"{value!r} is not an output format. "
+            f"Use {', '.join(accepted[:-1])} or {accepted[-1]}.",
+            param, ctx,
+        )
+
+
+def _resolve_output_format(fmt, agent, as_json):
+    """Collapse the three spellings into the (agent, as_json) pair the renderers
+    already take, refusing a caller that names two DIFFERENT renderings.
+
+    Deliberately a refusal rather than a precedence rule. Before E-1504
+    `--llm --json` silently yielded JSON, because every renderer tested `as_json`
+    first — an accident of write order that no help text stated and no caller
+    could have predicted. Picking a winner for a contradiction is the silent
+    incorrectness E-2143 exists to end; a wrong guess has to cost tokens.
+
+    Naming the SAME rendering twice (`--json --format json`) is not a
+    contradiction and is allowed.
+    """
+    spellings: dict[str, str] = {}
+    if fmt is not None:
+        spellings.setdefault(fmt, f"--format {fmt}")
+    if as_json:
+        spellings.setdefault(JSON_FORMAT, "--json")
+    if agent:
+        spellings.setdefault(AGENT_FORMAT, "--agent")
+
+    if len(spellings) > 1:
+        names = sorted(spellings)
+        raise click.UsageError(
+            f"{' and '.join(spellings[n] for n in names)} name two different "
+            f"output renderings.\n"
+            f"  Re-run with just one — "
+            f"{' or '.join(f'--format {n}' for n in names)}."
+        )
+
+    mode = next(iter(spellings), TEXT_FORMAT)
+    return mode == AGENT_FORMAT, mode == JSON_FORMAT
+
+
+def output_options(*, agent: bool = True, json_help: str = "JSON output"):
+    """Declare a command's output-rendering flags from one fact: whether it has
+    an agent rendering.
+
+    Adds `--json` and `--format <fmt>` always, and `--agent` (plus the retired
+    `--llm` that points at it) when `agent=True`. The command body still receives
+    the `agent` / `as_json` booleans its renderer takes: `--format` is an alias
+    resolved before the body runs, never a third parameter to branch on, so it
+    costs the renderers nothing.
+
+    `json_help` is a parameter only because a handful of commands describe their
+    JSON more precisely than "JSON output"; the rest take the default.
+    """
+
+    def decorate(f):
+        @functools.wraps(f)
+        def wrapper(*args, **kwargs):
+            is_agent, is_json = _resolve_output_format(
+                kwargs.pop("output_format", None),
+                kwargs.get("agent", False),
+                kwargs.get("as_json", False),
+            )
+            if agent:
+                kwargs["agent"] = is_agent
+            kwargs["as_json"] = is_json
+            return f(*args, **kwargs)
+
+        # Applied innermost-first, so the params land in source order
+        # --agent, --llm, --json, --format.
+        fmt_help = (
+            "Output rendering: text (default), json, or agent — the long form of "
+            "--json / --agent."
+            if agent else
+            "Output rendering: text (default) or json — the long form of --json."
+        )
+        wrapper = click.option("--format", "output_format",
+                               type=FormatArg(agent=agent), default=None,
+                               help=fmt_help)(wrapper)
+        wrapper = click.option("--json", "as_json", is_flag=True,
+                               help=json_help)(wrapper)
+        if agent:
+            wrapper = retired_option("--llm", "--agent", is_flag=True)(wrapper)
+            wrapper = click.option("--agent", is_flag=True,
+                                   help="Token-efficient output for agents")(wrapper)
+        return wrapper
+
+    return decorate
 
 
 class DecisionIDType(click.ParamType):
@@ -565,8 +721,8 @@ def info(name):
 @click.option("--all", "show_all", is_flag=True,
               help="Include `ready` tasks — spawnable work, a claim on capacity "
                    "rather than attention")
-@click.option("--json", "as_json", is_flag=True,
-              help="Emit the rows as JSON, uncapped, each carrying its action")
+@output_options(agent=False,
+                json_help="Emit the rows as JSON, uncapped, each carrying its action")
 @project_status_cmd.group_limit_options
 def project_status(name, show_all, as_json, limit, no_limit):
     """Show what in this project needs attention — a one-shot snapshot.
@@ -1055,7 +1211,7 @@ def sql_query(query, write, tsv, limit, no_limit):
         else:
             for r in shown:
                 click.echo("\t".join(str(r[h]) for h in headers))
-        rowcap.echo_footer(hidden, llm=True, err=True)
+        rowcap.echo_footer(hidden, agent=True, err=True)
         return
 
     from tabulate import tabulate
@@ -1098,7 +1254,7 @@ def session_cmd():
 
 @session_cmd.command("show")
 @click.argument("session_ref", required=False, default=None)
-@click.option("--json", "as_json", is_flag=True, help="JSON output")
+@output_options(agent=False)
 def session_show(session_ref, as_json):
     """Show details for a Claude session — current by default.
 
@@ -1121,7 +1277,7 @@ def session_show(session_ref, as_json):
 @click.option("--sort", "sort_order", default="desc",
               type=click.Choice(["asc", "desc"]),
               help="Sort order (default: desc, newest first)")
-@click.option("--json", "as_json", is_flag=True, help="JSON output")
+@output_options(agent=False)
 @rowcap.limit_options
 def session_history(session_id, show_tools, timestamps, limit, sort_order, as_json,
                     no_limit):
@@ -1145,8 +1301,8 @@ def session_history(session_id, show_tools, timestamps, limit, sort_order, as_js
               help="Render this session's hidden task rows too, marked ⊘")
 @click.option("--only-hidden", is_flag=True,
               help="Render ONLY this session's hidden task rows")
-@click.option("--json", "as_json", is_flag=True,
-              help="Emit the rows as JSON (every row carries its hidden state)")
+@output_options(agent=False,
+                json_help="Emit the rows as JSON (every row carries its hidden state)")
 def session_status(show_all, tree, show_hidden, only_hidden, as_json):
     """Show the current session's status — a one-shot snapshot.
 
@@ -1217,7 +1373,7 @@ def session_monitor(show_all, tree, show_hidden, only_hidden):
               help="Show only hidden sessions")
 @click.option("--empty", "show_empty", is_flag=True,
               help="Include empty/short sessions (<=2 messages)")
-@click.option("--json", "as_json", is_flag=True, help="JSON output")
+@output_options(agent=False)
 @rowcap.limit_options
 def session_list(project, all_projects, state, sort_by, show_all, show_hidden,
                  show_empty, limit, as_json, no_limit):
@@ -1247,7 +1403,7 @@ def session_list(project, all_projects, state, sort_by, show_all, show_hidden,
 @session_cmd.command("search")
 @click.argument("query")
 @click.option("--project", default=None, help="Filter by project")
-@click.option("--json", "as_json", is_flag=True, help="JSON output")
+@output_options(agent=False)
 @rowcap.limit_options
 def session_search(query, project, limit, as_json, no_limit):
     """Search across all session messages."""
@@ -1940,13 +2096,10 @@ def task_import(file, from_claude, json_file, project, replace, parent):
               help="Sort by column (default: id)")
 @click.option("--removed", "removed_only", is_flag=True,
               help="List REMOVED tasks instead of live ones")
-@click.option("--llm", is_flag=True,
-              help="Token-efficient output for LLMs")
-@click.option("--json", "as_json", is_flag=True,
-              help="JSON output")
+@output_options()
 @rowcap.limit_options
 def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, rel_type,
-              sort, removed_only, llm, as_json, limit, no_limit):
+              sort, removed_only, agent, as_json, limit, no_limit):
     """List tasks for a project.
 
     Stops at --limit rows and says how many it left out; --no-limit renders
@@ -1959,7 +2112,7 @@ def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, 
               status_filter=status, phase_filter=phase,
               tier_filter=tier_val, parent_id=parent_val,
               related_to_id=related_to_id, rel_type=rel_type,
-              sort_by=sort, removed_only=removed_only, llm=llm, as_json=as_json,
+              sort_by=sort, removed_only=removed_only, agent=agent, as_json=as_json,
               limit=limit, no_limit=no_limit)
 
 
@@ -1984,19 +2137,16 @@ def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, 
               default=None, type=BRIEF_LEN, metavar="[N]",
               help=f"Preview every long field instead of its full body, cut to "
                    f"N characters (default {BRIEF_CHARS}) with a trailing '…'. "
-                   f"Applies to human, --llm and --json alike, and wins over "
+                   f"Applies to human, --agent and --json alike, and wins over "
                    f"the display flags: --all-fields --brief yields previews. "
                    f"Write --brief=N, or put a bare --brief after the task id.")
-@click.option("--llm", is_flag=True,
-              help="Token-efficient output for LLMs")
-@click.option("--json", "as_json", is_flag=True,
-              help="JSON output")
+@output_options()
 @click.option("-p", "--paged", is_flag=True,
               help="Page colorized output through less (wheel-scrollable)")
 @click.option("--no-color", is_flag=True,
               help="Disable ANSI color even on a TTY")
 def task_show(item_ids, no_description, show_analysis, show_plan_field,
-              show_children, show_outcome, all_fields, brief, llm, as_json,
+              show_children, show_outcome, all_fields, brief, agent, as_json,
               paged, no_color):
     """Show detail for one or more tasks."""
     from endless.task_cmd import detail_item
@@ -2006,7 +2156,7 @@ def task_show(item_ids, no_description, show_analysis, show_plan_field,
         detail_item(item_id, show_description=not no_description,
                     show_analysis=show_analysis, show_plan=show_plan_field,
                     show_children=show_children, show_outcome=show_outcome,
-                    llm=llm, as_json=as_json, paged=paged, no_color=no_color,
+                    agent=agent, as_json=as_json, paged=paged, no_color=no_color,
                     brief=brief)
 
 
@@ -2018,10 +2168,7 @@ task_cmd.add_command(task_show, name="detail")
               help="Project name (default: detect from cwd)")
 @click.option("--all", "show_all", is_flag=True,
               help="Show tasks from all projects")
-@click.option("--llm", is_flag=True,
-              help="Token-efficient output for LLMs")
-@click.option("--json", "as_json", is_flag=True,
-              help="JSON output")
+@output_options()
 @click.option("--tier", default=None,
               help="Filter by tier (1-4 or auto/quick/deep/discuss)")
 @click.option("--phase", default=None,
@@ -2031,7 +2178,7 @@ task_cmd.add_command(task_show, name="detail")
               help="Filter to children of this task (e.g. E-101), or 'none' for root tasks")
 @rowcap.limit_options
 @click.pass_context
-def task_next(ctx, project, show_all, limit, llm, as_json, tier, phase, parent_id,
+def task_next(ctx, project, show_all, limit, agent, as_json, tier, phase, parent_id,
               no_limit):
     """Show top actionable tasks, ranked by priority."""
     # `next` is a group so it can host `revise` (and future `move`/`briefing`),
@@ -2042,7 +2189,7 @@ def task_next(ctx, project, show_all, limit, llm, as_json, tier, phase, parent_i
     tier_val = parse_tier_filter(tier) if tier else None
     parent_val = parse_parent_filter(parent_id) if parent_id else None
     next_tasks(project_name=project, show_all=show_all,
-               limit=limit, no_limit=no_limit, llm=llm, as_json=as_json,
+               limit=limit, no_limit=no_limit, agent=agent, as_json=as_json,
                tier=tier_val, phase_filter=phase, parent_id=parent_val)
 
 
@@ -2051,8 +2198,7 @@ def task_next(ctx, project, show_all, limit, llm, as_json, tier, phase, parent_i
               help="Path to a JSON file holding the full new curated list")
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
-@click.option("--json", "as_json", is_flag=True,
-              help="Emit the resulting list as JSON")
+@output_options(agent=False, json_help="Emit the resulting list as JSON")
 def task_next_revise(file_path, project, as_json):
     """Replace the curated 'next' list from a JSON file (full rewrite)."""
     from endless.task_cmd import revise_next_list
@@ -2064,18 +2210,15 @@ def task_next_revise(file_path, project, as_json):
               help="Project name (default: detect from cwd)")
 @click.option("--all", "show_all", is_flag=True,
               help="Show tasks from all projects")
-@click.option("--llm", is_flag=True,
-              help="Token-efficient output for LLMs")
-@click.option("--json", "as_json", is_flag=True,
-              help="JSON output")
+@output_options()
 @click.option("--parent", "parent_id", default=None,
               help="Filter to children of this task (e.g. E-101), or 'none' for root tasks")
-def task_active(project, show_all, llm, as_json, parent_id):
+def task_active(project, show_all, agent, as_json, parent_id):
     """Show underway and unverified tasks."""
     from endless.task_cmd import active_tasks, parse_parent_filter
     parent_val = parse_parent_filter(parent_id) if parent_id else None
     active_tasks(project_name=project, show_all=show_all,
-                 llm=llm, as_json=as_json, parent_id=parent_val)
+                 agent=agent, as_json=as_json, parent_id=parent_val)
 
 
 @task_cmd.command("id")
@@ -2107,19 +2250,16 @@ def task_id_cmd(ctx, pane):
               help="Project name (default: detect from cwd)")
 @click.option("--all", "show_all", is_flag=True,
               help="Show tasks from all projects")
-@click.option("--llm", is_flag=True,
-              help="Token-efficient output for LLMs")
-@click.option("--json", "as_json", is_flag=True,
-              help="JSON output")
+@output_options()
 @click.option("--parent", "parent_id", default=None,
               help="Filter to children of this task (e.g. E-101), or 'none' for root tasks")
 @rowcap.limit_options
-def task_recent(project, show_all, limit, llm, as_json, parent_id, no_limit):
+def task_recent(project, show_all, limit, agent, as_json, parent_id, no_limit):
     """Show most recently updated tasks."""
     from endless.task_cmd import recent_tasks, parse_parent_filter
     parent_val = parse_parent_filter(parent_id) if parent_id else None
     recent_tasks(project_name=project, show_all=show_all,
-                 limit=limit, no_limit=no_limit, llm=llm, as_json=as_json,
+                 limit=limit, no_limit=no_limit, agent=agent, as_json=as_json,
                  parent_id=parent_val)
 
 
@@ -2138,10 +2278,7 @@ def landing_report_options(all_help: str):
 
     def decorate(f):
         f = rowcap.limit_options(f)
-        f = click.option("--json", "as_json", is_flag=True,
-                         help="JSON output")(f)
-        f = click.option("--llm", is_flag=True,
-                         help="Token-efficient output for LLMs")(f)
+        f = output_options()(f)
         f = click.option("--all", "show_all", is_flag=True, help=all_help)(f)
         f = click.option("--project", default=None,
                          help="Project name (default: detect from cwd)")(f)
@@ -2153,7 +2290,7 @@ def landing_report_options(all_help: str):
 @task_cmd.command("landed")
 @click.argument("item_id", type=TASK_ID, required=False)
 @landing_report_options("Show tasks from all projects")
-def task_landed(item_id, project, show_all, limit, llm, as_json, no_limit):
+def task_landed(item_id, project, show_all, limit, agent, as_json, no_limit):
     """List landed tasks, or show one task's landing history.
 
     Bare `task landed` lists tasks that have landed at least once, most
@@ -2166,15 +2303,15 @@ def task_landed(item_id, project, show_all, limit, llm, as_json, no_limit):
     """
     from endless.task_cmd import landed_list, landed_item
     if item_id is not None:
-        landed_item(item_id, llm=llm, as_json=as_json)
+        landed_item(item_id, agent=agent, as_json=as_json)
     else:
         landed_list(project_name=project, show_all=show_all,
-                    limit=limit, no_limit=no_limit, llm=llm, as_json=as_json)
+                    limit=limit, no_limit=no_limit, agent=agent, as_json=as_json)
 
 
 @task_cmd.command("unlanded")
 @landing_report_options("Survey every registered project")
-def task_unlanded(project, show_all, limit, llm, as_json, no_limit):
+def task_unlanded(project, show_all, limit, agent, as_json, no_limit):
     """List finished tasks whose work has not reached the base branch.
 
     `task unlanded` asks whether a TASK claims to be done while its work is
@@ -2195,7 +2332,7 @@ def task_unlanded(project, show_all, limit, llm, as_json, no_limit):
     """
     from endless.task_cmd import unlanded_list
     unlanded_list(project_name=project, show_all=show_all, limit=limit,
-                  no_limit=no_limit, llm=llm, as_json=as_json)
+                  no_limit=no_limit, agent=agent, as_json=as_json)
 
 
 @task_cmd.command("unsettled")
@@ -2206,12 +2343,9 @@ def task_unlanded(project, show_all, limit, llm, as_json, no_limit):
               help="Survey every task worktree in the project")
 @click.option("--include-settled", is_flag=True,
               help="With --all, also list settled worktrees")
-@click.option("--llm", is_flag=True,
-              help="Token-efficient output for LLMs")
-@click.option("--json", "as_json", is_flag=True,
-              help="JSON output")
+@output_options()
 @rowcap.limit_options
-def task_unsettled(item_id, project, show_all, include_settled, limit, llm, as_json,
+def task_unsettled(item_id, project, show_all, include_settled, limit, agent, as_json,
                    no_limit):
     """Explain why a task's worktree is unsettled (modified vs unlanded).
 
@@ -2243,10 +2377,10 @@ def task_unsettled(item_id, project, show_all, include_settled, limit, llm, as_j
 
     from endless.task_cmd import unsettled_list, unsettled_item
     if item_id is not None:
-        unsettled_item(item_id, llm=llm, as_json=as_json)
+        unsettled_item(item_id, agent=agent, as_json=as_json)
     else:
         unsettled_list(project_name=project, limit=limit, no_limit=no_limit,
-                       include_settled=include_settled, llm=llm, as_json=as_json)
+                       include_settled=include_settled, agent=agent, as_json=as_json)
 
 
 @task_cmd.command("search")
@@ -2266,13 +2400,10 @@ def task_unsettled(item_id, project, show_all, include_settled, limit, llm, as_j
 @retired_option("--text", "--plan", is_flag=True)
 @click.option("--plan", "search_plan", is_flag=True,
               help="Also search in plan field")
-@click.option("--llm", is_flag=True,
-              help="Token-efficient output for LLMs")
-@click.option("--json", "as_json", is_flag=True,
-              help="JSON output")
+@output_options()
 @rowcap.limit_options
 def task_search(query, project, show_all, status, phase, parent_id,
-                search_plan, limit, llm, as_json, no_limit):
+                search_plan, limit, agent, as_json, no_limit):
     """Search tasks by query string.
 
     The count under the table is the number of MATCHES, not the number of rows
@@ -2284,7 +2415,7 @@ def task_search(query, project, show_all, status, phase, parent_id,
                  status_filter=status, phase_filter=phase,
                  parent_id=parent_val,
                  search_plan=search_plan,
-                 limit=limit, no_limit=no_limit, llm=llm, as_json=as_json)
+                 limit=limit, no_limit=no_limit, agent=agent, as_json=as_json)
 
 
 # ─── inline-content path gate (E-1744) ───────────────────────────────────────
@@ -3385,22 +3516,20 @@ def task_unblock(item_id, blocker_id):
 
 @task_cmd.command("deps")
 @click.argument("item_id", type=TASK_ID)
-@click.option("--llm", is_flag=True,
-              help="Token-efficient output for LLMs")
-def task_deps(item_id, llm):
+@output_options(json_help="JSON output — the task and its links array")
+def task_deps(item_id, agent, as_json):
     """Show all relations for a task. Alias of `task relations`."""
     from endless.task_cmd import show_relations
-    show_relations(item_id, llm=llm)
+    show_relations(item_id, agent=agent, as_json=as_json)
 
 
 @task_cmd.command("relations")
 @click.argument("item_id", type=TASK_ID)
-@click.option("--llm", is_flag=True,
-              help="Token-efficient output for LLMs")
-def task_relations(item_id, llm):
+@output_options(json_help="JSON output — the task and its links array")
+def task_relations(item_id, agent, as_json):
     """Show all of a task's relations under a single 'Links:' section."""
     from endless.task_cmd import show_relations
-    show_relations(item_id, llm=llm)
+    show_relations(item_id, agent=agent, as_json=as_json)
 
 
 @main.command("plan", context_settings={"ignore_unknown_options": True})
@@ -3435,16 +3564,13 @@ def decision_cmd():
 @click.option("--sort", default=None,
               type=click.Choice(["id", "created", "title"]),
               help="Sort by column (default: id)")
-@click.option("--llm", is_flag=True,
-              help="Token-efficient output for LLMs")
-@click.option("--json", "as_json", is_flag=True,
-              help="JSON output")
+@output_options()
 @rowcap.limit_options
-def decision_list(project, show_all, sort, llm, as_json, limit, no_limit):
+def decision_list(project, show_all, sort, agent, as_json, limit, no_limit):
     """List decisions for a project."""
     from endless.decision_cmd import list_decisions
     list_decisions(project_name=project, show_all=show_all,
-                   sort_by=sort, llm=llm, as_json=as_json,
+                   sort_by=sort, agent=agent, as_json=as_json,
                    limit=limit, no_limit=no_limit)
 
 
@@ -3503,15 +3629,12 @@ def decision_update(item_id, title, description, description_file, allow_paths, 
 
 @decision_cmd.command("show")
 @click.argument("item_ids", type=DECISION_ID, nargs=-1, required=True)
-@click.option("--llm", is_flag=True,
-              help="Token-efficient output for LLMs")
-@click.option("--json", "as_json", is_flag=True,
-              help="JSON output")
-def decision_show(item_ids, llm, as_json):
+@output_options()
+def decision_show(item_ids, agent, as_json):
     """Show detail for one or more decisions."""
     from endless.decision_cmd import detail_decision
     for item_id in item_ids:
-        detail_decision(item_id, llm=llm, as_json=as_json)
+        detail_decision(item_id, agent=agent, as_json=as_json)
 
 
 @decision_cmd.command("accept")
@@ -3748,13 +3871,10 @@ def epic_add(title, description, description_file, plan_text, plan_file, phase, 
 @click.option("--sort", default=None,
               type=click.Choice(["id", "status", "phase", "tier", "created", "title"]),
               help="Sort by column (default: id)")
-@click.option("--llm", is_flag=True,
-              help="Token-efficient output for LLMs")
-@click.option("--json", "as_json", is_flag=True,
-              help="JSON output")
+@output_options()
 @rowcap.limit_options
 def epic_list(project, show_all, status, phase, tier, parent_id, sort,
-              llm, as_json, limit, no_limit):
+              agent, as_json, limit, no_limit):
     """List epics for a project."""
     from endless.epic_cmd import list_epics
     from endless.task_cmd import parse_tier_filter, parse_parent_filter
@@ -3763,7 +3883,7 @@ def epic_list(project, show_all, status, phase, tier, parent_id, sort,
     list_epics(project_name=project, show_all=show_all,
                status_filter=status, phase_filter=phase,
                tier_filter=tier_val, parent_id=parent_val,
-               sort_by=sort, llm=llm, as_json=as_json,
+               sort_by=sort, agent=agent, as_json=as_json,
                limit=limit, no_limit=no_limit)
 
 
@@ -3784,12 +3904,9 @@ def epic_list(project, show_all, status, phase, tier, parent_id, sort,
 @click.option("--all-fields", "all_fields", is_flag=True,
               help="Show every content section (description, analysis, plan, "
                    "outcome, children)")
-@click.option("--llm", is_flag=True,
-              help="Token-efficient output for LLMs")
-@click.option("--json", "as_json", is_flag=True,
-              help="JSON output")
+@output_options()
 def epic_show(item_ids, no_description, show_analysis, show_plan_field,
-              no_children, show_outcome, all_fields, llm, as_json):
+              no_children, show_outcome, all_fields, agent, as_json):
     """Show detail for one or more epics (children shown by default)."""
     from endless.epic_cmd import show_epic
     show_children = not no_children
@@ -3799,7 +3916,7 @@ def epic_show(item_ids, no_description, show_analysis, show_plan_field,
         show_epic(item_id, show_description=not no_description,
                   show_analysis=show_analysis, show_plan=show_plan_field,
                   show_children=show_children, show_outcome=show_outcome,
-                  llm=llm, as_json=as_json)
+                  agent=agent, as_json=as_json)
 
 
 @epic_cmd.command("update")
@@ -3880,7 +3997,7 @@ def worktree_cmd():
 @click.option("--state", "state_filter", default=None,
               type=click.Choice(["main", "active", "foreign"]),
               help="Filter by lifecycle state")
-@click.option("--json", "as_json", is_flag=True, help="JSON output")
+@output_options(agent=False)
 @rowcap.limit_options
 def worktree_list(state_filter, as_json, limit, no_limit):
     """List worktrees for the current project."""
@@ -3889,7 +4006,7 @@ def worktree_list(state_filter, as_json, limit, no_limit):
 
 
 @worktree_cmd.command("current")
-@click.option("--json", "as_json", is_flag=True, help="JSON output")
+@output_options(agent=False)
 def worktree_current(as_json):
     """Show the worktree for the current cwd."""
     from endless.worktree_cmd import current_worktree
@@ -3898,7 +4015,7 @@ def worktree_current(as_json):
 
 @worktree_cmd.command("show")
 @click.argument("name_or_path")
-@click.option("--json", "as_json", is_flag=True, help="JSON output")
+@output_options(agent=False)
 def worktree_show(name_or_path, as_json):
     """Show detail for one worktree (by trailing path segment or absolute path)."""
     from endless.worktree_cmd import show_worktree
@@ -3907,7 +4024,7 @@ def worktree_show(name_or_path, as_json):
 
 @worktree_cmd.command("for-task")
 @click.argument("task_id")
-@click.option("--json", "as_json", is_flag=True, help="JSON output")
+@output_options(agent=False)
 def worktree_for_task(task_id, as_json):
     """Resolve a task ID to its worktree path (or report none)."""
     from endless.worktree_cmd import for_task
@@ -3950,7 +4067,7 @@ def worktree_land(task_id, dry_run, record_only, sha, at):
 
 @worktree_cmd.command("diagnose")
 @click.argument("task_id", required=False)
-@click.option("--json", "as_json", is_flag=True, help="JSON output")
+@output_options(agent=False)
 def worktree_diagnose(task_id, as_json):
     """Classify the rebase conflict a land recorded, and prescribe only what is proven.
 
@@ -4243,7 +4360,7 @@ def verb_add(value, definition, category, machine_only):
 
 
 @verb_cmd.command("list")
-@click.option("--json", "as_json", is_flag=True, help="JSON output")
+@output_options(agent=False)
 @rowcap.limit_options
 def verb_list(as_json, limit, no_limit):
     """List registered verbs from project + machine layers."""
@@ -4351,7 +4468,7 @@ def phrase_add(type_, value, scope, method, case_sensitive, machine_only):
               help="Filter to one scope")
 @click.option("--all", "show_disabled", is_flag=True,
               help="Include disabled matchers")
-@click.option("--json", "as_json", is_flag=True, help="JSON output")
+@output_options(agent=False)
 @rowcap.limit_options
 def phrase_list(type_filter, scope_filter, show_disabled, as_json, limit, no_limit):
     """List matchers from project + machine config layers, merged."""

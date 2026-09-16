@@ -74,7 +74,7 @@ endless sql "SELECT name FROM pragma_table_info('tasks') ORDER BY cid" --tsv
 
 ### When to use `task list --json` instead
 
-For straightforward task queries, prefer `endless task list --json --status <...> --llm` — it's purpose-built for agent consumption and respects business logic (e.g., `unverified` vs `confirmed` for blocking). Reach for `sql` when you need a count/aggregate or a join the CLI doesn't expose.
+For straightforward task queries, prefer `endless task list --agent --status <...>` — it's purpose-built for agent consumption and respects business logic (e.g., `unverified` vs `confirmed` for blocking). Reach for `sql` when you need a count/aggregate or a join the CLI doesn't expose.
 
 ---
 

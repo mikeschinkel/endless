@@ -303,21 +303,21 @@ def test_task_show_outcome_section_renders_after_plan(seeded_project_at_cwd):
     assert outcome_idx > plan_idx, "outcome section must follow plan section"
 
 
-def test_task_show_llm_outcome_gated(seeded_project_at_cwd):
-    """E-1601: --llm collapses outcome to a char marker by default; --outcome
+def test_task_show_agent_outcome_gated(seeded_project_at_cwd):
+    """E-1601: --agent collapses outcome to a char marker by default; --outcome
     pulls the body as a `## Outcome` section."""
     tid = _add_task("Sample")
-    task_cmd.decline_item(tid, reason="llm-mode reason")
+    task_cmd.decline_item(tid, reason="agent-mode reason")
     runner = CliRunner()
-    default = runner.invoke(main, ["task", "show", f"E-{tid}", "--llm"])
+    default = runner.invoke(main, ["task", "show", f"E-{tid}", "--agent"])
     assert default.exit_code == 0
-    assert f"outcome_chars={len('llm-mode reason')}" in default.output
-    assert "outcome=llm-mode reason" not in default.output
+    assert f"outcome_chars={len('agent-mode reason')}" in default.output
+    assert "outcome=agent-mode reason" not in default.output
     assert "## Outcome" not in default.output
-    revealed = runner.invoke(main, ["task", "show", f"E-{tid}", "--llm", "--outcome"])
+    revealed = runner.invoke(main, ["task", "show", f"E-{tid}", "--agent", "--outcome"])
     assert revealed.exit_code == 0
     assert "## Outcome" in revealed.output
-    assert "llm-mode reason" in revealed.output
+    assert "agent-mode reason" in revealed.output
 
 
 def test_task_show_json_outcome_ungated(seeded_project_at_cwd):

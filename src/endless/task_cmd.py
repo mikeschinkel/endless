@@ -1126,7 +1126,7 @@ def show_plan(
     related_to_id: int | None = None,
     rel_type: str | None = None,
     sort_by: str | None = None,
-    llm: bool = False,
+    agent: bool = False,
     as_json: bool = False,
     type_filter: str | None = None,
     removed_only: bool = False,
@@ -1222,7 +1222,7 @@ def show_plan(
     if not rows:
         if as_json:
             click.echo("[]")
-        elif llm:
+        elif agent:
             click.echo(f"# {proj_name}\n(no {noun})")
         else:
             click.echo(
@@ -1244,8 +1244,8 @@ def show_plan(
     rows, hidden = rowcap.cap_rows(rows, cap)
 
     _ids = [row["id"] for row in rows]
-    replaced = replaced_by_map(_ids) if (as_json or llm) else {}
-    duplicated = duplicates_map(_ids) if (as_json or llm) else {}
+    replaced = replaced_by_map(_ids) if (as_json or agent) else {}
+    duplicated = duplicates_map(_ids) if (as_json or agent) else {}
 
     if as_json:
         import json
@@ -1256,7 +1256,7 @@ def show_plan(
                 "status": row["status"],
                 # JSON is DATA, not a rendering, so the relation is emitted
                 # whenever it exists — the terminal-status gate the human and
-                # --llm views apply is a display rule, and a consumer is
+                # --agent views apply is a display rule, and a consumer is
                 # entitled to the raw fact. Always present (possibly empty) so
                 # an absent key never has to be read as "not replaced" /
                 # "not a duplicate" (E-1185 adds `duplicates` on the same rule).
@@ -1275,10 +1275,10 @@ def show_plan(
             for row in rows
         ]
         click.echo(json.dumps(out, indent=2))
-        rowcap.echo_footer(hidden, llm=True, err=True)
+        rowcap.echo_footer(hidden, agent=True, err=True)
         return
 
-    if llm:
+    if agent:
         click.echo(f"# {proj_name} (removed)" if removed_only else f"# {proj_name}")
         for row in rows:
             tier_val = row["tier"]
@@ -1300,7 +1300,7 @@ def show_plan(
                 f"E-{row['id']} {row['phase']} "
                 f"{row['status']}{tier_str}{rb_str}{dup_str} {row['title']}"
             )
-        rowcap.echo_footer(hidden, llm=True)
+        rowcap.echo_footer(hidden, agent=True)
         return
 
     # Header
@@ -1332,7 +1332,7 @@ def next_tasks(
     show_all: bool = False,
     limit: int | None = None,
     no_limit: bool = False,
-    llm: bool = False,
+    agent: bool = False,
     as_json: bool = False,
     tier: int | None = None,
     phase_filter: str | None = None,
@@ -1408,7 +1408,7 @@ def next_tasks(
     if not rows:
         if as_json:
             click.echo("[]")
-        elif llm:
+        elif agent:
             click.echo("# no actionable tasks")
         else:
             click.echo(
@@ -1433,7 +1433,7 @@ def next_tasks(
             for row in rows
         ]
         click.echo(json.dumps(out, indent=2))
-        rowcap.echo_footer(hidden, llm=True, err=True)
+        rowcap.echo_footer(hidden, agent=True, err=True)
         return
 
     # Group by project
@@ -1442,7 +1442,7 @@ def next_tasks(
         groups.setdefault(row["project_name"], []).append(row)
 
     for proj, items in groups.items():
-        if llm:
+        if agent:
             click.echo(f"# {proj}")
             for item in items:
                 click.echo(
@@ -1453,8 +1453,8 @@ def next_tasks(
             click.echo()
             click.echo(click.style(f"Next up ({proj}):", bold=True))
             _render_flat_table(items)
-    rowcap.echo_footer(hidden, llm=llm)
-    if not llm:
+    rowcap.echo_footer(hidden, agent=agent)
+    if not agent:
         click.echo()
 
 
@@ -1559,7 +1559,7 @@ def _active_status_ranking() -> str:
 def active_tasks(
     project_name: str | None = None,
     show_all: bool = False,
-    llm: bool = False,
+    agent: bool = False,
     as_json: bool = False,
     parent_id: int | None = None,
 ):
@@ -1598,7 +1598,7 @@ def active_tasks(
     if not rows:
         if as_json:
             click.echo("[]")
-        elif llm:
+        elif agent:
             click.echo("# no active tasks")
         else:
             click.echo(
@@ -1628,7 +1628,7 @@ def active_tasks(
         groups.setdefault(row["project_name"], []).append(row)
 
     for proj, items in groups.items():
-        if llm:
+        if agent:
             click.echo(f"# {proj}")
             for item in items:
                 click.echo(
@@ -1639,7 +1639,7 @@ def active_tasks(
             click.echo()
             click.echo(click.style(f"Active ({proj}):", bold=True))
             _render_flat_table(items)
-    if not llm:
+    if not agent:
         click.echo()
 
 
@@ -1648,7 +1648,7 @@ def recent_tasks(
     show_all: bool = False,
     limit: int | None = None,
     no_limit: bool = False,
-    llm: bool = False,
+    agent: bool = False,
     as_json: bool = False,
     parent_id: int | None = None,
 ):
@@ -1686,7 +1686,7 @@ def recent_tasks(
     if not rows:
         if as_json:
             click.echo("[]")
-        elif llm:
+        elif agent:
             click.echo("# no recent tasks")
         else:
             click.echo(
@@ -1711,7 +1711,7 @@ def recent_tasks(
             for row in rows
         ]
         click.echo(json.dumps(out, indent=2))
-        rowcap.echo_footer(hidden, llm=True, err=True)
+        rowcap.echo_footer(hidden, agent=True, err=True)
         return
 
     # Group by project
@@ -1720,7 +1720,7 @@ def recent_tasks(
         groups.setdefault(row["project_name"], []).append(row)
 
     for proj, items in groups.items():
-        if llm:
+        if agent:
             click.echo(f"# {proj}")
             for item in items:
                 click.echo(
@@ -1731,8 +1731,8 @@ def recent_tasks(
             click.echo()
             click.echo(click.style(f"Recent ({proj}):", bold=True))
             _render_flat_table(items)
-    rowcap.echo_footer(hidden, llm=llm)
-    if not llm:
+    rowcap.echo_footer(hidden, agent=agent)
+    if not agent:
         click.echo()
 
 
@@ -1777,7 +1777,7 @@ def landed_list(
     show_all: bool = False,
     limit: int | None = None,
     no_limit: bool = False,
-    llm: bool = False,
+    agent: bool = False,
     as_json: bool = False,
 ):
     """List tasks that have landed at least once, most-recent landing first (E-1478)."""
@@ -1810,7 +1810,7 @@ def landed_list(
     if not rows:
         if as_json:
             click.echo("[]")
-        elif llm:
+        elif agent:
             click.echo("# no landed tasks")
         else:
             click.echo(click.style("•", fg="cyan") + " No landed tasks")
@@ -1833,7 +1833,7 @@ def landed_list(
             for r in rows
         ]
         click.echo(json.dumps(out, indent=2))
-        rowcap.echo_footer(hidden, llm=True, err=True)
+        rowcap.echo_footer(hidden, agent=True, err=True)
         return
 
     # Group by project
@@ -1842,7 +1842,7 @@ def landed_list(
         groups.setdefault(r["project_name"], []).append(r)
 
     for proj, items in groups.items():
-        if llm:
+        if agent:
             click.echo(f"# {proj}")
             for r in items:
                 suffix = f" x{r['land_count']}" if r["land_count"] > 1 else ""
@@ -1854,12 +1854,12 @@ def landed_list(
             click.echo()
             click.echo(click.style(f"Landed ({proj}):", bold=True))
             _render_landed_table(items)
-    rowcap.echo_footer(hidden, llm=llm)
-    if not llm:
+    rowcap.echo_footer(hidden, agent=agent)
+    if not agent:
         click.echo()
 
 
-def landed_item(item_id: int, llm: bool = False, as_json: bool = False):
+def landed_item(item_id: int, agent: bool = False, as_json: bool = False):
     """Show the full landing history for a single task, newest first (E-1478)."""
     row = db.query(
         "SELECT t.id, COALESCE(t.title, t.description) AS title, "
@@ -1890,7 +1890,7 @@ def landed_item(item_id: int, llm: bool = False, as_json: bool = False):
         click.echo(json.dumps(out, indent=2))
         return
 
-    if llm:
+    if agent:
         click.echo(f"# E-{item['id']} {item['title']}")
         if not landings:
             click.echo("# never landed")
@@ -2026,7 +2026,7 @@ def unlanded_list(
     show_all: bool = False,
     limit: int | None = None,
     no_limit: bool = False,
-    llm: bool = False,
+    agent: bool = False,
     as_json: bool = False,
 ):
     """Survey finished tasks whose work has not reached the base branch (E-2095)."""
@@ -2053,7 +2053,7 @@ def unlanded_list(
         ], indent=2))
         return
 
-    if llm:
+    if agent:
         for name, base, outstanding, unrecorded in reports:
             click.echo(f"# {name} base={base or 'unresolved'}")
             click.echo(f"# outstanding={len(outstanding)} "
@@ -2067,7 +2067,7 @@ def unlanded_list(
                 click.echo(f"{task_id_display(r['id'])} unrecorded "
                            f"{_unlanded_reason(r['probe'])} {r['status']} "
                            f"{r['title']}")
-            rowcap.echo_footer(hidden, llm=True)
+            rowcap.echo_footer(hidden, agent=True)
         return
 
     for name, base, outstanding, unrecorded in reports:
@@ -2271,7 +2271,7 @@ def unsettled_list(
     limit: int | None = None,
     no_limit: bool = False,
     include_settled: bool = False,
-    llm: bool = False,
+    agent: bool = False,
     as_json: bool = False,
 ):
     """Survey every task worktree in the project, with the reason for each (E-1865).
@@ -2309,23 +2309,23 @@ def unsettled_list(
             }
             for r in shown
         ], indent=2))
-        rowcap.echo_footer(hidden, llm=True, err=True)
+        rowcap.echo_footer(hidden, agent=True, err=True)
         return
 
     if not shown:
-        if llm:
+        if agent:
             click.echo("# no unsettled worktrees")
         else:
             click.echo(click.style("•", fg="cyan") +
                        " No unsettled worktrees — everything is committed and landed")
         return
 
-    if llm:
+    if agent:
         click.echo(f"# {proj_name}")
         for r in shown:
             click.echo(f"{task_id_display(r['id'])} {r['probe']['reason']} "
                        f"{r['status']} {r['title']}")
-        rowcap.echo_footer(hidden, llm=True)
+        rowcap.echo_footer(hidden, agent=True)
         return
 
     click.echo()
@@ -2390,7 +2390,7 @@ def _echo_probe_errors(probe: dict) -> None:
             f"Recorded as an error: endless errors show", fg="red"))
 
 
-def unsettled_item(item_id: int, llm: bool = False, as_json: bool = False):
+def unsettled_item(item_id: int, agent: bool = False, as_json: bool = False):
     """Explain exactly why one task's worktree is unsettled (E-1865)."""
     row = db.query(
         "SELECT t.id, COALESCE(t.title, t.description) AS title, t.status, "
@@ -2439,7 +2439,7 @@ def unsettled_item(item_id: int, llm: bool = False, as_json: bool = False):
         }, indent=2))
         return
 
-    if llm:
+    if agent:
         click.echo(f"# {task_id_display(item['id'])} {item['title']}")
         click.echo(f"# {probe['reason']}")
         for f in probe["modified_files"]:
@@ -6023,7 +6023,7 @@ def detail_item(
     show_plan: bool = False,
     show_children: bool = False,
     show_outcome: bool = False,
-    llm: bool = False,
+    agent: bool = False,
     as_json: bool = False,
     paged: bool = False,
     no_color: bool = False,
@@ -6039,7 +6039,7 @@ def detail_item(
     instead.
 
     `show_children` lists EVERY direct child, in all three render paths (JSON,
-    llm, human). It used to exclude `status = 'confirmed'` — and only that one
+    agent, human). It used to exclude `status = 'confirmed'` — and only that one
     status, so an epic rendered its `obsolete` and `declined` children while
     dropping the ones that were verified and landed. E-1906 vanished from
     `task show E-1785 --children` that way while four obsolete children stayed,
@@ -6197,7 +6197,7 @@ def detail_item(
         click.echo(json.dumps(out, indent=2))
         return
 
-    if llm:
+    if agent:
         if caveat_line:
             click.echo(caveat_line)
             click.echo()
@@ -6250,7 +6250,7 @@ def detail_item(
             for c in landedness.get("unlanded_log") or ():
                 click.echo(f"unlanded {c}")
         # Large fields collapse to a char marker unless their flag is set, so
-        # `task show --llm` stays token-cheap on tasks whose outcome is a large
+        # `task show --agent` stays token-cheap on tasks whose outcome is a large
         # deliverable; pass --outcome/--plan/--analysis to pull the body (E-1601).
         # `--brief` upgrades the bare count to a readable preview (E-2126): the
         # field counts as shown, so the marker gives way to a truncated section.
@@ -6947,7 +6947,7 @@ def search_tasks(
     search_plan: bool = False,
     limit: int | None = None,
     no_limit: bool = False,
-    llm: bool = False,
+    agent: bool = False,
     as_json: bool = False,
 ):
     """Search tasks by query string across ID, title, and description.
@@ -7017,7 +7017,7 @@ def search_tasks(
     if not rows:
         if as_json:
             click.echo("[]")
-        elif llm:
+        elif agent:
             click.echo(f"# {proj_name}\n(no matches for '{query}')")
         else:
             click.echo(
@@ -7042,17 +7042,17 @@ def search_tasks(
             for row in rows
         ]
         click.echo(json.dumps(out, indent=2))
-        rowcap.echo_footer(hidden, llm=True, err=True)
+        rowcap.echo_footer(hidden, agent=True, err=True)
         return
 
-    if llm:
+    if agent:
         click.echo(f"# {proj_name} search: {query}")
         for row in rows:
             click.echo(
                 f"E-{row['id']} {row['phase']} "
                 f"{row['status']} {row['title']}"
             )
-        rowcap.echo_footer(hidden, llm=True)
+        rowcap.echo_footer(hidden, agent=True)
         return
 
     click.echo()
@@ -7610,7 +7610,7 @@ def replaced_by_note(status: str | None, ids: list[int] | None) -> str:
 def duplicates_note(status: str | None, ids: list[int] | None) -> str:
     """The inline ' (duplicates E-NNN)' annotation for a status display, or ''.
 
-    E-1185: one token — `duplicates` — across the human, --llm and --json
+    E-1185: one token — `duplicates` — across the human, --agent and --json
     renderings, as `replaced_by` has. It reads as a verb phrase with the row as
     its subject: "E-986  obsolete (duplicates E-1086)".
     """
@@ -7959,12 +7959,42 @@ def _related_task_ids(item_id: int, rel_type: str | None = None) -> list[int]:
     return sorted(ids)
 
 
-def show_relations(item_id: int, llm: bool = False):
-    """Show all of a task's relations under a single 'Links:' section (E-1477)."""
+def show_relations(item_id: int, agent: bool = False, as_json: bool = False):
+    """Show all of a task's relations under a single 'Links:' section (E-1477).
+
+    The JSON rendering arrived with E-1504, which found `relations`/`deps` the
+    only two reader commands carrying an agent view and no machine one — so the
+    one question whose answer IS a graph was the one an agent could not get
+    structurally. It is an OBJECT rather than a bare array because every `rel`
+    here is directional and reads as a phrase about a subject ("cleans up"), so
+    the payload has to name the subject the phrases are about.
+
+    `rel` is the same lower-cased directional token the agent line prints —
+    E-1185's rule that one fact wears one spelling across the human, agent and
+    JSON renderings.
+    """
     if not db.exists("SELECT 1 FROM live_tasks WHERE id = ?", (item_id,)):
         raise click.ClickException(f"Task {task_id_display(item_id)} not found.")
 
-    if llm:
+    if as_json:
+        import json
+        links = _flatten_relations(item_id)
+        click.echo(json.dumps({
+            "id": task_id_display(item_id),
+            # Always present, so `[]` says "no relations" rather than an absent
+            # key leaving it unsaid (E-1956's rule for `replaced_by`).
+            "links": [
+                {
+                    "id": task_id_display(r["id"]),
+                    "rel": r["rel"],
+                    "status": r["status"],
+                }
+                for r in links
+            ],
+        }, indent=2))
+        return
+
+    if agent:
         click.echo(f"# Relations for E-{item_id}")
         links = _flatten_relations(item_id)
         if not links:

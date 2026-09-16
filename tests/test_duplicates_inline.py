@@ -8,7 +8,7 @@ That was the wrong yardstick. Two gaps close here:
    `task update` had no relation flags at all before this.
 2. The inline `(duplicates E-NNN)` note beside a TERMINAL status, on every
    surface that already carries `(replaced by E-NNN)` from E-1956 — `task show`
-   and `task list`, human/--llm/--json. The Go `session status` side is covered
+   and `task list`, human/--agent/--json. The Go `session status` side is covered
    by the Go tests. E-2064 later pulled it back out of the human TABLES — see
    tests/test_status_column_width.py — so `task list`'s human assertion here is
    now the negative one.
@@ -161,16 +161,16 @@ def test_task_show_human_leaves_the_keeper_alone(seeded_project_at_cwd, capsys):
     assert "duplicates" not in status_line
 
 
-def test_task_show_llm_puts_the_note_on_the_status_line(
+def test_task_show_agent_puts_the_note_on_the_status_line(
     seeded_project_at_cwd, capsys
 ):
     dupe, keeper = _duplicate_pair()
-    task_cmd.detail_item(dupe, llm=True)
+    task_cmd.detail_item(dupe, agent=True)
     assert f"status=obsolete duplicates=E-{keeper}" in capsys.readouterr().out
 
 
 def test_task_show_json_emits_the_relation_ungated(seeded_project_at_cwd, capsys):
-    # `unverified` is NOT terminal, so the human/--llm note is suppressed — but
+    # `unverified` is NOT terminal, so the human/--agent note is suppressed — but
     # --json is data, and the relation is emitted anyway.
     dupe, keeper = _duplicate_pair(status="unverified")
     task_cmd.detail_item(dupe, as_json=True)
@@ -202,11 +202,11 @@ def test_task_list_default_view_is_unchanged(seeded_project_at_cwd, capsys):
     assert "duplicates" not in capsys.readouterr().out
 
 
-def test_task_list_llm_puts_the_note_after_the_status(
+def test_task_list_agent_puts_the_note_after_the_status(
     seeded_project_at_cwd, capsys
 ):
     dupe, keeper = _duplicate_pair()
-    task_cmd.show_plan(show_all=True, llm=True)
+    task_cmd.show_plan(show_all=True, agent=True)
     assert f"obsolete duplicates=E-{keeper}" in capsys.readouterr().out
 
 

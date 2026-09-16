@@ -1017,7 +1017,7 @@ def test_decision_show_names_the_successor(isolated_env, capsys):
     new = _add_decision(pid, "new rule", status="accepted")
     _link_supersedes(new, old)
 
-    decision_cmd.detail_decision(old, llm=True)
+    decision_cmd.detail_decision(old, agent=True)
 
     out = capsys.readouterr().out
     assert "status=superseded" in out
@@ -1054,7 +1054,7 @@ def test_decision_list_annotates_the_superseded_row(seeded_project_at_cwd, capsy
     new = _add_decision(pid, "new rule", status="accepted")
     _link_supersedes(new, old)
 
-    decision_cmd.list_decisions(llm=True)
+    decision_cmd.list_decisions(agent=True)
 
     out = capsys.readouterr().out
     assert f"superseded (by ED-{new})" in out

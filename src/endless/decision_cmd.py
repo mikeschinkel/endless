@@ -95,7 +95,7 @@ def list_decisions(
     project_name: str | None = None,
     show_all: bool = False,
     sort_by: str | None = None,
-    llm: bool = False,
+    agent: bool = False,
     as_json: bool = False,
     limit: int | None = None,
     no_limit: bool = False,
@@ -133,7 +133,7 @@ def list_decisions(
     if not rows:
         if as_json:
             click.echo("[]")
-        elif llm:
+        elif agent:
             click.echo(f"# {proj_name}\n(no decisions)")
         else:
             click.echo(
@@ -149,7 +149,7 @@ def list_decisions(
     # two modes that still carry the supersession: since E-2064 the human table
     # renders the bare status, so it must not pay for a query it never reads.
     superseders = (
-        superseded_by_map(r["id"] for r in rows) if (as_json or llm) else {}
+        superseded_by_map(r["id"] for r in rows) if (as_json or agent) else {}
     )
 
     if as_json:
@@ -168,10 +168,10 @@ def list_decisions(
             for row in rows
         ]
         click.echo(json.dumps(out, indent=2))
-        rowcap.echo_footer(hidden, llm=True, err=True)
+        rowcap.echo_footer(hidden, agent=True, err=True)
         return
 
-    if llm:
+    if agent:
         click.echo(f"# {proj_name} decisions")
         for row in rows:
             prefix = f"[{row['project_name']}] " if show_all else ""
@@ -180,7 +180,7 @@ def list_decisions(
                 f"{decision_id_display(row['id'])} {row['status']}{note} "
                 f"{prefix}{row['title']}"
             )
-        rowcap.echo_footer(hidden, llm=True)
+        rowcap.echo_footer(hidden, agent=True)
         return
 
     try:
@@ -296,7 +296,7 @@ def _fetch_decision_relations(decision_id: int) -> list[dict]:
     return out
 
 
-def detail_decision(item_id: int, llm: bool = False, as_json: bool = False):
+def detail_decision(item_id: int, agent: bool = False, as_json: bool = False):
     """Show full detail for a decision."""
     row = db.query(
         "SELECT d.id, d.title, d.description, d.text, d.status, "
@@ -363,7 +363,7 @@ def detail_decision(item_id: int, llm: bool = False, as_json: bool = False):
         click.echo(json.dumps(out, indent=2))
         return
 
-    if llm:
+    if agent:
         if caveat_line:
             click.echo(caveat_line)
             click.echo()

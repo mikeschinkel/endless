@@ -222,13 +222,13 @@ def test_item_json_carries_the_probe_fields(registered_project, stub_probe, caps
     assert out["reason"] == "unlanded (1 commit)"
 
 
-def test_item_llm_mode_is_line_oriented(registered_project, stub_probe, capsys):
+def test_item_agent_mode_is_line_oriented(registered_project, stub_probe, capsys):
     _insert_task(9110)
     stub_probe([_probe(unsettled=True, modified=True, unlanded=True,
                        reason="modified (1 file) + unlanded (1 commit)",
                        modified_files=["a.py"], unlanded_count=1,
                        unlanded_log=["abc1234 work"])])
-    task_cmd.unsettled_item(9110, llm=True)
+    task_cmd.unsettled_item(9110, agent=True)
     lines = [l for l in capsys.readouterr().out.splitlines() if l]
     assert any(l.startswith("modified a.py") for l in lines)
     assert any(l.startswith("unlanded abc1234") for l in lines)

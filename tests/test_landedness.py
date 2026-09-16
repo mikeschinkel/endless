@@ -218,11 +218,11 @@ def test_every_form_fits_the_line_budget(stub_probe, over):
 # ─── the other two output modes ─────────────────────────────────────────────
 
 
-def test_llm_mode_carries_the_verdict_and_the_commits(stub_probe):
+def test_agent_mode_carries_the_verdict_and_the_commits(stub_probe):
     stub_probe(unlanded_count=2,
                unlanded_log=["aaa1111 E-1: fix", "bbb2222 E-1: more"])
     task_id = _add_task("Fix the thing", "assumed")
-    out = _show(task_id, "--llm")
+    out = _show(task_id, "--agent")
     assert "landed=never — 2 unlanded commits" in out
     assert "unlanded aaa1111 E-1: fix" in out
 

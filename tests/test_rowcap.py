@@ -2,7 +2,7 @@
 
 Two properties, and they are the whole point:
 
-1. A HUMAN or `--llm` render stops at the cap and prints a footer naming both
+1. A HUMAN or `--agent` render stops at the cap and prints a footer naming both
    the dropped count and the flag that shows them. A count printed under the
    table (`N match(es)`, `N item(s)`) reports the SIZE OF THE RESULT, never the
    height of the table — a table capped at 20 under the line "20 match(es)" is
@@ -145,7 +145,7 @@ def test_footer_is_silent_when_nothing_was_dropped(capsys):
 
 def test_machine_footer_goes_to_stderr(capsys):
     """So the trace survives without corrupting the payload it describes."""
-    rowcap.echo_footer(5, llm=True, err=True)
+    rowcap.echo_footer(5, agent=True, err=True)
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "5 more rows" in captured.err
@@ -223,10 +223,10 @@ def test_an_uncapped_result_prints_no_footer(argv):
 
 
 @pytest.mark.parametrize("argv", TASK_LISTINGS, ids=lambda a: " ".join(a))
-def test_llm_output_carries_the_footer_too(argv):
-    """--llm is prose an agent reads, and the agent is who got fooled."""
+def test_agent_output_carries_the_footer_too(argv):
+    """--agent is prose an agent reads, and the agent is who got fooled."""
     _seed_tasks(35)
-    result = _run(argv + PROJECT + ["--llm"])
+    result = _run(argv + PROJECT + ["--agent"])
     assert result.exit_code == 0, result.output
     assert "# 15 more rows (--no-limit)" in result.output
 
