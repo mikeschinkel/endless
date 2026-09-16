@@ -257,9 +257,11 @@ def test_child_db_args_recover_an_explicit_db_choice(monkeypatch):
     monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", config.main_config_dir())
     assert triage._child_db_args() == ["--db", "main"]
 
-    monkeypatch.setattr(config, "worktree_dir_name", lambda *_a, **_k: "e-1859")
+    from pathlib import Path as _Path
+    _wt = _Path("/proj/.endless/worktrees/e-1859")
+    monkeypatch.setattr(config, "worktree_path", lambda *_a, **_k: _wt)
     monkeypatch.setattr(
-        config, "RESOLVED_CONFIG_DIR", config.sandbox_config_dir("e-1859"),
+        config, "RESOLVED_CONFIG_DIR", config.sandbox_config_dir(_wt),
     )
     assert triage._child_db_args() == ["--db", "sandbox"]
 

@@ -10,7 +10,11 @@ from endless.cli import main
 
 def _make_worktree(tmp_path, sandbox: bool, task_id: str = "555"):
     """Build <tmp>/proj/.endless/{config.json, worktrees/e-<id>} and
-    return the worktree dir. config.json sets self_dev to `sandbox`."""
+    return the worktree dir. config.json sets self_dev to `sandbox`, and when
+    `sandbox` the worktree's own sandbox directory is created too.
+
+    Creating it matters: nothing provisions a sandbox on demand any more, so
+    `--db sandbox` refuses when the directory is absent."""
     proj = tmp_path / "proj"
     endless = proj / ".endless"
     wt = endless / "worktrees" / f"e-{task_id}"
@@ -18,6 +22,8 @@ def _make_worktree(tmp_path, sandbox: bool, task_id: str = "555"):
     (endless / "config.json").write_text(
         '{"self_dev": %s}\n' % ("true" if sandbox else "false")
     )
+    if sandbox:
+        config.sandbox_root(wt).mkdir(parents=True, exist_ok=True)
     return wt
 
 
@@ -61,9 +67,29 @@ def test_apply_db_choice_sandbox(tmp_path, monkeypatch):
     monkeypatch.chdir(wt)
     monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
     config.apply_db_choice("sandbox")
-    assert config.RESOLVED_CONFIG_DIR == config.sandbox_config_dir("e-909")
+    assert config.RESOLVED_CONFIG_DIR == config.sandbox_config_dir(wt)
     assert config.RESOLVED_CONFIG_DIR.name == "endless"
-    assert "sandboxes/e-909/endless" in str(config.RESOLVED_CONFIG_DIR)
+    # The sandbox lives inside the worktree it belongs to, so the resolved path
+    # is the worktree's own path plus a fixed segment.
+    assert str(config.RESOLVED_CONFIG_DIR).startswith(str(wt) + "/")
+    assert str(config.RESOLVED_CONFIG_DIR).endswith(".endless/sandbox/endless")
+
+
+def test_apply_db_choice_sandbox_refuses_when_missing(tmp_path, monkeypatch):
+    """A worktree whose sandbox is gone REFUSES rather than resolving a path
+    nothing wrote to. Without this the flag would resolve, thread the context to
+    every Go subprocess, and the first write would create a fresh empty database
+    at the absent path."""
+    wt = _make_worktree(tmp_path, sandbox=True, task_id="910")
+    import shutil as _shutil
+    _shutil.rmtree(config.sandbox_root(wt))
+    monkeypatch.chdir(wt)
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
+    with pytest.raises(ValueError) as e:
+        config.apply_db_choice("sandbox")
+    assert "no sandbox" in str(e.value)
+    assert "endless sandbox migrate" in str(e.value)
+    assert config.RESOLVED_CONFIG_DIR is None
 
 
 def test_apply_db_choice_sandbox_outside_worktree(tmp_path, monkeypatch):
@@ -154,7 +180,7 @@ def test_default_db_to_main_honors_explicit_sandbox(tmp_path, monkeypatch):
     overridden by the always-main default."""
     wt = _make_worktree(tmp_path, sandbox=True, task_id="1628")
     monkeypatch.chdir(wt)
-    sandbox = config.sandbox_config_dir("e-1628")
+    sandbox = config.sandbox_config_dir(wt)
     monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", sandbox)
     config.default_db_to_main()
     assert config.RESOLVED_CONFIG_DIR == sandbox  # unchanged
@@ -230,7 +256,7 @@ def test_db_apply_change_honors_explicit_sandbox(tmp_path, monkeypatch):
         main, ["db", "apply-change", str(change_file), "--db", "sandbox"]
     )
     assert result.exit_code == 0, result.output
-    assert seen["resolved"] == config.sandbox_config_dir("e-1628")
+    assert seen["resolved"] == config.sandbox_config_dir(wt)
 
 
 def test_db_backup_pins_main_from_sandbox(tmp_path, monkeypatch):
@@ -302,7 +328,7 @@ def test_go_db_context_args(monkeypatch, tmp_path):
     wt = _make_worktree(tmp_path, sandbox=True, task_id="1668")
     monkeypatch.chdir(wt)
     monkeypatch.setattr(
-        config, "RESOLVED_CONFIG_DIR", config.sandbox_config_dir("e-1668")
+        config, "RESOLVED_CONFIG_DIR", config.sandbox_config_dir(wt)
     )
     assert config.go_db_context_args() == ["--db", "sandbox"]
 
@@ -359,7 +385,7 @@ def test_db_path_sandbox(tmp_path, monkeypatch):
     result = CliRunner().invoke(main, ["db", "path", "--db=sandbox"])
     assert result.exit_code == 0, result.output
     out = result.output.strip()
-    assert out.endswith("/sandboxes/e-1234/endless/endless.db")
+    assert out.endswith("/e-1234/.endless/sandbox/endless/endless.db")
 
 
 def test_db_path_sandbox_outside_worktree(tmp_path, monkeypatch):

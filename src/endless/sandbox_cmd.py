@@ -207,7 +207,7 @@ def migrate_sandboxes(dry_run: bool) -> None:
             if not worktree.is_dir():
                 orphaned.append((legacy, _dir_size(legacy)))
                 continue
-            target = config.sandbox_dir(worktree)
+            target = config.sandbox_root(worktree)
             if target.exists():
                 collided.append((legacy, target))
                 continue
@@ -219,7 +219,7 @@ def migrate_sandboxes(dry_run: bool) -> None:
     # ── 2. provision what never had one ────────────────────────────────────
     relocated = {target for _, target in moved}
     for worktree in _worktree_dirs(project_root):
-        sandbox = config.sandbox_dir(worktree)
+        sandbox = config.sandbox_root(worktree)
         if sandbox.is_dir() or sandbox in relocated:
             continue
         provisioned.append(worktree)
@@ -235,12 +235,17 @@ def migrate_sandboxes(dry_run: bool) -> None:
             unpinned.append(worktree)
 
     # ── report ─────────────────────────────────────────────────────────────
-    verb = "would " if dry_run else ""
-    click.echo(
-        f"{len(moved)} {verb}moved, {len(provisioned)} {verb}provisioned, "
+    # One shape for both runs, so the counts a --dry-run reports are directly
+    # comparable with the ones the real run then reports. A dry run says so in
+    # a prefix rather than by conjugating every noun.
+    summary = (
+        f"{len(moved)} moved, {len(provisioned)} provisioned, "
         f"{len(hook_failed)} hook failure(s), {len(collided)} collided, "
-        f"{len(orphaned)} orphaned, {len(unpinned)} {verb}unpinned"
+        f"{len(orphaned)} orphaned, {len(unpinned)} unpinned"
     )
+    if dry_run:
+        summary = "DRY RUN — nothing changed. " + summary
+    click.echo(summary)
     for name, target in moved:
         click.echo(f"  moved       {name} → {_display_path(target)}")
     for worktree in provisioned:

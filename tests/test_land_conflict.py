@@ -317,7 +317,7 @@ def test_capture_lands_in_the_worktree_sandbox(tmp_path):
 
     repo = _init_repo(tmp_path / "e-6002")
     assert land_conflict.evidence_path(repo).is_relative_to(
-        config.sandbox_root("e-6002")
+        config.sandbox_root(repo)
     )
 
 

@@ -228,7 +228,7 @@ def _evidence_dir(worktree_path: Path) -> Path:
     """
     from endless import config
 
-    return config.sandbox_root(worktree_path.name) / "land-conflict"
+    return config.sandbox_root(worktree_path) / "land-conflict"
 
 
 def evidence_path(worktree_path: Path) -> Path:

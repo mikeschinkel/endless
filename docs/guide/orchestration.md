@@ -45,8 +45,8 @@ This:
 
    The facts above that step are printed as aligned labels, and the worktree is
    the only path among them — the per-worktree sandbox directory used to be
-   printed beside it, and readers cd'd into the cache directory instead of the
-   checkout. Ask for that one when you want it: `endless worktree sandbox`.
+   printed beside it, and readers cd'd into that one instead of the checkout.
+   Ask for it when you want it: `endless worktree sandbox`.
 
 The branch name is the task id and nothing else — no title slug, and no pattern to configure. That makes it a pure function of the id: anything holding the id can construct the branch name instead of looking it up, and renaming a task can never leave its branch describing what the task used to be called. Nothing records the name anywhere, because nothing has to.
 
@@ -62,6 +62,51 @@ A fresh worktree often needs project-specific setup endless can't bake in — Go
 - **The hook must be idempotent / re-runnable.** Because there's no teardown, completing a failed bootstrap is just re-running the hook. Write it so a second run on an already-bootstrapped worktree is a safe no-op (or a clean regenerate).
 
 Plan files for a task live in the task's worktree at `<worktree>/.endless/plans/E-NNNN.md`, not in main, and ride into main when the task lands. The DB's `tasks.plan` column is the source of truth; the on-disk file is a mirror that lives with the branch. `endless task update <id> --plan-file <path>` writes `tasks.plan`; it does **not** create a worktree. The plan file is materialized from `tasks.plan` when the worktree is born (at `task claim`/`task spawn`); if a worktree already exists, `--plan`/`--plan-file` also mirrors into it. So setting a plan on an unclaimed task touches only the DB — no stray worktrees for tasks you aren't working on yet.
+
+### The worktree's sandbox
+
+Every worktree gets a **sandbox**: a directory at `<worktree>/.endless/sandbox/`
+holding the isolated state that worktree's task is exercised against. A
+throwaway database, a fixture spreadsheet, an API document, credentials that
+must not be the real ones — essentially no real project has none of that, which
+is why every project gets one rather than only projects that opted in.
+
+Three properties, and they are the whole design:
+
+- **It lives inside the worktree.** So its path is composition — the worktree
+  path plus a fixed segment — and no environment variable carries it. Nothing
+  can be exported once and silently route a later command at another worktree's
+  state.
+- **Its lifetime is the worktree's.** Drop or reap the worktree and the sandbox
+  goes with it, which makes orphaned sandboxes structurally impossible rather
+  than something to manage. Anything that must outlive the worktree does not
+  belong in a sandbox — commit it.
+- **Its contents are yours, not endless's.** Endless creates an empty directory
+  and writes a `.gitignore` containing `*` so the sandbox keeps itself out of
+  git without your `.gitignore` needing an entry. What goes in is declared by
+  your `post-worktree-create.sh`, which endless runs immediately afterwards.
+  Endless seeds nothing: it cannot know which of a checkout's files your task
+  needs, and copying them in is the exact accident a sandbox exists to prevent.
+
+Nothing creates a sandbox on demand. If one is missing, the command that needed
+it refuses and names `endless sandbox migrate` rather than quietly building one,
+because a directory endless expects to exist and does not is worth understanding
+rather than papering over.
+
+**If your worktrees predate this**, run `endless sandbox migrate` once per
+project. It moves any sandbox an older endless left under
+`~/.cache/endless/sandboxes/` into the worktree it belongs to, provisions one
+for every worktree that never had it (running your bootstrap hook, as worktree
+creation does), and reports what it did. It deletes nothing: a sandbox whose
+worktree is gone is reported as an orphan and left alone. `--dry-run` does every
+read and none of the writes.
+
+**For a tree that cannot take extra files** — one whose worktree contents are
+themselves a git repository, a build that must stay hermetic, CI that runs
+`git clean -xdff` — set `"sandbox_root": "<path>"` in the project's
+`.endless/config.json`. Sandboxes then live at `<path>/<worktree-dir-name>`
+instead. It is a project-level setting; worktrees that could each answer
+differently would be a fleet nobody could reason about.
 
 ### Getting into the worktree
 

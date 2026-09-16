@@ -837,23 +837,23 @@ def sandbox_dir(task_id: str | None) -> None:
     resolves that task's worktree, which need not be the one you are standing
     in.
 
-    Refuses rather than printing a path that does not exist: a sandbox is
-    provisioned only for a self-dev project, so on any other project the honest
-    answer is that there is none, not a plausible-looking directory nothing
-    ever wrote to.
+    Refuses rather than printing a path that does not exist. Since ED-1554
+    every project's worktrees have a sandbox — `self_dev` no longer gates
+    provisioning, only whether endless routes its OWN database there — so the
+    only reason there is nothing to print is that the worktree has none yet.
     """
     from endless import config
 
     if task_id is None:
-        name = config.worktree_dir_name()
-        if name is None:
+        wt_dir = config.worktree_path()
+        if wt_dir is None:
             raise click.ClickException(
                 "Not inside a task worktree, so there is no sandbox to "
                 "resolve.\n"
                 "  Name the task instead:\n"
                 "      endless worktree sandbox E-<id>"
             )
-        canonical = _task_id_from_worktree_path(Path.cwd()) or name
+        canonical = _task_id_from_worktree_path(Path.cwd()) or wt_dir.name
     else:
         canonical = _normalize_task_id(task_id)
         root = _project_root()
@@ -863,26 +863,13 @@ def sandbox_dir(task_id: str | None) -> None:
                 f"No endless-managed worktree for {canonical}, so it has no "
                 f"sandbox."
             )
-        # The sandbox dir's basename IS the worktree dir's basename; that
-        # 1-to-1 mapping is what `endless-go sandbox init` writes against.
-        name = wt_dir.name
 
-    project_root = config.enclosing_project_root()
-    if project_root is None or not config.project_is_self_dev(project_root):
-        raise click.ClickException(
-            f"{canonical}'s project does not sandbox its worktrees, so there "
-            f"is no sandbox directory.\n"
-            "  Sandboxes are provisioned only for a project whose "
-            ".endless/config.json\n"
-            '  sets "self_dev": true.'
-        )
-
-    path = config.sandbox_root(name)
+    path = config.sandbox_root(wt_dir)
     if not path.is_dir():
         raise click.ClickException(
             f"{canonical}'s sandbox has not been provisioned:\n\n"
             f"    {path}\n\n"
-            f"Provision it with:  endless-go sandbox init --mode worktree {name}"
+            f"Provision it with:  endless sandbox migrate"
         )
     click.echo(str(path))
 
@@ -2412,8 +2399,8 @@ def _commit_plan_file_in_worktree(
 # never reports it. A rule in the project's .gitignore would be endless editing
 # a file in a repo that is not its own, once per project, forever.
 _SANDBOX_GITIGNORE = """\
-# Endless per-worktree sandbox (ED-1554): isolated state this worktree's task
-# is exercised against, with a lifetime exactly equal to this worktree's.
+# Endless per-worktree sandbox: isolated state this worktree's task is
+# exercised against, with a lifetime exactly equal to this worktree's.
 # Self-ignoring — '*' covers every path here, this file included — so the
 # project's own .gitignore needs no entry for it.
 *

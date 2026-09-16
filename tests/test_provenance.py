@@ -76,15 +76,17 @@ def test_names_the_database_in_a_self_dev_project(tmp_path, monkeypatch):
 def test_names_the_sandbox_and_which_one(tmp_path, monkeypatch):
     """`sandbox` alone would not say WHICH worktree's, and with many live at
     once that is the whole question."""
-    _self_dev_project(tmp_path, monkeypatch, task_id="1668")
+    _proj, wt = _self_dev_project(tmp_path, monkeypatch, task_id="1668")
     monkeypatch.setattr(
-        config, "CONFIG_DIR", config.sandbox_config_dir("e-1668")
+        config, "CONFIG_DIR", config.sandbox_config_dir(wt)
     )
     provenance.mark_touched()
 
     assert provenance.line() == "db: sandbox (e-1668)"
     assert provenance.fields()["db"] == "sandbox (e-1668)"
-    assert provenance.fields()["db_dir"].endswith("/sandboxes/e-1668/endless")
+    assert provenance.fields()["db_dir"].endswith(
+        "/e-1668/.endless/sandbox/endless"
+    )
 
 
 def test_says_nothing_about_the_database_downstream(tmp_path, monkeypatch):
@@ -363,10 +365,10 @@ def test_the_migrate_spelling_is_a_directory_not_a_word(tmp_path, monkeypatch):
     so its flag must always carry the path itself."""
     wt = _self_dev_project(tmp_path, monkeypatch)[1]
     monkeypatch.setattr(
-        config, "RESOLVED_CONFIG_DIR", config.sandbox_config_dir(wt.name)
+        config, "RESOLVED_CONFIG_DIR", config.sandbox_config_dir(wt)
     )
 
     assert config.go_db_context_args() == ["--db", "sandbox"]
     args = config.migrate_db_context_args()
     assert args[0] == "--config-dir"
-    assert args[1] == str(config.sandbox_config_dir(wt.name))
+    assert args[1] == str(config.sandbox_config_dir(wt))

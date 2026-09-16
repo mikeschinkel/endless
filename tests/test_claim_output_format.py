@@ -125,34 +125,34 @@ def test_header_then_a_blank_line_then_the_rows(
 
 
 def test_provisioning_a_sandbox_is_silent(tmp_path, monkeypatch, capsys):
-    """The removal itself, on the path that used to print. A non-self-dev
-    project never provisions a sandbox at all, so asserting on a claim there
-    would prove nothing — this drives the provisioner directly, with the
-    project marked self-dev and both `endless-go sandbox` calls succeeding."""
+    """The removal itself, on the path that used to print. Drives the
+    provisioner directly, on a project that is NOT self-dev — since ED-1554
+    every project's worktrees get a sandbox, so that is the ordinary case."""
     from endless import config, worktree_cmd
 
     root = tmp_path / "proj"
     (root / ".endless").mkdir(parents=True)
-    (root / ".endless" / "config.json").write_text('{"self_dev": true}\n')
+    (root / ".endless" / "config.json").write_text('{"self_dev": false}\n')
     wt = root / ".endless" / "worktrees" / "e-42"
     wt.mkdir(parents=True)
-    assert config.project_is_self_dev(root)
+    assert not config.project_is_self_dev(root)
 
-    calls: list[list[str]] = []
-    monkeypatch.setattr(worktree_cmd.shutil, "which", lambda n: "/bin/endless-go")
-    monkeypatch.setattr(
-        worktree_cmd.subprocess, "run",
-        lambda cmd, **kw: (
-            calls.append(list(cmd)),
-            types.SimpleNamespace(returncode=0, stdout="", stderr=""),
-        )[1],
-    )
-    worktree_cmd._maybe_auto_sandbox_bind(root, wt, 42)
+    sandbox = worktree_cmd.provision_worktree_sandbox(wt)
 
-    assert [c[1:3] for c in calls] == [["sandbox", "init"], ["sandbox", "bind"]]
     captured = capsys.readouterr()
     assert captured.out == ""
     assert captured.err == ""
+
+    # It provisioned, silently: an empty directory that keeps itself out of git.
+    assert sandbox == wt / ".endless" / "sandbox"
+    assert sandbox.is_dir()
+    assert (sandbox / ".gitignore").read_text().rstrip().endswith("*")
+    assert [p.name for p in sandbox.iterdir()] == [".gitignore"]
+
+    # Idempotent: a second call keeps whatever the project put there.
+    (sandbox / "fixture.db").write_text("payload")
+    worktree_cmd.provision_worktree_sandbox(wt)
+    assert (sandbox / "fixture.db").read_text() == "payload"
 
 
 # ── The session id, on each of the four caller paths ────────────────────────
@@ -362,7 +362,7 @@ def test_worktree_sandbox_prints_the_path_on_demand(
     )
     capsys.readouterr()
 
-    sandbox = config.sandbox_root(f"e-{tid}")
+    sandbox = config.sandbox_root(root / ".endless" / "worktrees" / f"e-{tid}")
     sandbox.mkdir(parents=True, exist_ok=True)
     worktree_cmd.sandbox_dir(f"E-{tid}")
     assert capsys.readouterr().out.strip() == str(sandbox)
@@ -380,7 +380,7 @@ def test_worktree_sandbox_refuses_rather_than_inventing_a_path(
     honest answer is that there is none — not a plausible-looking directory
     nothing ever wrote to."""
     import click
-    from endless import worktree_cmd
+    from endless import config, worktree_cmd
 
     tid = project_with_task["task_id"]
     _claim(
@@ -389,9 +389,19 @@ def test_worktree_sandbox_refuses_rather_than_inventing_a_path(
     )
     capsys.readouterr()
 
+    # The worktree exists but its sandbox does not. Since ED-1554 that is the
+    # only reason there is nothing to print: `self_dev` no longer decides
+    # whether a project's worktrees have sandboxes, so a non-self-dev project
+    # is not a reason either.
+    root = project_with_task["project_root"]
+    wt = root / ".endless" / "worktrees" / f"e-{tid}"
+    sandbox = config.sandbox_root(wt)
+    if sandbox.exists():
+        import shutil as _shutil
+        _shutil.rmtree(sandbox)
     with pytest.raises(click.ClickException) as exc:
         worktree_cmd.sandbox_dir(f"E-{tid}")
-    assert "does not sandbox its worktrees" in str(exc.value)
+    assert "has not been provisioned" in str(exc.value)
 
     with pytest.raises(click.ClickException) as exc:
         worktree_cmd.sandbox_dir("E-99999")

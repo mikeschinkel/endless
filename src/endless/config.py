@@ -710,7 +710,7 @@ def apply_db_choice(choice: str):
         # every Go subprocess, and the first write would create a fresh empty
         # database at the absent path — the silent rebuild this design exists to
         # rule out, arriving through the one door that bypasses the Go gate.
-        sandbox = sandbox_dir(worktree)
+        sandbox = sandbox_root(worktree)
         if not sandbox.is_dir():
             raise ValueError(sandbox_missing_refusal(worktree, sandbox))
         set_db_context(sandbox_config_dir(worktree))
@@ -810,8 +810,8 @@ def go_db_context_args() -> list[str]:
         return []
     if RESOLVED_CONFIG_DIR == main_config_dir():
         return ["--db", "main"]
-    dir_name = worktree_dir_name()
-    if dir_name and RESOLVED_CONFIG_DIR == sandbox_config_dir(dir_name):
+    worktree = worktree_path()
+    if worktree is not None and RESOLVED_CONFIG_DIR == sandbox_config_dir(worktree):
         return ["--db", "sandbox"]
     return ["--db-dir", str(RESOLVED_CONFIG_DIR)]
 

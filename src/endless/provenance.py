@@ -182,9 +182,9 @@ def _describe_db() -> tuple[str, str] | None:
     resolved = Path(config.CONFIG_DIR)
     if resolved == config.main_config_dir():
         return "main", str(resolved)
-    dir_name = config.worktree_dir_name()
-    if dir_name and resolved == config.sandbox_config_dir(dir_name):
-        return f"sandbox ({dir_name})", str(resolved)
+    worktree = config.worktree_path()
+    if worktree is not None and resolved == config.sandbox_config_dir(worktree):
+        return f"sandbox ({worktree.name})", str(resolved)
     return config.tilde(resolved), str(resolved)
 
 

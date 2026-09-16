@@ -44,17 +44,15 @@ def _make_worktree_layout(tmp_path: Path, worktree_dir: str = "e-9999",
 
 @pytest.fixture
 def synthetic_sandbox(tmp_path, monkeypatch):
-    """Stand up a synthetic self-dev worktree, point XDG_CACHE_HOME at tmp so
-    sandbox_config_dir resolves under it, set RESOLVED_CONFIG_DIR to that
+    """Stand up a synthetic self-dev worktree, set RESOLVED_CONFIG_DIR to its
     sandbox path, chdir into the worktree, and stub subprocess.run.
 
     Yields a dict with: worktree, worktree_bin, sandbox_dir, calls (list of
     cmd argv lists captured from subprocess.run).
     """
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / ".cache"))
     wt, wt_bin = _make_worktree_layout(tmp_path, worktree_dir="e-9999")
     monkeypatch.chdir(wt)
-    sandbox_dir = config.sandbox_config_dir("e-9999")
+    sandbox_dir = config.sandbox_config_dir(wt)
     monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", sandbox_dir)
 
     calls: list[list[str]] = []
@@ -138,7 +136,7 @@ def test_missing_worktree_binary_fails_loudly(tmp_path, monkeypatch):
     )
     monkeypatch.chdir(wt)
     monkeypatch.setattr(
-        config, "RESOLVED_CONFIG_DIR", config.sandbox_config_dir("e-9999")
+        config, "RESOLVED_CONFIG_DIR", config.sandbox_config_dir(wt)
     )
     with pytest.raises(click.ClickException) as exc:
         event_bridge.apply_change("ignored")
@@ -251,11 +249,10 @@ def test_resolver_helper_returns_none_for_main_dir(tmp_path, monkeypatch):
 
 
 def test_resolver_helper_returns_path_for_sandbox(tmp_path, monkeypatch):
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / ".cache"))
     wt, wt_bin = _make_worktree_layout(tmp_path, worktree_dir="e-7777")
     monkeypatch.chdir(wt)
     monkeypatch.setattr(
-        config, "RESOLVED_CONFIG_DIR", config.sandbox_config_dir("e-7777")
+        config, "RESOLVED_CONFIG_DIR", config.sandbox_config_dir(wt)
     )
     result = config.resolved_worktree_endless_go()
     assert result == wt_bin
@@ -264,11 +261,10 @@ def test_resolver_helper_returns_path_for_sandbox(tmp_path, monkeypatch):
 def test_resolver_helper_ignores_named_alternate(tmp_path, monkeypatch):
     """ED-1515: a named-alternate dir (e-NNN-slug) is not recognized as a task
     worktree, so the resolver finds no per-worktree binary and returns None."""
-    monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / ".cache"))
     wt, _wt_bin = _make_worktree_layout(tmp_path, worktree_dir="e-7777-add-foo")
     monkeypatch.chdir(wt)
     monkeypatch.setattr(
         config, "RESOLVED_CONFIG_DIR",
-        config.sandbox_config_dir("e-7777-add-foo"),
+        config.sandbox_config_dir(wt),
     )
     assert config.resolved_worktree_endless_go() is None

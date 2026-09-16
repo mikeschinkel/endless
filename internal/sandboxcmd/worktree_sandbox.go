@@ -18,8 +18,8 @@ import (
 // the project's .gitignore would be a file endless edits in a repo that is not
 // its own, and one more thing to get wrong for every project that ever adopts
 // worktrees.
-const SandboxGitignore = `# Endless per-worktree sandbox (ED-1554): isolated state this worktree's task
-# is exercised against, with a lifetime exactly equal to this worktree's.
+const SandboxGitignore = `# Endless per-worktree sandbox: isolated state this worktree's task is
+# exercised against, with a lifetime exactly equal to this worktree's.
 # Self-ignoring — '*' covers every path here, this file included — so the
 # project's own .gitignore needs no entry for it.
 *
