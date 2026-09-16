@@ -6297,3 +6297,15 @@ The rule: when the turn has already recorded something durably — a plan, an ou
 ### [2026-09-16] Omissions justified differently do not share a sentence — verify each before compressing them
 Summarizing E-1916 I dropped two clauses the plan named and told Mike 'both are covered elsewhere now (E-2023)'. True of one: the runner clause really is refused inside `endless task verify`, and `just verify` routes there — verified by reading the recipe through to `endless --db sandbox task verify`. False of the other: the retired `tests/tasks/` path is not covered, it is merely almost-empty on main. 63 retained worktrees still hold those scripts, 11 of them on non-terminal tasks, where a legacy suite has no guard at all. Mike had to ask 'will it break things?' to surface the difference, and the answer changed what he was deciding. Each thing you chose NOT to build carries its own justification. Before compressing several omissions into one clause, re-check each against live evidence; if they do not share a justification, they do not share a sentence.
 - **Project**: endless
+
+### [2026-09-16] Design changes decided mid-task go in the plan field and the outcome field, not just the reply
+Mike, during E-1504, mid-turn: 'Be sure to update the changes in the plan in the appropriate field; outcome?'
+
+When a session asks a design question and gets an answer, the answer is now part of the spec — it belongs in the task's plan field BEFORE implementing, not only in the final reply. The reply is transcript and dies with the session; the plan field is what the next reader sees.
+
+Two fields, two jobs:
+  - plan (--plan-file, with --keep-status): what was decided and why, written before the code. Re-attach it if the work later proves a claim in it wrong — a plan that still states a superseded intent is worse than no plan.
+  - outcome (--outcome-file): what diverged from the plan, what was folded in rather than filed, what the counts actually turned out to be.
+
+Do this without being asked. A session that answers a design question in chat and implements it has left no durable record of the choice.
+- **Project**: endless
