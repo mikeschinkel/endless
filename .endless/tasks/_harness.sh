@@ -66,7 +66,29 @@ UNDERLINE="───────────────────────
 # result stream, so there is nothing here to collect and the assertions still
 # print. Discarding is right; dying under `set -u` would not be.
 ENDLESS_VERIFY_TAP="${ENDLESS_VERIFY_TAP:-/dev/null}"
-tap() { printf '%s\n' "$1" >>"${ENDLESS_VERIFY_TAP}"; }
+
+# tap writes ONE TAP record, however many lines its argument spans. A newline
+# inside a result or a diagnostic used to reach the stream raw, and an
+# unprefixed line mid-stream is not TAP: the runner's parser stopped counting
+# where it met one, then reported a truncated total — 1 failed/18 passed for a
+# real 1 failed/53 passed — while the on-screen summary below stayed correct.
+# It under-reported only on a FAILING run, because the multi-line values are
+# `actual`s, which is precisely when someone is reading the count.
+#
+# So every line after the first is emitted as a `# ` diagnostic, which TAP
+# attaches to the record it follows. Single-line calls are byte-identical to
+# what they were.
+tap() {
+    local first=1 line
+    while IFS= read -r line || [[ -n "${line}" ]]; do
+        if (( first )); then
+            printf '%s\n' "${line}"
+            first=0
+        else
+            printf '# %s\n' "${line}"
+        fi
+    done <<<"$1" >>"${ENDLESS_VERIFY_TAP}"
+}
 
 # section prints a heading on the terminal only. It emits no TAP: a TAP
 # diagnostic line attaches to the PRECEDING test, so a heading written there

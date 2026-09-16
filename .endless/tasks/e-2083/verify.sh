@@ -40,6 +40,12 @@
 # breaks, so editing it would be committing this task's own sin while reverting
 # it. Section 6 asserts that it was left alone.
 #
+# Grown scope, on Mike's call (ED-1550: fold a finding into an open task rather
+# than file it): _harness.sh's tap() corrupted the runner's TAP stream whenever
+# a failure's `actual` spanned lines, so a failing run under-reported its own
+# count. Section 7 proves the fix; tests/test_suite_guard.py is where its
+# coverage lives past this land.
+#
 #   endless task verify E-2083
 #
 # Exit 0 on all-passed, 1 on any failure, 2 on setup error.
@@ -54,15 +60,11 @@ cd "${WT}" || exit 2
 TMP="$(mktemp -d)" || setup_error "could not create a temp dir"
 trap 'rm -rf "${TMP}"' EXIT
 
-# oneline folds a multi-line detail onto one line before it reaches
-# report_fail. The harness emits a failure's `actual` straight into the TAP
-# stream it hands the runner, unprefixed, so an embedded newline puts lines the
-# TAP parser cannot read in the middle of the results — the runner then stops
-# counting there and reports a truncated total while the on-screen summary
-# below stays correct. Keeping every diagnostic to one line sidesteps it. The
-# harness defect is E-2083's finding, not its fix: `tap()` in _harness.sh
-# should prefix continuation lines with `# `, and 30 landed suites pass a
-# multi-line `actual` today.
+# oneline caps a diagnostic at one readable line. It is no longer load-bearing
+# — section 7 fixes the harness defect that made a multi-line `actual` corrupt
+# the TAP stream — but a twenty-line diff inside a TAP diagnostic is noise in
+# the runner's report either way, so the detail is summarised rather than
+# dumped.
 oneline() { tr '\n\t' '  ' | sed 's/  */ /g' | cut -c1-400; }
 
 E2074="bf285b5421e8f291605e4b912df5fa612db23108"   # the commit being undone
@@ -114,6 +116,16 @@ for id in "${RESTORED[@]}"; do
     status="$(git show --format="" --name-status "${E2074}" \
         -- "tests/tasks/e-${id}-verify.sh" | awk '{print $1}')"
     assert_eq "E-2074 is what deleted e-${id}'s suite" "D" "${status}"
+done
+
+# And nothing between its landing and that deletion had edited it either, so
+# "the last state before E-2074" and "what E-NNNN itself landed" are the same
+# text. Without this the restore would only be undoing the LAST violation on
+# each file, silently keeping any earlier one.
+for id in "${RESTORED[@]}"; do
+    others="$(git log --format='%s' --follow "${E2074}^" \
+        -- "tests/tasks/e-${id}-verify.sh" | grep -cv "^E-${id}:" || true)"
+    assert_eq "only E-${id} ever edited e-${id}'s suite before E-2074" "0" "${others}"
 done
 
 # ── 3. all fourteen match what their own tasks landed ───────────────────────
@@ -237,20 +249,36 @@ done
 # A revert that reaches product code is not a revert. And E-2074's own suite is
 # a landed suite like any other: leaving it alone is the rule this task exists
 # to restore, so its untouchedness is an assertion, not an omission.
-section "6. Nothing outside the fourteen suites changed"
+section "6. Nothing outside the fourteen suites and the harness fix changed"
 
 BASE="$(git merge-base HEAD main)" || setup_error "could not find the merge base with main"
 
 changed="$(git diff --name-only "${BASE}" -- . \
     | grep -vE '^\.endless/(db-ledger|plans|analyses|outcomes|LESSONS\.md|verbs\.jsonl)' || true)"
+# The two files beyond the suites are section 7's grown scope, named here
+# rather than waved through: _harness.sh belongs to no task, and the durable
+# test is where the fix's coverage has to live to survive this land.
 outside="$(printf '%s\n' "${changed}" | grep -v '^$' \
-    | grep -vE "^\.endless/tasks/e-(1568|1570|1572|1621|1573|1624|1645|1648|1659|1905|1906|1914|1967|2067|2083)/verify\.sh$" || true)"
+    | grep -vE "^\.endless/tasks/e-(1568|1570|1572|1621|1573|1624|1645|1648|1659|1905|1906|1914|1967|2067|2083)/verify\.sh$" \
+    | grep -vxE "\.endless/tasks/_harness\.sh|tests/test_suite_guard\.py" || true)"
 if [[ -z "${outside}" ]]; then
-    report_pass "no file outside the fourteen suites and this one is touched"
+    report_pass "only the fourteen suites, this one, _harness.sh and its test are touched"
 else
-    report_fail "no file outside the fourteen suites and this one is touched" \
-        "nothing" "$(printf '%s' "${outside}" | oneline)"
+    report_fail "only the fourteen suites, this one, _harness.sh and its test are touched" \
+        "nothing else" "$(printf '%s' "${outside}" | oneline)"
 fi
+
+# _harness.sh is shared infrastructure and 240 suites' first executable line,
+# so the edit must be confined to tap() and the comment above it.
+assert_eq "the harness still defines exactly the functions it did, by name" \
+    "$(git show "${BASE}:.endless/tasks/_harness.sh" | grep -oE '^[a-z_]+\(\)' | tr '\n' ' ')" \
+    "$(grep -oE '^[a-z_]+\(\)' .endless/tasks/_harness.sh | tr '\n' ' ')"
+assert_eq "every non-comment line the harness edit changed is inside tap()" "yes" \
+    "$(git diff "${BASE}" -- .endless/tasks/_harness.sh \
+        | sed -n 's/^[-+]//p' | grep -vE '^(\+\+|--)' \
+        | grep -vE "^([[:space:]]*#|[[:space:]]*$)" \
+        | grep -qvE "^(tap\(\)|\}|[[:space:]]*(local|while|if|else|fi|done|printf|first=0)|.*ENDLESS_VERIFY_TAP)" \
+        && printf no || printf yes)"
 
 assert_eq "E-2074's own suite is untouched" "" \
     "$(git diff --name-only "${BASE}" -- .endless/tasks/e-2074/verify.sh)"
@@ -268,5 +296,38 @@ for id in "${RESTORED[@]}"; do
         report_pass "tests/tasks/e-${id}-verify.sh is still gone (restored to the new path)"
     fi
 done
+
+# ── 7. the harness reports a failing run's count honestly ───────────────────
+#
+# Folded into this task on Mike's call (ED-1550: fold a finding into an open
+# task rather than file). Found while mutation-testing this suite: _harness.sh's
+# `tap()` wrote its argument into the runner's TAP stream with `printf '%s\n'`,
+# so a multi-line `actual` — a diff, or `tail -25` of a log — put unprefixed
+# lines mid-stream. The runner's parser stopped counting where it met one: a run
+# that was really 1 failed / 53 passed was reported as 1 failed / 18 passed,
+# with the suite's own on-screen summary still correct. It under-reported only
+# on a FAILING run, which is when the count is read, and 30 landed suites pass a
+# multi-line `actual` today.
+#
+# tap() now emits every line after the first as a `# ` diagnostic, which TAP
+# attaches to the record it follows. The behaviour is pinned in
+# tests/test_suite_guard.py — section 1 runs it — because a fix living only in
+# this land-time suite would be unprotected the moment this task lands.
+section "7. A multi-line failure detail stays one TAP record"
+
+TAPF="${TMP}/probe.tap"
+( ENDLESS_VERIFY_TAP="${TAPF}"
+  PASS_COUNT=0; FAIL_COUNT=0; TAP_COUNT=0; FAILED_TESTS=()
+  report_pass "before" >/dev/null
+  report_fail "boom" "nothing" "$(printf 'one\ntwo\nthree')" >/dev/null
+  report_pass "after" >/dev/null
+) || true
+
+raw="$(grep -vcE '^(ok |not ok |#|1\.\.|Bail out!)' "${TAPF}" || true)"
+assert_eq "no raw line reaches the TAP stream" "0" "${raw}"
+assert_eq "all three records survive, densely numbered" "1 2 3" \
+    "$(grep -E '^(ok|not ok) ' "${TAPF}" | awk '{print ($1=="ok") ? $2 : $3}' | tr '\n' ' ' | sed 's/ $//')"
+assert_eq "the detail is kept, as diagnostics" "yes" \
+    "$(grep -q '^# two$' "${TAPF}" && grep -q '^# three$' "${TAPF}" && printf yes || printf no)"
 
 summary

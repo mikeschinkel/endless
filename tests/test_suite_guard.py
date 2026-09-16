@@ -305,3 +305,79 @@ def test_refuses_when_a_real_config_is_reachable(tmp_path):
     assert "endless task verify E-1001" in res.stderr, (
         "the refusal must name the sanctioned command for THIS suite"
     )
+
+
+# ── the TAP stream the harness hands the runner (E-2083) ────────────────────
+#
+# These live here, beside the guard tests, for the same reason those do: the
+# harness is what every other suite depends on, so it is the last thing that
+# should be protected only by one task's land-time suite.
+
+
+def _harness_checkout(tmp_path: Path, body: str) -> tuple[Path, Path]:
+    """A synthetic own-task checkout whose suite sources the real harness."""
+    root = tmp_path / "proj" / ".endless" / "worktrees" / "e-1001"
+    tasks = root / ".endless" / "tasks"
+    (tasks / "e-1001").mkdir(parents=True)
+    shutil.copy(GUARD, tasks / "_guard.sh")
+    shutil.copy(HARNESS, tasks / "_harness.sh")
+    suite = tasks / "e-1001" / "verify.sh"
+    suite.write_text(
+        '#!/usr/bin/env bash\n'
+        'source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"\n'
+        f'{body}\n'
+    )
+    suite.chmod(0o755)
+    return suite, tmp_path / "tap.txt"
+
+
+def _tap(tmp_path: Path, body: str) -> list[str]:
+    suite, tap_path = _harness_checkout(tmp_path, body)
+    env = dict(os.environ)
+    env["HOME"] = str(tmp_path / "home")
+    env["XDG_CONFIG_HOME"] = str(tmp_path / "home" / ".config")
+    env["ENDLESS_VERIFY_TAP"] = str(tap_path)
+    subprocess.run(["bash", str(suite)], capture_output=True, text=True, env=env)
+    return tap_path.read_text().splitlines()
+
+
+def test_a_multi_line_failure_detail_stays_one_tap_record(tmp_path):
+    """A newline in a diagnostic must not put a raw line into the stream.
+
+    An unprefixed line mid-stream is not TAP. The runner's parser stopped
+    counting where it met one and then reported a truncated total — 1 failed
+    and 18 passed for a run that was really 1 failed and 53 passed — while the
+    suite's own on-screen summary stayed correct. It under-reported only on a
+    FAILING run, which is exactly when the count is being read.
+
+    Multi-line `actual`s are ordinary: a diff, or `tail -25` of a log.
+    """
+    lines = _tap(
+        tmp_path,
+        'report_pass "before"\n'
+        'report_fail "boom" "nothing" "$(printf \'one\\ntwo\\nthree\')"\n'
+        'report_pass "after"\n'
+        'summary',
+    )
+
+    for ln in lines:
+        assert ln.startswith(("ok ", "not ok ", "#", "1..", "Bail out!")), (
+            f"raw line in the TAP stream: {ln!r}"
+        )
+
+    # Numbering must stay dense and in order, which is what the parser counts.
+    results = [ln for ln in lines if ln.startswith(("ok ", "not ok "))]
+    assert len(results) == 3, results
+    assert [ln.split()[1] if ln.startswith("ok") else ln.split()[2] for ln in results] == [
+        "1", "2", "3",
+    ]
+    assert lines[-1] == "1..3", lines[-1]
+
+    # The detail is still there — the fix must not have dropped it.
+    assert "# two" in lines and "# three" in lines, lines
+
+
+def test_a_single_line_record_is_unchanged(tmp_path):
+    """The fix is additive: one-line calls emit exactly what they always did."""
+    lines = _tap(tmp_path, 'report_pass "plain"\nsummary')
+    assert lines == ["ok 1 - plain", "1..1"], lines
