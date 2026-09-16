@@ -6247,3 +6247,13 @@ A closing message carries what is PENDING FOR MIKE — decisions only he can mak
 
 Related but distinct from the over-filing lesson: that one was about spending his attention on a second TASK; this is about spending it on a second COPY. Same scarce resource, same reflex — producing volume and mistaking it for diligence.
 - **Project**: endless
+
+### [2026-09-15] Answer the question that was asked; do not attach a briefing to it
+Mike asked two narrow questions about a stale tmux hook — what should it point to, and can it be fixed without restarting the server. I answered both, then attached an unrequested re-evaluation of a design decision he had not asked about, a filed-task summary, and a paragraph of context. His reply: 'TL;DR; what of that response did I NEED to know?' The answer was one line.
+
+The failure mode is not length for its own sake. It is treating every reply as an opportunity to surface everything I currently know to be true. Findings I judge interesting are not thereby things he needs. Each unrequested paragraph costs him a read to discover it was not for him, and it buries the sentence that was.
+
+The rule: answer the question asked, at the length the question implies. A yes/no question gets yes or no plus the one fact that makes it actionable. If I surface something extra, it earns its place only when NOT saying it would change what he does next — and then it is one sentence, not a section.
+
+This compounds with the report-density contract already in the guide (run the regression yourself and state the outcome in prose; hand over one command; never enumerate a checklist). Same principle, applied to ordinary conversational turns and not just handoffs.
+- **Project**: endless
