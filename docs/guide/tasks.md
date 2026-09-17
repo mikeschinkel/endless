@@ -806,8 +806,8 @@ Rows orphaned before this landed are cleaned up by `reconcile` — which runs on
 ```bash
 endless task block <a> --by <b>                      # A is blocked by B
 endless task unblock <a> --by <b>
-endless task deps <id>                               # all relations for a task
-endless task links <id>                              # show typed relations, grouped by type
+endless task relations <id>                          # all relations for a task, one Links: section
+endless task deps <id>                               # alias of task relations
 endless task link <a> --to <b> --type implements     # create a typed link
 endless task unlink <a> --to <b> --type implements
 ```

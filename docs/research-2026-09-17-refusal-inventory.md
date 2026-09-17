@@ -375,6 +375,8 @@ verdict lines at both ends (today `event_bridge.py:232` prefixes
 
 ### Order
 
+Filed as E-2159 (Go) and E-2160 (Python), both implementing E-2155.
+
 The Go helper and its check first: it owns the golden rendering and the
 environment contract that Python consumes, and every refusal E-1063 ports into Go
 is then born classified. Python second. The inventory already classifies every
