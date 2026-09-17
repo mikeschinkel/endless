@@ -157,6 +157,12 @@ Where it appears:
   no header row, so an extra column would silently change what every
   `cut`/`read` consumer sees.
 - A command that never opened a database says nothing.
+- **Output meant to be captured or `eval`'d carries nothing** —
+  `endless shell-init`, `session use`, `session cd`, `session id`,
+  `worktree for-task`, `worktree sandbox` and the like. Their stdout is a value
+  for another program, and a trailing line would become part of it: a path with
+  a second line is not a directory. `cd "$(endless worktree for-task E-101)"`
+  gets exactly the path.
 
 ### Inspecting
 

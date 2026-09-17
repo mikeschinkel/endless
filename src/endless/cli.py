@@ -574,7 +574,32 @@ class SettingAwareMixin:
 
 
 class AgentAwareCommand(AgentHelpMixin, SettingAwareMixin, click.Command):
-    """Leaf command whose --help is augmented for agents (E-1502)."""
+    """Leaf command whose --help is augmented for agents (E-1502).
+
+    Also the one place that honours `stdout_is_captured` (E-1668). Some commands
+    exist to print a value or shell code for another program to take in:
+    `eval "$(endless shell-init)"`, `esu` evaling `session use`,
+    `cd "$(endless worktree for-task <id>)"`. The trace that names which database
+    answered belongs on output a person or an agent READS; appended to one of
+    these it becomes part of the value, and the damage is not cosmetic. esu ran
+    `# db: main` as a command under zsh's default options, and shell-init's
+    `[ -d "$wt" ]` quietly failed on a two-line path and routed to the global
+    endless instead of the worktree's.
+
+    Opt-in per command, `<cmd>.stdout_is_captured = True`, set beside the
+    command itself the way `governing_setting` is. It is declared rather than
+    detected because nothing at runtime can tell output captured to be READ from
+    output captured to be RUN — an agent's shell is not a terminal either, and it
+    is meant to see the line. tests/test_captured_output.py finds every command
+    the docs and shell-init capture, and fails if one is not marked.
+    """
+
+    def invoke(self, ctx):
+        if getattr(self, "stdout_is_captured", False):
+            from endless import provenance
+
+            provenance.mark_machine()
+        return super().invoke(ctx)
 
 
 class AgentAwareGroup(AgentHelpMixin, SettingAwareMixin, DBAwareGroup):
@@ -1276,6 +1301,10 @@ def shell_init():
     click.echo(_SHELL_INIT_SNIPPET, nl=False)
 
 
+# Captured, not read: eval "$(endless shell-init)" (E-1668).
+shell_init.stdout_is_captured = True
+
+
 @main.group("session")
 def session_cmd():
     """View and manage session conversation history."""
@@ -1468,6 +1497,10 @@ def session_use(session_ref):
     session_use_resolve(session_ref)
 
 
+# Captured, not read: esu evals it (E-1668).
+session_use.stdout_is_captured = True
+
+
 @session_cmd.command("forget")
 def session_forget():
     """Print shell-evaluable lines that unset session-use env vars.
@@ -1481,6 +1514,10 @@ def session_forget():
     """
     from endless.session_cmd import session_forget_resolve
     session_forget_resolve()
+
+
+# Captured, not read: esf evals it (E-1668).
+session_forget.stdout_is_captured = True
 
 
 @session_cmd.command("cd")
@@ -1503,6 +1540,10 @@ def session_cd(session_ref, show_all, target):
     """
     from endless.session_cmd import session_cd_resolve
     session_cd_resolve(session_ref, show_all=show_all, target=target)
+
+
+# Captured, not read: shell-init captures it into $wt; esp captures it for cd (E-1668).
+session_cd.stdout_is_captured = True
 
 
 # E-2106: one sentence, two verbs. `session resume` and `session goto --resume`
@@ -1663,6 +1704,10 @@ def session_id():
     """
     from endless.session_cmd import session_id_resolve
     session_id_resolve()
+
+
+# Captured, not read: $(endless session id) (E-1668).
+session_id.stdout_is_captured = True
 
 
 # --task turns `session hide`/`session unhide` from a SESSION verb into a
@@ -2273,6 +2318,10 @@ def task_id_cmd(ctx, pane):
     """
     from endless.tmux_cmd import run_active_id
     run_active_id(pane, ctx.command_path)
+
+
+# Captured, not read: $(endless task id) (E-1668).
+task_id_cmd.stdout_is_captured = True
 
 
 @task_cmd.command("recent")
@@ -4061,6 +4110,10 @@ def worktree_for_task(task_id, as_json):
     for_task(task_id, as_json)
 
 
+# Captured, not read: cd "$(endless worktree for-task <id>)" (E-1668).
+worktree_for_task.stdout_is_captured = True
+
+
 @worktree_cmd.command("sandbox")
 @click.argument("task_id", required=False)
 def worktree_sandbox(task_id):
@@ -4077,6 +4130,10 @@ def worktree_sandbox(task_id):
     """
     from endless.worktree_cmd import sandbox_dir
     sandbox_dir(task_id)
+
+
+# Captured, not read: $(endless worktree sandbox) (E-1668).
+worktree_sandbox.stdout_is_captured = True
 
 
 @worktree_cmd.command("land")
@@ -4827,6 +4884,10 @@ def db_path():
             "'endless db path --db=main' or 'endless db path --db=sandbox'."
         )
     click.echo(str(config.DB_PATH))
+
+
+# Captured, not read: $(endless db path) (E-1668).
+db_path.stdout_is_captured = True
 
 
 # Hidden `endless internal` group: debug surfaces that shell through to

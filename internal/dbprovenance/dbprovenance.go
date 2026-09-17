@@ -6,7 +6,15 @@
 // `endless <verb>` shells out to this binary, the user reads Python's trace and
 // this one would be a second line saying the same thing — which is why the Go
 // trace is written by the SUBCOMMANDS a person or an agent invokes directly,
-// and the shellout verbs keep their payloads clean of prose.
+// and the shellout verbs keep their output clean of it.
+//
+// `jobs` and `errors` are shellout verbs in that sense, and E-1668 first got
+// them wrong: it deferred Echo in both, and `endless jobs list` / `endless errors
+// show` — whose Python front door passes this binary's stdout straight through
+// and then announces for itself — printed the line twice. Nothing calls Echo
+// now. It stays because a Go subcommand that people run DIRECTLY and that
+// prints tables is exactly what it is for; the JSON surfaces carry the same
+// fact through Encode.
 //
 // The incident this exists for was a direct invocation:
 //

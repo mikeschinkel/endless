@@ -55,6 +55,9 @@
 #      enclosing cwd.
 #   8. The exemption holds: a pinned surface announces nothing, and the tmux
 #      status line's bytes are unchanged.
+#   9. Revisit: output captured by $(...) or eval — shell-init, session use,
+#      worktree for-task and the rest — stays a bare value, while output a person
+#      reads still names its store, and exactly once.
 #
 # Exit 0 on all-passed, 1 on any failure, 2 on setup error.
 
@@ -129,6 +132,9 @@ gate "pytest tests/test_agent_error_bracket.py (E-2097's both-ends refusal)" \
     uv run pytest tests/test_agent_error_bracket.py -q
 gate "pytest tests/test_session_list_render.py (a header that names a project)" \
     uv run pytest tests/test_session_list_render.py -q
+# E-1668 revisit: output another program takes in must carry no provenance line.
+gate "pytest tests/test_captured_output.py (captured and eval'd output stays a bare value)" \
+    uv run pytest tests/test_captured_output.py -q
 
 [[ -x "${GO_BIN}" ]] || setup_error "no endless-go at ${GO_BIN} — run 'just build'"
 
@@ -433,6 +439,61 @@ else
     report_fail "a verb that opened no database announces nothing" \
         "DBProvenance gated on dbOpened" "absent"
 fi
+
+# ── 9. captured output (the revisit) ───────────────────────────────────────
+section "9. Output captured by \$(...) or eval stays a bare value"
+
+# The defect that reopened E-1668. The trace was kept out of --json and --tsv
+# and appended to everything else — including commands whose whole purpose is
+# to print a value for another program. shell-init captures `session cd` into
+# $wt and tests [ -d "$wt" ]; a two-line path fails it and routes to the global
+# endless instead of the worktree's, silently. The guide teaches
+# cd "$(endless worktree for-task <id>)", which failed outright.
+# These commands resolve the project by the name in .endless/config.json, and
+# section 5 registered the checkout as "seeded". Rename it to what this checkout
+# actually calls itself, read from the config rather than typed, so a refusal
+# cannot stand in for an answer below.
+PROJ_NAME=$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["name"])' \
+    "${PROJ_PATH}/.endless/config.json" 2>/dev/null) || setup_error "cannot read the project name"
+sqlite3 "${MAIN_CFG}/endless.db" "UPDATE projects SET name='${PROJ_NAME}' WHERE id=1;" \
+    >/dev/null 2>&1 || setup_error "could not register ${PROJ_NAME} in the main fixture"
+
+# Each check requires a real answer first. "No provenance line" is also true of
+# empty output, and an empty answer from a refused command passed the first
+# draft of this section vacuously.
+for args in "worktree for-task E-1668" "worktree sandbox E-1668"; do
+    # shellcheck disable=SC2086
+    out=$("${BIN}" --db main ${args} 2>"${RUN_DIR}/captured.err")
+    if [[ -z "${out}" ]]; then
+        report_fail "endless ${args}: answered at all" \
+            "a value on stdout" "nothing — $(tail -1 "${RUN_DIR}/captured.err")"
+        continue
+    fi
+    assert_not_contains "endless ${args}: no provenance line in the captured value" \
+        "# db:" "${out}"
+done
+
+# The shape shell-init itself relies on, run the way shell-init runs it.
+wt="$("${BIN}" --db main worktree for-task E-1668 2>/dev/null)"
+if [[ -n "${wt}" && -d "${wt}" ]]; then
+    report_pass "a captured path is a directory, as shell-init's [ -d \"\$wt\" ] needs"
+else
+    report_fail "a captured path is a directory, as shell-init's [ -d \"\$wt\" ] needs" \
+        "a single-line existing path" "${wt}"
+fi
+
+# The fix must not switch the feature off. A read a person does still names its
+# store, from this same self-dev worktree, with this same flag.
+read_out=$("${BIN}" --db main task list 2>/dev/null)
+assert_contains "a command whose output is READ still says which database answered" \
+    "db: main" "${read_out}"
+
+# The second defect found beside the first: `endless errors` passes endless-go's
+# stdout straight through and then announces for itself, and endless-go was
+# announcing too — so the line printed twice.
+dupes=$("${BIN}" --db sandbox errors show 2>/dev/null | grep -c "# db:" || true)
+assert_eq "endless errors show says which database answered exactly once" \
+    "1" "${dupes}"
 
 # ── summary ─────────────────────────────────────────────────────────────────
 summary
