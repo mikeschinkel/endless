@@ -289,7 +289,6 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `phrase` | _(none yet)_ | matchers (action regexes) config isn't covered by the guide yet. |
 | `plan` | tasks | 'plan' is the former name for 'task' (renamed); use 'task'. |
 | `project` | reference | Managing registered projects (register, list, status, set, rename, scan, discover, purge, unregister). |
-| `sandbox` | orchestration | The per-worktree sandbox: where a worktree's isolated state lives, and migrating existing worktrees onto it. |
 | `session` | sessions | Recording session status; discovery (who am I); reading status. |
 {{if .report_gate}}| `session turn` | sessions | Reading a session's raw draft, or one option of a paired minimization. |
 {{end}}| `setup` | _(none yet)_ | hook/integration setup (claude-hook, prompt-hook, shell-helpers) isn't covered by the guide yet. |

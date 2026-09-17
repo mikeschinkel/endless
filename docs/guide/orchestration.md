@@ -89,17 +89,9 @@ Three properties, and they are the whole design:
   needs, and copying them in is the exact accident a sandbox exists to prevent.
 
 Nothing creates a sandbox on demand. If one is missing, the command that needed
-it refuses and names `endless sandbox migrate` rather than quietly building one,
-because a directory endless expects to exist and does not is worth understanding
-rather than papering over.
-
-**If your worktrees predate this**, run `endless sandbox migrate` once per
-project. It moves any sandbox an older endless left under
-`~/.cache/endless/sandboxes/` into the worktree it belongs to, provisions one
-for every worktree that never had it (running your bootstrap hook, as worktree
-creation does), and reports what it did. It deletes nothing: a sandbox whose
-worktree is gone is reported as an orphan and left alone. `--dry-run` does every
-read and none of the writes.
+it refuses rather than quietly building one, because a directory endless expects
+to exist and does not is worth understanding rather than papering over.
+`endless worktree sandbox [E-NNNN]` names the path and says how to recreate it.
 
 **For a tree that cannot take extra files** — one whose worktree contents are
 themselves a git repository, a build that must stay hermetic, CI that runs

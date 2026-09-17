@@ -189,11 +189,11 @@ func TestForceRealDB(t *testing.T) {
 	})
 }
 
-// TestGuardRefusesMissingSandbox is the E-1964 refusal (plan step 3d). A
-// self-dev worktree with no sandbox must say so and name the command that fixes
-// it — never route to the absent path and never build one.
+// TestGuardRefusesMissingSandbox is the E-1964 refusal. A self-dev worktree
+// with no sandbox must say so and name the command that recreates it — never
+// route to the absent path and never build one.
 func TestGuardRefusesMissingSandbox(t *testing.T) {
-	t.Run("missing sandbox names the worktree and the migration", func(t *testing.T) {
+	t.Run("missing sandbox names the worktree and the remedy", func(t *testing.T) {
 		resetDBContext(t)
 		wt := newWorktree(t, "e-1964", `{"self_dev": true}`)
 		t.Chdir(wt)
@@ -203,7 +203,7 @@ func TestGuardRefusesMissingSandbox(t *testing.T) {
 			t.Fatal("guardWorktreeDBContext() = nil, want a refusal")
 		}
 		msg := err.Error()
-		for _, want := range []string{"no sandbox", "endless sandbox migrate", "e-1964"} {
+		for _, want := range []string{"no sandbox", "just dev-sandbox-init", "e-1964"} {
 			if !strings.Contains(msg, want) {
 				t.Errorf("refusal does not mention %q:\n%s", want, msg)
 			}

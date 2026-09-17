@@ -198,9 +198,9 @@ func mainConfigDir() (string, error) {
 //
 // A missing sandbox is REFUSED, not created. Inventing one used to mean a stray
 // database in the cache; now it would mean a fresh empty database inside the
-// worktree, which is worse, because it looks exactly like the real thing. The
-// last moment a missing sandbox is expected is `endless sandbox migrate`, and
-// the refusal says so.
+// worktree, which is worse, because it looks exactly like the real thing. A
+// sandbox is created with its worktree, so an absent one is an anomaly, and the
+// refusal says so.
 func sandboxConfigDirForCwd() (string, error) {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -806,10 +806,12 @@ func isDir(path string) bool {
 // is an anomaly.
 //
 // Nothing rebuilds the sandbox — not here, not in the resolver, not on the next
-// command. A silent recovery would hide the fact that a directory endless
-// expects to exist does not, and would act on a state nobody has understood;
-// after `endless sandbox migrate` has run once, reaching this message means
-// something happened that this design did not anticipate.
+// command. A sandbox is created with its worktree, so reaching this means
+// something removed a directory endless expects to exist; a silent recovery
+// would hide that and act on a state nobody has understood.
+//
+// Only reachable in a self-dev project, which is why the remedy can name that
+// project's own recipe. Mirrors Python's config.sandbox_missing_refusal.
 func sandboxMissingError(worktree, sandbox string) error {
 	if worktree == "" {
 		worktree = "(unknown)"
@@ -818,13 +820,10 @@ func sandboxMissingError(worktree, sandbox string) error {
 		"refusing to open the database: this worktree has no sandbox.\n\n"+
 			"  worktree: %s\n"+
 			"  expected: %s\n\n"+
-			"A sandbox is expected here and nothing creates one on demand. Run:\n\n"+
-			"    endless sandbox migrate\n\n"+
-			"which relocates a sandbox left in the old cache root and provisions "+
-			"one for any worktree that never had it. If migration has already run "+
-			"on this machine, this is not a chore — something removed a directory "+
-			"endless expects to exist, and that is worth understanding before "+
-			"carrying on.",
+			"A sandbox is created with its worktree, so a missing one means something "+
+			"removed it — worth understanding before carrying on. To recreate and "+
+			"seed it, run this from the worktree:\n\n"+
+			"    just dev-sandbox-init",
 		worktree, sandbox)
 }
 

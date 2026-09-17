@@ -88,7 +88,7 @@ def test_apply_db_choice_sandbox_refuses_when_missing(tmp_path, monkeypatch):
     with pytest.raises(ValueError) as e:
         config.apply_db_choice("sandbox")
     assert "no sandbox" in str(e.value)
-    assert "endless sandbox migrate" in str(e.value)
+    assert "just dev-sandbox-init" in str(e.value)
     assert config.RESOLVED_CONFIG_DIR is None
 
 

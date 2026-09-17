@@ -53,12 +53,25 @@ if ! command -v just >/dev/null 2>&1; then
     exit 1
 fi
 
-echo "post-worktree-create: generating go.work for ${worktree}"
-just go-work-init
-
-# Copy main's prebuilt binary rather than building (see header). The main
-# checkout is the parent of the shared git-common-dir.
+# The main checkout is the parent of the shared git-common-dir.
 main_checkout="$(dirname "$(cd "$(git rev-parse --git-common-dir)" && pwd)")"
+
+# Run recipes from MAIN's justfile, against this worktree. Endless runs the hook
+# that lives in the main checkout, so the recipes it calls have to come from the
+# same place. A bare `just <recipe>` resolves the WORKTREE's justfile instead —
+# identical for a worktree created a moment ago, but a worktree on an older
+# branch has an older justfile, missing recipes this hook depends on or carrying
+# versions that call binaries that no longer exist. Every recipe here derives
+# its paths from the working directory, never from the justfile's location, so
+# pointing it at main's justfile changes nothing but which version runs.
+recipe() {
+    just --justfile "${main_checkout}/justfile" --working-directory "${worktree}" "$@"
+}
+
+echo "post-worktree-create: generating go.work for ${worktree}"
+recipe go-work-init
+
+# Copy main's prebuilt binary rather than building (see header).
 src_bin="${main_checkout}/bin/endless-go"
 if [[ ! -x "${src_bin}" ]]; then
     echo "post-worktree-create: main checkout binary not found at ${src_bin};" >&2
@@ -73,7 +86,7 @@ cp -p "${src_bin}" "${worktree}/bin/endless-go"
 # Uses the binary just copied above, not the global one: a sandbox DB must be
 # built by the same schema the worktree's own commands will read it with.
 echo "post-worktree-create: seeding sandbox endless.db"
-just dev-sandbox-init
+recipe dev-sandbox-init
 
 echo "post-worktree-create: installing per-worktree Claude hook override"
-just claude-settings-init
+recipe claude-settings-init

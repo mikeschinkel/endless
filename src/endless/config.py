@@ -612,18 +612,21 @@ def sandbox_missing_refusal(worktree: Path, sandbox: Path) -> str:
 
     Nothing creates one on demand: a path resolver that mutated the filesystem
     would race two sessions on one worktree, and a silent rebuild would hide the
-    fact that a directory endless expects to exist does not. Plain wording, no
-    ticket refs (user-facing).
+    fact that a directory endless expects to exist does not.
+
+    Only reachable in a self-dev project — `--db sandbox` is refused everywhere
+    else before this — which is why the remedy can name that project's own
+    recipe. Mirrors monitor.sandboxMissingError. Plain wording, no ticket refs
+    (user-facing).
     """
     return (
         "this worktree has no sandbox, and nothing creates one on demand:\n\n"
         f"  worktree: {worktree}\n"
         f"  expected: {sandbox}\n\n"
-        "Run `endless sandbox migrate` — it relocates a sandbox left in the old\n"
-        "cache root and provisions one for any worktree that never had it.\n\n"
-        "If migration has already run on this machine, this is not a chore:\n"
-        "something removed a directory endless expects to exist, and that is\n"
-        "worth understanding before carrying on."
+        "A sandbox is created with its worktree, so a missing one means something\n"
+        "removed it — worth understanding before carrying on. To recreate and\n"
+        "seed it, run this from the worktree:\n\n"
+        "    just dev-sandbox-init"
     )
 
 
@@ -706,10 +709,10 @@ def apply_db_choice(choice: str):
         if not enclosing_project_is_self_dev():
             raise ValueError(DB_NOT_SELF_DEV_REFUSAL)
         # Refuse a missing sandbox rather than pin a path that is not there
-        # (E-1964). Without this the flag would resolve, thread --config-dir to
+        # (E-1964). Without this the flag would resolve, thread the context to
         # every Go subprocess, and the first write would create a fresh empty
         # database at the absent path — the silent rebuild this design exists to
-        # rule out, arriving through the one door that bypasses the Go gate.
+        # rule out.
         sandbox = sandbox_root(worktree)
         if not sandbox.is_dir():
             raise ValueError(sandbox_missing_refusal(worktree, sandbox))

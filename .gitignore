@@ -56,10 +56,9 @@ go.work.sum
 # convention, so the broad match is safe in this repo.
 settings.local.json
 
-# The per-worktree Claude Code override (hooks from `just claude-settings-init`,
-# the XDG_CONFIG_HOME env block from `endless sandbox bind`) is written to
-# .claude/settings.local.json, so the settings.local.json rule above already
-# covers it — nothing more is needed here.
+# The per-worktree Claude Code override (hooks from `just claude-settings-init`)
+# is written to .claude/settings.local.json, so the settings.local.json rule
+# above already covers it — nothing more is needed here.
 #
 # There is intentionally NO gitignore rule for .claude/settings.json: it is a
 # tracked file (it carries enabledPlugins for everyone), and gitignore does not

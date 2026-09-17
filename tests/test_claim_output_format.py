@@ -401,7 +401,11 @@ def test_worktree_sandbox_refuses_rather_than_inventing_a_path(
         _shutil.rmtree(sandbox)
     with pytest.raises(click.ClickException) as exc:
         worktree_cmd.sandbox_dir(f"E-{tid}")
-    assert "has not been provisioned" in str(exc.value)
+    assert "sandbox is missing" in str(exc.value)
+    # The project in this fixture is not self-dev, so the remedy is the generic
+    # one — never the endless-repo recipe.
+    assert "post-worktree-create.sh" in str(exc.value)
+    assert "dev-sandbox-init" not in str(exc.value)
 
     with pytest.raises(click.ClickException) as exc:
         worktree_cmd.sandbox_dir("E-99999")

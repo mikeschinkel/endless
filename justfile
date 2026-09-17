@@ -361,9 +361,8 @@ claude-settings-init:
     else
         echo "claude-settings-init: warning: no endless-go found; skipping the legacy skip-worktree de-arm" >&2
     fi
-    # Start from whatever settings.local.json already holds — the env block
-    # 'endless sandbox bind' wrote, and any hand-written keys — so regenerating
-    # the hooks preserves them.
+    # Start from whatever settings.local.json already holds — any hand-written
+    # keys — so regenerating the hooks preserves them.
     if [ -f .claude/settings.local.json ]; then
         local_json="$(cat .claude/settings.local.json)"
     else

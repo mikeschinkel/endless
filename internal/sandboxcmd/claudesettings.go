@@ -54,11 +54,11 @@ func (o repairOutcome) changed() bool {
 // worktree at once, the moment main commits to that file, each reporting a
 // rebase failure that names no conflicting file.
 //
-// It lives beside `sandbox bind` because bind is what wrote that content; this
-// is the exact inverse operation on the exact same file. It is deliberately NOT
-// on the user-facing `endless` CLI: only a self-dev worktree ever set the bit,
-// so a downstream project would be reading a command about a state it can never
-// reach.
+// It lives in the sandbox command because `sandbox bind` — since deleted — is
+// what wrote that content; this is the inverse operation on the same file. It
+// is deliberately NOT on the user-facing `endless` CLI: only a self-dev worktree
+// ever set the bit, so a downstream project would be reading a command about a
+// state it can never reach.
 func claudeSettingsRepairCmd(args []string) {
 	fs := flag.NewFlagSet("claude-settings-repair", flag.ExitOnError)
 	all := fs.Bool("all", false, "repair every worktree under the main checkout")

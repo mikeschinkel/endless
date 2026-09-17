@@ -866,10 +866,21 @@ def sandbox_dir(task_id: str | None) -> None:
 
     path = config.sandbox_root(wt_dir)
     if not path.is_dir():
+        project_root = config.enclosing_project_root(wt_dir)
+        if project_root is not None and config.project_is_self_dev(project_root):
+            remedy = (
+                "Recreate and seed it from the worktree with:  just dev-sandbox-init"
+            )
+        else:
+            remedy = (
+                "Recreate the directory, then re-run the project's "
+                ".endless/hooks/post-worktree-create.sh to fill it."
+            )
         raise click.ClickException(
-            f"{canonical}'s sandbox has not been provisioned:\n\n"
+            f"{canonical}'s sandbox is missing:\n\n"
             f"    {path}\n\n"
-            f"Provision it with:  endless sandbox migrate"
+            "A sandbox is created with its worktree, so something removed it.\n"
+            f"{remedy}"
         )
     click.echo(str(path))
 
@@ -1995,14 +2006,8 @@ POST_WORKTREE_CREATE_HOOK = ".endless/hooks/post-worktree-create.sh"
 POST_LAND_HOOK_DIR = ".endless/hooks/post-land"
 
 
-def _run_post_worktree_create_hook(project_root: Path, worktree_path: Path) -> bool:
+def _run_post_worktree_create_hook(project_root: Path, worktree_path: Path) -> None:
     """Run the project's post-worktree-create bootstrap hook, if present (E-986).
-
-    Returns True when the hook ran cleanly or there was none to run, False on
-    every failure path. The bool exists for `sandbox migrate`, which runs this
-    across a whole fleet of worktrees and has to report "3 hook failures"
-    separately from what it moved; a caller bootstrapping ONE worktree can go
-    on ignoring it, since the loud message below is the whole report there.
 
     Worktree creation can't bake in every project's bootstrap needs (Go go.mod
     replace paths, npm install, venv recreation, Rust target/ cleanup, ...).
@@ -2026,7 +2031,7 @@ def _run_post_worktree_create_hook(project_root: Path, worktree_path: Path) -> b
     """
     hook = project_root / POST_WORKTREE_CREATE_HOOK
     if not hook.exists():
-        return True
+        return
     if not os.access(hook, os.X_OK):
         click.echo(
             click.style("⚠ post-worktree-create hook is not executable", fg="yellow")
@@ -2036,7 +2041,7 @@ def _run_post_worktree_create_hook(project_root: Path, worktree_path: Path) -> b
             f"        cd {_tilde(worktree_path)} && {_tilde(hook)} {_tilde(worktree_path)}",
             err=True,
         )
-        return False
+        return
     click.echo(
         click.style("•", fg="cyan")
         + f" running post-worktree-create hook: {_tilde(hook)}"
@@ -2053,7 +2058,7 @@ def _run_post_worktree_create_hook(project_root: Path, worktree_path: Path) -> b
             f"        cd {_tilde(worktree_path)} && {_tilde(hook)} {_tilde(worktree_path)}",
             err=True,
         )
-        return False
+        return
     if result.returncode != 0:
         click.echo(
             click.style(
@@ -2066,8 +2071,6 @@ def _run_post_worktree_create_hook(project_root: Path, worktree_path: Path) -> b
             f"        cd {_tilde(worktree_path)} && {_tilde(hook)} {_tilde(worktree_path)}",
             err=True,
         )
-        return False
-    return True
 
 
 def _run_post_land_script(
