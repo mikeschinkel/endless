@@ -2327,7 +2327,7 @@ def _match_companions(live: list[dict], ref: str) -> list[dict]:
     m = re.fullmatch(r"[Ee]-(\d+)", ref.strip())
     if m is not None:
         target = int(m.group(1))
-        return [c for c in live if c.get("active_task_id") == target]
+        return [c for c in live if c.get("task_id") == target]
     if ref.isdigit():
         target = int(ref)
         return [c for c in live if c.get("endless_session_id") == target]

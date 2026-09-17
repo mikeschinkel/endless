@@ -343,7 +343,7 @@ def test_use_resolves_task_id_form(project_with_companion, capsys, tmp_path):
     real_worktree.mkdir()
     stage(
         endless_session_id=314,
-        active_task_id=1655,
+        task_id=1655,
         worktree_path=str(real_worktree),
         cwd="/the/cwd",
     )
@@ -357,7 +357,7 @@ def test_use_resolves_task_id_form(project_with_companion, capsys, tmp_path):
 def test_use_task_id_form_is_case_insensitive(project_with_companion, capsys):
     """`E-1655` resolves the same way as `e-1655`."""
     _, sessions_dir, stage = project_with_companion
-    stage(endless_session_id=314, active_task_id=1655, cwd="/the/cwd")
+    stage(endless_session_id=314, task_id=1655, cwd="/the/cwd")
 
     session_cmd.session_use_resolve("E-1655")
     out = capsys.readouterr().out
@@ -368,7 +368,7 @@ def test_use_task_id_no_live_session_errors(project_with_companion, capsys):
     """A task id with no live session bound to it errors clearly and is a
     no-op (no activation block on stdout)."""
     _, sessions_dir, stage = project_with_companion
-    stage(endless_session_id=247, active_task_id=42, cwd="/the/cwd")
+    stage(endless_session_id=247, task_id=42, cwd="/the/cwd")
 
     with pytest.raises(SystemExit) as exc:
         session_cmd.session_use_resolve("e-9999999")
@@ -380,10 +380,10 @@ def test_use_task_id_no_live_session_errors(project_with_companion, capsys):
 
 def test_use_bare_numeric_still_means_session_id(project_with_companion, capsys):
     """Regression: a bare numeric ref keeps matching endless_session_id, not
-    active_task_id. A session id of 1655 with a DIFFERENT active task still
+    task_id. A session id of 1655 with a DIFFERENT active task still
     resolves by `1655`."""
     _, sessions_dir, stage = project_with_companion
-    stage(endless_session_id=1655, active_task_id=42, cwd="/by/session/id")
+    stage(endless_session_id=1655, task_id=42, cwd="/by/session/id")
 
     session_cmd.session_use_resolve("1655")
     out = capsys.readouterr().out
@@ -392,10 +392,10 @@ def test_use_bare_numeric_still_means_session_id(project_with_companion, capsys)
 
 def test_match_companions_task_id_branch():
     """Unit-level: `_match_companions` matches the task-id form against
-    active_task_id; bare numerics still hit endless_session_id."""
+    task_id; bare numerics still hit endless_session_id."""
     live = [
-        {"endless_session_id": 1, "active_task_id": 1655, "harness_session_id": "aaaa"},
-        {"endless_session_id": 1655, "active_task_id": 42, "harness_session_id": "bbbb"},
+        {"endless_session_id": 1, "task_id": 1655, "harness_session_id": "aaaa"},
+        {"endless_session_id": 1655, "task_id": 42, "harness_session_id": "bbbb"},
     ]
     by_task = session_cmd._match_companions(live, "e-1655")
     assert [c["endless_session_id"] for c in by_task] == [1]
