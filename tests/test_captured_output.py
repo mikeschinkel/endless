@@ -120,12 +120,23 @@ def test_every_captured_command_is_marked():
 # --- the mechanism -----------------------------------------------------------
 
 
-@pytest.fixture
-def announcing(monkeypatch):
-    """A tiny CLI built from the real classes, with a database to name."""
+# The line is spelled `db: …` for a person and `# db: …` for an agent. Every
+# check here runs as both: E-1668's verify suite first matched only the agent's
+# spelling, passed when an agent ran it, and failed when the owner did.
+AUDIENCES = [
+    pytest.param((False, "db: main"), id="person"),
+    pytest.param((True, "# db: main"), id="agent"),
+]
+
+
+@pytest.fixture(params=AUDIENCES)
+def announcing(monkeypatch, request):
+    """A tiny CLI built from the real classes, with a database to name, rendered
+    for one audience at a time. Yields (cli, the line that audience sees)."""
+    agent, expected_line = request.param
     monkeypatch.setattr(provenance, "_describe_db", lambda: ("main", "/cfg"))
     monkeypatch.setattr(provenance, "_describe_project", lambda: None)
-    monkeypatch.setattr(provenance, "_agent_mode", lambda: False)
+    monkeypatch.setattr(provenance, "_agent_mode", lambda: agent)
 
     @click.group(cls=cli.AgentAwareGroup)
     def root():
@@ -147,20 +158,24 @@ def announcing(monkeypatch):
         provenance.mark_touched()
         click.echo("a report")
 
-    return root
+    return root, expected_line
 
 
 def test_a_captured_command_prints_only_its_value(announcing):
-    result = CliRunner().invoke(announcing, ["value"])
+    root, _ = announcing
+    result = CliRunner().invoke(root, ["value"])
 
     assert result.exit_code == 0, result.output
     assert result.output == "/the/path\n"
 
 
 def test_an_ordinary_command_still_says_which_database_answered(announcing):
-    """The fix must not switch the feature off: output a person reads keeps it."""
-    result = CliRunner().invoke(announcing, ["report"])
+    """The fix must not switch the feature off: output that is READ keeps it,
+    exactly once, in the spelling its audience gets."""
+    root, expected_line = announcing
+    result = CliRunner().invoke(root, ["report"])
 
     assert result.exit_code == 0, result.output
-    assert "a report" in result.output
-    assert "db: main" in result.output
+    lines = result.output.splitlines()
+    assert "a report" in lines
+    assert lines.count(expected_line) == 1, result.output

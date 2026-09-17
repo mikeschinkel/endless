@@ -83,6 +83,20 @@ cd "${WT}" || setup_error "cannot cd to ${WT}"
 RUN_DIR="${HOME}/e-1668-verify"
 mkdir -p "${RUN_DIR}" || setup_error "cannot create ${RUN_DIR}"
 
+# The provenance line has two renderings: `# db: …` when an agent is reading,
+# `db: …` when a person is. Which one a command prints depends on the ENVIRONMENT
+# of whoever runs this suite — and the first version matched only `# db:`, so it
+# passed when an agent ran it and failed when the owner did. Every check below
+# counts lines in either form, and section 9 runs its checks as each audience
+# explicitly, so the result cannot depend on who typed the verify command.
+provenance_count() { grep -cE '^(# )?db: ' || true; }
+
+# Agent detection reads CLAUDE_CODE_ENTRYPOINT and __CFBundleIdentifier
+# (src/endless/agent_env.py). Clearing both is a person; setting the CLI
+# entrypoint is an agent.
+as_person() { env -u CLAUDE_CODE_ENTRYPOINT -u __CFBundleIdentifier "$@"; }
+as_agent()  { env -u __CFBundleIdentifier CLAUDE_CODE_ENTRYPOINT=cli "$@"; }
+
 GO_BIN="${WT}/bin/endless-go"
 SCHEMA_SQL="${WT}/internal/schema/schema.sql"
 DB_SRC="${WT}/internal/monitor/db.go"
@@ -417,8 +431,8 @@ section "8. A pin is not a resolution"
 # not have influenced the choice there is nothing to disambiguate — and the tmux
 # status line has no room for it besides.
 tmux_out=$("${GO_BIN}" tmux status-line 2>&1)
-assert_not_contains "the tmux status line carries no provenance line" \
-    "# db:" "${tmux_out}"
+assert_eq "the tmux status line carries no provenance line" \
+    "0" "$(printf '%s\n' "${tmux_out}" | provenance_count)"
 assert_not_contains "the tmux status line carries no provenance field" \
     "_answered_from" "${tmux_out}"
 
@@ -461,39 +475,49 @@ sqlite3 "${MAIN_CFG}/endless.db" "UPDATE projects SET name='${PROJ_NAME}' WHERE 
 # Each check requires a real answer first. "No provenance line" is also true of
 # empty output, and an empty answer from a refused command passed the first
 # draft of this section vacuously.
-for args in "worktree for-task E-1668" "worktree sandbox E-1668"; do
-    # shellcheck disable=SC2086
-    out=$("${BIN}" --db main ${args} 2>"${RUN_DIR}/captured.err")
-    if [[ -z "${out}" ]]; then
-        report_fail "endless ${args}: answered at all" \
-            "a value on stdout" "nothing — $(tail -1 "${RUN_DIR}/captured.err")"
-        continue
+#
+# And each runs twice, once per audience. The line is spelled differently for a
+# person than for an agent, so a check that only ever saw one spelling proves
+# nothing about the other — which is how this section first passed for the agent
+# that wrote it and failed for the owner who ran it.
+for who in as_person as_agent; do
+    for args in "worktree for-task E-1668" "worktree sandbox E-1668"; do
+        # shellcheck disable=SC2086
+        out=$("${who}" "${BIN}" --db main ${args} 2>"${RUN_DIR}/captured.err")
+        if [[ -z "${out}" ]]; then
+            report_fail "${who}: endless ${args} answered at all" \
+                "a value on stdout" "nothing — $(tail -1 "${RUN_DIR}/captured.err")"
+            continue
+        fi
+        assert_eq "${who}: endless ${args} prints only its value" \
+            "0" "$(printf '%s\n' "${out}" | provenance_count)"
+    done
+
+    # The shape shell-init itself relies on, run the way shell-init runs it.
+    wt="$("${who}" "${BIN}" --db main worktree for-task E-1668 2>/dev/null)"
+    if [[ -n "${wt}" && -d "${wt}" ]]; then
+        report_pass "${who}: a captured path is a directory, as shell-init's [ -d \"\$wt\" ] needs"
+    else
+        report_fail "${who}: a captured path is a directory, as shell-init's [ -d \"\$wt\" ] needs" \
+            "a single-line existing path" "${wt}"
     fi
-    assert_not_contains "endless ${args}: no provenance line in the captured value" \
-        "# db:" "${out}"
+
+    # The fix must not switch the feature off. A read still names its store.
+    read_n=$("${who}" "${BIN}" --db main task list 2>/dev/null | provenance_count)
+    if (( read_n >= 1 )); then
+        report_pass "${who}: a command whose output is READ still says which database answered"
+    else
+        report_fail "${who}: a command whose output is READ still says which database answered" \
+            "at least one provenance line" "${read_n}"
+    fi
+
+    # Found beside the first defect: `endless errors` passes endless-go's stdout
+    # through and then announces for itself, and endless-go announced too, so
+    # the line printed twice.
+    dupes=$("${who}" "${BIN}" --db sandbox errors show 2>/dev/null | provenance_count)
+    assert_eq "${who}: endless errors show says which database answered exactly once" \
+        "1" "${dupes}"
 done
-
-# The shape shell-init itself relies on, run the way shell-init runs it.
-wt="$("${BIN}" --db main worktree for-task E-1668 2>/dev/null)"
-if [[ -n "${wt}" && -d "${wt}" ]]; then
-    report_pass "a captured path is a directory, as shell-init's [ -d \"\$wt\" ] needs"
-else
-    report_fail "a captured path is a directory, as shell-init's [ -d \"\$wt\" ] needs" \
-        "a single-line existing path" "${wt}"
-fi
-
-# The fix must not switch the feature off. A read a person does still names its
-# store, from this same self-dev worktree, with this same flag.
-read_out=$("${BIN}" --db main task list 2>/dev/null)
-assert_contains "a command whose output is READ still says which database answered" \
-    "db: main" "${read_out}"
-
-# The second defect found beside the first: `endless errors` passes endless-go's
-# stdout straight through and then announces for itself, and endless-go was
-# announcing too — so the line printed twice.
-dupes=$("${BIN}" --db sandbox errors show 2>/dev/null | grep -c "# db:" || true)
-assert_eq "endless errors show says which database answered exactly once" \
-    "1" "${dupes}"
 
 # ── summary ─────────────────────────────────────────────────────────────────
 summary
