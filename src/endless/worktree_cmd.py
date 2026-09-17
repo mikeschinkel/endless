@@ -40,7 +40,7 @@ from pathlib import Path
 
 import click
 
-from endless import land_conflict, rowcap
+from endless import land_conflict, provenance, rowcap
 from endless.task_cmd import _display_path, _resolve_project, recover_task_plan
 from endless.project_path import resolved
 

@@ -10,6 +10,7 @@ import json
 import click
 
 from endless import matchers
+from endless import provenance
 from endless import rowcap
 
 
