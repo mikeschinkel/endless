@@ -6370,3 +6370,11 @@ The damage split two ways. Loudly: esu evals session use's output, and in zsh wi
 
 The rule: before adding anything to a command's stdout, ask what CONSUMES that stdout, not what flag produced it. The documented consumers are findable — grep shell-init and the guide for $(endless and eval — and any command they name is a payload command.
 - **Project**: endless
+
+### [2026-09-17] The no-jargon rule covers names in code, not just words in replies
+Earlier in the same session I recorded a lesson against jargon in replies ('choke point'). Then, proposing a fix for E-1668, I named a new command attribute stdout_is_payload. Mike flagged 'payload' as jargon too.
+
+The earlier lesson was scoped to prose, so it did not fire on an identifier — but an identifier is read far more often than a reply, by every future reader of the code, with no surrounding explanation at all. A coined term in a name is the same failure with a longer life.
+
+The rule: an attribute, flag, or function name gets the same plain-words test as a sentence. Name what literally happens to the thing (stdout_is_captured), not the category a specialist would file it under (payload). Then check the plain name is TRUE for every case it will label, not just the case that prompted it — Mike's own suggestion, stdout_is_evaled, was plain but held for only three of the nine commands.
+- **Project**: endless
