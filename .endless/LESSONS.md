@@ -6378,3 +6378,11 @@ The earlier lesson was scoped to prose, so it did not fire on an identifier — 
 
 The rule: an attribute, flag, or function name gets the same plain-words test as a sentence. Name what literally happens to the thing (stdout_is_captured), not the category a specialist would file it under (payload). Then check the plain name is TRUE for every case it will label, not just the case that prompted it — Mike's own suggestion, stdout_is_evaled, was plain but held for only three of the nine commands.
 - **Project**: endless
+
+### [2026-09-17] When enumerating consumers of output, the search pattern can exclude the very thing it should find
+Looking for every command whose stdout is captured or eval'd, I grepped the docs for \$\(endless [a-z-]+ [a-z-]+ — two words after endless. That listed session use, worktree for-task, task id and the rest, and silently missed \$(endless shell-init), which is ONE word. shell-init is the most-captured command in the product: every user's shell rc runs eval "\$(endless shell-init)". Mike caught it.
+
+Worse, I had just been reading shell-init's output as the SOURCE of consumers, which made it easy to not think of it as a consumer target itself.
+
+The rule: a pattern written to find members of a set encodes an assumption about their shape, and an enumeration is only as complete as that assumption. When the answer will be used as 'the complete list', test the pattern against a member you already know is in the set — and prefer resolving candidates against the real command tree over a regex guess at how many words a command has.
+- **Project**: endless
