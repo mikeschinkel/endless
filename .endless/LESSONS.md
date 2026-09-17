@@ -6386,3 +6386,11 @@ Worse, I had just been reading shell-init's output as the SOURCE of consumers, w
 
 The rule: a pattern written to find members of a set encodes an assumption about their shape, and an enumeration is only as complete as that assumption. When the answer will be used as 'the complete list', test the pattern against a member you already know is in the set — and prefer resolving candidates against the real command tree over a regex guess at how many words a command has.
 - **Project**: endless
+
+### [2026-09-17] A verify suite that passes for the agent can fail for the owner: pin the environment the output depends on
+E-1668's verify suite passed 50/50 when I ran it and failed for Mike. The provenance line is rendered for its audience — '# db: …' when an agent is detected, 'db: …' for a person — and one check counted only '# db:'. Agent detection reads the environment, so the check could only ever pass in an agent's session. I declared the suite green on runs that could not have failed that way.
+
+Two things made it worse. I tried to reproduce as a person with env $CLEAN, and zsh does not word-split an unquoted variable, so env received one malformed argument and nothing was cleared — three 'human' runs that were agent runs, each 'confirming' I could not reproduce. And a second check (captured output must carry no '# db:') was weakened the same way: in a person's terminal a regression printing 'db: main' would have passed it.
+
+The rule: when output varies with WHO runs a command (agent vs person, TTY vs pipe, locale, env), a suite must not inherit that from whoever invokes it. Match every rendering, and run the property explicitly under each environment it depends on. And before trusting a 'could not reproduce', verify the reproduction actually changed the variable — print the detected state, do not assume the env manipulation worked.
+- **Project**: endless
