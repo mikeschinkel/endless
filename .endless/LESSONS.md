@@ -6362,3 +6362,11 @@ Also: the skip reason is printed on every skipped line, so keep it to one short 
 
 And one process error of mine: a failing verify run leaves a CTRF report behind (the runner prints its path), and my first instinct was to re-run the suite — which overwrote Mike's evidence with my passing run. Read the report BEFORE re-running.
 - **Project**: endless
+
+### [2026-09-17] stdout is a payload when a command exists to print a value, not only under --json
+E-1668 added a provenance line ('# db: main') to the end of every command's stdout, and kept it out of machine formats by treating --json and --tsv as the only machine output. That classification was wrong. A command whose whole purpose is to print shell code for eval (session use) or a bare value for $(...) capture (session cd, session id, worktree for-task, worktree sandbox) is emitting a payload just as surely as --json is, with no flag to say so.
+
+The damage split two ways. Loudly: esu evals session use's output, and in zsh without interactivecomments the trailing '# db: main' runs as a command. Silently, which is worse: shell-init captures session cd into $wt and tests [ -d "$wt" ]; the appended line makes that false, so _endless_run falls back to the global endless instead of the worktree's — a wrong-binary routing bug of exactly the kind E-1668 existed to remove.
+
+The rule: before adding anything to a command's stdout, ask what CONSUMES that stdout, not what flag produced it. The documented consumers are findable — grep shell-init and the guide for $(endless and eval — and any command they name is a payload command.
+- **Project**: endless
