@@ -1160,9 +1160,14 @@ def show_plan(
     cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     project_id, proj_name = _resolve_project(project_name)
 
-    # Reads go through live_tasks so removed rows can never leak into a listing.
-    # --removed is the one exception, and says so above.
-    table = "tasks" if removed_only else "live_tasks"
+    # Reads go through task_tree — live_tasks plus effective_parent_id — so
+    # removed rows can never leak into a listing AND a live task whose parent was
+    # removed is filtered by where it renders (E-2161). --removed is the one
+    # exception, and says so above: it exists to show removed rows, so it reads
+    # `tasks` and filters on the literal parent_id, which is the only parentage a
+    # removed row has.
+    table = "tasks" if removed_only else "task_tree"
+    parent_col = "parent_id" if removed_only else "effective_parent_id"
     join = ""
     where = "WHERE pi.project_id = ?"
     params: list = [project_id]
@@ -1190,9 +1195,9 @@ def show_plan(
             params.append(tier_filter)
     if parent_id is not None:
         if parent_id == PARENT_NONE:
-            where += " AND pi.parent_id IS NULL"
+            where += f" AND pi.{parent_col} IS NULL"
         else:
-            where += " AND pi.parent_id = ?"
+            where += f" AND pi.{parent_col} = ?"
             params.append(parent_id)
     if related_to_id is not None:
         related_ids = _related_task_ids(related_to_id, rel_type)
@@ -1364,7 +1369,11 @@ def next_tasks(
     # where the routing decision belongs.
     where = (
         f"WHERE t.status NOT IN ({statuses.sql_list('not-actionable')}) "
-        "AND (SELECT count(*) FROM live_tasks c WHERE c.parent_id = t.id) = 0 "
+        # E-2161: childless is judged on the EFFECTIVE tree — the one the user
+        # sees. A task whose only child was removed is a leaf again and belongs
+        # here; a task whose live grandchildren were adopted up past a removed
+        # child is not one, and its grandchildren are the leaves instead.
+        "AND (SELECT count(*) FROM task_tree c WHERE c.effective_parent_id = t.id) = 0 "
         "AND t.id NOT IN ("
         "  SELECT td.target_id FROM task_deps td"
         "  WHERE td.target_type = 'task' AND td.dep_type = 'blocks'"
@@ -1388,10 +1397,14 @@ def next_tasks(
         params.append(phase_filter)
 
     if parent_id is not None:
+        # E-2161: --parent selects on where a task RENDERS, so a live child of a
+        # removed parent is listed under the ancestor it is shown under, and
+        # `--parent none` means "shown at the root" rather than "parent_id IS
+        # NULL" — which after a removal are no longer the same set.
         if parent_id == PARENT_NONE:
-            where += " AND t.parent_id IS NULL"
+            where += " AND t.effective_parent_id IS NULL"
         else:
-            where += " AND t.parent_id = ?"
+            where += " AND t.effective_parent_id = ?"
             params.append(parent_id)
 
     if not show_all:
@@ -1408,7 +1421,7 @@ def next_tasks(
     rows = db.query(
         f"SELECT t.id, t.phase, COALESCE(t.title, t.description) as title, "
         f"t.status, t.tier, p.name as project_name "
-        f"FROM live_tasks t "
+        f"FROM task_tree t "
         f"JOIN projects p ON t.project_id = p.id "
         f"{where} "
         f"ORDER BY "
@@ -1597,10 +1610,14 @@ def active_tasks(
     params: list = []
 
     if parent_id is not None:
+        # E-2161: --parent selects on where a task RENDERS, so a live child of a
+        # removed parent is listed under the ancestor it is shown under, and
+        # `--parent none` means "shown at the root" rather than "parent_id IS
+        # NULL" — which after a removal are no longer the same set.
         if parent_id == PARENT_NONE:
-            where += " AND t.parent_id IS NULL"
+            where += " AND t.effective_parent_id IS NULL"
         else:
-            where += " AND t.parent_id = ?"
+            where += " AND t.effective_parent_id = ?"
             params.append(parent_id)
 
     if not show_all:
@@ -1615,7 +1632,7 @@ def active_tasks(
     rows = db.query(
         f"SELECT t.id, t.phase, COALESCE(t.title, t.description) as title, "
         f"t.status, t.tier, p.name as project_name "
-        f"FROM live_tasks t "
+        f"FROM task_tree t "
         f"JOIN projects p ON t.project_id = p.id "
         f"{where} "
         f"ORDER BY "
@@ -1698,10 +1715,14 @@ def recent_tasks(
     params: list = []
 
     if parent_id is not None:
+        # E-2161: --parent selects on where a task RENDERS, so a live child of a
+        # removed parent is listed under the ancestor it is shown under, and
+        # `--parent none` means "shown at the root" rather than "parent_id IS
+        # NULL" — which after a removal are no longer the same set.
         if parent_id == PARENT_NONE:
-            where += " AND t.parent_id IS NULL"
+            where += " AND t.effective_parent_id IS NULL"
         else:
-            where += " AND t.parent_id = ?"
+            where += " AND t.effective_parent_id = ?"
             params.append(parent_id)
 
     if not show_all:
@@ -1716,7 +1737,7 @@ def recent_tasks(
     rows = db.query(
         f"SELECT t.id, t.phase, COALESCE(t.title, t.description) as title, "
         f"t.status, t.tier, p.name as project_name "
-        f"FROM live_tasks t "
+        f"FROM task_tree t "
         f"JOIN projects p ON t.project_id = p.id "
         f"{where} "
         f"ORDER BY t.updated_at DESC",
@@ -3205,6 +3226,11 @@ def remove_item(item_id: int, cascade: bool = False):
             f"No task found with id {item_id}"
         )
 
+    # parent_id, not effective_parent_id, and deliberately (E-2161). This gate
+    # protects a REMOVAL, not a render: it asks "does removing this strand live
+    # children off the row I am about to hide", and only a literal child is
+    # stranded. A grandchild adopted up past an already-removed task is not made
+    # any worse off by this removal and must not start demanding --cascade.
     child_count = db.scalar(
         "SELECT count(*) FROM live_tasks WHERE parent_id = ?",
         (item_id,),
@@ -3676,11 +3702,16 @@ def complete_item(item_id: int, cascade: bool = False, outcome: str | None = Non
         changes.append(("outcome", None, outcome))
     suffix = None
     if cascade:
+        # E-2161: the descent walks effective_parent_id, so the number reported
+        # is the number of LIVE tasks the cascade actually changed. The executor
+        # cascades over `tasks`, following parent_id through removed rows too; a
+        # live-only walk on parent_id stopped at the first removed task and
+        # reported 0 descendants for work it had just rewritten.
         count = db.scalar(
             "WITH RECURSIVE tree(id) AS ("
-            "  SELECT id FROM live_tasks WHERE id = ?"
+            "  SELECT id FROM task_tree WHERE id = ?"
             "  UNION ALL"
-            "  SELECT t.id FROM live_tasks t JOIN tree ON t.parent_id = tree.id"
+            "  SELECT t.id FROM task_tree t JOIN tree ON t.effective_parent_id = tree.id"
             ") SELECT count(*) FROM tree",
             (item_id,),
         ) or 1
@@ -3740,11 +3771,16 @@ def assume_item(item_id: int, cascade: bool = False, outcome: str | None = None)
         changes.append(("outcome", None, outcome))
     suffix = None
     if cascade:
+        # E-2161: the descent walks effective_parent_id, so the number reported
+        # is the number of LIVE tasks the cascade actually changed. The executor
+        # cascades over `tasks`, following parent_id through removed rows too; a
+        # live-only walk on parent_id stopped at the first removed task and
+        # reported 0 descendants for work it had just rewritten.
         count = db.scalar(
             "WITH RECURSIVE tree(id) AS ("
-            "  SELECT id FROM live_tasks WHERE id = ?"
+            "  SELECT id FROM task_tree WHERE id = ?"
             "  UNION ALL"
-            "  SELECT t.id FROM live_tasks t JOIN tree ON t.parent_id = tree.id"
+            "  SELECT t.id FROM task_tree t JOIN tree ON t.effective_parent_id = tree.id"
             ") SELECT count(*) FROM tree",
             (item_id,),
         ) or 1
@@ -5978,8 +6014,10 @@ def _children_by_type(item_id: int) -> dict[str, int]:
     available on every render without paying for the list. Ordered by
     descending count, ties broken alphabetically by type, so the dominant kind
     reads first and both the human line and the JSON object are deterministic.
-    `live_tasks`, so a removed child is not counted — matching the `children`
-    list, which reads the same view.
+    `task_tree`, so a removed child is not counted and a live grandchild whose
+    own parent was removed IS — it renders under this task now, so it counts
+    under it (E-2161). Matching the `children` list, which reads the same view
+    the same way.
 
     A child with no `type_id` counts under `untyped` rather than under the empty
     string the join produces. Older rows really do carry a null type, and the
@@ -5989,9 +6027,9 @@ def _children_by_type(item_id: int) -> dict[str, int]:
     """
     rows = db.query(
         "SELECT COALESCE(tt.slug, 'untyped') AS type, COUNT(*) AS n "
-        "FROM live_tasks t "
+        "FROM task_tree t "
         "LEFT JOIN task_types tt ON tt.id = t.type_id "
-        "WHERE t.parent_id = ? "
+        "WHERE t.effective_parent_id = ? "
         "GROUP BY tt.slug",
         (item_id,),
     )
@@ -6279,7 +6317,7 @@ def detail_item(
         if show_children:
             children = db.query(
                 "SELECT id, COALESCE(title, description) as title, status, phase "
-                "FROM live_tasks WHERE parent_id = ? "
+                "FROM task_tree WHERE effective_parent_id = ? "
                 "ORDER BY sort_order",
                 (item_id,),
             )
@@ -6380,7 +6418,7 @@ def detail_item(
         if show_children:
             children = db.query(
                 "SELECT id, COALESCE(title, description) as title, status, phase "
-                "FROM live_tasks WHERE parent_id = ? "
+                "FROM task_tree WHERE effective_parent_id = ? "
                 "ORDER BY id",
                 (item_id,),
             )
@@ -6572,7 +6610,7 @@ def _render_detail_human(
     if show_children:
         children = db.query(
             "SELECT id, COALESCE(title, description) as title, status, phase "
-            "FROM live_tasks WHERE parent_id = ? "
+            "FROM task_tree WHERE effective_parent_id = ? "
             "ORDER BY id",
             (item_id,),
         )
@@ -6650,9 +6688,15 @@ def _children_state(parent_id: int) -> str:
     ``"2 unplanned, 3 ready, 1 underway, 4 terminal (10 total)"``.
     A single bucket still gets the total: ``"3 ready (3 total)"``. With no
     children it returns ``"no children yet"``. See E-1567.
+
+    Direct children by task_tree.effective_parent_id (E-2161): the breakdown
+    describes what the claiming session will find under the epic, which is where
+    those tasks render, not what parent_id literally says. The Go twin
+    (internal/hookcmd/claim_handoff.go) counts the same way — the two render the
+    same line and must not disagree.
     """
     rows = db.query(
-        "SELECT status, count(*) AS n FROM live_tasks WHERE parent_id = ? "
+        "SELECT status, count(*) AS n FROM task_tree WHERE effective_parent_id = ? "
         "GROUP BY status",
         (parent_id,),
     )
@@ -6709,7 +6753,7 @@ def render_handoff(spawned_id: int, title: str,
 
     effective_type = task_type if task_type in _HANDOFF_TYPES else "todo"
     child_rows = db.query(
-        "SELECT count(*) AS n FROM live_tasks WHERE parent_id = ?",
+        "SELECT count(*) AS n FROM task_tree WHERE effective_parent_id = ?",
         (spawned_id,),
     )
     child_count = child_rows[0]["n"] if child_rows else 0
@@ -7075,10 +7119,14 @@ def search_tasks(
         where += " AND t.phase = ?"
         params.append(phase_filter)
     if parent_id is not None:
+        # E-2161: --parent selects on where a task RENDERS, so a live child of a
+        # removed parent is listed under the ancestor it is shown under, and
+        # `--parent none` means "shown at the root" rather than "parent_id IS
+        # NULL" — which after a removal are no longer the same set.
         if parent_id == PARENT_NONE:
-            where += " AND t.parent_id IS NULL"
+            where += " AND t.effective_parent_id IS NULL"
         else:
-            where += " AND t.parent_id = ?"
+            where += " AND t.effective_parent_id = ?"
             params.append(parent_id)
 
     # Build search conditions
@@ -7110,7 +7158,7 @@ def search_tasks(
     rows = db.query(
         f"SELECT t.id, t.phase, COALESCE(t.title, t.description) as title, "
         f"t.status "
-        f"FROM live_tasks t "
+        f"FROM task_tree t "
         f"{where} "
         f"ORDER BY t.updated_at DESC",
         tuple(params),
@@ -7238,7 +7286,10 @@ def move_task(
                 f"Source parent {task_id_display(children_of)} not found."
             )
 
-        # Count children
+        # Count children — parent_id, because this number previews the UPDATE
+        # below, which matches on parent_id (E-2161). `--children-of` re-parents
+        # rows; it must count exactly the rows it will write, not the wider set
+        # that merely renders under this task.
         count = db.scalar(
             "SELECT count(*) FROM live_tasks WHERE parent_id = ?",
             (children_of,),

@@ -34,10 +34,21 @@ import (
 // it. It returns the ids actually removed, in walk order with the root first —
 // the caller needs them to record per-task session touches.
 //
-// Non-cascade re-roots the removed task's children to NULL, exactly as the
-// hard-delete path did via `ON DELETE SET NULL`. Retention makes that MORE
-// important, not less: a child left pointing at a row the view hides would hang
-// off an invisible parent and drop out of every tree render.
+// It changes NO child's parent_id. E-1929 carried the hard-delete path's
+// `ON DELETE SET NULL` forward as an explicit
+// `UPDATE tasks SET parent_id = NULL WHERE parent_id = ?` on the non-cascade
+// path; E-2161 removed it. What that statement protected was a render — every
+// tree read joins live_tasks to live_tasks, so a live child left pointing at a
+// hidden row would hang off nothing and vanish. The task_tree view answers that
+// at read time instead (effective_parent_id: the nearest ancestor with
+// removed = 0), which costs the render nothing and keeps the edge.
+//
+// Keeping it matters because nothing can put it back. There is no restore verb,
+// so a nulled edge is unrecoverable from the live database; only the ledger
+// still holds it. And for a child that is ITSELF already removed — the case the
+// non-cascade guard leaves reachable, since it refuses a removal whose children
+// are live — the null protected no render at all and only destroyed the
+// association. Retention covers relationships now, not just rows.
 func removeTaskTree(db dbQuerier, taskID int64, cascade bool) ([]int64, error) {
 	var (
 		ids []int64
@@ -60,11 +71,6 @@ func removeTaskTree(db dbQuerier, taskID int64, cascade bool) ([]int64, error) {
 		if err != nil {
 			return nil, fmt.Errorf("events: enumerate removal target: %w", err)
 		}
-		if _, err = db.Exec(
-			"UPDATE tasks SET parent_id = NULL WHERE parent_id = ?", taskID,
-		); err != nil {
-			return nil, fmt.Errorf("events: re-root children of removed task: %w", err)
-		}
 	}
 
 	if err = applyTaskRemoval(db, ids); err != nil {
@@ -80,6 +86,12 @@ func removeTaskTree(db dbQuerier, taskID int64, cascade bool) ([]int64, error) {
 // data" — E-1915's reasoning applies. One rule with no exemption beats two rules
 // with a judgment call at the boundary, and a second orphaning path is exactly
 // what ED-1547 exists to close.
+//
+// It likewise no longer nulls its children's parent_id (E-2161). This was the
+// bulk half of the same orphaning: a re-import cleared the edge for every child
+// of every task the source file owned, INCLUDING children owned by a different
+// source file that were never part of the import. Those children keep their
+// parent_id now and render under the nearest live ancestor.
 func removeTasksBySourceFile(db dbQuerier, projectID int64, sourceFile string) ([]int64, error) {
 	ids, err := queryTaskIDs(db,
 		"SELECT id FROM live_tasks WHERE project_id = ? AND source_file = ?",
@@ -87,14 +99,6 @@ func removeTasksBySourceFile(db dbQuerier, projectID int64, sourceFile string) (
 	)
 	if err != nil {
 		return nil, fmt.Errorf("events: enumerate bulk_cleared tasks: %w", err)
-	}
-
-	if _, err = db.Exec(
-		`UPDATE tasks SET parent_id = NULL WHERE parent_id IN (
-			SELECT id FROM live_tasks WHERE project_id = ? AND source_file = ?
-		)`, projectID, sourceFile,
-	); err != nil {
-		return nil, fmt.Errorf("events: re-root children of bulk-cleared tasks: %w", err)
 	}
 
 	if err = applyTaskRemoval(db, ids); err != nil {

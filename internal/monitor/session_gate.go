@@ -18,11 +18,16 @@ import (
 // supersede-on-insert discipline that keeps at most one open row per
 // (session_id, kind_id).
 
-// NearestRevisitEpicAncestor walks up tasks.parent_id from taskID and returns
+// NearestRevisitEpicAncestor walks the task tree upward from taskID and returns
 // the id of the nearest ancestor that is an epic currently in status='revisit'.
 // taskID itself is included in the walk (depth 0). The depth is capped at 32 so
-// a malformed parent_id cycle terminates instead of looping forever. found is
+// a malformed parent cycle terminates instead of looping forever. found is
 // false when no such ancestor exists.
+//
+// E-2161: it climbs task_tree.effective_parent_id, so a removed task partway up
+// is stepped over rather than ending the walk. On parent_id the walk stopped
+// dead at the first removed ancestor and the revisit epic above it — the one the
+// task still visibly sits under — went unfound.
 func NearestRevisitEpicAncestor(taskID int64) (epicID int64, found bool, err error) {
 	db, err := DB()
 	if err != nil {
@@ -30,10 +35,10 @@ func NearestRevisitEpicAncestor(taskID int64) (epicID int64, found bool, err err
 	}
 	const q = `
 		WITH RECURSIVE ancestry(id, parent_id, type_id, status, depth) AS (
-			SELECT id, parent_id, type_id, status, 0 FROM live_tasks WHERE id = ?
+			SELECT id, effective_parent_id, type_id, status, 0 FROM task_tree WHERE id = ?
 			UNION ALL
-			SELECT t.id, t.parent_id, t.type_id, t.status, a.depth + 1
-			FROM live_tasks t JOIN ancestry a ON t.id = a.parent_id
+			SELECT t.id, t.effective_parent_id, t.type_id, t.status, a.depth + 1
+			FROM task_tree t JOIN ancestry a ON t.id = a.parent_id
 			WHERE a.depth < 32
 		)
 		SELECT a.id

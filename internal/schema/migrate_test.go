@@ -105,7 +105,15 @@ func TestMigrate_IsIdempotent(t *testing.T) {
 	if after := shapeOf(t, db); after != before {
 		t.Errorf("re-migrating changed the schema:\n%s", firstDifference(before, after))
 	}
-	assertCount(t, db, "goose_db_version", 2) // goose's own version-0 row, plus the baseline
+	// One bookkeeping row per applied migration, plus goose's own version-0 row.
+	// Derived rather than pinned at a literal: every migration added to the set
+	// bumps this, and a test that had to be re-typed for that would be a test
+	// that says nothing about idempotence.
+	latest, err := schema.LatestVersion()
+	if err != nil {
+		t.Fatalf("latest version: %v", err)
+	}
+	assertCount(t, db, "goose_db_version", int(latest)+1)
 }
 
 // TestMigrate_LeavesAPreVersioningDatabaseIntact is the assertion the real
@@ -115,8 +123,14 @@ func TestMigrate_IsIdempotent(t *testing.T) {
 // ~/.config/endless/endless.db — and it acquired its shape by exec'ing
 // schema.sql on connect, with nothing recording a version anywhere. Its first
 // connect after E-2019 replays the baseline. That replay must be inert: it must
-// create nothing, destroy nothing, and leave the rows alone, ending with the
-// database recorded at version 1 and otherwise untouched.
+// create nothing, destroy nothing, and leave the rows alone.
+//
+// It ends at the LATEST version, not at the baseline. That was the same number
+// while the baseline was the whole set; E-2161 added the second migration and
+// separated them. The fixture is built from the CURRENT schema.sql, so every
+// later migration meets a database that already declares what it creates and is
+// likewise inert — which is the property under test, and the reason the shape
+// comparison below is the assertion that matters rather than the version.
 //
 // Run for real once during E-2019 against a 127MB VACUUM INTO snapshot of the
 // live ledger (1,448 tasks, 1,199 sessions): shape identical, row counts
@@ -151,8 +165,12 @@ func TestMigrate_LeavesAPreVersioningDatabaseIntact(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read version: %v", err)
 	}
-	if version != schema.BaselineVersion {
-		t.Errorf("recorded version = %d, want %d", version, schema.BaselineVersion)
+	latest, err := schema.LatestVersion()
+	if err != nil {
+		t.Fatalf("latest version: %v", err)
+	}
+	if version != latest {
+		t.Errorf("recorded version = %d, want the latest %d", version, latest)
 	}
 }
 

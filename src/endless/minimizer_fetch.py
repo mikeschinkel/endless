@@ -94,10 +94,15 @@ def _fetch_sibling_tasks(task_id: int | None, session_id: int | None, spec: dict
     """
     if not task_id:
         return ""
+    # Both halves read effective_parent_id (E-2161): the children of this task
+    # and the tasks sharing its parent are the ones a reader sees around it. The
+    # two must move together — computing children by one notion of parentage and
+    # siblings by the other would assemble a neighbourhood that exists nowhere.
     rows = db.query(
-        "SELECT id, title, status FROM live_tasks "
-        "WHERE parent_id = ? OR (parent_id IS NOT NULL AND parent_id = "
-        "      (SELECT parent_id FROM live_tasks WHERE id = ?)) "
+        "SELECT id, title, status FROM task_tree "
+        "WHERE effective_parent_id = ? "
+        "   OR (effective_parent_id IS NOT NULL AND effective_parent_id = "
+        "      (SELECT effective_parent_id FROM task_tree WHERE id = ?)) "
         "ORDER BY id LIMIT 30",
         (task_id, task_id),
     )

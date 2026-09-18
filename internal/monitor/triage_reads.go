@@ -178,8 +178,8 @@ func triageContext(db *sql.DB, taskID int64) (TriageContext, error) {
 	err := db.QueryRow(
 		`SELECT p.name, p.path, t.title, COALESCE(t.description, ''),
 		        COALESCE(tt.slug, ''), t.phase, t.status,
-		        COALESCE(t.plan, '') != '', t.parent_id
-		   FROM live_tasks t
+		        COALESCE(t.plan, '') != '', t.effective_parent_id
+		   FROM task_tree t
 		   JOIN projects p ON p.id = t.project_id
 		   LEFT JOIN task_types tt ON tt.id = t.type_id
 		  WHERE t.id = ?`, taskID,
@@ -214,9 +214,12 @@ func triageContext(db *sql.DB, taskID int64) (TriageContext, error) {
 	return ctx, nil
 }
 
-// triageParent reads the parent row. A dangling parent_id (the FK is ON DELETE
-// SET NULL, so this should not happen) yields nil rather than an error: a
-// missing parent degrades the prompt, it does not invalidate the task.
+// triageParent reads the parent row. It is called with an EFFECTIVE parent id
+// (E-2161), so the row is live by construction and the sibling set below is the
+// set the task renders beside — a removed parent resolves to the nearest live
+// ancestor rather than leaving the prompt with no parent and no siblings at all.
+// A missing row still yields nil rather than an error: a missing parent degrades
+// the prompt, it does not invalidate the task.
 func triageParent(db *sql.DB, parentID int64) (*TriageParent, error) {
 	p := TriageParent{ID: parentID}
 	err := db.QueryRow(
@@ -234,8 +237,8 @@ func triageParent(db *sql.DB, parentID int64) (*TriageParent, error) {
 
 func triageSiblings(db *sql.DB, parentID, selfID int64) ([]string, error) {
 	rows, err := db.Query(
-		`SELECT title FROM live_tasks
-		  WHERE parent_id = ? AND id != ?
+		`SELECT title FROM task_tree
+		  WHERE effective_parent_id = ? AND id != ?
 		  ORDER BY sort_order, id
 		  LIMIT ?`, parentID, selfID, triageSiblingLimit,
 	)

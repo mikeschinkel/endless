@@ -69,13 +69,20 @@ func recomputeEpicStatus(db dbQuerier, emit DerivedEmitter, parentIDs ...int64) 
 // epicAncestorsInclusive returns the ids of every epic on the path from startID
 // up to the root, including startID itself when it is an epic, ordered
 // nearest-first. The depth cap bounds a malformed (cyclic) parent chain.
+//
+// E-2161: the walk climbs task_tree.effective_parent_id, not parent_id, so a
+// removed task in the chain is stepped OVER rather than ending the walk. It has
+// to be the same notion of parent the roll-up below counts children by: if a
+// grandchild counts toward the epic that adopted it, then a change to that
+// grandchild must reach that epic, or the derived status it just contributed to
+// goes stale until something unrelated touches the epic.
 func epicAncestorsInclusive(db dbQuerier, startID int64) ([]int64, error) {
 	rows, err := db.Query(
 		`WITH RECURSIVE ancestors(id, parent_id, type_id, depth) AS (
-			SELECT id, parent_id, type_id, 0 FROM live_tasks WHERE id = ?
+			SELECT id, effective_parent_id, type_id, 0 FROM task_tree WHERE id = ?
 			UNION ALL
-			SELECT t.id, t.parent_id, t.type_id, a.depth + 1
-			FROM live_tasks t JOIN ancestors a ON t.id = a.parent_id
+			SELECT t.id, t.effective_parent_id, t.type_id, a.depth + 1
+			FROM task_tree t JOIN ancestors a ON t.id = a.parent_id
 			WHERE a.depth < ?
 		)
 		SELECT id FROM ancestors WHERE type_id = ? ORDER BY depth ASC`,
@@ -166,7 +173,11 @@ func deriveOneEpic(db dbQuerier, emit DerivedEmitter, epicID int64) error {
 // Previously the same ladder was a switch of five hand-ordered bools; the
 // category-4 miss it invites is exactly what E-1845 nearly shipped.
 func deriveTargetStatus(db dbQuerier, epicID int64) (string, bool, error) {
-	rows, err := db.Query("SELECT status FROM live_tasks WHERE parent_id = ?", epicID)
+	// E-2161: effective_parent_id, so a live child whose own parent was removed
+	// rolls up into the epic it now renders under. An epic whose children all sit
+	// behind a removed intermediate would otherwise read as childless and be left
+	// unchanged forever, showing a status its visible subtree contradicts.
+	rows, err := db.Query("SELECT status FROM task_tree WHERE effective_parent_id = ?", epicID)
 	if err != nil {
 		return "", false, fmt.Errorf("events: read children of epic %d: %w", epicID, err)
 	}
@@ -209,13 +220,21 @@ func deriveTargetStatus(db dbQuerier, epicID int64) (string, bool, error) {
 	}
 }
 
-// taskParentID reads a task's parent_id. The second result is false when the
-// task has no parent (or the row is gone). Used by the executor entry points to
-// resolve the parent chain to recompute after a child mutation.
-func taskParentID(db dbQuerier, taskID int64) (int64, bool, error) {
+// taskEffectiveParentID reads the task the given task RENDERS under: its
+// nearest ancestor that is not removed. The second result is false when there
+// is none (no parent, every ancestor removed, or the row is gone). Used by the
+// executor entry points to resolve the parent chain to recompute after a child
+// mutation.
+//
+// Effective rather than literal (E-2161) for the reason epicAncestorsInclusive
+// gives: this is the entry point to the roll-up, and it has to name the same
+// parent the roll-up counts by. A literal parent that is removed would start the
+// walk at a row task_tree does not hold, recompute nothing, and leave the epic
+// that DOES count the mutated task stale.
+func taskEffectiveParentID(db dbQuerier, taskID int64) (int64, bool, error) {
 	var pid sql.NullInt64
 	if err := db.QueryRow(
-		"SELECT parent_id FROM live_tasks WHERE id = ?", taskID,
+		"SELECT effective_parent_id FROM task_tree WHERE id = ?", taskID,
 	).Scan(&pid); err != nil {
 		if err == sql.ErrNoRows {
 			return 0, false, nil

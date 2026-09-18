@@ -353,6 +353,67 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE VIEW IF NOT EXISTS live_tasks AS
     SELECT * FROM tasks WHERE removed = 0;
 
+-- task_tree (E-2161) is live_tasks plus one derived column: effective_parent_id,
+-- the nearest ancestor that is not removed.
+--
+-- Removal retains the row and now retains the EDGE too: the two
+-- `UPDATE tasks SET parent_id = NULL WHERE parent_id = ?` statements that
+-- non-cascade removal and `task import --replace` used to run (mirroring the
+-- hard-delete path's ON DELETE SET NULL) are gone, so a child keeps pointing at
+-- the parent it was actually filed under. What those statements protected was a
+-- render, not the data: every tree read joins live_tasks to live_tasks, so a
+-- live child left pointing at a hidden row would hang off nothing and vanish
+-- from `task list`, `task show --children` and the monitors. This view answers
+-- that instead — the child renders under the closest ancestor still visible —
+-- and the original edge survives for history and for any future restore.
+--
+-- ONE place answers "who is my effective parent", for the same reason
+-- live_tasks is one place rather than an `AND removed = 0` at every site: a rule
+-- repeated at each reader is a rule one reader will omit.
+--
+-- The split every converted reader must hold: `parent_id` answers "what did the
+-- user set", `effective_parent_id` answers "where does this render". Writes,
+-- validation (cycle checks, the maybe-parent rule, the research gate), the
+-- `Parent:` line, and the cascade walks that GOVERN a mutation all keep naming
+-- parent_id. Tree assembly, child counts and epic roll-ups use this column.
+--
+-- Shape: the recursive arm advances only while the current candidate names a
+-- REMOVED row, so each task's chain holds at most one candidate that names a
+-- live row — which is what the inner join selects. A chain that runs out
+-- (NULL parent, a dangling id, every ancestor removed, or a removed cycle that
+-- exhausts the depth cap) simply matches nothing and the LEFT JOIN yields NULL,
+-- i.e. "renders at top level". The depth cap mirrors the one in
+-- epic_derivation.go: write-time checks already reject parent_id cycles, and
+-- the cap is what keeps a malformed tree from looping forever anyway.
+--
+-- Removed rows are excluded exactly as live_tasks excludes them: this is a
+-- superset of live_tasks in COLUMNS, not in rows, so a reader swapping
+-- live_tasks for task_tree gains a column and loses nothing. Reads that exist
+-- to render a removed task (`task show`, `task list --removed`) keep naming
+-- `tasks` directly.
+--
+-- SELECT t.* is deliberate, for the reason live_tasks gives: the view inherits
+-- future tasks columns without an edit here.
+--
+-- Lazily resolved, so this file still applies to a database that predates
+-- `tasks.removed` — see the live_tasks note above for why that matters and why
+-- an index here would not.
+CREATE VIEW IF NOT EXISTS task_tree AS
+    WITH RECURSIVE eff_anc(id, candidate_id, depth) AS (
+        SELECT id, parent_id, 0 FROM tasks WHERE removed = 0
+        UNION ALL
+        SELECT a.id, p.parent_id, a.depth + 1
+          FROM eff_anc a JOIN tasks p ON p.id = a.candidate_id
+         WHERE p.removed = 1 AND a.depth < 32
+    )
+    SELECT t.*, e.candidate_id AS effective_parent_id
+      FROM tasks t
+      LEFT JOIN (
+          SELECT a.id, a.candidate_id
+            FROM eff_anc a JOIN tasks p ON p.id = a.candidate_id AND p.removed = 0
+      ) e ON e.id = t.id
+     WHERE t.removed = 0;
+
 CREATE TRIGGER IF NOT EXISTS tasks_updated_at AFTER UPDATE ON tasks
 BEGIN
     UPDATE tasks SET updated_at = strftime('%Y-%m-%dT%H:%M:%S', 'now')

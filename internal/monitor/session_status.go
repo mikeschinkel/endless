@@ -16,8 +16,8 @@ import (
 // so the rendering rules stay testable without a DB.
 //
 // IsFocal/IsParent/IsFrom/InFlight are mutually-prioritized decorations computed
-// in-query: IsFocal is the window's own active task; IsParent the focal's real
-// task-tree parent (tasks.parent_id); IsFrom the SPAWNING session's active task
+// in-query: IsFocal is the window's own active task; IsParent the focal's
+// task-tree parent (its effective parent, E-2161); IsFrom the SPAWNING session's active task
 // (session lineage — "where this session came from", NOT a tree relation);
 // InFlight any OTHER live session's active task. IsParent and IsFrom are distinct
 // (E-1694): the spawner is rarely the task-tree parent, and conflating them was
@@ -233,7 +233,9 @@ func tmuxWindowOption(pane, name string) string {
 //   - every task touched (via session_tasks) by ANY live-or-dead session whose
 //     task_id = focal (cross-project; robust to duplicate session rows),
 //   - ∪ the focal task itself,
-//   - ∪ the focal's real task-tree parent (tasks.parent_id) — the ↑ parent row,
+//   - ∪ the focal's task-tree parent — the ↑ parent row. E-2161: the EFFECTIVE
+//     parent (task_tree.effective_parent_id), the nearest ancestor not removed,
+//     so this is the row the focal renders under rather than a hidden one,
 //   - ∪ the spawning session's active task — the ↩ from row (session lineage),
 //   - ∪ the focal task's DIRECT dependents — tasks T it blocks
 //     (task_deps source=focal, target=T, dep_type='blocks'). These are computed
@@ -243,7 +245,7 @@ func tmuxWindowOption(pane, name string) string {
 //     open focal); when the focal lands and the block clears, BlockedByN drops to
 //     0 and ⊗ disappears with no special highlight. One hop only, not the
 //     transitive closure.
-//   - ∪ the focal task's DIRECT children — tasks T with parent_id = focal
+//   - ∪ the focal task's DIRECT children — tasks T whose effective parent is focal
 //     (E-1691). For an epic the children ARE the work; surfacing them lets the
 //     session's pane carry the subtasks. Read-time only, same invariant reason
 //     as the dependents. One level only — working a child surfaces ITS children
@@ -271,8 +273,11 @@ WITH RECURSIVE
 ftask(tid) AS (SELECT ?),
 -- sfoc.stid = the SPAWNING session's active task (session lineage → ↩ from).
 sfoc(stid) AS (SELECT task_id FROM sessions WHERE id = ?),
--- rpar.rpid = the focal's real task-tree parent (tasks.parent_id → ↑ parent).
-rpar(rpid) AS (SELECT parent_id FROM live_tasks WHERE id = (SELECT tid FROM ftask)),
+-- rpar.rpid = the focal's task-tree parent (→ ↑ parent). E-2161: the EFFECTIVE
+-- parent, i.e. the nearest ancestor not removed, so the ↑ row is the one the
+-- focal actually renders under; a removed parent would resolve to nothing and
+-- the pane would silently lose its ↑ row.
+rpar(rpid) AS (SELECT effective_parent_id FROM task_tree WHERE id = (SELECT tid FROM ftask)),
 base AS (
   SELECT t.id, t.project_id, t.title, t.status, t.phase, t.plan, t.type_id
     FROM session_tasks st JOIN live_tasks t ON t.id = st.task_id
@@ -311,8 +316,10 @@ base AS (
   -- in that child's own session, keeping each view one level deep rather than
   -- exploding the whole subtree. The terminal-status filter in the final SELECT
   -- drops done children unless --all, matching the dependent behavior.
+  -- E-2161: effective_parent_id, matching the ↑ parent row above — the children
+  -- surfaced are the ones that render under the focal.
   SELECT t.id, t.project_id, t.title, t.status, t.phase, t.plan, t.type_id
-    FROM live_tasks t WHERE t.parent_id = (SELECT tid FROM ftask)
+    FROM task_tree t WHERE t.effective_parent_id = (SELECT tid FROM ftask)
 ),
 -- E-1795: the UPSTREAM blocker chain of every task already in base, walked
 -- TRANSITIVELY. Seeded from base's ids, each step adds the OPEN tasks that block

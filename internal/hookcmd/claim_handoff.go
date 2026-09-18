@@ -181,9 +181,14 @@ func hierarchicalLabelPrefix(taskID int64, parentID sql.NullInt64) string {
 // children-state string the epic handoff prints, e.g.
 // "2 unplanned, 3 ready, 1 underway, 4 terminal (10 total)". With no children it
 // returns "no children yet". Mirrors Python's `_children_state` (E-1567).
+//
+// E-2161: counted by effective_parent_id — the children the handoff describes
+// are the ones the session will see under the epic, which after a removal
+// partway down the tree is not the same set as `parent_id = ?`. The Python twin
+// counts the same way, and the two must agree: they render the same line.
 func childrenBreakdown(db *sql.DB, taskID int64) (int, string, error) {
 	rows, err := db.Query(
-		"SELECT status, count(*) FROM live_tasks WHERE parent_id = ? GROUP BY status",
+		"SELECT status, count(*) FROM task_tree WHERE effective_parent_id = ? GROUP BY status",
 		taskID,
 	)
 	if err != nil {

@@ -582,7 +582,7 @@ func execTaskStatusChanged(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 	// E-1541: the changed task's status may alter its parent epic chain.
 	// Recompute from the parent up; the changed task itself is never
 	// re-derived, so an explicit set (e.g. a cascade confirm) is preserved.
-	if parentID, ok, err := taskParentID(db, mustParseInt64(taskID)); err != nil {
+	if parentID, ok, err := taskEffectiveParentID(db, mustParseInt64(taskID)); err != nil {
 		return nil, err
 	} else if ok {
 		if err := recomputeEpicStatus(db, emit, parentID); err != nil {
@@ -614,7 +614,7 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 	var hasOldParent bool
 	if parentChanging {
 		var perr error
-		oldParentID, hasOldParent, perr = taskParentID(db, mustParseInt64(taskID))
+		oldParentID, hasOldParent, perr = taskEffectiveParentID(db, mustParseInt64(taskID))
 		if perr != nil {
 			return nil, perr
 		}
@@ -830,7 +830,7 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 	// covers the chain the task left.
 	if statusChanging || parentChanging {
 		var parentIDs []int64
-		if pid, ok, err := taskParentID(db, mustParseInt64(taskID)); err != nil {
+		if pid, ok, err := taskEffectiveParentID(db, mustParseInt64(taskID)); err != nil {
 			return nil, err
 		} else if ok {
 			parentIDs = append(parentIDs, pid)
@@ -913,7 +913,7 @@ func execTaskDeleted(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 
 	// E-1541: capture the parent before the removal so its epic chain can be
 	// recomputed afterwards (the task left the parent's child set).
-	parentID, hasParent, err := taskParentID(db, mustParseInt64(taskID))
+	parentID, hasParent, err := taskEffectiveParentID(db, mustParseInt64(taskID))
 	if err != nil {
 		return nil, err
 	}
