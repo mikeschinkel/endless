@@ -178,29 +178,34 @@ schema integrity, git plumbing that should not fail.
 (Some sites carry several rows — one per message or per audience — so the site
 list is shorter than 110.)
 
-## CONDITIONAL — 194 rows, three different kinds of "it depends"
+## CONDITIONAL — 194 rows, and what was decided for each
 
-Keyword-split, so the edges are approximate:
+The class depends on something the message alone does not fix. Where that
+something sits decides the mechanism (all settled 2026-09-18):
 
-- **Relay, ~91.** The site prints another process's output — endless-go's stderr
-  captured by Python, git's, a hook script's. Its class is the relayed message's
-  class. This is a mechanism requirement, not a judgement per site: a class has
-  to travel across the process boundary (see *Cross-process* below), or each
-  relay site narrows it itself (a git failure inside `worktree drop` is REPORT
-  whatever git said).
-- **State, ~49.** The class follows from state the site already has: the task's
-  current status and type (status-transition guards, decision status guards),
-  whether an error is `ErrNoProject` or a database error, whether a write failed
-  with EPIPE. These resolve to REPORT or NO-REPORT at runtime; the helper takes
-  whichever the site computes.
-- **Intent, ~54.** The class depends on whether **the user** or **the agent**
-  supplied the input or asked for the act: a project name that matches two
-  projects, `--cascade` on a remove, a declined task's reason, an interactive
-  setup prompt that hit EOF. The command cannot know that. **These cannot be
-  resolved to REPORT/NO-REPORT at the site**; the directive has to hand the
-  condition to the agent ("report this only if the user named the project").
-  This is the finding the plan did not anticipate: a binary REPORT/NO-REPORT
-  helper is not enough.
+- **139 the site or its source already answers.** ~91 are relays — the site
+  prints another process's output and inherits its class, so the class must
+  travel across the process boundary (Go renders its own directive; Python's
+  relay adds none). ~48 follow from state the site holds: the task's status and
+  type, `ErrNoProject` versus a database error, EPIPE versus a failed write.
+  These resolve to REPORT or NO-REPORT at runtime.
+- **12 the command can resolve, and should.** Not "it depends" at all, once you
+  use what Endless already detects: the actor (the environment says agent or
+  human), the call path (Endless computed the value versus a caller passed it),
+  process ancestry (whether the processes holding a sandbox are the agent's
+  own), and state in hand (a `session resume --review` tree). Two worth naming:
+  the live-session ambiguity refusals can resolve the session from
+  `CLAUDE_CODE_SESSION_ID` rather than asking, and the interactive-prompt "file
+  not found" refusals know the path came from whoever ran the command.
+- **29 render as `report_if`.** These turn on what the user asked the agent to
+  do — was the subtree meant to go, was reopening settled work requested — or,
+  for a few, on who made an earlier change where nothing recorded it. When a
+  directive renders at all the environment has already said an agent ran the
+  command; what it cannot say is whether the user asked for it, and that lives
+  only in the conversation. So the refusal names both branches and the
+  consequence, and the agent — which holds the conversation — decides.
+- **14 stop being conditional.** They belong to commands that are the user's
+  alone, which refuse an agent outright (E-2162), so the message is REPORT.
 
 ## Not in the inventory, but not out of scope for enforcement
 
@@ -355,7 +360,12 @@ under the Go package, asserted by a Go test and a Python test — the pattern
 1. an agent is detected in the environment (`agent_env.present()` /
    `agentenv.Present()`);
 2. `--agent` was passed;
-3. `--agent-view` was passed.
+3. `--agent-view` was passed;
+4. `--format agent` was passed — the long form of `--agent` (E-1504), settled
+   2026-09-18, so two spellings of one flag cannot behave differently.
+
+Harness detection itself is deliberately NOT widened (settled 2026-09-18): an
+agent under a harness Endless does not recognise reads as a human, as today.
 
 `agent_help.agent_facing()` does not honour trigger 2 today; the argv pre-scan in
 the root group's `main` that already consumes `--agent-view` is the one place to
@@ -390,7 +400,10 @@ rules out.
    because the agent cannot continue, but they name no decision. The `fault`
    factory gives them one standard directive instead of 110 invented decisions.
 2. **Warnings the user should act on, but that block nothing, become inert.**
-   The rule makes them NO-REPORT, and they are addressed to the human:
+   The rule makes them NO-REPORT, and they are addressed to the human.
+   *Settled 2026-09-18: these go to the errors channel — `faults.Record` on the
+   Go side, a new `endless-go errors record` verb for Python — so the user sees
+   them on the session-status badge and the agent spends nothing.* The set:
    output style installed but not active (`outputstyle.go:143`, fires on every
    `register`), invalid `worktree_ttl` re-warned on every claim and land
    (`event.go:721`), worktree dir not git-ignored (`bind.go:162`, and Python
@@ -403,6 +416,9 @@ rules out.
    (`session_cmd.py:429`, `:2647`), `--cascade` (`task_cmd.py:3214`),
    `--no-session` (`event_bridge.py:171`), `--write` for raw SQL (`cli.py:1236`).
    By the rule's letter a named command reads NO-REPORT; each is a user act.
+   *Settled 2026-09-18: a REPORT renders the decision and not the bypass
+   (`human_remedy` is human-only), and the commands that are the user's alone
+   refuse an agent outright (E-2162) rather than offering it `--force`.*
 4. **Remedies that do not exist in a foreign project.** `just install`
    (`session_states.py:92`, `statuses.py:100`, `cli.py:1080`,
    `worktree_cmd.py:3563`, the task-status/session-state relays), `just land`
@@ -444,7 +460,9 @@ The plan says trigger 1 keys on `CLAUDECODE`, `CLAUDE_CODE_SESSION_ID` and
 `AI_AGENT`. It does not: `agent_env.present()` is `detect() != UNKNOWN`, and
 `detect()` recognises only `CLAUDE_CODE_ENTRYPOINT=cli`, `claude-desktop`, or the
 Desktop bundle id. An agent in the VS Code extension (`vscode`) or the SDK
-(`sdk-py`) reads as a human and would never see a directive. See open question 2.
+(`sdk-py`) reads as a human and would never see a directive. Settled
+2026-09-18: detection is NOT widened — that is the behaviour, not a gap to fix
+here.
 
 ## Message defects to fix while converting
 
@@ -478,11 +496,11 @@ code; the ones marked *reproduced* were run in a sandbox.
 - `verb list --json`, `phrase list --json` and `worktree list/current/show/for-task
   --json` crashed with `NameError`: `provenance` was called but never imported.
 
-**Folded into the follow-on todos** (same sites, same conversion):
+**Folded into E-2159** (same sites, same conversion): items 3-8 below, plus:
 
 - `hookcmd`'s `init()` redirects the standard logger to stderr and `hook.log`,
   prefixed `endless-go hook:`, in every endless-go subcommand, before `--db` is
-  parsed (Go todo, logging step).
+  parsed (E-2159, logging step).
 - Faults that arrive at a refusal site as the wrong error:
   `_live_sessions` returns `[]` on any endless-go failure, so a broken install
   reads "No Claude session matches" (`session_cmd.py:1735`); `worktree drop`
@@ -490,9 +508,12 @@ code; the ones marked *reproduced* were run in a sandbox.
   prefers stdout); a failed `.go` schema change shows only "exit status 1"
   (`schemachange.go:232`, `runner.go:130`).
 
-**Not fixed, not filed — for the owner to decide:**
+**Dispositioned 2026-09-18** (Mike: file, merge or fold). Items 3-8 are folded
+into E-2159, because each sits on a site that task converts and each makes a
+class or a verdict dishonest until it is fixed:
 
-1. **Refused events are written to the durable ledger.** *Reproduced.* `event
+1. **Folded into E-1935** (ledger-rebuild trust): refused events are written to
+   the durable ledger. *Reproduced.* `event
    emit` appends the event and git-commits the ledger segment
    (`eventcmd/event.go:300-310`) before `events.Execute` runs the guards
    (`executor.go:778`). A refused status transition rolls back the database and
@@ -502,7 +523,8 @@ code; the ones marked *reproduced* were run in a sandbox.
    `task.fields_updated` line. Affects every guard in the executor (transitions,
    actor standing, parent cycles, phase, decision status), and every refusal an
    agent has ever hit through them is in the main ledger.
-2. **`endless guide` fails on any non-editable install.** `cli.py:982` and
+2. **Folded into E-1063** (the port embeds what Python reads from the source
+   tree): `endless guide` fails on any non-editable install. `cli.py:982` and
    `guide_map.py:31` resolve `docs/guide` from the source tree; the wheel ships
    only `src/endless`. A wheel built from this tree contains no `docs/`. The
    first command CLAUDE.md tells an agent to run would fail for anyone who
@@ -525,31 +547,39 @@ code; the ones marked *reproduced* were run in a sandbox.
 8. **The commit-on-main guard is bypassed by a reworded command** — `git -C .
    commit`, `cd x && git commit` — because its regex is anchored at the start
    (`claude.go:1331`), while the bypass its message names is blocked.
-9. **`self_dev` only, low reach:** the sandbox reap guard hard-codes `main`
+9. **Dropped** (self_dev only, low reach): the sandbox reap guard hard-codes `main`
    (`reapguard.go:267`; `monitor.DefaultBranch()` exists), so `prune` always
    refuses on another default branch; `seed_worktree.go:46` re-derives the main
    database path instead of calling `mainConfigDir`.
+10. **Already owned by E-1964**: worktrees whose sandbox predated E-1964 were
+    left without the self-ignoring `.gitignore`, so they report the sandbox to
+    git. Its migrate command had a bug; E-1964 is fixing it. This worktree was
+    repaired in place by running E-1964's own provisioning function.
 
-## Open questions
+## Decisions (settled 2026-09-18 — do not re-open)
 
-Design choices the plan did not settle. Each follow-on todo lists the ones it
-needs answered before implementing.
+1. **`--format agent` fires the directive**, like `--agent`. Harness detection is
+   not widened: an agent under an unrecognised harness reads as a human.
+2. **Conditions the command cannot resolve render as `report_if`** — both
+   branches and the consequence, for the agent to judge. Conditions it *can*
+   resolve (actor, call path, process ancestry, state) are resolved in code.
+3. **An unclassified error renders as a fault** — a Go error reaching a generic
+   print site without a class, and an uncaught Python traceback.
+4. **Warnings that ask the user to act but block nothing go to the errors
+   channel**, not the agent's reply.
+5. **User-only commands refuse an agent outright** rather than carrying a
+   directive: `worktree drop`, `event rebuild-db --confirm`, `db restore`,
+   `project unregister --purge`, the `setup` commands that write shell rc files
+   and global Claude settings, and the user-owned status transitions. Filed as
+   E-2162; this inventory classifies their messages REPORT.
 
-1. **Should `--format agent` fire the directive like `--agent`?** E-1504 made
-   it the long form of `--agent`; the plan names only `--agent`.
-   *Recommendation: yes — two spellings of one flag that behave differently is
-   the trap E-1504 closed.*
-2. **Widen trigger 1?** `present()` recognises two harnesses. An agent in the VS
-   Code extension or the SDK reads as a human and never sees a directive.
-   Widening `present()` also changes every other caller (the hooks' gates), so it
-   may want a separate "any agent" predicate rather than a change to `present()`.
-   *No recommendation — it turns on what `present()` is for.*
-3. **Accept the one implied class?** An error value that reaches a generic print
-   site without a class (Go), and an uncaught exception (Python), render as a
-   fault. That is not a refusal site defaulted — nobody wrote a refusal — but it
-   is a class nobody chose, and it leans REPORT.
-   *Recommendation: accept; the alternative is requiring every Go Run error to be
-   classified, which the static check cannot enforce anyway.*
-4. **Warnings the user should act on but that block nothing (*did not fit*,
-   item 2).** The rule makes them inert. Accept that, or give them a channel that
-   is not the agent's reply (the fault badge, `endless errors`)?
+## Where the work went
+
+- **E-2159** — the whole conversion, both languages, Go first. E-2160 was merged
+  into it (ED-1550: one cause is one task; a language boundary is a sequence
+  inside a plan, not a second row).
+- **E-2162** — the user-only refusal guard (decision 5).
+- **E-2161** — retain a removed task's parent link instead of nulling it.
+- **E-1935** — carries the refused-events-in-the-ledger finding as evidence.
+- **E-1063** — carries the embed-the-guide finding, since the port is where it
+  goes away.
