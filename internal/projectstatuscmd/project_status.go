@@ -7,7 +7,7 @@
 // answers "what is next for the task I am on"; this one answers "what in this
 // project is claiming a person's attention", across every concurrent session.
 // The two share their live-pane machinery (internal/liveview) and their fault
-// badge (internal/faultbadge) and nothing else — the questions are different, so
+// row (internal/faultrow) and nothing else — the questions are different, so
 // the row sets, the ranks and the glyph vocabularies are too.
 //
 // The Python verbs shell out here inheriting the terminal's stdout, so width and

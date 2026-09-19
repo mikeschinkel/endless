@@ -10,7 +10,7 @@ import (
 // E-1950: losing a lock race is what a database with concurrent writers does,
 // not a fault. The runner used to record a user-visible ERR-0004 warning on the
 // FIRST contended scheduling write — which then pinned itself to the
-// session-status badge forever, describing a condition that had already healed.
+// session-status fault row forever, describing a condition that had already healed.
 
 func TestIsBusy_RecognizesSQLiteContention(t *testing.T) {
 	busy := []string{

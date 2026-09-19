@@ -81,7 +81,7 @@ end:
 	return title
 }
 
-// Overview is the aggregate the session-status badge renders: how many open
+// Overview is the aggregate the session-status fault row renders: how many open
 // incidents exist, at what severities, and the most recent one's text.
 type Overview struct {
 	Counts map[Severity]int // open incident count per severity
@@ -93,13 +93,13 @@ type Overview struct {
 // Open returns the aggregate over currently-open (uncleared) incidents within
 // scope.
 //
-// Callers on a render path must treat any error as "show no badge" rather than
+// Callers on a render path must treat any error as "show no fault row" rather than
 // as a failure: a missing table (a binary pinned schema-passive onto a DB it
 // does not own) or a locked DB must never take down the view.
 //
 // A caller that applies its own display policy should call List and Summarize
 // instead, so the aggregate is computed over the incidents it actually intends
-// to show. The session-status badge once did, to suppress stale warnings; it no
+// to show. The session-status fault row once did, to suppress stale warnings; it no
 // longer has a policy to apply, because nothing ages off it (E-2151).
 func Open(scope ProjectScope) (overview Overview, err error) {
 	var incidents []Incident
@@ -115,7 +115,7 @@ end:
 	return overview, err
 }
 
-// Summarize aggregates a set of incidents into the shape the badge renders.
+// Summarize aggregates a set of incidents into the shape the fault row renders.
 //
 // Split out from Open so a caller that filters the set first — by severity, by
 // source — gets counts consistent with what it displays rather than with what

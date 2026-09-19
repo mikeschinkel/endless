@@ -116,7 +116,7 @@ The runner itself knows nothing job-specific — jobs register themselves with i
 
 ## Errors
 
-Anything that goes wrong in the background is recorded as a classified, clearable **error** with a stable `ERR-NNNN` code. `session status` and `session monitor` show a trailing badge whenever uncleared errors exist — the most severe wins, and `error` outranks `warning`.
+Anything that goes wrong in the background is recorded as a classified, clearable **error** with a stable `ERR-NNNN` code. `session status` and `session monitor` append a trailing **fault row** whenever uncleared errors exist — the most severe wins, and `error` outranks `warning`.
 
 ```bash
 endless errors show                    # open errors, this project  (shell helper: eeh)
@@ -132,32 +132,32 @@ endless errors raise                   # record a SYNTHETIC fault, to see the su
 
 Every scope also carries the errors that belong to **no** project — the job runner unable to open the database, the status bar unable to resolve a pane. Those are the machine's failures, and a scoped view that hid them would leave them visible nowhere. They show a `—` in the PROJECT column. Run outside any registered project and both verbs cover everything, which is what the PROJECT column appearing tells you.
 
-The badge follows the same rule: `project status` / `project monitor` count their own project plus the unattributed ones, while `session status` / `session monitor` stay machine-wide — they render every live session on the box, whatever project each is in.
+The fault row follows the same rule: `project status` / `project monitor` count their own project plus the unattributed ones, while `session status` / `session monitor` stay machine-wide — they render every live session on the box, whatever project each is in.
 
 **Seeing it work without waiting for a failure.** `errors raise` records a real incident carrying a synthetic code (ERR-0006 warning / ERR-0007 error), through the same path a genuine fault takes — same upsert, same fingerprinting, same detail line. It exists because the one view whose job is reporting trouble was otherwise the hardest view to inspect.
 
 ```bash
 endless errors raise --severity error   # exercise the red styling and max-severity precedence
 endless errors raise --repeat 4         # one incident, four occurrences
-endless session status                  # the badge, at your terminal's real width
+endless session status                  # the fault row, at your terminal's real width
 endless errors clear <id>               # put it back
 ```
 
-**Which database the error record lives in.** Inside a self-dev worktree, every `errors` and `jobs` verb **requires an explicit `--db main|sandbox`** and refuses without one. They are not pinned to a database on your behalf: the badge reads main, a worktree's own routing points at its sandbox, and silently choosing either one for you is exactly how `errors clear` ends up dismissing incidents in the wrong record.
+**Which database the error record lives in.** Inside a self-dev worktree, every `errors` and `jobs` verb **requires an explicit `--db main|sandbox`** and refuses without one. They are not pinned to a database on your behalf: the fault row reads main, a worktree's own routing points at its sandbox, and silently choosing either one for you is exactly how `errors clear` ends up dismissing incidents in the wrong record.
 
 ```bash
-endless errors show --db main       # the record the session-status badge counts
+endless errors show --db main       # the record the session-status fault row counts
 endless errors show --db sandbox    # this worktree's throwaway copy
 ```
 
-Outside a worktree there is only one database and no flag is needed. `endless-go session-status` takes `--cols N`, which renders the badge at any width without resizing anything.
+Outside a worktree there is only one database and no flag is needed. `endless-go session-status` takes `--cols N`, which renders the fault row at any width without resizing anything.
 
-The badge is one row: severity chip, the latest incident, and `Run eeh` right-aligned. `eeh` is the shell helper for `errors show` (see **Shell helpers** in `endless guide orchestration`), and `errors show` closes by naming `errors clear` — the badge has no room to spell out the dismissal, so the command it points at does.
+The fault row is one line: severity chip, the latest incident, and `Run eeh` right-aligned. `eeh` is the shell helper for `errors show` (see **Shell helpers** in `endless guide orchestration`), and `errors show` closes by naming `errors clear` — the fault row has no room to spell out the dismissal, so the command it points at does.
 
 Three behaviors are worth knowing before you rely on this:
 
 - **Clearing never deletes.** A recurrence after clearing opens a *new* error beside the cleared one, so a problem that came back is visibly distinct from one that never left.
-- **Nothing leaves the badge on its own.** Neither severity expires: an incident stays badged until a human dismisses it, however long ago it last occurred and even if whatever failed has since been succeeding. An intermittent fault that healed itself out of view would never get fixed, and whether a one-off is still worth knowing about is your call rather than a timer's. That makes badge noise yours to manage — `errors clear` is the whole exit.
+- **Nothing leaves the fault row on its own.** Neither severity expires: an incident stays on it until a human dismisses it, however long ago it last occurred and even if whatever failed has since been succeeding. An intermittent fault that healed itself out of view would never get fixed, and whether a one-off is still worth knowing about is your call rather than a timer's. That makes fault-row noise yours to manage — `errors clear` is the whole exit.
 - **Clearing is not retrying.** `errors clear` means "I have seen this"; making a backed-off job due again is `jobs retry`. They are separate verbs so that tidying your error list cannot silently re-arm a job that is still broken.
 
 The database stores only the index — project, code, source, summary, counts. Each occurrence's full capture goes to `<config-dir>/log/errors.jsonl` and comes back through `--detail`, so the table stays bounded by how many *distinct* things are wrong rather than how often they happen. That file is machine-local: it is not the db-ledger, it is never replayed into the database, and errors emit no ledger events.

@@ -2,7 +2,7 @@
 
 `endless jobs ...` and `endless errors ...` are user-facing verbs, but the
 runner and the fault store both live in Go (internal/jobs, internal/faults) —
-the session monitor that triggers the runner is Go, and the badge that surfaces
+the session monitor that triggers the runner is Go, and the fault row that surfaces
 faults is rendered by the Go view. Reimplementing either read path in Python
 would be a second source of truth for the same tables.
 

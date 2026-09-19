@@ -24,7 +24,7 @@ import (
 	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
 
-	"github.com/mikeschinkel/endless/internal/faultbadge"
+	"github.com/mikeschinkel/endless/internal/faultrow"
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/liveview"
 	"github.com/mikeschinkel/endless/internal/monitor"
@@ -610,7 +610,7 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 	// would be actively wrong advice for the second.
 	if len(rows) == 0 {
 		fmt.Fprintln(w, dim(noTaskHint, color))
-		faultbadge.Render(w, cols, color, faults.AllProjects)
+		faultrow.Render(w, cols, color, faults.AllProjects)
 		return
 	}
 
@@ -630,7 +630,7 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 		} else if hiddenN > 0 {
 			fmt.Fprintln(w, dim(hiddenFooter(hiddenN), color))
 		}
-		faultbadge.Render(w, cols, color, faults.AllProjects)
+		faultrow.Render(w, cols, color, faults.AllProjects)
 		return
 	}
 
@@ -722,9 +722,9 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 		}
 	}
 
-	// The hidden footer sits between the rows and the fault badge: it annotates
-	// the row set (it says what the table is NOT showing you), while the badge
-	// annotates the machine. Printed whenever anything was suppressed — never
+	// The hidden footer sits between the rows and the fault row: it annotates
+	// the row set (it says what the table is NOT showing you), while the fault
+	// row annotates the machine. Printed whenever anything was suppressed — never
 	// conditional on width, color, or row count — because a hidden task that
 	// vanishes without a trace is the one failure this feature must not have.
 	if hiddenN > 0 {
@@ -737,9 +737,9 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 	// AllProjects, not this session's project (E-1960): `session status` is a
 	// machine-wide view — it renders every live session on the box, whatever
 	// project each is in — so a fault narrowed to one of them would be the only
-	// narrowed thing on the frame. `project status` is where the scoped badge
-	// belongs, and that is what it passes.
-	faultbadge.Render(w, cols, color, faults.AllProjects)
+	// narrowed thing on the frame. `project status` is where the scoped fault
+	// row belongs, and that is what it passes.
+	faultrow.Render(w, cols, color, faults.AllProjects)
 }
 
 // applyHiddenMode splits rows by the viewing session's hides and returns the set

@@ -5,7 +5,7 @@
 // One Endless database holds every project on the machine, but the `errors`
 // table E-698 created had no project column. Every recorded fault from every
 // project landed in one undifferentiated table: `errors show` could not filter,
-// the status badge could not scope, and — worse than either — the partial
+// the status fault row could not scope, and — worse than either — the partial
 // unique index on (source, code, fingerprint) COLLIDED across unrelated
 // projects, so two projects hitting the same condition became one incident with
 // a doubled occurrence count and a summary from whichever wrote last.

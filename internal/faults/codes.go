@@ -4,7 +4,7 @@ import (
 	"sort"
 )
 
-// Severity ranks a fault for display. The badge on the session-status view
+// Severity ranks a fault for display. The fault row on the session-status view
 // shows the MAX severity among open incidents, so the ordering here is the
 // ordering the user sees.
 type Severity string
@@ -111,7 +111,7 @@ var (
 	// ErrCodeTestWarning and ErrCodeTestError are raised only by
 	// `endless errors raise` (E-1950). Nothing has gone wrong when one appears.
 	//
-	// They exist because the badge, the store and the detail log had no way to
+	// They exist because the fault row, the store and the detail log had no way to
 	// be exercised without waiting for a real failure — which made the one
 	// surface whose whole job is reporting trouble the hardest one to look at.
 	// Two codes rather than a --severity flag on one, because severity is a
@@ -233,14 +233,14 @@ var (
 	// because severity is a property of the CODE here (see the Code doc above)
 	// and a per-occurrence severity would be the first exception to that. The
 	// split is by whether the failure can resolve itself, which is also what
-	// decides which one deserves the single line the badge renders.
+	// decides which one deserves the single line the fault row renders.
 	//
 	// Transient: `rate_limit`, `overloaded`, `server_error`, `max_output_tokens`,
 	// and every error type not named in the fatal set — including ones a future
 	// Claude Code adds. Warning is the forgiving direction for an unrecognised
 	// value: an unknown failure is more likely to be a passing one than a fatal
-	// one, and over-reporting it as red would outrank real errors for the badge's
-	// one row.
+	// one, and over-reporting it as red would outrank real errors for the fault
+	// row's one line.
 	ErrCodeTurnFailedTransient = Code{
 		ID:       "ERR-0013",
 		Slug:     "turn-failed-transient",
@@ -251,7 +251,7 @@ var (
 	// ErrCodeTurnFailedFatal is the needs-a-person half: `authentication_failed`,
 	// `billing_error`, `oauth_org_not_allowed` and `account_on_hold`. Nothing
 	// self-heals — every one of them is a fact about the account that retrying
-	// cannot change — so they outrank a transient failure for the badge's row.
+	// cannot change — so they outrank a transient failure for the fault row.
 	ErrCodeTurnFailedFatal = Code{
 		ID:       "ERR-0014",
 		Slug:     "turn-failed-fatal",

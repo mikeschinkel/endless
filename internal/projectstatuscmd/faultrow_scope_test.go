@@ -7,16 +7,16 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/mikeschinkel/endless/internal/faultbadge"
+	"github.com/mikeschinkel/endless/internal/faultrow"
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/schema"
 )
 
-// The frame's badge counts THIS project's open incidents plus the machine-level
+// The frame's fault row counts THIS project's open incidents plus the machine-level
 // ones no project could be attributed to (E-1960) — never another project's.
 //
-// `project status` is scoped to one project in every other respect, so a badge
+// `project status` is scoped to one project in every other respect, so a fault row
 // counting
 // the whole machine would be the one line on the frame reporting on work the
 // rows above it do not show. `session status` makes the opposite call, and its
@@ -85,33 +85,33 @@ func bindFaultStoreWithProjects(t *testing.T) (alpha, beta int64) {
 }
 
 // nonEmptyRows is the minimal row set that exercises the normal (non-empty)
-// render path, so the badge is asserted where it will actually be seen.
+// render path, so the fault row is asserted where it will actually be seen.
 func nonEmptyRows() []monitor.ProjectStatusRow {
 	return []monitor.ProjectStatusRow{taskRow(1, "unverified", 0)}
 }
 
-func TestFrameBadge_CountsOnlyThisProjectAndTheUnattributed(t *testing.T) {
+func TestFrameFaultRow_CountsOnlyThisProjectAndTheUnattributed(t *testing.T) {
 	alpha, _ := bindFaultStoreWithProjects(t)
 
 	var b strings.Builder
 	render(&b, "alpha", nonEmptyRows(), 10, 0, 120, false, now, faults.ProjectScope(alpha))
 	out := b.String()
 
-	if !strings.Contains(out, faultbadge.Hint) {
-		t.Fatalf("no badge on a frame with open incidents:\n%s", out)
+	if !strings.Contains(out, faultrow.Hint) {
+		t.Fatalf("no fault row on a frame with open incidents:\n%s", out)
 	}
 	// alpha's own fault is a warning; the unattributed one is a warning too. Beta's
 	// is the only ERROR, so the severity chip is the tell: an ERROR chip here means
 	// the frame counted a project it has no business counting.
 	if strings.Contains(out, "ERROR") {
-		t.Errorf("alpha's frame badged beta's error:\n%s", out)
+		t.Errorf("alpha's frame reported beta's error:\n%s", out)
 	}
 	if !strings.Contains(out, "2 warnings") {
 		t.Errorf("alpha's frame did not count its own fault plus the unattributed one:\n%s", out)
 	}
 }
 
-func TestFrameBadge_MachineWideScopeSeesEverything(t *testing.T) {
+func TestFrameFaultRow_MachineWideScopeSeesEverything(t *testing.T) {
 	bindFaultStoreWithProjects(t)
 
 	var b strings.Builder

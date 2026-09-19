@@ -453,7 +453,7 @@ func recordSchedulingFault(name, summary string, err error) {
 }
 
 // firstLine trims an error message to its first line for the short summary
-// field, which must stay one readable line in `errors show` and the badge.
+// field, which must stay one readable line in `errors list` and the fault row.
 func firstLine(s string) (out string) {
 	out = s
 	for i, r := range s {

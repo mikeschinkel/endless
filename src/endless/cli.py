@@ -1171,12 +1171,12 @@ esm() {
     _endless_run session monitor "$@"
 }
 
-# eeh — show the recorded errors the session-status badge is counting,
+# eeh — show the recorded errors the session-status fault row is counting,
 #       plus how to dismiss them.
 #   eeh            → list open errors
 #   eeh --detail   → include every occurrence's full capture
 #   eeh --all      → include already-cleared errors
-# Exists because the badge has one row to spend and `endless errors show`
+# Exists because the fault row has one line to spend and `endless errors list`
 # does not fit beside the incident text it would be explaining.
 # No session guard: errors are machine-local, not session-scoped.
 eeh() {
@@ -4337,7 +4337,7 @@ def errors_cmd():
 def errors_show(show_all, detail, error_id, project, all_projects):
     """List recorded errors, most recently seen first.
 
-    Only uncleared errors are shown by default — the same set the badge on
+    Only uncleared errors are shown by default — the same set the fault row on
     `session status` / `session monitor` counts.
 
     Scoped to the project you are standing in, plus the faults attributed to no
@@ -4373,7 +4373,7 @@ def errors_clear(ids, project, all_projects):
 
 @errors_cmd.command("record", hidden=True)
 @click.option("--code", required=True, help="Catalog code ID, e.g. ERR-0008")
-@click.option("--summary", required=True, help="Short text shown in lists and the badge")
+@click.option("--summary", required=True, help="Short text shown in lists and the fault row")
 @click.option("--source", default="", help="Subsystem raising it, e.g. triage:inline")
 @click.option("--detail", default="", help="Long capture; goes to the detail log")
 @click.option("--fingerprint", default="", help="Grouping key (defaults to the summary)")
@@ -4382,7 +4382,7 @@ def errors_record(code, summary, source, detail, fingerprint):
 
     Hidden because it is an internal bridge, not a verb a person needs: the
     detached `endless triage run` child uses it to put a failed triage on the
-    session-status badge, since Python cannot write the fault store directly.
+    session-status fault row, since Python cannot write the fault store directly.
     Shipped rather than Go-only so it is reachable from the CLI a user
     actually types.
     """
@@ -4410,7 +4410,7 @@ def errors_codes():
 def errors_raise(severity, summary, source, repeat):
     """Record a SYNTHETIC fault, to see this surface work.
 
-    Nothing is wrong when one appears. It exists so the session-status badge,
+    Nothing is wrong when one appears. It exists so the session-status fault row,
     this listing and the detail log can be exercised on demand instead of only
     when something genuinely breaks.
 

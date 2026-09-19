@@ -80,7 +80,7 @@ type Fault struct {
 	Code        Code           // catalog entry; supplies the ID and severity
 	Source      string         // subsystem that raised it, e.g. "job:evaluate"
 	Fingerprint string         // grouping key; derived from Summary when empty
-	Summary     string         // SHORT descriptive text, shown in lists and the badge
+	Summary     string         // SHORT descriptive text, shown in lists and the fault row
 	Detail      string         // LONG capture; goes to the JSONL log, never the DB
 	Fields      map[string]any // structured context; goes to the JSONL log
 

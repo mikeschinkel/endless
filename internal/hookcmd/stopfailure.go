@@ -40,7 +40,7 @@ import (
 // so retrying cannot change the answer.
 //
 // Membership decides which catalog code the fault carries, and therefore its
-// severity — which buys PROMINENCE, not longevity: the fault badge renders a
+// severity — which buys PROMINENCE, not longevity: the fault row renders a
 // single line and the most severe open incident wins it. A needs-a-person
 // failure should take that line from a rate limit that will have passed by the
 // time anyone looks.
@@ -50,7 +50,7 @@ import (
 // `unknown` are documented values that land there today, and so will whatever a
 // future Claude Code adds. That is the forgiving direction on purpose: an
 // unrecognised failure is more likely to be a passing one, and grading it red
-// would let a guess outrank a real error for the badge's one row.
+// would let a guess outrank a real error for the fault row's one line.
 var fatalTurnErrorTypes = map[string]bool{
 	"authentication_failed": true,
 	"billing_error":         true,
@@ -123,7 +123,7 @@ func handleStopFailure(projectID int64, payload claudePayload) (err error) {
 // Fingerprinted by the summary's default, which embeds only the error type: a
 // session hitting one rate limit twenty times is ONE incident with an occurrence
 // count of twenty, and a different failure opens its own row. Deliberately not
-// per-session — the badge would then carry one line per session on a machine
+// per-session — the fault row would then carry one line per session on a machine
 // where a shared rate limit hit every one of them at once.
 //
 // The session and task go in Fields instead, which reach the JSONL detail log,

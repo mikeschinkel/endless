@@ -1,4 +1,4 @@
-package faultbadge
+package faultrow
 
 import (
 	"database/sql"
@@ -13,7 +13,7 @@ import (
 )
 
 // bindFaultStore points the faults package at a throwaway in-memory DB for one
-// test, and unbinds afterwards so tests that expect NO badge still see none.
+// test, and unbinds afterwards so tests that expect NO fault row still see none.
 func bindFaultStore(t *testing.T) *sql.DB {
 	t.Helper()
 
@@ -47,7 +47,7 @@ func bindFaultStore(t *testing.T) *sql.DB {
 const ancient = "2020-01-01T00:00:00"
 
 // age backdates every open incident's last occurrence, so a test can ask what
-// the badge does with a fault nobody has seen fire in years.
+// the fault row does with a fault nobody has seen fire in years.
 func age(t *testing.T, db *sql.DB, lastSeen string) {
 	t.Helper()
 
@@ -56,7 +56,7 @@ func age(t *testing.T, db *sql.DB, lastSeen string) {
 	}
 }
 
-// rendered is the badge Render writes for the bound store, at a width wide
+// rendered is the fault row Render writes for the bound store, at a width wide
 // enough that nothing is truncated away.
 func rendered(t *testing.T) string {
 	t.Helper()
@@ -66,11 +66,11 @@ func rendered(t *testing.T) string {
 	return out.String()
 }
 
-// --- E-2151: nothing ages off the badge; clearing is the only way out ---
+// --- E-2151: nothing ages off the row; clearing is the only way out ---
 //
-// A warning used to leave the badge an hour of active time after it last fired,
+// A warning used to leave the row an hour of active time after it last fired,
 // which made a fault that happened once and self-healed discoverable only by
-// someone who already suspected it existed. The badged set is now exactly the
+// someone who already suspected it existed. The listed set is now exactly the
 // uncleared set, at both severities, whatever their age.
 
 // recordWarning opens a warning-severity incident in the bound store.
@@ -91,7 +91,7 @@ func recordError() {
 	})
 }
 
-func TestRender_BadgesAWarningHoweverLongAgoItFired(t *testing.T) {
+func TestRender_ShowsAWarningHoweverLongAgoItFired(t *testing.T) {
 	db := bindFaultStore(t)
 
 	recordWarning()
@@ -99,10 +99,10 @@ func TestRender_BadgesAWarningHoweverLongAgoItFired(t *testing.T) {
 
 	line := rendered(t)
 	if !strings.Contains(line, "WARNING") {
-		t.Errorf("an old warning aged off the badge:\n%q", line)
+		t.Errorf("an old warning aged off the fault row:\n%q", line)
 	}
 	if !strings.Contains(line, "ERR-0004") {
-		t.Errorf("badge lost the incident code:\n%q", line)
+		t.Errorf("the fault row lost the incident code:\n%q", line)
 	}
 }
 
@@ -113,36 +113,36 @@ func TestRender_CountsEveryUnclearedIncidentHoweverOld(t *testing.T) {
 	recordError()
 	age(t, db, ancient)
 
-	// The tally is what the single chip cannot convey, so it is where a badge
+	// The tally is what the single chip cannot convey, so it is where a row
 	// counting a filtered set rather than the open one shows up: an aged-off
 	// warning would leave the ERROR chip standing over no tally at all.
 	line := rendered(t)
 	if !strings.Contains(line, "ERROR") {
-		t.Errorf("an old error aged off the badge:\n%q", line)
+		t.Errorf("an old error aged off the fault row:\n%q", line)
 	}
 	if !strings.Contains(line, "1 error") || !strings.Contains(line, "1 warning") {
-		t.Errorf("badge counts fewer incidents than the store holds open:\n%q", line)
+		t.Errorf("the fault row counts fewer incidents than the store holds open:\n%q", line)
 	}
 }
 
-func TestRender_StopsBadgingOnlyWhatSomebodyCleared(t *testing.T) {
+func TestRender_DropsOnlyWhatSomebodyCleared(t *testing.T) {
 	db := bindFaultStore(t)
 
 	recordWarning()
 	age(t, db, ancient)
 
-	// Clearing is the one thing that takes an incident off the badge — which is
-	// what makes badge noise the user's to manage rather than a timer's.
+	// Clearing is the one thing that takes an incident off the row — which is
+	// what makes row noise the user's to manage rather than a timer's.
 	if _, err := faults.Clear(faults.AllProjects, nil, "test"); err != nil {
 		t.Fatalf("clear: %v", err)
 	}
 
 	if line := rendered(t); line != "" {
-		t.Errorf("badge survived the clear:\n%q", line)
+		t.Errorf("the fault row survived the clear:\n%q", line)
 	}
 }
 
-// --- E-1950: one-line badge, non-redundant counts ---
+// --- E-1950: one-line fault row, non-redundant counts ---
 
 func warned(lastSeen string) faults.Incident {
 	return faults.Incident{
@@ -160,97 +160,97 @@ func errored(lastSeen string) faults.Incident {
 	}
 }
 
-func TestBadgeLine_IsOneRowCarryingBothTextAndHint(t *testing.T) {
+func TestRowLine_IsOneRowCarryingBothTextAndHint(t *testing.T) {
 	overview := faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")})
 
-	line := badgeLine(overview, 90, false)
+	line := rowLine(overview, 90, false)
 
 	if strings.Contains(line, "\n") {
-		t.Errorf("badge spans more than one row:\n%q", line)
+		t.Errorf("the fault row spans more than one line:\n%q", line)
 	}
 	if !strings.Contains(line, "WARNING") {
-		t.Errorf("badge lost its severity chip:\n%q", line)
+		t.Errorf("the fault row lost its severity chip:\n%q", line)
 	}
 	if !strings.Contains(line, "ERR-0004") {
-		t.Errorf("badge lost the incident code:\n%q", line)
+		t.Errorf("the fault row lost the incident code:\n%q", line)
 	}
 	if !strings.HasSuffix(line, Hint) {
 		t.Errorf("hint is not right-aligned at the end of the row:\n%q", line)
 	}
 }
 
-func TestBadgeLine_OmitsTheCountASingleChipAlreadyConveys(t *testing.T) {
+func TestRowLine_OmitsTheCountASingleChipAlreadyConveys(t *testing.T) {
 	overview := faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")})
 
-	line := badgeLine(overview, 90, false)
+	line := rowLine(overview, 90, false)
 
 	// " WARNING  1 warning — ..." said the same thing twice.
 	if strings.Contains(line, "1 warning") {
-		t.Errorf("badge restates the count the chip already carries:\n%q", line)
+		t.Errorf("the fault row restates the count the chip already carries:\n%q", line)
 	}
 }
 
-func TestBadgeLine_CountsWhenThereIsMoreThanOneIncident(t *testing.T) {
+func TestRowLine_CountsWhenThereIsMoreThanOneIncident(t *testing.T) {
 	overview := faults.Summarize([]faults.Incident{
 		errored("2026-08-10T10:00:00"),
 		warned("2026-08-10T09:49:09"),
 	})
 
-	line := badgeLine(overview, 90, false)
+	line := rowLine(overview, 90, false)
 
 	if !strings.Contains(line, "1 error") || !strings.Contains(line, "1 warning") {
-		t.Errorf("badge dropped the tally that the single chip cannot convey:\n%q", line)
+		t.Errorf("the fault row dropped the tally that the single chip cannot convey:\n%q", line)
 	}
 }
 
-func TestBadgeLine_KeepsTheTextWhenTheRowIsTooNarrowForBoth(t *testing.T) {
+func TestRowLine_KeepsTheTextWhenTheRowIsTooNarrowForBoth(t *testing.T) {
 	overview := faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")})
 
-	line := badgeLine(overview, 30, false)
+	line := rowLine(overview, 30, false)
 
 	if strings.Contains(line, "\n") {
-		t.Errorf("narrow badge wrapped onto a second row:\n%q", line)
+		t.Errorf("a narrow fault row wrapped onto a second line:\n%q", line)
 	}
 	if !strings.Contains(line, "ERR-0004") {
-		t.Errorf("narrow badge dropped the incident text instead of the hint:\n%q", line)
+		t.Errorf("a narrow fault row dropped the incident text instead of the hint:\n%q", line)
 	}
 }
 
-func TestBadgeLine_UsesThemeIndependentColors(t *testing.T) {
+func TestRowLine_UsesThemeIndependentColors(t *testing.T) {
 	overview := faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")})
 
-	line := badgeLine(overview, 90, true)
+	line := rowLine(overview, 90, true)
 
 	// The 30-47 ANSI range is remapped by the terminal theme, which is what made
 	// the old black-on-yellow chip unreadable. 256-color indices are fixed.
 	if strings.Contains(line, "\033[30;43m") {
-		t.Errorf("badge fell back to theme-remapped ANSI colors:\n%q", line)
+		t.Errorf("the fault row fell back to theme-remapped ANSI colors:\n%q", line)
 	}
 	if !strings.Contains(line, rowWarning) {
-		t.Errorf("badge did not reverse the whole row:\n%q", line)
+		t.Errorf("the fault row did not reverse its whole line:\n%q", line)
 	}
 	if !strings.Contains(line, chipWarning) {
 		t.Errorf("chip is not inverted against the row:\n%q", line)
 	}
 }
 
-// --- E-1950: the badge must be correct at EVERY width, not at a chosen one ---
+// --- E-1950: the row must be correct at EVERY width, not at a chosen one ---
 //
 // Terminal width is not a property of any one person's setup: it changes with
 // the monitor, the split, the font, and the window. Asserting the layout at a
 // hand-picked width only moves the guess around, so these sweep the range and
 // assert the invariants that must hold at all of them.
 
-// badgeWidths is the sweep: absurdly narrow through wider than any real
+// rowWidths is the sweep: absurdly narrow through wider than any real
 // terminal, including every boundary the layout logic can turn on.
-func badgeWidths() (widths []int) {
+func rowWidths() (widths []int) {
 	for w := 1; w <= 240; w++ {
 		widths = append(widths, w)
 	}
 	return widths
 }
 
-// printedWidth is the badge's width in terminal columns, with the ANSI escapes
+// printedWidth is the row's width in terminal columns, with the ANSI escapes
 // — which occupy no columns — removed.
 func printedWidth(line string) int {
 	var out strings.Builder
@@ -266,7 +266,7 @@ func printedWidth(line string) int {
 	return runewidth.StringWidth(out.String())
 }
 
-func TestBadgeLine_NeverExceedsTheTerminalWidth(t *testing.T) {
+func TestRowLine_NeverExceedsTheTerminalWidth(t *testing.T) {
 	cases := map[string]faults.Overview{
 		"warning":    faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")}),
 		"error":      faults.Summarize([]faults.Incident{errored("2026-08-10T10:00:00")}),
@@ -276,12 +276,12 @@ func TestBadgeLine_NeverExceedsTheTerminalWidth(t *testing.T) {
 	}
 
 	for name, overview := range cases {
-		for _, cols := range badgeWidths() {
+		for _, cols := range rowWidths() {
 			for _, color := range []bool{false, true} {
-				line := badgeLine(overview, cols, color)
+				line := rowLine(overview, cols, color)
 
 				if strings.Contains(line, "\n") {
-					t.Fatalf("%s/cols=%d/color=%v: badge contains a newline:\n%q", name, cols, color, line)
+					t.Fatalf("%s/cols=%d/color=%v: the fault row contains a newline:\n%q", name, cols, color, line)
 				}
 				// cols-1, not cols: a line ending exactly at the right margin sits
 				// on the deferred-wrap boundary where tmux can emit a phantom row.
@@ -294,10 +294,10 @@ func TestBadgeLine_NeverExceedsTheTerminalWidth(t *testing.T) {
 	}
 }
 
-func TestBadgeLine_AlwaysShowsTheSeverityAndTheCode(t *testing.T) {
+func TestRowLine_AlwaysShowsTheSeverityAndTheCode(t *testing.T) {
 	overview := faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")})
 
-	// Whatever else gives way, the severity is the last thing standing: a badge
+	// Whatever else gives way, the severity is the last thing standing: a row
 	// that cannot say what happened is not worth the row it costs.
 	//
 	// Both thresholds are DERIVED from the layout's own constants, not chosen.
@@ -306,37 +306,37 @@ func TestBadgeLine_AlwaysShowsTheSeverityAndTheCode(t *testing.T) {
 	// chip text or the hint changed length.
 	chip := severityLabel(faults.SeverityWarning)
 	chipWidth := runewidth.StringWidth(chip)
-	// The bare severity word must fit whole; below that the badge renders nothing.
+	// The bare severity word must fit whole; below that the row renders nothing.
 	minSeverity := runewidth.StringWidth(strings.TrimSpace(chip))
 	minCode := chipWidth + 2 + len("ERR-0004…") // chip, space, and a code that survives truncation
 
-	for _, cols := range badgeWidths() {
-		line := badgeLine(overview, cols, false)
+	for _, cols := range rowWidths() {
+		line := rowLine(overview, cols, false)
 
 		if cols-1 < minSeverity {
 			if line != "" {
-				t.Fatalf("cols=%d: rendered a badge too narrow to be legible:\n%q", cols, line)
+				t.Fatalf("cols=%d: rendered a fault row too narrow to be legible:\n%q", cols, line)
 			}
 			continue
 		}
 		if !strings.Contains(line, "WARNING") {
-			t.Fatalf("cols=%d: badge lost its severity:\n%q", cols, line)
+			t.Fatalf("cols=%d: the fault row lost its severity:\n%q", cols, line)
 		}
 		if cols >= minCode && !strings.Contains(line, "ERR-0004") {
-			t.Fatalf("cols=%d: badge lost the incident code:\n%q", cols, line)
+			t.Fatalf("cols=%d: the fault row lost the incident code:\n%q", cols, line)
 		}
 	}
 }
 
-func TestBadgeLine_DropsTheHintOnlyWhenItCannotFit(t *testing.T) {
+func TestRowLine_DropsTheHintOnlyWhenItCannotFit(t *testing.T) {
 	overview := faults.Summarize([]faults.Incident{longWarning()})
 
 	// The hint is reserved BEFORE the text, so at any width where both fit it is
 	// present — and once present it must never disappear again as the terminal
 	// gets wider. Assert that transition happens exactly once.
 	seen := false
-	for _, cols := range badgeWidths() {
-		line := badgeLine(overview, cols, false)
+	for _, cols := range rowWidths() {
+		line := rowLine(overview, cols, false)
 		has := strings.Contains(line, Hint)
 		if has {
 			seen = true
@@ -354,18 +354,18 @@ func TestBadgeLine_DropsTheHintOnlyWhenItCannotFit(t *testing.T) {
 	}
 }
 
-func TestBadgeLine_ResetsEveryColorItOpens(t *testing.T) {
+func TestRowLine_ResetsEveryColorItOpens(t *testing.T) {
 	overview := faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")})
 
 	// An unreset background bleeds into the rest of the pane — including the
 	// user's prompt after the command exits.
-	for _, cols := range badgeWidths() {
-		line := badgeLine(overview, cols, true)
+	for _, cols := range rowWidths() {
+		line := rowLine(overview, cols, true)
 		if line == "" {
 			continue // too narrow to render at all — nothing opened, nothing to reset
 		}
-		if !strings.HasSuffix(line, badgeReset) {
-			t.Fatalf("cols=%d: badge does not end with a reset:\n%q", cols, line)
+		if !strings.HasSuffix(line, rowReset) {
+			t.Fatalf("cols=%d: the fault row does not end with a reset:\n%q", cols, line)
 		}
 	}
 }

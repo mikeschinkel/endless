@@ -10,7 +10,7 @@ import (
 
 	"github.com/mattn/go-runewidth"
 
-	"github.com/mikeschinkel/endless/internal/faultbadge"
+	"github.com/mikeschinkel/endless/internal/faultrow"
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/liveview"
 	"github.com/mikeschinkel/endless/internal/monitor"
@@ -295,13 +295,13 @@ func buildGroups(rows []monitor.ProjectStatusRow, groupCap, budget, overhead int
 	return out
 }
 
-// badgeLines is the allowance for the fault badge. It renders only when an
+// faultRowLines is the allowance for the fault row. It renders only when an
 // incident is open, but it is budgeted for unconditionally: discovering it at
 // paint time would cost exactly the row the budget was protecting.
-const badgeLines = 1
+const faultRowLines = 1
 
 // nonRowLines is what a frame spends before a single row is drawn: the legend
-// plus the badge allowance.
+// plus the fault-row allowance.
 //
 // The legend is measured, not assumed to be one line. It is the one part of the
 // frame that may WRAP — glyphs are never truncated out of it, because a legend
@@ -315,7 +315,7 @@ func nonRowLines(legendText string, cols int) int {
 			lines = (w + cols - 1) / cols
 		}
 	}
-	return lines + badgeLines
+	return lines + faultRowLines
 }
 
 // allot decides how many rows each group renders, in place.
@@ -471,10 +471,10 @@ func emptyHint(project string) string {
 // rows drawn. A return of 0 means the frame is the empty hint, which the pane fit
 // treats differently from a short real frame.
 // scope is the frame's project as the fault store understands it (E-1960): the
-// badge below counts THIS project's open incidents plus the machine-level ones
-// no project could be attributed to, never another project's. `project status`
-// is scoped to one project in every other respect, and a badge that ignored that
-// would be reporting on work the frame above it does not show.
+// fault row below counts THIS project's open incidents plus the machine-level
+// ones no project could be attributed to, never another project's. `project
+// status` is scoped to one project in every other respect, and a fault row that
+// ignored that would be reporting on work the frame above it does not show.
 func render(
 	w io.Writer,
 	project string,
@@ -492,7 +492,7 @@ func render(
 	groups := buildGroups(rows, groupCap, 0, 0, now)
 	if len(groups) == 0 {
 		fmt.Fprintln(w, liveview.Dim(emptyHint(project), color))
-		faultbadge.Render(w, cols, color, scope)
+		faultrow.Render(w, cols, color, scope)
 		return 0
 	}
 	legendText := legend(project, groups)
@@ -541,7 +541,7 @@ func render(
 		}
 	}
 
-	faultbadge.Render(w, cols, color, scope)
+	faultrow.Render(w, cols, color, scope)
 	return drawn
 }
 

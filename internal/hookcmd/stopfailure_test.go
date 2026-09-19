@@ -208,7 +208,7 @@ func TestStopFailure_RecordsTheFailureAsAFault(t *testing.T) {
 		t.Errorf("source = %q, want %q", f.source, "hook:stopfailure")
 	}
 	if !strings.Contains(f.summary, "rate_limit") {
-		t.Errorf("summary = %q, want it to NAME the error type — the badge "+
+		t.Errorf("summary = %q, want it to NAME the error type — the fault row "+
 			"renders this line, and 'a turn failed' without saying how is not "+
 			"worth a row", f.summary)
 	}
@@ -220,7 +220,7 @@ func TestStopFailure_RecordsTheFailureAsAFault(t *testing.T) {
 
 // TestStopFailure_SeverityFollowsTheErrorType pins the mapping.
 //
-// Severity buys PROMINENCE, not longevity: the fault badge renders a single line
+// Severity buys PROMINENCE, not longevity: the fault row renders a single line
 // and the most severe open incident wins it. A failure nothing can self-heal
 // should take that line from a rate limit that will have passed by the time
 // anyone looks.
@@ -244,7 +244,7 @@ func TestStopFailure_SeverityFollowsTheErrorType(t *testing.T) {
 		{"cloud_credential_error", "ERR-0013", "warning", "not in the fatal set, so transient"},
 		{"unknown", "ERR-0013", "warning", "an unknown failure is more likely passing than fatal"},
 		{"a_type_from_a_future_claude_code", "ERR-0013", "warning",
-			"an unrecognised type must not outrank a real error for the badge's one row"},
+			"an unrecognised type must not outrank a real error for the fault row's one line"},
 	}
 
 	for _, tc := range cases {
@@ -293,7 +293,7 @@ func TestStopFailure_AnAbsentErrorTypeIsRecordedAsUnknown(t *testing.T) {
 // TestStopFailure_RepeatsOfOneErrorTypeAreOneIncident. The fingerprint is the
 // error type, not the session: a machine whose shared rate limit hit six
 // sessions at once must raise ONE incident with six occurrences, not six rows
-// competing for the badge's single line.
+// competing for the fault row's single line.
 func TestStopFailure_RepeatsOfOneErrorTypeAreOneIncident(t *testing.T) {
 	db, projectPath := stopFailureEnv(t, sessionstate.Working)
 

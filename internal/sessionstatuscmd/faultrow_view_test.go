@@ -7,18 +7,18 @@ import (
 
 	_ "modernc.org/sqlite"
 
-	"github.com/mikeschinkel/endless/internal/faultbadge"
+	"github.com/mikeschinkel/endless/internal/faultrow"
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/schema"
 )
 
 // bindFaultStore points the faults package at a throwaway in-memory DB for one
-// test, and unbinds afterwards so tests that expect NO badge still see none.
+// test, and unbinds afterwards so tests that expect NO fault row still see none.
 //
-// A near-copy of the helper in internal/faultbadge, and deliberately so: these
-// tests assert the badge reaches the SESSION-STATUS FRAME, which is a property
-// of renderTo, not of the badge. Exporting a test helper across a package
+// A near-copy of the helper in internal/faultrow, and deliberately so: these
+// tests assert the fault row reaches the SESSION-STATUS FRAME, which is a
+// property of renderTo, not of the row. Exporting a test helper across a package
 // boundary to save fifteen lines would couple two suites that must be able to
 // fail independently.
 func bindFaultStore(t *testing.T) {
@@ -55,7 +55,7 @@ func bindFaultStore(t *testing.T) {
 }
 
 // oneRow is the minimal row set that exercises the normal (non-empty) render
-// path, so the badge is asserted where it will actually be seen.
+// path, so the fault row is asserted where it will actually be seen.
 func oneRow() []monitor.SessionStatusRow {
 	return []monitor.SessionStatusRow{
 		{ID: 698, Title: "Build a fire-once background job runner", Status: "underway",
@@ -63,7 +63,7 @@ func oneRow() []monitor.SessionStatusRow {
 	}
 }
 
-func TestRenderFaultBadge_AppearsWhenIncidentsAreOpen(t *testing.T) {
+func TestRenderFaultRow_AppearsWhenIncidentsAreOpen(t *testing.T) {
 	bindFaultStore(t)
 
 	faults.Record(faults.Fault{
@@ -83,35 +83,35 @@ func TestRenderFaultBadge_AppearsWhenIncidentsAreOpen(t *testing.T) {
 
 	// Max severity wins: one error outranks any number of warnings.
 	if !strings.Contains(out, "ERROR") {
-		t.Errorf("badge does not show the ERROR severity:\n%s", out)
+		t.Errorf("the fault row does not show the ERROR severity:\n%s", out)
 	}
 	if !strings.Contains(out, "1 error") {
-		t.Errorf("badge does not count the error:\n%s", out)
+		t.Errorf("the fault row does not count the error:\n%s", out)
 	}
 	if !strings.Contains(out, "1 warning") {
-		t.Errorf("badge does not count the warning:\n%s", out)
+		t.Errorf("the fault row does not count the warning:\n%s", out)
 	}
-	if !strings.Contains(out, faultbadge.Hint) {
-		t.Errorf("badge does not name the command that explains it:\n%s", out)
+	if !strings.Contains(out, faultrow.Hint) {
+		t.Errorf("the fault row does not name the command that explains it:\n%s", out)
 	}
 
-	// The task rows must still be intact — the badge annotates the view, it does
+	// The task rows must still be intact — the fault row annotates the view, it does
 	// not replace it.
 	if !strings.Contains(out, "E-698") {
 		t.Errorf("task row is missing from the frame:\n%s", out)
 	}
 }
 
-// TestRenderFaultBadge_StaysMachineWide is the session-status half of E-1960's
+// TestRenderFaultRow_StaysMachineWide is the session-status half of E-1960's
 // scoping contract, and the deliberate asymmetry with `project status`.
 //
 // `session status` renders every live session on the box, whatever project each
-// is in, so its badge counts every project's open incidents. Narrowing it to the
+// is in, so its fault row counts every project's open incidents. Narrowing it to the
 // project the pane happens to sit in would hide a fault in a project this very
 // frame is showing a session for. `project status` makes the opposite call — see
-// internal/projectstatuscmd/badge_scope_test.go — because that view is scoped to
+// internal/projectstatuscmd/faultrow_scope_test.go — because that view is scoped to
 // one project in every other respect.
-func TestRenderFaultBadge_StaysMachineWide(t *testing.T) {
+func TestRenderFaultRow_StaysMachineWide(t *testing.T) {
 	bindFaultStore(t)
 
 	// One fault filed under a project this session has nothing to do with. It is
@@ -128,23 +128,23 @@ func TestRenderFaultBadge_StaysMachineWide(t *testing.T) {
 	out := b.String()
 
 	if !strings.Contains(out, "ERROR") {
-		t.Errorf("session status narrowed its badge to one project — "+
+		t.Errorf("session status narrowed its fault row to one project — "+
 			"a fault in another project vanished from a machine-wide view:\n%s", out)
 	}
 }
 
-func TestRenderFaultBadge_SilentWhenNothingIsOpen(t *testing.T) {
+func TestRenderFaultRow_SilentWhenNothingIsOpen(t *testing.T) {
 	bindFaultStore(t)
 
 	var b strings.Builder
 	renderTo(&b, oneRow(), 698, hintClaimBind, 90, false, hiddenOmit)
 
-	if strings.Contains(b.String(), faultbadge.Hint) {
-		t.Errorf("badge rendered with no open incidents:\n%s", b.String())
+	if strings.Contains(b.String(), faultrow.Hint) {
+		t.Errorf("the fault row rendered with no open incidents:\n%s", b.String())
 	}
 }
 
-func TestRenderFaultBadge_SilentWhenClearedEvenThoughHistoryRemains(t *testing.T) {
+func TestRenderFaultRow_SilentWhenClearedEvenThoughHistoryRemains(t *testing.T) {
 	bindFaultStore(t)
 
 	faults.Record(faults.Fault{
@@ -159,12 +159,12 @@ func TestRenderFaultBadge_SilentWhenClearedEvenThoughHistoryRemains(t *testing.T
 	var b strings.Builder
 	renderTo(&b, oneRow(), 698, hintClaimBind, 90, false, hiddenOmit)
 
-	if strings.Contains(b.String(), faultbadge.Hint) {
-		t.Errorf("badge still rendered after clearing:\n%s", b.String())
+	if strings.Contains(b.String(), faultrow.Hint) {
+		t.Errorf("the fault row still rendered after clearing:\n%s", b.String())
 	}
 }
 
-func TestRenderFaultBadge_AppearsOnTheEmptyView(t *testing.T) {
+func TestRenderFaultRow_AppearsOnTheEmptyView(t *testing.T) {
 	bindFaultStore(t)
 
 	faults.Record(faults.Fault{
@@ -178,12 +178,12 @@ func TestRenderFaultBadge_AppearsOnTheEmptyView(t *testing.T) {
 	var b strings.Builder
 	renderTo(&b, nil, 0, hintClaimBind, 90, false, hiddenOmit)
 
-	if !strings.Contains(b.String(), faultbadge.Hint) {
-		t.Errorf("badge missing from the empty view:\n%s", b.String())
+	if !strings.Contains(b.String(), faultrow.Hint) {
+		t.Errorf("the fault row is missing from the empty view:\n%s", b.String())
 	}
 }
 
-func TestRenderFaultBadge_ColorizesOnlyWhenColorIsEnabled(t *testing.T) {
+func TestRenderFaultRow_ColorizesOnlyWhenColorIsEnabled(t *testing.T) {
 	bindFaultStore(t)
 
 	faults.Record(faults.Fault{
@@ -195,47 +195,47 @@ func TestRenderFaultBadge_ColorizesOnlyWhenColorIsEnabled(t *testing.T) {
 	var plain strings.Builder
 	renderTo(&plain, oneRow(), 698, hintClaimBind, 90, false, hiddenOmit)
 	if strings.Contains(plain.String(), "\033[") {
-		t.Errorf("badge emitted ANSI escapes with color disabled:\n%q", plain.String())
+		t.Errorf("the fault row emitted ANSI escapes with color disabled:\n%q", plain.String())
 	}
 
 	var colored strings.Builder
 	renderTo(&colored, oneRow(), 698, hintClaimBind, 90, true, hiddenOmit)
-	// Isolate the badge's own line before asserting: with color on the legend is
-	// dimmed too, so a frame-wide escape check would pass without the badge being
+	// Isolate the fault row's own line before asserting: with color on the legend
+	// is dimmed too, so a frame-wide escape check would pass without the row being
 	// styled at all. WHICH colors it uses is pinned by
-	// TestBadgeLine_UsesThemeIndependentColors, next to the constants.
-	badge := badgeLineOf(colored.String())
-	if badge == "" {
-		t.Fatalf("no badge line in the colored frame:\n%q", colored.String())
+	// TestRowLine_UsesThemeIndependentColors, next to the constants.
+	row := faultRowLineOf(colored.String())
+	if row == "" {
+		t.Fatalf("no fault row in the colored frame:\n%q", colored.String())
 	}
-	if !strings.Contains(badge, "\033[") {
-		t.Errorf("badge line carries no ANSI escapes with color enabled:\n%q", badge)
+	if !strings.Contains(row, "\033[") {
+		t.Errorf("the fault row carries no ANSI escapes with color enabled:\n%q", row)
 	}
 }
 
-// badgeLineOf returns the frame line carrying the fault badge, or "".
-func badgeLineOf(frame string) string {
+// faultRowLineOf returns the frame line carrying the fault row, or "".
+func faultRowLineOf(frame string) string {
 	for _, line := range strings.Split(frame, "\n") {
-		if strings.Contains(line, faultbadge.Hint) {
+		if strings.Contains(line, faultrow.Hint) {
 			return line
 		}
 	}
 	return ""
 }
 
-func TestRenderFaultBadge_SurvivesAnUnboundFaultStore(t *testing.T) {
+func TestRenderFaultRow_SurvivesAnUnboundFaultStore(t *testing.T) {
 	faults.Bind(nil, nil, nil)
 
 	// A diagnostics surface must never be able to take down the view it
 	// annotates: with no fault store reachable the frame renders as normal,
-	// simply without a badge.
+	// simply without a fault row.
 	var b strings.Builder
 	renderTo(&b, oneRow(), 698, hintClaimBind, 90, false, hiddenOmit)
 
 	if !strings.Contains(b.String(), "E-698") {
 		t.Errorf("frame did not render with an unbound fault store:\n%s", b.String())
 	}
-	if strings.Contains(b.String(), faultbadge.Hint) {
-		t.Errorf("badge rendered with an unbound fault store:\n%s", b.String())
+	if strings.Contains(b.String(), faultrow.Hint) {
+		t.Errorf("the fault row rendered with an unbound fault store:\n%s", b.String())
 	}
 }

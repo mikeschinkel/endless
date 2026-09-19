@@ -21,8 +21,8 @@ endless errors clear 12 13       # clear specific incidents
 endless errors codes             # print this catalog from the running binary
 ```
 
-`session status` and `session monitor` show a trailing badge whenever open
-incidents exist — max severity wins, `error` outranks `warning`.
+`session status` and `session monitor` append a trailing **fault row** whenever
+open incidents exist — max severity wins, `error` outranks `warning`.
 
 Two behaviors worth knowing:
 
@@ -64,7 +64,7 @@ Run outside any registered project and there is nothing to scope to, so both
 verbs cover the whole machine. The PROJECT column appearing is how a listing
 tells you it widened.
 
-The same rule scopes the badge: `project status` and `project monitor` count
+The same rule scopes the fault row: `project status` and `project monitor` count
 their own project's open incidents plus the unattributed ones, while
 `session status` and `session monitor` stay machine-wide — they render every live
 session on the box, whatever project each is in.
@@ -174,7 +174,7 @@ and the unavoidable cost of that design is that a slow job can be re-entered.
 **Severity:** warning · **Raised by:** `endless errors raise`
 
 Nothing is wrong. This code exists only so the error surface can be exercised on
-demand — the badge on `session status`, the `errors show` listing, the JSONL
+demand — the fault row on `session status`, the `errors show` listing, the JSONL
 detail log — without waiting for something to genuinely break (E-1950).
 
 ```bash
@@ -191,7 +191,7 @@ like the real thing. Only the code marks it synthetic.
 Inside a self-dev worktree it requires an explicit `--db main|sandbox`, like
 every other `errors` verb, and refuses without one — so a synthetic fault cannot
 land in a record you did not mean to touch. Use `--db main` to see it on the
-`session status` badge, which reads main.
+`session status` fault row, which reads main.
 
 **What to do.** Dismiss it: `endless errors clear <id>`. If you did not raise it
 yourself, someone was testing; it is not a fault report.
@@ -201,7 +201,7 @@ yourself, someone was testing; it is not a fault report.
 **Severity:** error · **Raised by:** `endless errors raise --severity error`
 
 The error-severity counterpart to ERR-0006, for exercising the surfaces that
-treat `error` differently from `warning` — the red badge styling and the
+treat `error` differently from `warning` — the red fault-row styling and the
 max-severity precedence.
 
 **What to do.** Dismiss it: `endless errors clear <id>`.
@@ -375,15 +375,15 @@ lives.
 
 Fingerprinted on the error type, so a session that hits the same rate limit
 twenty times raises one incident with an occurrence count of twenty, while a
-different failure opens its own. The summary names the type, so the badge says
+different failure opens its own. The summary names the type, so the fault row says
 which one it was.
 
 Warning rather than error because these clear themselves: waiting out a rate
 limit, retrying an overload, or shortening a reply that hit
 `max_output_tokens` is all that any of them need. An unrecognised error type
 also lands here — an unknown failure is more likely transient than fatal, and
-grading it red would let it outrank a real error for the single line the badge
-renders.
+grading it red would let it outrank a real error for the single line the fault
+row renders.
 
 **What to do.** Usually nothing but take the turn again. Read the detail
 (`endless errors show --id <n> --detail`) for the session, the task and the
@@ -409,7 +409,7 @@ because severity here is a property of the code — one code that sometimes mean
 yellow and sometimes red would be invisible in the catalog and in
 `endless errors codes`.
 
-Error rather than warning so it wins the badge's single row against a
+Error rather than warning so it wins the fault row's single line against a
 transient failure that happens to be open at the same time. That is what
 severity buys here: prominence, not longevity.
 

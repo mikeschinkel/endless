@@ -62,7 +62,7 @@ const (
 
 // ANSI helpers. Intensity only — bold and dim (SGR 1/2) — so a frame reads on
 // any theme without color-profile guessing. Views that need a fixed color
-// (the fault badge's severity chip) reach for 256-color indices themselves;
+// (the fault row's severity chip) reach for 256-color indices themselves;
 // the 30-47 range is remapped by the user's theme and is never safe here.
 const (
 	Reset  = "\x1b[0m"
@@ -192,7 +192,7 @@ func Loop(cfg LoopConfig) {
 //
 // Measuring the RENDERED frame, rather than deriving a height from the row
 // count, is what keeps the fit correct as a view grows new parts: the fault
-// badge adds a line when an incident is open and none when it isn't, and the fit
+// fault row adds a line when an incident is open and none when it isn't, and the fit
 // tracks that for free.
 func FrameLines(frame string) int {
 	return strings.Count(frame, "\n")

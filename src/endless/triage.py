@@ -316,7 +316,7 @@ def report_failure(task_id: int, detail: str, source: str) -> None:
     `triage.run` is fail-open by design, and the inline path runs DETACHED —
     so without this, a crashed child and a considered no-verdict are
     indistinguishable and neither is written anywhere. The fault store puts it
-    on the `session status` / `session monitor` badge and writes the detail to
+    on the `session status` / `session monitor` fault row and writes the detail to
     its own log; repeats collapse into one incident with an occurrence count,
     so a machine with no `claude` raises one warning, not one per filing.
 
@@ -348,7 +348,7 @@ def triage_one(task_id: int, dry_run: bool = False) -> dict:
     longer untriaged), or `failed` (fail-open — the task stays untriaged).
 
     Every `failed` outcome is ALSO recorded as a fault, so it reaches the
-    session-status badge instead of dying in a detached child's closed stdout.
+    session-status fault row instead of dying in a detached child's closed stdout.
     Fail-open stays fail-open: the task keeps its status and the caller still
     exits zero. Silence was the bug, not the tolerance.
     """
@@ -530,7 +530,7 @@ def spawn_detached(task_id: int) -> bool:
     env = dict(os.environ)
     # Lets the child label its own faults `triage:inline` rather than
     # `triage:sweep` — the two fail for different reasons and a user reading
-    # the badge needs to know which path is broken.
+    # the fault row needs to know which path is broken.
     env[INLINE_ENV] = "1"
     if config.RESOLVED_CONFIG_DIR is not None:
         # The config dir is always <XDG_CONFIG_HOME>/endless, so handing the

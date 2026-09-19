@@ -45,9 +45,9 @@ func TestPaneHeightForFrame(t *testing.T) {
 		{"cap never falls below the minimum", 30, 29, 2, 2},
 
 		// rows == 0: the no-task hint, regardless of how many lines it renders
-		// (E-698's fault badge can add two).
+		// (E-698's fault row can add two).
 		{"hint-only frame holds the empty height", 1, 0, 50, 8},
-		{"hint + fault badge still holds the empty height", 3, 0, 50, 8},
+		{"hint + fault row still holds the empty height", 3, 0, 50, 8},
 		{"empty frame holds the empty height", 0, 0, 50, 8},
 		{"empty height still yields to the window cap", 1, 0, 8, 6},
 	}

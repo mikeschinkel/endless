@@ -88,13 +88,13 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  --all-projects                    every project on the machine")
 }
 
-// runRaise records a synthetic fault so the badge, the store and the detail log
+// runRaise records a synthetic fault so the fault row, the store and the detail log
 // can be exercised on demand.
 //
 // Before this, the only way to look at the error surface was to wait for
 // something to actually break (E-1950) — which made the one view whose whole job
 // is reporting trouble the hardest view in the system to inspect, and left the
-// session-status badge with no end-to-end test that rendered a real incident.
+// session-status fault row with no end-to-end test that rendered a real incident.
 //
 // It goes through faults.Record, not a direct INSERT, so what it produces is
 // indistinguishable in shape from a genuine fault: same upsert, same
@@ -296,10 +296,10 @@ func projectText(incident faults.Incident) (text string) {
 
 // printClearHint names the command that makes these rows go away.
 //
-// The badge and this listing were the only surfaces a user ever saw, and neither
+// The fault row and this listing were the only surfaces a user ever saw, and neither
 // mentioned `clear` — so the one action available on a fault that had already
-// self-healed was undiscoverable (E-1950). Nothing ages off the badge (E-2151),
-// which makes this hint the whole exit: an incident stays badged until someone
+// self-healed was undiscoverable (E-1950). Nothing ages off the fault row
+// (E-2151), which makes this hint the whole exit: an incident stays on it until someone
 // runs the command named here. Suppressed when nothing here is still open, since
 // clearing a cleared incident does nothing.
 func printClearHint(incidents []faults.Incident) {
@@ -448,7 +448,7 @@ func clearedBy() string {
 // runRecord records a REAL catalog fault. It is the bridge the Python CLI needs:
 // `endless triage run` executes detached, where a failure has nowhere to go, and
 // the fault store is the surface a user actually watches (the `session status` /
-// `session monitor` badge). Distinct from `raise`, which only ever emits the two
+// `session monitor` fault row). Distinct from `raise`, which only ever emits the two
 // synthetic test codes and says so in its detail text.
 //
 // --code must name a catalog entry, so this cannot invent classifications that
@@ -456,7 +456,7 @@ func clearedBy() string {
 func runRecord(args []string) {
 	fs := flag.NewFlagSet("record", flag.ExitOnError)
 	codeID := fs.String("code", "", "catalog code ID, e.g. ERR-0008")
-	summary := fs.String("summary", "", "short summary shown in lists and the badge")
+	summary := fs.String("summary", "", "short summary shown in lists and the fault row")
 	source := fs.String("source", "", "subsystem raising it, e.g. triage:inline")
 	detail := fs.String("detail", "", "long capture; goes to the detail log, never the DB")
 	fingerprint := fs.String("fingerprint", "", "grouping key (defaults to the summary)")
