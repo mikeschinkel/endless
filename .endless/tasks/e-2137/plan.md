@@ -341,3 +341,58 @@ exists to move.
 - `endless worktree strip-docs [--apply]` — the one-time branch-history
   cleanup ("drain" above). Dry run by default, like `worktree sync`.
 - Job name `doc-mirrors` — the convergent main-side sweep.
+
+
+
+
+# Second pass — 2026-09-19, after the first land
+
+Reopened because the cleanup command shipped in the wrong shape, and because
+seven branches it had skipped needed a decision only a person could make.
+
+## The seven skipped branches, resolved
+
+`strip-docs` refused any branch whose mirror differed from its column: "which
+side is right is not this command's to guess." Correct as a default, and it left
+seven branches holding 217 mirror commits. Each was examined:
+
+| branches | file | what it actually was |
+|---|---|---|
+| task/1803, 1864, 1865, 1929 | `ED-1541.md` | the pre-revision wording; the column and main already held the newer text |
+| task/1944 | `ED-1567.md` | the ED-1569-era wording, superseded by ED-1570 |
+| task/1815 | `ED-1538.md` | the oldest of three revisions — main's copy was stale too, and the sweep fixes that |
+| task/1619 | `E-1619.md` | a `## Verification` section the column lacked — for a task that is OBSOLETE |
+
+So all seven were superseded copies with nothing worth adopting, and the
+refusal's own advice — "adopt it before re-running" — was wrong for every one of
+them. The command could say "these differ" and could not say "the database is
+newer", which is the distinction that actually decides the question.
+
+They were stripped with the reviewed decision supplied explicitly, through the
+same tested rewrite, compare-and-swap and worktree resync. Every branch's
+non-mirror commits survived at exactly the expected count and none holds a
+mirror commit now. With the first pass's 47, that is 54 branches and 316
+commits — the whole fleet.
+
+## The command retires with the backlog
+
+It was built as `endless worktree strip-docs`, justified by re-runnability and
+by downstream projects adopting this version. The first held up — seven skips
+proved it. The second did not: Endless is pre-release, and a project adopting it
+fresh never had branch-side mirrors to strip.
+
+What that reasoning under-weighted is the cost of permanent CLI surface. A verb
+appears in `--help` and in guide coverage, has to keep working, and rots the
+moment the condition it was written for is gone. This one is a migration wearing
+a product verb's clothes — and this repository already had the right home for
+it: `.endless/migrations/`, which holds `e-1754-backfill-doc-mirrors.go` for
+exactly this shape of one-time work.
+
+Removed: the `strip-docs` verb, `src/endless/doc_strip.py`,
+`tests/test_doc_strip.py`, and the guide sentence that pointed at it. It is not
+relocated to `.endless/migrations/`, because after this pass there is nothing
+left for it to do; git history holds it if a straggler ever appears.
+
+The verify suite gains section F, which asserts the verb does not resolve and
+nothing references the module — a retired verb that quietly returns is how a CLI
+accretes.
