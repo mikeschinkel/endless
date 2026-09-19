@@ -237,7 +237,7 @@ const ensureRowBusyBackoff = 250 * time.Millisecond
 // ensureRowWithRetry creates the job's scheduling row, retrying when SQLite
 // reports the database busy or locked.
 //
-// docs/errors.md has always said of ERR-0004 that "no job state is corrupted —
+// docs/errors.md has always said of WARN-0004 that "no job state is corrupted —
 // every scheduling write is a single statement — and the next invocation
 // retries", but the runner still recorded a user-visible warning on the FIRST
 // contended write (E-1950). Losing a lock race is the expected behavior of a

@@ -301,7 +301,7 @@ func severityLabel(severity faults.Severity) (label string) {
 // minTextBudget is the narrowest incident text worth keeping the hint for.
 //
 // Below it the hint is costing more than it is worth: a row truncated to
-// "ERR-0004 job sch…" has stopped telling the user what happened, and pointing
+// "WARN-0004 job sch…" has stopped telling the user what happened, and pointing
 // them at a command to read more is no substitute for the text itself.
 const minTextBudget = 20
 

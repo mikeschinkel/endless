@@ -32,17 +32,38 @@ func (s Severity) Rank() (rank int) {
 // Code is one entry in the error catalog: a stable, documented classification
 // of something that can go wrong.
 //
-// Numbers are flat and unprefixed (ERR-0001, ERR-0002, ...) ON PURPOSE. A
-// subsystem prefix (JOB-, HOOK-, DB-) would squat on identifier namespace that
-// project-scoped task IDs may want — task IDs are E-NNNN today and may become
-// per-project prefixes later. The subsystem is already carried by a fault's
-// Source field, so a prefix here would be redundant as well as risky.
+// # The prefix states the severity
 //
-// Severity is a property of the CODE, never of the call site. Two places
-// raising the same condition therefore cannot disagree about whether the user
-// sees yellow or red.
+// `WARN-NNNN` for a warning, `ERR-NNNN` for an error (E-2148). Severity is
+// already a property of the CODE and never of the call site — two places
+// raising the same condition cannot disagree about whether the user sees yellow
+// or red — so the id can carry it, and carrying it is what lets every display
+// stop spelling the word out. A column of severities beside a column of codes
+// says one thing twice; the fault row spent nine columns on " WARNING ".
+//
+// ERR-0001 was severity warning for a year and a half, which is the defect this
+// fixes: an id that states one thing and means another. The prefix is checked
+// against the severity by TestCatalog_CodesAreUniqueAndWellFormed, so a code
+// cannot be added with the wrong one.
+//
+// NUMBERS DO NOT MOVE. ERR-0001 became WARN-0001, not WARN-0006: a number is
+// spent the moment it ships, and renumbering would make every incident already
+// recorded in a user's database, every log line and every bug report cite a code
+// that now means something else. Seven of the fourteen changed prefix;
+// internal/schema/changes/e-2148-severity-keyed-fault-codes.sql rewrites
+// `errors.code` for the rows recorded before the change so they still resolve
+// to a catalog entry.
+//
+// # No subsystem prefix
+//
+// Still none, and severity is not one. A subsystem prefix (JOB-, HOOK-, DB-)
+// would squat on identifier namespace that project-scoped task IDs may want —
+// task IDs are E-NNNN today and may become per-project prefixes later — and the
+// subsystem is already carried by a fault's Source field. Severity is different
+// on both counts: there are exactly two values, neither can collide with a task
+// id, and no other field states it.
 type Code struct {
-	ID       string   // "ERR-0001" — stable, never reused
+	ID       string   // "WARN-0001" / "ERR-0002" — prefix states Severity; never reused
 	Slug     string   // kebab-case identifier, also the docs/errors.md anchor
 	Severity Severity // display severity for every fault carrying this code
 	Title    string   // short human-readable classification
@@ -59,7 +80,7 @@ var (
 	// Warning rather than error: the runner recovers, reschedules, and the job
 	// gets another turn, so a single failure is not yet a broken system.
 	ErrCodeJobFailed = Code{
-		ID:       "ERR-0001",
+		ID:       "WARN-0001",
 		Slug:     "job-failed",
 		Severity: SeverityWarning,
 		Title:    "A background job returned an error",
@@ -91,7 +112,7 @@ var (
 	// next one re-attempts, and no job state is corrupted (every write is a
 	// single statement).
 	ErrCodeJobScheduling = Code{
-		ID:       "ERR-0004",
+		ID:       "WARN-0004",
 		Slug:     "job-scheduling",
 		Severity: SeverityWarning,
 		Title:    "A background job's schedule could not be read or written",
@@ -102,7 +123,7 @@ var (
 	// taken by someone else. Warning: it means a job overran its LeaseTTL, so
 	// the TTL is mistuned or the job is not as fast as declared.
 	ErrCodeJobStuckLease = Code{
-		ID:       "ERR-0005",
+		ID:       "WARN-0005",
 		Slug:     "job-stuck-lease",
 		Severity: SeverityWarning,
 		Title:    "A background job outran its lease and was re-claimed",
@@ -118,9 +139,9 @@ var (
 	// property of the CODE here and a flag would be the first exception to that.
 	//
 	// The titles say "synthetic" so a raised fault is never mistaken for a real
-	// one in `errors show`, in a screenshot, or in a bug report.
+	// one in a listing, in a screenshot, or in a bug report.
 	ErrCodeTestWarning = Code{
-		ID:       "ERR-0006",
+		ID:       "WARN-0006",
 		Slug:     "test-warning",
 		Severity: SeverityWarning,
 		Title:    "A synthetic warning raised on purpose to exercise this surface",
@@ -141,7 +162,7 @@ var (
 	// how the 2026-08-05 incident ran for hours with 59 blank status lines and
 	// no diagnostic anywhere (E-1898, absorbing E-1895).
 	//
-	// ERR-0008, not 0006: E-1950 took 0006/0007 for the synthetic codes above
+	// 0008, not 0006: E-1950 took 0006/0007 for the synthetic codes above
 	// while this branch was in flight, and a spent number is never reused.
 	ErrCodeStatusLineUnavailable = Code{
 		ID:       "ERR-0008",
@@ -162,10 +183,10 @@ var (
 	// one incident with an occurrence count, so a machine with no `claude`
 	// installed raises one warning, not one per filing.
 	//
-	// ERR-0009, not 0008: E-1898 took 0008 for the status-line code while this
+	// 0009, not 0008: E-1898 took 0008 for the status-line code while this
 	// branch was in flight, and a spent number is never reused.
 	ErrCodeTriageFailed = Code{
-		ID:       "ERR-0009",
+		ID:       "WARN-0009",
 		Slug:     "triage-failed",
 		Severity: SeverityWarning,
 		Title:    "Triage could not reach a verdict and left the task untriaged",
@@ -219,7 +240,7 @@ var (
 	// directory is one condition with one remedy, and a per-worktree
 	// fingerprint would raise N incidents about it on every pass.
 	ErrCodeUnlandedCacheUnwritable = Code{
-		ID:       "ERR-0012",
+		ID:       "WARN-0012",
 		Slug:     "unlanded-cache-unwritable",
 		Severity: SeverityWarning,
 		Title:    "The unlanded-verdict cache cannot be written",
@@ -242,7 +263,7 @@ var (
 	// one, and over-reporting it as red would outrank real errors for the fault
 	// row's one line.
 	ErrCodeTurnFailedTransient = Code{
-		ID:       "ERR-0013",
+		ID:       "WARN-0013",
 		Slug:     "turn-failed-transient",
 		Severity: SeverityWarning,
 		Title:    "A turn ended on an API error that should pass on its own",

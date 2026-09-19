@@ -4372,7 +4372,7 @@ def errors_clear(ids, project, all_projects):
 
 
 @errors_cmd.command("record", hidden=True)
-@click.option("--code", required=True, help="Catalog code ID, e.g. ERR-0008")
+@click.option("--code", required=True, help="Catalog code ID, e.g. ERR-0008 or WARN-0009")
 @click.option("--summary", required=True, help="Short text shown in lists and the fault row")
 @click.option("--source", default="", help="Subsystem raising it, e.g. triage:inline")
 @click.option("--detail", default="", help="Long capture; goes to the detail log")
@@ -4416,7 +4416,7 @@ def errors_raise(severity, summary, source, repeat):
 
     It records through the same path a real fault takes, so what you get is
     shaped exactly like the real thing; only the code marks it synthetic
-    (ERR-0006 warning / ERR-0007 error). Dismiss it with `errors clear <id>`.
+    (WARN-0006 warning / ERR-0007 error). Dismiss it with `errors clear <id>`.
     """
     from endless.jobs_cmd import errors_raise as impl
     impl(severity, summary, source, repeat)

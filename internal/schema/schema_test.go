@@ -196,7 +196,7 @@ func TestSchema_AppliesToDBPredatingErrorsProjectID(t *testing.T) {
 	for _, pid := range []int{1, 2} {
 		if _, err := db.Exec(
 			`INSERT INTO errors (project_id, code, severity, source, fingerprint, summary)
-			 VALUES (?, 'ERR-0001', 'error', 's', 'f', 'same everywhere')`, pid,
+			 VALUES (?, 'ERR-0002', 'error', 's', 'f', 'same everywhere')`, pid,
 		); err != nil {
 			t.Fatalf("insert for project %d: %v", pid, err)
 		}

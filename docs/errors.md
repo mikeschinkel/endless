@@ -1,14 +1,36 @@
 # Endless error codes
 
-Every classified fault Endless records carries a stable `ERR-NNNN` code. This
-page is the catalog: what each code means, why it fires, and what to do about it.
+Every classified fault Endless records carries a stable code. This page is the
+catalog: what each code means, why it fires, and what to do about it.
 
-Codes are flat and unprefixed on purpose. A subsystem prefix (`JOB-`, `HOOK-`,
-`DB-`) would squat on identifier namespace that project-scoped task IDs may want
-— task IDs are `E-NNNN` today and may become per-project prefixes later. Which
-subsystem raised a fault is already recorded in its **source** field.
+**The prefix states the severity.** `WARN-NNNN` is a warning — something is
+degraded and still working. `ERR-NNNN` is an error — something you asked for did
+not happen. Severity is a property of the code and never of the call site, so
+two places raising the same condition cannot disagree about which colour you
+see; putting it in the id is what lets every display stop spelling the word out
+beside the code.
 
-Numbers are never reused. Retiring a code spends its number permanently.
+That was not always true. `ERR-0001` was severity *warning* from the day it
+shipped until E-2148 renamed it `WARN-0001` — an id that stated one thing and
+meant another.
+
+**Numbers are never reused, and re-prefixing did not move any.** `ERR-0001`
+became `WARN-0001`, not `WARN-0006`. A number is spent the moment it ships:
+incidents in your database, lines in the detail log and text in old bug reports
+all cite one, and renumbering would make every one of them point at a different
+code. Seven of the fourteen changed prefix; a schema change rewrote `errors.code`
+for the incidents already recorded, so they still resolve to a catalog entry.
+The detail log was deliberately left alone — a line reading `ERR-0001` is an
+accurate record of what the code was called when that occurrence was captured.
+
+There is still no **subsystem** prefix (`JOB-`, `HOOK-`, `DB-`): that would squat
+on identifier namespace project-scoped task IDs may want — task IDs are `E-NNNN`
+today and may become per-project prefixes later — and which subsystem raised a
+fault is already recorded in its **source** field. Severity is different on both
+counts: there are exactly two values, neither can be mistaken for a task id, and
+no other field states it.
+
+Retiring a code spends its number permanently.
 
 ## Seeing and clearing errors
 
@@ -88,7 +110,7 @@ replayed into the database, and faults emit no ledger events.
 
 ---
 
-## ERR-0001 — job-failed
+## WARN-0001 — job-failed
 
 **Severity:** warning · **Raised by:** the background job runner
 
@@ -134,7 +156,7 @@ Note that Go cannot forcibly stop a goroutine that ignores its context. A job
 that does not honor `ctx` will leak a goroutine in a long-running trigger
 process even after this fault is recorded.
 
-## ERR-0004 — job-scheduling
+## WARN-0004 — job-scheduling
 
 **Severity:** warning · **Raised by:** the background job runner
 
@@ -157,7 +179,7 @@ current. A binary pinned onto a database it does not own opens schema-passive
 (E-1818) and will not have created the `jobs` table; that is the expected cause
 if you are running a worktree build against the main database.
 
-## ERR-0005 — job-stuck-lease
+## WARN-0005 — job-stuck-lease
 
 **Severity:** warning · **Raised by:** the background job runner
 
@@ -169,7 +191,7 @@ worst-case runtime. Also confirm the job is genuinely idempotent: the lease is
 time-boxed rather than an OS lock precisely so a dead process needs no cleanup,
 and the unavoidable cost of that design is that a slow job can be re-entered.
 
-## ERR-0006 — test-warning
+## WARN-0006 — test-warning
 
 **Severity:** warning · **Raised by:** `endless errors raise`
 
@@ -200,7 +222,7 @@ yourself, someone was testing; it is not a fault report.
 
 **Severity:** error · **Raised by:** `endless errors raise --severity error`
 
-The error-severity counterpart to ERR-0006, for exercising the surfaces that
+The error-severity counterpart to WARN-0006, for exercising the surfaces that
 treat `error` differently from `warning` — the red fault-row styling and the
 max-severity precedence.
 
@@ -239,7 +261,7 @@ means the binary and the database disagree — usually a worktree build against
 the main DB (E-1818). If the bar is blank with *no* incident recorded, suspect
 the database itself and check `endless sql "select 1"`.
 
-## ERR-0009 — triage-failed
+## WARN-0009 — triage-failed
 
 **Severity:** warning · **Raised by:** `endless triage run` (E-1859)
 
@@ -325,7 +347,7 @@ give git the answer it is missing: `git remote set-head origin --auto` populates
 `origin/HEAD` for a clone that never had it. Dismiss with
 `endless errors clear <id>`.
 
-## ERR-0012 — unlanded-cache-unwritable
+## WARN-0012 — unlanded-cache-unwritable
 
 **Severity:** warning · **Raised by:** the unlanded-verdict cache under the git
 common directory (E-2128)
@@ -356,7 +378,7 @@ repository prints the parent the cache wants to live under. Nothing needs
 repairing afterwards — the cache is rebuildable derived state, and the next job
 pass refills it. Dismiss with `endless errors clear <id>`.
 
-## ERR-0013 — turn-failed-transient
+## WARN-0013 — turn-failed-transient
 
 **Severity:** warning · **Raised by:** the Claude Code `StopFailure` hook
 (E-2145)
@@ -402,7 +424,7 @@ A Claude Code turn ended on an API error that will not clear itself —
 passing condition, so retrying cannot change the answer; the same turn will die
 the same way until a person fixes something outside Endless.
 
-Identical to ERR-0013 in everything but severity and remedy: the same hook, the
+Identical to WARN-0013 in everything but severity and remedy: the same hook, the
 same transcript parse, the same move to `idle`, the same fingerprint-per-error-
 type grouping. Two codes rather than one whose colour depends on the payload,
 because severity here is a property of the code — one code that sometimes meant

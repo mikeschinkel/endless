@@ -589,8 +589,8 @@ func TestUnusableCacheDirIsAPermanentMissAndOneFault(t *testing.T) {
 	if len(incidents) != 1 {
 		t.Fatalf("got %d incidents over 3 worktrees, want exactly 1: %+v", len(incidents), incidents)
 	}
-	if incidents[0].Code != "ERR-0012" {
-		t.Errorf("code = %s, want ERR-0012", incidents[0].Code)
+	if incidents[0].Code != "WARN-0012" {
+		t.Errorf("code = %s, want WARN-0012", incidents[0].Code)
 	}
 }
 
@@ -799,7 +799,7 @@ func TestComputeOnMissReadsTheCacheFirst(t *testing.T) {
 // TestRefreshSkipsADirectoryThatIsNotARepository is the second half of the same
 // reopening. `monitor.ProjectRoots` returns every registered project, and not all
 // of them are git repositories — one registered project was a plain directory.
-// Failing the pass over it raised ERR-0001 "the job failed" once a minute,
+// Failing the pass over it raised WARN-0001 "the job failed" once a minute,
 // forever, about every OTHER project's sweep as well.
 //
 // A registered directory that is not a repository has no worktrees and nothing to
@@ -819,7 +819,7 @@ func TestRefreshSkipsADirectoryThatIsNotARepository(t *testing.T) {
 // A repository whose default branch cannot be resolved is a durable property of
 // THAT repository, and the fault is fingerprinted on it, so it raises one
 // incident with a rising occurrence count. Returning an error as well raised a
-// SECOND incident every interval — ERR-0001 on top of ERR-0011 — saying the job
+// SECOND incident every interval — WARN-0001 on top of ERR-0011 — saying the job
 // was broken when one project was.
 func TestRefreshRecordsAnUnresolvableBaseWithoutFailingTheSweep(t *testing.T) {
 	bindFaultsForTest(t)

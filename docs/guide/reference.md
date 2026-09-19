@@ -116,7 +116,7 @@ The runner itself knows nothing job-specific — jobs register themselves with i
 
 ## Errors
 
-Anything that goes wrong in the background is recorded as a classified, clearable **error** with a stable `ERR-NNNN` code. `session status` and `session monitor` append a trailing **fault row** whenever uncleared errors exist — the most severe wins, and `error` outranks `warning`.
+Anything that goes wrong in the background is recorded as a classified, clearable **error** with a stable code whose prefix states its severity: `WARN-NNNN` is degraded-but-working, `ERR-NNNN` is something you asked for that did not happen. `session status` and `session monitor` append a trailing **fault row** whenever uncleared errors exist — the most severe wins, and `error` outranks `warning`.
 
 ```bash
 endless errors show                    # open errors, this project  (shell helper: eeh)
@@ -134,7 +134,7 @@ Every scope also carries the errors that belong to **no** project — the job ru
 
 The fault row follows the same rule: `project status` / `project monitor` count their own project plus the unattributed ones, while `session status` / `session monitor` stay machine-wide — they render every live session on the box, whatever project each is in.
 
-**Seeing it work without waiting for a failure.** `errors raise` records a real incident carrying a synthetic code (ERR-0006 warning / ERR-0007 error), through the same path a genuine fault takes — same upsert, same fingerprinting, same detail line. It exists because the one view whose job is reporting trouble was otherwise the hardest view to inspect.
+**Seeing it work without waiting for a failure.** `errors raise` records a real incident carrying a synthetic code (WARN-0006 warning / ERR-0007 error), through the same path a genuine fault takes — same upsert, same fingerprinting, same detail line. It exists because the one view whose job is reporting trouble was otherwise the hardest view to inspect.
 
 ```bash
 endless errors raise --severity error   # exercise the red styling and max-severity precedence

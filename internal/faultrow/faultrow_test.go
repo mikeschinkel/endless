@@ -101,7 +101,7 @@ func TestRender_ShowsAWarningHoweverLongAgoItFired(t *testing.T) {
 	if !strings.Contains(line, "WARNING") {
 		t.Errorf("an old warning aged off the fault row:\n%q", line)
 	}
-	if !strings.Contains(line, "ERR-0004") {
+	if !strings.Contains(line, "WARN-0004") {
 		t.Errorf("the fault row lost the incident code:\n%q", line)
 	}
 }
@@ -146,7 +146,7 @@ func TestRender_DropsOnlyWhatSomebodyCleared(t *testing.T) {
 
 func warned(lastSeen string) faults.Incident {
 	return faults.Incident{
-		ID: 1, Code: "ERR-0004", Severity: faults.SeverityWarning,
+		ID: 1, Code: "WARN-0004", Severity: faults.SeverityWarning,
 		Source: "job:triage", Summary: "job scheduling row could not be created",
 		Occurrences: 1, LastSeenAt: lastSeen,
 	}
@@ -171,7 +171,7 @@ func TestRowLine_IsOneRowCarryingBothTextAndHint(t *testing.T) {
 	if !strings.Contains(line, "WARNING") {
 		t.Errorf("the fault row lost its severity chip:\n%q", line)
 	}
-	if !strings.Contains(line, "ERR-0004") {
+	if !strings.Contains(line, "WARN-0004") {
 		t.Errorf("the fault row lost the incident code:\n%q", line)
 	}
 	if !strings.HasSuffix(line, Hint) {
@@ -211,7 +211,7 @@ func TestRowLine_KeepsTheTextWhenTheRowIsTooNarrowForBoth(t *testing.T) {
 	if strings.Contains(line, "\n") {
 		t.Errorf("a narrow fault row wrapped onto a second line:\n%q", line)
 	}
-	if !strings.Contains(line, "ERR-0004") {
+	if !strings.Contains(line, "WARN-0004") {
 		t.Errorf("a narrow fault row dropped the incident text instead of the hint:\n%q", line)
 	}
 }
@@ -308,7 +308,7 @@ func TestRowLine_AlwaysShowsTheSeverityAndTheCode(t *testing.T) {
 	chipWidth := runewidth.StringWidth(chip)
 	// The bare severity word must fit whole; below that the row renders nothing.
 	minSeverity := runewidth.StringWidth(strings.TrimSpace(chip))
-	minCode := chipWidth + 2 + len("ERR-0004…") // chip, space, and a code that survives truncation
+	minCode := chipWidth + 2 + len("WARN-0004…") // chip, space, and a code that survives truncation
 
 	for _, cols := range rowWidths() {
 		line := rowLine(overview, cols, false)
@@ -322,7 +322,7 @@ func TestRowLine_AlwaysShowsTheSeverityAndTheCode(t *testing.T) {
 		if !strings.Contains(line, "WARNING") {
 			t.Fatalf("cols=%d: the fault row lost its severity:\n%q", cols, line)
 		}
-		if cols >= minCode && !strings.Contains(line, "ERR-0004") {
+		if cols >= minCode && !strings.Contains(line, "WARN-0004") {
 			t.Fatalf("cols=%d: the fault row lost the incident code:\n%q", cols, line)
 		}
 	}

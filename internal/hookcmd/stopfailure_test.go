@@ -231,19 +231,19 @@ func TestStopFailure_SeverityFollowsTheErrorType(t *testing.T) {
 		wantSev   string
 		why       string
 	}{
-		{"rate_limit", "ERR-0013", "warning", "waiting is the whole remedy"},
-		{"overloaded", "ERR-0013", "warning", "the server recovers on its own"},
-		{"server_error", "ERR-0013", "warning", "transient by definition"},
-		{"max_output_tokens", "ERR-0013", "warning", "an ordinary outcome of a long turn"},
+		{"rate_limit", "WARN-0013", "warning", "waiting is the whole remedy"},
+		{"overloaded", "WARN-0013", "warning", "the server recovers on its own"},
+		{"server_error", "WARN-0013", "warning", "transient by definition"},
+		{"max_output_tokens", "WARN-0013", "warning", "an ordinary outcome of a long turn"},
 		{"authentication_failed", "ERR-0014", "error", "nobody's retry fixes a credential"},
 		{"billing_error", "ERR-0014", "error", "a fact about the account"},
 		{"oauth_org_not_allowed", "ERR-0014", "error", "an org policy needs a person"},
 		{"account_on_hold", "ERR-0014", "error", "a hold does not lift itself"},
-		{"invalid_request", "ERR-0013", "warning", "not in the fatal set, so transient"},
-		{"model_not_found", "ERR-0013", "warning", "not in the fatal set, so transient"},
-		{"cloud_credential_error", "ERR-0013", "warning", "not in the fatal set, so transient"},
-		{"unknown", "ERR-0013", "warning", "an unknown failure is more likely passing than fatal"},
-		{"a_type_from_a_future_claude_code", "ERR-0013", "warning",
+		{"invalid_request", "WARN-0013", "warning", "not in the fatal set, so transient"},
+		{"model_not_found", "WARN-0013", "warning", "not in the fatal set, so transient"},
+		{"cloud_credential_error", "WARN-0013", "warning", "not in the fatal set, so transient"},
+		{"unknown", "WARN-0013", "warning", "an unknown failure is more likely passing than fatal"},
+		{"a_type_from_a_future_claude_code", "WARN-0013", "warning",
 			"an unrecognised type must not outrank a real error for the fault row's one line"},
 	}
 

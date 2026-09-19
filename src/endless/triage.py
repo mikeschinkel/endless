@@ -299,7 +299,7 @@ def apply(task_id: int, decision: str, rationale: str) -> bool:
 # --- failure reporting ------------------------------------------------------
 
 # The catalog code for "triage could not reach a verdict" (docs/errors.md).
-TRIAGE_FAILED_CODE = "ERR-0009"
+TRIAGE_FAILED_CODE = "WARN-0009"
 
 # Set by spawn_detached in the child's environment so a recorded fault can say
 # WHICH path failed. Read only for labelling; it gates nothing.

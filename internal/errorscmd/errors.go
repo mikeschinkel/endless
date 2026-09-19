@@ -455,7 +455,7 @@ func clearedBy() string {
 // have no docs/errors.md section; an unknown ID is a usage error.
 func runRecord(args []string) {
 	fs := flag.NewFlagSet("record", flag.ExitOnError)
-	codeID := fs.String("code", "", "catalog code ID, e.g. ERR-0008")
+	codeID := fs.String("code", "", "catalog code ID, e.g. ERR-0008 or WARN-0009")
 	summary := fs.String("summary", "", "short summary shown in lists and the fault row")
 	source := fs.String("source", "", "subsystem raising it, e.g. triage:inline")
 	detail := fs.String("detail", "", "long capture; goes to the detail log, never the DB")

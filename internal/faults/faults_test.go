@@ -65,8 +65,8 @@ func TestRecord_OpensAnIncident(t *testing.T) {
 	}
 
 	incident := incidents[0]
-	if incident.Code != "ERR-0001" {
-		t.Errorf("code = %s, want ERR-0001", incident.Code)
+	if incident.Code != "WARN-0001" {
+		t.Errorf("code = %s, want WARN-0001", incident.Code)
 	}
 	if incident.Severity != faults.SeverityWarning {
 		t.Errorf("severity = %s, want warning (it comes from the CODE, not the call site)", incident.Severity)
@@ -435,7 +435,7 @@ func TestCatalog_EveryCodeIsDocumented(t *testing.T) {
 
 	// ...and every documented section must map to a real code, so the docs
 	// cannot go stale describing a code that no longer exists.
-	documented := regexp.MustCompile(`(?m)^## (ERR-\d{4}) — ([a-z0-9-]+)$`).FindAllStringSubmatch(docs, -1)
+	documented := regexp.MustCompile(`(?m)^## ((?:ERR|WARN)-\d{4}) — ([a-z0-9-]+)$`).FindAllStringSubmatch(docs, -1)
 	if len(documented) != len(codes) {
 		t.Errorf("docs document %d codes, catalog has %d", len(documented), len(codes))
 	}
@@ -453,7 +453,7 @@ func TestCatalog_EveryCodeIsDocumented(t *testing.T) {
 
 func TestCatalog_CodesAreUniqueAndWellFormed(t *testing.T) {
 	seen := make(map[string]bool)
-	format := regexp.MustCompile(`^ERR-\d{4}$`)
+	format := regexp.MustCompile(`^(ERR|WARN)-\d{4}$`)
 
 	for _, code := range faults.Codes() {
 		if seen[code.ID] {
@@ -464,13 +464,87 @@ func TestCatalog_CodesAreUniqueAndWellFormed(t *testing.T) {
 		// Codes must NOT look like task ids (E-NNNN, or a future per-project
 		// prefix): a number that could be either is ambiguous in every log line.
 		if !format.MatchString(code.ID) {
-			t.Errorf("code id %q is not of the form ERR-NNNN", code.ID)
+			t.Errorf("code id %q is not of the form ERR-NNNN or WARN-NNNN", code.ID)
 		}
 		if code.Severity != faults.SeverityWarning && code.Severity != faults.SeverityError {
 			t.Errorf("%s has severity %q, want warning or error", code.ID, code.Severity)
 		}
 		if code.Title == "" {
 			t.Errorf("%s has no title", code.ID)
+		}
+	}
+}
+
+// TestCatalog_ThePrefixStatesTheSeverity is the gate E-2148 added so a code
+// cannot ship saying one thing and meaning another.
+//
+// ERR-0001 was severity warning for a year and a half. Nothing caught it,
+// because nothing was checking: the prefix was decorative, so the only way to
+// learn a code's severity was to look it up. Now the id states it, every
+// display can stop spelling the word out beside the code — and this test is
+// what makes the id trustworthy enough for them to.
+func TestCatalog_ThePrefixStatesTheSeverity(t *testing.T) {
+	want := map[faults.Severity]string{
+		faults.SeverityWarning: "WARN-",
+		faults.SeverityError:   "ERR-",
+	}
+
+	for _, code := range faults.Codes() {
+		prefix, known := want[code.Severity]
+		if !known {
+			t.Errorf("%s has severity %q, which no prefix claims", code.ID, code.Severity)
+			continue
+		}
+		if !strings.HasPrefix(code.ID, prefix) {
+			t.Errorf("%s is severity %s, so its id must start with %q",
+				code.ID, code.Severity, prefix)
+		}
+	}
+}
+
+// TestCatalog_NumbersAreNeverReused pins the identity rule the re-prefixing had
+// to respect: a code's NUMBER is spent for good, and changing its prefix must
+// not have renumbered anything.
+//
+// Every incident already in a user's database, every JSONL detail line and
+// every bug report cites a number. Re-prefixing rewrites a display convention;
+// renumbering would make all of those cite a code that now means something
+// else, and no migration can reach a log file or a bug report.
+func TestCatalog_NumbersAreNeverReused(t *testing.T) {
+	// Every number the catalog has ever spent, with the code that owns it.
+	// Append here when a code is added; never re-point an existing entry.
+	owner := map[string]string{
+		"0001": "job-failed",
+		"0002": "job-panicked",
+		"0003": "job-timed-out",
+		"0004": "job-scheduling",
+		"0005": "job-stuck-lease",
+		"0006": "test-warning",
+		"0007": "test-error",
+		"0008": "status-line-unavailable",
+		"0009": "triage-failed",
+		"0010": "worktree-probe-failed",
+		"0011": "default-branch-unresolved",
+		"0012": "unlanded-cache-unwritable",
+		"0013": "turn-failed-transient",
+		"0014": "turn-failed-fatal",
+	}
+
+	for _, code := range faults.Codes() {
+		_, number, found := strings.Cut(code.ID, "-")
+		if !found {
+			t.Errorf("code id %q carries no number", code.ID)
+			continue
+		}
+		slug, spent := owner[number]
+		if !spent {
+			t.Errorf("%s uses number %s, which is not recorded as spent — "+
+				"add it here so a later code cannot claim it", code.ID, number)
+			continue
+		}
+		if slug != code.Slug {
+			t.Errorf("number %s belongs to %q, but %s claims it for %q — "+
+				"numbers are never reused", number, slug, code.ID, code.Slug)
 		}
 	}
 }
