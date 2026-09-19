@@ -6452,3 +6452,7 @@ This cost Mike a long detour on E-2148. Having noticed that .endless/tasks/e-215
 
 Two rules follow. First: notice a stale landed suite, say nothing, move on. Second, and more general: when the premise that made something worth raising turns out to be false, drop the item. Do not hunt for a smaller claim the surviving evidence can still support — that is manufacturing a finding to justify having raised one.
 - **Project**: endless
+
+### [2026-09-19] Before treating legacy data as a cost to preserve, ask whether the concept behind it still exists in the product
+Planning E-2142's drop of tasks.source_file, I flagged that it 'drops provenance for historical imported rows' as a cost of Mike's decision. Mike: Endless was first conceived as a tool that imported and synced markdown files, that approach was abandoned for storing markdown in the DB, and the product no longer thinks in source files at all — so the provenance is moot, not a cost. The caveat made a dead concept sound load-bearing, which is how vestigial columns survive removal passes forever. Rule: when a removal touches legacy data, first establish whether the concept it records is still one the product has. If it is not, say the data is vestigial and drop it without hedging; reserve the caveat for data whose concept is still alive.
+- **Project**: endless
