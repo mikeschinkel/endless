@@ -1171,7 +1171,7 @@ esm() {
     _endless_run session monitor "$@"
 }
 
-# eeh — show the recorded errors the session-status fault row is counting,
+# eeh — list the recorded errors the session-status fault row is counting,
 #       plus how to dismiss them.
 #   eeh            → list open errors
 #   eeh --detail   → include every occurrence's full capture
@@ -1180,7 +1180,7 @@ esm() {
 # does not fit beside the incident text it would be explaining.
 # No session guard: errors are machine-local, not session-scoped.
 eeh() {
-    _endless_run errors show "$@"
+    _endless_run errors list "$@"
 }
 
 # <<< endless shell helpers <<<
@@ -1280,7 +1280,7 @@ def shell_init():
     """Print shell helper functions for bash/zsh.
 
     Wraps 'endless session use', 'session cd --target project',
-    'session forget', 'session monitor', and 'errors show' with short
+    'session forget', 'session monitor', and 'errors list' with short
     functions (esu, esp, esf, esm, eeh).
 
     To install, run:
@@ -4327,17 +4327,16 @@ def errors_cmd():
     pass
 
 
-@errors_cmd.command("show")
+@errors_cmd.command("list")
 @click.option("--all", "show_all", is_flag=True, help="Include cleared errors")
 @click.option("--detail", is_flag=True, help="Print every occurrence's full capture")
-@click.option("--id", "error_id", type=int, default=None, help="Show only this error id")
 @click.option("--project", default="", help="Scope to this project instead of the one you are in")
 @click.option("--all-projects", "all_projects", is_flag=True,
               help="Cover every project on the machine")
-def errors_show(show_all, detail, error_id, project, all_projects):
+def errors_list(show_all, detail, project, all_projects):
     """List recorded errors, most recently seen first.
 
-    Only uncleared errors are shown by default — the same set the fault row on
+    Only uncleared errors are listed by default — the same set the fault row on
     `session status` / `session monitor` counts.
 
     Scoped to the project you are standing in, plus the faults attributed to no
@@ -4345,9 +4344,37 @@ def errors_show(show_all, detail, error_id, project, all_projects):
     to a project, and would otherwise be reportable nowhere). --all-projects
     widens to the whole machine and adds a PROJECT column; outside any registered
     project that is what you get anyway.
+
+    The listing truncates each summary to the width it has. `errors show <id>`
+    is where the whole one lives, along with what to do about it.
+    """
+    from endless.jobs_cmd import errors_list as impl
+    impl(show_all, detail, project, all_projects)
+
+
+@errors_cmd.command("show")
+@click.argument("error_id", type=int, required=False, default=None)
+@click.option("--detail", is_flag=True, help="Print every occurrence's full capture")
+@click.option("--id", "id_flag", type=int, default=None, hidden=True,
+              help="Deprecated spelling of the positional id")
+def errors_show(error_id, detail, id_flag):
+    """Show ONE recorded error in full: `endless errors show 7`.
+
+    The whole summary (the listing truncates it), where it came from, how many
+    times it has happened, and the remedy its catalog code documents.
+
+    The id is honoured whichever project the error belongs to — you named the
+    row, so there is nothing left for a scope to decide. With no id this is a
+    usage error, not a listing: `errors list` is the listing.
     """
     from endless.jobs_cmd import errors_show as impl
-    impl(show_all, detail, error_id, project, all_projects)
+    chosen = error_id if error_id is not None else id_flag
+    if chosen is None:
+        raise click.UsageError(
+            "errors show needs an id — `endless errors show 7`. "
+            "To see which errors exist, run `endless errors list`."
+        )
+    impl(chosen, detail)
 
 
 @errors_cmd.command("clear")
@@ -4362,7 +4389,7 @@ def errors_clear(ids, project, all_projects):
     NEW error beside it, so a problem that came back is visibly distinct from
     one that never left.
 
-    With no ids the scope bounds what is cleared — the same set `errors show`
+    With no ids the scope bounds what is cleared — the same set `errors list`
     lists under the same flags, so "dismiss what you just showed me" cannot reach
     another project's incidents. Named ids are cleared wherever they live: you
     typed the id, so the scope has nothing left to decide.

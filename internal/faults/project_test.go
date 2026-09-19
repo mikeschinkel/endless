@@ -16,7 +16,7 @@ import (
 // One Endless database holds every project on the machine. Before E-1960 the
 // `errors` table said nothing about which one a fault came from, so two
 // unrelated projects hitting the same condition became ONE incident with a
-// doubled count, `errors show` could not filter, and a producer that knew its
+// doubled count, `errors list` could not filter, and a producer that knew its
 // project had to smuggle it through Source or Fields.
 
 // seedProjects registers two projects and returns their ids. The rows are real
@@ -295,7 +295,7 @@ func TestClear_ByIDIgnoresScope(t *testing.T) {
 }
 
 // TestDetail_CarriesTheProjectName: the JSONL detail log is read WITHOUT a
-// database — `errors show --detail` prints it, and so does anyone tailing the
+// database — `errors show <id> --detail` prints it, and so does anyone tailing the
 // file — so the line carries the project's name, not its id. One shared log for
 // every project on the machine is unreadable without it.
 func TestDetail_CarriesTheProjectName(t *testing.T) {

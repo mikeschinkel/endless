@@ -2493,7 +2493,7 @@ def _echo_probe_errors(probe: dict) -> None:
         click.echo(click.style(
             f"  {label} failed ({msg}). The verdict is undetermined, not "
             f"settled — the ◆ marks this task until the probe can run. "
-            f"Recorded as an error: endless errors show", fg="red"))
+            f"Recorded as an error: endless errors list", fg="red"))
 
 
 def unsettled_item(item_id: int, agent: bool = False, as_json: bool = False):

@@ -20,7 +20,7 @@ import (
 // Directly modeled on internal/monitor/usermachinelog.go, and the same
 // disclaimers apply: this is NOT the shareable ledger and NOT a write-ahead
 // log. Nothing here is ever replayed into the DB or shared with other
-// developers. It exists so an incident summarized in one line of `errors show`
+// developers. It exists so an incident summarized in one line of `errors list`
 // can still be investigated in full afterwards.
 //
 // Every write is best-effort: a logging failure must never surface to a caller,
@@ -115,7 +115,7 @@ end:
 }
 
 // DetailLogPath returns the absolute path of the detail log, or "" when the
-// package is unbound. Exposed so `errors show --detail` and the verify suite
+// package is unbound. Exposed so `errors show <id> --detail` and the verify suite
 // read the file without duplicating the resolution rule.
 func DetailLogPath() (path string) {
 	var dir string

@@ -39,7 +39,7 @@ def _go_subcommands(rel_path: str) -> set[str]:
     Stops at the first `}` that closes the switch, so unrelated later switches
     in the same file (e.g. errors.go's severity switch) are not scooped up.
 
-    Only the FIRST label of a multi-label case counts. `case "show", "list":`
+    Only the FIRST label of a multi-label case counts. A multi-label case
     declares one verb with a shorthand, and Python is not owed an equivalent of
     every Go-side alias — only of every verb.
     """
@@ -85,7 +85,7 @@ def test_parser_sees_the_known_verbs(rel_path, group_name):
     """Guard the guard: a parser that silently matches nothing would make the
     parity test vacuously green."""
     expected = {
-        "errors": {"show", "clear", "codes", "raise"},
+        "errors": {"list", "show", "clear", "codes", "raise"},
         "jobs": {"list", "run", "retry"},
     }[group_name]
     assert expected <= _go_subcommands(rel_path)

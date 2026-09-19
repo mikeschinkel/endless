@@ -1179,7 +1179,7 @@ CREATE INDEX IF NOT EXISTS idx_jobs_due ON jobs(next_due_at);
 --
 -- project_id (E-1960) is the project the fault happened IN. One Endless database
 -- holds every project on the machine, so without it every recorded fault from
--- every project landed in one undifferentiated table: `errors show` could not
+-- every project landed in one undifferentiated table: the listing could not
 -- filter, the status fault row could not scope, and two unrelated projects hitting
 -- the same condition collapsed into a single incident with a doubled count. The
 -- omission was an oversight in E-698, not a decision.

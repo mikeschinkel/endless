@@ -3,7 +3,7 @@
 //
 // The package is named `faults` ONLY because `errors` collides with the stdlib
 // package name. Every user-facing surface it backs says "errors": the `errors`
-// table, `endless errors show|clear`, and docs/errors.md.
+// table, `endless errors list|show|clear`, and docs/errors.md.
 //
 // # Ownership
 //
@@ -283,7 +283,7 @@ func (f Fault) normalized() (out Fault) {
 // fingerprintOf derives a stable grouping key from a summary. Truncated to 16
 // hex characters: collision risk is irrelevant here (a collision merely groups
 // two distinct incidents, which clearing separates again) and short keys keep
-// `errors show` readable.
+// a listing readable.
 func fingerprintOf(summary string) (fp string) {
 	sum := sha256.Sum256([]byte(summary))
 	fp = hex.EncodeToString(sum[:])[:16]

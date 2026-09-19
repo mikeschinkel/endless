@@ -74,7 +74,7 @@ def jobs_retry(name: str) -> None:
     _run_go("jobs", ["retry", name])
 
 
-def errors_show(show_all: bool, detail: bool, error_id: int | None,
+def errors_list(show_all: bool, detail: bool,
                 project: str = "", all_projects: bool = False) -> None:
     """List recorded errors.
 
@@ -82,14 +82,28 @@ def errors_show(show_all: bool, detail: bool, error_id: int | None,
     subprocess inherits — the same walk `project status` uses, so standing in a
     worktree scopes to the checkout that owns it.
     """
-    args = ["show"]
+    args = ["list"]
     if show_all:
         args.append("--all")
     if detail:
         args.append("--detail")
-    if error_id:
-        args += ["--id", str(error_id)]
     args += _project_scope_args(project, all_projects)
+    _run_go("errors", args)
+
+
+def errors_show(error_id: int, detail: bool) -> None:
+    """Show ONE recorded error in full.
+
+    No scope arguments: an id is an exact selector the user typed, and the Go
+    side honours it whichever project the row belongs to (E-2148). Passing a
+    scope here would give the caller a flag that changes nothing.
+
+    The id goes positionally, which is the spelling `errors show` documents;
+    --id remains accepted on the Go side for callers that already type it.
+    """
+    args = ["show", str(error_id)]
+    if detail:
+        args.append("--detail")
     _run_go("errors", args)
 
 

@@ -127,7 +127,7 @@ func handleStopFailure(projectID int64, payload claudePayload) (err error) {
 // where a shared rate limit hit every one of them at once.
 //
 // The session and task go in Fields instead, which reach the JSONL detail log,
-// so `errors show --detail` still answers "which session, on what" per
+// so `errors show <id> --detail` still answers "which session, on what" per
 // occurrence without splitting the incident.
 func recordTurnFailure(projectID int64, payload claudePayload) {
 	errorType := payload.ErrorType

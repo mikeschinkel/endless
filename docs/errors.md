@@ -35,13 +35,21 @@ Retiring a code spends its number permanently.
 ## Seeing and clearing errors
 
 ```sh
-endless errors show              # open incidents in the project you are in
-endless errors show --all        # include cleared ones (history)
-endless errors show --id 12 --detail   # one incident, with every logged occurrence
+endless errors list              # open incidents in the project you are in
+endless errors list --all        # include cleared ones (history)
+endless errors show 12           # ONE incident in full, with its remedy
+endless errors show 12 --detail  # and every logged occurrence
 endless errors clear             # mark every open incident cleared
 endless errors clear 12 13       # clear specific incidents
 endless errors codes             # print this catalog from the running binary
 ```
+
+**`list` lists; `show` shows one.** The listing has one line per incident and
+truncates each summary to the width it has; `show <id>` is where the whole
+summary lives, along with what the code's catalog entry says to do about it.
+`show` used to be the listing verb, which made it the only `show` in the CLI
+that did not mean what `task show` and `decision show` mean. `errors show` with
+no id is now a usage error naming `list`, never a listing.
 
 `session status` and `session monitor` append a trailing **fault row** whenever
 open incidents exist — max severity wins, `error` outranks `warning`.
@@ -64,16 +72,17 @@ the project it happened in. `show` and `clear` are scoped to the project
 enclosing your working directory:
 
 ```sh
-endless errors show                      # this project (plus the machine's own)
-endless errors show --project acme       # another project
-endless errors show --all-projects       # everything, with a PROJECT column
+endless errors list                      # this project (plus the machine's own)
+endless errors list --project acme       # another project
+endless errors list --all-projects       # everything, with a PROJECT column
 endless errors clear --all-projects      # dismiss every open incident, everywhere
 ```
 
 Both flags work the same on `clear`, and they matter there: with no ids, `clear`
-dismisses exactly the set a `show` under the same flags would list. Naming ids
+dismisses exactly the set a `list` under the same flags would show. Naming ids
 overrides the scope — `errors clear 12` clears incident 12 whichever project it
-belongs to, because you named it.
+belongs to, because you named it. `errors show 12` is the same rule: you named
+the row, so there is nothing left for a scope to decide.
 
 **Every scope also includes the errors that belong to no project.** Some failures
 are the machine's, not a project's: the background job runner unable to open the
@@ -96,7 +105,7 @@ session on the box, whatever project each is in.
 The `errors` table holds only the index — project, code, source, summary, counts.
 Each occurrence's full capture (stack traces, command output, the job's own log
 output) is appended to `<config-dir>/log/errors.jsonl` and read back by
-`errors show --detail`. The table therefore stays bounded by the number of
+`errors show <id> --detail`. The table therefore stays bounded by the number of
 *distinct* faults rather than by how often they happen, and nothing is lost to
 diagnosis.
 
@@ -120,7 +129,7 @@ This is a warning rather than an error because the runner recovers: it records
 the failure, releases the lease, and reschedules the job. One failure is not yet
 a broken system.
 
-**What to do.** Read the detail (`endless errors show --id <n> --detail`) — it
+**What to do.** Read the detail (`endless errors show <n> --detail`) — it
 carries the error and anything the job logged. If the cause is transient, the
 job will retry on its own cadence. If the job declares a `MaxBackoff`, repeated
 failures push its next attempt exponentially further out, up to that cap; fix the
@@ -196,7 +205,7 @@ and the unavoidable cost of that design is that a slow job can be re-entered.
 **Severity:** warning · **Raised by:** `endless errors raise`
 
 Nothing is wrong. This code exists only so the error surface can be exercised on
-demand — the fault row on `session status`, the `errors show` listing, the JSONL
+demand — the fault row on `session status`, the `errors list` listing, the JSONL
 detail log — without waiting for something to genuinely break (E-1950).
 
 ```bash
@@ -255,7 +264,7 @@ recorded — the recorder needs the same handle that just failed. This code
 therefore covers the schema, enum-integrity, and DB-context gates behind
 `monitor.DB()`, not a genuinely unopenable database.
 
-**What to do.** Read the detail (`endless errors show --id <n> --detail`); it
+**What to do.** Read the detail (`endless errors show <n> --detail`); it
 carries the underlying error and the pane id. A schema or enum-integrity failure
 means the binary and the database disagree — usually a worktree build against
 the main DB (E-1818). If the bar is blank with *no* incident recorded, suspect
@@ -314,7 +323,7 @@ Repeats collapse on (worktree, failing probe), so `session monitor` re-probing
 every row every two seconds raises **one** incident with a rising occurrence
 count.
 
-**What to do.** Read the detail (`endless errors show --id <n> --detail`); it
+**What to do.** Read the detail (`endless errors show <n> --detail`); it
 carries the worktree path, the failing git command and its stderr. The usual
 causes are a worktree directory whose git administrative file is stale or gone
 (`git worktree list` disagrees with the disk) and a base branch that does not
@@ -370,7 +379,7 @@ Fingerprinted on the cache directory rather than on a worktree: one unwritable
 directory is one condition with one remedy, so this raises a single incident
 however many worktrees the pass covered.
 
-**What to do.** Read the detail (`endless errors show --id <n> --detail`); it
+**What to do.** Read the detail (`endless errors show <n> --detail`); it
 names the directory and the filesystem error. The usual causes are a checkout on
 read-only media, a `.git` directory owned by another user, and a full disk.
 `git rev-parse --path-format=absolute --git-common-dir` from inside the
@@ -408,7 +417,7 @@ grading it red would let it outrank a real error for the single line the fault
 row renders.
 
 **What to do.** Usually nothing but take the turn again. Read the detail
-(`endless errors show --id <n> --detail`) for the session, the task and the
+(`endless errors show <n> --detail`) for the session, the task and the
 error type of every occurrence. A high occurrence count on `max_output_tokens`
 is worth acting on — it means turns are routinely being cut off mid-reply.
 Dismiss with `endless errors clear <id>`.
@@ -437,6 +446,6 @@ severity buys here: prominence, not longevity.
 
 **What to do.** Fix the account condition the error type names — re-authenticate
 (`claude` will prompt), settle billing, or ask whoever administers the
-organisation about an org policy or a hold. `endless errors show --id <n>
---detail` names the error type, the session and the task for every occurrence.
+organisation about an org policy or a hold. `endless errors show <n> --detail`
+names the error type, the session and the task for every occurrence.
 Dismiss with `endless errors clear <id>` once it is sorted.

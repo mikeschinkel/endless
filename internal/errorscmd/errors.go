@@ -1,9 +1,22 @@
 // Package errorscmd implements `endless-go errors` — the operator surface over
 // the machine-local fault record (E-698).
 //
-//	endless-go errors show [--all] [--detail] [--id N]   list incidents
-//	endless-go errors clear [<id>...]                    mark incidents cleared
-//	endless-go errors codes                              print the error catalog
+//	endless-go errors list [--all] [--detail]   list incidents
+//	endless-go errors show <id> [--detail]      one incident, in full
+//	endless-go errors clear [<id>...]           mark incidents cleared
+//	endless-go errors codes                     print the error catalog
+//
+// # list lists, show shows one
+//
+// `show` used to be the listing verb, which made it the only `show` in the CLI
+// that did not mean what `task show` and `decision show` mean: one item, in
+// detail (E-2148). Worse, there was nowhere to go for the rest of a summary the
+// listing had truncated — the detail view the truncation implies did not exist.
+//
+// So the listing is `list`, and `show <id>` is the detail view. `errors show`
+// with no id is a usage error naming `list`, never a listing: silently doing
+// something other than what the verb says is how the old spelling misled people
+// in the first place.
 //
 // # Project scope
 //
@@ -52,7 +65,9 @@ func Run(args []string) {
 	}
 
 	switch args[0] {
-	case "show", "list":
+	case "list":
+		runList(args[1:])
+	case "show":
 		runShow(args[1:])
 	case "clear":
 		runClear(args[1:])
@@ -74,7 +89,8 @@ func Run(args []string) {
 func usage(w *os.File) {
 	fmt.Fprintln(w, "Usage: endless-go errors <command>")
 	fmt.Fprintln(w, "Commands:")
-	fmt.Fprintln(w, "  show [--all] [--detail] [--id N]  list uncleared errors (--all includes cleared)")
+	fmt.Fprintln(w, "  list [--all] [--detail]           list uncleared errors (--all includes cleared)")
+	fmt.Fprintln(w, "  show <id> [--detail]              one error in full, with its remedy")
 	fmt.Fprintln(w, "  clear [<id>...]                   mark errors cleared (all open ones when no id given)")
 	fmt.Fprintln(w, "  codes                             print the documented error catalog")
 	fmt.Fprintln(w, "  record --code ID --summary T [--source S] [--detail D]")
@@ -82,10 +98,13 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  raise [--severity S] [--summary T] [--repeat N]")
 	fmt.Fprintln(w, "                                    record a SYNTHETIC fault, to see this surface work")
 	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "show and clear cover the project you are standing in, plus the faults")
+	fmt.Fprintln(w, "list and clear cover the project you are standing in, plus the faults")
 	fmt.Fprintln(w, "attributed to no project. Both accept:")
 	fmt.Fprintln(w, "  --project <name>                  that project instead of this one")
 	fmt.Fprintln(w, "  --all-projects                    every project on the machine")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "`show <id>` ignores the scope: you named the row, so there is nothing")
+	fmt.Fprintln(w, "left for a scope to decide.")
 }
 
 // runRaise records a synthetic fault so the fault row, the store and the detail log
@@ -173,33 +192,22 @@ func runRaise(args []string) {
 	os.Exit(1)
 }
 
-// runShow lists incidents within scope.
-//
-// --id bypasses the scope entirely, for the same reason `clear <id>` does: an id
-// is an exact selector the user typed, and refusing to show a row because it
-// belongs to another project would make `errors show --id 7` fail right after a
-// machine-wide listing displayed row 7.
-func runShow(args []string) {
-	fs := flag.NewFlagSet("show", flag.ExitOnError)
+// runList lists incidents within scope.
+func runList(args []string) {
+	fs := flag.NewFlagSet("list", flag.ExitOnError)
 	all := fs.Bool("all", false, "include cleared errors")
 	detail := fs.Bool("detail", false, "print each occurrence's full captured detail")
-	id := fs.Int64("id", 0, "show only this error id")
 	project := fs.String("project", "", "scope to this project instead of the one you are in")
 	allProjects := fs.Bool("all-projects", false, "cover every project on the machine")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
 
-	if *id > 0 {
-		showOne(*id, *detail)
-		return
-	}
-
-	scope := resolveScope("show", *project, *allProjects)
+	scope := resolveScope("list", *project, *allProjects)
 
 	incidents, err := faults.List(scope, *all, 0)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "endless-go errors: show:", err)
+		fmt.Fprintln(os.Stderr, "endless-go errors: list:", err)
 		os.Exit(1)
 	}
 	if len(incidents) == 0 {
@@ -231,7 +239,7 @@ func runShow(args []string) {
 			incident.LastSeenAt, incident.Source, incident.Summary)
 	}
 	if err = tw.Flush(); err != nil {
-		fmt.Fprintln(os.Stderr, "endless-go errors: show:", err)
+		fmt.Fprintln(os.Stderr, "endless-go errors: list:", err)
 		os.Exit(1)
 	}
 
@@ -242,6 +250,69 @@ func runShow(args []string) {
 	}
 
 	printClearHint(incidents)
+}
+
+// runShow prints ONE incident in full.
+//
+// The id is positional — `errors show 7`, the spelling every other `show` in
+// the CLI uses. `--id 7` stays accepted but undocumented, because it is what
+// this surface took for two years and a scripted caller should not break on a
+// rename; it is deliberately absent from the usage text so nobody learns it new.
+//
+// No id at all is a usage error naming `list`. It used to print the listing,
+// which is exactly the confusion E-2148 removed — a verb that means "one item,
+// in detail" everywhere else must not quietly mean "all of them" here.
+//
+// The scope is IGNORED, as it is for `clear <id>` and as `--id` always was: an
+// id is an exact selector the user typed, and refusing to show a row because it
+// belongs to another project would make `show 7` fail immediately after a
+// listing displayed row 7.
+func runShow(args []string) {
+	var id int64
+
+	fs := flag.NewFlagSet("show", flag.ExitOnError)
+	detail := fs.Bool("detail", false, "print each occurrence's full captured detail")
+	idFlag := fs.Int64("id", 0, "the error to show (positional `<id>` is the documented spelling)")
+	fs.Usage = func() { showUsage(os.Stderr) }
+	if err := fs.Parse(args); err != nil {
+		os.Exit(2)
+	}
+
+	id = *idFlag
+	if fs.NArg() > 0 {
+		parsed, err := strconv.ParseInt(fs.Arg(0), 10, 64)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "endless-go errors: show: %q is not an error id\n", fs.Arg(0))
+			os.Exit(2)
+		}
+		id = parsed
+	}
+	if fs.NArg() > 1 {
+		fmt.Fprintln(os.Stderr,
+			"endless-go errors: show: one id at a time; `errors list` shows them together")
+		os.Exit(2)
+	}
+	if id <= 0 {
+		showUsage(os.Stderr)
+		os.Exit(2)
+	}
+
+	showOne(id, *detail)
+}
+
+// showUsage is `show`'s own usage, which names `list` because reaching it
+// almost always means the caller wanted the listing.
+//
+// It deliberately does not mention --id: that alias exists for callers who
+// already type it, not for anyone learning the command today.
+func showUsage(w *os.File) {
+	fmt.Fprintln(w, "Usage: endless-go errors show <id> [--detail]")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Prints ONE error in full — the whole summary, its remedy, and where it")
+	fmt.Fprintln(w, "came from. --detail adds every logged occurrence's full capture.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "To see which errors exist, list them:")
+	fmt.Fprintln(w, "  endless errors list")
 }
 
 // resolveScope settles which project a `show` or `clear` covers.

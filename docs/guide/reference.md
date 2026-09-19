@@ -119,16 +119,19 @@ The runner itself knows nothing job-specific — jobs register themselves with i
 Anything that goes wrong in the background is recorded as a classified, clearable **error** with a stable code whose prefix states its severity: `WARN-NNNN` is degraded-but-working, `ERR-NNNN` is something you asked for that did not happen. `session status` and `session monitor` append a trailing **fault row** whenever uncleared errors exist — the most severe wins, and `error` outranks `warning`.
 
 ```bash
-endless errors show                    # open errors, this project  (shell helper: eeh)
-endless errors show --all              # include cleared ones (history)
-endless errors show --id N --detail    # one error, with every occurrence's full capture
+endless errors list                    # open errors, this project  (shell helper: eeh)
+endless errors list --all              # include cleared ones (history)
+endless errors show N                  # ONE error in full, with its remedy
+endless errors show N --detail         # and every occurrence's full capture
 endless errors clear                   # mark every open error cleared
 endless errors clear N                 # dismiss just one
 endless errors codes                   # the documented catalog
 endless errors raise                   # record a SYNTHETIC fault, to see the surface work
 ```
 
-**Which project's errors.** One database holds every project on the machine, so `show` and `clear` cover the project enclosing your working directory. `--project <name>` picks another; `--all-projects` covers the machine and adds a PROJECT column. On `clear` the same flags decide what a no-id "clear everything" reaches, so dismissing what you were just shown cannot acknowledge another project's incidents; naming ids overrides the scope, since you named them.
+**`list` lists; `show` shows one.** The listing gives each incident a line and truncates its summary to the width available; `errors show <id>` prints that one incident whole, with the remedy its code documents. `errors show` with no id is a usage error naming `list` — `show` means "one item, in detail" everywhere else in the CLI, and this was the one place it did not.
+
+**Which project's errors.** One database holds every project on the machine, so `list` and `clear` cover the project enclosing your working directory. `--project <name>` picks another; `--all-projects` covers the machine and adds a PROJECT column. On `clear` the same flags decide what a no-id "clear everything" reaches, so dismissing what you were just shown cannot acknowledge another project's incidents; naming ids overrides the scope, since you named them.
 
 Every scope also carries the errors that belong to **no** project — the job runner unable to open the database, the status bar unable to resolve a pane. Those are the machine's failures, and a scoped view that hid them would leave them visible nowhere. They show a `—` in the PROJECT column. Run outside any registered project and both verbs cover everything, which is what the PROJECT column appearing tells you.
 
@@ -146,13 +149,13 @@ endless errors clear <id>               # put it back
 **Which database the error record lives in.** Inside a self-dev worktree, every `errors` and `jobs` verb **requires an explicit `--db main|sandbox`** and refuses without one. They are not pinned to a database on your behalf: the fault row reads main, a worktree's own routing points at its sandbox, and silently choosing either one for you is exactly how `errors clear` ends up dismissing incidents in the wrong record.
 
 ```bash
-endless errors show --db main       # the record the session-status fault row counts
-endless errors show --db sandbox    # this worktree's throwaway copy
+endless errors list --db main       # the record the session-status fault row counts
+endless errors list --db sandbox    # this worktree's throwaway copy
 ```
 
 Outside a worktree there is only one database and no flag is needed. `endless-go session-status` takes `--cols N`, which renders the fault row at any width without resizing anything.
 
-The fault row is one line: severity chip, the latest incident, and `Run eeh` right-aligned. `eeh` is the shell helper for `errors show` (see **Shell helpers** in `endless guide orchestration`), and `errors show` closes by naming `errors clear` — the fault row has no room to spell out the dismissal, so the command it points at does.
+The fault row is one line: severity chip, the latest incident, and `Run eeh` right-aligned. `eeh` is the shell helper for `errors list` (see **Shell helpers** in `endless guide orchestration`), and `errors list` closes by naming `errors clear` — the fault row has no room to spell out the dismissal, so the command it points at does.
 
 Three behaviors are worth knowing before you rely on this:
 
