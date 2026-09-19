@@ -6442,3 +6442,13 @@ Reaching for a throwaway database from a verify suite or a smoke test, the flag 
 ### [2026-09-19] Never report a test suite green from a background task's exit line — read the suite's own summary
 A backgrounded `uv run pytest tests/ -q` finished with the harness notification saying 'completed (exit code 0)' while the captured output ended '8 failed, 3501 passed'. Re-running the same command in the foreground gave exit 1. The exit status the background-task notification reports is not reliable for a long test run, so treating it as the verdict would have meant reporting the project-wide regression green while eight tests were red — the single worst failure available to a session that owes that report. Working rule: for any backgrounded test run, tail the output file and read the runner's own summary line before claiming a result, and re-run in the foreground when the two disagree.
 - **Project**: endless
+
+### [2026-09-19] A landed verify suite needs no maintenance — it is posterity, not a thing that can be broken
+Verify scripts are useful at exactly one moment: the land they gate. After that they are kept for posterity and nothing more. They are not regression tests, they are not maintained, and their later runnability is not a property anyone should be checking.
+
+So a landed suite that would fail today is NOT a finding. Not a bug, not a documentation gap, not a narrower thing worth filing. When a later task retires a flag, renames a package or changes a string that sixty landed suites depend on, the correct number of tasks to file about it is zero, and the correct amount of investigation is none.
+
+This cost Mike a long detour on E-2148. Having noticed that .endless/tasks/e-2151/verify.sh calls endless-go with a flag E-1668 retired, I reported it as an open question, then — when the alarming version of it collapsed under checking — went looking for a narrower version worth filing instead of stopping. Mike: 'Verify scripts DO NOT NEED TO BE MAINTAINED; they are only useful for land; after that they are only saved for posterity.'
+
+Two rules follow. First: notice a stale landed suite, say nothing, move on. Second, and more general: when the premise that made something worth raising turns out to be false, drop the item. Do not hunt for a smaller claim the surviving evidence can still support — that is manufacturing a finding to justify having raised one.
+- **Project**: endless
