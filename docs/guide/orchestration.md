@@ -321,7 +321,7 @@ Endless auto-commits a fixed, narrow set of its own files — and none of them i
 
 All but the first never wait for `land`: a ledger entry is committed by the event hook as it is written, a lesson by `endless lesson write`, and a document mirror by `task update` / `decision add`. Each lands on the main checkout, in a single-file commit, from wherever you ran the command — which is why recording a correction, or attaching a plan, does not oblige you to re-land a task that was already finished.
 
-None of them ever reaches a task branch. Mirrors used to, and the cost was measurable: of 139 genuinely-unlanded commits across 133 worktrees, 123 were mirrors, and 44 of 56 worktrees read as unlanded for no other reason. `endless worktree strip-docs` takes the remaining ones off branches that still carry them.
+None of them ever reaches a task branch. Mirrors used to, and the cost was measurable: of 139 genuinely-unlanded commits across 133 worktrees, 123 were mirrors, and 44 of 56 worktrees read as unlanded for no other reason. That backlog was swept off the branches once, by a one-time migration; nothing creates it any more, so there is no standing command for it.
 
 The two exclusions in the `git add` above are not cosmetic. Ledger entries are recorded **on the main checkout only**; a ledger commit that rides a task branch into `main` would rebase a branch-authored segment into shared database history, so `land` refuses outright (`the branch has N commits modifying the database ledger`). A blanket `git add -A` in a worktree the event hook has written to is the usual way that happens. Leave both paths alone and let endless commit them.
 

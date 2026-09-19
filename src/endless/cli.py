@@ -4150,28 +4150,6 @@ def worktree_sync(apply):
     sync_worktrees(apply)
 
 
-@worktree_cmd.command("strip-docs")
-@click.option("--apply", is_flag=True,
-              help="Actually rewrite the branches. Without it, only reports what it would do.")
-def worktree_strip_docs(apply):
-    """Remove Endless-authored document-mirror commits from task branches.
-
-    A mirror — a task's plan, outcome or analysis, or a decision body — is a
-    projection of a database column. Endless used to commit it on the task's
-    branch, where it waited for a land; it now writes it straight to main. This
-    removes what the old behaviour already left behind, so a branch stops
-    reading as holding unlanded work it never really held.
-
-    Dry run by default. A branch whose mirror holds content the database does
-    not have is reported and left completely alone — which side is right is not
-    this command's to guess. Branch tips move under a compare-and-swap, so a
-    session that commits mid-sweep is never clobbered; its branch is skipped
-    instead.
-    """
-    from endless.doc_strip import strip_doc_commits
-    strip_doc_commits(apply)
-
-
 @worktree_cmd.command("check")
 def worktree_check():
     """Report genuine git/worktree handoff anomalies for the current worktree.

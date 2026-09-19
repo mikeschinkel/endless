@@ -17,7 +17,7 @@
 #
 # What is verified here:
 #   A. Fail-fast: this task's own tests pass — the path convention, the sweep,
-#      the commit path's new retry, the hook gate, and the four Python modules
+#      the commit path's new retry, the hook gate, and the three Python modules
 #      whose contracts changed.
 #   B. The claims only visible from inside, named one by one.
 #   C. The structural guarantee, through the REAL binary against a REAL
@@ -55,8 +55,13 @@ section "A. This task's own tests (fail-fast)"
 # internal/docsweep is the job that relocates and repairs. internal/events holds
 # the index.lock retry this change made necessary by adding writers to that
 # path. internal/hookcmd is the gate that now has to discriminate WITHIN a
-# directory. The Python modules are the write path, the branch-history cleanup,
-# and the two contracts that changed shape underneath them.
+# directory. The Python modules are the write path and the two contracts that
+# changed shape underneath them.
+#
+# The branch-history cleanup that used to be checked here is gone with its
+# command: it swept a one-time backlog off the branches, and once swept there is
+# nothing for it to do. Keeping it would have been a migration wearing a product
+# verb's clothes — `.endless/migrations/` is where this repo puts such things.
 
 go_pkg() { # go_pkg <package> <label>
     if out=$(go test "$1" 2>&1); then
@@ -82,7 +87,6 @@ py_mod() { # py_mod <path> <label>
 }
 
 py_mod tests/test_doc_mirror_to_main.py "the write path lands on main"
-py_mod tests/test_doc_strip.py "the branch-history cleanup"
 py_mod tests/test_worktree_orphan_branch.py "orphan-branch recovery, widened"
 py_mod tests/test_worktree_db_context_threading.py "the --db context still threads"
 
@@ -158,23 +162,6 @@ py_claim tests/test_doc_mirror_to_main.py::test_sandbox_context_writes_nothing \
 py_claim tests/test_doc_mirror_to_main.py::test_a_failed_commit_warns_and_keeps_the_file \
     "a failed commit warns and keeps going — the DB write already succeeded"
 
-# The branch-history cleanup, in order of what it would cost to get wrong.
-py_claim tests/test_doc_strip.py::test_a_commit_bundling_a_mirror_with_source_keeps_the_source \
-    "a commit holding BOTH a mirror and source keeps the source"
-py_claim tests/test_doc_strip.py::test_nothing_but_the_mirror_paths_changes \
-    "the rewritten branch differs from the original in mirror paths and nothing else"
-py_claim tests/test_doc_strip.py::test_a_mirror_the_database_lacks_leaves_the_branch_alone \
-    "a mirror the database does not have is never dropped — no side is guessed"
-py_claim tests/test_doc_strip.py::test_an_unreadable_database_leaves_the_branch_alone \
-    "'I could not ask' never reads as 'the database agrees'"
-py_claim tests/test_doc_strip.py::test_a_mirror_the_base_already_had_is_restored_not_deleted \
-    "a mirror main already had is restored, not proposed for deletion"
-py_claim tests/test_doc_strip.py::test_author_and_dates_survive_the_rewrite \
-    "retained commits keep their author, dates and message"
-py_claim tests/test_doc_strip.py::test_a_worktree_on_the_branch_is_left_clean \
-    "a worktree standing on the branch is left clean, not permanently dirty"
-py_claim tests/test_doc_strip.py::test_a_worktree_mid_rebase_is_skipped \
-    "a worktree mid-rebase is skipped — that ref is not ours to move"
 
 # Orphan-branch recovery, widened from plans to every mirror kind.
 py_claim tests/test_worktree_orphan_branch.py::test_every_mirror_kind_counts_as_a_mirror \
@@ -468,5 +455,37 @@ assert_eq "no module builds a legacy mirror path as a literal" "" "${MIRROR_LITE
 assert_contains "the doc-mirror gate is called from the PreToolUse path" \
     "blockDocMirrorWriteIfApplicable(payload)" \
     "$(sed -n '/func handlePreToolUse/,/^}/p' internal/hookcmd/claude.go)"
+
+# ---------------------------------------------------------------------------
+section "F. The one-time cleanup is gone, and stays gone"
+# ---------------------------------------------------------------------------
+# `endless worktree strip-docs` swept a one-time backlog of mirror commits off
+# 54 task branches. Once swept there is nothing for it to do — nothing creates
+# that backlog any more — so it was removed rather than kept as a product verb
+# it never was. `.endless/migrations/` is where this repo puts a one-time
+# migration; that is where it should have lived from the start.
+#
+# Asserted, not assumed, because a retired verb that quietly comes back is how a
+# CLI accretes: the next reader finds it in --help, believes it is supported, and
+# runs a history rewrite against a fleet that no longer needs one.
+
+if uv run endless worktree strip-docs --help >/dev/null 2>&1; then
+    report_fail "the strip-docs verb is gone" \
+        "a non-zero exit from a removed verb" "it still resolves"
+else
+    report_pass "the strip-docs verb is gone"
+fi
+
+for gone in src/endless/doc_strip.py tests/test_doc_strip.py; do
+    if [[ -e "${gone}" ]]; then
+        report_fail "${gone} is gone" "absent" "still present"
+    else
+        report_pass "${gone} is gone"
+    fi
+done
+
+assert_eq "nothing references it any more" "" \
+    "$(grep -rln 'doc_strip\|strip-docs' --include='*.py' --include='*.md' \
+        src/ tests/ docs/ 2>/dev/null)"
 
 summary
