@@ -6426,3 +6426,11 @@ Asked how to fix the ERR- prefix on warnings, Mike answered with a before/after 
 ### [2026-09-18] A rule that applies to task content applies to a file too; do not route around a gate by changing where the text lives
 E-2155's inventory TSV keys every row on path:line, pinned to a commit. The task-content gate refuses line numbers precisely because they rot — it refused my plan and my outcome for exactly that, and I rewrote both to name functions instead. Then I left 1136 line-numbered rows in a committed file, where no gate looks, and called the commit hash a mitigation. It is not: the file landed, other sessions land, and every row rots from the moment it is written — two of my own fixes in the same session already shifted lines in files the inventory cites. Rule: when a gate refuses content, treat its reason as the project's rule and apply it everywhere that content goes, including files. Anchor a code reference to a file plus an enclosing symbol or a searchable string, never a line number.
 - **Project**: endless
+
+### [2026-09-19] Never `go run` a schema-change script to check it compiles — with no ENDLESS_CHANGE_DB it executes against the real main database
+internal/schema/changes/*.go are `package main` programs whose runner.Run resolves its DB from ENDLESS_CHANGE_DB and, when that is unset, falls back to dbcontext.DBPath("") — the real ledger under the user's config dir. They also parse no flags, so appending --help does not turn the run into a dry run; it is ignored and the change executes. Doing this from a worktree bypasses every sandbox routing rule the project has, because the fallback never consults the worktree.
+
+Cost when it happened on E-2161: the backfill ran against main and inserted its _schema_version marker, which would have made `endless worktree land` skip the change on the one database it was written for. It had to be deleted by hand before landing.
+
+To check a change script compiles, build it and throw the binary away with `go build -o` pointed at the null device. To exercise it, always name a throwaway database first: `ENDLESS_CHANGE_DB=<scratch>/probe.db go run ./internal/schema/changes/e-NNNN-slug.go`. The //go:build ignore tag keeps these files out of `go build ./...`, so a plain package build will not cover them — which is exactly why the temptation to `go run` them arises.
+- **Project**: endless
