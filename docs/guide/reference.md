@@ -133,7 +133,9 @@ endless errors raise                   # record a SYNTHETIC fault, to see the su
 
 **Which project's errors.** One database holds every project on the machine, so `list` and `clear` cover the project enclosing your working directory. `--project <name>` picks another; `--all-projects` covers the machine and adds a PROJECT column. On `clear` the same flags decide what a no-id "clear everything" reaches, so dismissing what you were just shown cannot acknowledge another project's incidents; naming ids overrides the scope, since you named them.
 
-Every scope also carries the errors that belong to **no** project — the job runner unable to open the database, the status bar unable to resolve a pane. Those are the machine's failures, and a scoped view that hid them would leave them visible nowhere. They show a `—` in the PROJECT column. Run outside any registered project and both verbs cover everything, which is what the PROJECT column appearing tells you.
+Every scope also carries the errors that belong to **no** project — the job runner unable to open the database, the status bar unable to resolve a pane. Those are the machine's failures, and a scoped view that hid them would leave them visible nowhere. They show a `—` in the PROJECT column. Run outside any registered project and both verbs cover everything.
+
+**A listing always says what it counted**, the empty case included: `no errors in endless — 2 elsewhere (endless errors list --all-projects)`. `errors show` used to print a bare `no errors` from inside one project while the fault row simultaneously reported `1 error, 1 warning` from another — two surfaces disagreeing about whether anything was wrong. The listing stays scoped; it just stops saying "nothing" when it means "nothing here".
 
 The fault row follows the same rule: `project status` / `project monitor` count their own project plus the unattributed ones, while `session status` / `session monitor` stay machine-wide — they render every live session on the box, whatever project each is in.
 

@@ -33,8 +33,27 @@
 // that hid them would be a view on which they are never reported at all.
 //
 // Outside any registered project there is nothing to scope to, so both verbs
-// fall back to the whole machine. The PROJECT column, which appears exactly when
-// the listing is machine-wide, is what tells the two situations apart.
+// fall back to the whole machine.
+//
+// # A listing says what it counted
+//
+// Every listing opens with a header naming the scope and the count, the empty
+// case included (E-2148). `errors show` once printed a bare "no errors" from
+// inside one project while the session-status fault row said `1 error, 1
+// warning`, because both incidents belonged to another project — two surfaces
+// flatly disagreeing about whether anything was wrong. Neither was lying: the
+// listing meant "none HERE" and said "none".
+//
+// The answer is not to widen the listing. A listing stays scoped, because
+// standing in a project and asking what went wrong should answer about that
+// project. The answer is that a scoped listing must say it is scoped, and hand
+// over the command that shows the rest:
+//
+//	no errors in endless — 2 elsewhere (endless errors list --all-projects)
+//
+// The PROJECT column still appears exactly when the listing is machine-wide,
+// but it is no longer load-bearing: the header says which of the two situations
+// produced it, which a column's presence never could.
 //
 // Clearing NEVER deletes: the row stays as history, and a recurrence of the same
 // fingerprint opens a NEW incident beside it, so a fault that came back is
@@ -203,24 +222,42 @@ func runList(args []string) {
 		os.Exit(2)
 	}
 
-	scope := resolveScope("list", *project, *allProjects)
+	scoped := resolveScope("list", *project, *allProjects)
 
-	incidents, err := faults.List(scope, *all, 0)
+	incidents, err := faults.List(scoped.scope, *all, 0)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "endless-go errors: list:", err)
 		os.Exit(1)
 	}
+
+	// The header comes FIRST and is printed unconditionally, empty listing
+	// included. A bare "no errors" from a scoped listing is the sentence that
+	// contradicted the fault row; this one says which project it means and where
+	// the rest are.
+	fmt.Println(listingHeader(scoped, len(incidents), *all))
 	if len(incidents) == 0 {
-		fmt.Println("no errors")
 		return
 	}
+	fmt.Println()
 
-	// The PROJECT column earns its width only when the listing spans projects.
-	// On a scoped listing every row would carry the same value — the name the
-	// user is already standing in — which is a column of noise on a table that
-	// has to stay readable in a status pane.
-	wide := scope == faults.AllProjects
+	printTable(incidents, scoped.wide())
 
+	if *detail {
+		for _, incident := range incidents {
+			printDetails(incident.ID)
+		}
+	}
+
+	printClearHint(incidents)
+}
+
+// printTable renders the listing rows.
+//
+// The PROJECT column earns its width only when the listing spans projects. On a
+// scoped listing every row would carry the same value — the name the header has
+// already given once — which is a column of noise on a table that has to stay
+// readable in a status pane.
+func printTable(incidents []faults.Incident, wide bool) {
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
 	if wide {
 		fmt.Fprintln(tw, "ID\tSEVERITY\tCODE\tPROJECT\tCOUNT\tLAST SEEN\tSOURCE\tSUMMARY")
@@ -238,18 +275,10 @@ func runList(args []string) {
 			incident.ID, severityText(incident), incident.Code, incident.Occurrences,
 			incident.LastSeenAt, incident.Source, incident.Summary)
 	}
-	if err = tw.Flush(); err != nil {
+	if err := tw.Flush(); err != nil {
 		fmt.Fprintln(os.Stderr, "endless-go errors: list:", err)
 		os.Exit(1)
 	}
-
-	if *detail {
-		for _, incident := range incidents {
-			printDetails(incident.ID)
-		}
-	}
-
-	printClearHint(incidents)
 }
 
 // runShow prints ONE incident in full.
@@ -315,7 +344,26 @@ func showUsage(w *os.File) {
 	fmt.Fprintln(w, "  endless errors list")
 }
 
-// resolveScope settles which project a `show` or `clear` covers.
+// scoping is a resolved scope together with what a surface must SAY about it.
+//
+// The scope alone cannot be described honestly, because faults.AllProjects is
+// two different situations wearing one value: "cover the machine, I asked for
+// it" and "cover the machine, because nothing here narrows it". A listing that
+// cannot tell those apart cannot explain itself, and explaining itself is the
+// whole of E-2148's item 3.
+type scoping struct {
+	scope   faults.ProjectScope
+	project string // the project's name when scoped; "" machine-wide
+	asked   bool   // machine-wide because --all-projects, not because of a fallback
+}
+
+// wide reports whether this covers every project — the condition under which a
+// PROJECT column earns its width.
+func (s scoping) wide() bool {
+	return s.scope == faults.AllProjects
+}
+
+// resolveScope settles which project a `list` or `clear` covers.
 //
 // The precedence is explicit-beats-ambient and the two explicit flags are
 // mutually exclusive: naming a project and asking for all of them are opposite
@@ -327,30 +375,116 @@ func showUsage(w *os.File) {
 // The ambient case fails OPEN, to the whole machine: run outside any registered
 // project there is no project to scope to, and refusing would make the fault
 // record unreadable from exactly the directories where something unexplained is
-// most likely happening. The PROJECT column then appears, which is how the
-// listing says it widened.
-func resolveScope(verb, project string, allProjects bool) (scope faults.ProjectScope) {
+// most likely happening. The listing's header says so in as many words, rather
+// than leaving the PROJECT column's appearance to be decoded.
+func resolveScope(verb, project string, allProjects bool) (s scoping) {
 	if project != "" && allProjects {
 		fmt.Fprintf(os.Stderr,
 			"endless-go errors: %s: --project and --all-projects are opposites; pass one\n", verb)
 		os.Exit(2)
 	}
 	if allProjects {
-		return faults.AllProjects
+		return scoping{scope: faults.AllProjects, asked: true}
 	}
 	if project != "" {
-		id, _, err := monitor.ProjectByName(project)
+		id, name, err := monitor.ProjectByName(project)
 		if err != nil {
 			fmt.Fprintf(os.Stderr, "endless-go errors: %s: %v\n", verb, err)
 			os.Exit(2)
 		}
-		return faults.ProjectScope(id)
+		return scoping{scope: faults.ProjectScope(id), project: name}
 	}
-	id, _, err := monitor.ProjectForCwd()
+	id, name, err := monitor.ProjectForCwd()
 	if err != nil {
-		return faults.AllProjects
+		return scoping{scope: faults.AllProjects}
 	}
-	return faults.ProjectScope(id)
+	return scoping{scope: faults.ProjectScope(id), project: name}
+}
+
+// listingHeader is the line above the table (or instead of it) saying WHAT was
+// counted and WHERE — and, on a scoped listing, how many incidents are open
+// outside it.
+//
+// This exists because of a flat contradiction (E-2148 item 3). `errors show`
+// printed "no errors" from inside the endless project while the session-status
+// fault row simultaneously said `1 error, 1 warning`, because both incidents
+// belonged to a different project. Neither surface was lying; the listing meant
+// "none here" and said "none", and two surfaces disagreeing about whether
+// anything is wrong is worse than either answer alone.
+//
+// The fix is NOT to widen the listing — a listing stays scoped to the project
+// you are standing in, because "generally when I am in a project I don't want
+// other project's concerns leaking in". The fix is to stop a scoped listing
+// saying "no errors" when it means "none here", and to hand over the command
+// that shows the rest.
+//
+// elsewhere is counted with a second read rather than inferred, and it is the
+// machine-wide total minus this scope's: exactly the incidents belonging to
+// OTHER projects, since the unattributed ones are already inside every scope.
+// A read that fails contributes nothing and is not reported — a header is an
+// annotation, and a diagnostics surface must not fail over its own annotation.
+func listingHeader(s scoping, shown int, includeCleared bool) (header string) {
+	var elsewhere int
+
+	noun := "errors"
+	if shown == 1 {
+		noun = "error"
+	}
+	count := strconv.Itoa(shown)
+	if shown == 0 {
+		count, noun = "no", "errors"
+	}
+
+	if s.wide() {
+		header = count + " " + noun + " across every project"
+		if !s.asked {
+			// The fallback, named rather than implied. Before E-2148 the only
+			// hint that a listing had widened was the PROJECT column appearing,
+			// which says nothing at all to a reader who has not seen the other
+			// shape.
+			header += " (no project encloses this directory)"
+		}
+		goto end
+	}
+
+	header = count + " " + noun + " in " + s.project
+
+	elsewhere = countElsewhere(s, shown, includeCleared)
+	if elsewhere > 0 {
+		header += " — " + strconv.Itoa(elsewhere) +
+			" elsewhere (endless errors list --all-projects)"
+	}
+
+end:
+	if includeCleared {
+		header += " [including cleared]"
+	}
+	return header
+}
+
+// countElsewhere returns how many incidents are open outside this scope: the
+// machine-wide count less the count already shown. Zero on any read failure,
+// and zero on a machine-wide scope, where there is no "elsewhere".
+func countElsewhere(s scoping, shown int, includeCleared bool) (n int) {
+	var all []faults.Incident
+	var err error
+
+	if s.wide() {
+		goto end
+	}
+	all, err = faults.List(faults.AllProjects, includeCleared, 0)
+	if err != nil {
+		goto end
+	}
+	n = len(all) - shown
+	if n < 0 {
+		// Two reads, one racing writer. Reporting a negative count would be
+		// worse than reporting none.
+		n = 0
+	}
+
+end:
+	return n
 }
 
 // projectText renders an incident's project for the wide listing. An
@@ -478,7 +612,7 @@ func runClear(args []string) {
 		ids = append(ids, id)
 	}
 
-	cleared, err := faults.Clear(resolveScope("clear", *project, *allProjects), ids, clearedBy())
+	cleared, err := faults.Clear(resolveScope("clear", *project, *allProjects).scope, ids, clearedBy())
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "endless-go errors: clear:", err)
 		os.Exit(1)

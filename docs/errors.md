@@ -92,8 +92,27 @@ would otherwise be visible on no default view at all. In an `--all-projects`
 listing their PROJECT column reads `—`.
 
 Run outside any registered project and there is nothing to scope to, so both
-verbs cover the whole machine. The PROJECT column appearing is how a listing
-tells you it widened.
+verbs cover the whole machine; the listing's header says so in as many words.
+
+**A listing always says what it counted.** Every `errors list` opens with a
+header naming the scope and the count — including when the count is zero, and
+especially then:
+
+```
+no errors in endless — 2 elsewhere (endless errors list --all-projects)
+no errors in endless
+3 errors in endless
+2 errors across every project
+1 error across every project (no project encloses this directory)
+```
+
+That first line is why this exists. `errors show` used to print a bare
+`no errors` from inside one project while the `session status` fault row
+simultaneously reported `1 error, 1 warning`, because both incidents belonged to
+a *different* project. Neither surface was lying — the listing meant "none here"
+and said "none" — but two surfaces disagreeing about whether anything is wrong
+is worse than either answer alone. The listing stays scoped; it just stops
+saying "nothing" when it means "nothing here".
 
 The same rule scopes the fault row: `project status` and `project monitor` count
 their own project's open incidents plus the unattributed ones, while
