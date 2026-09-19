@@ -253,7 +253,7 @@ func runList(args []string) {
 		}
 	}
 
-	printClearHint(incidents)
+	printFooter(incidents)
 }
 
 // listingWidth is the width the table is fitted to, or 0 for "do not fit".
@@ -723,27 +723,38 @@ func projectText(incident faults.Incident) (text string) {
 	return text
 }
 
-// printClearHint names the command that makes these rows go away.
+// printFooter names what a reader can do with the rows above.
 //
-// The fault row and this listing were the only surfaces a user ever saw, and neither
-// mentioned `clear` — so the one action available on a fault that had already
-// self-healed was undiscoverable (E-1950). Nothing ages off the fault row
-// (E-2151), which makes this hint the whole exit: an incident stays on it until someone
-// runs the command named here. Suppressed when nothing here is still open, since
-// clearing a cleared incident does nothing.
-func printClearHint(incidents []faults.Incident) {
+// `show` comes FIRST, and that ordering is the point (E-2148 item 6). This
+// footer used to name only `clear` — an action that dismisses a message and
+// changes nothing about the failure, as its own last paragraph is careful to
+// say. So the one thing the surface told a reader they could do was the one
+// thing that does not help, while docs/errors.md had carried a remedy per code
+// all along and nothing pointed at it. `errors show <id>` is now where that
+// remedy is, alongside the whole summary this table had to cut.
+//
+// The `clear` half is suppressed when nothing here is still open, since
+// clearing a cleared incident does nothing. The `show` half is not: reading one
+// row of history in full is a perfectly good reason to be looking at `--all`.
+func printFooter(incidents []faults.Incident) {
 	open := 0
 	for _, incident := range incidents {
 		if incident.ClearedAt == "" {
 			open++
 		}
 	}
+
+	fmt.Println()
+	fmt.Println("The summaries above are cut to fit. For one in full, with what to do about it:")
+	fmt.Println("  endless errors show <id>           the whole summary, and its remedy")
+	fmt.Println("  endless errors show <id> --detail  every occurrence's full capture")
+
 	if open == 0 {
 		return
 	}
 
 	fmt.Println()
-	fmt.Println("Once you have read these, dismiss them:")
+	fmt.Println("Once you have dealt with them, dismiss them:")
 	fmt.Println("  endless errors clear            mark every open error above as seen")
 	fmt.Println("  endless errors clear <id>       dismiss just one")
 	fmt.Println()
@@ -781,9 +792,93 @@ func showOne(id int64, detail bool) {
 	}
 	fmt.Printf("Summary:     %s\n", incident.Summary)
 
+	printRemedy(incident)
+
 	if detail {
 		printDetails(incident.ID)
 	}
+}
+
+// printRemedy prints what to do about this incident, and how to dismiss it once
+// done.
+//
+// Nothing anywhere used to say how to resolve anything (E-2148 item 6). The
+// listing's footer explained how to DISMISS an incident and was careful to say
+// dismissing is not a retry — so the one action the surface named was the one
+// that changes nothing. A reader learned that something was wrong and not one
+// thing about fixing it, while docs/errors.md had carried a remedy per code all
+// along and no surface pointed at it.
+//
+// It goes HERE and not in the listing, which has no width for it: pass 3 split
+// `show` off precisely so there would be somewhere for what does not fit on a
+// row.
+//
+// An unknown code — an older binary reading a row a newer one wrote — prints no
+// remedy rather than an apology for not having one. The fields above already
+// say everything this process knows.
+func printRemedy(incident faults.Incident) {
+	code, ok := faults.LookupCode(incident.Code)
+	if ok && code.Remedy != "" {
+		fmt.Println()
+		fmt.Println("What to do:")
+		fmt.Println(indentWrapped(code.Remedy, "  ", remedyWidth()))
+	}
+
+	if incident.ClearedAt != "" {
+		// Already dismissed. Naming `clear` here would offer an action that
+		// does nothing, which is the shape of unhelpfulness this pass exists to
+		// remove.
+		return
+	}
+	fmt.Println()
+	fmt.Printf("Dismiss it once you have dealt with it: endless errors clear %d\n", incident.ID)
+	fmt.Println("Dismissing is an acknowledgement, not a retry — it does not re-arm a failing job.")
+}
+
+// remedyWidth is the column the remedy wraps at: the terminal's width when
+// there is one, and a readable fixed measure otherwise, so a redirected `show`
+// produces the same file on every machine.
+func remedyWidth() (cols int) {
+	cols = 78
+	if liveview.IsTerminal(os.Stdout) {
+		cols = liveview.DetectCols(0, cols)
+	}
+	return cols
+}
+
+// indentWrapped wraps text to width columns and prefixes every line, breaking
+// only at spaces.
+//
+// Measured with runewidth, like everything else that has to fit a terminal: a
+// word count would be a different unit from the one the screen uses. A word
+// longer than the whole width is left to overhang rather than cut, because a
+// remedy's long words are paths and commands, and half of either is worse than
+// a line that wraps once.
+func indentWrapped(text, prefix string, width int) (out string) {
+	var lines []string
+	var line string
+
+	budget := width - runewidth.StringWidth(prefix)
+	if budget < 1 {
+		budget = 1
+	}
+
+	for _, word := range strings.Fields(text) {
+		switch {
+		case line == "":
+			line = word
+		case runewidth.StringWidth(line)+1+runewidth.StringWidth(word) <= budget:
+			line += " " + word
+		default:
+			lines = append(lines, prefix+line)
+			line = word
+		}
+	}
+	if line != "" {
+		lines = append(lines, prefix+line)
+	}
+
+	return strings.Join(lines, "\n")
 }
 
 // printDetails prints every logged occurrence for one incident. The detail lives

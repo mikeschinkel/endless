@@ -451,6 +451,63 @@ func TestCatalog_EveryCodeIsDocumented(t *testing.T) {
 	}
 }
 
+// TestCatalog_EveryCodeCarriesARemedy is the gate E-2148 added so a code cannot
+// ship telling a user something is wrong and nothing about fixing it.
+//
+// Before it, the only action the error surface named was `errors clear`, which
+// the footer was careful to explain is NOT a retry — so the one thing a reader
+// was told they could do was the one thing that changes nothing.
+func TestCatalog_EveryCodeCarriesARemedy(t *testing.T) {
+	for _, code := range faults.Codes() {
+		if strings.TrimSpace(code.Remedy) == "" {
+			t.Errorf("%s (%s) has no remedy", code.ID, code.Slug)
+		}
+	}
+}
+
+// TestCatalog_RemediesMatchTheDocs holds the catalog's remedy byte-identical to
+// the docs' own words.
+//
+// The remedy text is not authored in Go. docs/errors.md has carried a "What to
+// do" section per code all along; E-2148's job was to SURFACE that text, not to
+// write a second, shorter version of it that would drift away from the first
+// the moment either was edited. This test is what makes the copy safe: edit
+// either side alone and it fails, naming which.
+func TestCatalog_RemediesMatchTheDocs(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "docs", "errors.md"))
+	if err != nil {
+		t.Fatalf("read docs/errors.md: %v", err)
+	}
+	sections := regexp.MustCompile(`(?m)^## ((?:ERR|WARN)-\d{4}) — [a-z0-9-]+$`).
+		Split(string(data), -1)
+	ids := regexp.MustCompile(`(?m)^## ((?:ERR|WARN)-\d{4}) — [a-z0-9-]+$`).
+		FindAllStringSubmatch(string(data), -1)
+
+	documented := make(map[string]string, len(ids))
+	whatToDo := regexp.MustCompile(`(?s)\*\*What to do\.\*\*(.*?)(?:\n\n|$)`)
+	for i, match := range ids {
+		// sections[0] is the preamble above the first heading, so a heading's
+		// body is the section AFTER it.
+		found := whatToDo.FindStringSubmatch(sections[i+1])
+		if found == nil {
+			t.Errorf("docs/errors.md section %s has no **What to do.** paragraph", match[1])
+			continue
+		}
+		documented[match[1]] = strings.Join(strings.Fields(found[1]), " ")
+	}
+
+	for _, code := range faults.Codes() {
+		want, ok := documented[code.ID]
+		if !ok {
+			continue // TestCatalog_EveryCodeIsDocumented reports the missing section
+		}
+		if code.Remedy != want {
+			t.Errorf("%s: the catalog's remedy and docs/errors.md have diverged\n"+
+				"  catalog: %s\n  docs:    %s", code.ID, code.Remedy, want)
+		}
+	}
+}
+
 func TestCatalog_CodesAreUniqueAndWellFormed(t *testing.T) {
 	seen := make(map[string]bool)
 	format := regexp.MustCompile(`^(ERR|WARN)-\d{4}$`)

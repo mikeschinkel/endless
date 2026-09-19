@@ -67,6 +67,23 @@ type Code struct {
 	Slug     string   // kebab-case identifier, also the docs/errors.md anchor
 	Severity Severity // display severity for every fault carrying this code
 	Title    string   // short human-readable classification
+
+	// Remedy is what to do about a fault carrying this code, printed by
+	// `endless errors show <id>` (E-2148).
+	//
+	// Before it, nothing anywhere told a user how to resolve anything. The
+	// listing's footer explained how to DISMISS an incident, and was careful to
+	// say dismissing is not a retry — so the one action the surface named was
+	// the one that changes nothing. A reader learned that something was wrong
+	// and not one thing about fixing it.
+	//
+	// The text is NOT written here. It is the first paragraph of the code's
+	// "What to do" section in docs/errors.md, copied verbatim with its line
+	// breaks collapsed — docs/errors.md has carried a remedy per code all
+	// along, and this task surfaces that text rather than inventing a second,
+	// shorter, drifting version of it. TestCatalog_RemediesMatchTheDocs holds
+	// the two byte-identical, so editing either alone fails the build's tests.
+	Remedy string
 }
 
 // The catalog. Every code MUST have a matching section in docs/errors.md; the
@@ -84,6 +101,12 @@ var (
 		Slug:     "job-failed",
 		Severity: SeverityWarning,
 		Title:    "A background job returned an error",
+		Remedy: "Read the detail (`endless errors show <n> --detail`) — it " +
+			"carries the error and anything the job logged. If the cause is " +
+			"transient, the job will retry on its own cadence. If the job " +
+			"declares a `MaxBackoff`, repeated failures push its next attempt " +
+			"exponentially further out, up to that cap; fix the cause and run " +
+			"`endless jobs retry <name>` rather than waiting the backoff out.",
 	}
 
 	// ErrCodeJobPanicked covers a job whose Run panicked. Error severity: a
@@ -94,6 +117,9 @@ var (
 		Slug:     "job-panicked",
 		Severity: SeverityError,
 		Title:    "A background job panicked",
+		Remedy: "Treat it as a bug in the job. The stack in the detail log names " +
+			"the line. The job's scheduling row is intact and it will be " +
+			"retried.",
 	}
 
 	// ErrCodeJobTimedOut covers a job that outran its lease TTL and had its
@@ -105,6 +131,11 @@ var (
 		Slug:     "job-timed-out",
 		Severity: SeverityError,
 		Title:    "A background job exceeded its lease and was cancelled",
+		Remedy: "Either the job is slower than its `Schedule.LeaseTTL` allows, or " +
+			"it is wedged. Raise `LeaseTTL` if the work legitimately takes " +
+			"that long — the TTL must exceed the job's realistic worst case, " +
+			"because once it expires another invocation may claim and run the " +
+			"job concurrently.",
 	}
 
 	// ErrCodeJobScheduling covers a database failure while claiming, releasing,
@@ -116,6 +147,11 @@ var (
 		Slug:     "job-scheduling",
 		Severity: SeverityWarning,
 		Title:    "A background job's schedule could not be read or written",
+		Remedy: "Check that the database is reachable and that the schema is " +
+			"current. A binary pinned onto a database it does not own opens " +
+			"schema-passive (E-1818) and will not have created the `jobs` " +
+			"table; that is the expected cause if you are running a worktree " +
+			"build against the main database.",
 	}
 
 	// ErrCodeJobStuckLease covers a job re-claimed while a previous owner may
@@ -127,6 +163,12 @@ var (
 		Slug:     "job-stuck-lease",
 		Severity: SeverityWarning,
 		Title:    "A background job outran its lease and was re-claimed",
+		Remedy: "Raise the job's `Schedule.LeaseTTL` above its realistic " +
+			"worst-case runtime. Also confirm the job is genuinely " +
+			"idempotent: the lease is time-boxed rather than an OS lock " +
+			"precisely so a dead process needs no cleanup, and the " +
+			"unavoidable cost of that design is that a slow job can be " +
+			"re-entered.",
 	}
 
 	// ErrCodeTestWarning and ErrCodeTestError are raised only by
@@ -145,6 +187,8 @@ var (
 		Slug:     "test-warning",
 		Severity: SeverityWarning,
 		Title:    "A synthetic warning raised on purpose to exercise this surface",
+		Remedy: "Dismiss it: `endless errors clear <id>`. If you did not raise it " +
+			"yourself, someone was testing; it is not a fault report.",
 	}
 
 	// ErrCodeTestError is the error-severity counterpart to ErrCodeTestWarning.
@@ -153,6 +197,7 @@ var (
 		Slug:     "test-error",
 		Severity: SeverityError,
 		Title:    "A synthetic error raised on purpose to exercise this surface",
+		Remedy:   "Dismiss it: `endless errors clear <id>`.",
 	}
 
 	// ErrCodeStatusLineUnavailable covers the tmux status line failing to
@@ -169,6 +214,12 @@ var (
 		Slug:     "status-line-unavailable",
 		Severity: SeverityError,
 		Title:    "The tmux status line could not resolve its pane",
+		Remedy: "Read the detail (`endless errors show <n> --detail`); it carries " +
+			"the underlying error and the pane id. A schema or enum-integrity " +
+			"failure means the binary and the database disagree — usually a " +
+			"worktree build against the main DB (E-1818). If the bar is blank " +
+			"with *no* incident recorded, suspect the database itself and " +
+			"check `endless sql \"select 1\"`.",
 	}
 
 	// ErrCodeTriageFailed covers a triage attempt that could not produce a
@@ -190,6 +241,12 @@ var (
 		Slug:     "triage-failed",
 		Severity: SeverityWarning,
 		Title:    "Triage could not reach a verdict and left the task untriaged",
+		Remedy: "Check that `claude` is on PATH and answering — the incident's " +
+			"detail log carries the failing invocation. If triage is not " +
+			"wanted on this machine, set `ENDLESS_NO_TRIAGE=1` to stop the " +
+			"automatic path, or route by hand with `endless task submit <id>` " +
+			"/ `endless task update <id> --status unplanned`. Dismiss with " +
+			"`endless errors clear <id>`.",
 	}
 
 	// ErrCodeWorktreeProbeFailed covers a git probe behind the ◆ unsettled
@@ -208,6 +265,12 @@ var (
 		Slug:     "worktree-probe-failed",
 		Severity: SeverityError,
 		Title:    "A worktree's settled-state probe could not run",
+		Remedy: "Read the detail (`endless errors show <n> --detail`); it carries " +
+			"the worktree path, the failing git command and its stderr. The " +
+			"usual causes are a worktree directory whose git administrative " +
+			"file is stale or gone (`git worktree list` disagrees with the " +
+			"disk) and a base branch that does not exist locally. Dismiss " +
+			"with `endless errors clear <id>`.",
 	}
 
 	// ErrCodeDefaultBranchUnresolved covers monitor.DefaultBranch falling
@@ -224,6 +287,12 @@ var (
 		Slug:     "default-branch-unresolved",
 		Severity: SeverityError,
 		Title:    "The repository's default branch could not be resolved",
+		Remedy: "Set the branch explicitly — add `\"default_branch\": " +
+			"\"<branch>\"` to the project's `.endless/config.json`, which " +
+			"beats every detection step. Or give git the answer it is " +
+			"missing: `git remote set-head origin --auto` populates " +
+			"`origin/HEAD` for a clone that never had it. Dismiss with " +
+			"`endless errors clear <id>`.",
 	}
 
 	// ErrCodeUnlandedCacheUnwritable covers the derived-state cache under the
@@ -244,6 +313,15 @@ var (
 		Slug:     "unlanded-cache-unwritable",
 		Severity: SeverityWarning,
 		Title:    "The unlanded-verdict cache cannot be written",
+		Remedy: "Read the detail (`endless errors show <n> --detail`); it names " +
+			"the directory and the filesystem error. The usual causes are a " +
+			"checkout on read-only media, a `.git` directory owned by another " +
+			"user, and a full disk. `git rev-parse --path-format=absolute " +
+			"--git-common-dir` from inside the repository prints the parent " +
+			"the cache wants to live under. Nothing needs repairing " +
+			"afterwards — the cache is rebuildable derived state, and the " +
+			"next job pass refills it. Dismiss with `endless errors clear " +
+			"<id>`.",
 	}
 
 	// ErrCodeTurnFailedTransient and ErrCodeTurnFailedFatal both cover a Claude
@@ -267,6 +345,12 @@ var (
 		Slug:     "turn-failed-transient",
 		Severity: SeverityWarning,
 		Title:    "A turn ended on an API error that should pass on its own",
+		Remedy: "Usually nothing but take the turn again. Read the detail " +
+			"(`endless errors show <n> --detail`) for the session, the task " +
+			"and the error type of every occurrence. A high occurrence count " +
+			"on `max_output_tokens` is worth acting on — it means turns are " +
+			"routinely being cut off mid-reply. Dismiss with `endless errors " +
+			"clear <id>`.",
 	}
 
 	// ErrCodeTurnFailedFatal is the needs-a-person half: `authentication_failed`,
@@ -278,6 +362,12 @@ var (
 		Slug:     "turn-failed-fatal",
 		Severity: SeverityError,
 		Title:    "A turn ended on an API error that will not clear itself",
+		Remedy: "Fix the account condition the error type names — re-authenticate " +
+			"(`claude` will prompt), settle billing, or ask whoever " +
+			"administers the organisation about an org policy or a hold. " +
+			"`endless errors show <n> --detail` names the error type, the " +
+			"session and the task for every occurrence. Dismiss with `endless " +
+			"errors clear <id>` once it is sorted.",
 	}
 )
 

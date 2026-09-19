@@ -129,7 +129,7 @@ endless errors codes                   # the documented catalog
 endless errors raise                   # record a SYNTHETIC fault, to see the surface work
 ```
 
-**`list` lists; `show` shows one.** The listing gives each incident a line and truncates its summary to the width available; `errors show <id>` prints that one incident whole, with the remedy its code documents. `errors show` with no id is a usage error naming `list` — `show` means "one item, in detail" everywhere else in the CLI, and this was the one place it did not.
+**`list` lists; `show` shows one.** The listing gives each incident a line and truncates its summary to the width available; `errors show <id>` prints that one incident whole, followed by **what to do about it** — the `docs/errors.md` "What to do" paragraph for that code, printed by the command rather than left for you to go and find. Until then the only action either surface named was `clear`, which dismisses a message and changes nothing about the failure. `errors show` with no id is a usage error naming `list` — `show` means "one item, in detail" everywhere else in the CLI, and this was the one place it did not.
 
 The listing fits itself to your terminal instead of wrapping: the summary takes every column left over, and whole columns — SOURCE, then LAST SEEN, then PROJECT, then STATUS, then COUNT — drop out as the window narrows. The id, the code and a summary never drop. Piped or redirected output is never truncated at all, so a script gets the data rather than a picture of a table.
 

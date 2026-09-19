@@ -46,10 +46,17 @@ endless errors codes             # print this catalog from the running binary
 
 **`list` lists; `show` shows one.** The listing has one line per incident and
 truncates each summary to the width it has; `show <id>` is where the whole
-summary lives, along with what the code's catalog entry says to do about it.
-`show` used to be the listing verb, which made it the only `show` in the CLI
-that did not mean what `task show` and `decision show` mean. `errors show` with
-no id is now a usage error naming `list`, never a listing.
+summary lives, along with **what to do about it** — the same "What to do"
+paragraph this page carries for that code, printed by the command rather than
+left for you to come and find. `show` used to be the listing verb, which made it
+the only `show` in the CLI that did not mean what `task show` and
+`decision show` mean. `errors show` with no id is now a usage error naming
+`list`, never a listing.
+
+Until E-2148 nothing anywhere told you how to resolve anything. The listing's
+footer explained how to *dismiss* an incident, and was careful to say dismissing
+is not a retry — so the one action the surface named was the one that changes
+nothing.
 
 `session status` and `session monitor` append a trailing **fault row** whenever
 open incidents exist — max severity wins, `error` outranks `warning`:

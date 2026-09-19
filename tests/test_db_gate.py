@@ -430,7 +430,8 @@ def _run_go_calls(monkeypatch):
         "jobs_list": lambda: jobs_cmd.jobs_list(),
         "jobs_run": lambda: jobs_cmd.jobs_run(None),
         "jobs_retry": lambda: jobs_cmd.jobs_retry("some-job"),
-        "errors_show": lambda: jobs_cmd.errors_show(False, False, None),
+        "errors_list": lambda: jobs_cmd.errors_list(False, False),
+        "errors_show": lambda: jobs_cmd.errors_show(7, False),
         "errors_clear": lambda: jobs_cmd.errors_clear(()),
         "errors_codes": lambda: jobs_cmd.errors_codes(),
     }
