@@ -68,11 +68,16 @@ package errorscmd
 import (
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"strconv"
+	"strings"
 	"text/tabwriter"
 
+	"github.com/mattn/go-runewidth"
+
 	"github.com/mikeschinkel/endless/internal/faults"
+	"github.com/mikeschinkel/endless/internal/liveview"
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
@@ -240,7 +245,7 @@ func runList(args []string) {
 	}
 	fmt.Println()
 
-	printTable(incidents, scoped.wide())
+	printTable(os.Stdout, incidents, scoped.wide(), *all, listingWidth())
 
 	if *detail {
 		for _, incident := range incidents {
@@ -251,34 +256,253 @@ func runList(args []string) {
 	printClearHint(incidents)
 }
 
-// printTable renders the listing rows.
+// listingWidth is the width the table is fitted to, or 0 for "do not fit".
+//
+// A real terminal gets its real width. Anything else — a pipe, a file, a capture
+// in a test harness — gets 0 and therefore the whole summary, because a script
+// reading this output wants the data, not a picture of a table. $COLUMNS is
+// deliberately NOT consulted: it is commonly exported in a shell and would make
+// a piped run truncate for no reason.
+func listingWidth() (cols int) {
+	if !liveview.IsTerminal(os.Stdout) {
+		goto end
+	}
+	cols = liveview.DetectCols(0, 0)
+
+end:
+	return cols
+}
+
+// printTable renders the listing rows, fitted to width columns (0 = unbounded).
+func printTable(w io.Writer, incidents []faults.Incident, wide, includeCleared bool, width int) {
+	for _, line := range listingLines(incidents, wide, includeCleared, width) {
+		fmt.Fprintln(w, line)
+	}
+}
+
+// listingColumns builds the table, header row included, as a column-major
+// grid — every cell already rendered, nothing measured yet.
+//
+// There is no SEVERITY column (E-2148). The code says it: WARN-0004 is a
+// warning because it is spelled WARN-0004, checked by the catalog's own tests,
+// so a column beside it would state the same fact on every row at a cost of ten
+// columns — taken from the summary, which is the part that was being cut off.
 //
 // The PROJECT column earns its width only when the listing spans projects. On a
-// scoped listing every row would carry the same value — the name the header has
-// already given once — which is a column of noise on a table that has to stay
-// readable in a status pane.
-func printTable(incidents []faults.Incident, wide bool) {
-	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	if wide {
-		fmt.Fprintln(tw, "ID\tSEVERITY\tCODE\tPROJECT\tCOUNT\tLAST SEEN\tSOURCE\tSUMMARY")
-	} else {
-		fmt.Fprintln(tw, "ID\tSEVERITY\tCODE\tCOUNT\tLAST SEEN\tSOURCE\tSUMMARY")
+// scoped listing every row would carry the same value, which the header has
+// already given once.
+//
+// STATUS appears only under --all, which is the only mode in which a row can be
+// anything but open. It is what the severity column's "(cleared)" suffix became,
+// and it says the same thing in its own column instead of inside another one's.
+func listingColumns(incidents []faults.Incident, wide, includeCleared bool) (cols []listColumn) {
+	add := func(head string, shed int, cell func(faults.Incident) string) {
+		col := listColumn{head: head, shed: shed}
+		col.cells = make([]string, 0, len(incidents))
+		for _, incident := range incidents {
+			col.cells = append(col.cells, cell(incident))
+		}
+		cols = append(cols, col)
 	}
-	for _, incident := range incidents {
-		if wide {
-			fmt.Fprintf(tw, "%d\t%s\t%s\t%s\t%d\t%s\t%s\t%s\n",
-				incident.ID, severityText(incident), incident.Code, projectText(incident),
-				incident.Occurrences, incident.LastSeenAt, incident.Source, incident.Summary)
+
+	add("ID", shedNever, func(i faults.Incident) string { return strconv.FormatInt(i.ID, 10) })
+	add("CODE", shedNever, func(i faults.Incident) string { return i.Code })
+	if includeCleared {
+		add("STATUS", 3, statusText)
+	}
+	if wide {
+		add("PROJECT", 4, projectText)
+	}
+	add("COUNT", 2, func(i faults.Incident) string { return strconv.FormatInt(i.Occurrences, 10) })
+	add("LAST SEEN", 5, func(i faults.Incident) string { return i.LastSeenAt })
+	add("SOURCE", 6, func(i faults.Incident) string { return i.Source })
+	add("SUMMARY", shedNever, func(i faults.Incident) string { return i.Summary })
+
+	return cols
+}
+
+// listColumn is one column of the listing: its heading, its rendered cells, and
+// how readily it gives up its width.
+type listColumn struct {
+	head  string
+	cells []string
+	shed  int // higher sheds first; shedNever stays at every width
+	width int
+}
+
+// shedNever marks the three columns a listing is not a listing without: the id
+// you type into the next command, the code that says what and how bad, and the
+// summary that says which one.
+const shedNever = 0
+
+// minSummary is the narrowest SUMMARY worth keeping a column for. Below it the
+// cell is an ellipsis and a syllable, which is not a summary.
+const minSummary = 12
+
+// gap is the run of spaces between columns.
+const gap = "  "
+
+// listingLines renders the table — heading first — fitted into width columns.
+// A width of 0 means unbounded: every cell renders whole.
+//
+// This exists because the listing WRAPPED (E-2148 item 4). It rendered through
+// text/tabwriter, which pads to the widest cell and knows nothing about the
+// terminal, so a long summary ran past the margin and the row folded — on the
+// one surface whose job is to be scannable when something is wrong.
+//
+// Two things follow from fitting it properly, and both are why tabwriter had to
+// go rather than be configured. It measures cells in RUNES, so a CJK summary
+// (two columns per rune) shifted every column after it; everything here measures
+// with runewidth, which is the same yardstick the terminal uses. And a column
+// that no longer fits must GO rather than be squeezed, which tabwriter has no
+// concept of.
+//
+// Columns shed in a fixed order — SOURCE, LAST SEEN, PROJECT, STATUS, COUNT —
+// each one whole, so what remains is always a true table rather than a smeared
+// one. ID, CODE and SUMMARY never shed: they are the listing.
+func listingLines(incidents []faults.Incident, wide, includeCleared bool, width int) (lines []string) {
+	var cols []listColumn
+	var row []string
+
+	if len(incidents) == 0 {
+		goto end
+	}
+
+	cols = listingColumns(incidents, wide, includeCleared)
+	for i := range cols {
+		cols[i].width = cols[i].natural()
+	}
+	cols = fitColumns(cols, width)
+
+	lines = make([]string, 0, len(incidents)+1)
+	row = make([]string, len(cols))
+
+	for i := range cols {
+		row[i] = pad(cols[i].head, cols[i].width)
+	}
+	lines = append(lines, clamp(strings.Join(row, gap), width))
+
+	for r := range incidents {
+		for i := range cols {
+			row[i] = pad(cols[i].cells[r], cols[i].width)
+		}
+		lines = append(lines, clamp(strings.Join(row, gap), width))
+	}
+
+end:
+	return lines
+}
+
+// clamp trims a row's trailing padding and, as a last resort, its content.
+//
+// The content cut is the backstop for widths no table can survive: ID, CODE and
+// SUMMARY never shed, so below roughly twenty columns their headings alone
+// overrun the line. Wrapping there would be worse than cutting — a wrapped row
+// on a diagnostics listing is the defect this whole pass removes, while a cut
+// one is at least still one row per incident.
+//
+// width 0 means unbounded and only the trailing padding goes.
+func clamp(line string, width int) (out string) {
+	out = strings.TrimRight(line, " ")
+	if width > 0 {
+		out = runewidth.Truncate(out, width-1, "")
+	}
+	return out
+}
+
+// natural is the width a column needs to render every cell whole.
+func (c listColumn) natural() (w int) {
+	w = runewidth.StringWidth(c.head)
+	for _, cell := range c.cells {
+		if cw := runewidth.StringWidth(cell); cw > w {
+			w = cw
+		}
+	}
+	return w
+}
+
+// fitColumns sheds columns and narrows the summary until the row fits width.
+// A width of 0 leaves everything at its natural size.
+//
+// The summary absorbs the slack in both directions: it is the column with no
+// natural size worth respecting (a summary is as long as it is) and the only one
+// a reader can lose the tail of and still use the row — `errors show <id>` is
+// where the whole one lives, which is exactly why pass 3 had to come first.
+func fitColumns(cols []listColumn, width int) []listColumn {
+	if width <= 0 {
+		return cols
+	}
+
+	// cols-1, not cols: a line ending exactly at the right margin sits on the
+	// terminal's deferred-wrap boundary, where some emulators emit a phantom
+	// second row. One unused column at the edge is invisible; a wrapped table
+	// is not.
+	budget := width - 1
+
+	for {
+		fixed := 0
+		for _, c := range cols[:len(cols)-1] {
+			fixed += c.width
+		}
+		left := budget - fixed - len(gap)*(len(cols)-1)
+
+		if left >= minSummary || !shedOne(&cols) {
+			cols[len(cols)-1].width = left
+			if cols[len(cols)-1].width < 1 {
+				cols[len(cols)-1].width = 1
+			}
+			truncateCells(&cols[len(cols)-1])
+			return cols
+		}
+	}
+}
+
+// shedOne drops the most readily shed column, and reports whether it found one.
+func shedOne(cols *[]listColumn) (shed bool) {
+	victim := -1
+	for i, c := range *cols {
+		if c.shed == shedNever {
 			continue
 		}
-		fmt.Fprintf(tw, "%d\t%s\t%s\t%d\t%s\t%s\t%s\n",
-			incident.ID, severityText(incident), incident.Code, incident.Occurrences,
-			incident.LastSeenAt, incident.Source, incident.Summary)
+		if victim < 0 || c.shed > (*cols)[victim].shed {
+			victim = i
+		}
 	}
-	if err := tw.Flush(); err != nil {
-		fmt.Fprintln(os.Stderr, "endless-go errors: list:", err)
-		os.Exit(1)
+	if victim < 0 {
+		goto end
 	}
+	*cols = append((*cols)[:victim], (*cols)[victim+1:]...)
+	shed = true
+
+end:
+	return shed
+}
+
+// truncateCells cuts a column's cells — and its heading — down to its width.
+func truncateCells(c *listColumn) {
+	c.head = runewidth.Truncate(c.head, c.width, "")
+	for i, cell := range c.cells {
+		c.cells[i] = runewidth.Truncate(cell, c.width, "…")
+	}
+}
+
+// pad right-pads s to w display columns, measured the way a terminal measures.
+func pad(s string, w int) (padded string) {
+	padded = s
+	if n := w - runewidth.StringWidth(s); n > 0 {
+		padded += strings.Repeat(" ", n)
+	}
+	return padded
+}
+
+// statusText says whether a row is still open. Only rendered under --all, which
+// is the only mode in which it can be anything but "open".
+func statusText(incident faults.Incident) (text string) {
+	text = "open"
+	if incident.ClearedAt != "" {
+		text = "cleared"
+	}
+	return text
 }
 
 // runShow prints ONE incident in full.

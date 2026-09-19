@@ -100,14 +100,20 @@ func TestFrameFaultRow_CountsOnlyThisProjectAndTheUnattributed(t *testing.T) {
 	if !strings.Contains(out, faultrow.Hint) {
 		t.Fatalf("no fault row on a frame with open incidents:\n%s", out)
 	}
-	// alpha's own fault is a warning; the unattributed one is a warning too. Beta's
-	// is the only ERROR, so the severity chip is the tell: an ERROR chip here means
-	// the frame counted a project it has no business counting.
-	if strings.Contains(out, "ERROR") {
+	// alpha's own fault is a warning; the unattributed one is a warning too.
+	// Beta's ERR-0002 is the only error, so its code is the tell: seeing it here
+	// means the frame counted a project it has no business counting.
+	//
+	// The codes are what this asserts on because E-2148 made them the row's
+	// vocabulary — the severity word left, and the code carries it.
+	if strings.Contains(out, "ERR-0002") {
 		t.Errorf("alpha's frame reported beta's error:\n%s", out)
 	}
-	if !strings.Contains(out, "2 warnings") {
-		t.Errorf("alpha's frame did not count its own fault plus the unattributed one:\n%s", out)
+	for _, code := range []string{"WARN-0001", "WARN-0004"} {
+		if !strings.Contains(out, code) {
+			t.Errorf("alpha's frame did not count %s — its own fault and the "+
+				"unattributed one are both due here:\n%s", code, out)
+		}
 	}
 }
 
@@ -118,7 +124,7 @@ func TestFrameFaultRow_MachineWideScopeSeesEverything(t *testing.T) {
 	render(&b, "alpha", nonEmptyRows(), 10, 0, 120, false, now, faults.AllProjects)
 	out := b.String()
 
-	if !strings.Contains(out, "ERROR") {
+	if !strings.Contains(out, "ERR-0002") {
 		t.Errorf("AllProjects did not see beta's error — the scope is not being applied:\n%s", out)
 	}
 }

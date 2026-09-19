@@ -81,15 +81,21 @@ func TestRenderFaultRow_AppearsWhenIncidentsAreOpen(t *testing.T) {
 	renderTo(&b, oneRow(), 698, hintClaimBind, 90, false, hiddenOmit)
 	out := b.String()
 
-	// Max severity wins: one error outranks any number of warnings.
-	if !strings.Contains(out, "ERROR") {
-		t.Errorf("the fault row does not show the ERROR severity:\n%s", out)
-	}
-	if !strings.Contains(out, "1 error") {
+	// Both incidents reach the row, and the error is ranked above the warning.
+	//
+	// Asserted on the CODES rather than the words "error"/"warning": E-2148 took
+	// the severity word off the row, because WARN-0001 and ERR-0002 already say
+	// which is which and repeating it cost nine columns of the summary.
+	errAt := strings.Index(out, "ERR-0002")
+	warnAt := strings.Index(out, "WARN-0001")
+	if errAt < 0 {
 		t.Errorf("the fault row does not count the error:\n%s", out)
 	}
-	if !strings.Contains(out, "1 warning") {
+	if warnAt < 0 {
 		t.Errorf("the fault row does not count the warning:\n%s", out)
+	}
+	if errAt >= 0 && warnAt >= 0 && errAt > warnAt {
+		t.Errorf("the warning outranks the error on the row — most severe goes first:\n%s", out)
 	}
 	if !strings.Contains(out, faultrow.Hint) {
 		t.Errorf("the fault row does not name the command that explains it:\n%s", out)
@@ -115,7 +121,7 @@ func TestRenderFaultRow_StaysMachineWide(t *testing.T) {
 	bindFaultStore(t)
 
 	// One fault filed under a project this session has nothing to do with. It is
-	// the only ERROR, so the severity chip is the tell.
+	// the only incident in the store, so its code appearing at all is the tell.
 	faults.Record(faults.Fault{
 		Code:      faults.ErrCodeJobPanicked,
 		ProjectID: 1,
@@ -127,7 +133,7 @@ func TestRenderFaultRow_StaysMachineWide(t *testing.T) {
 	renderTo(&b, oneRow(), 698, hintClaimBind, 90, false, hiddenOmit)
 	out := b.String()
 
-	if !strings.Contains(out, "ERROR") {
+	if !strings.Contains(out, "ERR-0002") {
 		t.Errorf("session status narrowed its fault row to one project — "+
 			"a fault in another project vanished from a machine-wide view:\n%s", out)
 	}

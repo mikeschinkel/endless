@@ -131,6 +131,8 @@ endless errors raise                   # record a SYNTHETIC fault, to see the su
 
 **`list` lists; `show` shows one.** The listing gives each incident a line and truncates its summary to the width available; `errors show <id>` prints that one incident whole, with the remedy its code documents. `errors show` with no id is a usage error naming `list` — `show` means "one item, in detail" everywhere else in the CLI, and this was the one place it did not.
 
+The listing fits itself to your terminal instead of wrapping: the summary takes every column left over, and whole columns — SOURCE, then LAST SEEN, then PROJECT, then STATUS, then COUNT — drop out as the window narrows. The id, the code and a summary never drop. Piped or redirected output is never truncated at all, so a script gets the data rather than a picture of a table.
+
 **Which project's errors.** One database holds every project on the machine, so `list` and `clear` cover the project enclosing your working directory. `--project <name>` picks another; `--all-projects` covers the machine and adds a PROJECT column. On `clear` the same flags decide what a no-id "clear everything" reaches, so dismissing what you were just shown cannot acknowledge another project's incidents; naming ids overrides the scope, since you named them.
 
 Every scope also carries the errors that belong to **no** project — the job runner unable to open the database, the status bar unable to resolve a pane. Those are the machine's failures, and a scoped view that hid them would leave them visible nowhere. They show a `—` in the PROJECT column. Run outside any registered project and both verbs cover everything.
@@ -157,7 +159,18 @@ endless errors list --db sandbox    # this worktree's throwaway copy
 
 Outside a worktree there is only one database and no flag is needed. `endless-go session-status` takes `--cols N`, which renders the fault row at any width without resizing anything.
 
-The fault row is one line: severity chip, the latest incident, and `Run eeh` right-aligned. `eeh` is the shell helper for `errors list` (see **Shell helpers** in `endless guide orchestration`), and `errors list` closes by naming `errors clear` — the fault row has no room to spell out the dismissal, so the command it points at does.
+The fault row is one line, and what it says depends on how much is wrong:
+
+```
+WARN-0004 job scheduling row could not be created           Run eeh
+✕2 ⚠1  ERR-0002 ERR-0011 WARN-0004                          Run eeh
+```
+
+One open incident gets its code and summary. Several get a severity tally in glyphs and then the distinct codes, most severe first — no summary, because naming one summary while four things are broken reads as the whole story when it is a quarter of it. Duplicate codes collapse; the tally already carries the count.
+
+There is no severity word on the row: `WARN-0004` is a warning because it is spelled that way, so a chip reading ` WARNING ` beside it would cost nine columns to say the same thing twice — taken from the summary, which is the part that was being cut off. The colour stays: the whole row is painted in the highest open severity's pair.
+
+As the terminal narrows it degrades in a fixed order — the hint goes first, then the codes shed into `+N more` (never half a code, which would be useless to look up), then the tally alone, then nothing. `eeh` is the shell helper for `errors list` (see **Shell helpers** in `endless guide orchestration`), and `errors list` closes by naming `errors clear` — the fault row has no room to spell out the dismissal, so the command it points at does.
 
 Three behaviors are worth knowing before you rely on this:
 

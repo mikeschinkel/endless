@@ -45,10 +45,40 @@ import (
 // otherwise be invisible.
 //
 // ONE line, always (E-1950). The row sits in a status pane where every line is
-// scarce, so the severity chip, the incident text, and the command that explains
-// it share it: chip left, text filling, hint right-aligned. The text is what
-// gives when the terminal is narrow — the hint is reserved out of the budget
-// first, because a notification whose reader cannot act on it is just noise.
+// scarce, so the incident text and the command that explains it share it: text
+// filling from the left, hint right-aligned. The text is what gives when the
+// terminal is narrow — the hint is reserved out of the budget first, because a
+// notification whose reader cannot act on it is just noise.
+//
+// # No severity word (E-2148)
+//
+// The row used to open with a nine-column chip reading " WARNING " or
+// " ERROR   ". It does not any more: the code says it. WARN-0004 is a warning
+// because it is spelled WARN-0004, checked by the catalog's own tests, so a word
+// beside it would state the same fact twice — at a cost of nine columns on a
+// line whose scarcest resource is columns, taken from the summary, which is the
+// part that was being cut off.
+//
+// The colour stays. The whole row is still reversed in the max severity's pair,
+// which is what makes it read at a glance from across a pane; what went is the
+// redundant TEXT, not the distinction.
+//
+// # What the line says
+//
+// ONE open incident — its code, then its summary:
+//
+//	WARN-0004 job scheduling row could not be created          Run eeh
+//
+// MORE THAN ONE — a severity tally in glyphs, then the distinct codes, most
+// severe first:
+//
+//	✕2 ⚠1  ERR-0002 ERR-0011 WARN-0004                         Run eeh
+//
+// and no summary. With several incidents open, naming one summary reads as the
+// whole story when it is a fraction of it; the codes say what KINDS of thing are
+// wrong, which is the question a one-line notification can actually answer.
+//
+// Duplicate codes collapse — the tally already carries the count.
 
 // Severity styling.
 //
@@ -58,16 +88,29 @@ import (
 // unreadable dark-orange block on exactly that path (E-1950). 256-color indices
 // are fixed points in a standard cube — index 220 is the same gold everywhere.
 //
-// The whole row is reversed, not just the chip, so the line reads as a bar
-// rather than as a colored word floating in ordinary text. The chip then
-// inverts the row's own pair, which delineates it without introducing a third
-// color that would have to be legible against both.
+// The WHOLE row is reversed, so the line reads as a bar rather than as a colored
+// word floating in ordinary text. There used to be a second, inverted pair for
+// the severity chip; the chip is gone (E-2148) and so is the pair.
 const (
-	rowError    = "\033[48;5;160;38;5;231m" // white on red
-	chipError   = "\033[48;5;231;38;5;160m" // red on white
-	rowWarning  = "\033[48;5;220;38;5;16m"  // black on gold
-	chipWarning = "\033[48;5;16;38;5;220m"  // gold on black
-	rowReset    = "\033[0m"
+	rowError   = "\033[48;5;160;38;5;231m" // white on red
+	rowWarning = "\033[48;5;220;38;5;16m"  // black on gold
+	rowReset   = "\033[0m"
+)
+
+// Severity glyphs for the multi-incident tally.
+//
+// Both are single-width under runewidth, which is load-bearing: this row is
+// budgeted in terminal columns, and a double-width glyph counted as one would
+// push the right-aligned hint past the margin and wrap the line — the one thing
+// this row must never do. TestRowLine_TallyGlyphsAreSingleWidth pins it, so
+// swapping a glyph for a prettier double-width one fails rather than ships.
+//
+// Deliberately NOT emoji. An emoji presentation selector makes width
+// terminal-dependent, which is exactly the property a column budget cannot
+// tolerate.
+const (
+	glyphError   = "✕"
+	glyphWarning = "⚠"
 )
 
 // Hint is the command the row points at. It names a shell helper rather than
@@ -135,7 +178,7 @@ end:
 	return
 }
 
-// rowLine assembles the single notification row: chip, text, right-aligned hint,
+// rowLine assembles the single notification row: text left, right-aligned hint,
 // all on one reversed background painted across the line.
 //
 // It fills cols-1, not cols. A line that ends exactly at the right margin sits
@@ -144,6 +187,7 @@ end:
 // frameLines, which counts newlines, so a visual wrap it cannot see would
 // mis-fit the pane. One unpainted column at the right edge is invisible; a
 // wrapped row is not.
+//
 // Terminal width is not a fixed property of anyone's setup — it changes with the
 // monitor, the split, the font and the window — so every branch below is derived
 // from `cols` rather than tuned against any particular one. The invariant the
@@ -152,16 +196,12 @@ end:
 //
 // Degradation order as the row narrows: the hint goes first (it is reserved
 // before the text, so it survives every width where both fit), then the text
-// truncates toward nothing, then the chip itself truncates. The severity is the
-// last thing standing, because a row that cannot say what happened is not
-// worth the line it costs.
+// sheds from the right — see rowText — and below that the row renders nothing
+// at all. A blank reversed line would cost the same space and say nothing.
 func rowLine(overview faults.Overview, cols int, color bool) (line string) {
-	var chip string
 	var text string
 	var hint string
 	var width int
-	var chipWidth int
-	var avail int
 	var budget int
 	var pad int
 
@@ -170,99 +210,181 @@ func rowLine(overview faults.Overview, cols int, color bool) (line string) {
 		goto end
 	}
 
-	chip = severityLabel(overview.Max)
-	chipWidth = runewidth.StringWidth(chip)
-
-	// No room for the padded chip plus any text: fall back to the bare severity
-	// word, unpadded. It either fits whole or the row renders nothing —
-	// a sliver of a truncated word ("WARN", " ", "W") is not a notification, it
-	// is debris occupying a line.
-	if chipWidth+1 >= width {
-		chip = strings.TrimSpace(chip)
-		if runewidth.StringWidth(chip) > width {
-			goto end
-		}
-		line = chip
-		if color {
-			line = chipStyle(overview.Max) + chip + rowReset
-		}
+	hint = Hint
+	budget = textBudget(width, hint)
+	if budget == width {
+		// textBudget kept the whole span for the text, which is how it reports
+		// that the hint does not fit.
+		//
+		// The decision is made on the BUDGET and not on what the text happened
+		// to need, which is what keeps it monotonic: the hint appears at every
+		// width above one threshold and at none below it. Deciding from the
+		// fitted text instead made it blink back on as the terminal NARROWED —
+		// a tally short enough to leave room where a code list had not — which
+		// is the opposite of "the hint goes first".
+		hint = ""
+	}
+	text = rowText(overview, budget)
+	if text == "" {
 		goto end
 	}
 
-	text = rowText(overview)
-	hint = Hint
-
-	// Columns left for text + hint, after the chip and the space following it.
-	avail = width - chipWidth - 1
-
-	budget = textBudget(avail, hint)
-	if budget == avail {
-		// textBudget kept the whole span for the text, which is how it reports
-		// that the hint does not fit.
-		hint = ""
-	}
-	text = runewidth.Truncate(text, budget, "…")
-
-	pad = avail - runewidth.StringWidth(text) - runewidth.StringWidth(hint)
+	pad = width - runewidth.StringWidth(text) - runewidth.StringWidth(hint)
 	if pad < 0 {
 		pad = 0
 	}
 
 	if !color {
-		line = strings.TrimRight(chip+" "+text+strings.Repeat(" ", pad)+hint, " ")
+		line = strings.TrimRight(text+strings.Repeat(" ", pad)+hint, " ")
 		goto end
 	}
 
-	line = rowStyle(overview.Max) +
-		chipStyle(overview.Max) + chip + rowReset +
-		rowStyle(overview.Max) + " " + text + strings.Repeat(" ", pad) + hint +
-		rowReset
+	line = rowStyle(overview.Max) + text + strings.Repeat(" ", pad) + hint + rowReset
 
 end:
 	return line
 }
 
-// rowText is the incident text beside the chip: the latest incident's code and
-// summary, prefixed by a count only when the count says something the chip does
-// not.
+// rowText is the incident text, fitted into budget columns. It returns "" when
+// nothing legible fits, which is rowLine's signal to render no row at all.
 //
-// A lone warning behind a WARNING chip made the old row read "WARNING 1
-// warning — ..." (E-1950); the tally earns its space only when there is more
-// than one incident, or when a lower severity is hiding behind a higher chip.
-func rowText(overview faults.Overview) (text string) {
-	counts := rowCounts(overview)
-
-	if counts != "" {
-		text = counts
+// One incident gets its code and summary; several get a glyph tally and the
+// distinct codes. The split is not about space — it is about what a single line
+// can honestly say. With one thing wrong, the summary IS the news. With four,
+// naming one summary reads as the whole story when it is a quarter of it.
+func rowText(overview faults.Overview, budget int) (text string) {
+	if budget < 1 {
+		goto end
 	}
-	if overview.Latest != nil {
-		if text != "" {
-			text += " — "
-		}
-		text += overview.Latest.Code + " " + liveview.Collapse(overview.Latest.Summary)
+	if overview.Total == 1 && overview.Latest != nil {
+		text = singleText(*overview.Latest, budget)
+		goto end
 	}
+	text = multiText(overview, budget)
 
+end:
 	return text
 }
 
-// rowCounts renders the per-severity tallies, most severe first, and returns
-// "" for the common single-incident case the chip already conveys.
-func rowCounts(overview faults.Overview) (text string) {
+// minSummaryFragment is the shortest summary tail worth printing beside a code.
+//
+// Below it the summary has stopped being a summary: "j…" tells a reader nothing
+// the code did not, while costing the columns that would have gone to nothing
+// else. The code alone is the better row.
+const minSummaryFragment = 6
+
+// singleText renders the one-incident row: code, then as much of the summary as
+// fits.
+//
+// The code is never truncated. A code is an identifier — it is looked up, typed
+// into `errors show`, and pasted into a bug report — and "WARN-00…" serves none
+// of those, so a budget too narrow for the whole code renders no row rather than
+// a code-shaped thing that is not one.
+func singleText(incident faults.Incident, budget int) (text string) {
+	var codeWidth int
+	var left int
+
+	codeWidth = runewidth.StringWidth(incident.Code)
+	if codeWidth > budget {
+		goto end
+	}
+	text = incident.Code
+
+	left = budget - codeWidth - 1
+	if left < minSummaryFragment {
+		goto end
+	}
+	text += " " + runewidth.Truncate(liveview.Collapse(incident.Summary), left, "…")
+
+end:
+	return text
+}
+
+// multiText renders the several-incidents row: the severity tally, then the
+// distinct codes.
+//
+// Degradation is by whole units, never by cutting one in half: the codes shed
+// from the right into "+N more", and below that the tally stands alone. The
+// tally is the last thing to go because it is the one part that is still true
+// at any width — "two errors and a warning are open" needs no room to be
+// understood.
+func multiText(overview faults.Overview, budget int) (text string) {
+	var tally string
+	var codes string
+	var left int
+
+	tally = severityTally(overview)
+	if tally == "" || runewidth.StringWidth(tally) > budget {
+		goto end
+	}
+	text = tally
+
+	left = budget - runewidth.StringWidth(tally) - 2
+	if left < 1 {
+		goto end
+	}
+	codes = fitCodes(overview.Codes, left)
+	if codes == "" {
+		goto end
+	}
+	text += "  " + codes
+
+end:
+	return text
+}
+
+// severityTally renders the per-severity counts as glyphs, most severe first:
+// `✕2 ⚠1`. A severity with no open incidents is omitted rather than shown as
+// zero — a zero is a fact nobody needs on a line this scarce.
+//
+// This is what the nine-column " WARNING " chip became. It says strictly more
+// (how many, at each severity, not just the maximum) in a quarter of the space.
+func severityTally(overview faults.Overview) (tally string) {
 	errCount := overview.Counts[faults.SeverityError]
 	warnCount := overview.Counts[faults.SeverityWarning]
 
-	if overview.Total < 2 {
+	if errCount > 0 {
+		tally = glyphError + strconv.Itoa(errCount)
+	}
+	if warnCount > 0 {
+		if tally != "" {
+			tally += " "
+		}
+		tally += glyphWarning + strconv.Itoa(warnCount)
+	}
+
+	return tally
+}
+
+// fitCodes renders as many codes as fit in budget, space-separated, replacing
+// the remainder with `+N more`.
+//
+// It never emits a partial code — see singleText for why — and it never emits a
+// bare `+N more` with no code beside it, which would be a longer way of saying
+// what the tally already said. Either at least one whole code and an honest
+// count of the rest fit, or nothing does and the caller keeps the tally alone.
+func fitCodes(codes []string, budget int) (text string) {
+	var joined string
+	var candidate string
+	var take int
+
+	if len(codes) == 0 {
 		goto end
 	}
 
-	if errCount > 0 {
-		text = strconv.Itoa(errCount) + " " + plural(errCount, "error", "errors")
+	joined = strings.Join(codes, " ")
+	if runewidth.StringWidth(joined) <= budget {
+		text = joined
+		goto end
 	}
-	if warnCount > 0 {
-		if text != "" {
-			text += ", "
+
+	for take = len(codes) - 1; take >= 1; take-- {
+		candidate = strings.Join(codes[:take], " ") +
+			" +" + strconv.Itoa(len(codes)-take) + " more"
+		if runewidth.StringWidth(candidate) <= budget {
+			text = candidate
+			goto end
 		}
-		text += strconv.Itoa(warnCount) + " " + plural(warnCount, "warning", "warnings")
 	}
 
 end:
@@ -278,29 +400,9 @@ func rowStyle(severity faults.Severity) (style string) {
 	return style
 }
 
-// chipStyle inverts rowStyle, so the severity label reads as a distinct block
-// within the bar.
-func chipStyle(severity faults.Severity) (style string) {
-	style = chipWarning
-	if severity == faults.SeverityError {
-		style = chipError
-	}
-	return style
-}
-
-// severityLabel is the chip's text, padded to a common width so the row lines
-// up whichever severity is showing.
-func severityLabel(severity faults.Severity) (label string) {
-	label = " WARNING "
-	if severity == faults.SeverityError {
-		label = " ERROR   "
-	}
-	return label
-}
-
 // minTextBudget is the narrowest incident text worth keeping the hint for.
 //
-// Below it the hint is costing more than it is worth: a row truncated to
+// Below it the hint is costing more than it is worth: a row cut down to
 // "WARN-0004 job sch…" has stopped telling the user what happened, and pointing
 // them at a command to read more is no substitute for the text itself.
 const minTextBudget = 20
@@ -327,13 +429,4 @@ func textBudget(avail int, hint string) (budget int) {
 
 end:
 	return budget
-}
-
-// plural picks the singular or plural form for n.
-func plural(n int, singular, many string) (word string) {
-	word = many
-	if n == 1 {
-		word = singular
-	}
-	return word
 }

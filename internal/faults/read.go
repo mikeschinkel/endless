@@ -2,6 +2,7 @@ package faults
 
 import (
 	"database/sql"
+	"sort"
 	"strings"
 
 	"github.com/mikeschinkel/go-doterr"
@@ -82,12 +83,24 @@ end:
 }
 
 // Overview is the aggregate the session-status fault row renders: how many open
-// incidents exist, at what severities, and the most recent one's text.
+// incidents exist, at what severities, the most recent one's text, and which
+// distinct codes are involved.
 type Overview struct {
 	Counts map[Severity]int // open incident count per severity
 	Total  int              // open incidents across all severities
 	Max    Severity         // highest severity present; "" when Total is 0
 	Latest *Incident        // most recently seen open incident; nil when none
+
+	// Codes is every DISTINCT code among the incidents, most severe first and
+	// then by id. Duplicates collapse: four occurrences of one condition and
+	// four incidents carrying one code are both "that code", and the counts
+	// above already say how many.
+	//
+	// Ordered deterministically rather than by recency (E-2148) because the
+	// fault row repaints every two seconds on a live monitor: recency ordering
+	// would shuffle the codes under the reader's eye every time an incident
+	// re-occurred, which is motion carrying no information.
+	Codes []string
 }
 
 // Open returns the aggregate over currently-open (uncleared) incidents within
@@ -124,8 +137,10 @@ end:
 // produce that order.
 func Summarize(incidents []Incident) (overview Overview) {
 	var incident Incident
+	var rank map[string]int
 
 	overview.Counts = make(map[Severity]int, 2)
+	rank = make(map[string]int, len(incidents))
 
 	for _, incident = range incidents {
 		overview.Counts[incident.Severity]++
@@ -133,7 +148,19 @@ func Summarize(incidents []Incident) (overview Overview) {
 		if incident.Severity.Rank() > overview.Max.Rank() {
 			overview.Max = incident.Severity
 		}
+		if _, seen := rank[incident.Code]; !seen {
+			rank[incident.Code] = incident.Severity.Rank()
+			overview.Codes = append(overview.Codes, incident.Code)
+		}
 	}
+	sort.Slice(overview.Codes, func(i, j int) bool {
+		a, b := overview.Codes[i], overview.Codes[j]
+		if rank[a] != rank[b] {
+			return rank[a] > rank[b]
+		}
+		return a < b
+	})
+
 	if len(incidents) > 0 {
 		// Copied into a local so Latest does not alias the caller's slice.
 		incident = incidents[0]

@@ -52,7 +52,17 @@ that did not mean what `task show` and `decision show` mean. `errors show` with
 no id is now a usage error naming `list`, never a listing.
 
 `session status` and `session monitor` append a trailing **fault row** whenever
-open incidents exist — max severity wins, `error` outranks `warning`.
+open incidents exist — max severity wins, `error` outranks `warning`:
+
+```
+WARN-0004 job scheduling row could not be created           Run eeh
+✕2 ⚠1  ERR-0002 ERR-0011 WARN-0004                          Run eeh
+```
+
+One open incident gets its code and summary; several get a severity tally in
+glyphs and then the distinct codes, most severe first. The row carries no
+severity *word* — the code says it — and the colour of the whole row carries the
+highest severity open.
 
 Two behaviors worth knowing:
 

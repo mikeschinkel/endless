@@ -97,12 +97,13 @@ func TestRender_ShowsAWarningHoweverLongAgoItFired(t *testing.T) {
 	recordWarning()
 	age(t, db, ancient)
 
+	// WARN-0004 is BOTH the assertion that the warning is still counted and the
+	// assertion that the row says WHICH warning — E-2148 folded those two facts
+	// into one string when the severity word left the row and the code took it
+	// over.
 	line := rendered(t)
-	if !strings.Contains(line, "WARNING") {
-		t.Errorf("an old warning aged off the fault row:\n%q", line)
-	}
 	if !strings.Contains(line, "WARN-0004") {
-		t.Errorf("the fault row lost the incident code:\n%q", line)
+		t.Errorf("an old warning aged off the fault row:\n%q", line)
 	}
 }
 
@@ -113,14 +114,13 @@ func TestRender_CountsEveryUnclearedIncidentHoweverOld(t *testing.T) {
 	recordError()
 	age(t, db, ancient)
 
-	// The tally is what the single chip cannot convey, so it is where a row
-	// counting a filtered set rather than the open one shows up: an aged-off
-	// warning would leave the ERROR chip standing over no tally at all.
+	// The tally is where a row counting a filtered set rather than the open one
+	// shows up: an aged-off warning would leave the error counted alone.
 	line := rendered(t)
-	if !strings.Contains(line, "ERROR") {
+	if !strings.Contains(line, glyphError+"1") {
 		t.Errorf("an old error aged off the fault row:\n%q", line)
 	}
-	if !strings.Contains(line, "1 error") || !strings.Contains(line, "1 warning") {
+	if !strings.Contains(line, glyphWarning+"1") {
 		t.Errorf("the fault row counts fewer incidents than the store holds open:\n%q", line)
 	}
 }
@@ -168,51 +168,61 @@ func TestRowLine_IsOneRowCarryingBothTextAndHint(t *testing.T) {
 	if strings.Contains(line, "\n") {
 		t.Errorf("the fault row spans more than one line:\n%q", line)
 	}
-	if !strings.Contains(line, "WARNING") {
-		t.Errorf("the fault row lost its severity chip:\n%q", line)
-	}
 	if !strings.Contains(line, "WARN-0004") {
 		t.Errorf("the fault row lost the incident code:\n%q", line)
+	}
+	if !strings.Contains(line, "job scheduling row") {
+		t.Errorf("a lone incident lost its summary:\n%q", line)
 	}
 	if !strings.HasSuffix(line, Hint) {
 		t.Errorf("hint is not right-aligned at the end of the row:\n%q", line)
 	}
 }
 
-func TestRowLine_OmitsTheCountASingleChipAlreadyConveys(t *testing.T) {
-	overview := faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")})
+// --- E-2148: the code states the severity, so the row stops spelling it out ---
 
-	line := rowLine(overview, 90, false)
+func TestRowLine_SpendsNoColumnsOnTheSeverityWord(t *testing.T) {
+	cases := map[string]faults.Overview{
+		"warning": faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")}),
+		"error":   faults.Summarize([]faults.Incident{errored("2026-08-10T10:00:00")}),
+		"both": faults.Summarize([]faults.Incident{
+			errored("2026-08-10T10:00:00"), warned("2026-08-10T09:49:09"),
+		}),
+	}
 
-	// " WARNING  1 warning — ..." said the same thing twice.
-	if strings.Contains(line, "1 warning") {
-		t.Errorf("the fault row restates the count the chip already carries:\n%q", line)
+	// " WARNING " and " ERROR   " cost nine columns to repeat what WARN-0004
+	// and ERR-0002 already say — taken from the summary, which is the part that
+	// was being cut off.
+	for name, overview := range cases {
+		for _, cols := range rowWidths() {
+			line := rowLine(overview, cols, false)
+			for _, word := range []string{"WARNING", "ERROR"} {
+				if strings.Contains(line, word) {
+					t.Fatalf("%s/cols=%d: the row still spells out %q:\n%q",
+						name, cols, word, line)
+				}
+			}
+		}
 	}
 }
 
-func TestRowLine_CountsWhenThereIsMoreThanOneIncident(t *testing.T) {
-	overview := faults.Summarize([]faults.Incident{
-		errored("2026-08-10T10:00:00"),
-		warned("2026-08-10T09:49:09"),
-	})
-
-	line := rowLine(overview, 90, false)
-
-	if !strings.Contains(line, "1 error") || !strings.Contains(line, "1 warning") {
-		t.Errorf("the fault row dropped the tally that the single chip cannot convey:\n%q", line)
+func TestRowLine_StillColorsByMaxSeverity(t *testing.T) {
+	// The severity WORD went; the distinction did not. The whole row is still
+	// reversed in the max severity's pair, which is what makes it read at a
+	// glance from across a pane.
+	warn := rowLine(faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")}), 90, true)
+	if !strings.Contains(warn, rowWarning) {
+		t.Errorf("a warning-only row is not painted in the warning pair:\n%q", warn)
 	}
-}
 
-func TestRowLine_KeepsTheTextWhenTheRowIsTooNarrowForBoth(t *testing.T) {
-	overview := faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")})
-
-	line := rowLine(overview, 30, false)
-
-	if strings.Contains(line, "\n") {
-		t.Errorf("a narrow fault row wrapped onto a second line:\n%q", line)
+	both := rowLine(faults.Summarize([]faults.Incident{
+		errored("2026-08-10T10:00:00"), warned("2026-08-10T09:49:09"),
+	}), 90, true)
+	if !strings.Contains(both, rowError) {
+		t.Errorf("an error present did not win the row's color:\n%q", both)
 	}
-	if !strings.Contains(line, "WARN-0004") {
-		t.Errorf("a narrow fault row dropped the incident text instead of the hint:\n%q", line)
+	if strings.Contains(both, rowWarning) {
+		t.Errorf("the row carries two severity pairs at once:\n%q", both)
 	}
 }
 
@@ -229,8 +239,146 @@ func TestRowLine_UsesThemeIndependentColors(t *testing.T) {
 	if !strings.Contains(line, rowWarning) {
 		t.Errorf("the fault row did not reverse its whole line:\n%q", line)
 	}
-	if !strings.Contains(line, chipWarning) {
-		t.Errorf("chip is not inverted against the row:\n%q", line)
+}
+
+func TestRowLine_TallyGlyphsAreSingleWidth(t *testing.T) {
+	// Load-bearing, not cosmetic: this row is budgeted in terminal columns, so a
+	// double-width glyph counted as one pushes the right-aligned hint past the
+	// margin and wraps the line. Swapping in a prettier glyph must fail here
+	// rather than ship.
+	for _, glyph := range []string{glyphError, glyphWarning} {
+		if got := runewidth.StringWidth(glyph); got != 1 {
+			t.Errorf("glyph %q is %d columns wide, want 1", glyph, got)
+		}
+	}
+}
+
+func TestRowLine_TalliesSeveritiesInGlyphsWhenSeveralAreOpen(t *testing.T) {
+	overview := faults.Summarize([]faults.Incident{
+		errored("2026-08-10T10:00:00"),
+		errored("2026-08-10T09:59:00"),
+		warned("2026-08-10T09:49:09"),
+	})
+
+	line := rowLine(overview, 90, false)
+
+	if !strings.Contains(line, glyphError+"2") {
+		t.Errorf("the tally does not count the two errors:\n%q", line)
+	}
+	if !strings.Contains(line, glyphWarning+"1") {
+		t.Errorf("the tally does not count the warning:\n%q", line)
+	}
+	// The words are what the glyphs replaced. "1 error, 1 warning" cost
+	// eighteen columns to say what "✕1 ⚠1" says in five.
+	if strings.Contains(line, "error") || strings.Contains(line, "warning") {
+		t.Errorf("the tally still spells the severities out:\n%q", line)
+	}
+}
+
+func TestRowLine_NamesTheDistinctCodesRatherThanOneSummary(t *testing.T) {
+	overview := faults.Summarize([]faults.Incident{
+		errored("2026-08-10T10:00:00"),
+		warned("2026-08-10T09:49:09"),
+	})
+
+	line := rowLine(overview, 90, false)
+
+	if !strings.Contains(line, "ERR-0002") || !strings.Contains(line, "WARN-0004") {
+		t.Errorf("the row does not name both open codes:\n%q", line)
+	}
+	// With several open, naming ONE summary reads as the whole story when it is
+	// a fraction of it.
+	if strings.Contains(line, "job scheduling row") || strings.Contains(line, "panicked") {
+		t.Errorf("the row named one incident's summary while several are open:\n%q", line)
+	}
+	// Most severe first.
+	if strings.Index(line, "ERR-0002") > strings.Index(line, "WARN-0004") {
+		t.Errorf("codes are not ordered most severe first:\n%q", line)
+	}
+}
+
+func TestRowLine_CollapsesDuplicateCodes(t *testing.T) {
+	a := warned("2026-08-10T09:49:09")
+	b := warned("2026-08-10T09:48:00")
+	b.ID, b.Fingerprint, b.Summary = 9, "other", "a different failure, same code"
+
+	line := rowLine(faults.Summarize([]faults.Incident{a, b}), 90, false)
+
+	if n := strings.Count(line, "WARN-0004"); n != 1 {
+		t.Errorf("one code shown %d times; the tally already carries the count:\n%q", n, line)
+	}
+	if !strings.Contains(line, glyphWarning+"2") {
+		t.Errorf("the tally lost an incident to the code collapse:\n%q", line)
+	}
+}
+
+// wholeCodes is the set the shedding sweep matches against.
+var wholeCodes = map[string]bool{"ERR-0002": true, "ERR-0011": true, "WARN-0004": true}
+
+func TestRowLine_ShedsCodesIntoACountRatherThanCuttingOne(t *testing.T) {
+	overview := faults.Summarize([]faults.Incident{
+		errored("2026-08-10T10:00:00"),
+		unresolvedBranch("2026-08-10T09:55:00"),
+		warned("2026-08-10T09:49:09"),
+	})
+
+	// A code is an identifier: it gets looked up, typed into `errors show` and
+	// pasted into a bug report, and "WARN-00…" serves none of those. So the row
+	// sheds WHOLE codes into a count as it narrows, and never cuts one in half.
+	sawMore := false
+	for _, cols := range rowWidths() {
+		line := rowLine(overview, cols, false)
+		if line == "" {
+			continue
+		}
+		if strings.Contains(line, "more") {
+			sawMore = true
+		}
+		// Every code-shaped TOKEN on the line must be a whole code. Tokens
+		// rather than substrings is the point: "ERR-" is a prefix of two
+		// different codes here, so a substring test cannot tell a shed code
+		// from a cut one.
+		for _, field := range strings.Fields(line) {
+			if !strings.HasPrefix(field, "ERR-") && !strings.HasPrefix(field, "WARN-") {
+				continue
+			}
+			if !wholeCodes[field] {
+				t.Fatalf("cols=%d: row carries a partial code %q:\n%q", cols, field, line)
+			}
+		}
+	}
+	if !sawMore {
+		t.Error("no width between 1 and 240 shed codes into a +N more count")
+	}
+}
+
+func TestRowLine_KeepsTheTallyWhenNoCodeFits(t *testing.T) {
+	overview := faults.Summarize([]faults.Incident{
+		errored("2026-08-10T10:00:00"),
+		warned("2026-08-10T09:49:09"),
+	})
+
+	// The tally is the last thing to go: "an error and a warning are open" is
+	// still true at any width, and a bare "+2 more" would be a longer way of
+	// saying what the tally already said.
+	tally := severityTally(overview)
+	line := rowLine(overview, runewidth.StringWidth(tally)+1, false)
+
+	if line != tally {
+		t.Errorf("at exactly the tally's width the row is %q, want %q", line, tally)
+	}
+}
+
+func TestRowLine_KeepsTheTextWhenTheRowIsTooNarrowForBoth(t *testing.T) {
+	overview := faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")})
+
+	line := rowLine(overview, 30, false)
+
+	if strings.Contains(line, "\n") {
+		t.Errorf("a narrow fault row wrapped onto a second line:\n%q", line)
+	}
+	if !strings.Contains(line, "WARN-0004") {
+		t.Errorf("a narrow fault row dropped the incident text instead of the hint:\n%q", line)
 	}
 }
 
@@ -294,63 +442,76 @@ func TestRowLine_NeverExceedsTheTerminalWidth(t *testing.T) {
 	}
 }
 
-func TestRowLine_AlwaysShowsTheSeverityAndTheCode(t *testing.T) {
+func TestRowLine_ShowsTheWholeCodeOrNoRowAtAll(t *testing.T) {
 	overview := faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")})
 
-	// Whatever else gives way, the severity is the last thing standing: a row
-	// that cannot say what happened is not worth the row it costs.
+	// With the severity word gone, the CODE is the thing that must survive: it
+	// is what says both what happened and how severe it is, and it is what gets
+	// typed into `errors show`. A truncated one serves neither purpose, so the
+	// rule is whole-or-nothing.
 	//
-	// Both thresholds are DERIVED from the layout's own constants, not chosen.
-	// A hand-picked width would just be a different guess about someone's
-	// terminal, and would silently stop testing the boundary the moment the
-	// chip text or the hint changed length.
-	chip := severityLabel(faults.SeverityWarning)
-	chipWidth := runewidth.StringWidth(chip)
-	// The bare severity word must fit whole; below that the row renders nothing.
-	minSeverity := runewidth.StringWidth(strings.TrimSpace(chip))
-	minCode := chipWidth + 2 + len("WARN-0004…") // chip, space, and a code that survives truncation
+	// The threshold is DERIVED from the layout, not chosen: a hand-picked width
+	// would just be a different guess about someone's terminal and would
+	// silently stop testing the boundary the moment the code or hint changed
+	// length.
+	minCode := runewidth.StringWidth("WARN-0004")
 
 	for _, cols := range rowWidths() {
 		line := rowLine(overview, cols, false)
 
-		if cols-1 < minSeverity {
+		if cols-1 < minCode {
 			if line != "" {
-				t.Fatalf("cols=%d: rendered a fault row too narrow to be legible:\n%q", cols, line)
+				t.Fatalf("cols=%d: rendered a fault row too narrow to carry a whole code:\n%q",
+					cols, line)
 			}
 			continue
 		}
-		if !strings.Contains(line, "WARNING") {
-			t.Fatalf("cols=%d: the fault row lost its severity:\n%q", cols, line)
-		}
-		if cols >= minCode && !strings.Contains(line, "WARN-0004") {
+		if !strings.Contains(line, "WARN-0004") {
 			t.Fatalf("cols=%d: the fault row lost the incident code:\n%q", cols, line)
 		}
 	}
 }
 
 func TestRowLine_DropsTheHintOnlyWhenItCannotFit(t *testing.T) {
-	overview := faults.Summarize([]faults.Incident{longWarning()})
-
 	// The hint is reserved BEFORE the text, so at any width where both fit it is
 	// present — and once present it must never disappear again as the terminal
-	// gets wider. Assert that transition happens exactly once.
-	seen := false
-	for _, cols := range rowWidths() {
-		line := rowLine(overview, cols, false)
-		has := strings.Contains(line, Hint)
-		if has {
-			seen = true
-			if !strings.HasSuffix(line, Hint) {
-				t.Fatalf("cols=%d: hint is present but not right-aligned:\n%q", cols, line)
-			}
-			continue
-		}
-		if seen {
-			t.Fatalf("cols=%d: hint reappeared as missing after fitting at a narrower width:\n%q", cols, line)
-		}
+	// gets wider. Assert that transition happens exactly once, for BOTH shapes
+	// the row takes.
+	//
+	// The multi-incident case is the one that caught this: deciding from the
+	// fitted text rather than from the budget made the hint blink back on as the
+	// terminal NARROWED, because a tally short enough to leave room appeared at
+	// a width where a code list had not.
+	shapes := map[string]faults.Overview{
+		"one incident": faults.Summarize([]faults.Incident{longWarning()}),
+		"several": faults.Summarize([]faults.Incident{
+			errored("2026-08-10T10:00:00"),
+			unresolvedBranch("2026-08-10T09:55:00"),
+			warned("2026-08-10T09:49:09"),
+		}),
 	}
-	if !seen {
-		t.Fatal("the hint never fit at any width up to 240")
+
+	for name, overview := range shapes {
+		seen := false
+		for _, cols := range rowWidths() {
+			line := rowLine(overview, cols, false)
+			has := strings.Contains(line, Hint)
+			if has {
+				seen = true
+				if !strings.HasSuffix(line, Hint) {
+					t.Fatalf("%s/cols=%d: hint is present but not right-aligned:\n%q",
+						name, cols, line)
+				}
+				continue
+			}
+			if seen {
+				t.Fatalf("%s/cols=%d: hint reappeared as missing after fitting at a "+
+					"narrower width:\n%q", name, cols, line)
+			}
+		}
+		if !seen {
+			t.Fatalf("%s: the hint never fit at any width up to 240", name)
+		}
 	}
 }
 
@@ -374,6 +535,17 @@ func longWarning() faults.Incident {
 	w := warned("2026-08-10T09:49:09")
 	w.Summary = strings.Repeat("a very long summary that will certainly not fit ", 8)
 	return w
+}
+
+// unresolvedBranch is a THIRD distinct code, so the codes list has something to
+// shed. Two codes can only ever become "one code +1 more", which does not
+// exercise the shedding loop.
+func unresolvedBranch(lastSeen string) faults.Incident {
+	return faults.Incident{
+		ID: 3, Code: "ERR-0011", Severity: faults.SeverityError,
+		Source: "probe:unsettled", Summary: "the repository's default branch could not be resolved",
+		Occurrences: 1, LastSeenAt: lastSeen,
+	}
 }
 
 func wideRuneWarning() faults.Incident {
