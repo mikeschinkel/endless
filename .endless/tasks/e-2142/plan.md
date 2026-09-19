@@ -15,6 +15,11 @@ populated meaningfully.
    now that E-2164 is planned). Only its ordering override goes.
 3. **The `task import` removal reaches the column**: the command, the bulk-clear
    path it is the only caller of, and `tasks.source_file` itself.
+   The column is vestigial, not valuable. Endless was first conceived as a tool
+   that imported and synced markdown files; storing the markdown in the database
+   replaced that, and the product no longer thinks in source files at all. So
+   there is no provenance worth preserving here — do not reintroduce the column
+   under another name, and do not keep it "just in case".
 4. **One land.** All four removals share the retired-kinds decision; splitting
    means making it once and applying it across three reviews.
 
@@ -27,7 +32,8 @@ task retired them. Everything below can then delete freely.
 
 A dropped COLUMN has the same shape: historical `task.created` payloads carry
 `source_file`, and the payload struct keeps the field so old events still
-unmarshal — the executor and projector simply stop writing it.
+unmarshal — the executor and projector simply stop writing it. Nothing reads the
+value afterwards, and nothing should.
 
 ## 2. The curated `next` list
 
