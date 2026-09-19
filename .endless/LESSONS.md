@@ -6434,3 +6434,7 @@ Cost when it happened on E-2161: the backfill ran against main and inserted its 
 
 To check a change script compiles, build it and throw the binary away with `go build -o` pointed at the null device. To exercise it, always name a throwaway database first: `ENDLESS_CHANGE_DB=<scratch>/probe.db go run ./internal/schema/changes/e-NNNN-slug.go`. The //go:build ignore tag keeps these files out of `go build ./...`, so a plain package build will not cover them — which is exactly why the temptation to `go run` them arises.
 - **Project**: endless
+
+### [2026-09-19] endless-go takes --db-dir <dir>, never --config-dir; only endless-migrate takes --config-dir
+Reaching for a throwaway database from a verify suite or a smoke test, the flag on `endless-go` is `--db-dir <dir>`. `--config-dir` is rejected as an unknown SUBCOMMAND, which reads like a broken invocation rather than a wrong flag, so the mistake costs a round of debugging before it names itself. internal/dbcontext.ConsumeConfigDirFlag has exactly one caller — cmd/endless-migrate — and endless-go is not it. Setting XDG_CONFIG_HOME instead does redirect the config dir, but inside a self-dev worktree the E-1429 gate then refuses anyway (main and sandbox are both reachable and nothing said which), so --db-dir is the only spelling that works from a worktree. Evidence that this is not hypothetical: .endless/tasks/e-2151/verify.sh passes --config-dir to a freshly built endless-go and would setup_error on every run today.
+- **Project**: endless
