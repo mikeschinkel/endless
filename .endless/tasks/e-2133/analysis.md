@@ -1,0 +1,11 @@
+Owner decisions, taken 2026-09-11:
+  1. Announce ALWAYS, on every read -- not only when the scope was inferred rather than named. Repetition is cheaper than a rule about when to look.
+  2. Machine formats carry it as a FIELD IN THE PAYLOAD, not on stderr.
+
+Decision 2 departs from rowcap.echo_footer's precedent, which sends the omission trace to stderr for --json/--tsv so '| jq' will not choke, and the departure is deliberate: that footer is prose COMMENTARY ABOUT an answer and would corrupt a payload, whereas the store a result came from is DATA ABOUT THE RESULT and belongs in it. For array payloads the field goes per-row (non-breaking; rows such as list-live's already carry project_id); for object payloads, once at top level.
+
+Why stderr was rejected, from the agent's own account of the incident that prompted this: in that session it wrote 2>/dev/null, 2>&1 | head, | tail -5 and 2>&1 | python3 -c repeatedly, each of which discards stderr or buries it under a truncation. Ranked by what actually reaches an agent: (1) a field in the structure it parses, near-unmissable because it destructures it; (2) stdout it quotes back, high, because what is in the pasted text is in the claim; (3) stderr, moderate and hardest to see when the command SUCCEEDED and returned the wanted data; (4) documentation read at session start, near zero at the moment of error. Hook stderr is weaker still -- it arrives as system-reminder text an agent is told to treat as background.
+
+Scope note. The database half of this is self-dev-only: apply_db_choice refuses --db outright on a non-self-dev project because such a project has one DB. The PROJECT half reaches everyone -- session list, session-query list-live and project-status all scope to 'the project enclosing cwd', so a command run from a worktree, a sibling checkout, or a directory inside a different registered project answers about a project the caller did not name.
+
+Relationship to E-2132. That one removes the guess by requiring an explicit flag; this one states the answer. They are the two halves of one omission -- the scope a command uses is inferred from ambient state and never declared -- and they land independently: E-2132 is a refusal, this is an output contract, and neither waits on the other.

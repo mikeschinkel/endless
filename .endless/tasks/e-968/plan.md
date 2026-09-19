@@ -1,0 +1,301 @@
+# Parallel Sessions on Endless: Worktrees, Plan Stability, and the Behavioral Gate
+
+## Context
+
+Mike runs many parallel Claude Code sessions in tmux against the endless repo. Two problems block this from scaling:
+
+1. **Code collision**: sessions share one working tree, so concurrent edits conflict.
+2. **Topic drift**: when Mike redirects a session ("actually, let's also Y"), Claude jumps into Y without recording a new task. Today the user has to police this manually.
+
+The fix is three coordinated workstreams. They overlap conceptually (all touch the session/task/hook surface) but should land in sequence to avoid one stalling the others.
+
+## Workstream sequencing
+
+```
+W1 (plan-file stability) ──► W2 (phrases table) ──► W3 (worktrees + gate)
+```
+
+W1 is a prerequisite for W3 because plan-file presence is the trigger for worktree creation. W2 is a prerequisite for W3 because the gate's trigger phrases live in the phrases table. W2 is also independently useful (replaces hardcoded task-verb regexes in `cmd/endless-hook/claude.go`).
+
+---
+
+## Workstream 1 — Plan-file path stability
+
+**Problem.** `tasks.plan_file_path` today points at `~/.claude/plans/<conversation-name>.md`. The harness names plan files per-conversation, not per-task, and Claude overwrites them when entering plan mode for unrelated work. References go stale silently.
+
+**Fix.** Endless takes ownership of plan content the moment it's attached to a task.
+
+- `endless task update <id> --text <source-path>` reads the source, writes a copy to `.endless/plans/<task-id>.md`, and stores that endless-owned path in `tasks.plan_file_path`. The harness path is treated as a transient draft buffer.
+- Re-running `--text` overwrites the endless copy. User controls when updates happen.
+- The directory `.endless/plans/` is checked into the repo (these are decisions; they belong with the codebase).
+
+**Cwd-aware project root resolution (added 2026-04-29 from E-957 worktree experience).** When `task update --text` runs from inside a git worktree of the project, the derivative `.endless/plans/<task-id>.md` MUST land in the worktree's checkout, not in the main checkout. Today `_project_root_for_task()` reads the project's path from the `projects` table — which is fixed at registration time and points at main. That's wrong for worktree workflows: a session working in a worktree expects its file writes to land where it lives, not silently in main, where they're invisible to the worktree's git history until manually copied. Bug observed during E-957 implementation: the plan file was written to main even though the command ran from the worktree, requiring a manual `cp` to include it in the branch's commit.
+
+Resolution rule for `_project_root_for_task()`:
+1. If cwd is inside a registered project's main checkout → return that path (current behavior).
+2. If cwd is inside a `git worktree` of a registered project (detected via `git rev-parse --git-common-dir` matching the project's `.git` directory) → return the worktree's root path, NOT the main checkout's.
+3. If neither applies → fall back to the DB-stored path with a warning.
+
+**Critical files.**
+- `src/endless/task_cmd.py` — modify `task update --text` to copy-and-rewrite; update `_project_root_for_task()` for cwd/worktree resolution.
+- `internal/schema/schema.sql` — no change; the column already exists.
+
+**Verification.**
+- Attach a plan to a task; verify `.endless/plans/<id>.md` exists and `tasks.plan_file_path` points there. Overwrite the harness file; verify the task's plan content is unchanged.
+- Create a git worktree of the project. From inside the worktree, run `endless task update E-X --text <path>`. Verify the file lands in the worktree's `.endless/plans/`, not main's.
+
+---
+
+## Workstream 2 — Phrases table
+
+**Why.** Several places in endless hardcode lists of strings: title-verb whitelist in `task_cmd.py` (existing E-757 proposal), action regexes in `cmd/endless-hook/claude.go`, etc. The behavioral gate (W3) needs another such list (pivot triggers). One general table beats N specific tables.
+
+**Obsoletes E-757.** That task proposes a `verbs` table for title verbs only. W2 covers it via `kind='verb'`. Mark E-757 replaced-by once W2 is a real endless task.
+
+**Schema.**
+```sql
+CREATE TABLE phrases (
+  id INTEGER PRIMARY KEY,
+  kind TEXT NOT NULL,                 -- 'pivot', 'verb', 'action', ...
+  phrase TEXT NOT NULL,
+  match_type TEXT NOT NULL DEFAULT 'substring',  -- 'substring' | 'word' | 'regex'
+  case_sensitive INTEGER NOT NULL DEFAULT 0,
+  enabled INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S','now')),
+  UNIQUE(kind, phrase)
+);
+```
+
+`match_type` is orthogonal to `kind`: different kinds typically default to different match types, but rows within a kind can mix as needed.
+- `substring` — input contains the phrase. Default; right for most pivot phrases.
+- `word` — word-boundary match. Right for verbs ("Add" matches "Add a feature" but not "Adder").
+- `regex` — full regex pattern. For action patterns and any future complex matches.
+
+Project-scoped. Global fallback if a `kind` has no project rows.
+
+**Naming convention** (general principle, applies beyond this table):
+- **snake_case** for data and code identifiers in non-Go contexts: DB column names, Python/Ruby/Rust variable names, env var names. Also for DB string-column *values* that are NOT user-typed.
+- **kebab-case** for user-facing strings: CLI flags, CLI argument values that the user types as labels (including `kind` values in this table), file names, URL slugs, git branch names.
+- **Go exception**: Go identifiers use PascalCase (exported) or camelCase (unexported), NEVER snake_case or kebab-case.
+
+So `kind='action'` (kebab; user types it on CLI), `--case-sensitive` (kebab), `task/757-move-title-verbs` (kebab), `CreateWorktree` (Go PascalCase), `def parse_phrase` (Python snake).
+
+**CLI.**
+- `endless phrase add <kind> "<phrase>" [--match substring|word|regex] [--case-sensitive]`
+- `endless phrase list [--kind <k>]`
+- `endless phrase disable <id>` / `endless phrase enable <id>`
+- `endless phrase remove <id>`
+
+No `endless verb` alias; not enough use to warrant the surface.
+
+**Seed data.**
+
+`kind='pivot'`, default `match_type='substring'` (one kind for both soft and hard triggers; `case_sensitive` distinguishes):
+- case-insensitive: "actually", "wait", "also can you", "by the way", "btw", "different", "switch to", "while you're at it", "instead", "and can you"
+- case-sensitive: "PIVOT" (Mike's deliberate override)
+
+`kind='verb'`, `match_type='word'`, case-insensitive: seeded from current `_TITLE_VERBS` set in `src/endless/task_cmd.py`.
+
+`kind='action'`, `match_type='regex'`: lifted from hardcoded regexes in `cmd/endless-hook/claude.go`. Hook reads from the table at startup, caches in memory.
+
+**Critical files.**
+- `internal/schema/schema.sql` — new table.
+- `internal/monitor/db.go` — migration.
+- new: `src/endless/phrase_cmd.py` — CLI verbs.
+- `src/endless/task_cmd.py` — read `verb` phrases from DB instead of `_TITLE_VERBS`.
+- `cmd/endless-hook/claude.go` — read `action` phrases from DB.
+
+---
+
+## Workstream 3 — Worktrees and the behavioral gate
+
+Two complementary mechanisms, same goal: never let work happen without an explicit task association.
+
+### Decisions locked from this conversation
+
+- **No h2 / h2pp absorption.**
+- **No DB worktrees table.** Filesystem and git are authoritative.
+- **Layout inside the repo**: `.endless/worktrees/<name>/`, gitignored (E-975/E-976, commit `32c4b75`).
+- **Configurable path.** Endless must co-exist with other worktree managers, not own.
+- **Per-session worktree by default.** Every editing session lives in a worktree, never main.
+- **Plan-bearing tasks get *dedicated* worktrees** that persist across sessions; ownership transfers sequentially via Rust-style move semantics.
+- **Main = always clean integration target.** No session ever edits main directly. `land` requires clean main and refuses otherwise.
+- **Worktrees are agent-facing, not user-facing.** The `endless worktree` verb is primarily an API for Claude.
+- **No `create` verb.** Worktree creation is always a side-effect of session start (per-session) or plan-bearing task start (dedicated).
+- **No `switch` verb.** A child process can't change its parent shell's cwd; switching means a new session.
+- **Spawn stays narrow.** Don't couple worktree creation to `task spawn`.
+- **Overlap detection deferred.** Mike coordinates manually short-term.
+
+### Two worktree flavors
+
+| Flavor | When created | Lifetime | Adoptable across sessions? | Removed when |
+|---|---|---|---|---|
+| **Session worktree** | Auto on session start (default) | Lifetime of the session | No | Session ends |
+| **Task worktree** | Plan-bearing task transitions to `in_progress` | Until landed or dropped | Yes, via ownership transfer | `land` or `drop` |
+
+A task is **plan-bearing** if `tasks.plan_file_path` is set (the W1/E-969 mechanism makes this stable). That's the whole definition.
+
+### Ownership model (Rust-style move semantics)
+
+At most one owner at a time. Ownership transfers, never shares — parallel sharing would defeat isolation.
+
+**Lock file**: `.endless/worktree.lock` alongside the sidecar, containing `{session_id, pid, tmux_pane, claimed_at}`. Atomic claim via `O_EXCL` create. Stale detection via `kill -0 <pid>`. Released by deleting the file on SessionEnd.
+
+**Adoption**: SessionStart hook reads cwd, walks up for the sidecar. If the lock is missing or stale, claim it (auto-adopt — the cd into the worktree is the deliberate act). If owned by a live session, refuse to register the new session with a clear message. No separate `adopt` verb in v1.
+
+### Worktree creation triggers
+
+**Per-session worktree (default)**: when a session starts in main with no worktree at cwd, hook creates `session/<short-id>` branch and a worktree at `.endless/worktrees/session-<short-id>`, writes sidecar with `flavor='session'`, instructs the user to cd there.
+
+**Task worktree (plan-bearing → `in_progress`)**: `endless task start <id>` computes `task/<id>-<slug>`, runs `git worktree add` if missing, writes sidecar with `flavor='task'`. Adoption happens via the SessionStart hook claiming the lock when a session lands in it.
+
+### Worktree lifecycle (derived state, no DB)
+
+| State | Derived from |
+|---|---|
+| **active** | `git worktree list --porcelain` shows it AND `.endless/worktree.json` present |
+| **merged** | branch in `git branch --merged <base>` |
+| **abandoned** | unmerged, no commits in N days, no live session bound; surfaced not auto-cleaned |
+| **foreign** | listed by git but no endless sidecar; left alone |
+
+Endless never deletes a worktree it didn't create.
+
+### Behavioral gate (UserPromptSubmit hook)
+
+The hook fires on every user message. **Two layers, no semantic guessing.**
+
+**Layer 1 — always-on context refresh.** Inject one line into Claude's context: *"Active task: E-XXX — <title>."* No comparison, no decision required. Keeps the active task salient at the moment context is most likely to drift.
+
+**Layer 2 — deterministic gate.** Match the user's message against `kind='pivot'` rows in the phrases table. Match → block Write/Edit until Claude clears the gate via CLI verb (see clearance rules below). Same gate, same clearance, regardless of whether the trigger was case-sensitive ("PIVOT") or case-insensitive ("actually") — the case-sensitivity flag distinguishes deliberate from incidental typing, not severity.
+
+Every editing session lives in a worktree (per-session default), so the worktree IS the scope declaration and PreToolUse already enforces task↔worktree match. Layer 1 + Layer 2 still fire on top to catch topic drift within a session.
+
+**Gate clearance.** Two paths, friction proportional to risk:
+
+- **Continuation** (`endless task start <existing-id>` or `endless task confirm <id>`): Claude self-clears. No user approval needed; the user just typed the trigger and is in the loop. If Claude declares wrong, the user corrects on the next turn.
+- **New task creation** (`endless task add ...` triggered as gate clearance): brief draft-and-approve flow. Claude proposes a title and parent based on the user's message; user accepts or edits. One content-bearing turn.
+
+Avoids approval fatigue while preserving oversight where it matters.
+
+### Hook integration summary
+
+- **SessionStart**:
+  - Walk up from cwd for `.endless/worktree.json`.
+  - If found and unowned (lock missing or stale): atomic `O_EXCL` claim. Auto-adopt.
+  - If owned by a live session: refuse to register; tell user to use a different worktree or wait.
+  - If not found (cwd is main): create a per-session worktree, write sidecar + lock, tell user to `cd` there.
+- **UserPromptSubmit (new event)**: inject Layer 1 reminder; check phrases table for Layer 2 triggers.
+- **PreToolUse**: existing task-active check + worktree↔task match. Edits in main are refused outright.
+- **Stop / SessionEnd**:
+  - Release ownership: delete `.endless/worktree.lock`.
+  - If task moved to `verify` and worktree clean, nudge to `endless worktree land <task-id>`.
+
+### CLI surface (Claude is the primary consumer)
+
+Output is `--json` capable, exit codes stable, no interactive prompts.
+
+**Introspection (high frequency):**
+- `endless worktree current` — what worktree am I in? bound task? dirty/clean/ahead/behind?
+- `endless worktree list [--status active|merged|abandoned|foreign]`
+- `endless worktree show <name>`
+- `endless worktree for-task <task-id>` — resolve task to worktree path or "not isolated".
+
+**Mutation:**
+- `endless worktree land <task-id>` — safe local-only landing dance (see Land algorithm below). Refuses on `foreign`. `--pr` flag uses remote-based path when a remote is configured.
+- `endless worktree drop <name>` — explicit cleanup; refuses unmerged/dirty without `--force`. Refuses on `foreign`.
+
+### Land algorithm
+
+**Precondition: clean main.** Per-session worktrees ensure no session ever edits main, so main stays clean by construction. `land` requires this and refuses otherwise with a clear actionable message.
+
+**Steps (local-only, default):**
+1. Resolve the worktree and branch for `<task-id>`.
+2. Verify main is clean. If dirty: refuse with *"main has uncommitted changes — commit them, move them to a worktree, or set them aside before landing E-XXX"*.
+3. `git merge --ff-only <branch>` from main.
+4. `git worktree remove <worktree-path>` (sidecar + lock removed automatically).
+
+**Why no WIP dance.** The earlier proposal (WIP commit + reset --soft) had a real flaw: after the WIP commit, main is no longer an ancestor of the branch and `--ff-only` fails. Fixing it required captured-SHA logic plus a concurrency lock plus cherry-pick conflict handling, all to support a use case (dirty main) that disappears once per-session worktrees are the norm.
+
+**PR-based path** (`--pr` flag, requires remote): push branch, `gh pr create`. Worktree stays until the PR merges and the user runs `endless worktree drop`.
+
+**Acceptance criteria:**
+- (a) `endless worktree land <task-id>` succeeds when main is clean.
+- (b) `endless worktree land <task-id>` refuses cleanly when main is dirty, with actionable message.
+- (c) `git stash` is never invoked anywhere in the path.
+
+### Co-existence with other worktree managers
+
+- `worktree_dir` configurable in `.endless/config.json` (default `.endless/worktrees`).
+- Discovery via `git worktree list --porcelain` + sidecar filter, not path-prefix.
+- `land` / `drop` refuse on worktrees lacking an endless sidecar.
+
+### Sidecar format
+
+JSON, matching the rest of `.endless/`. Not YAML.
+
+```json
+{
+  "task_id": "E-808",
+  "base_branch": "main",
+  "branch": "task/808-event-logs-authoritative",
+  "created_at": "2026-04-28T15:30:00"
+}
+```
+
+---
+
+## What we're explicitly NOT doing yet
+
+- Cross-branch overlap detection (file conflict warnings before merge).
+- Auto-cleanup of abandoned worktrees.
+- Recipe templates / pods / manager-evaluator pattern (h2pp absorption).
+- Auto-cd or auto-spawn on task start.
+- Replacing tmux.
+- LLM-based topic-drift detection (cry-wolf risk; deterministic gates only).
+
+## Critical files (full picture)
+
+**W1:**
+- `src/endless/task_cmd.py` — copy-and-rewrite in `task update --text`.
+
+**W2:**
+- `internal/schema/schema.sql` — `phrases` table.
+- `internal/monitor/db.go` — migration.
+- `src/endless/phrase_cmd.py` (new) — CLI verbs.
+- `cmd/endless-hook/claude.go` — read task-verb phrases from DB.
+
+**W3:**
+- `internal/git/worktree.go` (new) — wrapper over `git worktree`.
+- `internal/monitor/worktree.go` (new) — sidecar IO, derived-state queries.
+- `cmd/endless-hook/claude.go` — `SessionStart` worktree resolution; new `UserPromptSubmit` handler; `PreToolUse` worktree↔task check.
+- `src/endless/task_cmd.py` — `task start` triggers worktree creation for plan-bearing tasks.
+- `src/endless/worktree_cmd.py` (new) — `current / list / show / for-task / merge / drop`.
+- `.gitignore` — add `.endless/worktrees/`.
+
+## Slug generation
+
+Lowercase, strip filler words (`a`, `an`, `the`, `to`, `from`, `of`, `for`, `with`, `in`, `on`, `at`, `by`, `and`, `or`), replace non-alnum with dash, collapse repeated dashes, truncate to 40 chars at a word boundary.
+
+Example: task E-757 "Move title verbs from hardcoded list to database table" → slug `move-title-verbs-hardcoded-list-database`. Branch: `task/757-move-title-verbs-hardcoded-list-database`.
+
+## Resolved decisions
+
+- Branch naming: `task/<id>-<slug>` (slug rules above).
+- Layer 1 reminder: delivered as system reminder, not prepended to user message.
+- Gate clearance: CLI verb required; continuation self-clears, new-task creation gets brief draft-and-approve flow.
+- One pivot kind, not separate soft/hard categories.
+- snake_case for DB/code, kebab-case for user-facing strings.
+
+## Verification
+
+**W1.** Attach a plan to a task; confirm `.endless/plans/<id>.md` exists and is referenced. Overwrite the harness draft; confirm task's plan unchanged.
+
+**W2.** Add a shift_trigger phrase via CLI; send a user message containing it; confirm hook fires. Disable; confirm it stops. Replace a hardcoded task-verb regex with a DB row; confirm hook still detects task starts.
+
+**W3.**
+- Two parallel sessions on two plan-bearing tasks; each gets its own worktree; no edit collisions.
+- Plan-bearing task active, cwd is main checkout; PreToolUse blocks with switch-worktree message.
+- User types "actually let's fix the auth bug"; soft gate fires; Claude can't edit until task declared.
+- User types "PIVOT" mid-message; force gate fires regardless of context.
+- Small ad-hoc task `in_progress`; no worktree created; existing session keeps editing freely.
+- Manually `git worktree add` outside endless; `endless worktree list` shows it as `foreign`; merge/drop refuse.

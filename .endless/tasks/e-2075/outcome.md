@@ -1,0 +1,1 @@
+Absorbed into E-2071. The record my earlier decline gave was wrong: Mike never scoped these surfaces out — he chose what E-2071 covered, which is not the same as ruling the rest out. They are the same defect and the mechanism already existed, so they are being finished inside E-2071 rather than tracked separately.

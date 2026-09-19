@@ -1,0 +1,1 @@
+Folded into E-1872, which covers all the guide's memory-only conventions in one pass — same file, same review. Filing these separately was the task-proliferation anti-pattern E-1872 now documents.

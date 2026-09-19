@@ -1,0 +1,1 @@
+Direction reversed: decisions move back onto tasks (E-1868) rather than a dedicated table. E-1378/E-1507 shipped and remain under E-1511 as history; E-1389 rehomed and E-1383 relinked to E-1868. Superseded by E-1868.

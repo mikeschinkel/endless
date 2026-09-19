@@ -1,0 +1,1 @@
+Invalid premise on my part: verify scripts are pre-land gates for their own task in their own worktree, not a regression suite. e-1901 and e-1822 already landed, so their current failures are not signal and there is nothing to fix. I should not have run them at all.

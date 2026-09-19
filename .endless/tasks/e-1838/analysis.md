@@ -1,0 +1,6 @@
+The gate ships an escape hatch (--allow-path) that the error names, so this false positive is workaround-able but still wrong — ordinary prose should not need an escape hatch.
+
+Key reframing (Mike): 'kill the false positive so the escape hatch is never needed' is the ideal but is NOT achievable — deterministic detection cannot catch 100 percent of true positives without also producing some false positives, and vice versa. So the escape hatch is permanent and false positives will recur. The fix must therefore be MORE than tightening detection:
+1. Fix the obvious safe wins (the bare-slash and bare-tilde cases) so common prose stops tripping.
+2. Accept residual false positives as inevitable and make that path safe and correctly handled — e.g. error UX that makes the escape hatch the obvious next action, or a design where blocked content is never silently worked around. The observed failure was an agent degrading its own content to dodge the gate instead of using --allow-path; the design must make that wrong move hard and the right move easy.
+Consider whether the escape-hatch flag needs a clearer name or behavior (a --allow-slash style affordance was floated), though step 1 removes the need for it in the common case.

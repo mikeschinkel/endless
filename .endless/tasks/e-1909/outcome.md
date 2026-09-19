@@ -1,0 +1,1 @@
+A verify suite is a one-shot land-time gate (guide: orchestration) — a failure after that task lands is meaningless by design. e-1771-verify.sh is posterity, and 'endless project register --infer' works correctly standalone, so no product bug was behind it. Non-problem, filed against the documented contract.

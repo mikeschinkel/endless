@@ -1,0 +1,1 @@
+Folded into E-1898. Its 'verify the prior occupant is actually stale before invalidating' is the same liveness principle the reaper needs, on the sibling code path; fixing them apart would mean writing the check twice. Content preserved in E-1898's analysis.

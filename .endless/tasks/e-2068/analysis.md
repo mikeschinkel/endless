@@ -1,0 +1,5 @@
+They disagree in BOTH directions. next_tasks releases a dependent whose blocker is 'completed' but keeps holding one whose blocker is 'declined' or 'obsolete'. GetActiveBlockers does the opposite — it keeps painting a 'completed' blocker as active in the tmux status line.
+
+The guide's table lists confirmed/assumed/declined/obsolete as unblocking and does not mention 'completed', which post-dates it (E-1240 restored 'completed' as a real terminal). So the likely answer is the union — the full Terminal group — but that is a policy call, not a relocation, which is why E-1891 preserved both verbatim rather than picking.
+
+Both call sites already read the registry, so the fix is a one-line edit to internal/taskstatus plus deleting the loser. taskstatus_test.go pins both memberships, so the test diff IS the behavior diff.

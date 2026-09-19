@@ -1,0 +1,1 @@
+Obsoleted by ED-1560: sessions.active_task_id (renaming to task_id under E-1969) is write-once — set at claim, never NULLed and never repointed. This task exists to preserve an origin task when active focus shifts; under the invariant focus cannot shift, so goal and active can never diverge and there is nothing for goal_task_id to preserve.

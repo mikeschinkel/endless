@@ -1,0 +1,1 @@
+Folded into E-1897. The log-dir leak and the tmux/XDG_CONFIG_HOME isolation rule are the same invariant — a test or verify run must not touch the user's real machine state — so they share a fix and a verify suite. Content preserved in E-1897's analysis as 'Gap 2'.

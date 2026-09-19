@@ -1,0 +1,1 @@
+Reopening: per Mike, tests should attach to this task under ED-1550 (fold findings into existing open task; do not file a new one) rather than a separate follow-up. Branch will carry the three regression tests for _tmux_window_pane_ids as its landed contribution; the substantive fix remains E-1395's.

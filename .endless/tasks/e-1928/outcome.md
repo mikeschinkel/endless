@@ -1,0 +1,1 @@
+Folded into E-1915's second landing. Three-line fix reusing _removal_id_set() from the first landing: remove_item now computes the removal id set once before the emit and reports len(ids)-1, replacing the recursive query that ran after emit_event (which deletes the subtree synchronously) and so always counted 0.

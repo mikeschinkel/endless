@@ -1,0 +1,1 @@
+Merged into E-1876 as part 5, reduced to the monitor surface only. Item (1), recording a checkpoint per task report call, is delivered by E-1901 Part 2; item (3), a record-only Stop hook designed to sidestep blocking, is superseded because E-1901 blocks by design.

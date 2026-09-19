@@ -1,0 +1,1 @@
+Shipped by other work. The catch-all text column was split long ago: tasks now carries description, text, analysis, outcome and notes as distinct fields, each with its own update path (E-999 placed analysis before text; E-1601 gave large fields their own placeholder rendering). The 'migration: existing text -> plan field' this task planned already happened piecemeal.

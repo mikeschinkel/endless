@@ -1,0 +1,1 @@
+Shipped by other work. task_dep.created and task_dep.deleted are live event kinds with replay handlers in projector.go; task_deps holds the graph; and 'task next' ranks on graph + tier + phase + status, including E-1795's upstream blocker chain. The only unshipped clause is 'cross-project deps via global ID', which is E-816's scope.

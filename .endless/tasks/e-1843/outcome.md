@@ -1,0 +1,1 @@
+Superseded by E-1832 (Rewrite README). The one distinct requirement — link the refocused README to ROADMAP.md and VISION.md — was folded into E-1832's plan. Two tasks both rewriting README was redundant.
