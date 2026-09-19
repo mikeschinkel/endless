@@ -165,7 +165,7 @@ def test_item_reports_a_failed_git_probe(registered_project, stub_probe, capsys)
     out = capsys.readouterr().out
     assert "Undetermined" in out
     assert "not\nsettled" in out or "not settled" in out
-    assert "endless errors show" in out
+    assert "endless errors list" in out
     assert "under-report" not in out
 
 
