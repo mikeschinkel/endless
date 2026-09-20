@@ -209,3 +209,64 @@ task exists to end.
   unprefixed at both ends.
 - `endless errors show` lists a recorded warning after running `endless register`
   on a project whose output style is installed but inactive.
+
+## What the build changed about this plan (recorded at implementation)
+
+Nine things the plan did not say, each decided while converting and each
+visible in the diff.
+
+1. **The Go check also forbids `flag.NewFlagSet`.** The plan scoped it to
+   `os.Stderr`, which a plain `flag.FlagSet` never names: it writes "flag
+   provided but not defined" and its usage block to stderr from INSIDE the flag
+   package, and `flag.ExitOnError` prints and calls `os.Exit(2)` before the site
+   can classify anything. The check would have been decorative for every flag
+   error. `refusal.NewFlags` captures that text; 62 flag sets converted.
+
+2. **`refusal` grew four things the plan did not name**: `NewFlags` and its
+   `ExitOnHelp` (which restores the exit 0 that `flag.ExitOnError` used to give
+   `-h`), `InitLog`/`SlogHandler` for step 6, and `Faultf`/`Infof`. The setters
+   copy rather than mutate — refusals are often package-level values reached
+   through `From()`, and one caller naming its command would otherwise write
+   that command onto a value every other caller shares.
+
+3. **The verdict strips the binary prefix the message already carries.** Every
+   Go message opens `endless-go <verb>: `, and the verdict opens `[Endless]
+   <verb>: `; both belong where they are, printed adjacent they read as the same
+   words twice. Stripped in one place rather than at ~300 sites.
+
+4. **`agent_help.run_standalone`.** Plan step 10 puts the two unclassified
+   categories in the root group's `main`. Click's standalone mode prints and
+   exits itself, so it is switched off and its block replicated — and that
+   block IS refusal machinery, so it lives in `agent_help` beside
+   `Refusal.show` rather than in `cli`.
+
+5. **Python reads `ENDLESS_AUDIENCE` too**, snapshotted at import so this
+   process's own export cannot feed back as input. The plan had Python writing
+   it and Go reading it; one-way meant an operator who exported it got an
+   agent rendering from Go and a human one from Python, from one command.
+
+6. **Decision 5 is applied to one warning, not six.** The mechanism is in
+   place — `faults.Record`, `warn.record`, and `endless-go errors record`,
+   which already existed rather than needing to be built — and the hook's
+   foreign-build warning moved to the errors channel as WARN-0015, fixing the
+   tension the inventory names: on a non-blocking hook failure it became the
+   first stderr line the user saw and displaced the real error. The other five
+   are left on stderr and flagged: each needs a judgement about whether the
+   reader is the user or the agent, and moving one whose reader is the agent
+   silences it.
+
+7. **`cmd/endless-migrate`'s dependency allowlist admits `refusal` and
+   `agentenv`.** Its test says the fix is never to widen the list — but that
+   rule governs packages that expect a schema, and these two import os, io,
+   fmt, log, strings, errors and path/filepath between them. They are already
+   leaves, so there is nothing to move into one.
+
+8. **Two defects went further than rewording.** The commit-on-main guard now
+   matches `git -C <dir> commit` and reads `-C` when deciding which checkout
+   the commit lands in — the old regex missed every global-option form while
+   blocking the `--no-verify` its own message advertised. The revisit gate
+   exempts `AskUserQuestion`, the tool its instruction tells the agent to use.
+
+9. **Conditions resolved in code rather than handed over.** 80 `lang=go` rows
+   are CONDITIONAL and 25 became `ReportIf`; the rest were settled from the
+   actor, a sentinel, `errors.Is`, or state already in hand, per decision 3.
