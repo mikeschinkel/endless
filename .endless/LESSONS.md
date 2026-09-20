@@ -6548,3 +6548,15 @@ If something genuinely must be corrected because he would otherwise act on a fal
 
 Applies to /tl-dr, /whats-left, and any request for just the summary.
 - **Project**: endless
+
+### [2026-09-20] Documentation my own landing falsified is a bug in what I landed — reopen and fix, do not ask to file
+After landing E-2157 I reported that a refusal-inventory row now described a flag my change had removed, and asked Mike whether to file a task. He asked why I could not reopen E-2157 and fix it myself, pointing at ED-1550.
+
+ED-1550 rule 2 forbids reopening SHIPPED work to EXTEND it, and gives two exemptions: 'work still live in the session that landed it' and 'reopen only when what shipped is wrong'. Both applied. My own session landed it, and the doc was false BECAUSE of my change — that is the landing being wrong, not a new finding on the same subject.
+
+My task instructions said the same thing in plainer words: 'Is it a bug in work THIS session landed? Reopen that task and fix it there.' I had the rule and still routed the finding to the ask-before-filing branch.
+
+The test is causation, not tidiness. If my change is what made a statement false — a doc, a comment, a test name, an inventory row — that is my defect and I fix it under the same task. Only a finding that would have been true without my change is a candidate for filing, and only then does the ask apply.
+
+A finding I am about to describe as 'I deliberately left this' deserves that question first: did I create it?
+- **Project**: endless
