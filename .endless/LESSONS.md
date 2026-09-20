@@ -6538,3 +6538,13 @@ I treated release and reap as two routes to the same end, with reaping merely th
 
 Rule: never propose releasing or dropping a worktree, not even as an aside, a nicety, or a thing the user 'could' do. A landed worktree needs nothing from me — say nothing about it at all.
 - **Project**: endless
+
+### [2026-09-20] A TL;DR contains only action items — never the items that need no action
+Mike ran /tl-dr twice. Both times I answered with the decision he owed me AND extra sections labeled 'no input needed' and 'no action'. He called it the exact opposite of what the command asks for.
+
+The word TL;DR means: what must you act on. An item explicitly marked as needing no action fails that test by its own label — writing 'no action needed' next to something is proof it does not belong in the reply. Corrections to his mental model, things that resolved themselves, and FYIs are all the long version he asked to skip.
+
+If something genuinely must be corrected because he would otherwise act on a false belief, that IS an action item and it gets stated as one, in the action list, without an 'FYI' or 'no action' label. Otherwise it waits for a normal reply.
+
+Applies to /tl-dr, /whats-left, and any request for just the summary.
+- **Project**: endless
