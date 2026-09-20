@@ -1,6 +1,7 @@
 package dbcontext_test
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/mikeschinkel/go-dt"
@@ -53,72 +54,142 @@ func TestDBPath_IsTheDatabaseInsideTheConfigDir(t *testing.T) {
 	}
 }
 
-// TestConsumeConfigDirFlag covers each shape the flag arrives in, and the two
-// that matter most: the flag is stripped from ANYWHERE in the arguments (a
-// binary reads args[1] as its subcommand and must not see it), and the
-// executable name in args[0] is never touched.
-func TestConsumeConfigDirFlag(t *testing.T) {
+// TestMainConfigDir_IgnoresXDG is the assertion that makes `--db main` mean
+// main. Endless injects XDG_CONFIG_HOME to route a child process at a
+// worktree's sandbox, so a resolver that honoured it would answer "the sandbox"
+// to a caller that said "main" — the wrong-database failure the flag exists to
+// prevent, inside the flag that exists to prevent it.
+func TestMainConfigDir_IgnoresXDG(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/a/worktree/.endless/sandbox")
+	t.Setenv("HOME", "/home/someone")
+
+	got, err := dbcontext.MainConfigDir()
+	if err != nil {
+		t.Fatalf("MainConfigDir() error = %v", err)
+	}
+	if got != "/home/someone/.config/endless" {
+		t.Errorf("MainConfigDir() = %q, want %q", got, "/home/someone/.config/endless")
+	}
+}
+
+// TestMainConfigDir_FollowsHOME is the other half of the same contract, and the
+// one a verify suite depends on: it runs under a temp HOME and says `--db main`
+// meaning its own isolated main, not the developer's real one.
+func TestMainConfigDir_FollowsHOME(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("HOME", "/tmp/verify-run-1234")
+
+	got, err := dbcontext.MainConfigDir()
+	if err != nil {
+		t.Fatalf("MainConfigDir() error = %v", err)
+	}
+	if got != "/tmp/verify-run-1234/.config/endless" {
+		t.Errorf("MainConfigDir() = %q, want %q", got, "/tmp/verify-run-1234/.config/endless")
+	}
+}
+
+// TestMainConfigDir_IsNotConfigDir pins the distinction that E-2157 had to
+// resist collapsing. With XDG set the two resolvers MUST disagree; a refactor
+// that makes them agree has silently redirected every `--db main`.
+func TestMainConfigDir_IsNotConfigDir(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/xdg")
+	t.Setenv("HOME", "/home/someone")
+
+	main, err := dbcontext.MainConfigDir()
+	if err != nil {
+		t.Fatalf("MainConfigDir() error = %v", err)
+	}
+	if def := dbcontext.ConfigDir(""); def == main {
+		t.Fatalf("ConfigDir(\"\") and MainConfigDir() both = %q; --db main must "+
+			"ignore XDG_CONFIG_HOME while the default honours it", main)
+	}
+}
+
+func TestMainDBPath(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/xdg")
+	t.Setenv("HOME", "/home/someone")
+
+	got, err := dbcontext.MainDBPath()
+	if err != nil {
+		t.Fatalf("MainDBPath() error = %v", err)
+	}
+	if got != "/home/someone/.config/endless/endless.db" {
+		t.Errorf("MainDBPath() = %q, want %q", got,
+			"/home/someone/.config/endless/endless.db")
+	}
+}
+
+// TestConsumeFlags covers each shape a flag arrives in, and the two properties
+// that matter most: a flag is stripped from ANYWHERE in the arguments (a binary
+// reads args[1] as its subcommand and must not see one), and args[0] is never
+// touched.
+func TestConsumeFlags(t *testing.T) {
 	tests := []struct {
 		name        string
 		args        []string
 		wantCleaned []string
+		wantChoice  dbcontext.Choice
 		wantDir     dt.DirPath
-		wantFound   bool
 	}{
 		{
-			name:        "separate value before the subcommand",
-			args:        []string{"endless-migrate", "--config-dir", "/cfg", "apply", "x.sql"},
+			name:        "--db main before the subcommand",
+			args:        []string{"endless-migrate", "--db", "main", "apply", "x.sql"},
 			wantCleaned: []string{"endless-migrate", "apply", "x.sql"},
-			wantDir:     "/cfg",
-			wantFound:   true,
+			wantChoice:  dbcontext.ChoiceMain,
 		},
 		{
-			name:        "equals form after the subcommand",
-			args:        []string{"endless-migrate", "apply", "--config-dir=/cfg", "x.sql"},
+			name:        "--db=main equals form after the subcommand",
+			args:        []string{"endless-go", "event", "--db=main", "emit"},
+			wantCleaned: []string{"endless-go", "event", "emit"},
+			wantChoice:  dbcontext.ChoiceMain,
+		},
+		{
+			name:        "--db sandbox parses to a choice, unresolved",
+			args:        []string{"endless-go", "--db", "sandbox", "session-query"},
+			wantCleaned: []string{"endless-go", "session-query"},
+			wantChoice:  dbcontext.ChoiceSandbox,
+		},
+		{
+			name:        "--db-dir separate value",
+			args:        []string{"endless-migrate", "--db-dir", "/cfg", "apply", "x.sql"},
 			wantCleaned: []string{"endless-migrate", "apply", "x.sql"},
+			wantChoice:  dbcontext.ChoiceDir,
 			wantDir:     "/cfg",
-			wantFound:   true,
+		},
+		{
+			name:        "--db-dir equals form after the subcommand",
+			args:        []string{"endless-migrate", "apply", "--db-dir=/cfg", "x.sql"},
+			wantCleaned: []string{"endless-migrate", "apply", "x.sql"},
+			wantChoice:  dbcontext.ChoiceDir,
+			wantDir:     "/cfg",
 		},
 		{
 			name:        "absent",
 			args:        []string{"endless-migrate", "apply", "x.sql"},
 			wantCleaned: []string{"endless-migrate", "apply", "x.sql"},
-			wantDir:     "",
-			wantFound:   false,
+			wantChoice:  dbcontext.ChoiceNone,
 		},
 		{
-			name:        "last occurrence wins",
-			args:        []string{"endless-migrate", "--config-dir", "/one", "--config-dir=/two", "apply"},
+			name:        "a --db-dir value that is an empty string is still a value",
+			args:        []string{"endless-migrate", "--db-dir=", "apply"},
 			wantCleaned: []string{"endless-migrate", "apply"},
-			wantDir:     "/two",
-			wantFound:   true,
-		},
-		{
-			name:        "trailing flag names nothing and is dropped",
-			args:        []string{"endless-migrate", "apply", "--config-dir"},
-			wantCleaned: []string{"endless-migrate", "apply"},
+			wantChoice:  dbcontext.ChoiceDir,
 			wantDir:     "",
-			wantFound:   false,
-		},
-		{
-			name:        "a value that is an empty string is still a value",
-			args:        []string{"endless-migrate", "--config-dir=", "apply"},
-			wantCleaned: []string{"endless-migrate", "apply"},
-			wantDir:     "",
-			wantFound:   true,
 		},
 		{
 			name:        "no arguments at all",
 			args:        nil,
 			wantCleaned: []string{},
-			wantDir:     "",
-			wantFound:   false,
+			wantChoice:  dbcontext.ChoiceNone,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cleaned, dir, found := dbcontext.ConsumeConfigDirFlag(tt.args)
+			cleaned, flags, err := dbcontext.ConsumeFlags(tt.args)
+			if err != nil {
+				t.Fatalf("ConsumeFlags() error = %v, want nil", err)
+			}
 			if len(cleaned) != len(tt.wantCleaned) {
 				t.Fatalf("cleaned = %q, want %q", cleaned, tt.wantCleaned)
 			}
@@ -127,23 +198,78 @@ func TestConsumeConfigDirFlag(t *testing.T) {
 					t.Fatalf("cleaned = %q, want %q", cleaned, tt.wantCleaned)
 				}
 			}
-			if dir != tt.wantDir {
-				t.Errorf("dir = %q, want %q", dir, tt.wantDir)
+			if flags.Choice != tt.wantChoice {
+				t.Errorf("Choice = %v, want %v", flags.Choice, tt.wantChoice)
 			}
-			if found != tt.wantFound {
-				t.Errorf("found = %v, want %v", found, tt.wantFound)
+			if flags.Dir != tt.wantDir {
+				t.Errorf("Dir = %q, want %q", flags.Dir, tt.wantDir)
 			}
 		})
 	}
 }
 
-// TestConsumeConfigDirFlag_DoesNotMutateItsInput proves the function is safe to
-// call on os.Args: it returns a new slice rather than reordering the caller's.
-func TestConsumeConfigDirFlag_DoesNotMutateItsInput(t *testing.T) {
-	args := []string{"endless-migrate", "--config-dir", "/cfg", "apply"}
+// TestConsumeFlags_Refusals covers what the merged parser made STRICTER.
+//
+// internal/dbcontext's own parser used to drop a trailing bare flag silently
+// and let a repeated flag win last-one-wins, also silently. Both are a caller
+// that meant to choose and did not, and E-1668 had already decided for
+// endless-go that such a caller is told. Merging the two parsers (E-2157) is
+// what extends that answer to cmd/endless-migrate.
+func TestConsumeFlags_Refusals(t *testing.T) {
+	tests := []struct {
+		name string
+		args []string
+		want error
+	}{
+		{
+			name: "trailing bare --db names nothing",
+			args: []string{"endless-migrate", "apply", "--db"},
+			want: dbcontext.ErrDBFlagNeedsValue,
+		},
+		{
+			name: "trailing bare --db-dir names nothing",
+			args: []string{"endless-migrate", "apply", "--db-dir"},
+			want: dbcontext.ErrDBDirFlagNeedsDir,
+		},
+		{
+			name: "--db and --db-dir are one choice spelled twice",
+			args: []string{"endless-go", "--db", "main", "--db-dir", "/tmp/x", "event"},
+			want: dbcontext.ErrDBFlagConflict,
+		},
+		{
+			name: "a word outside the vocabulary",
+			args: []string{"endless-go", "--db", "worktree", "event"},
+			want: dbcontext.ErrUnknownDBValue,
+		},
+		{
+			name: "the retired --config-dir names its replacement",
+			args: []string{"endless-migrate", "--config-dir", "/cfg", "apply"},
+			want: dbcontext.ErrConfigDirFlagRetired,
+		},
+		{
+			name: "the retired --config-dir in equals form too",
+			args: []string{"endless-migrate", "--config-dir=/cfg", "apply"},
+			want: dbcontext.ErrConfigDirFlagRetired,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			_, _, err := dbcontext.ConsumeFlags(tt.args)
+			if !errors.Is(err, tt.want) {
+				t.Fatalf("ConsumeFlags() error = %v, want %v", err, tt.want)
+			}
+		})
+	}
+}
+
+// TestConsumeFlags_DoesNotMutateItsInput proves the parser is safe to call on
+// os.Args: it returns a new slice rather than reordering the caller's.
+func TestConsumeFlags_DoesNotMutateItsInput(t *testing.T) {
+	args := []string{"endless-migrate", "--db-dir", "/cfg", "apply"}
 	original := append([]string(nil), args...)
 
-	dbcontext.ConsumeConfigDirFlag(args)
+	dbcontext.ConsumeFlags(args)
 
 	for i := range args {
 		if args[i] != original[i] {

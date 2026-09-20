@@ -2551,15 +2551,16 @@ def _migrate_change(migrate_bin: str, change_path: Path) -> dict:
     on failure; the executable reports its cause in the JSON's "error" field, as
     the event bridge's apply_change does.
 
-    The DB context is threaded as --config-dir (E-1429): a per-invocation flag,
-    never an environment variable, so a stale export cannot silently redirect a
+    The DB context is threaded as a per-invocation flag (E-1429), never an
+    environment variable, so a stale export cannot silently redirect a
     migration. `land_worktree` has already pinned main, so during a land this
-    always names the real ledger.
+    always names the real ledger and threads `--db main`.
 
-    `migrate_db_context_args`, NOT `go_db_context_args` — the two binaries take
-    different flags. E-1668 gave endless-go `--db main|sandbox`; this executable
-    resolves its target from what the caller named and keeps `--config-dir`. See
-    config.migrate_db_context_args for why that is a contract and not a leftover.
+    `migrate_db_context_args`, NOT `go_db_context_args` — but since E-2157 the
+    difference is one rewrite rather than a second dialect: both binaries take
+    `--db main` and `--db-dir` from the same parser, and only `--db sandbox` is
+    resolved here into `--db-dir <path>`, because ED-1571 leaves this executable
+    no cwd routing to resolve it with. See config.migrate_db_context_args.
     """
     from endless import config
 

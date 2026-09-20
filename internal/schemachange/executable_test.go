@@ -91,9 +91,17 @@ func buildMigrate(t *testing.T) string {
 // nothing here can reach a real database whatever the assertion is about.
 func run(t *testing.T, binary string, args ...string) (stdout, stderr string, code int) {
 	t.Helper()
+	return runWithEnv(t, binary, []string{"XDG_CONFIG_HOME=" + t.TempDir()}, args...)
+}
+
+// runWithEnv is run with the environment named outright, for the cases that
+// turn on WHICH variable is set: `--db main` follows $HOME and ignores
+// XDG_CONFIG_HOME, so proving that needs both set to different places.
+func runWithEnv(t *testing.T, binary string, env []string, args ...string) (stdout, stderr string, code int) {
+	t.Helper()
 
 	cmd := exec.Command(binary, args...)
-	cmd.Env = append(os.Environ(), "XDG_CONFIG_HOME="+t.TempDir())
+	cmd.Env = append(os.Environ(), env...)
 	var outBuf, errBuf strings.Builder
 	cmd.Stdout = &outBuf
 	cmd.Stderr = &errBuf
@@ -209,7 +217,7 @@ func TestMigrateExecutable_RefusesADatabaseThatDoesNotExist(t *testing.T) {
 	change := writeChange(t, "e-2088-unused.sql", "CREATE TABLE thing (id INTEGER);\n")
 	cfgDir := t.TempDir()
 
-	stdout, _, code := run(t, binary, "--config-dir", cfgDir, "apply", string(change))
+	stdout, _, code := run(t, binary, "--db-dir", cfgDir, "apply", string(change))
 	if code == 0 {
 		t.Fatal("apply succeeded against a config dir holding no database")
 	}
@@ -239,7 +247,7 @@ func TestMigrateExecutable_AppliesAChangeEndToEnd(t *testing.T) {
 		INSERT OR IGNORE INTO task_types (id, slug) VALUES (1, 'todo');
 	`)
 
-	stdout, stderr, code := run(t, binary, "--config-dir", cfgDir, "apply", string(change))
+	stdout, stderr, code := run(t, binary, "--db-dir", cfgDir, "apply", string(change))
 	if code != 0 {
 		t.Fatalf("apply exited %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
@@ -264,11 +272,111 @@ func TestMigrateExecutable_AppliesAChangeEndToEnd(t *testing.T) {
 		t.Error("the change was applied but not recorded")
 	}
 
-	stdout, _, code = run(t, binary, "--config-dir", cfgDir, "apply", string(change))
+	stdout, _, code = run(t, binary, "--db-dir", cfgDir, "apply", string(change))
 	if code != 0 {
 		t.Fatalf("re-apply exited %d: %s", code, stdout)
 	}
 	if !strings.Contains(stdout, `"status":"skipped"`) {
 		t.Errorf("re-applying did not skip: %q", stdout)
+	}
+}
+
+// TestMigrateExecutable_DBMainFollowsHOMEAndIgnoresXDG is the flag the land
+// actually threads (E-2157), proved against the one thing that could make it
+// lie. Endless injects XDG_CONFIG_HOME to route a process at a worktree's
+// sandbox, so this runs with HOME and XDG_CONFIG_HOME pointing at DIFFERENT
+// directories, each holding a database, and asserts the one under HOME is the
+// one that moved. A resolver that honoured XDG here would migrate a sandbox
+// during a land and report success.
+func TestMigrateExecutable_DBMainFollowsHOMEAndIgnoresXDG(t *testing.T) {
+	binary := buildMigrate(t)
+
+	home := t.TempDir()
+	xdg := t.TempDir()
+
+	mainDB := filepath.Join(home, ".config", "endless", "endless.db")
+	if err := os.MkdirAll(filepath.Dir(mainDB), 0o755); err != nil {
+		t.Fatalf("creating the main config dir: %v", err)
+	}
+	if _, err := openDBAt(t, mainDB); err != nil {
+		t.Fatalf("create %s: %v", mainDB, err)
+	}
+
+	// The decoy: a database exactly where an injected XDG_CONFIG_HOME would
+	// send a resolver that honoured it.
+	xdgDB := filepath.Join(xdg, "endless", "endless.db")
+	if err := os.MkdirAll(filepath.Dir(xdgDB), 0o755); err != nil {
+		t.Fatalf("creating the sandbox config dir: %v", err)
+	}
+	decoy, err := openDBAt(t, xdgDB)
+	if err != nil {
+		t.Fatalf("create %s: %v", xdgDB, err)
+	}
+
+	change := writeChange(t, "e-2157-db-main.sql", "CREATE TABLE migrated (id INTEGER);\n")
+
+	stdout, stderr, code := runWithEnv(t, binary,
+		[]string{"HOME=" + home, "XDG_CONFIG_HOME=" + xdg},
+		"--db", "main", "apply", string(change))
+	if code != 0 {
+		t.Fatalf("apply exited %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
+	}
+	if !strings.Contains(stdout, mainDB) {
+		t.Errorf("--db main did not open the database under HOME\n got: %s\nwant it to name: %s",
+			stdout, mainDB)
+	}
+	if strings.Contains(stdout, xdgDB) {
+		t.Errorf("--db main resolved through XDG_CONFIG_HOME: %s", stdout)
+	}
+
+	var name string
+	err = decoy.QueryRow(
+		"SELECT name FROM sqlite_master WHERE type='table' AND name='migrated'",
+	).Scan(&name)
+	if err == nil {
+		t.Error("--db main migrated the XDG-routed database, not the one under HOME")
+	}
+}
+
+// TestMigrateExecutable_RefusesDBSandbox is this executable's ONE deliberate
+// departure from endless-go's vocabulary (ED-1571): it resolves its target from
+// what the caller named, never from where the caller is standing, so there is
+// no "which sandbox" for it to answer.
+//
+// The refusal must NAME the remedy. The reader who types this is exactly the
+// reader who learned `--db main|sandbox` from the guide and had no way to know
+// this binary differs; "unknown command" would tell them nothing.
+func TestMigrateExecutable_RefusesDBSandbox(t *testing.T) {
+	binary := buildMigrate(t)
+
+	change := writeChange(t, "e-2157-sandbox.sql", "CREATE TABLE thing (id INTEGER);\n")
+
+	_, stderr, code := run(t, binary, "--db", "sandbox", "apply", string(change))
+	if code == 0 {
+		t.Fatal("--db sandbox was accepted; it has no cwd routing to resolve it with")
+	}
+	for _, want := range []string{"sandbox", "--db-dir", "--db main"} {
+		if !strings.Contains(stderr, want) {
+			t.Errorf("the refusal does not mention %q: %s", want, stderr)
+		}
+	}
+}
+
+// TestMigrateExecutable_RefusesRetiredConfigDirFlag: --config-dir was this
+// binary's flag until E-2157 renamed it, so a stale invocation is muscle memory
+// rather than a typo, and the refusal names the replacement instead of leaving
+// the reader to guess from "unknown command".
+func TestMigrateExecutable_RefusesRetiredConfigDirFlag(t *testing.T) {
+	binary := buildMigrate(t)
+
+	cfgDir := t.TempDir()
+	change := writeChange(t, "e-2157-retired.sql", "CREATE TABLE thing (id INTEGER);\n")
+
+	_, stderr, code := run(t, binary, "--config-dir", cfgDir, "apply", string(change))
+	if code == 0 {
+		t.Fatal("--config-dir was accepted; E-2157 retired it")
+	}
+	if !strings.Contains(stderr, "--db-dir") {
+		t.Errorf("the refusal does not name the replacement flag: %s", stderr)
 	}
 }

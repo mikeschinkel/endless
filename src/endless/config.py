@@ -843,27 +843,30 @@ def go_db_context_args() -> list[str]:
 def migrate_db_context_args() -> list[str]:
     """The flag pair that threads the resolved DB context to `endless-migrate`.
 
-    A SECOND spelling, and deliberately not a duplicate of the one above: the two
-    binaries have different contracts, so one function cannot serve both.
+    Since E-2157 this is go_db_context_args' vocabulary — the SAME words, from
+    the same parser (internal/dbcontext) — with exactly one rewrite:
+    `--db sandbox` becomes `--db-dir <that sandbox>`.
 
-    `endless-go` is an application surface. It resolves a database the way every
-    other surface does — `--db main|sandbox`, with cwd supplying the address of a
-    worktree's sandbox — and E-1668 gave it that vocabulary so the word a user
-    types is the word the binary hears.
+    The rewrite honors ED-1571 rather than working around it. That decision
+    forbids the migration executable from resolving its target from where it
+    happens to be standing, so it has no cwd routing, and `--db sandbox` — which
+    is answered from cwd — is a question it cannot be asked. THIS layer does own
+    cwd routing, so the question is answered here and the resulting directory is
+    named outright. The binary is told; it never deduces.
 
-    `endless-migrate` is the opposite by design (ED-1571): a migration-only
-    executable that links none of the application and resolves its target from
-    what the caller NAMED, never from where it happens to be standing. So it
-    takes a directory outright, through `internal/dbcontext`, and `--config-dir`
-    is its flag rather than a retired one.
+    So the fork this used to be is now one named rule instead of a second
+    dialect, and every other value threads through unchanged.
 
-    Threading `--db main` to it would not be a rename, it would be an argument it
-    cannot parse: `--db` survives the strip, lands in `args[1]` where the
-    subcommand belongs, and the migration fails during a land.
+    It is backstopped rather than merely documented: cmd/endless-migrate refuses
+    `--db sandbox` by name. A caller that bypasses this helper gets an
+    explanation naming --db-dir, not "unknown command --db" — which is exactly
+    what a land would have hit when E-1668 changed the other binary's flags
+    underneath this one, and the near-miss E-2157 exists to close.
     """
-    if RESOLVED_CONFIG_DIR is None:
-        return []
-    return ["--config-dir", str(RESOLVED_CONFIG_DIR)]
+    args = go_db_context_args()
+    if args[:2] == ["--db", "sandbox"]:
+        return ["--db-dir", str(RESOLVED_CONFIG_DIR)]
+    return args
 
 
 def resolution_cwd() -> Path:

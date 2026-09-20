@@ -25,8 +25,12 @@ import (
 // worktree it belonged to and hand a session a schema weeks out of date.
 //
 // Python mirrors this in config.sandbox_dir / config.sandbox_config_dir. The two
-// must agree byte for byte: Python resolves the path for `--db sandbox` and
-// threads it to Go as --config-dir, and Go resolves it again from cwd.
+// must agree byte for byte, because BOTH resolve it and the answers meet. To
+// endless-go, Python threads the word `--db sandbox` and this package resolves
+// it again from cwd — so a disagreement means two processes in one invocation
+// reading different databases. To cmd/endless-migrate, which ED-1571 leaves no
+// cwd routing, Python threads its own resolution as `--db-dir <path>` instead
+// (config.migrate_db_context_args).
 
 // sandboxDirName is the worktree-relative directory a sandbox occupies, under
 // the worktree's own `.endless/`. It sits beside `tmp/` and `worktree.json`

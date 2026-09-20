@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mikeschinkel/endless/internal/dbcontext"
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/schema"
 	"github.com/mikeschinkel/endless/internal/sessionstate"
@@ -39,12 +40,16 @@ func seedFromWorktree(sandboxDir string) error {
 		return err
 	}
 
-	home, err := os.UserHomeDir()
+	// The main database, resolved the one way `--db main` resolves it: through
+	// internal/dbcontext, following $HOME and ignoring XDG_CONFIG_HOME. Seeding
+	// runs under a sandbox's own injected XDG, so a resolver that honoured it
+	// would read the sandbox being seeded rather than the database it is being
+	// seeded FROM.
+	mainDBPath, err := dbcontext.MainDBPath()
 	if err != nil {
-		return fmt.Errorf("home dir: %w", err)
+		return err
 	}
-	mainDBPath := filepath.Join(home, ".config", "endless", "endless.db")
-	proj, err := readMainProjectRow(mainDBPath, mainCheckout)
+	proj, err := readMainProjectRow(string(mainDBPath), mainCheckout)
 	if err != nil {
 		return err
 	}

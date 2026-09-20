@@ -109,7 +109,7 @@ func Run(apply func(*sql.Tx) error) {
 // same property ED-1571's executable rests on, and for the same reason: a
 // migration must not carry code that expects a schema. The answer is identical
 // either way; monitor's extra routing (the hook pin, cwd sandbox detection, the
-// --config-dir flag) is all set by callers this process does not have.
+// --db/--db-dir flags) is all set by callers this process does not have.
 func dbPath() string {
 	if p := os.Getenv(schemachange.ChangeDBEnvVar); p != "" {
 		return p

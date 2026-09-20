@@ -336,21 +336,25 @@ def test_begin_reads_the_argv_it_is_given_not_sys_argv():
 # --- the two binaries' flag vocabularies -------------------------------------
 #
 # E-1668 gave `endless-go` --db main|sandbox and retired --config-dir from it.
-# ED-1571's `endless-migrate` landed separately and KEEPS --config-dir: it links
-# none of the application and resolves its target from what the caller named,
-# never from cwd. Two contracts, so two spellings — and threading the wrong one
-# is not a cosmetic slip. `--db` survives endless-migrate's strip, lands in
-# argv[1] where the subcommand belongs, and the migration fails during a land.
+# E-2157 gave cmd/endless-migrate the same vocabulary, from the same parser
+# (internal/dbcontext), so these two helpers now agree on every value but one.
+#
+# The exception is `--db sandbox`, and it is ED-1571 rather than an oversight:
+# that word is answered from cwd, and the migration executable has no cwd
+# routing to answer it with. So Python resolves it and names the directory.
+#
+# Threading a word the other binary cannot parse is not a cosmetic slip — it is
+# the near-miss E-2157 exists to close. When E-1668 changed endless-go's flags,
+# the land threaded `--db main` at endless-migrate, `--db` survived its strip
+# and landed in argv[1] where the subcommand belongs, and the migration would
+# have failed mid-land.
 
 
-def test_the_two_binaries_get_different_flags(tmp_path, monkeypatch):
+def test_the_two_binaries_agree_on_main(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", config.main_config_dir())
 
     assert config.go_db_context_args() == ["--db", "main"]
-    assert config.migrate_db_context_args() == [
-        "--config-dir",
-        str(config.main_config_dir()),
-    ]
+    assert config.migrate_db_context_args() == ["--db", "main"]
 
 
 def test_neither_threads_anything_without_a_resolved_context(monkeypatch):
@@ -360,15 +364,26 @@ def test_neither_threads_anything_without_a_resolved_context(monkeypatch):
     assert config.migrate_db_context_args() == []
 
 
-def test_the_migrate_spelling_is_a_directory_not_a_word(tmp_path, monkeypatch):
+def test_the_migrate_spelling_resolves_sandbox_to_a_directory(tmp_path, monkeypatch):
     """endless-migrate cannot resolve `sandbox` — it has no cwd routing at all —
-    so its flag must always carry the path itself."""
+    so the one word it cannot take is rewritten here into one it can."""
     wt = _self_dev_project(tmp_path, monkeypatch)[1]
     monkeypatch.setattr(
         config, "RESOLVED_CONFIG_DIR", config.sandbox_config_dir(wt)
     )
 
     assert config.go_db_context_args() == ["--db", "sandbox"]
-    args = config.migrate_db_context_args()
-    assert args[0] == "--config-dir"
-    assert args[1] == str(config.sandbox_config_dir(wt))
+    assert config.migrate_db_context_args() == [
+        "--db-dir",
+        str(config.sandbox_config_dir(wt)),
+    ]
+
+
+def test_the_migrate_spelling_passes_db_dir_through(tmp_path, monkeypatch):
+    """Every value but `--db sandbox` threads unchanged — the fork is one named
+    rewrite, not a second dialect."""
+    elsewhere = tmp_path / "somewhere" / "endless"
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", elsewhere)
+
+    assert config.go_db_context_args() == ["--db-dir", str(elsewhere)]
+    assert config.migrate_db_context_args() == ["--db-dir", str(elsewhere)]

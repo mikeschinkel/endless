@@ -32,10 +32,10 @@ What this module pins, and nothing else does:
      worktree's endless-go backs up and records. That pairing is the half of
      E-1664 that survives E-2088 and nothing else covers it.
   5. `_migrate_change` invokes the executable the way every other Go shellout is
-     invoked — `--config-dir` as a per-invocation flag (E-1429; endless-migrate
-     keeps that flag where endless-go moved to --db, see
-     config.migrate_db_context_args) — and surfaces
-     the executable's own error text rather than a generic one.
+     invoked — the DB target as a per-invocation flag (E-1429), which since
+     E-2157 is the same `--db main` endless-go takes (see
+     config.migrate_db_context_args) — and surfaces the executable's own error
+     text rather than a generic one.
 
 The ordering of the whole land, and the post-merge failure surfacing, live in
 tests/test_worktree_land_schema_apply.py with E-1941's other ordering
@@ -277,17 +277,19 @@ def test_invocation_threads_config_dir_and_the_change_path(
         "exit 0\n",
     )
     monkeypatch.setattr("endless.config.require_db_context", lambda: None)
-    # E-1668 split the two binaries' spellings: endless-go takes
-    # --db main|sandbox, endless-migrate keeps --config-dir. Stubbing the WRONG
-    # one here would let this test pass while a land threaded a flag the
-    # executable cannot parse.
+    # Stub the helper `_migrate_change` actually calls. Stubbing the other one
+    # is how this suite could stay green while every real land broke: the
+    # binaries' spellings diverged in E-1668, the land threaded endless-go's at
+    # endless-migrate, and the test that should have caught it had replaced the
+    # wrong function. E-2157 reunified the vocabulary; the stub still has to
+    # name the real dependency, because agreement today is not a contract.
     monkeypatch.setattr(
-        "endless.config.migrate_db_context_args", lambda: ["--config-dir", "/cfg"]
+        "endless.config.migrate_db_context_args", lambda: ["--db", "main"]
     )
 
     res = _migrate_change(str(binary), wt / CHANGE)
 
-    assert argv_log.read_text().strip() == f"--config-dir /cfg apply {wt / CHANGE}"
+    assert argv_log.read_text().strip() == f"--db main apply {wt / CHANGE}"
     assert res["status"] == "applied"
     assert res["name"] == "e-2088-add-thing"
 
@@ -302,7 +304,7 @@ def test_invocation_surfaces_the_executables_own_error(
         "exit 1\n",
     )
     monkeypatch.setattr("endless.config.require_db_context", lambda: None)
-    monkeypatch.setattr("endless.config.go_db_context_args", lambda: [])
+    monkeypatch.setattr("endless.config.migrate_db_context_args", lambda: [])
 
     with pytest.raises(click.ClickException) as ei:
         _migrate_change(str(binary), wt / CHANGE)
@@ -317,7 +319,7 @@ def test_invocation_falls_back_to_stderr_when_there_is_no_json(
     wt = landable["worktree"]
     binary = _make_migrate_bin(wt, 'echo "segfault" >&2\nexit 1\n')
     monkeypatch.setattr("endless.config.require_db_context", lambda: None)
-    monkeypatch.setattr("endless.config.go_db_context_args", lambda: [])
+    monkeypatch.setattr("endless.config.migrate_db_context_args", lambda: [])
 
     with pytest.raises(click.ClickException) as ei:
         _migrate_change(str(binary), wt / CHANGE)

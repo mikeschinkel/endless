@@ -21,7 +21,15 @@
 //
 // Usage:
 //
-//	endless-migrate [--config-dir <dir>] apply <change-file>
+//	endless-migrate [--db main | --db-dir <dir>] apply <change-file>
+//
+// The flags are internal/dbcontext's, the same vocabulary endless-go takes
+// (E-2157), minus one word. `--db sandbox` is REFUSED here rather than
+// resolved: it names a database by where the caller is standing, and this
+// executable resolves its target only from what the caller named. That is not
+// a second dialect, it is the one value ED-1571 forbids, and refusing it by
+// name is what tells a reader who learned `--db` from the guide why it does
+// not apply — which "unknown command" could not.
 //
 // There is one subcommand, and the absence of the others is a property rather
 // than an omission: no hook, no task, no event, no query, no tmux, no schema
@@ -38,6 +46,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -62,7 +71,10 @@ type result struct {
 }
 
 func main() {
-	args, explicit, _ := dbcontext.ConsumeConfigDirFlag(os.Args)
+	args, flags, err := dbcontext.ConsumeFlags(os.Args)
+	if err != nil {
+		errUsage(err.Error())
+	}
 
 	if len(args) < 2 {
 		usage(os.Stderr)
@@ -71,10 +83,18 @@ func main() {
 
 	switch args[1] {
 	case "-h", "--help", "help":
+		// Resolved in the apply arm rather than here, so --help answers
+		// without a database context. The reader who typed the wrong flag
+		// needs the usage text most, and making them satisfy the flag in
+		// order to read about the flag is a loop.
 		usage(os.Stdout)
 		return
 	case "apply":
-		res, err := runApply(args[2:], explicit)
+		dir, err := configDir(flags)
+		if err != nil {
+			errUsage(err.Error())
+		}
+		res, err := runApply(args[2:], dir)
 		if err != nil {
 			emitError(res.Name, err)
 		}
@@ -87,12 +107,48 @@ func main() {
 	os.Exit(2)
 }
 
+// errSandboxNotRoutable is the refusal for `--db sandbox`.
+//
+// It states the rule, then names the two flags that do work here — a refusal
+// that names no remedy is worse than terse, and this one is met by exactly the
+// reader who learned the vocabulary from the guide and had no way to know that
+// this binary is different.
+var errSandboxNotRoutable = errors.New(
+	dbcontext.DBFlag + " sandbox names a database by where the caller is " +
+		"standing, and this executable resolves its target only from what " +
+		"the caller named (ED-1571) — so there is no \"which sandbox\" for " +
+		"it to answer. Pass " + dbcontext.DBDirFlag + " <dir> to name a " +
+		"sandbox outright, or " + dbcontext.DBFlag + " main for the " +
+		"project's database.")
+
+// configDir resolves the parsed flags to the directory holding the database to
+// migrate. Every arm but the refusal is internal/dbcontext's own resolution, so
+// "the main database" means here exactly what it means to endless-go.
+//
+// No flag keeps the historical default (XDG_CONFIG_HOME, else ~/.config)
+// rather than refusing. A land always names its target, so the default is
+// reached only by a hand invocation, and the relative-path check in runApply is
+// what catches the case where that default resolves to nothing meaningful.
+func configDir(flags dbcontext.Flags) (dir dt.DirPath, err error) {
+	switch flags.Choice {
+	case dbcontext.ChoiceSandbox:
+		err = errSandboxNotRoutable
+	case dbcontext.ChoiceMain:
+		dir, err = dbcontext.MainConfigDir()
+	case dbcontext.ChoiceDir:
+		dir = flags.Dir
+	default:
+		dir = dbcontext.ConfigDir("")
+	}
+	return dir, err
+}
+
 // runApply applies exactly one change file to exactly one database.
 //
 // One file per invocation, matching what `worktree land` has always done: a
 // change set can be several files, one can apply and the next fail, and the
 // caller needs to know which — so it names them one at a time and reports each.
-func runApply(args []string, explicit dt.DirPath) (res result, err error) {
+func runApply(args []string, dir dt.DirPath) (res result, err error) {
 	var db *sql.DB
 	var path dt.Filepath
 	var exists bool
@@ -108,7 +164,7 @@ func runApply(args []string, explicit dt.DirPath) (res result, err error) {
 		goto end
 	}
 
-	res.DB = dbcontext.DBPath(explicit)
+	res.DB = dt.FilepathJoin(dir, dbcontext.DBFileName)
 
 	// An absolute database or nothing. dbcontext resolves a RELATIVE path when
 	// no home directory and no XDG_CONFIG_HOME can be found, and a relative one
@@ -118,9 +174,10 @@ func runApply(args []string, explicit dt.DirPath) (res result, err error) {
 	if !res.DB.IsAbs() {
 		err = fmt.Errorf(
 			"refusing to migrate a database at a relative path: %s\n"+
-				"Neither --config-dir nor XDG_CONFIG_HOME nor a home directory "+
-				"resolved, so there is no way to know which ledger was meant.",
-			res.DB)
+				"Neither %s main, nor %s, nor XDG_CONFIG_HOME, nor a home "+
+				"directory resolved, so there is no way to know which ledger "+
+				"was meant.",
+			res.DB, dbcontext.DBFlag, dbcontext.DBDirFlag)
 		goto end
 	}
 
@@ -255,7 +312,7 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "endless-migrate — apply Endless schema changes, and nothing else.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Usage:")
-	fmt.Fprintln(w, "  endless-migrate [--config-dir <dir>] apply <change-file>")
+	fmt.Fprintln(w, "  endless-migrate [--db main | --db-dir <dir>] apply <change-file>")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Commands:")
 	fmt.Fprintln(w, "  apply <change-file>   Apply one internal/schema/changes/<name>.{sql,go}")
@@ -263,9 +320,15 @@ func usage(w io.Writer) {
 	fmt.Fprintln(w, "                        applied changes are skipped.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Flags:")
-	fmt.Fprintln(w, "  --config-dir <dir>    The Endless config directory holding the database")
+	fmt.Fprintln(w, "  --db main             The project's main database, ~/.config/endless")
+	fmt.Fprintln(w, "                        (follows $HOME, ignores XDG_CONFIG_HOME).")
+	fmt.Fprintln(w, "  --db-dir <dir>        The Endless config directory holding the database")
 	fmt.Fprintln(w, "                        to migrate. Defaults to XDG_CONFIG_HOME/endless,")
 	fmt.Fprintln(w, "                        else ~/.config/endless.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "  --db sandbox is refused: this binary resolves its target from what you")
+	fmt.Fprintln(w, "  name, never from where you are standing, so it cannot say which sandbox")
+	fmt.Fprintln(w, "  you meant. Name one with --db-dir.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "This binary carries the migration set and nothing else: it serves no hook,")
 	fmt.Fprintln(w, "runs no task command, answers no query, and touches no business data outside")

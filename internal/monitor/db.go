@@ -135,11 +135,11 @@ func ForceRealDB() {
 	if !IsSandboxActive() {
 		return
 	}
-	home, err := os.UserHomeDir()
+	path, err := dbcontext.MainDBPath()
 	if err != nil {
 		return
 	}
-	dbPathOverride = filepath.Join(home, ".config", "endless", "endless.db")
+	dbPathOverride = string(path)
 }
 
 // HasExplicitDBContext reports whether a per-invocation DB flag was consumed for
@@ -177,11 +177,8 @@ func SetDBContextDir(dir string) {
 // Mirrors Python's config.main_config_dir, so "the main database" means one
 // thing across both layers.
 func mainConfigDir() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolving home directory for --db main: %w", err)
-	}
-	return filepath.Join(home, ".config", "endless"), nil
+	dir, err := dbcontext.MainConfigDir()
+	return string(dir), err
 }
 
 // sandboxConfigDirForCwd resolves `--db sandbox` to THIS worktree's sandbox
@@ -245,98 +242,73 @@ var errNotInSelfDevWorktree = errors.New(
 // ForceRealDB(): its XDG is always the sandbox, so the conditional path
 // already lands on main.
 func PinMainDB() {
-	home, err := os.UserHomeDir()
+	path, err := dbcontext.MainDBPath()
 	if err != nil {
 		return
 	}
-	dbPathOverride = filepath.Join(home, ".config", "endless", "endless.db")
+	dbPathOverride = string(path)
 }
 
 // ErrDBFlagConflict is returned when one invocation spells its DB choice twice.
-var ErrDBFlagConflict = errors.New(
-	"--db and --db-dir are two spellings of one choice; pass only one")
+//
+// An ALIAS of the parser's own sentinel, not a second one: the check moved into
+// internal/dbcontext with the parse, and callers that already test for this by
+// identity must keep matching the error the parser actually returns.
+var ErrDBFlagConflict = dbcontext.ErrDBFlagConflict
 
 // ConsumeDBFlags strips this binary's DB-context flags out of os.Args (wherever
 // they appear) and resolves them to a config directory. Called once at the top
 // of main(), BEFORE os.Args[1] is read as the subcommand, so existing positional
 // parsing is unaffected and `endless-go --db main event emit ...` works.
 //
-// The vocabulary is the Python CLI's, deliberately (E-1668): one --db
-// main|sandbox spelling serves both layers as the port moves to Go, instead of
-// the user saying --db and the Go binary hearing --config-dir.
+// The PARSE lives in internal/dbcontext (E-2157), which owns the vocabulary for
+// every binary that has one; this is the routing layer on top. The split is not
+// arbitrary — it falls exactly where cwd enters. dbcontext resolves `--db main`
+// and `--db-dir` because they need nothing but $HOME and the argument itself.
+// `--db sandbox` needs the working directory to say WHICH worktree is meant,
+// dbcontext never reads it, so the choice arrives here as a word and this
+// function is where it becomes a path.
 //
-//	--db main        the project's main database (~/.config/endless, $HOME-following)
+//	--db main        the project's main database ($HOME/.config/endless)
 //	--db sandbox     this worktree's sandbox database, addressed from cwd
 //	--db-dir <path>  name a directory outright
 //
-// --db-dir is the escape for a caller that must name a directory WITHOUT owning
-// the process environment — chiefly Go tests on t.TempDir(). A caller that
-// already runs under a temp HOME (the verify runner does) wants plain --db
-// main, since mainConfigDir follows $HOME.
-//
-// The target is carried as a per-invocation flag, never an env var: an exported
-// env var could silently satisfy the gate for every later command, which is
-// exactly the silent-wrong-DB failure mode E-1429 exists to prevent — and since
-// E-1668, never from cwd either.
-//
-// Both flags accept the `--flag value` and `--flag=value` forms. A missing value
-// is an error rather than a silent skip: `--db` with nothing after it is a
-// caller that meant to choose and did not, and the old flag's silent tolerance
-// of that is how a choice goes missing.
-func ConsumeDBFlags() error {
-	args := os.Args
-	cleaned := make([]string, 0, len(args))
-	if len(args) > 0 {
-		cleaned = append(cleaned, args[0])
-	}
-	var choice, dir string
-	for i := 1; i < len(args); i++ {
-		a := args[i]
-		switch {
-		case a == "--db":
-			if i+1 >= len(args) {
-				return errors.New("--db requires a value: main or sandbox")
-			}
-			choice = args[i+1]
-			i++
-		case strings.HasPrefix(a, "--db="):
-			choice = strings.TrimPrefix(a, "--db=")
-		case a == "--db-dir":
-			if i+1 >= len(args) {
-				return errors.New("--db-dir requires a directory")
-			}
-			dir = args[i+1]
-			i++
-		case strings.HasPrefix(a, "--db-dir="):
-			dir = strings.TrimPrefix(a, "--db-dir=")
-		default:
-			cleaned = append(cleaned, a)
-		}
+// Reading cwd here is not the E-1368 guess returning: the flag is what grants
+// permission to open a database, and cwd only supplies the address of the one
+// permitted.
+func ConsumeDBFlags() (err error) {
+	var cleaned []string
+	var flags dbcontext.Flags
+	var dir dt.DirPath
+	var sandbox string
+
+	cleaned, flags, err = dbcontext.ConsumeFlags(os.Args)
+	if err != nil {
+		goto end
 	}
 	os.Args = cleaned
 
-	if choice != "" && dir != "" {
-		return ErrDBFlagConflict
-	}
-	switch {
-	case dir != "":
-		SetDBContextDir(dir)
-	case choice == "main":
-		resolved, err := mainConfigDir()
+	switch flags.Choice {
+	case dbcontext.ChoiceNone:
+		goto end
+	case dbcontext.ChoiceDir:
+		dir = flags.Dir
+	case dbcontext.ChoiceMain:
+		dir, err = dbcontext.MainConfigDir()
 		if err != nil {
-			return err
+			goto end
 		}
-		SetDBContextDir(resolved)
-	case choice == "sandbox":
-		resolved, err := sandboxConfigDirForCwd()
+	case dbcontext.ChoiceSandbox:
+		sandbox, err = sandboxConfigDirForCwd()
 		if err != nil {
-			return err
+			goto end
 		}
-		SetDBContextDir(resolved)
-	case choice != "":
-		return fmt.Errorf("unknown --db value %q: expected 'main' or 'sandbox'", choice)
+		dir = dt.DirPath(sandbox)
 	}
-	return nil
+	SetDBContextDir(string(dir))
+
+end:
+	return err
 }
 
 // dbContextExplicit reports whether this process was handed an explicit DB
@@ -453,11 +425,11 @@ func candidateBuild() bool {
 // in force. It hardcodes the same location PinMainDB does, so "the main database"
 // means one thing across both.
 func realDBPath() string {
-	home, err := os.UserHomeDir()
+	path, err := dbcontext.MainDBPath()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".config", "endless", "endless.db")
+	return string(path)
 }
 
 // PinnedToRealDB reports whether this process has been pinned onto a fixed real
