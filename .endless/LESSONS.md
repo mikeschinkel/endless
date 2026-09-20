@@ -6518,3 +6518,15 @@ The rule: a quoted rule is an argument only if you have established its scope. B
 
 Cost: a full round of analysis handed to Mike with a wrong recommendation on top of it.
 - **Project**: endless
+
+### [2026-09-20] A repair pass must check the thing that fails, not the thing that is easy to compare
+E-2137's doc-mirror sweep repairs mirrors. Its repair compared FILE CONTENT against the database column. The failure it exists to repair is a failed COMMIT — which leaves the content perfectly correct and no commit at all. So the repair could never see its own reason for existing: a mirror sat untracked through 77 consecutive 'ok' passes in a project that is not Endless, and the job reported itself healthy the whole time.
+
+The plan even named the failure mode ('a failed write warns and is repaired later'). I then wrote a repair for content drift, because content drift is what is easy to compare. Nobody catches this by reading the code; you catch it by asking, of a repair pass: what EXACTLY goes wrong, and does this comparison detect that specific thing? Content drift was a hypothetical. The uncommitted file was the real one, and it was the one I had written the warning path for myself.
+
+Generalisation: when a write has two parts (change the data, record the change) and the second is best-effort, the repair must probe the second. Probing the first will always say everything is fine.
+
+Second lesson from the same fix: 'report work on every pass' is its own defect. Once reconcile could stage an unknown path, a gitignored mirror became permanently unknown — the sweep would stage it and the commit layer would drop it, forever. Any 'fix up what is missing' pass needs a predicate for 'and can this actually be completed?', or it churns. I only found it because a test asserted the SECOND pass was quiet.
+
+Third, unrelated to the feature but worth keeping: tests/test_db_restore.py treated holders_of()'s None ('could not determine') as 'nothing open', guarded by whether lsof EXISTS rather than whether it ANSWERED. On a loaded machine lsof exceeded its 15s timeout and the test accused working code. A probe that can time out has three outcomes, not two, and a test must skip on the third rather than assert.
+- **Project**: endless
