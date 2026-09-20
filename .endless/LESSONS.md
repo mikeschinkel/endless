@@ -6490,3 +6490,19 @@ The CLAUDE.md PRODUCT rule says to describe how software behaves for someone els
 
 Second, narrower lesson in the same bug: a path that is neither on disk nor in the index is a no-op to stage, but 'git add' exits 128 on it and takes the whole invocation with it. Filter a computed path list before handing it to git add; do not assume a path you just moved is one git knows about.
 - **Project**: endless
+
+### [2026-09-19] A test that blocks your change is evidence about the change, not about the test
+During E-2142 a schema migration could not satisfy TestMigrate_LeavesAPreVersioningDatabaseIntact, which asserts that replaying migrations onto a database already at the declared shape changes nothing. I presented 'relax the test fixture' as my recommended option, with two cons against the alternative: that LatestVersion() would need fixing, and that listing one folder would no longer show the whole migration set.
+
+Mike: 'isn't that fixing the code to match the test rather than fixing the test to test the code?' — and on the cons: 'LatestVersion() is OUR code. Why can't we fix it to work correctly?' and 'That seems like we are allowing a convenience to become a constraint?'
+
+He was right on all three.
+
+The rule: when a test blocks a change, the first hypothesis is that the test is correct and the change is wrong. Here the test was catching something real — my migration was the only statement in the file that was not idempotent, while the five DROP TABLEs beside it all carried IF EXISTS. I had picked a mechanism (pure SQL) that could not express the requirement, then proposed relaxing the requirement rather than changing the mechanism.
+
+Two corollaries, both of which I got wrong in the same breath:
+
+1. Work on our own code is not a con. 'This would require changing LatestVersion()' is a cost estimate, not an argument. Listing it alongside real objections inflates the option you already prefer.
+
+2. A convenience worth keeping is a problem to solve, not a reason to retreat. 'The migration set would stop being readable by listing one folder' was answerable — put the Go step IN that folder — and I offered it as a reason to avoid Go migrations instead of as a constraint on how to build them.
+- **Project**: endless
