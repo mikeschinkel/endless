@@ -6506,3 +6506,15 @@ Two corollaries, both of which I got wrong in the same breath:
 
 2. A convenience worth keeping is a problem to solve, not a reason to retreat. 'The migration set would stop being readable by listing one folder' was answerable — put the Go step IN that folder — and I offered it as a reason to avoid Go migrations instead of as a constraint on how to build them.
 - **Project**: endless
+
+### [2026-09-19] Check what a written rule actually governs before citing it as decisive
+During E-2142 I argued against Go migrations by quoting 00001_baseline.sql's header: 'A later migration must not copy this. A forward step is not idempotent, and one that silently skips its own work is a migration that lies about having run.' I called that the decisive objection to a probe-then-drop migration.
+
+Mike: 'I do not follow this at all. Why does register a Go migration need to copy 00001_baseline.sql?'
+
+He was right. That paragraph governs the baseline's BLANKET idempotence — IF NOT EXISTS on every statement, so a whole run and a whole skip are indistinguishable. It says nothing about one conditional step. Two things in the same tree already proved it: 00002_task_tree_view.sql carries CREATE VIEW IF NOT EXISTS with an explicit note that this is 'NOT the baseline's blanket idempotence... the narrow case schema.sql creates', and my own migration used DROP TABLE IF EXISTS five times without my noticing the contradiction.
+
+The rule: a quoted rule is an argument only if you have established its scope. Before citing one as decisive, find the nearest existing case that looks like yours and check how it was handled — a precedent in the same directory settles the question faster and more reliably than reasoning from the rule's wording. If your own change already violates the rule as you have stated it, you have misread the rule, not found a second violation.
+
+Cost: a full round of analysis handed to Mike with a wrong recommendation on top of it.
+- **Project**: endless
