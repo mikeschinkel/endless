@@ -6456,3 +6456,13 @@ Two rules follow. First: notice a stale landed suite, say nothing, move on. Seco
 ### [2026-09-19] Before treating legacy data as a cost to preserve, ask whether the concept behind it still exists in the product
 Planning E-2142's drop of tasks.source_file, I flagged that it 'drops provenance for historical imported rows' as a cost of Mike's decision. Mike: Endless was first conceived as a tool that imported and synced markdown files, that approach was abandoned for storing markdown in the DB, and the product no longer thinks in source files at all — so the provenance is moot, not a cost. The caveat made a dead concept sound load-bearing, which is how vestigial columns survive removal passes forever. Rule: when a removal touches legacy data, first establish whether the concept it records is still one the product has. If it is not, say the data is vestigial and drop it without hedging; reserve the caveat for data whose concept is still alive.
 - **Project**: endless
+
+### [2026-09-19] Removing something redundant: separate the CONTENT from the SLOT it occupied
+E-2148's plan said the severity word should leave the fault row, because severity-keyed codes had made it redundant — WARN-0004 is a warning because it is spelled that way. I removed the word AND the inverted chip that held it, and shipped a row with the code as plain text on the bar.
+
+Mike: 'the implementation was not what I asked for... I was thinking it should show WARN-0001 in reverse w/o WARNING.'
+
+The word was redundant. The chip was not. A chip is a fixed left-hand anchor the eye lands on before it reads anything; that function had nothing to do with which string sat inside it. I collapsed two separable things into one because one argument (this repeats what the code says) happened to be true of the contents.
+
+The check, before deleting any container along with what it held: state what the CONTAINER does that its contents do not. If that sentence exists, the container stays and something else goes in it. Here: 'it anchors the left edge and marks where the row begins' — plainly true, and untouched by anything the severity word was guilty of.
+- **Project**: endless
