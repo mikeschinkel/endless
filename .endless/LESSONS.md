@@ -6480,3 +6480,13 @@ I read that comment while working in that file and did not carry it eighteen inc
 
 Two rules. First: a comment warning about a LANGUAGE or LIBRARY behaviour is documentation of the hazard, not of the function it sits on — when you add a sibling that takes argv, mixes flags with positionals, or shares whatever the comment describes, it applies to yours too. Second: when a command accepts both flags and positionals, test the order the DOCS tell users to type, not the order that was convenient to write. The footer and the help text are a specification; a spelling only they use is a spelling nothing covers.
 - **Project**: endless
+
+### [2026-09-19] Endless's own repo is the special case; test the shape a project that is not Endless has
+The doc-mirror sweep (E-2137) failed on every pass in another registered project with 'fatal: pathspec .endless/plans/E-1173.md did not match any files'. Relocating a mirror stages both the old and the new name so git records a move; when the OLD name was UNTRACKED, the move left a path neither in the working tree nor in the index — a no-op that git add treats as a fatal unmatched pathspec, failing the commit and the sweep.
+
+Every fixture I wrote committed its legacy mirrors first, because that is what Endless's own repository looks like: mirrors have been committed there since E-1525. Untracked mirrors are the DEFAULT for any project that has not committed its .endless/ tree yet — which is every project on its first day with Endless. I had tested the special case eleven times and the general case zero.
+
+The CLAUDE.md PRODUCT rule says to describe how software behaves for someone else, on a different machine, on a project that is not Endless. I treated that as a thing to write in a reply. It is a thing to put in a FIXTURE. Concretely, for anything that touches a project's git tree, ask what is untracked, what is gitignored, what has no commits yet, and what the project does not track at all — then write that fixture, because Endless's own tree answers all four questions the comfortable way.
+
+Second, narrower lesson in the same bug: a path that is neither on disk nor in the index is a no-op to stage, but 'git add' exits 128 on it and takes the whole invocation with it. Filter a computed path list before handing it to git add; do not assume a path you just moved is one git knows about.
+- **Project**: endless
