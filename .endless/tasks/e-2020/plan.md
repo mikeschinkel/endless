@@ -152,10 +152,16 @@ This task is where stale binaries begin to halt, so it cannot land alone.
 - **E-2019 has LANDED** (2026-09-17), and deliberately left this task its hooks:
   goose drives the connect path, `DBVersion`/`LatestVersion` exist, and the
   block to replace is commented as belonging to E-2020.
-- **E-2158 overlaps and is not recorded as a relation.** It deletes the
-  change-file mechanism; this task leaves `_incomplete_schema_hint` alone
-  precisely so the two do not collide. If E-2158 lands first, re-read that
-  bullet — the deferral becomes moot and the old branch is already gone.
+- **E-2158 touches the same file and should not run concurrently with this.**
+  It deletes the change-file mechanism; this task leaves `_incomplete_schema_hint`
+  alone precisely so the two do not collide. That is E-2164's `<>` case —
+  two tasks whose worktrees touch the same paths — and no relation expresses it
+  today; `precedes`/`preceded_by` and the `<>` marker both arrive with E-2164.
+  Until then the constraint lives here, in prose, deliberately rather than as a
+  `relates_to` standing in for a relation that does not exist yet.
+
+  If E-2158 lands first, re-read the `_incomplete_schema_hint` bullet above:
+  the deferral becomes moot because its subject is already gone.
 - **E-1972 blocks this task.** 89 worktrees are pinned to their own binary and
   every one of them is older than main's; the moment this lands, each halts on
   connect. The hook's silent-no-op-plus-fault keeps that from being noisy, but
