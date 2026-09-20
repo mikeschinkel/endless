@@ -6466,3 +6466,17 @@ The word was redundant. The chip was not. A chip is a fixed left-hand anchor the
 
 The check, before deleting any container along with what it held: state what the CONTAINER does that its contents do not. If that sentence exists, the container stays and something else goes in it. Here: 'it anchors the left edge and marks where the row begins' — plainly true, and untouched by anything the severity word was guilty of.
 - **Project**: endless
+
+### [2026-09-19] A warning comment on a sibling function is about the hazard, not about that function — check yours
+Go's flag package stops parsing at the first non-flag argument, so `errors show 7 --detail` left --detail unparsed as a second positional and the command refused with 'one id at a time'. That is the exact spelling the listing's footer tells a user to type and the one the Python CLI emitted, so the documented invocation failed 100% of the time. It shipped past a 104-check verify suite and a full project regression, because every check used the flag-first order.
+
+The hazard was already written down. jobs_cmd.errors_clear has carried this comment since E-1960:
+
+    # Flags before positionals: Go's flag package stops parsing at the first
+    # non-flag argument, so an id ahead of --all-projects would leave the flag
+    # unparsed and silently narrow the clear back to the ambient project.
+
+I read that comment while working in that file and did not carry it eighteen inches to errors_show, the new function with the same shape.
+
+Two rules. First: a comment warning about a LANGUAGE or LIBRARY behaviour is documentation of the hazard, not of the function it sits on — when you add a sibling that takes argv, mixes flags with positionals, or shares whatever the comment describes, it applies to yours too. Second: when a command accepts both flags and positionals, test the order the DOCS tell users to type, not the order that was convenient to write. The footer and the help text are a specification; a spelling only they use is a spelling nothing covers.
+- **Project**: endless
