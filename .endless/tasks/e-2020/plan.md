@@ -162,11 +162,30 @@ This task is where stale binaries begin to halt, so it cannot land alone.
 
   If E-2158 lands first, re-read the `_incomplete_schema_hint` bullet above:
   the deferral becomes moot because its subject is already gone.
-- **E-1972 blocks this task.** 89 worktrees are pinned to their own binary and
-  every one of them is older than main's; the moment this lands, each halts on
-  connect. The hook's silent-no-op-plus-fault keeps that from being noisy, but
-  it means those sessions stop being tracked until their binary is rebuilt,
-  which is E-1972's whole subject.
+- **E-1972 blocks this task, and NOT because stale binaries start halting.**
+  An earlier draft said they would. They do not: the version check lives in the
+  binary doing the connect, so a build that predates this task carries no check
+  and cannot halt. Measured 2026-09-20 — 134 of 142 worktrees carry their own
+  binary and 110 of those predate E-2019's land, so they hold no goose set at
+  all. Landing this task leaves every one of them doing exactly what it does
+  today: `pinnedToForeignRealDB()` sends it down the schema-passive path, which
+  skips `Migrate()` and all four `VerifyIntegrity` gates, and it writes data
+  against a schema that has moved under it. That is ED-1570's
+  permanently-incomplete case, and it is untouched by this task.
+
+  So what this task achieves ALONE is narrower than it looks: the guard reaches
+  a session only once that worktree has rebuilt, and the worktrees most likely
+  to be dangerous are the ones least likely to have rebuilt. E-1972 is what
+  routes hooks through main's known-good binary, which is what puts the check in
+  front of every session rather than only freshly-built ones. Without it this is
+  a guard the binaries needing guarding do not execute.
+
+  The cost profile inverts the same way. Once Increment 5 removes schema-passive,
+  the halting population is not a one-time backlog to drain — it is every
+  worktree whose branch has not rebased past the newest migration, recurring
+  every time anyone lands one. Across 142 worktrees that is steady state, not a
+  migration cost paid once, and E-1972 is what keeps it from being a permanent
+  tax.
 
 # Verification
 
