@@ -39,12 +39,15 @@ def _param(cmd, spelling):
 
 ALL = list(_walk(main))
 
-# `--json` here names how the command reads its INPUT, not how it writes its
-# output: `session order --json` parses SPEC as a JSON array-of-groups, and
-# `task import --json` names a file to read. Neither is a rendering, so neither
-# takes `--format`. Listed rather than inferred, so that adding a third one is a
-# deliberate act with a test to change.
-INPUT_JSON = {"endless session order", "endless task import"}
+# Commands whose `--json` names how they read their INPUT rather than how they
+# write their output. Such a flag is not a rendering, so it takes no `--format`.
+#
+# EMPTY, and deliberately kept: the two that were here — `session order --json`
+# (a JSON array-of-groups) and `task import --json` (a file to read) — were
+# retired with their commands. Listed rather than inferred, so that the next one
+# is a deliberate act with a test to change; deleting the set would make that
+# next one look like a `--json` that had simply forgotten its `--format`.
+INPUT_JSON: set[str] = set()
 
 
 # ─── the drift guard ─────────────────────────────────────────────────────────

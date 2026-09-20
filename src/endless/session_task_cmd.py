@@ -16,9 +16,8 @@ for the two cases automation gets wrong.
 Hide suppresses a row from one session's `session status` listing while
 KEEPING the association, so `task show`'s "Touched by:" still reports the
 touch that really happened — it is for a capture that is real but noisy.
-Remove deletes the row: the touch, its relation and its do_order. It also
-clears any hide on the same pair, so a later re-capture does not come back
-silently suppressed.
+Remove deletes the row: the touch and its relation. It also clears any hide on
+the same pair, so a later re-capture does not come back silently suppressed.
 
 This module performs no DB access. Both verbs emit an event
 (`session_tasks.queued` / `session_tasks.removed`) via event_bridge ->
@@ -62,7 +61,7 @@ def _emit(kind: str, task_refs: tuple[str, ...],
     # An explicit --session-id also names the actor, so attribution is settled
     # without the resolver (lets a non-tmux caller / test fixture emit). When
     # absent, emit_event resolves actor.session_id the same way _resolve_process
-    # resolved the sentinel. Mirrors session_order_cmd.
+    # resolved the sentinel.
     session_id = str(session_id_override) if session_id_override is not None else None
     result = event_bridge.emit_event(
         kind=kind,
@@ -86,7 +85,7 @@ def _emit(kind: str, task_refs: tuple[str, ...],
 
 
 def _resolve_process(session_id_override: int | None) -> str:
-    """Return the process identifier to send to Go (mirrors session order).
+    """Return the process identifier to send to Go (mirrors session status).
 
     Resolves the Endless session id and returns the reserved sentinel
     `f"__session_id={N}"`, which the Go side recognizes as "use this id
@@ -105,8 +104,7 @@ def _canonical_ids(task_refs: tuple[str, ...]) -> list[str]:
     """Validate each id and normalize to `E-NNN`, preserving argument order.
 
     A repeated id is collapsed rather than rejected: naming the same task twice
-    is the same request, not a contradiction (unlike `session order`, where a
-    duplicate is genuinely ambiguous about which position it wants).
+    is the same request, not a contradiction.
     """
     if not task_refs:
         raise click.ClickException("session task: name at least one task id")

@@ -2,15 +2,20 @@
 // the task_tree view.
 //
 // Two halves, and they are separable on purpose. The first is about what
-// removal WRITES — that `parent_id` survives it, on both the single-task path
-// and the bulk-clear path, because once a child's edge is nulled nothing in the
-// live database can put it back. The second is about what the schema READS — the
-// effective_parent_id contract every converted reader now depends on, pinned
-// here as the view's own behaviour rather than re-derived at each call site.
+// removal WRITES — that `parent_id` survives it — because once a child's edge is
+// nulled nothing in the live database can put it back. The second is about what
+// the schema READS — the effective_parent_id contract every converted reader now
+// depends on, pinned here as the view's own behaviour rather than re-derived at
+// each call site.
+//
+// E-2161 also covered a bulk-clear path, removeTasksBySourceFile, whose claim
+// was the same one a source file's whole import wide. E-2142 removed the
+// function with `task import` and tasks.source_file, so that case is gone rather
+// than unasserted.
 //
 // White-box, like epic_derivation_test.go beside it: these call removeTaskTree
-// and removeTasksBySourceFile directly against a fresh schema-applied DB,
-// reusing newDerivationDB / seedTask / ptr from that file.
+// directly against a fresh schema-applied DB, reusing newDerivationDB /
+// seedTask / ptr from that file.
 package events
 
 import (
@@ -100,32 +105,6 @@ func TestRemoveTaskTree_LiveChildRendersUnderGrandparent(t *testing.T) {
 	if !hasParent || parent != 1 {
 		t.Errorf("effective_parent_id = (%d, %v), want (1, true) — the child must render under its grandparent",
 			parent, hasParent)
-	}
-}
-
-// TestRemoveTasksBySourceFile_KeepsChildParentID covers the bulk half
-// (`task import --replace`). Its clear was WIDER than the single-task one: it
-// nulled every child of every task the source file owned, including children
-// owned by a different source file that were never part of the import.
-func TestRemoveTasksBySourceFile_KeepsChildParentID(t *testing.T) {
-	db := newDerivationDB(t)
-	seedTask(t, db, 1, nil, int(tasktype.TaskTypeEpic), "ready")
-	if _, err := db.Exec("UPDATE tasks SET source_file = 'plan.md' WHERE id = 1"); err != nil {
-		t.Fatalf("set source_file: %v", err)
-	}
-	// A child that is NOT part of the import, and never was.
-	seedTask(t, db, 2, ptr(1), int(tasktype.TaskTypeTask), "ready")
-
-	if _, err := removeTasksBySourceFile(db, 1, "plan.md"); err != nil {
-		t.Fatalf("removeTasksBySourceFile: %v", err)
-	}
-
-	if parent, ok := taskParentRow(t, db, 2); !ok || parent != 1 {
-		t.Errorf("child parent_id = (%d, %v), want (1, true) — a re-import must not orphan it", parent, ok)
-	}
-	if _, hasParent, found := effectiveParent(t, db, 2); !found || hasParent {
-		t.Errorf("child in view = %v with a parent = %v; want present and rendering at the root",
-			found, hasParent)
 	}
 }
 

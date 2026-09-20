@@ -21,12 +21,18 @@ import (
 // would silently re-free every removed id — the exact failure ED-1547 names, on
 // a path nobody would think to test. Two copies can drift; one cannot.
 //
+// It held a second removal until E-2142: removeTasksBySourceFile, the bulk clear
+// behind `task import --replace`. Both the command and tasks.source_file are
+// gone, so there is nothing left to enumerate by — which is also why
+// task.bulk_cleared replays as a declared no-op rather than as a removal (see
+// RetiredKinds).
+//
 // The two halves of every query below are deliberately asymmetric, and this is
 // the subtle part of the change:
 //
 //   - ENUMERATION reads live_tasks. "What does this removal cover?" means the
 //     rows that would still have existed under hard delete, so an already-removed
-//     task is not re-removed and a repeated bulk clear is the no-op it is today.
+//     task is not re-removed.
 //   - MUTATION names tasks. The view is not writable, and the removal path is one
 //     of the three places that must see and set what the view hides.
 
@@ -71,34 +77,6 @@ func removeTaskTree(db dbQuerier, taskID int64, cascade bool) ([]int64, error) {
 		if err != nil {
 			return nil, fmt.Errorf("events: enumerate removal target: %w", err)
 		}
-	}
-
-	if err = applyTaskRemoval(db, ids); err != nil {
-		return nil, err
-	}
-	return ids, nil
-}
-
-// removeTasksBySourceFile is the bulk-clear (`task import --replace`) removal:
-// every task the given source file owns in the given project.
-//
-// It retains too, rather than hard-deleting because the rows are "just imported
-// data" — E-1915's reasoning applies. One rule with no exemption beats two rules
-// with a judgment call at the boundary, and a second orphaning path is exactly
-// what ED-1547 exists to close.
-//
-// It likewise no longer nulls its children's parent_id (E-2161). This was the
-// bulk half of the same orphaning: a re-import cleared the edge for every child
-// of every task the source file owned, INCLUDING children owned by a different
-// source file that were never part of the import. Those children keep their
-// parent_id now and render under the nearest live ancestor.
-func removeTasksBySourceFile(db dbQuerier, projectID int64, sourceFile string) ([]int64, error) {
-	ids, err := queryTaskIDs(db,
-		"SELECT id FROM live_tasks WHERE project_id = ? AND source_file = ?",
-		projectID, sourceFile,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("events: enumerate bulk_cleared tasks: %w", err)
 	}
 
 	if err = applyTaskRemoval(db, ids); err != nil {

@@ -8,13 +8,21 @@ import (
 	"io/fs"
 
 	"github.com/pressly/goose/v3"
+
+	"github.com/mikeschinkel/endless/internal/schema/migrations"
 )
 
-// migrationsFS holds the versioned migration set. Embedding it is what lets the
-// set ship inside the binary: no installed copy of internal/schema/migrations/
-// has to exist on the machine running endless, which matters because the
-// binaries are symlinked into /usr/local/bin from a checkout the user is free
-// to move.
+// migrationsFS holds the SQL half of the versioned migration set. Embedding it
+// is what lets the set ship inside the binary: no installed copy of
+// internal/schema/migrations/ has to exist on the machine running endless, which
+// matters because the binaries are symlinked into /usr/local/bin from a checkout
+// the user is free to move.
+//
+// The Go half compiles in rather than embedding, and comes from
+// migrations.Go(). Both halves live in the same directory — see that package's
+// doc for when a step has to be Go — so anything that answers "what is the
+// migration set" has to consult both. There are two such things, newProvider
+// and LatestVersion, and they are the reason this comment exists.
 //
 //go:embed migrations/*.sql
 var migrationsFS embed.FS
@@ -117,10 +125,17 @@ func DBVersion(ctx context.Context, db *sql.DB) (int64, error) {
 	return version, nil
 }
 
-// LatestVersion reports the highest version in the embedded migration set — the
-// version a database is brought to by Migrate. It reads the set, not a database,
-// so it answers for a binary rather than for a connection: E-2020's direction
-// rules are a comparison between this and DBVersion.
+// LatestVersion reports the highest version in the migration set — the version a
+// database is brought to by Migrate. It reads the set, not a database, so it
+// answers for a binary rather than for a connection: E-2020's direction rules
+// are a comparison between this and DBVersion.
+//
+// It counts BOTH halves of the set. Counting only the embedded .sql files would
+// under-report the moment a Go step is the newest one, and under-reporting here
+// is not cosmetic: `endless-go event migrate` would print a database version
+// above its own latest, which is exactly the "your database is ahead of your
+// binary" condition E-2020 exists to detect. A wrong answer there reads as a
+// real fault rather than as a bug in the counting.
 func LatestVersion() (int64, error) {
 	entries, err := fs.ReadDir(migrationsFS, "migrations")
 	if err != nil {
@@ -134,6 +149,11 @@ func LatestVersion() (int64, error) {
 		}
 		if version > latest {
 			latest = version
+		}
+	}
+	for _, m := range migrations.Go() {
+		if m.Version > latest {
+			latest = m.Version
 		}
 	}
 	return latest, nil
@@ -157,9 +177,14 @@ func newProvider(db *sql.DB) (*goose.Provider, error) {
 	}
 	provider, err := goose.NewProvider(goose.DialectSQLite3, db, dir,
 		goose.WithLogger(goose.NopLogger()),
-		// Nothing registers Go migrations globally, and inheriting whatever a
-		// linked-in package might have registered is not a thing this project
-		// wants to be exposed to.
+		// The Go half of the set, named explicitly. Registration is a slice in
+		// migrations.Go() rather than init() side effects precisely so this is
+		// the only door — which is what makes disabling the global registry
+		// below a statement about correctness and not just about hygiene.
+		goose.WithGoMigrations(migrations.Go()...),
+		// Nothing else may register Go migrations: inheriting whatever a
+		// linked-in package might have put in goose's package-level registry is
+		// not a thing this project wants to be exposed to.
 		goose.WithDisableGlobalRegistry(true),
 	)
 	if err != nil {

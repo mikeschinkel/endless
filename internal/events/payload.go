@@ -47,6 +47,17 @@ func (p TaskCreatedPayload) PlanText() string {
 	return p.LegacyText
 }
 
+// TaskImportedPayload is replay-only from E-2142 on: `task import` and
+// `task import-json`, the only two commands that ever emitted task.imported, are
+// gone. The kind stays live rather than retired because the events in the ledger
+// CREATED TASKS, and those tasks are still there — a rebuild that skipped them
+// would lose rows, which is the opposite of what a retired no-op is for.
+//
+// SourceFile is retained and no longer written. Nothing reads the value: E-2142
+// dropped tasks.source_file, so neither the executor nor the projector puts it
+// in the INSERT any more. It stays declared because historical payloads carry
+// the key, and a struct that names it says so in the one place a reader of this
+// type will look. Do not reintroduce a column for it.
 type TaskImportedPayload struct {
 	Title       string `json:"title"`
 	Description string `json:"description,omitempty"`
@@ -77,10 +88,6 @@ type TaskMovedPayload struct {
 type TaskDeletedPayload struct {
 	Cascade bool   `json:"cascade"`
 	Title   string `json:"title"`
-}
-
-type TaskBulkClearedPayload struct {
-	SourceFile string `json:"source_file,omitempty"`
 }
 
 type TaskReleasedPayload struct {
@@ -246,28 +253,6 @@ type ProjectPurgedPayload struct {
 	Path string `json:"path"`
 }
 
-// Curated next-list payloads (E-1421)
-
-// ProjectNextRevisedPayload is the full new state of a project's curated
-// "next" list — revise is a full rewrite. Order of lanes and items is
-// intrinsic in the arrays. A pending_triage field, if present, is ignored:
-// the pending bucket is hook-managed and untouched by revise (E-1421).
-type ProjectNextRevisedPayload struct {
-	Lanes []ProjectNextLanePayload `json:"lanes"`
-}
-
-type ProjectNextLanePayload struct {
-	ID        string                   `json:"id"`
-	Priority  int                      `json:"priority"`
-	Rationale string                   `json:"rationale"`
-	Items     []ProjectNextItemPayload `json:"items"`
-}
-
-type ProjectNextItemPayload struct {
-	TaskID string `json:"task_id"`
-	Reason string `json:"reason"`
-}
-
 // Session payloads
 
 type SessionWorkStartedPayload struct {
@@ -351,23 +336,11 @@ type SessionStatusRecordedPayload struct {
 	Notes     string `json:"notes"`
 }
 
-// SessionTasksOrderedPayload carries a replace-all per-session implementation
-// order (E-1683). Process is the session identifier (the "__session_id=N"
-// sentinel set by the Python command, or a raw tmux pane id) resolved the same
-// way as session_status.recorded. Groups is the ordered list of parallel
-// groups: group index i (0-based) maps to do_order = i+1, and every task id in
-// the same inner slice shares that do_order (parallelizable). Task ids are the
-// display form ("E-100"); the executor strips the prefix and validates each is
-// already a session_tasks row for this session.
-type SessionTasksOrderedPayload struct {
-	Process string     `json:"process"`
-	Groups  [][]string `json:"groups"`
-}
-
 // SessionTaskMembershipPayload carries the task list for the two session-task
 // membership verbs (E-1696): `session_tasks.queued` (`session task add`) and
 // `session_tasks.removed` (`session task remove`). Process is the session
-// identifier, resolved exactly as SessionTasksOrderedPayload's is. TaskIDs are
+// identifier — the "__session_id=N" sentinel set by the Python command, or a raw
+// tmux pane id — resolved exactly as session_status.recorded's is. TaskIDs are
 // display form ("E-100"); the executors strip the prefix.
 //
 // One struct for both kinds because the INPUT is identical — a session and a set

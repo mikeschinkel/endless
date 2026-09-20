@@ -7,6 +7,7 @@ package events
 import (
 	"database/sql"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -22,8 +23,15 @@ var harnessed = string(agentenv.ClaudeCLI)
 
 // seedHolderSession inserts a sessions row bound to a task. A taskID of 0
 // leaves sessions.task_id NULL — a session that has claimed nothing. Distinct
-// from seedSession (session_tasks_order_test.go), which seeds a session with no
+// from seedSession (session_task_membership_test.go), which seeds a session with no
 // task binding at all.
+// taskIDString formats a task id as the bare "NNNN" form an event envelope's
+// Entity.ID carries. It lived in project_next_pending.go until E-2142 retired
+// the curated next list, and these tests are all that still want it.
+func taskIDString(id int64) string {
+	return strconv.FormatInt(id, 10)
+}
+
 func seedHolderSession(t *testing.T, db *sql.DB, id int64, taskID int64) {
 	t.Helper()
 	var bound any

@@ -58,7 +58,7 @@ func FormatTasks(projectName string, items []Task) string {
 	if len(items) == 0 {
 		fmt.Fprintf(&b, "Endless is tracking project: %s\n", projectName)
 		b.WriteString("No tasks yet. Ask the user what they'd like to work on.\n")
-		b.WriteString("Use `endless task import <file>` to import tasks, ")
+		b.WriteString("Use `endless task add \"<title>\"` to file one, ")
 		b.WriteString("or `endless task show` to check status.")
 		return b.String()
 	}

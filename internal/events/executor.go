@@ -25,12 +25,11 @@ type dbQuerier interface {
 
 // ExecuteResult holds the output of a successful execution.
 type ExecuteResult struct {
-	TaskID          int64              `json:"task_id,omitempty"`           // for task.created/imported
-	DecisionID      int64              `json:"decision_id,omitempty"`       // for decision.created (E-1378)
-	SessionStatusID int64              `json:"session_status_id,omitempty"` // for session_status.recorded (E-1312)
-	Skipped         bool               `json:"skipped,omitempty"`           // dedup-skip path (no row written)
-	Markdown        string             `json:"markdown,omitempty"`          // rendered output for chat display
-	ProjectNext     *ProjectNextResult `json:"-"`                           // for project_next.revised (E-1436)
+	TaskID          int64  `json:"task_id,omitempty"`           // for task.created/imported
+	DecisionID      int64  `json:"decision_id,omitempty"`       // for decision.created (E-1378)
+	SessionStatusID int64  `json:"session_status_id,omitempty"` // for session_status.recorded (E-1312)
+	Skipped         bool   `json:"skipped,omitempty"`           // dedup-skip path (no row written)
+	Markdown        string `json:"markdown,omitempty"`          // rendered output for chat display
 }
 
 // PreAllocateTaskID acquires a write lock via BEGIN IMMEDIATE, reads the next
@@ -306,8 +305,6 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 		return execTaskMoved(db, evt, emit)
 	case KindTaskDeleted:
 		return execTaskDeleted(db, evt, emit)
-	case KindTaskBulkCleared:
-		return execTaskBulkCleared(db, evt)
 	case KindTaskReleased:
 		return execTaskReleased(db, evt)
 	case KindTaskClaimed:
@@ -320,14 +317,10 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 		return execTaskDepDeleted(db, evt)
 	case KindSessionStatusRecorded:
 		return execSessionStatusRecorded(db, evt)
-	case KindSessionTasksOrdered:
-		return execSessionTasksOrdered(db, evt)
 	case KindSessionTasksQueued:
 		return execSessionTasksQueued(db, evt)
 	case KindSessionTasksRemoved:
 		return execSessionTasksRemoved(db, evt)
-	case KindProjectNextRevised:
-		return execProjectNextRevised(db, evt)
 	case KindDecisionCreated:
 		return execDecisionCreated(db, evt)
 	case KindDecisionFieldsUpdated:
@@ -353,6 +346,17 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 	case KindDecisionRelationDeleted:
 		return execDecisionRelationDeleted(db, evt)
 	default:
+		if RetiredKinds[evt.Kind] {
+			// Reachable only by hand — `event emit` gates on ValidKinds, which a
+			// retired kind is deliberately not in (E-2142). Worth its own message
+			// anyway: "does not handle" reads like an oversight, and the one
+			// thing a caller who typed a retired kind needs to know is that it
+			// was withdrawn, not missed.
+			return nil, fmt.Errorf(
+				"events: kind %q is retired — its command was removed, and it is "+
+					"accepted only when replaying a historical ledger", evt.Kind,
+			)
+		}
 		return nil, fmt.Errorf("events: executor does not handle kind %q", evt.Kind)
 	}
 }
@@ -465,12 +469,6 @@ func execTaskCreated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 		}
 	}
 
-	if p.Phase == "urgent" {
-		if err := autoAddUrgentPending(db, evt, taskID); err != nil {
-			return nil, fmt.Errorf("events: %w", err)
-		}
-	}
-
 	// E-1541: a new child can change its parent epic's derived status.
 	if p.ParentID != nil {
 		if err := recomputeEpicStatus(db, emit, *p.ParentID); err != nil {
@@ -499,9 +497,9 @@ func execTaskImported(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRe
 	ts := now()
 
 	_, err = db.Exec(
-		`INSERT INTO tasks (id, project_id, phase, title, description, status, source_file, sort_order, parent_id, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, 'unplanned', ?, ?, ?, ?, ?)`,
-		taskID, projectID, p.Phase, p.Title, p.Description, p.SourceFile,
+		`INSERT INTO tasks (id, project_id, phase, title, description, status, sort_order, parent_id, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, 'unplanned', ?, ?, ?, ?)`,
+		taskID, projectID, p.Phase, p.Title, p.Description,
 		p.SortOrder, p.ParentID, ts, ts,
 	)
 	if err != nil {
@@ -817,14 +815,6 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 		}
 	}
 
-	if phaseVal, hasPhase := p.Fields["phase"]; hasPhase {
-		if phaseStr, ok := phaseVal.(string); ok && phaseStr == "urgent" {
-			if err := autoAddUrgentPending(db, evt, mustParseInt64(evt.Entity.ID)); err != nil {
-				return nil, fmt.Errorf("events: %w", err)
-			}
-		}
-	}
-
 	// E-1541: recompute the affected epic chains. The current (post-update)
 	// parent covers a status change and a re-parent's new chain; oldParentID
 	// covers the chain the task left.
@@ -938,38 +928,6 @@ func execTaskDeleted(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 	if hasParent {
 		if err := recomputeEpicStatus(db, emit, parentID); err != nil {
 			return nil, err
-		}
-	}
-
-	return &ExecuteResult{}, nil
-}
-
-func execTaskBulkCleared(db dbQuerier, evt *Event) (*ExecuteResult, error) {
-	var p TaskBulkClearedPayload
-	if err := json.Unmarshal(evt.Payload, &p); err != nil {
-		return nil, fmt.Errorf("events: unmarshal task.bulk_cleared payload: %w", err)
-	}
-
-	projectID, err := resolveProjectID(db, evt.Project)
-	if err != nil {
-		return nil, err
-	}
-
-	// ED-1547 (E-1929): mark removed, never DELETE — see task_removal.go, which
-	// the projector's replay handler calls too. It returns the ids it covered so
-	// session_tasks can record a per-cleared-task touch; session_tasks has no FK
-	// on task_id, so those rows outlive the removal.
-	ids, err := removeTasksBySourceFile(db, projectID, p.SourceFile)
-	if err != nil {
-		return nil, err
-	}
-
-	if shouldRecordSessionTouch(evt) {
-		for _, id := range ids {
-			// Bulk-clear touches pre-existing tasks → revisited.
-			if err := upsertSessionTask(db, evt.Actor.SessionID, id, sessiontaskrelation.RelationRevisited); err != nil {
-				return nil, fmt.Errorf("events: %w", err)
-			}
 		}
 	}
 

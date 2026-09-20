@@ -448,12 +448,13 @@ func projectRefColumns(tx *sql.Tx) ([]projectRef, error) {
 
 // mergeProjectRow repoints everything referencing dup at keep, then deletes dup.
 //
-// Repointing can collide: project_next.project_id is UNIQUE, so a duplicate
-// that acquired a curated next list cannot be moved onto a survivor that
-// already has one. The survivor's row wins and the duplicate's is dropped —
-// the duplicate is the auto-registered twin, and the alternative is to abort
-// the whole repair over a per-project scratch list. The DELETE cascades to its
-// children, which is why nothing below has to walk them.
+// Repointing can collide on any uniqueness a referencing table declares over
+// project_id — `errors`, for instance, holds at most one OPEN incident per
+// (project, source, code, fingerprint), so a duplicate carrying the same open
+// fault as the survivor cannot be moved onto it. The survivor's row wins and the
+// duplicate's is dropped: the duplicate is the auto-registered twin, and the
+// alternative is to abort the whole repair over a machine-local record. The
+// DELETE cascades to any children, which is why nothing below has to walk them.
 func mergeProjectRow(tx *sql.Tx, refs []projectRef, dup, keep int64) error {
 	for _, ref := range refs {
 		if ref.table == "projects" {

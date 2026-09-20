@@ -302,55 +302,104 @@ func TestProjectToTempDB_TaskDeletedRetainsRowAndIDFloor(t *testing.T) {
 	}
 }
 
-// TestProjectToTempDB_TaskBulkClearedRetainsRowsAndIDFloor is the same parity
-// check for the bulk-clear path (`task import --replace`). Bulk clear retains
-// too — one rule, no second orphaning path — so a rebuild must not re-free the
-// ids it cleared either.
-func TestProjectToTempDB_TaskBulkClearedRetainsRowsAndIDFloor(t *testing.T) {
+// TestProjectToTempDB_RetiredKindsReplayAsDeclaredNoOps pins the half of E-2142
+// that is not a deletion.
+//
+// Three commands were removed — `task import --replace` / `task import-json
+// --clear`, `endless session order`, and `endless task next revise` — and the
+// db-ledger is the permanent record, so events of all three kinds are still in
+// it. Replay has to walk past them. It must ALSO still fail on a kind nobody
+// declared, which is the property that would have been thrown away by the cheap
+// fix of ignoring everything unrecognized. Both halves are asserted here
+// together, because either one alone is satisfiable by the wrong
+// implementation.
+//
+// The task.imported events around them are load-bearing, not scenery: a retired
+// kind must be a no-op, not a stop. Asserting the rows on both sides of the
+// retired run is what distinguishes "skipped it" from "gave up at it".
+func TestProjectToTempDB_RetiredKindsReplayAsDeclaredNoOps(t *testing.T) {
 	dir := t.TempDir()
 
-	w, err := events.NewWriter(dir, "bulk")
+	w, err := events.NewWriter(dir, "retd")
 	if err != nil {
 		t.Fatalf("NewWriter: %v", err)
 	}
 
+	// SourceFile is still spelled here on purpose: this is what a HISTORICAL
+	// task.imported payload looks like, and the point is that it replays.
 	importedPayload, err := json.Marshal(events.TaskImportedPayload{
 		Title: "From file", Phase: "now", Status: "unplanned", SourceFile: "PLAN.md",
 	})
 	if err != nil {
 		t.Fatalf("marshal imported payload: %v", err)
 	}
-	for i, id := range []string{"910", "911"} {
+	appendEvent(t, w, events.Event{
+		V:       events.Version,
+		TS:      "5WYM00000001",
+		Kind:    events.KindTaskImported,
+		Project: "proj-retired",
+		Entity:  events.EntityRef{Type: events.EntityTask, ID: "910"},
+		Actor:   events.Actor{Kind: events.ActorCLI, ID: "tester"},
+		Payload: importedPayload,
+	})
+
+	// The three retired kinds, each with the entity type and a payload shaped
+	// the way its now-deleted writer really wrote them.
+	retired := []struct {
+		ts      string
+		kind    events.Kind
+		entity  events.EntityRef
+		payload string
+	}{
+		{
+			"5WYM00000002", events.KindTaskBulkCleared,
+			events.EntityRef{Type: events.EntityTask, ID: "910"},
+			`{"source_file":"PLAN.md"}`,
+		},
+		{
+			"5WYM00000003", events.KindSessionTasksOrdered,
+			events.EntityRef{Type: events.EntitySessionTasks, ID: "0"},
+			`{"process":"__session_id=42","groups":[["E-910"]]}`,
+		},
+		{
+			"5WYM00000004", events.KindProjectNextRevised,
+			events.EntityRef{Type: events.EntityProjectNext, ID: "proj-retired"},
+			`{"lanes":[{"id":"now","priority":1,"rationale":"r",` +
+				`"items":[{"task_id":"910","reason":"why"}]}]}`,
+		},
+	}
+	// Validate() is asserted on these kinds in TestRetiredKinds (event_test.go),
+	// which is where the envelope's gates live. This test is about what replay
+	// DOES with them once they are past that gate.
+	for _, r := range retired {
 		appendEvent(t, w, events.Event{
 			V:       events.Version,
-			TS:      []string{"5WYM00000001", "5WYM00000002"}[i],
-			Kind:    events.KindTaskImported,
-			Project: "proj-bulk",
-			Entity:  events.EntityRef{Type: events.EntityTask, ID: id},
-			Actor:   events.Actor{Kind: events.ActorCLI, ID: "tester"},
-			Payload: importedPayload,
+			TS:      r.ts,
+			Kind:    r.kind,
+			Project: "proj-retired",
+			Entity:  r.entity,
+			Actor:   events.Actor{Kind: events.ActorCLI, ID: "tester", SessionID: "42"},
+			Payload: json.RawMessage(r.payload),
 		})
 	}
 
-	clearedPayload, err := json.Marshal(events.TaskBulkClearedPayload{SourceFile: "PLAN.md"})
-	if err != nil {
-		t.Fatalf("marshal bulk_cleared payload: %v", err)
-	}
-	appendEvent(t, w, events.Event{
-		V:       events.Version,
-		TS:      "5WYM00000003",
-		Kind:    events.KindTaskBulkCleared,
-		Project: "proj-bulk",
-		Entity:  events.EntityRef{Type: events.EntityTask, ID: "910"},
-		Actor:   events.Actor{Kind: events.ActorCLI, ID: "tester"},
-		Payload: clearedPayload,
-	})
+	// A task created AFTER the retired run: proof replay carried on.
+	appendTaskCreated(t, w, "proj-retired", "911", "5WYM00000005", "After the retired run")
 
-	tempPath, _, err := events.ProjectToTempDB(dir)
+	tempPath, result, err := events.ProjectToTempDB(dir)
 	if err != nil {
 		t.Fatalf("ProjectToTempDB: %v", err)
 	}
 	t.Cleanup(func() { os.Remove(tempPath) })
+
+	if len(result.Errors) != 0 {
+		t.Errorf("replaying retired kinds recorded %d error(s), want 0: %v",
+			len(result.Errors), result.Errors)
+	}
+	if result.EventsReplayed != 5 {
+		t.Errorf("EventsReplayed = %d, want 5 (a retired kind is walked past, not skipped short)",
+			result.EventsReplayed)
+	}
 
 	db, err := sql.Open("sqlite", tempPath)
 	if err != nil {
@@ -358,27 +407,23 @@ func TestProjectToTempDB_TaskBulkClearedRetainsRowsAndIDFloor(t *testing.T) {
 	}
 	defer db.Close()
 
-	var retained int
-	if err := db.QueryRow(
-		"SELECT count(*) FROM tasks WHERE id IN (910, 911) AND removed = 1",
-	).Scan(&retained); err != nil {
-		t.Fatalf("count retained bulk-cleared rows: %v", err)
-	}
-	if retained != 2 {
-		t.Errorf("bulk-cleared rows retained with removed = 1: %d, want 2", retained)
-	}
-
+	// task.bulk_cleared projecting NOTHING is the visible consequence: the task
+	// it once removed stays live. That is not a regression against ED-1547's
+	// id-floor rule — retention already leaves every row in place, and the only
+	// column the removal could have been enumerated by (tasks.source_file) is
+	// gone, so there is nothing left for a replay to act on.
 	var live int
-	if err := db.QueryRow("SELECT count(*) FROM live_tasks WHERE id IN (910, 911)").Scan(&live); err != nil {
+	if err := db.QueryRow(
+		"SELECT count(*) FROM live_tasks WHERE id IN (910, 911)",
+	).Scan(&live); err != nil {
 		t.Fatalf("count live_tasks: %v", err)
 	}
-	if live != 0 {
-		t.Errorf("bulk-cleared tasks visible through live_tasks (%d row(s))", live)
+	if live != 2 {
+		t.Errorf("live tasks either side of the retired run = %d, want 2", live)
 	}
 
 	if got := allocatorFloor(t, db); got != 912 {
-		t.Errorf("allocator floor after replaying bulk clear = %d, want 912 "+
-			"(a lower value means the cleared ids were re-freed)", got)
+		t.Errorf("allocator floor = %d, want 912", got)
 	}
 }
 

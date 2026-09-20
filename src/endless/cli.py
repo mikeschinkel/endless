@@ -1374,8 +1374,7 @@ def session_status(show_all, tree, show_hidden, only_hidden, as_json):
 
     With --tree, render the do/plan backlog as an IDs-only tree in implementation
     order (nesting = order, siblings = parallelizable), derived from the
-    blocked-by DAG and overridden by any per-session order (`endless session
-    order`). No legend, titles, or icons.
+    blocked-by DAG. No legend, titles, or icons.
 
     Tasks this session hid (`endless session hide --task <id>`) are omitted, with
     a '… N hidden' footer so they never vanish silently. --show-hidden renders
@@ -1883,9 +1882,8 @@ def session_task_remove(task_refs, session_id_override):
     """Drop tasks from this session's list entirely.
 
     For a capture that should not have happened. This DELETES the association
-    — the touch, its relation and its `session order` position — so
-    `task show`'s "Touched by:" stops reporting it, and any hide on the same
-    pair is cleared with it.
+    — the touch and its relation — so `task show`'s "Touched by:" stops
+    reporting it, and any hide on the same pair is cleared with it.
 
     Not the same as `session hide --task`, which suppresses a row from this
     session's listing but KEEPS the association: hide is for a capture that is
@@ -1902,35 +1900,6 @@ def session_task_remove(task_refs, session_id_override):
     """
     from endless.session_task_cmd import session_task_remove as impl
     impl(task_refs, session_id_override)
-
-
-@session_cmd.command("order")
-@click.argument("spec")
-@click.option("--json", "as_json", is_flag=True,
-              help="Parse SPEC as a JSON array-of-groups "
-                   '(e.g. [["E-100"], ["E-101", "E-102"]]) '
-                   "instead of the compact form.")
-@click.option("--session-id", "session_id_override", type=int, default=None,
-              help="Use this Endless session id directly instead of "
-                   "resolving the current session (test fixtures / "
-                   "non-tmux callers).")
-def session_order(spec, as_json, session_id_override):
-    """Set this session's task implementation order.
-
-    SPEC is a compact sequence where whitespace advances the order and `|`
-    groups tasks at the same order (parallelizable). Order is stored per
-    session (session_tasks.do_order); equal values = safe to run concurrently.
-    Replace-all: tasks this session has touched but omitted from SPEC are
-    reset to unordered. Every id must already be a task this session touched.
-
-    Example:
-
-      \b
-      endless session order "E-100 E-101|E-102 E-103"
-      # E-100=1, E-101=2, E-102=2 (parallel with E-101), E-103=3
-    """
-    from endless.session_order_cmd import session_order as impl
-    impl(spec, as_json, session_id_override)
 
 
 @session_cmd.command("turn")
@@ -2115,38 +2084,6 @@ def task_cmd():
     pass
 
 
-@task_cmd.command("import")
-@click.argument("file", default=None, required=False)
-@click.option("--from-claude", is_flag=True,
-              help="Import from ~/.claude/plans/")
-@click.option("--json", "json_file", default=None,
-              help="Import from JSON file")
-@click.option("--project", default=None,
-              help="Project name (default: detect from cwd)")
-@click.option("--replace", is_flag=True,
-              help="Replace items from same source file under same parent")
-@click.option("--parent", type=TASK_ID, default=None,
-              help="Parent goal ID to import under")
-def task_import(file, from_claude, json_file, project, replace, parent):
-    """Import a plan file into the DB."""
-    if json_file:
-        import json as json_mod
-        from pathlib import Path
-        from endless.task_cmd import import_json
-        p = Path(json_file).expanduser()
-        if not p.exists():
-            raise click.ClickException(f"File not found: {p}")
-        data = json_mod.loads(p.read_text())
-        import_json(data, project_name=project, clear=replace)
-    else:
-        from endless.task_cmd import import_plan
-        import_plan(
-            file_path=file, from_claude=from_claude,
-            project_name=project, replace=replace,
-            parent_id=parent,
-        )
-
-
 @task_cmd.command("list")
 @click.option("--project", default=None,
               help="Project name (default: detect from cwd)")
@@ -2256,8 +2193,10 @@ task_cmd.add_command(task_show, name="detail")
 def task_next(ctx, project, show_all, limit, agent, as_json, tier, phase, parent_id,
               no_limit):
     """Show top actionable tasks, ranked by priority."""
-    # `next` is a group so it can host `revise` (and future `move`/`briefing`),
-    # but bare `endless task next` keeps its heuristic-list behavior.
+    # Still a group, with no subcommands since E-2142 retired `revise`: the
+    # shape is what reserves room for a future `move`/`briefing`, and collapsing
+    # it to a plain command would change nothing a user can see today while
+    # having to be undone to add one.
     if ctx.invoked_subcommand is not None:
         return
     from endless.task_cmd import next_tasks, parse_tier_filter, parse_parent_filter
@@ -2266,18 +2205,6 @@ def task_next(ctx, project, show_all, limit, agent, as_json, tier, phase, parent
     next_tasks(project_name=project, show_all=show_all,
                limit=limit, no_limit=no_limit, agent=agent, as_json=as_json,
                tier=tier_val, phase_filter=phase, parent_id=parent_val)
-
-
-@task_next.command("revise")
-@click.option("--file", "file_path", required=True,
-              help="Path to a JSON file holding the full new curated list")
-@click.option("--project", default=None,
-              help="Project name (default: detect from cwd)")
-@output_options(agent=False, json_help="Emit the resulting list as JSON")
-def task_next_revise(file_path, project, as_json):
-    """Replace the curated 'next' list from a JSON file (full rewrite)."""
-    from endless.task_cmd import revise_next_list
-    revise_next_list(file_path=file_path, project_name=project, as_json=as_json)
 
 
 @task_cmd.command("active")

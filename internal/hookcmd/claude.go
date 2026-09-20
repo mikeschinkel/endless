@@ -169,11 +169,6 @@ func runClaude(args []string) (err error) {
 	// E-1505 also records the pollution this caused — a SessionStart from
 	// Desktop registering the home directory as a project.
 	//
-	// It also decouples the hook from the CLI refusal added alongside this:
-	// autoImportTask shells out to the Python `endless`, which now exits 1 on an
-	// unsupported harness. Returning here means that path is never reached
-	// there, rather than reached and failing.
-	//
 	// Silent and nil, never an error. A hook that logged or exited non-zero
 	// would surface as a Claude Code hook failure on every event — turning "we
 	// don't support this" into a stream of errors for the user to chase. Nothing
@@ -1832,38 +1827,6 @@ func resolveCwdTaskID(projectRoot, cwd string) int64 {
 		return 0
 	}
 	return taskID
-}
-
-// resolveParentTaskID determines the parent task ID for auto-import.
-// Priority: session's active goal > tmux @endless_task_id > none.
-func resolveParentTaskID(sessionID string) *int64 {
-	// Check session's active goal first
-	session, err := monitor.GetActiveSession(sessionID)
-	if err == nil && session != nil && session.TaskID != nil {
-		return session.TaskID
-	}
-	// Fall back to tmux window option
-	if id := tmuxTaskID(); id > 0 {
-		return &id
-	}
-	return nil
-}
-
-func autoImportTask(projectID int64, sessionID, filePath string) error {
-	projectName, err := monitor.GetProjectName(projectID)
-	if err != nil {
-		return err
-	}
-
-	args := []string{"task", "import", filePath, "--project", projectName, "--replace"}
-
-	if parentID := resolveParentTaskID(sessionID); parentID != nil {
-		args = append(args, "--parent", strconv.FormatInt(*parentID, 10))
-	}
-
-	cmd := exec.Command("endless", args...)
-	cmd.Stderr = os.Stderr
-	return cmd.Run()
 }
 
 // --- E-971 Layer D: worktree adoption + enforcement helpers ----------------

@@ -36,9 +36,10 @@ type treeNode struct {
 // root, the focal ("this") task nests under it marked `●` and annotated with its
 // spawner inline (`●E-<focal> ← E-<spawner>`), and the do/plan backlog nests
 // under the focal in implementation order. The backlog structure is derived from
-// the blocked-by DAG (monitor.SessionStatusBlockerEdges) unless a per-session order
-// (monitor.SessionStatusDoOrder) is present, which overrides it. No legend, titles,
-// or icons — IDs only. focal==0 prints a short hint.
+// the blocked-by DAG (monitor.SessionStatusBlockerEdges) — the tree's only source
+// of order since E-2142 retired `endless session order` and the explicit
+// session_tasks.do_order layering it wrote. No legend, titles, or icons — IDs
+// only. focal==0 prints a short hint.
 func renderTree(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskHint string) error {
 	if focal == 0 {
 		fmt.Fprintln(w, noTaskHint)
@@ -47,15 +48,11 @@ func renderTree(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTas
 
 	var backlogRoots []*treeNode
 	if ids := doPlanIDs(rows); len(ids) > 0 {
-		doOrder, err := monitor.SessionStatusDoOrder(focal, ids)
-		if err != nil {
-			return err
-		}
 		edges, err := monitor.SessionStatusBlockerEdges(ids)
 		if err != nil {
 			return err
 		}
-		backlogRoots = buildForest(ids, edges, doOrder)
+		backlogRoots = buildForest(ids, edges)
 	}
 
 	renderForest(w, buildSpine(focal, parentID(rows), fromID(rows), backlogRoots))
@@ -115,24 +112,19 @@ func doPlanIDs(rows []monitor.SessionStatusRow) []int64 {
 	return ids
 }
 
-// buildForest computes each task's parent and returns the sorted root nodes.
+// buildForest computes each task's parent and returns the sorted root nodes:
+// depth(t)=0 when t has no in-set open blocker, else 1+max(depth(blockers));
+// parent(t) is its max-depth blocker (tie → lowest id). Depth-0 tasks are roots.
+// Equal depth with no parent-child edge ⇒ siblings (parallelizable).
 //
-//   - DAG mode (default): depth(t)=0 when t has no in-set open blocker, else
-//     1+max(depth(blockers)); parent(t) is its max-depth blocker (tie → lowest
-//     id). Depth-0 tasks are roots.
-//   - Override mode (any do_order present): tasks are layered by do_order asc;
-//     tasks lacking a value form a trailing layer ordered by id. A task's parent
-//     is the lowest-id task of the previous non-empty layer; the first layer is
-//     the roots.
-//
-// Equal depth / equal layer with no parent-child edge ⇒ siblings (parallelizable).
-func buildForest(ids []int64, edges map[int64][]int64, doOrder map[int64]int64) []*treeNode {
+// The DAG is the only source of order. Until E-2142 an explicit per-session
+// do_order (written by `endless session order`) could override it with flat
+// layers; the command, the column and the layering are gone. This is what the
+// tree already rendered for every session that never ran that command, so the
+// surviving behaviour is the one that was always the common case.
+func buildForest(ids []int64, edges map[int64][]int64) []*treeNode {
 	parent := map[int64]int64{} // child → parent; absent ⇒ root
-	if len(doOrder) > 0 {
-		assignByLayer(ids, doOrder, parent)
-	} else {
-		assignByDAG(ids, edges, parent)
-	}
+	assignByDAG(ids, edges, parent)
 	return assemble(ids, parent)
 }
 
@@ -188,37 +180,6 @@ func assignByDAG(ids []int64, edges map[int64][]int64, parent map[int64]int64) {
 		if bestDepth >= 0 {
 			parent[id] = best
 		}
-	}
-}
-
-// assignByLayer fills parent[] from explicit do_order layers. Only tasks WITH a
-// do_order value participate in the chain; tasks lacking one stay parentless and
-// render as independent roots (they have no declared order to place them in).
-func assignByLayer(ids []int64, doOrder map[int64]int64, parent map[int64]int64) {
-	byLayer := map[int64][]int64{}
-	for _, id := range ids {
-		if key, ok := doOrder[id]; ok {
-			byLayer[key] = append(byLayer[key], id)
-		}
-	}
-	keys := make([]int64, 0, len(byLayer))
-	for k := range byLayer {
-		keys = append(keys, k)
-	}
-	sort.Slice(keys, func(i, j int) bool { return keys[i] < keys[j] })
-
-	var prevLowest int64
-	havePrev := false
-	for _, k := range keys {
-		layer := byLayer[k]
-		sort.Slice(layer, func(i, j int) bool { return layer[i] < layer[j] })
-		if havePrev {
-			for _, id := range layer {
-				parent[id] = prevLowest
-			}
-		}
-		prevLowest = layer[0] // lowest id (layer is id-sorted)
-		havePrev = true
 	}
 }
 

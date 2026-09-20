@@ -765,9 +765,15 @@ func TestRepairProjectPaths_KeepsTheDuplicatesHistory(t *testing.T) {
 }
 
 // TestRepairProjectPaths_SurvivesAUniqueRefCollision pins the one repointing
-// that cannot be a plain UPDATE: project_next.project_id is UNIQUE, so a
-// duplicate carrying a curated next list cannot move onto a survivor that
-// already has one. The survivor keeps its list and the repair still completes.
+// that cannot be a plain UPDATE: a referencing table can declare uniqueness over
+// project_id, so a duplicate row cannot always move onto the survivor. The
+// survivor keeps its row and the repair still completes.
+//
+// `errors` is the collision used here — it holds at most one OPEN incident per
+// (project, source, code, fingerprint), via a partial unique index. It replaced
+// project_next.project_id, which was UNIQUE outright and read more obviously;
+// E-2142 dropped that table, and the repair behaviour it demonstrated is not
+// specific to it.
 func TestRepairProjectPaths_SurvivesAUniqueRefCollision(t *testing.T) {
 	db := withTestDB(t)
 	real := tempProjectRoot(t)
@@ -777,10 +783,14 @@ func TestRepairProjectPaths_SurvivesAUniqueRefCollision(t *testing.T) {
 	}
 	seedProject(t, db, 1, "acme", real)
 	seedProject(t, db, 2, "acme-2", link)
+	// Same open fault on both projects: repointing the duplicate's row onto the
+	// survivor would violate idx_errors_open_uniq.
 	if _, err := db.Exec(
-		"INSERT INTO project_next (id, project_id) VALUES (1, 1), (2, 2)",
+		`INSERT INTO errors (id, project_id, code, severity, source, fingerprint, summary)
+		 VALUES (1, 1, 'E100', 'warn', 'job', 'fp-1', 'tick failed'),
+		        (2, 2, 'E100', 'warn', 'job', 'fp-1', 'tick failed')`,
 	); err != nil {
-		t.Fatalf("seed project_next: %v", err)
+		t.Fatalf("seed errors: %v", err)
 	}
 
 	repairInTx(t, db)
@@ -788,13 +798,14 @@ func TestRepairProjectPaths_SurvivesAUniqueRefCollision(t *testing.T) {
 	if n := countProjects(t, db); n != 1 {
 		t.Errorf("projects rows = %d, want 1", n)
 	}
-	var nextRows, nextProject int64
-	if err := db.QueryRow("SELECT count(*), min(project_id) FROM project_next").
-		Scan(&nextRows, &nextProject); err != nil {
-		t.Fatalf("read project_next: %v", err)
+	var openRows, openProject int64
+	if err := db.QueryRow(
+		"SELECT count(*), min(project_id) FROM errors WHERE cleared_at IS NULL",
+	).Scan(&openRows, &openProject); err != nil {
+		t.Fatalf("read errors: %v", err)
 	}
-	if nextRows != 1 || nextProject != 1 {
-		t.Errorf("project_next = %d row(s) on project %d, want 1 on 1", nextRows, nextProject)
+	if openRows != 1 || openProject != 1 {
+		t.Errorf("open errors = %d row(s) on project %d, want 1 on 1", openRows, openProject)
 	}
 }
 

@@ -136,11 +136,6 @@ func TestSchemaFreshDB_CreatesAllTables(t *testing.T) {
 		"task_landings",
 		"session_statuses",
 		"session_tasks",
-		"project_next",
-		"project_next_lanes",
-		"project_next_tasks",
-		"project_next_pending",
-		"project_next_events",
 	}
 	for _, name := range wantTables {
 		if !hasTable(db, name) {

@@ -287,7 +287,6 @@ CREATE TABLE IF NOT EXISTS tasks (
     plan TEXT,
     phase TEXT NOT NULL DEFAULT 'now',
     status TEXT NOT NULL DEFAULT 'unplanned',
-    source_file TEXT,
     sort_order INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     completed_at TEXT,
@@ -356,11 +355,12 @@ CREATE VIEW IF NOT EXISTS live_tasks AS
 -- task_tree (E-2161) is live_tasks plus one derived column: effective_parent_id,
 -- the nearest ancestor that is not removed.
 --
--- Removal retains the row and now retains the EDGE too: the two
--- `UPDATE tasks SET parent_id = NULL WHERE parent_id = ?` statements that
--- non-cascade removal and `task import --replace` used to run (mirroring the
--- hard-delete path's ON DELETE SET NULL) are gone, so a child keeps pointing at
--- the parent it was actually filed under. What those statements protected was a
+-- Removal retains the row and now retains the EDGE too: the
+-- `UPDATE tasks SET parent_id = NULL WHERE parent_id = ?` that removal used to
+-- run (mirroring the hard-delete path's ON DELETE SET NULL) is gone, so a child
+-- keeps pointing at the parent it was actually filed under. E-2161 removed two
+-- such statements; the second belonged to a bulk-clear path that has since been
+-- retired along with the command that drove it. What those statements protected was a
 -- render, not the data: every tree read joins live_tasks to live_tasks, so a
 -- live child left pointing at a hidden row would hang off nothing and vanish
 -- from `task list`, `task show --children` and the monitors. This view answers
@@ -969,11 +969,6 @@ ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
 -- events ledger. No FKs on session_id/task_id by design: rows must outlive their
 -- referenced session/task so the "session N touched task M" record survives
 -- deletion.
--- do_order (E-1683): per-session implementation order for this task. NULL =
--- unordered. Equal do_order across rows of the same session = parallelizable.
--- Session-scoped (not tasks.sort_order, which is global): two sessions may
--- order the same task differently. Set by `endless session order` via the
--- session_tasks.ordered event; replace-all (unlisted rows reset to NULL).
 -- relation_id (E-1462, revised E-1696): how the task entered this session's
 -- scope, FK to session_task_relations. Written at capture time by the
 -- task-mutation executors (claim→goal, create/import→surfaced, else→revisited)
@@ -996,7 +991,6 @@ CREATE TABLE IF NOT EXISTS session_tasks (
     task_id INTEGER NOT NULL,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
-    do_order INTEGER,
     relation_id INTEGER REFERENCES session_task_relations(id),
     UNIQUE(session_id, task_id)
 );
@@ -1050,71 +1044,6 @@ CREATE TABLE IF NOT EXISTS triage_claims (
 );
 CREATE INDEX IF NOT EXISTS idx_triage_claims_expires
     ON triage_claims(expires_at);
-
--- Curated, persistent per-project "next" list (E-1421). Five tables: header,
--- lanes, tasks, auto-added pending tasks awaiting curation, and an event-
--- sourced audit log of every mutation.
-CREATE TABLE IF NOT EXISTS project_next (
-    id INTEGER PRIMARY KEY,
-    project_id INTEGER NOT NULL UNIQUE,
-    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS project_next_lanes (
-    id INTEGER PRIMARY KEY,
-    project_next_id INTEGER NOT NULL,
-    lane_id TEXT NOT NULL,
-    priority INTEGER NOT NULL,
-    rationale TEXT NOT NULL,
-    added_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-    updated_at TEXT,
-    UNIQUE(project_next_id, lane_id),
-    FOREIGN KEY (project_next_id) REFERENCES project_next(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS project_next_tasks (
-    id INTEGER PRIMARY KEY,
-    project_next_lane_id INTEGER NOT NULL,
-    task_id TEXT NOT NULL,
-    reason TEXT NOT NULL,
-    position INTEGER NOT NULL,
-    added_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-    updated_at TEXT,
-    UNIQUE(project_next_lane_id, task_id),
-    UNIQUE(project_next_lane_id, position),
-    FOREIGN KEY (project_next_lane_id) REFERENCES project_next_lanes(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS project_next_pending (
-    id INTEGER PRIMARY KEY,
-    project_next_id INTEGER NOT NULL,
-    task_id TEXT NOT NULL,
-    reason TEXT NOT NULL,
-    added_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-    UNIQUE(project_next_id, task_id),
-    FOREIGN KEY (project_next_id) REFERENCES project_next(id) ON DELETE CASCADE
-);
-
-CREATE TABLE IF NOT EXISTS project_next_events (
-    id INTEGER PRIMARY KEY,
-    project_next_id INTEGER NOT NULL,
-    session_id INTEGER NOT NULL,
-    event_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-    kind TEXT NOT NULL,
-    payload TEXT,
-    batch_id INTEGER,
-    FOREIGN KEY (project_next_id) REFERENCES project_next(id),
-    FOREIGN KEY (session_id) REFERENCES sessions(id)
-);
-
-CREATE INDEX IF NOT EXISTS idx_project_next_lanes_priority
-    ON project_next_lanes(project_next_id, priority);
-CREATE INDEX IF NOT EXISTS idx_project_next_events_recent
-    ON project_next_events(project_next_id, event_at DESC);
-CREATE INDEX IF NOT EXISTS idx_project_next_pending_added
-    ON project_next_pending(project_next_id, added_at);
-CREATE INDEX IF NOT EXISTS idx_project_next_tasks_task
-    ON project_next_tasks(task_id);
 
 -- Background jobs (E-698). One row per registered job, holding ONLY its
 -- scheduling state — the job's identity and behavior live in Go code

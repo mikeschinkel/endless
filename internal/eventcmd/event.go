@@ -151,16 +151,6 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 		ts = kairos.New(parsed, 0, nid)
 	}
 
-	// E-1436: project_next.revised is a lock-first, multi-row rewrite. It takes
-	// the write lock BEFORE appending the ledger line (mirroring the create
-	// path), so a lost concurrent revise fails at BEGIN with no orphan ledger
-	// line. Handled out of line from the generic create/update flows below.
-	if evtKind == events.KindProjectNextRevised {
-		return runProjectNextRevise(evtKind, project, entityTypeStr, entityID,
-			actorKindStr, actorID, sessionID, nodeIDStr, projectRoot, payloadStr,
-			correlationID, ts.String())
-	}
-
 	// Determine if this is a create event that needs ID pre-allocation.
 	// task.created / task.imported pre-allocate a tasks.id; decision.created
 	// (E-1378) pre-allocates a decisions.id and emits an ED-prefixed display
@@ -419,100 +409,6 @@ func makeDerivedEmitter(clock *kairos.Clock, project, nodeIDStr, projectRoot str
 		segRel := filepath.Join(".endless", events.LedgerDirName, writer.CurrentSegment())
 		return events.CommitLedgerSegment(projectRoot, segRel)
 	}
-}
-
-// projectNextReviseOutput is the stdout JSON for a project_next.revised emit.
-// prior_revision is null on the first revision; warning is present only when
-// the soft cap was exceeded; state is the curated list as written.
-type projectNextReviseOutput struct {
-	TS            string                         `json:"ts"`
-	Kind          string                         `json:"kind"`
-	PriorRevision *events.ProjectNextRevisionRef `json:"prior_revision"`
-	Warning       string                         `json:"warning,omitempty"`
-	State         events.ProjectNextState        `json:"state"`
-}
-
-// runProjectNextRevise handles a project_next.revised emit (E-1436). It gates
-// on structure + caps before the lock, then mirrors the create path's
-// lock-first ordering: BEGIN IMMEDIATE → append+commit the ledger line under
-// the lock → execute the SQL rewrite → COMMIT.
-func runProjectNextRevise(evtKind events.Kind, project, entityType, entityID,
-	actorKindStr, actorID, sessionID, nodeIDStr, projectRoot, payloadStr,
-	correlationID, tsStr string) error {
-
-	// Gate: validate structure + caps BEFORE taking the write lock, so a
-	// refused revise (malformed, or over the hard cap) writes nothing at all.
-	warning, err := events.ValidateProjectNextRevise([]byte(payloadStr))
-	if err != nil {
-		return err
-	}
-
-	execAndCommit, rollback, err := events.BeginImmediate()
-	if err != nil {
-		return err
-	}
-
-	evt := events.Event{
-		V:       events.Version,
-		TS:      tsStr,
-		Kind:    evtKind,
-		Project: project,
-		Entity: events.EntityRef{
-			Type: events.EntityType(entityType),
-			ID:   entityID,
-		},
-		Actor: events.EmittingActor(
-			events.ActorKind(actorKindStr), actorID, sessionID),
-		CorrelationID: correlationID,
-		Payload:       json.RawMessage(payloadStr),
-	}
-	if err := evt.Validate(); err != nil {
-		rollback()
-		return err
-	}
-
-	// Events-authoritative: write the ledger line FIRST, under the lock.
-	line, err := json.Marshal(evt)
-	if err != nil {
-		rollback()
-		return fmt.Errorf("marshal event: %w", err)
-	}
-	writer, err := events.NewWriter(ledgerRoot(projectRoot), nodeIDStr)
-	if err != nil {
-		rollback()
-		return fmt.Errorf("create writer: %w", err)
-	}
-	if err := writer.Append(line); err != nil {
-		rollback()
-		return err
-	}
-	// E-1206: commit the just-written ledger segment immediately; a commit
-	// failure surfaces a problem without rolling back the WAL line. E-1729:
-	// skip the commit in a sandbox (disposable, non-git dir).
-	if !monitor.IsSandboxActive() {
-		segRel := filepath.Join(".endless", events.LedgerDirName, writer.CurrentSegment())
-		if err := events.CommitLedgerSegment(projectRoot, segRel); err != nil {
-			return fmt.Errorf("commit ledger segment: %w", err)
-		}
-	}
-
-	// project_next.revised never touches the task tree, so no epic derivation.
-	execRes, err := execAndCommit(&evt, nil)
-	if err != nil {
-		return err
-	}
-
-	out := projectNextReviseOutput{
-		TS:      tsStr,
-		Kind:    string(evtKind),
-		Warning: warning,
-	}
-	if execRes != nil && execRes.ProjectNext != nil {
-		out.PriorRevision = execRes.ProjectNext.PriorRevision
-		out.State = execRes.ProjectNext.State
-	}
-	_ = dbprovenance.Encode(os.Stdout, out)
-	return nil
 }
 
 func runValidateDB(args []string) {

@@ -66,12 +66,16 @@ func TestTaskPlan_MissingRowReturnsEmpty(t *testing.T) {
 	}
 }
 
-// TestFormatTasks_EmptyListInstructsImport pins the no-tasks branch of
+// TestFormatTasks_EmptyListInstructsFiling pins the no-tasks branch of
 // the SessionStart task-context renderer: the message must name the
-// project and tell the user how to import or check status.
-func TestFormatTasks_EmptyListInstructsImport(t *testing.T) {
+// project and tell the user how to file a task or check status.
+//
+// It named `endless task import` until E-2142 retired that command. The branch
+// is the first thing a new user of Endless reads, so the one requirement that
+// matters is that every command it names still exists.
+func TestFormatTasks_EmptyListInstructsFiling(t *testing.T) {
 	got := FormatTasks("acme", nil)
-	for _, want := range []string{"acme", "endless task import", "endless task show"} {
+	for _, want := range []string{"acme", "endless task add", "endless task show"} {
 		if !strings.Contains(got, want) {
 			t.Errorf("empty FormatTasks output missing %q:\n%s", want, got)
 		}

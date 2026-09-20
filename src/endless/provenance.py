@@ -146,10 +146,11 @@ def _asks_for_a_machine_format(argv) -> bool:
     """Whether argv asks for a machine format.
 
     `--json` and `--tsv` are boolean flags everywhere they appear in this CLI,
-    so a bare occurrence means the flag was passed. `endless task import --json
-    FILE` and `endless session order --json SPEC` take a VALUE — but both are
-    inputs to a command whose stdout is not a payload, so treating them as
-    machine renders costs a line neither would have printed usefully anyway.
+    so a bare occurrence means the flag was passed. Two commands took a VALUE —
+    `endless task import --json FILE` and `endless session order --json SPEC` —
+    and E-2142 retired both, so the exception this paragraph documented no longer
+    has an instance. It is kept as the reason the scan may stay this simple: a
+    value-taking `--json` would have to be handled here, not assumed away.
 
     Takes argv as an ARGUMENT rather than reading sys.argv. Reading sys.argv was
     wrong in a way that hid itself: click.testing.CliRunner passes its arguments

@@ -35,28 +35,32 @@ func TestDoPlanIDsExcludesClosed(t *testing.T) {
 
 // renderForestString builds and renders the backlog forest for a synthetic
 // candidate set, so the layering + rendering can be asserted without a DB.
-func renderForestString(ids []int64, edges map[int64][]int64, doOrder map[int64]int64) string {
+func renderForestString(ids []int64, edges map[int64][]int64) string {
 	var b strings.Builder
-	renderForest(&b, buildForest(ids, edges, doOrder))
+	renderForest(&b, buildForest(ids, edges))
 	return b.String()
 }
 
 // renderSpineString assembles the full ancestry spine (parent → *focal ← from →
 // backlog) and renders it, so the spine + focal marker + spawner annotation can
 // be asserted without a DB.
-func renderSpineString(focal, parent, from int64, ids []int64, edges map[int64][]int64, doOrder map[int64]int64) string {
+func renderSpineString(focal, parent, from int64, ids []int64, edges map[int64][]int64) string {
 	var b strings.Builder
-	renderForest(&b, buildSpine(focal, parent, from, buildForest(ids, edges, doOrder)))
+	renderForest(&b, buildSpine(focal, parent, from, buildForest(ids, edges)))
 	return b.String()
 }
 
+// TestBuildForest pins the DAG as the tree's ONLY source of order. It used to
+// carry two more cases, for the explicit per-session do_order layering that
+// overrode the DAG; E-2142 retired `endless session order`, the column and the
+// override together, so what these cases assert is now the whole behaviour
+// rather than its default half.
 func TestBuildForest(t *testing.T) {
 	tests := []struct {
-		name    string
-		ids     []int64
-		edges   map[int64][]int64 // target → blockers (source blocks target)
-		doOrder map[int64]int64
-		want    string
+		name  string
+		ids   []int64
+		edges map[int64][]int64 // target → blockers (source blocks target)
+		want  string
 	}{
 		{
 			name:  "chain plus independent root",
@@ -89,36 +93,16 @@ func TestBuildForest(t *testing.T) {
 				"└── E-102\n",
 		},
 		{
-			name:    "do_order overrides DAG-derived order",
-			ids:     []int64{100, 101, 102, 103},
-			edges:   nil,
-			doOrder: map[int64]int64{100: 1, 101: 2, 102: 2, 103: 3},
-			want: "" +
-				"E-100\n" +
-				"├── E-101\n" +
-				"│   └── E-103\n" +
-				"└── E-102\n",
-		},
-		{
 			name: "all independent render as flush-left roots",
 			ids:  []int64{100, 101},
 			want: "" +
 				"E-100\n" +
 				"E-101\n",
 		},
-		{
-			name:    "unordered tasks are independent roots under override",
-			ids:     []int64{100, 101, 102},
-			doOrder: map[int64]int64{100: 1, 101: 2},
-			want: "" +
-				"E-100\n" +
-				"└── E-101\n" +
-				"E-102\n",
-		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := renderForestString(tc.ids, tc.edges, tc.doOrder)
+			got := renderForestString(tc.ids, tc.edges)
 			if got != tc.want {
 				t.Errorf("forest mismatch:\n--- got ---\n%s\n--- want ---\n%s", got, tc.want)
 			}
@@ -128,14 +112,13 @@ func TestBuildForest(t *testing.T) {
 
 func TestBuildSpine(t *testing.T) {
 	tests := []struct {
-		name    string
-		focal   int64
-		parent  int64
-		from    int64
-		ids     []int64
-		edges   map[int64][]int64
-		doOrder map[int64]int64
-		want    string
+		name   string
+		focal  int64
+		parent int64
+		from   int64
+		ids    []int64
+		edges  map[int64][]int64
+		want   string
 	}{
 		{
 			name:  "no parent: focal is root, marked, backlog nested",
@@ -199,7 +182,7 @@ func TestBuildSpine(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			got := renderSpineString(tc.focal, tc.parent, tc.from, tc.ids, tc.edges, tc.doOrder)
+			got := renderSpineString(tc.focal, tc.parent, tc.from, tc.ids, tc.edges)
 			if got != tc.want {
 				t.Errorf("spine mismatch:\n--- got ---\n%s\n--- want ---\n%s", got, tc.want)
 			}

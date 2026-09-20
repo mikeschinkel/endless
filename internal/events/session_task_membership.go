@@ -21,9 +21,9 @@ import (
 //   - hide   — display suppression. The session_tasks row survives, so
 //     `task show`'s "Touched by:" still reports the touch that really happened.
 //     For a capture that is real but noisy.
-//   - remove — the association itself. DELETEs the session_tasks row (its
-//     relation and its do_order with it), and clears any hide alongside. For a
-//     capture that was simply wrong.
+//   - remove — the association itself. DELETEs the session_tasks row (and its
+//     relation with it), and clears any hide alongside. For a capture that was
+//     simply wrong.
 //
 // Both executors resolve the session the same way execSessionTasksOrdered does:
 // the payload's `process` field carries either the "__session_id=N" sentinel or

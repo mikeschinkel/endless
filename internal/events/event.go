@@ -125,13 +125,17 @@ type Kind string
 type EntityType string
 
 const (
-	EntityTask             EntityType = "task"
-	EntityTaskDep          EntityType = "task_dep"
-	EntityProject          EntityType = "project"
-	EntityProjectNext      EntityType = "project_next"
-	EntitySession          EntityType = "session"
-	EntitySessionStatus    EntityType = "session_status"
-	EntitySessionTasks     EntityType = "session_tasks" // E-1683
+	EntityTask    EntityType = "task"
+	EntityTaskDep EntityType = "task_dep"
+	EntityProject EntityType = "project"
+	// EntityProjectNext has no live writer (E-2142 retired the curated next
+	// list). It stays declared because the db-ledger still holds
+	// project_next.revised events, and a retired KIND that validates is no use
+	// if its entity type does not — Validate checks both.
+	EntityProjectNext   EntityType = "project_next"
+	EntitySession       EntityType = "session"
+	EntitySessionStatus EntityType = "session_status"
+	EntitySessionTasks  EntityType = "session_tasks" // E-1683
 
 	EntityConversation     EntityType = "conversation"
 	EntityMessage          EntityType = "message"
@@ -171,7 +175,6 @@ const (
 	KindTaskFieldsUpdated Kind = "task.fields_updated"
 	KindTaskMoved         Kind = "task.moved"
 	KindTaskDeleted       Kind = "task.deleted"
-	KindTaskBulkCleared   Kind = "task.bulk_cleared"
 	KindTaskReleased      Kind = "task.released"
 	KindTaskClaimed       Kind = "task.claimed"
 	KindTaskLanded        Kind = "task.landed"
@@ -234,13 +237,6 @@ const (
 	KindSessionStatusRecorded Kind = "session_status.recorded"
 )
 
-// Session task-ordering event kinds (E-1683). Sets the per-session
-// implementation order (session_tasks.do_order) for the emitting session's
-// touched tasks. Replace-all: the payload's groups are the complete ordering.
-const (
-	KindSessionTasksOrdered Kind = "session_tasks.ordered"
-)
-
 // Session task-membership event kinds (E-1696). The verbs that add a task to,
 // and drop a task from, the emitting session's scope — the correction path for
 // the otherwise-automatic session_tasks capture.
@@ -261,11 +257,6 @@ const (
 const (
 	KindSessionTasksQueued  Kind = "session_tasks.queued"
 	KindSessionTasksRemoved Kind = "session_tasks.removed"
-)
-
-// Curated next-list event kinds (E-1421).
-const (
-	KindProjectNextRevised Kind = "project_next.revised"
 )
 
 // Decision event kinds (E-1378). Decisions are first-class items extracted
@@ -306,7 +297,58 @@ const (
 	KindDecisionRelationDeleted Kind = "decision_relation.deleted"
 )
 
-// ValidKinds is the closed set of all recognized event kinds.
+// Retired event kinds (E-2142). Each named the only surface that wrote it, and
+// that surface is gone:
+//
+//   - task.bulk_cleared     — `task import --replace` / `task import-json --clear`
+//   - session_tasks.ordered — `endless session order`
+//   - project_next.revised  — `endless task next revise`
+//
+// The constants survive because the kinds do: the db-ledger is the permanent
+// record, so events of all three are still in it and replay has to get past
+// them. See RetiredKinds for what "getting past them" means.
+const (
+	KindTaskBulkCleared     Kind = "task.bulk_cleared"
+	KindSessionTasksOrdered Kind = "session_tasks.ordered"
+	KindProjectNextRevised  Kind = "project_next.revised"
+)
+
+// RetiredKinds is the closed set of kinds a historical ledger may hold and no
+// live code path writes (E-2142).
+//
+// A retired kind VALIDATES and PROJECTS NOTHING, and that pairing is the whole
+// design. Validating keeps a rebuild working on a ledger that predates the
+// retirement; projecting nothing is the honest answer, because the tables those
+// three events wrote no longer exist. Naming them in one declared list is what
+// keeps the third property: a kind NOBODY declared — a typo, or a kind from a
+// newer binary — still fails loudly on `events: unknown kind`. Silently
+// ignoring every unrecognized kind would have been the cheap way to survive
+// replay, and it would have thrown that away.
+//
+// Deliberately NOT folded into ValidKinds. The executor and the `event emit`
+// front door both gate on ValidKinds alone, so a retired kind cannot be newly
+// emitted — there is no writer left to emit it, and a kind whose executor was
+// deleted should refuse at the door rather than reach a dispatch that would
+// error on it internally.
+//
+// Retiring a KIND is not the same as retiring a COLUMN inside a live kind's
+// payload, and E-2142 did both. `task.created` and `task.imported` still
+// project in full; they simply stopped writing tasks.source_file. That
+// retirement rides in the payload struct — the field is retained so an old
+// event still unmarshals, and nothing reads the value — not here.
+var RetiredKinds = map[Kind]bool{
+	KindTaskBulkCleared:     true,
+	KindSessionTasksOrdered: true,
+	KindProjectNextRevised:  true,
+}
+
+// KnownKind reports whether a kind may appear in a well-formed event: a live
+// kind, or a retired one that only replay will ever see.
+func KnownKind(k Kind) bool {
+	return ValidKinds[k] || RetiredKinds[k]
+}
+
+// ValidKinds is the closed set of event kinds a live code path may emit.
 var ValidKinds = map[Kind]bool{
 	// Task
 	KindTaskCreated:       true,
@@ -315,7 +357,6 @@ var ValidKinds = map[Kind]bool{
 	KindTaskFieldsUpdated: true,
 	KindTaskMoved:         true,
 	KindTaskDeleted:       true,
-	KindTaskBulkCleared:   true,
 	KindTaskReleased:      true,
 	KindTaskClaimed:       true,
 	KindTaskLanded:        true,
@@ -349,13 +390,9 @@ var ValidKinds = map[Kind]bool{
 	KindNoteResolved: true,
 	// Session status (E-1312)
 	KindSessionStatusRecorded: true,
-	// Session task ordering (E-1683)
-	KindSessionTasksOrdered: true,
 	// Session task membership (E-1696)
 	KindSessionTasksQueued:  true,
 	KindSessionTasksRemoved: true,
-	// Curated next list (E-1421)
-	KindProjectNextRevised: true,
 	// Decision (E-1378)
 	KindDecisionCreated:       true,
 	KindDecisionFieldsUpdated: true,
@@ -406,7 +443,7 @@ func (e *Event) Validate() error {
 	if _, err := kairos.Parse(e.TS); err != nil {
 		return fmt.Errorf("events: invalid ts: %w", err)
 	}
-	if !ValidKinds[e.Kind] {
+	if !KnownKind(e.Kind) {
 		return fmt.Errorf("events: unknown kind %q", e.Kind)
 	}
 	if !validEntityTypes[e.Entity.Type] {

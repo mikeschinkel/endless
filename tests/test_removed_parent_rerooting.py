@@ -2,8 +2,8 @@
 nearest live ancestor.
 
 Removal retains the row (E-1929) and now retains the EDGE too — the
-`UPDATE tasks SET parent_id = NULL WHERE parent_id = ?` that non-cascade removal
-and `task import --replace` ran is gone. That null was load-bearing for exactly
+`UPDATE tasks SET parent_id = NULL WHERE parent_id = ?` that removal ran is
+gone. That null was load-bearing for exactly
 one thing: every tree read joined `live_tasks` to `live_tasks`, so a live child
 left pointing at a hidden row would hang off nothing and disappear from every
 render. Keeping the edge is only safe because the reads adopt the child upward

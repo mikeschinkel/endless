@@ -2,6 +2,7 @@ package events_test
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -247,11 +248,92 @@ func TestValidKinds_Count(t *testing.T) {
 	// + 2 (E-1864 decision.{unaccepted,unrejected})
 	// - 1 (E-1906 session.recapped, retired with the session-recap machinery)
 	// + 2 (E-1696 session_tasks.{queued,removed})
-	// + 3 (E-1920 decision.{superseded,obsoleted,reinstated}) = 48.
-	want := 48
+	// + 3 (E-1920 decision.{superseded,obsoleted,reinstated})
+	// - 3 (E-2142 task.bulk_cleared, session_tasks.ordered, project_next.revised —
+	//      moved to RetiredKinds, not deleted: see TestRetiredKinds below) = 45.
+	want := 45
 	got := len(events.ValidKinds)
 	if got != want {
 		t.Errorf("ValidKinds has %d entries, want %d", got, want)
+	}
+}
+
+// TestRetiredKinds pins the three invariants that make E-2142's retired-kinds
+// list worth having over the two shortcuts it was chosen against — dropping the
+// kinds outright (replay breaks) and ignoring every unrecognized kind (a typo
+// becomes silence).
+func TestRetiredKinds(t *testing.T) {
+	want := []events.Kind{
+		events.KindTaskBulkCleared,
+		events.KindSessionTasksOrdered,
+		events.KindProjectNextRevised,
+	}
+	if len(events.RetiredKinds) != len(want) {
+		t.Errorf("RetiredKinds has %d entries, want %d", len(events.RetiredKinds), len(want))
+	}
+
+	for _, kind := range want {
+		if !events.RetiredKinds[kind] {
+			t.Errorf("%q missing from RetiredKinds", kind)
+		}
+		// Disjoint from ValidKinds, which is what keeps a retired kind
+		// unemittable: the executor and `event emit` both gate on ValidKinds.
+		if events.ValidKinds[kind] {
+			t.Errorf("%q is in ValidKinds; a retired kind must not be emittable", kind)
+		}
+		// …and still KNOWN, which is what keeps a historical ledger replayable.
+		if !events.KnownKind(kind) {
+			t.Errorf("KnownKind(%q) = false; a retired kind must still validate", kind)
+		}
+	}
+
+	// The property the named list exists to preserve.
+	if events.KnownKind("project_next.rebalanced") {
+		t.Error("KnownKind() accepted an undeclared kind; retirement must not become a wildcard")
+	}
+}
+
+// TestValidate_RetiredKindsPassAndUndeclaredDoNot asserts the invariants above
+// where they are actually consumed: Event.Validate, the first gate every event a
+// rebuild replays has to pass. A retired kind that satisfied KnownKind but
+// tripped Validate would still make a historical ledger unreplayable, which is
+// the whole thing E-2142 had to avoid.
+func TestValidate_RetiredKindsPassAndUndeclaredDoNot(t *testing.T) {
+	base := events.Event{
+		V:       events.Version,
+		TS:      testTimestamp(),
+		Project: "endless",
+		Entity:  events.EntityRef{Type: events.EntityTask, ID: "1"},
+		Actor:   events.Actor{Kind: events.ActorCLI, ID: "mike@macbook"},
+		Payload: json.RawMessage(`{}`),
+	}
+
+	// Each retired kind carries the entity type its deleted writer really used —
+	// a kind that validates against an entity type that does not is no use.
+	for kind, entity := range map[events.Kind]events.EntityType{
+		events.KindTaskBulkCleared:     events.EntityTask,
+		events.KindSessionTasksOrdered: events.EntitySessionTasks,
+		events.KindProjectNextRevised:  events.EntityProjectNext,
+	} {
+		evt := base
+		evt.Kind = kind
+		evt.Entity = events.EntityRef{Type: entity, ID: "1"}
+		if err := evt.Validate(); err != nil {
+			t.Errorf("Validate() on retired kind %q = %v, want nil", kind, err)
+		}
+	}
+
+	// Plausible, never declared. This is the failure retiring a kind must not
+	// suppress: the alternative design — ignore anything unrecognized — would
+	// accept this and lose every typo and every kind from a newer binary with it.
+	evt := base
+	evt.Kind = "project_next.rebalanced"
+	err := evt.Validate()
+	if err == nil {
+		t.Fatal("Validate() = nil for an undeclared kind, want the unknown-kind error")
+	}
+	if !strings.Contains(err.Error(), "unknown kind") {
+		t.Errorf("Validate() error = %q, want it to name an unknown kind", err)
 	}
 }
 

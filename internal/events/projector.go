@@ -86,8 +86,6 @@ func replayEvent(db *sql.DB, evt *Event, result *ProjectResult) error {
 		return replayTaskMoved(db, evt, result)
 	case KindTaskDeleted:
 		return replayTaskDeleted(db, evt, result)
-	case KindTaskBulkCleared:
-		return replayTaskBulkCleared(db, evt, result)
 	case KindTaskLanded:
 		return replayTaskLanded(db, evt, result)
 	case KindTaskDepCreated:
@@ -121,6 +119,16 @@ func replayEvent(db *sql.DB, evt *Event, result *ProjectResult) error {
 	case KindDecisionRelationDeleted:
 		return replayDecisionRelationDeleted(db, evt, result)
 	default:
+		if RetiredKinds[evt.Kind] {
+			// A retired kind is a DECLARED no-op, not an unhandled one (E-2142).
+			// Its writer and the tables it wrote are both gone, so there is
+			// nothing left to project — but a ledger that predates the
+			// retirement still holds it, and replay has to walk past it rather
+			// than record an error per occurrence. The case is spelled out here
+			// so the next reader sees a decision instead of inferring one from
+			// the silence below.
+			return nil
+		}
 		// Skip non-task events silently (sessions, notes, etc.)
 		return nil
 	}
@@ -219,9 +227,9 @@ func replayTaskImported(db *sql.DB, evt *Event, result *ProjectResult) error {
 	ts := kairosToISO(evt.TS)
 
 	_, err = db.Exec(
-		`INSERT INTO tasks (id, project_id, phase, title, description, status, source_file, sort_order, parent_id, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, 'unplanned', ?, ?, ?, ?, ?)`,
-		taskID, projectID, p.Phase, p.Title, p.Description, p.SourceFile,
+		`INSERT INTO tasks (id, project_id, phase, title, description, status, sort_order, parent_id, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, 'unplanned', ?, ?, ?, ?)`,
+		taskID, projectID, p.Phase, p.Title, p.Description,
 		p.SortOrder, p.ParentID, ts, ts,
 	)
 	if err != nil {
@@ -468,25 +476,6 @@ func replayTaskDeleted(db *sql.DB, evt *Event, result *ProjectResult) error {
 	// marked removed = 1, a rebuild would re-free every removed id and reuse
 	// would return on a path nobody would think to test.
 	if _, err := removeTaskTree(db, mustParseInt64(evt.Entity.ID), p.Cascade); err != nil {
-		return err
-	}
-	result.TasksDeleted++
-	return nil
-}
-
-func replayTaskBulkCleared(db *sql.DB, evt *Event, result *ProjectResult) error {
-	var p TaskBulkClearedPayload
-	if err := json.Unmarshal(evt.Payload, &p); err != nil {
-		return err
-	}
-
-	projectID, err := ensureProject(db, evt.Project)
-	if err != nil {
-		return err
-	}
-
-	// Same shared removal as the executor — see replayTaskDeleted above.
-	if _, err := removeTasksBySourceFile(db, projectID, p.SourceFile); err != nil {
 		return err
 	}
 	result.TasksDeleted++

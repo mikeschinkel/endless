@@ -13,6 +13,18 @@ import (
 // seedLiveTask inserts a live task so the membership executors' live_tasks check
 // passes. `session task add` refuses ids that name no task, so every queued
 // fixture needs a real row behind it.
+// seedSession inserts a minimal live sessions row so the "__session_id=N"
+// sentinel resolves in the membership executors. It lived in
+// session_tasks_order_test.go until E-2142 retired `session order`.
+func seedSession(t *testing.T, db *sql.DB, id int64) {
+	t.Helper()
+	if _, err := db.Exec(
+		`INSERT INTO sessions (id, state) VALUES (?, 'working')`, id,
+	); err != nil {
+		t.Fatalf("seed session %d: %v", id, err)
+	}
+}
+
 func seedLiveTask(t *testing.T, db *sql.DB, id int64) {
 	t.Helper()
 	const ts = "2026-08-21T00:00:00"
