@@ -266,4 +266,61 @@ assert_contains "the migrate helper rewrites sandbox rather than passing the wor
     '["--db-dir", str(RESOLVED_CONFIG_DIR)]' \
     "$(sed -n '/^def migrate_db_context_args/,/^def /p' src/endless/config.py)"
 
+# ─────────────────────────────────────────────────────────────────────
+section "E. The refusal inventory still describes this code (C8)"
+# ─────────────────────────────────────────────────────────────────────
+#
+# C8  A LANDING DOES NOT LEAVE A REFERENCE LYING. E-2157 changed one refusal
+#     message and moved four sentinels into another package, and
+#     docs/research-2026-09-17-refusal-inventory.tsv records both. A doc my own
+#     change falsified is my defect (ED-1550 rule 2 — reopen when what shipped
+#     is wrong), not a finding to hand on.
+#
+#     These check the rows E-2157 OWNS. They are not a general audit of the
+#     inventory: rows this task never touched are E-2155's, and one of them
+#     (the gate refusal, anchored to `resolvedPath`) carries a symbol
+#     off-by-one that predates this work and is deliberately left alone.
+
+TSV="docs/research-2026-09-17-refusal-inventory.tsv"
+
+assert_eq "the inventory is still well-formed (10 fields per row)" \
+    "" \
+    "$(awk -F'\t' 'NR>1 && NF!=10 {print "line "NR": "NF" fields"}' "${TSV}")"
+
+# The message that changed. The row must name the flags that exist now, and
+# must not name the one that does not.
+relpath_row="$(grep -F 'refusing to migrate a database at a relative path' "${TSV}")"
+assert_contains "the relative-path row names --db main" \
+    "--db main" "${relpath_row}"
+assert_contains "the relative-path row names --db-dir" \
+    "--db-dir" "${relpath_row}"
+assert_not_contains "the relative-path row no longer names --config-dir" \
+    "--config-dir" "${relpath_row}"
+
+# The four sentinels E-2157 moved out of internal/monitor, plus the retired-flag
+# refusal it added. Each must be anchored to the file that now defines it.
+for sentinel in ErrDBFlagConflict ErrDBFlagNeedsValue ErrDBDirFlagNeedsDir \
+                ErrUnknownDBValue ErrConfigDirFlagRetired; do
+    row="$(awk -F'\t' -v s="${sentinel}" '$2 == s {print $1}' "${TSV}")"
+    assert_eq "the inventory anchors ${sentinel} to internal/dbcontext" \
+        "internal/dbcontext/dbcontext.go" "${row}"
+    assert_contains "internal/dbcontext actually defines ${sentinel}" \
+        "${sentinel}" "$(cat internal/dbcontext/dbcontext.go)"
+done
+
+# No row may still describe monitor as the definer of a flag sentinel — that is
+# exactly the anchor this landing invalidated.
+stale_monitor="$(awk -F'\t' '$1 == "internal/monitor/db.go" && $2 ~ /^Err/ {print $2}' "${TSV}")"
+assert_eq "no flag sentinel is still anchored to internal/monitor" "" "${stale_monitor}"
+
+# The refusal E-2157 ADDED. An inventory that records a binary's refusals and
+# omits its newest one is wrong in the same way as one that records a stale one.
+sandbox_row="$(awk -F'\t' '$2 == "errSandboxNotRoutable" {print $1"|"$8}' "${TSV}")"
+assert_contains "the inventory carries the --db sandbox refusal" \
+    "cmd/endless-migrate/main.go" "${sandbox_row}"
+assert_contains "and records that it names --db-dir as the remedy" \
+    "--db-dir" "${sandbox_row}"
+assert_contains "cmd/endless-migrate actually defines errSandboxNotRoutable" \
+    "errSandboxNotRoutable" "$(cat cmd/endless-migrate/main.go)"
+
 summary
