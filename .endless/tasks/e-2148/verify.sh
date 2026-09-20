@@ -116,6 +116,10 @@ for t in TestCatalog_ThePrefixStatesTheSeverity \
 done
 
 for t in TestRowLine_SpendsNoColumnsOnTheSeverityWord \
+         TestRowLine_PutsTheCodeInTheChip \
+         TestRowLine_PutsTheTallyInTheChipWhenSeveralAreOpen \
+         TestRowLine_NeverTruncatesTheChip \
+         TestRowLine_KeepsTheChipWhenNothingElseFits \
          TestRowLine_StillColorsByMaxSeverity \
          TestRowLine_TallyGlyphsAreSingleWidth \
          TestRowLine_TalliesSeveritiesInGlyphsWhenSeveralAreOpen \
@@ -127,6 +131,8 @@ for t in TestRowLine_SpendsNoColumnsOnTheSeverityWord \
          TestRowLine_DropsTheHintOnlyWhenItCannotFit; do
     run_named ./internal/faultrow "${t}"
 done
+
+run_named ./internal/errorscmd TestSplitArgs
 
 for t in TestListingLines_NeverExceedTheTerminalWidth \
          TestListingLines_AreColumnAlignedAtEveryWidth \
@@ -362,6 +368,46 @@ assert_contains "--id remains accepted for callers that already type it" \
     "WARN-0001" "$("${EN[@]}" errors show --id "${ID}" 2>&1)"
 assert_not_contains "and is not taught in the usage text" "--id" "${NOID}"
 
+# A flag may sit on EITHER side of the id. The first pass of this task shipped
+# with `show <id> --detail` broken — Go's flag package stops parsing at the
+# first non-flag argument, so the id in front left --detail unparsed as a second
+# positional and the command refused with "one id at a time". That is the exact
+# spelling the listing's footer teaches and the one the Python CLI emitted, so
+# it failed 100% of the time it was used.
+#
+# Checked against a RAISED incident, not one of the seeded rows: the seeded rows
+# were inserted with SQL, so they have no line in the JSONL detail log and
+# --detail would correctly print nothing for them. An assertion that cannot
+# distinguish the flag working from the flag being ignored proves nothing.
+"${EN[@]}" errors raise --summary "an incident with a detail line" >/dev/null 2>&1 \
+    || setup_error "errors raise failed while setting up the flag-order check"
+RAISED="$(q "${DBDIR}/endless.db" \
+    "SELECT id FROM errors WHERE summary='an incident with a detail line'")"
+[[ -n "${RAISED}" ]] || setup_error "could not read back the raised incident id"
+
+for spelling in "${RAISED} --detail" "--detail ${RAISED}" \
+                "--id ${RAISED} --detail" "--detail --id ${RAISED}"; do
+    # shellcheck disable=SC2086  # deliberate word splitting: these ARE argv
+    out="$("${EN[@]}" errors show ${spelling} 2>&1)"
+    assert_contains "errors show accepts the spelling: ${spelling}" "Occurrences:" "${out}"
+    assert_contains "and --detail actually took effect: ${spelling}" \
+        "logged occurrence(s)" "${out}"
+done
+
+# The flag being absent must still mean absent — otherwise the four checks above
+# would pass on a command that ignored --detail and always printed occurrences.
+assert_not_contains "and without it, no occurrences are printed" \
+    "logged occurrence(s)" "$("${EN[@]}" errors show "${RAISED}" 2>&1)"
+
+# Clear it again so the fault-row assertions below still see exactly the two
+# seeded incidents.
+"${EN[@]}" errors clear "${RAISED}" >/dev/null 2>&1 \
+    || setup_error "could not clear the raised incident"
+
+# Still refuses what it should: two ids, and none at all.
+assert_contains "two ids are still refused" \
+    "one id at a time" "$("${EN[@]}" errors show "${ID}" "${ID}" --detail 2>&1)"
+
 # --- remedies -----------------------------------------------------------
 # The footer used to name only `errors clear`, which it is careful to say is
 # not a retry — so the one action the surface named was the one that changes
@@ -396,6 +442,25 @@ assert_contains "and the warning" "⚠1" "${ROW}"
 assert_contains "it names the distinct codes" "ERR-0002" "${ROW}"
 assert_contains "both of them" "WARN-0001" "${ROW}"
 
+# The chip keeps its slot; only its CONTENTS changed. A first pass dropped the
+# chip along with the severity word it held, which threw away the row's fixed
+# left-hand anchor to solve a problem the word alone had. Asserted on the RAW
+# frame, escapes intact, because the chip IS an escape sequence — the inverted
+# pair is the whole of what distinguishes it from the bar beside it.
+raw_row() {
+    "${EN[@]}" session-status --cols 140 --color 2>/dev/null | grep -F 'Run eeh' || true
+}
+RAW="$(raw_row)"
+if [[ -z "${RAW}" ]]; then
+    report_skip "the chip inverts the row's color pair" "no colored frame available here"
+else
+    # gold-on-black is the warning chip; black-on-gold is the bar it sits on.
+    assert_contains "the chip inverts the row's color pair" \
+        $'\033[48;5;16;38;5;220m' "${RAW}"
+    assert_contains "and the bar itself carries the other half" \
+        $'\033[48;5;220;38;5;16m' "${RAW}"
+fi
+
 # With several open, naming ONE summary reads as the whole story when it is a
 # fraction of it.
 assert_not_contains "it names no single incident's summary while several are open" \
@@ -407,7 +472,7 @@ assert_not_contains "it names no single incident's summary while several are ope
     >/dev/null 2>&1 || setup_error "errors clear failed"
 
 LONE="$(row)"
-assert_contains "one open incident gets its code" "WARN-0001" "${LONE}"
+assert_contains "one open incident gets its code in the chip" "WARN-0001" "${LONE}"
 assert_contains "and its summary back" "a job in beta returned an error" "${LONE}"
 assert_not_contains "and no tally, which a single incident does not need" "⚠1" "${LONE}"
 

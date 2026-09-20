@@ -101,9 +101,15 @@ def errors_show(error_id: int, detail: bool) -> None:
     The id goes positionally, which is the spelling `errors show` documents;
     --id remains accepted on the Go side for callers that already type it.
     """
-    args = ["show", str(error_id)]
+    # Flags before the positional, the same rule errors_clear follows: Go's flag
+    # package stops parsing at the first non-flag argument. The Go side now
+    # splits args itself so either order works (E-2148 shipped with `show <id>
+    # --detail` broken, which is the spelling the footer teaches), but emitting
+    # the safe order keeps this caller correct against an older binary too.
+    args = ["show"]
     if detail:
         args.append("--detail")
+    args.append(str(error_id))
     _run_go("errors", args)
 
 

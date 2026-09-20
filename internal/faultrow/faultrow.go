@@ -50,33 +50,42 @@ import (
 // terminal is narrow — the hint is reserved out of the budget first, because a
 // notification whose reader cannot act on it is just noise.
 //
-// # No severity word (E-2148)
+// # The chip holds the code, not the severity word (E-2148)
 //
-// The row used to open with a nine-column chip reading " WARNING " or
-// " ERROR   ". It does not any more: the code says it. WARN-0004 is a warning
-// because it is spelled WARN-0004, checked by the catalog's own tests, so a word
-// beside it would state the same fact twice — at a cost of nine columns on a
-// line whose scarcest resource is columns, taken from the summary, which is the
-// part that was being cut off.
+// The row opens with an inverted chip, as it always has. What CHANGED is what
+// the chip holds: it read " WARNING " or " ERROR   ", and it now holds the
+// code itself.
 //
-// The colour stays. The whole row is still reversed in the max severity's pair,
-// which is what makes it read at a glance from across a pane; what went is the
-// redundant TEXT, not the distinction.
+// The word was redundant the moment codes became severity-keyed. WARN-0004 is a
+// warning because it is spelled WARN-0004, checked by the catalog's own tests —
+// so a chip saying WARNING beside a code saying WARN stated one fact twice, and
+// charged nine columns for the repetition on a line whose scarcest resource is
+// columns. The chip's JOB, though, was never the word: it is to give the row a
+// fixed left-hand anchor the eye lands on before it reads anything. Dropping
+// the chip along with the word (a first pass at this did) threw that away to
+// solve a problem the word alone had.
+//
+// So: chip kept, contents replaced. The reversed row still colours by max
+// severity, and the chip still inverts that pair.
 //
 // # What the line says
 //
-// ONE open incident — its code, then its summary:
+// ONE open incident — the code in the chip, then its summary:
 //
-//	WARN-0004 job scheduling row could not be created          Run eeh
+//	[ WARN-0004 ] job scheduling row could not be created       Run eeh
 //
-// MORE THAN ONE — a severity tally in glyphs, then the distinct codes, most
-// severe first:
+// MORE THAN ONE — a severity tally in glyphs in the chip, then the distinct
+// codes, most severe first:
 //
-//	✕2 ⚠1  ERR-0002 ERR-0011 WARN-0004                         Run eeh
+//	[ ✕2 ⚠1 ] ERR-0002 ERR-0011 WARN-0004                       Run eeh
 //
 // and no summary. With several incidents open, naming one summary reads as the
 // whole story when it is a fraction of it; the codes say what KINDS of thing are
 // wrong, which is the question a one-line notification can actually answer.
+//
+// The tally takes the chip in that case for the same reason the code takes it in
+// the first: the chip holds whatever the row's leftmost, most-compressed
+// statement of severity is, and with several open that is the tally.
 //
 // Duplicate codes collapse — the tally already carries the count.
 
@@ -89,12 +98,15 @@ import (
 // are fixed points in a standard cube — index 220 is the same gold everywhere.
 //
 // The WHOLE row is reversed, so the line reads as a bar rather than as a colored
-// word floating in ordinary text. There used to be a second, inverted pair for
-// the severity chip; the chip is gone (E-2148) and so is the pair.
+// word floating in ordinary text. The chip then inverts the row's own pair,
+// which delineates it without introducing a third color that would have to be
+// legible against both.
 const (
-	rowError   = "\033[48;5;160;38;5;231m" // white on red
-	rowWarning = "\033[48;5;220;38;5;16m"  // black on gold
-	rowReset   = "\033[0m"
+	rowError    = "\033[48;5;160;38;5;231m" // white on red
+	chipError   = "\033[48;5;231;38;5;160m" // red on white
+	rowWarning  = "\033[48;5;220;38;5;16m"  // black on gold
+	chipWarning = "\033[48;5;16;38;5;220m"  // gold on black
+	rowReset    = "\033[0m"
 )
 
 // Severity glyphs for the multi-incident tally.
@@ -199,9 +211,12 @@ end:
 // sheds from the right — see rowText — and below that the row renders nothing
 // at all. A blank reversed line would cost the same space and say nothing.
 func rowLine(overview faults.Overview, cols int, color bool) (line string) {
-	var text string
+	var chip string
+	var rest string
 	var hint string
 	var width int
+	var chipWidth int
+	var avail int
 	var budget int
 	var pad int
 
@@ -210,9 +225,35 @@ func rowLine(overview faults.Overview, cols int, color bool) (line string) {
 		goto end
 	}
 
+	chip = chipText(overview)
+	if chip == "" {
+		goto end
+	}
+	chipWidth = runewidth.StringWidth(chip)
+
+	// No room for the padded chip plus anything beside it: fall back to the
+	// chip unpadded. It either fits whole or the row renders nothing — a
+	// truncated code ("WARN-00…") is not an identifier, and an identifier is
+	// the whole of what this chip is for.
+	if chipWidth+1 >= width {
+		chip = strings.TrimSpace(chip)
+		if runewidth.StringWidth(chip) > width {
+			goto end
+		}
+		line = chip
+		if color {
+			line = chipStyle(overview.Max) + chip + rowReset
+		}
+		goto end
+	}
+
+	// Columns left for the text and the hint, after the chip and the space
+	// following it.
+	avail = width - chipWidth - 1
+
 	hint = Hint
-	budget = textBudget(width, hint)
-	if budget == width {
+	budget = textBudget(avail, hint)
+	if budget == avail {
 		// textBudget kept the whole span for the text, which is how it reports
 		// that the hint does not fit.
 		//
@@ -224,113 +265,95 @@ func rowLine(overview faults.Overview, cols int, color bool) (line string) {
 		// is the opposite of "the hint goes first".
 		hint = ""
 	}
-	text = rowText(overview, budget)
-	if text == "" {
-		goto end
-	}
+	rest = restText(overview, budget)
 
-	pad = width - runewidth.StringWidth(text) - runewidth.StringWidth(hint)
+	pad = avail - runewidth.StringWidth(rest) - runewidth.StringWidth(hint)
 	if pad < 0 {
 		pad = 0
 	}
 
 	if !color {
-		line = strings.TrimRight(text+strings.Repeat(" ", pad)+hint, " ")
+		line = strings.TrimRight(chip+" "+rest+strings.Repeat(" ", pad)+hint, " ")
 		goto end
 	}
 
-	line = rowStyle(overview.Max) + text + strings.Repeat(" ", pad) + hint + rowReset
+	line = rowStyle(overview.Max) +
+		chipStyle(overview.Max) + chip + rowReset +
+		rowStyle(overview.Max) + " " + rest + strings.Repeat(" ", pad) + hint +
+		rowReset
 
 end:
 	return line
 }
 
-// rowText is the incident text, fitted into budget columns. It returns "" when
-// nothing legible fits, which is rowLine's signal to render no row at all.
+// chipText is the inverted block at the head of the row, padded by a space on
+// each side so the reversed pair has breathing room around its contents.
 //
-// One incident gets its code and summary; several get a glyph tally and the
-// distinct codes. The split is not about space — it is about what a single line
-// can honestly say. With one thing wrong, the summary IS the news. With four,
-// naming one summary reads as the whole story when it is a quarter of it.
-func rowText(overview faults.Overview, budget int) (text string) {
+// One incident: its CODE, which states both what happened and how severe it is.
+// Several: the severity tally, which is the most compressed true statement
+// available once no single code describes the situation.
+//
+// Never truncated, at any width — see rowLine's narrow branch. Returns "" only
+// for an empty overview, which Render has already declined to draw.
+func chipText(overview faults.Overview) (chip string) {
+	if overview.Total == 1 && overview.Latest != nil {
+		chip = overview.Latest.Code
+		goto end
+	}
+	chip = severityTally(overview)
+
+end:
+	if chip == "" {
+		goto done
+	}
+	chip = " " + chip + " "
+
+done:
+	return chip
+}
+
+// restText is what sits beside the chip, fitted into budget columns: the
+// summary when one incident is open, the distinct codes when several are.
+//
+// The split is not about space — it is about what a single line can honestly
+// say. With one thing wrong, the summary IS the news. With four, naming one
+// summary reads as the whole story when it is a quarter of it.
+//
+// Returns "" when nothing fits, which is not a failure: the chip alone is a
+// legitimate row, and at a narrow width it is the only honest one.
+func restText(overview faults.Overview, budget int) (text string) {
 	if budget < 1 {
 		goto end
 	}
 	if overview.Total == 1 && overview.Latest != nil {
-		text = singleText(*overview.Latest, budget)
+		text = runewidth.Truncate(liveview.Collapse(overview.Latest.Summary), budget, "…")
+		if runewidth.StringWidth(text) < minSummaryFragment {
+			// An ellipsis and a syllable is not a summary; it is debris in the
+			// space the chip already used well.
+			text = ""
+		}
 		goto end
 	}
-	text = multiText(overview, budget)
+	text = fitCodes(overview.Codes, budget)
 
 end:
 	return text
 }
 
-// minSummaryFragment is the shortest summary tail worth printing beside a code.
-//
-// Below it the summary has stopped being a summary: "j…" tells a reader nothing
-// the code did not, while costing the columns that would have gone to nothing
-// else. The code alone is the better row.
+// minSummaryFragment is the shortest summary tail worth printing beside the
+// chip. Below it the summary has stopped being a summary: "j…" tells a reader
+// nothing the code did not, while costing the columns that would have gone to
+// nothing else.
 const minSummaryFragment = 6
 
-// singleText renders the one-incident row: code, then as much of the summary as
-// fits.
-//
-// The code is never truncated. A code is an identifier — it is looked up, typed
-// into `errors show`, and pasted into a bug report — and "WARN-00…" serves none
-// of those, so a budget too narrow for the whole code renders no row rather than
-// a code-shaped thing that is not one.
-func singleText(incident faults.Incident, budget int) (text string) {
-	var codeWidth int
-	var left int
-
-	codeWidth = runewidth.StringWidth(incident.Code)
-	if codeWidth > budget {
-		goto end
+// chipStyle inverts rowStyle, so the chip reads as a distinct block within the
+// bar.
+func chipStyle(severity faults.Severity) (style string) {
+	style = chipWarning
+	if severity == faults.SeverityError {
+		style = chipError
 	}
-	text = incident.Code
-
-	left = budget - codeWidth - 1
-	if left < minSummaryFragment {
-		goto end
-	}
-	text += " " + runewidth.Truncate(liveview.Collapse(incident.Summary), left, "…")
-
-end:
-	return text
-}
-
-// multiText renders the several-incidents row: the severity tally, then the
-// distinct codes.
-//
-// Degradation is by whole units, never by cutting one in half: the codes shed
-// from the right into "+N more", and below that the tally stands alone. The
-// tally is the last thing to go because it is the one part that is still true
-// at any width — "two errors and a warning are open" needs no room to be
-// understood.
-func multiText(overview faults.Overview, budget int) (text string) {
-	var tally string
-	var codes string
-	var left int
-
-	tally = severityTally(overview)
-	if tally == "" || runewidth.StringWidth(tally) > budget {
-		goto end
-	}
-	text = tally
-
-	left = budget - runewidth.StringWidth(tally) - 2
-	if left < 1 {
-		goto end
-	}
-	codes = fitCodes(overview.Codes, left)
-	if codes == "" {
-		goto end
-	}
-	text += "  " + codes
-
-end:
-	return text
+	return style
 }
 
 // severityTally renders the per-severity counts as glyphs, most severe first:

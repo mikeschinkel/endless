@@ -62,14 +62,15 @@ nothing.
 open incidents exist — max severity wins, `error` outranks `warning`:
 
 ```
-WARN-0004 job scheduling row could not be created           Run eeh
-✕2 ⚠1  ERR-0002 ERR-0011 WARN-0004                          Run eeh
+[ WARN-0004 ] job scheduling row could not be created       Run eeh
+[ ✕2 ⚠1 ] ERR-0002 ERR-0011 WARN-0004                       Run eeh
 ```
 
-One open incident gets its code and summary; several get a severity tally in
-glyphs and then the distinct codes, most severe first. The row carries no
-severity *word* — the code says it — and the colour of the whole row carries the
-highest severity open.
+An inverted chip on the left, then text, then `Run eeh`. One open incident puts
+its **code** in the chip and its summary beside it; several put a severity
+**tally** in glyphs there and then the distinct codes, most severe first. The
+chip carries no severity *word* — the code says it — and the colour of the whole
+row carries the highest severity open.
 
 Two behaviors worth knowing:
 

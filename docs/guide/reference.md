@@ -159,18 +159,18 @@ endless errors list --db sandbox    # this worktree's throwaway copy
 
 Outside a worktree there is only one database and no flag is needed. `endless-go session-status` takes `--cols N`, which renders the fault row at any width without resizing anything.
 
-The fault row is one line, and what it says depends on how much is wrong:
+The fault row is one line: an inverted **chip** on the left, then text, then `Run eeh` right-aligned. What the chip holds depends on how much is wrong:
 
 ```
-WARN-0004 job scheduling row could not be created           Run eeh
-✕2 ⚠1  ERR-0002 ERR-0011 WARN-0004                          Run eeh
+[ WARN-0004 ] job scheduling row could not be created       Run eeh
+[ ✕2 ⚠1 ] ERR-0002 ERR-0011 WARN-0004                       Run eeh
 ```
 
-One open incident gets its code and summary. Several get a severity tally in glyphs and then the distinct codes, most severe first — no summary, because naming one summary while four things are broken reads as the whole story when it is a quarter of it. Duplicate codes collapse; the tally already carries the count.
+One open incident puts its **code** in the chip and its summary beside it. Several put a severity **tally** in glyphs there and then the distinct codes, most severe first — no summary, because naming one summary while four things are broken reads as the whole story when it is a quarter of it. Duplicate codes collapse; the tally already carries the count.
 
-There is no severity word on the row: `WARN-0004` is a warning because it is spelled that way, so a chip reading ` WARNING ` beside it would cost nine columns to say the same thing twice — taken from the summary, which is the part that was being cut off. The colour stays: the whole row is painted in the highest open severity's pair.
+The chip used to read ` WARNING ` or ` ERROR   `. That word became redundant the moment codes carried severity — `WARN-0004` is a warning because it is spelled that way — so it cost nine columns to say one thing twice, taken from the summary, which is the part being cut off. The chip's *slot* is not redundant: it is the fixed left-hand anchor your eye lands on before reading anything, so the code moved into it rather than the chip going away. The colour stays too — the whole row is painted in the highest open severity's pair, and the chip inverts it.
 
-As the terminal narrows it degrades in a fixed order — the hint goes first, then the codes shed into `+N more` (never half a code, which would be useless to look up), then the tally alone, then nothing. `eeh` is the shell helper for `errors list` (see **Shell helpers** in `endless guide orchestration`), and `errors list` closes by naming `errors clear` — the fault row has no room to spell out the dismissal, so the command it points at does.
+As the terminal narrows it degrades in a fixed order — the hint goes first, then the summary or the codes give way (codes shed into `+N more`, never half a code, which would be useless to look up), then the chip alone, then nothing. The chip is never truncated: a code is an identifier you look up and paste, and `WARN-00…` is not one. `eeh` is the shell helper for `errors list` (see **Shell helpers** in `endless guide orchestration`), and `errors list` closes by naming `errors clear` — the fault row has no room to spell out the dismissal, so the command it points at does.
 
 Three behaviors are worth knowing before you rely on this:
 

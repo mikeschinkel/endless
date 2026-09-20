@@ -226,6 +226,92 @@ func TestRowLine_StillColorsByMaxSeverity(t *testing.T) {
 	}
 }
 
+// --- E-2148 second pass: the chip keeps its slot, the code takes its place ---
+//
+// The first pass dropped the chip along with the severity word it held. That
+// threw away the row's fixed left-hand anchor to solve a problem the WORD alone
+// had — and left the code as plain text on the bar, indistinguishable from the
+// summary beside it.
+
+func TestRowLine_PutsTheCodeInTheChip(t *testing.T) {
+	overview := faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")})
+
+	line := rowLine(overview, 90, true)
+
+	// The chip is the inverted pair. Finding the code inside it is the whole
+	// assertion: on the bar it would carry the ROW's pair instead.
+	chip := chipStyle(faults.SeverityWarning) + " WARN-0004 " + rowReset
+	if !strings.Contains(line, chip) {
+		t.Errorf("the code is not rendered as an inverted chip:\n%q\nwant to contain:\n%q",
+			line, chip)
+	}
+	// And the summary is NOT in it.
+	if strings.Contains(chip, "job scheduling") {
+		t.Errorf("the chip swallowed the summary:\n%q", line)
+	}
+}
+
+func TestRowLine_PutsTheTallyInTheChipWhenSeveralAreOpen(t *testing.T) {
+	overview := faults.Summarize([]faults.Incident{
+		errored("2026-08-10T10:00:00"),
+		warned("2026-08-10T09:49:09"),
+	})
+
+	line := rowLine(overview, 90, true)
+
+	// With several open no single code describes the situation, so the chip
+	// holds the most compressed statement that is still true.
+	chip := chipStyle(faults.SeverityError) + " " + glyphError + "1 " + glyphWarning + "1 " + rowReset
+	if !strings.Contains(line, chip) {
+		t.Errorf("the tally is not rendered as an inverted chip:\n%q\nwant to contain:\n%q",
+			line, chip)
+	}
+}
+
+func TestRowLine_NeverTruncatesTheChip(t *testing.T) {
+	shapes := map[string][]string{
+		"one incident": {"WARN-0004"},
+		"several":      {glyphError + "1", glyphWarning + "1"},
+	}
+	overviews := map[string]faults.Overview{
+		"one incident": faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")}),
+		"several": faults.Summarize([]faults.Incident{
+			errored("2026-08-10T10:00:00"), warned("2026-08-10T09:49:09"),
+		}),
+	}
+
+	// A code is an identifier — looked up, typed into `errors show`, pasted into
+	// a bug report — and a tally cut in half misreports how much is wrong. So
+	// the chip is whole or the row does not render.
+	for name, overview := range overviews {
+		for _, cols := range rowWidths() {
+			line := rowLine(overview, cols, false)
+			if line == "" {
+				continue
+			}
+			for _, want := range shapes[name] {
+				if !strings.Contains(line, want) {
+					t.Fatalf("%s/cols=%d: the chip lost %q:\n%q", name, cols, want, line)
+				}
+			}
+		}
+	}
+}
+
+func TestRowLine_KeepsTheChipWhenNothingElseFits(t *testing.T) {
+	overview := faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")})
+
+	// At exactly the bare code's width the chip stands alone, unpadded. Below
+	// it, nothing — a sliver of an identifier is not an identifier.
+	bare := "WARN-0004"
+	if got := rowLine(overview, runewidth.StringWidth(bare)+1, false); got != bare {
+		t.Errorf("at the bare chip's width the row is %q, want %q", got, bare)
+	}
+	if got := rowLine(overview, runewidth.StringWidth(bare), false); got != "" {
+		t.Errorf("below the bare chip's width the row is %q, want empty", got)
+	}
+}
+
 func TestRowLine_UsesThemeIndependentColors(t *testing.T) {
 	overview := faults.Summarize([]faults.Incident{warned("2026-08-10T09:49:09")})
 

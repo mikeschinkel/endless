@@ -522,28 +522,44 @@ func statusText(incident faults.Incident) (text string) {
 // listing displayed row 7.
 func runShow(args []string) {
 	var id int64
+	var flags []string
+	var positionals []string
+
+	// Split BEFORE parsing. Go's flag package stops at the first non-flag
+	// argument, so `show 7 --detail` — the id first, which is the spelling this
+	// command documents and the one the Python CLI emits — left `--detail`
+	// unparsed and sitting in Args() as a second positional. The result was
+	// that the exact invocation the listing's footer tells a user to type
+	// failed every time with "one id at a time" (E-2148).
+	//
+	// jobs_cmd.errors_clear has carried a comment about this hazard since
+	// E-1960 and orders its own argv around it. The lesson did not travel the
+	// eighteen inches to this function, so the split happens here instead of
+	// being a rule each caller has to remember.
+	flags, positionals = splitArgs(args)
 
 	fs := flag.NewFlagSet("show", flag.ExitOnError)
 	detail := fs.Bool("detail", false, "print each occurrence's full captured detail")
 	idFlag := fs.Int64("id", 0, "the error to show (positional `<id>` is the documented spelling)")
 	fs.Usage = func() { showUsage(os.Stderr) }
-	if err := fs.Parse(args); err != nil {
+	if err := fs.Parse(flags); err != nil {
+		os.Exit(2)
+	}
+
+	if len(positionals) > 1 {
+		fmt.Fprintln(os.Stderr,
+			"endless-go errors: show: one id at a time; `errors list` shows them together")
 		os.Exit(2)
 	}
 
 	id = *idFlag
-	if fs.NArg() > 0 {
-		parsed, err := strconv.ParseInt(fs.Arg(0), 10, 64)
+	if len(positionals) == 1 {
+		parsed, err := strconv.ParseInt(positionals[0], 10, 64)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "endless-go errors: show: %q is not an error id\n", fs.Arg(0))
+			fmt.Fprintf(os.Stderr, "endless-go errors: show: %q is not an error id\n", positionals[0])
 			os.Exit(2)
 		}
 		id = parsed
-	}
-	if fs.NArg() > 1 {
-		fmt.Fprintln(os.Stderr,
-			"endless-go errors: show: one id at a time; `errors list` shows them together")
-		os.Exit(2)
 	}
 	if id <= 0 {
 		showUsage(os.Stderr)
@@ -551,6 +567,44 @@ func runShow(args []string) {
 	}
 
 	showOne(id, *detail)
+}
+
+// splitArgs separates flags from positionals so a flag may appear on either
+// side of an id.
+//
+// A bare "--" ends flag parsing, as everywhere else; everything after it is
+// positional even if it starts with a dash. A flag that takes a value in the
+// separated form (`--id 7`) keeps its value with it — the value is consumed
+// here rather than left to look like a positional, which is why this walks the
+// slice instead of filtering it.
+//
+// Only --id takes a value on this command, so the set is named rather than
+// discovered: asking the FlagSet would mean parsing before the split, which is
+// the ordering problem this function exists to remove.
+func splitArgs(args []string) (flags, positionals []string) {
+	takesValue := map[string]bool{"-id": true, "--id": true}
+
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+
+		if arg == "--" {
+			positionals = append(positionals, args[i+1:]...)
+			break
+		}
+		if !strings.HasPrefix(arg, "-") || arg == "-" {
+			positionals = append(positionals, arg)
+			continue
+		}
+
+		flags = append(flags, arg)
+		// `--id=7` carries its own value; `--id 7` takes the next token.
+		if takesValue[arg] && i+1 < len(args) {
+			i++
+			flags = append(flags, args[i])
+		}
+	}
+
+	return flags, positionals
 }
 
 // showUsage is `show`'s own usage, which names `list` because reaching it

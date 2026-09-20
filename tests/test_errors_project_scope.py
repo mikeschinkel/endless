@@ -71,9 +71,19 @@ def test_show_takes_an_id_positionally_and_no_scope(captured):
     assert captured == [("errors", ["show", "7"])]
 
 
-def test_show_passes_detail_through(captured):
+def test_show_puts_the_flag_before_the_id(captured):
+    """Go's flag package stops parsing at the first non-flag argument.
+
+    E-2148 shipped this emitting ``show 7 --detail``, which left --detail
+    unparsed as a second positional and made the exact spelling the listing's
+    footer teaches fail every time. The Go side splits args itself now, so
+    either order works there — this keeps the safe order anyway, which is the
+    rule errors_clear has followed since E-1960.
+    """
     jobs_cmd.errors_show(7, True)
-    assert captured == [("errors", ["show", "7", "--detail"])]
+    subcommand, args = captured[0]
+    assert args == ["show", "--detail", "7"]
+    assert args.index("--detail") < args.index("7")
 
 
 def test_clear_passes_no_scope_flag_by_default(captured):
