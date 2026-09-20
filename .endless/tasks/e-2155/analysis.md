@@ -113,3 +113,19 @@ table the TSV is imported there and the file goes away — noted on E-1531.
 
 
 
+
+### Rows whose code has since moved
+
+Checked against main after E-2142 landed: 1087 of the 1136 rows still resolve.
+The rest say so in the `notes` column, because E-2159 reads this file row by row
+and should not hunt for code that is not there:
+
+- **RETIRED (36)** — the surface itself is gone, so there is nothing to convert
+  and the row is dropped. E-2142 removed the curated next list, `task import` and
+  session ordering; E-1964 moved sandboxes into the worktree.
+- **RELOCATE (13)** — a file or symbol was renamed or moved since the audit. The
+  message is still real; find it by its text.
+
+This is the cost of anchoring to code at all, and it is why the anchor is a file
+plus a symbol rather than a line: a rename leaves a row findable, where a line
+number would leave it silently wrong.
