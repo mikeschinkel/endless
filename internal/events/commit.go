@@ -20,6 +20,7 @@ import (
 	"os"
 	"os/exec"
 	"path"
+	"path/filepath"
 	"strings"
 	"time"
 )
@@ -88,10 +89,58 @@ func CommitDoc(projectRoot, relPath, subject string) error {
 // write, which is why the two are separate entry points rather than one with a
 // flag.
 func CommitDocPaths(projectRoot string, relPaths []string, subject string) error {
-	if len(relPaths) == 0 {
+	stageable, err := stageablePaths(projectRoot, relPaths)
+	if err != nil {
+		return err
+	}
+	if len(stageable) == 0 {
 		return nil
 	}
-	return commitPaths(projectRoot, relPaths, subject, ".endless/**")
+	return commitPaths(projectRoot, stageable, subject, ".endless/**")
+}
+
+// stageablePaths drops paths `git add` would refuse, keeping those it can act
+// on: a path present in the working tree (an add or a modification), or one the
+// index already knows (a deletion to record).
+//
+// A path that is NEITHER is a no-op by definition — there is nothing to add and
+// nothing to remove — but `git add` does not treat it that way. It fails the
+// whole invocation with "pathspec ... did not match any files", which fails the
+// commit, which fails the sweep, on every pass, forever.
+//
+// The sweep produces exactly that path. Relocating a mirror records both the old
+// and the new name so the move is staged as a move; when the old name was
+// UNTRACKED, moving it leaves a name git has never heard of and no longer sees.
+//
+// That case is invisible in Endless's own repository, where every mirror is
+// committed, and ordinary anywhere else: a project that has not committed its
+// `.endless/` tree yet, or does not commit it at all, has untracked mirrors by
+// default. WARN-0001 incident 1534 was this, on the first real sweep of a
+// project that was not Endless.
+func stageablePaths(projectRoot string, relPaths []string) ([]string, error) {
+	tracked, err := runGitOutput(projectRoot,
+		append([]string{"ls-files", "-z", "--"}, relPaths...)...)
+	if err != nil {
+		return nil, fmt.Errorf("list tracked paths: %w", err)
+	}
+	known := make(map[string]struct{})
+	for _, p := range strings.Split(tracked, "\x00") {
+		if p != "" {
+			known[p] = struct{}{}
+		}
+	}
+
+	out := make([]string, 0, len(relPaths))
+	for _, rel := range relPaths {
+		if _, isTracked := known[rel]; isTracked {
+			out = append(out, rel)
+			continue
+		}
+		if _, serr := os.Stat(filepath.Join(projectRoot, rel)); serr == nil {
+			out = append(out, rel)
+		}
+	}
+	return out, nil
 }
 
 // commitPaths makes one commit containing exactly the named paths.

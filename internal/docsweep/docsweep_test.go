@@ -393,3 +393,43 @@ func TestSweepIsIdempotent(t *testing.T) {
 		t.Errorf("working tree dirty after two passes:\n%s", got)
 	}
 }
+
+// TestAnUntrackedLegacyMirrorRelocatesWithoutFailing is WARN-0001 incident 1534,
+// at the level it actually happened.
+//
+// Every fixture above commits its legacy mirrors, which is Endless's own
+// situation and not the general one. A project that has not committed its
+// `.endless/` tree — the default for a project that just started using Endless —
+// has UNTRACKED mirrors. Relocating one leaves an old path git has never heard
+// of, and staging it used to fail the commit, the sweep, and every later pass.
+func TestAnUntrackedLegacyMirrorRelocatesWithoutFailing(t *testing.T) {
+	root := newRepo(t)
+	db := newDB(t, root)
+	seedTask(t, db, 1173, "PLAN\n", "", "")
+	// Written, deliberately NOT committed.
+	write(t, filepath.Join(root, ".endless/plans/E-1173.md"), "PLAN\n")
+
+	result := sweep(t, root)
+
+	if result.Relocated != 1 {
+		t.Errorf("Relocated = %d, want 1 (%s)", result.Relocated, result)
+	}
+	if got := read(t, filepath.Join(root, ".endless/tasks/e-1173/plan.md")); got != "PLAN\n" {
+		t.Errorf("plan.md = %q", got)
+	}
+	if exists(filepath.Join(root, ".endless/plans/E-1173.md")) {
+		t.Error("the legacy copy survived")
+	}
+	// And it is committed, not merely moved on disk.
+	names := mustGit(t, root, "show", "--name-only", "--format=", "HEAD")
+	if !strings.Contains(names, ".endless/tasks/e-1173/plan.md") {
+		t.Errorf("the relocated mirror was not committed; HEAD carries:\n%s", names)
+	}
+
+	// The pass must also be idempotent from this state — the failure it replaces
+	// recurred on every tick.
+	second := sweep(t, root)
+	if second.Total() != 0 {
+		t.Errorf("second pass touched %d path(s) (%s); want none", second.Total(), second)
+	}
+}

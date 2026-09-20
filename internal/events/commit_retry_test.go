@@ -185,3 +185,103 @@ func TestCommitDocPathsIsANoOpForNothing(t *testing.T) {
 		t.Errorf("HEAD moved for an empty path list")
 	}
 }
+
+// E-2137, WARN-0001 incident 1534: the doc-mirror sweep failed on every pass in
+// a project whose mirrors were never committed.
+//
+// Relocating a mirror stages both names so git records a move. When the OLD name
+// was untracked, moving it leaves a path that is neither in the working tree nor
+// in the index — a no-op by definition, which `git add` nonetheless treats as a
+// fatal unmatched pathspec, failing the commit and the whole sweep.
+//
+// Invisible in Endless's own repository, where every mirror is committed. The
+// default anywhere else.
+
+func TestCommitDocPathsSkipsAPathThatWasNeverTracked(t *testing.T) {
+	root, _ := initRepo(t)
+
+	// The shape the sweep produces: an untracked legacy mirror, relocated.
+	legacy := ".endless/plans/E-1173.md"
+	consolidated := ".endless/tasks/e-1173/plan.md"
+	writeAt(t, root, legacy, "body\n")
+	moveAt(t, root, legacy, consolidated)
+
+	if err := CommitDocPaths(root, []string{legacy, consolidated},
+		"Endless: consolidate document mirrors under .endless/tasks/"); err != nil {
+		t.Fatalf("CommitDocPaths over a never-tracked legacy path: %v", err)
+	}
+
+	names := mustGit(t, root, "show", "--name-only", "--format=", "HEAD")
+	if !strings.Contains(names, consolidated) {
+		t.Errorf("the relocated mirror was not committed; commit carries:\n%s", names)
+	}
+	// Scoped to the mirror paths: initRepo leaves an untracked ledger dir, which
+	// is the fixture's, not this commit's business.
+	if got := mustGit(t, root, "status", "--porcelain", "--", ".endless/plans", ".endless/tasks"); got != "" {
+		t.Errorf("mirror paths dirty after the sweep:\n%s", got)
+	}
+}
+
+// The other half: when the old name WAS tracked, its deletion must still be
+// staged, or the commit records an add and leaves the original behind — which
+// would be a duplicate, not a move.
+func TestCommitDocPathsStagesTheDeletionOfATrackedOriginal(t *testing.T) {
+	root, _ := initRepo(t)
+
+	legacy := ".endless/plans/E-1173.md"
+	consolidated := ".endless/tasks/e-1173/plan.md"
+	writeAt(t, root, legacy, "body\n")
+	mustGit(t, root, "add", legacy)
+	mustGit(t, root, "commit", "-q", "-m", "the legacy mirror, committed")
+
+	moveAt(t, root, legacy, consolidated)
+
+	if err := CommitDocPaths(root, []string{legacy, consolidated},
+		"Endless: consolidate document mirrors under .endless/tasks/"); err != nil {
+		t.Fatalf("CommitDocPaths: %v", err)
+	}
+
+	if err := runGit(root, "cat-file", "-e", "HEAD:"+legacy); err == nil {
+		t.Error("the legacy path survives at HEAD; the move was recorded as a copy")
+	}
+	if got := mustGit(t, root, "status", "--porcelain", "--", ".endless/plans", ".endless/tasks"); got != "" {
+		t.Errorf("mirror paths dirty:\n%s", got)
+	}
+}
+
+// An all-no-op list must not create an empty commit on main every pass.
+func TestCommitDocPathsCommitsNothingWhenNoPathIsStageable(t *testing.T) {
+	root, _ := initRepo(t)
+	before := mustGit(t, root, "rev-parse", "HEAD")
+
+	if err := CommitDocPaths(root, []string{".endless/plans/E-9999.md"},
+		"Endless: consolidate document mirrors under .endless/tasks/"); err != nil {
+		t.Fatalf("CommitDocPaths over a path that does not exist: %v", err)
+	}
+
+	if after := mustGit(t, root, "rev-parse", "HEAD"); after != before {
+		t.Error("HEAD moved for a list git could not stage anything from")
+	}
+}
+
+func writeAt(t *testing.T, root, rel, content string) {
+	t.Helper()
+	abs := filepath.Join(root, rel)
+	if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(abs, []byte(content), 0o644); err != nil {
+		t.Fatalf("write %s: %v", rel, err)
+	}
+}
+
+func moveAt(t *testing.T, root, from, to string) {
+	t.Helper()
+	dst := filepath.Join(root, to)
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.Rename(filepath.Join(root, from), dst); err != nil {
+		t.Fatalf("rename %s -> %s: %v", from, to, err)
+	}
+}
