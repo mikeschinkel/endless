@@ -6530,3 +6530,11 @@ Second lesson from the same fix: 'report work on every pass' is its own defect. 
 
 Third, unrelated to the feature but worth keeping: tests/test_db_restore.py treated holders_of()'s None ('could not determine') as 'nothing open', guarded by whether lsof EXISTS rather than whether it ANSWERED. On a loaded machine lsof exceeded its 15s timeout and the test accused working code. A probe that can time out has three outcomes, not two, and a test must skip on the third rather than assert.
 - **Project**: endless
+
+### [2026-09-20] Never offer to release or drop a worktree — reaping is the only sanctioned path, and suggesting otherwise is actively harmful
+Reorienting Mike after a tmux crash, I closed by saying the landed worktree 'can be released, but reaping handles that on its own', and then repeated it as an optional item. Mike: 'That is NOT an optional item. Worktrees should ONLY EVER be reaped, NEVER released. To suggest this is ACTIVELY HARMFUL.'
+
+I treated release and reap as two routes to the same end, with reaping merely the more convenient one. They are not equivalent. Reaping is the only sanctioned path; a manual release is a destructive act dressed up as tidying, and naming it as an option invites someone to take it.
+
+Rule: never propose releasing or dropping a worktree, not even as an aside, a nicety, or a thing the user 'could' do. A landed worktree needs nothing from me — say nothing about it at all.
+- **Project**: endless
