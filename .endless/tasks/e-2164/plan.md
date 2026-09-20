@@ -34,8 +34,12 @@ Start from the session status rows, then:
   blocker is phase `later` or in flight. An in-flight blocker renders with its
   id **dim** — it is already being handled, and the line exists to say the
   dependent is not yet available.
-- A task with no blocking relation to anything in the resulting set does not
-  appear at all. An empty graph renders nothing — no header, no blank line.
+- A task earns a place by having ANY edge the graph draws: a blocking relation,
+  an advisory `precedes`, or a conflict. Conflicts count — a task whose only
+  edge is `<>` still appears, or the warning not to run it alongside another
+  task silently disappears, which is the opposite of what conflicts are for.
+- A task with no edge of any kind does not appear. An empty graph renders
+  nothing — no header, no blank line.
 - Blockers in a terminal status are already filtered out by the edge query and
   stay filtered: they impose no order. `unverified` and `unreviewed` blockers DO
   appear, because they still block (the blocking semantics in the guide).
@@ -163,6 +167,15 @@ no relation between them.
   reachable from `--help`: a reader who has never seen `=>`, `->`, `|`, `<>`, a
   leading-`<>` set line, or a dim id must not have to infer them.
 
+## Sequencing
+
+Lands after E-2159 (Mike, 2026-09-19): the sweep converts every refusal site,
+and landing it first means this task's new output is born classified rather than
+converted afterwards. Advisory, not blocking — E-2164 could land first and
+nothing would break. It is recorded here in prose only because `precedes`, the
+relation that would hold it, is what this task adds; that edge is the feature's
+first real use.
+
 ## Verification
 
 - A session whose status has a task blocked by an off-list task renders that
@@ -173,8 +186,10 @@ no relation between them.
 - A task with two blockers shows both, on two lines, with the repeat dimmed.
 - An in-flight blocker renders dim; a `later` blocker renders normally; a
   terminal blocker does not render.
-- A task with no blocking relation never appears; a session with no blocking
-  relations at all renders no graph line and no blank.
+- A task with no edge of any kind never appears; a session with no edges at all
+  renders no graph line and no blank.
+- Two tasks related ONLY by a conflict both appear, and the `<>` line renders —
+  the case that is invisible if conflicts do not qualify a task for inclusion.
 - Two tasks whose worktrees touch a common path render `<>`; adding a blocking
   relation between them replaces the `<>` with an ordering line.
 - Three tasks that mutually conflict render as ONE set line, not three pairwise
