@@ -1,0 +1,5 @@
+Obsoleted 2026-09-20. The verb's entire mechanism was 'regenerates the companion file from current TMUX_PANE + CLAUDE_CODE_SESSION_ID'. Session companion files no longer exist — the `.endless/sessions/` path was pruned, and register.py's gitignore comment records that new projects must never scaffold it. A verb defined as repairing a file that cannot be missing because it is never written has no remaining premise.
+
+Never shipped (status was `submitted`), so obsolete is legal here rather than the `replaced_by` relation the guide requires for work that already landed.
+
+NOT obsolete because something else covers it: the recovery need it was filed for — a live session whose window identity is wrong — is real and is now the subject of the tmux-crash recovery discussion on E-1983. What died is this task's mechanism, not the problem class.
