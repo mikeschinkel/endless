@@ -89,9 +89,37 @@ Both found while sweeping the vocabulary, both cheaper than a task row:
   - `internal/monitor/sandboxpath.go`'s doc claimed Python threads
     `--config-dir` to Go, untrue since E-1668.
 
-## Not done, deliberately
+## Second pass: the inventory this landing falsified
 
-`docs/research-2026-09-17-refusal-inventory.tsv` row 578 records
-endless-migrate's old relative-path message. It is E-2155's dated research
-artifact (that task is `completed`, and has its own reconciliation pass for rows
-that landings move), so it is left alone rather than retrofitted here.
+Reopened after landing, on Mike's correction. I had reported the stale
+refusal-inventory row and asked whether to file it. ED-1550 rule 2 exempts
+"work still live in the session that landed it" and says to reopen when what
+shipped is WRONG — and a doc is false BECAUSE of this change, which is this
+landing being wrong rather than a new finding on the same subject.
+
+Fixed in `docs/research-2026-09-17-refusal-inventory.tsv`:
+
+  - the relative-path refusal's message, which named `--config-dir` and
+    `XDG_CONFIG_HOME` as the things that failed to resolve;
+  - four sentinels anchored to `internal/monitor/db.go` that this task moved
+    into `internal/dbcontext` (`ErrDBFlagConflict`, `ErrDBFlagNeedsValue`,
+    `ErrDBDirFlagNeedsDir`, `ErrUnknownDBValue`), whose notes also said the
+    print site was endless-go's alone — now both binaries;
+  - two rows ADDED for refusals this task introduced: the retired-`--config-dir`
+    message and endless-migrate's `--db sandbox` refusal. An inventory that
+    records a binary's refusals and omits its newest is wrong the same way a
+    stale row is.
+
+Layer E of the verify suite proves these rows against the source.
+
+### Still not done, deliberately
+
+Row 800's gate refusal is anchored to `resolvedPath`, which does not define it
+— E-2155's symbol-anchoring attributed a package-level var to the function
+above it, and the same off-by-one produced `PinMainDB` on the conflict row.
+That anchor was wrong before this task and is not this task's to fix.
+
+No durable test couples the inventory to the source. Layer E is land-time proof
+for the rows E-2157 owns; a general TSV-vs-source checker would make a dated
+research artifact a test-enforced one, which is a design change for its owner
+to make, not a rider on this fix.
