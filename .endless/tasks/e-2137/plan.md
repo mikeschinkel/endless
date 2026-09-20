@@ -396,3 +396,52 @@ left for it to do; git history holds it if a straggler ever appears.
 The verify suite gains section F, which asserts the verb does not resolve and
 nothing references the module — a retired verb that quietly returns is how a CLI
 accretes.
+
+
+
+
+# Third pass — 2026-09-20: a correct mirror that no one could read
+
+WARN-0001 incident 1534 was fixed in the second pass: the sweep stopped FAILING
+on an untracked legacy mirror. The relocation then succeeded — and the relocated
+file sat untracked through 77 clean passes, in a project that is not Endless.
+
+The repair pass compares content. A mirror whose commit never happened has the
+RIGHT content, so nothing about it differs, so the sweep called the project
+converged while the file existed only on that one filesystem. A mirror exists to
+be readable on a Git host; this one reported itself healthy while not being.
+
+That is the exact failure mode the original plan named — "a failed write warns
+and is repaired later" — and the repair did not cover it, because it was written
+to compare the thing that had not gone wrong.
+
+## What reconcile now does
+
+It asks git which mirrors it knows, once per pass, and stages any whose bytes
+are already correct but which git has never been told about. The file is not
+rewritten: the content is right, and rewriting would churn an mtime for nothing.
+
+Mike settled the question that made this a decision rather than a bug: a mirror
+is not a user-managed file, so it should be tracked.
+
+## The two conditions that keep it quiet
+
+Reporting work on every pass is its own defect, so "adoptable" excludes:
+
+- **tracked** — already committed, nothing to do;
+- **gitignored** — a project that ignores its `.endless/` tree has made a choice
+  Endless does not override with `git add -f`. Such a path can never become
+  tracked, so adopting it forever would have the sweep stage it and the commit
+  layer drop it, in perpetuity.
+
+`events.stageablePaths` learned the same exclusion from the other side: `git add`
+on an explicitly named ignored path fails outright and takes the whole
+invocation with it — the same shape of failure as the unmatched pathspec in
+incident 1534, from the opposite cause.
+
+## Tests
+
+Four, covering both halves in both directions: a correct-but-uncommitted mirror
+is adopted and the pass then goes quiet; an ignored mirror is written for local
+reading, never forced in, and does not re-report every pass; and at the commit
+layer an ignored path is dropped rather than failing the commit.
