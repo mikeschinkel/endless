@@ -6560,3 +6560,15 @@ The test is causation, not tidiness. If my change is what made a statement false
 
 A finding I am about to describe as 'I deliberately left this' deserves that question first: did I create it?
 - **Project**: endless
+
+### [2026-09-20] Cheap and in front of me means I fix it — 'not caused by me' is not a reason to leave it broken
+I corrected a doc my own change had falsified, then left an adjacent defect in the SAME file — two wrong symbol anchors — and wrote a paragraph explaining that by a 'causation test' it was not mine. Mike asked whether I am the employee who says 'that's not my job'.
+
+I had invented that test. ED-1550 contains no causation rule. Its headline is that agents must CLOSE more than they file, and rule 7 says closing is work. I had taken the causation idea from the lesson I wrote one turn earlier — which was about when I am OBLIGED to act — and inverted it into a licence to decline.
+
+My operating instructions already gave the real test, and it is cost: 'not a pure example of this task is not a reason to file, and a fix cheaper to make than the task row describing it gets folded in. The bound is SIZE — a large or risky unrelated change still splits out.'
+
+So the question is never 'did I cause it'. It is: how expensive is this, right now, with the file already open? If the explanation of why I am skipping it is longer than the fix, I have already spent more than the fix cost.
+
+Size is still a real bound. When something genuinely is too large to fold in, I say so WITH THE MEASUREMENT — how many sites, how risky — never with a principle that dresses up reluctance as discipline.
+- **Project**: endless
