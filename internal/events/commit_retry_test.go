@@ -285,3 +285,28 @@ func moveAt(t *testing.T, root, from, to string) {
 		t.Fatalf("rename %s -> %s: %v", from, to, err)
 	}
 }
+
+// A project that gitignores its `.endless/` tree has made a choice. `git add`
+// on an explicitly named ignored path fails ("paths are ignored by one of your
+// .gitignore files") and takes the whole invocation with it — the same shape of
+// failure as an unmatched pathspec, from the opposite cause. Endless drops the
+// path rather than overriding the project with -f.
+func TestCommitDocPathsSkipsAnIgnoredUntrackedPath(t *testing.T) {
+	root, _ := initRepo(t)
+	writeAt(t, root, ".gitignore", ".endless/tasks/\n")
+	mustGit(t, root, "add", ".gitignore")
+	mustGit(t, root, "commit", "-q", "-m", "ignore the task tree")
+
+	ignored := ".endless/tasks/e-1173/plan.md"
+	writeAt(t, root, ignored, "body\n")
+	before := mustGit(t, root, "rev-parse", "HEAD")
+
+	if err := CommitDocPaths(root, []string{ignored},
+		"Endless: reconcile document mirrors"); err != nil {
+		t.Fatalf("CommitDocPaths over an ignored path: %v", err)
+	}
+
+	if after := mustGit(t, root, "rev-parse", "HEAD"); after != before {
+		t.Error("HEAD moved: an ignored path was committed against the project's choice")
+	}
+}

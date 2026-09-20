@@ -433,3 +433,78 @@ func TestAnUntrackedLegacyMirrorRelocatesWithoutFailing(t *testing.T) {
 		t.Errorf("second pass touched %d path(s) (%s); want none", second.Total(), second)
 	}
 }
+
+// TestACorrectButUncommittedMirrorIsAdopted is the residue E-2137's second pass
+// left behind, found by reading a project's tree rather than the job's report.
+//
+// The earlier fix stopped the sweep FAILING on an untracked legacy mirror, so
+// the relocation succeeded — and the relocated file then sat untracked through
+// 77 clean passes. Reconcile compared content, the content was right, and
+// nothing about a missing commit differs from a present one by that test.
+//
+// A mirror exists to be readable on a Git host. One that is correct and
+// uncommitted is not doing its job, and reports itself healthy while not doing
+// it, which is the worst of both.
+func TestACorrectButUncommittedMirrorIsAdopted(t *testing.T) {
+	root := newRepo(t)
+	db := newDB(t, root)
+	seedTask(t, db, 1173, "PLAN\n", "", "")
+	// Right content, at the right path, never committed.
+	write(t, filepath.Join(root, ".endless/tasks/e-1173/plan.md"), "PLAN\n")
+
+	result := sweep(t, root)
+
+	if result.Adopted != 1 {
+		t.Errorf("Adopted = %d, want 1 (%s)", result.Adopted, result)
+	}
+	if result.Rewritten != 0 || result.Created != 0 {
+		t.Errorf("the bytes were already right; nothing should have been written (%s)", result)
+	}
+	if err := runGitIn(root, "cat-file", "-e", "HEAD:.endless/tasks/e-1173/plan.md"); err != nil {
+		t.Error("the mirror is still not committed")
+	}
+	if got := mustGit(t, root, "status", "--porcelain", "--", ".endless/tasks"); got != "" {
+		t.Errorf("mirror paths dirty after the sweep:\n%s", got)
+	}
+
+	// And a converged repository stays quiet: the second pass must find it
+	// tracked and do nothing.
+	second := sweep(t, root)
+	if second.Total() != 0 {
+		t.Errorf("second pass touched %d path(s) (%s); want none", second.Total(), second)
+	}
+}
+
+// A project that has told git to ignore its `.endless/` tree has made a choice.
+// The sweep writes the mirror for local reading and does not override that with
+// `git add -f` — and, critically, does not fail trying.
+func TestAnIgnoredMirrorIsWrittenButNotForcedIntoGit(t *testing.T) {
+	root := newRepo(t)
+	db := newDB(t, root)
+	seedTask(t, db, 1173, "PLAN\n", "", "")
+	write(t, filepath.Join(root, ".gitignore"), ".endless/\n")
+	mustGit(t, root, "add", ".gitignore")
+	mustGit(t, root, "commit", "-q", "-m", "ignore the endless tree")
+
+	result := sweep(t, root)
+
+	if result.Created != 1 {
+		t.Errorf("Created = %d, want 1 — the file is still written (%s)", result.Created, result)
+	}
+	if got := read(t, filepath.Join(root, ".endless/tasks/e-1173/plan.md")); got != "PLAN\n" {
+		t.Errorf("plan.md = %q", got)
+	}
+	if err := runGitIn(root, "cat-file", "-e", "HEAD:.endless/tasks/e-1173/plan.md"); err == nil {
+		t.Error("an ignored mirror was forced into git against the project's choice")
+	}
+
+	second := sweep(t, root)
+	if second.Total() != 0 {
+		t.Errorf("second pass touched %d path(s) (%s); want none", second.Total(), second)
+	}
+}
+
+// runGitIn reports whether a git command succeeds, for existence probes.
+func runGitIn(dir string, args ...string) error {
+	return exec.Command("git", append([]string{"-C", dir}, args...)...).Run()
+}

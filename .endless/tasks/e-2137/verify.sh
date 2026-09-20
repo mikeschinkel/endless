@@ -157,6 +157,12 @@ go_claim ./internal/events/ TestCommitDocPathsStagesTheDeletionOfATrackedOrigina
     "and a TRACKED one still records its deletion, so a move is a move"
 go_claim ./internal/docsweep/ TestAnUntrackedLegacyMirrorRelocatesWithoutFailing \
     "the same, end to end, on the project shape that is not Endless's own"
+go_claim ./internal/docsweep/ TestACorrectButUncommittedMirrorIsAdopted \
+    "a mirror that is correct but was never committed is staged, not called clean"
+go_claim ./internal/docsweep/ TestAnIgnoredMirrorIsWrittenButNotForcedIntoGit \
+    "a gitignored mirror is written for local reading and never forced in with -f"
+go_claim ./internal/events/ TestCommitDocPathsSkipsAnIgnoredUntrackedPath \
+    "and staging one is dropped rather than failing the commit"
 
 # The write path.
 py_claim tests/test_doc_mirror_to_main.py::test_nothing_is_written_into_the_worktree \

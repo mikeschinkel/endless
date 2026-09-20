@@ -130,10 +130,36 @@ func stageablePaths(projectRoot string, relPaths []string) ([]string, error) {
 		}
 	}
 
+	// A path the project has told git to ignore is the other thing `git add`
+	// refuses outright ("paths are ignored by one of your .gitignore files"),
+	// and refusing takes the whole invocation with it exactly as an unmatched
+	// pathspec does. Endless does not override that choice with -f: a project
+	// that ignores its `.endless/` tree has said what it wants, and the mirror
+	// still gets written for local reading.
+	//
+	// Only UNTRACKED paths can be ignored in the sense that matters — git
+	// honours tracking over .gitignore — so this list is consulted only after
+	// the tracked check below.
+	ignoredOut, err := runGitOutput(projectRoot,
+		append([]string{"ls-files", "-z", "--others", "--ignored",
+			"--exclude-standard", "--"}, relPaths...)...)
+	if err != nil {
+		return nil, fmt.Errorf("list ignored paths: %w", err)
+	}
+	ignored := make(map[string]struct{})
+	for _, p := range strings.Split(ignoredOut, "\x00") {
+		if p != "" {
+			ignored[p] = struct{}{}
+		}
+	}
+
 	out := make([]string, 0, len(relPaths))
 	for _, rel := range relPaths {
 		if _, isTracked := known[rel]; isTracked {
 			out = append(out, rel)
+			continue
+		}
+		if _, isIgnored := ignored[rel]; isIgnored {
 			continue
 		}
 		if _, serr := os.Stat(filepath.Join(projectRoot, rel)); serr == nil {

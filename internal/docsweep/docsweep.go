@@ -49,6 +49,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -76,18 +77,24 @@ type Result struct {
 	// Superseded is legacy files removed because the consolidated path already
 	// held a file.
 	Superseded int
+
+	// Adopted is mirrors whose bytes were already correct but which git had
+	// never been told about. A mirror exists to be readable on a Git host, so
+	// one that is right and uncommitted is not doing its job — and content
+	// comparison alone can never notice, because nothing about it differs.
+	Adopted int
 }
 
 // Total is how many paths the sweep touched.
 func (r Result) Total() int {
-	return r.Relocated + r.Rewritten + r.Created + r.Superseded
+	return r.Relocated + r.Rewritten + r.Created + r.Superseded + r.Adopted
 }
 
 // String renders a one-line summary for a log or a CLI.
 func (r Result) String() string {
 	return fmt.Sprintf(
-		"%d relocated, %d rewritten, %d created, %d superseded",
-		r.Relocated, r.Rewritten, r.Created, r.Superseded)
+		"%d relocated, %d rewritten, %d created, %d superseded, %d adopted",
+		r.Relocated, r.Rewritten, r.Created, r.Superseded, r.Adopted)
 }
 
 // Run sweeps every registered project. One project's failure does not abandon
@@ -249,8 +256,22 @@ func relocateOne(root, legacyRel, newRel string, result *Result) (bool, error) {
 	return true, nil
 }
 
-// reconcile writes every mirror whose bytes do not match its column.
+// reconcile writes every mirror whose bytes do not match its column, and stages
+// every mirror git has never been told about.
+//
+// The second half is not a tidiness pass. The write path is best-effort by
+// design — the database write has already happened, so a failed commit warns and
+// continues — and the state that failure leaves behind is a file with the RIGHT
+// content and no commit. Comparing content can never find it. Until E-2137's
+// third pass this sweep did exactly that and reported itself clean, while a
+// project that had never committed its `.endless/` tree kept a mirror nothing
+// but the local filesystem could see.
 func reconcile(project monitor.ProjectRef, changed map[string]bool, result *Result) error {
+	adoptable, err := adoptableMirrors(project.Root)
+	if err != nil {
+		return err
+	}
+
 	taskRows, err := monitor.TaskDocRows(project.ID)
 	if err != nil {
 		return fmt.Errorf("read task documents: %w", err)
@@ -261,7 +282,7 @@ func reconcile(project monitor.ProjectRef, changed map[string]bool, result *Resu
 			continue
 		}
 		rel := docmirror.TaskDocPath(row.ID, kind.Stem)
-		if err = writeIfDifferent(project.Root, rel, row.Content, changed, result); err != nil {
+		if err = writeIfDifferent(project.Root, rel, row.Content, adoptable, changed, result); err != nil {
 			return err
 		}
 	}
@@ -272,7 +293,7 @@ func reconcile(project monitor.ProjectRef, changed map[string]bool, result *Resu
 	}
 	for _, row := range decisionRows {
 		rel := docmirror.DecisionDocPath(row.ID)
-		if err = writeIfDifferent(project.Root, rel, row.Content, changed, result); err != nil {
+		if err = writeIfDifferent(project.Root, rel, row.Content, adoptable, changed, result); err != nil {
 			return err
 		}
 	}
@@ -285,13 +306,21 @@ func reconcile(project monitor.ProjectRef, changed map[string]bool, result *Resu
 // a sweep that tolerated a trailing-newline difference would leave the two
 // permanently, invisibly out of step.
 func writeIfDifferent(
-	root, rel, content string, changed map[string]bool, result *Result,
+	root, rel, content string, adoptable func(string) bool,
+	changed map[string]bool, result *Result,
 ) error {
 	abs := filepath.Join(root, rel)
 	existing, err := os.ReadFile(abs)
 	switch {
 	case err == nil:
 		if string(existing) == content {
+			if adoptable(rel) {
+				// Right content, no commit. Stage it without rewriting: the bytes
+				// are already what they should be, and rewriting them would churn
+				// the mtime for nothing.
+				changed[rel] = true
+				result.Adopted++
+			}
 			return nil
 		}
 		result.Rewritten++
@@ -318,4 +347,74 @@ func sortedKeys(m map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// adoptableMirrors returns a predicate answering "would committing this path
+// accomplish anything?" — true only for a mirror git neither tracks nor ignores.
+//
+// Both halves matter, and each was a bug before it was a condition.
+//
+// TRACKED: a mirror already under version control needs no staging, and marking
+// one changed every pass would have the job report work forever on a converged
+// repository.
+//
+// IGNORED: a project that gitignores its `.endless/` tree has made a choice
+// Endless does not override with `git add -f`. Such a path can never become
+// tracked, so treating it as adoptable would ALSO report work forever — the
+// sweep staging it, `events.stageablePaths` dropping it, neither making
+// progress.
+//
+// One `git ls-files` per question per pass rather than a check per file: a
+// converged repository holds a mirror for every task with content — a thousand
+// here — and a subprocess each would turn a pass costing milliseconds into one
+// costing minutes, on a job that runs every fifteen.
+//
+// A failure to ask is NOT fatal. Reporting nothing adoptable leaves the content
+// repair — the half that actually loses information — running.
+func adoptableMirrors(root string) (func(string) bool, error) {
+	dirs := []string{docmirror.TasksRoot, docmirror.DecisionsDir}
+	for _, kind := range docmirror.TaskKinds {
+		dirs = append(dirs, ".endless/"+kind.LegacyDir)
+	}
+
+	tracked := gitPathSet(root, append([]string{"ls-files", "-z", "--"}, dirs...))
+	ignored := gitPathSet(root, append([]string{"ls-files", "-z", "--others",
+		"--ignored", "--exclude-standard", "--"}, dirs...))
+
+	return func(rel string) bool {
+		if _, isTracked := tracked[rel]; isTracked {
+			return false
+		}
+		if _, isIgnored := ignored[rel]; isIgnored {
+			return false
+		}
+		return true
+	}, nil
+}
+
+// gitPathSet runs one NUL-delimited path-listing git command and returns its
+// results as a set. An error yields an empty set; see adoptableMirrors for why
+// that is the right failure.
+func gitPathSet(root string, args []string) map[string]struct{} {
+	set := make(map[string]struct{})
+	out, err := gitOutput(root, args...)
+	if err != nil {
+		return set
+	}
+	for _, p := range strings.Split(out, "\x00") {
+		if p != "" {
+			set[p] = struct{}{}
+		}
+	}
+	return set
+}
+
+// gitOutput runs one read-only git command in root and returns its stdout.
+func gitOutput(root string, args ...string) (string, error) {
+	cmd := exec.Command("git", append([]string{"-C", root}, args...)...)
+	out, err := cmd.Output()
+	if err != nil {
+		return "", err
+	}
+	return string(out), nil
 }

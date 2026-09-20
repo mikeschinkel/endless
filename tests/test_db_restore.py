@@ -231,11 +231,23 @@ def test_holders_of_finds_an_open_handle_by_pid_and_command(target):
         assert proc.stdout.readline().strip() == "ready"
         deadline = time.time() + 10
         holders = []
+        determined = True
         while time.time() < deadline:
-            holders = db_restore.holders_of(db_restore.file_set(target)) or []
+            found = db_restore.holders_of(db_restore.file_set(target))
+            determined = found is not None
+            holders = found or []
             if any(h.pid == proc.pid for h in holders):
                 break
             time.sleep(0.2)
+        # None is holders_of's "could not determine", which its own docstring
+        # says a caller must never read as an all-clear — and this assertion did
+        # exactly that. On a machine where `lsof` is merely SLOW (it is given a
+        # 15s timeout, and an unfiltered lsof can exceed that badly under load or
+        # on a wedged mount) the binary is present, so can_enumerate_holders()
+        # says yes while enumeration in fact failed. The result was a red test
+        # accusing the code of losing a handle it never got to look for.
+        if not determined:
+            pytest.skip("holders could not be enumerated here: lsof timed out")
         if not holders and not can_enumerate_holders():
             pytest.skip("no lsof and no /proc: holders cannot be enumerated here")
         match = [h for h in holders if h.pid == proc.pid]
