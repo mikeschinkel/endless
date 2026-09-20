@@ -273,13 +273,14 @@ section "E. The refusal inventory still describes this code (C8)"
 # C8  A LANDING DOES NOT LEAVE A REFERENCE LYING. E-2157 changed one refusal
 #     message and moved four sentinels into another package, and
 #     docs/research-2026-09-17-refusal-inventory.tsv records both. A doc my own
-#     change falsified is my defect (ED-1550 rule 2 — reopen when what shipped
-#     is wrong), not a finding to hand on.
+#     change falsified is my defect (ED-1550: reopen when what shipped is
+#     wrong), not a finding to hand on.
 #
-#     These check the rows E-2157 OWNS. They are not a general audit of the
-#     inventory: rows this task never touched are E-2155's, and one of them
-#     (the gate refusal, anchored to `resolvedPath`) carries a symbol
-#     off-by-one that predates this work and is deliberately left alone.
+#     THE CONVENTION, learned the hard way. E-2155 anchors a row to the symbol
+#     that RAISES the refusal, not the one holding the string — handlePreToolUse
+#     over declarationRefusal, Run over usage. My first pass at this section
+#     anchored five rows to the sentinel VARS and asserted that, encoding the
+#     break as if it were the rule. These assert the raiser.
 
 TSV="docs/research-2026-09-17-refusal-inventory.tsv"
 
@@ -297,30 +298,80 @@ assert_contains "the relative-path row names --db-dir" \
 assert_not_contains "the relative-path row no longer names --config-dir" \
     "--config-dir" "${relpath_row}"
 
-# The four sentinels E-2157 moved out of internal/monitor, plus the retired-flag
-# refusal it added. Each must be anchored to the file that now defines it.
+# The five flag refusals this task moved into the shared parser. Each is
+# anchored to internal/dbcontext, and to ConsumeFlags — the function that
+# RAISES them — rather than to the sentinel it returns.
+dbc_rows="$(awk -F'\t' '$1 == "internal/dbcontext/dbcontext.go" {print $2}' "${TSV}" | sort -u)"
+assert_eq "every internal/dbcontext row is anchored to its raiser, ConsumeFlags" \
+    "ConsumeFlags" "${dbc_rows}"
+
+assert_eq "all five flag refusals moved, none left behind" \
+    "5" \
+    "$(awk -F'\t' '$1 == "internal/dbcontext/dbcontext.go"' "${TSV}" | wc -l | tr -d ' ')"
+
+# The PARSE refusals must no longer be anchored to internal/monitor — that is
+# precisely the anchor this landing invalidated.
+#
+# Narrow on purpose. internal/monitor keeps the `--db sandbox` RESOLUTION
+# refusals (sandboxConfigDirForCwd), and must: resolving that word reads cwd,
+# and ED-1571 is why internal/dbcontext never will. The inventory showing parse
+# in one package and cwd-dependent resolution in the other is the split itself,
+# visible in the doc — so this asserts the four that moved, not every row whose
+# message happens to start with --db.
+stale=""
+while IFS= read -r msg; do
+    hit="$(awk -F'\t' -v m="${msg}" '$1 ~ /internal\/monitor/ && index($8, m) == 1 {print NR": "$2}' "${TSV}")"
+    [[ -n "${hit}" ]] && stale="${stale}${hit}"$'\n'
+done <<'MSGS'
+--db and --db-dir are two spellings
+--db requires a value
+--db-dir requires a directory
+unknown --db value
+MSGS
+assert_eq "no PARSE refusal is still anchored to internal/monitor" "" "${stale%$'\n'}"
+
+assert_contains "the sandbox RESOLUTION refusal correctly stays in internal/monitor" \
+    "sandboxConfigDirForCwd" \
+    "$(awk -F'\t' '$8 ~ /^--db sandbox only applies inside/ {print $1"::"$2}' "${TSV}")"
+
+# The refusal E-2157 ADDED, anchored to the function that raises it.
+sandbox_row="$(awk -F'\t' '$8 ~ /names a database by where the caller is standing/ {print $1"::"$2}' "${TSV}")"
+assert_eq "the --db sandbox refusal is anchored to its raiser" \
+    "cmd/endless-migrate/main.go::configDir" "${sandbox_row}"
+
+# And the sentinels really are where the rows say the package is.
 for sentinel in ErrDBFlagConflict ErrDBFlagNeedsValue ErrDBDirFlagNeedsDir \
                 ErrUnknownDBValue ErrConfigDirFlagRetired; do
-    row="$(awk -F'\t' -v s="${sentinel}" '$2 == s {print $1}' "${TSV}")"
-    assert_eq "the inventory anchors ${sentinel} to internal/dbcontext" \
-        "internal/dbcontext/dbcontext.go" "${row}"
-    assert_contains "internal/dbcontext actually defines ${sentinel}" \
+    assert_contains "internal/dbcontext defines ${sentinel}" \
         "${sentinel}" "$(cat internal/dbcontext/dbcontext.go)"
 done
-
-# No row may still describe monitor as the definer of a flag sentinel — that is
-# exactly the anchor this landing invalidated.
-stale_monitor="$(awk -F'\t' '$1 == "internal/monitor/db.go" && $2 ~ /^Err/ {print $2}' "${TSV}")"
-assert_eq "no flag sentinel is still anchored to internal/monitor" "" "${stale_monitor}"
-
-# The refusal E-2157 ADDED. An inventory that records a binary's refusals and
-# omits its newest one is wrong in the same way as one that records a stale one.
-sandbox_row="$(awk -F'\t' '$2 == "errSandboxNotRoutable" {print $1"|"$8}' "${TSV}")"
-assert_contains "the inventory carries the --db sandbox refusal" \
-    "cmd/endless-migrate/main.go" "${sandbox_row}"
-assert_contains "and records that it names --db-dir as the remedy" \
-    "--db-dir" "${sandbox_row}"
-assert_contains "cmd/endless-migrate actually defines errSandboxNotRoutable" \
+assert_contains "cmd/endless-migrate defines errSandboxNotRoutable" \
     "errSandboxNotRoutable" "$(cat cmd/endless-migrate/main.go)"
+
+# ─────────────────────────────────────────────────────────────────────
+section "F. The cause, not the symptom (C9)"
+# ─────────────────────────────────────────────────────────────────────
+#
+# C9  THE ANCHORS ARE CHECKED FROM NOW ON. Nothing validated them before, so a
+#     landing that moved a symbol broke rows for free and in silence — which is
+#     how this rotted, and how I re-broke it. tests/test_refusal_inventory_
+#     anchors.py asserts every live Go row's file exists and declares its
+#     symbol, and that no row is parked on E-2155's imperative RELOCATE: marker
+#     instead of answered.
+#
+#     Scope is deliberate: existence, not message location. 212 of the 553 live
+#     Go rows carry a paraphrase rather than the literal, so a message check
+#     would need a multi-hop reachability search to avoid false positives — and
+#     a flaky gate gets switched off rather than fixed.
+
+if ! anchors_out="$(uv run pytest tests/test_refusal_inventory_anchors.py -q 2>&1)"; then
+    printf '%s\n' "${anchors_out}" >&2
+    report_fail "the inventory's anchors all resolve" "4 passed" "see output above"
+else
+    report_pass "the inventory's anchors all resolve (durable test, not this suite)"
+fi
+
+assert_eq "no row is parked on the RELOCATE: to-do marker" \
+    "0" "$(grep -c 'RELOCATE:' "${TSV}" || true)"
 
 summary
