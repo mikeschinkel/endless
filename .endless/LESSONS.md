@@ -6572,3 +6572,13 @@ So the question is never 'did I cause it'. It is: how expensive is this, right n
 
 Size is still a real bound. When something genuinely is too large to fold in, I say so WITH THE MEASUREMENT — how many sites, how risky — never with a principle that dresses up reluctance as discipline.
 - **Project**: endless
+
+### [2026-09-20] A decision's text states intent, not shipped state — verify the code before reasoning from it
+I read ED-1554 ('the XDG_CONFIG_HOME injection and sandbox bind are deleted') and told Mike that once E-1964 landed, --db main and the default resolver would collapse into one. Wrong, and I had to withdraw it a turn later.
+
+ED-1554 describes what the decision COMMITS to. E-1964 implemented part of it: it deleted 'sandbox bind', the PERSISTENT injection written into a settings file. The per-invocation injection survives by design — sandboxcmd.Sandbox.Env, triagejob, minimizerjob and triage.py all still repoint XDG_CONFIG_HOME for a child process. So --db main must ignore XDG permanently, and a refactor that collapsed the two resolvers would have made every --db main open a sandbox.
+
+A decision is a statement of intent at a moment. An implementing task may deliver a part, a variant, or a different shape entirely, and 'accepted' says nothing about how much shipped. The same holds for a task description versus what its commits did.
+
+So: quote a decision for WHY, never for WHAT IS. Before reasoning from it, grep the code for the thing it claims was removed. Here one grep for XDG_CONFIG_HOME would have shown five live injection sites and saved a wrong claim to Mike.
+- **Project**: endless
