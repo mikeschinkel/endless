@@ -32,11 +32,24 @@
 // PREPARE time, not CREATE time. See the note in schema.sql; the standing rule is
 // that an eagerly-resolved reference to a change-file column cannot live there.
 //
-// The remaining ordering constraint is benign: between schema.sql creating the
-// view and this file adding the column, a read THROUGH live_tasks would fail. The
-// land applies changes before `just install` swaps in the new binary, and nothing
-// between monitor.DB() and this script reads live_tasks, so that window is never
-// entered in practice.
+// The remaining ordering constraint is benign FOR THIS FILE ONLY: between
+// schema.sql creating the view and this file adding the column, a read THROUGH
+// live_tasks would fail, and nothing between monitor.DB() and this script reads
+// live_tasks.
+//
+// Do NOT generalize that to the land window. The land applies changes before
+// `just install` swaps in the new binary, and that window IS entered. An earlier
+// version of this comment claimed it "is never entered in practice"; that was
+// false, and later change files copied the claim from here. E-1969's land
+// printed 50 hook errors inside the window, one per worktree, immediately after
+// a successful land — `no such column: active_task_id`, from
+// monitor.ReapWorktreesForProject.
+//
+// The ordering is not a mistake and cannot be reordered away: E-1941 moved
+// apply-change AFTER the ff-merge because applying before it left the DB on a
+// schema no installed binary understood, and it cannot move later because
+// _record_landing runs the same binary against the real DB. What hooks should do
+// inside the window is E-2020's to answer.
 //
 // FK actions that stop firing once removal is an UPDATE, and what replaces them:
 //   - sessions.active_task_id / session_statuses.active_task_id were ON DELETE
