@@ -228,7 +228,8 @@ An earlier draft of this section measured `.claude/settings.json`, found 1 of
 141 carrying a hooks block, and concluded the pin had already been dismantled —
 that "the inversion this brainstorm was convened to decide had already happened
 in practice." That was wrong. It measured the file the override had been moved
-*out of* sixteen months earlier, and read the resulting emptiness as progress.
+*out of* four months earlier (E-1457, 2026-05-24), and read the resulting
+emptiness as progress.
 
 This is a variant of the measurement trap this task's own analysis warns about.
 That warning says to derive the signal from what a binary CONTAINS rather than
