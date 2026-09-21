@@ -191,6 +191,7 @@ Per the user's instruction: write these up, overridable later, not blocking.
   migrated database. A rule of "spawn the worktree binary when versions match"
   routes that worktree's own hooks correctly for free. It does nothing for the
   other ~130 worktrees.
+
 ## 6. The distribution constraint — and a measurement error worth keeping
 
 The constraint is real and is **stronger** than an earlier draft of this section
