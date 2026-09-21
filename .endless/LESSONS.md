@@ -6598,3 +6598,11 @@ Both are the same failure: the session's own past is treated as current truth. B
 
 Practice: any status, count, or relationship in a report gets a fresh query in the same turn as the report — decision show, task show, a re-run of the measurement. For any elapsed-time claim, subtract from today's date rather than estimating; if the arithmetic is not worth doing, name the two dates and let the reader do it.
 - **Project**: endless
+
+### [2026-09-21] A finding does not earn a task — tell the user in chat, or fix it, and file only what the work actually requires
+Closing out E-1972 I filed E-2167 to retract a false comment in a schema change file. It was a true finding and a two-line fix. Mike asked whether two tasks were really needed and pointed at ED-1550(1): filing is the exception, and the default response to a finding is to tell the user in chat. Noticing something true does not earn a task. I obsoleted E-2167 and made the fix directly.
+
+The pull is real: filing feels like diligence and leaves a visible artifact. But ED-1550 is arithmetic — while the file-to-close ratio exceeds 1.0 the backlog diverges, and agents are what drive that ratio.
+
+Before filing anything from a brainstorm or a wrap-up, ask in order: can I just fix it now; if not, does an open task already own the area (fold it in as evidence); and only then file. Several symptoms of one cause are one task. Filing a task to record something I could have said in one sentence spends Mike's attention twice — once to read the task, once to close it.
+- **Project**: endless
