@@ -191,41 +191,71 @@ Mike's instruction: write these up, overridable later, not blocking.
   routes that worktree's own hooks correctly for free. It does nothing for the
   other ~130 worktrees.
 
-## 6. The distribution constraint, and what it costs
+## 6. Late correction — the pin was already gone when this was written
 
-A fix cannot ride into existing worktrees as an ordinary commit:
+Written into the synthesis rather than left in chat, because an earlier draft of
+this section argued at length about a distribution constraint that no longer
+binds, and a future session would have implemented against it.
 
-- `bin/` is gitignored, so no commit carries a binary.
-- `.claude/settings.json` — the file that decides which binary runs — is tracked
-  but carries `git update-index --skip-worktree` in every worktree (E-998), so
-  git deliberately will not update it there. This is not a detail; it is how the
-  e-1947 land failed.
+**The constraint as drafted:** a fix cannot ride into existing worktrees as an
+ordinary commit, because `bin/` is gitignored and `.claude/settings.json` is
+tracked but carries `git update-index --skip-worktree` in every worktree (E-998),
+so git deliberately will not update it there. `endless worktree sync` (E-2090)
+rebases worktrees, and a rebase cannot deliver a change to a skip-worktree file —
+so the ~96 pinned worktrees looked reachable only by lifting skip-worktree first
+or by writing the file directly, outside git.
 
-`endless worktree sync` now exists (E-2090, landed) and rebases task worktrees
-onto the default branch, reporting drift and closing it with `--apply`. **But a
-rebase cannot deliver a change to a skip-worktree file.** So the existing
-population is reachable only if skip-worktree is lifted first, or if the sweep
-writes `.claude/settings.json` directly, outside git.
+**Measured instead of assumed, 2026-09-21, twice on consecutive days:**
 
-Mike reports a task exists to remove skip-worktree or move to
-`settings.local.json`; it could not be located by search. E-2059 folds
-"settings.json / skip-worktree isolation" in as one more artifact kind rather
-than a special case, which is the nearest live owner. **If no such task exists,
-one is needed** — it is a hard dependency of the sweep.
+    worktrees with .claude/settings.json:     141
+      carrying a "hooks" block:                 1   (e-2122, live session)
+      carrying XDG_CONFIG_HOME:                 0
+      with skip-worktree set on that file:      1
 
-The durable form, worth stating because it is what makes this the last time the
-question has to be answered by touching ~96 files: **a worktree's settings
-should stop naming a binary path at all.** Once they always name main's binary,
-every future decision about which binary runs lives inside a binary that can be
-updated.
+Compare this task's own analysis: 96 of 135 pinned on 2026-08-13. The main
+checkout's copy is down to `autoMemoryEnabled` and `enabledPlugins`, and hooks
+come from the user-level Claude settings file, pointing at the globally
+installed `endless-go`.
+
+**So the inversion this brainstorm was convened to decide had already happened
+in practice** — arrived at by the per-worktree hooks block disappearing, not by
+decision. ED-1554 (accepted) accounts for the XDG half: it deletes the
+`XDG_CONFIG_HOME` injection and the sandbox bind. What removed the hooks blocks
+was not determined; E-1964 and `worktree sync` rebases are both candidates.
+
+Three consequences:
+
+- **There is no sweep to build.** One worktree, held by a live session, is a
+  single case and not a migration.
+- **The real gap is the opposite of the one this task was filed for.** There is
+  currently no way to run a worktree's hook binary at all, so candidate hook
+  code is never exercised and E-998's purpose is entirely unserved. ED-1595's
+  declaration mechanism is the whole of the remaining work.
+- **E-2035's `.claude/settings.json` section is moot.** It exists because the
+  file "legitimately needs a different body in every worktree — hooks pointing
+  at that worktree's `bin/endless-go`, plus the `XDG_CONFIG_HOME` env block."
+  Both are gone, so skip-worktree has nothing to hide and the symlink-into-the-
+  sandbox design would solve a problem that no longer exists. Folded into that
+  task as evidence. Its core — the artifact-root resolver — is untouched and
+  still needed, and so is the separate generator bug it documents (the recipe
+  reads settings from the worktree branch's HEAD, silently dropping any key
+  added to the committed copy after that worktree forked).
+
+This section is also the answer to "which task owns skip-worktree": **E-2035**,
+which folded it in 2026-08-27 with the symlink direction. No separate task was
+ever filed, and none is needed.
 
 ## 7. Follow-ups spawned
 
 - **ED-1595** — the decision above. `proposed`; needs Mike's accept or reject.
-- **E-2166** — implement the inversion, the declaration, and the sweep.
-- **E-2167** — retract the false comment in the e-1929 change file (find it with
-  `grep -rn "never entered in practice" internal/`), which states that the
-  window between schema application and the binary swap "is never entered in
-  practice." It is entered; the analysis documents it being entered. That file
-  is where later change files copy their ordering reasoning from, so the false
-  claim propagates until it is corrected at the source.
+- **E-2166** — build the declaration mechanism. Retitled and rewritten after the
+  measurement above; the sweep it was filed with is dead work.
+
+One task was filed and then withdrawn. **E-2167** proposed retracting a false
+comment in the e-1929 change file (`grep -rn "never entered in practice"
+internal/`) claiming the window between schema application and the binary swap
+"is never entered in practice" — it is entered, and that file is where later
+change files copy their ordering reasoning from. Mike pointed at ED-1550(1):
+filing is the exception, and the default response to a finding is to say so in
+chat. Noticing something true does not earn a task. E-2167 is `obsolete` and the
+comment was corrected directly instead.
