@@ -6590,3 +6590,11 @@ The task's own analysis already warned about a version of this: derive the signa
 
 Before reporting a population count: find what MOVED. Check .gitignore comments, search the ledger for a task that relocated the file, and diff a live example against the path you assumed. A measurement that happens to confirm a hopeful story deserves more scrutiny, not less.
 - **Project**: endless
+
+### [2026-09-21] Re-query state before reporting it; never report a status from memory of having set it, and compute date spans against today's date
+Twice in one session I asserted state I had not checked. I told Mike ED-1595 was 'proposed; needs your accept or reject' — he had accepted it hours earlier, and I was reporting my memory of filing it rather than the row. I also said E-1457 'landed sixteen months ago' when 2026-05-24 to 2026-09-21 is four months; I described a feel instead of subtracting.
+
+Both are the same failure: the session's own past is treated as current truth. Between turns, Mike acts, other sessions land work, and the ledger moves. What I did earlier in the conversation is the least reliable source available.
+
+Practice: any status, count, or relationship in a report gets a fresh query in the same turn as the report — decision show, task show, a re-run of the measurement. For any elapsed-time claim, subtract from today's date rather than estimating; if the arithmetic is not worth doing, name the two dates and let the reader do it.
+- **Project**: endless
