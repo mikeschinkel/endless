@@ -1,6 +1,6 @@
 # E-1972 — How Claude hooks choose between main's and a worktree's endless-go
 
-Brainstormed with Mike 2026-09-20. This decides **binary selection** only (the
+Brainstormed with the user 2026-09-20. This decides **binary selection** only (the
 axis E-2048 named and assigned here). DB target and artifact root are other
 tasks' business.
 
@@ -45,7 +45,7 @@ guesses intent from a file list: the list has to be written down, kept current
 as code moves, and is wrong at the edges (a change to a shared helper the hooks
 call; a change that alters hook behavior only through config).
 
-Mike's argument, which is the load-bearing one: the use-cases cannot be
+The user's argument, which is the load-bearing one: the use-cases cannot be
 enumerated in advance. Nobody can write the rule that covers cases they cannot
 envision. But the person doing a task knows whether they are working on hook
 code. Declaring beats inferring.
@@ -58,7 +58,7 @@ now what determines whether an absent binary is an error or a non-event."*
 
 **Recorded honestly: this is opt-in, and an earlier draft of this synthesis
 oversold it as something more.** That draft argued the declaration was better
-than a toggle because it gets verified at hook time. Mike pushed back, correctly:
+than a toggle because it gets verified at hook time. The user pushed back, correctly:
 the verification is a separate layer that exists under *any* policy, so it is not
 a property of the declaration and cannot be used to dress it up.
 
@@ -83,7 +83,7 @@ amount of testing E-998 was buying is already reduced by accepted decision.
 ### 2c. Amendment to this task's original framing
 
 The seed framing was *"delegation needs to be more intelligent than opt-in vs.
-automatic."* Amended by Mike this session: **the intelligence does not belong in
+automatic."* Amended by the user this session: **the intelligence does not belong in
 the delegation policy. It belongs one layer down, in the version verification.
 The policy itself should be dumb, and dumb in the safe direction.**
 
@@ -96,7 +96,8 @@ The policy itself should be dumb, and dumb in the safe direction.**
   dismisses the prompt fastest.
 - **The session declares early**, once it has read its task and seen what it is
   touching. This is the normal path.
-- **Mike may declare at any time,** before or during the work.
+- **The user may declare at any time,** before or during the work. Either party
+  can set it; neither is privileged.
 - Therefore it must be settable at any point through a command, not a
   hand-edited file. Changing it mid-task is a first-class case: discovering that
   you are now touching hook code is common.
@@ -154,7 +155,7 @@ candidate binary.
 
 ## 4. Recommendations carried into implementation, not decided here
 
-Mike's instruction: write these up, overridable later, not blocking.
+Per the user's instruction: write these up, overridable later, not blocking.
 
 - **How main's binary learns the worktree binary's version.** Preferred: an
   inert command on the worktree binary (a `schema-version`-shaped verb) that
@@ -180,7 +181,7 @@ Mike's instruction: write these up, overridable later, not blocking.
 - **What hooks do during the land window** — the seconds where the database is
   migrated and the installed binary is not, when every hook on the machine has
   nothing valid to run and last time printed fifty near-identical errors after a
-  *successful* land. Mike confirmed this belongs to **E-2020**, whose
+  *successful* land. The user confirmed this belongs to **E-2020**, whose
   description already commits to the shape: silent no-op plus a recorded fault
   on the hook surface, following E-1962, while interactive surfaces refuse
   loudly.
@@ -190,72 +191,93 @@ Mike's instruction: write these up, overridable later, not blocking.
   migrated database. A rule of "spawn the worktree binary when versions match"
   routes that worktree's own hooks correctly for free. It does nothing for the
   other ~130 worktrees.
+## 6. The distribution constraint — and a measurement error worth keeping
 
-## 6. Late correction — the pin was already gone when this was written
+The constraint is real and is **stronger** than an earlier draft of this section
+said. The error that draft made is recorded here because it is instructive and
+because it briefly propagated into two other tasks.
 
-Written into the synthesis rather than left in chat, because an earlier draft of
-this section argued at length about a distribution constraint that no longer
-binds, and a future session would have implemented against it.
+### What the pin actually is today
 
-**The constraint as drafted:** a fix cannot ride into existing worktrees as an
-ordinary commit, because `bin/` is gitignored and `.claude/settings.json` is
-tracked but carries `git update-index --skip-worktree` in every worktree (E-998),
-so git deliberately will not update it there. `endless worktree sync` (E-2090)
-rebases worktrees, and a rebase cannot deliver a change to a skip-worktree file —
-so the ~96 pinned worktrees looked reachable only by lifting skip-worktree first
-or by writing the file directly, outside git.
+The per-worktree hook override no longer lives in `.claude/settings.json`.
+E-1457 (`cleans_up E-998`, landed 2026-05-24, `16b2832`) moved it to
+**`.claude/settings.local.json`** and added a `settings.local.json` gitignore
+rule matching that name at any path. `.gitignore` says so in its own comments,
+including that there is intentionally no rule for `.claude/settings.json`
+because a change to it on main blocked the rebase in every live worktree.
 
-**Measured instead of assumed, 2026-09-21, twice on consecutive days:**
+Measured 2026-09-21:
 
-    worktrees with .claude/settings.json:     141
-      carrying a "hooks" block:                 1   (e-2122, live session)
-      carrying XDG_CONFIG_HOME:                 0
-      with skip-worktree set on that file:      1
+    worktrees with .claude/settings.local.json:        138
+      carrying a "hooks" block:                        115
+        pinned to their OWN bin/endless-go:            115   (binary present: 115)
+        pointing at the global install:                  0
+      of the 115 pinned binaries, pre-E-2011 (stale):   32
 
-Compare this task's own analysis: 96 of 135 pinned on 2026-08-13. The main
-checkout's copy is down to `autoMemoryEnabled` and `enabledPlugins`, and hooks
-come from the user-level Claude settings file, pointing at the globally
-installed `endless-go`.
+Discriminator, unchanged from this task's analysis:
+`strings <wt>/bin/endless-go | grep -q "storing project path"`.
 
-**So the inversion this brainstorm was convened to decide had already happened
-in practice** — arrived at by the per-worktree hooks block disappearing, not by
-decision. ED-1554 (accepted) accounts for the XDG half: it deletes the
-`XDG_CONFIG_HOME` injection and the sandbox bind. What removed the hooks blocks
-was not determined; E-1964 and `worktree sync` rebases are both candidates.
+**The pin is alive.** 115 of 141 worktrees run their own binary for every hook
+event, and 32 of those binaries are stale by the same test that found 57 on
+2026-08-26. The failure mode this brainstorm exists to fix is still live.
 
-Three consequences:
+### The error, and why it happened
 
-- **There is no sweep to build.** One worktree, held by a live session, is a
-  single case and not a migration.
-- **The real gap is the opposite of the one this task was filed for.** There is
-  currently no way to run a worktree's hook binary at all, so candidate hook
-  code is never exercised and E-998's purpose is entirely unserved. ED-1595's
-  declaration mechanism is the whole of the remaining work.
-- **E-2035's `.claude/settings.json` section is moot.** It exists because the
-  file "legitimately needs a different body in every worktree — hooks pointing
-  at that worktree's `bin/endless-go`, plus the `XDG_CONFIG_HOME` env block."
-  Both are gone, so skip-worktree has nothing to hide and the symlink-into-the-
-  sandbox design would solve a problem that no longer exists. Folded into that
-  task as evidence. Its core — the artifact-root resolver — is untouched and
-  still needed, and so is the separate generator bug it documents (the recipe
-  reads settings from the worktree branch's HEAD, silently dropping any key
-  added to the committed copy after that worktree forked).
+An earlier draft of this section measured `.claude/settings.json`, found 1 of
+141 carrying a hooks block, and concluded the pin had already been dismantled —
+that "the inversion this brainstorm was convened to decide had already happened
+in practice." That was wrong. It measured the file the override had been moved
+*out of* sixteen months earlier, and read the resulting emptiness as progress.
 
-This section is also the answer to "which task owns skip-worktree": **E-2035**,
-which folded it in 2026-08-27 with the symlink direction. No separate task was
-ever filed, and none is needed.
+This is a variant of the measurement trap this task's own analysis warns about.
+That warning says to derive the signal from what a binary CONTAINS rather than
+from file metadata. The same discipline applies one level up: **confirm which
+file is authoritative before counting what is in it.** An absence measured in
+the wrong place looks exactly like a success.
+
+The draft was corrected before anything was built on it, but it had already been
+written into E-2166 and E-2035; both are corrected.
+
+### What the constraint means for the sweep
+
+Worse than the skip-worktree framing, not better:
+
+- `bin/` is gitignored, so no commit carries a binary.
+- `.claude/settings.local.json` is **itself gitignored**, so no commit carries it
+  either. `endless worktree sync` (E-2090) rebases worktrees, and a rebase cannot
+  deliver a file git does not track at all.
+
+So the 115 pinned worktrees are reachable only by a sweep that writes
+`.claude/settings.local.json` directly, outside git. That sweep is required, it
+is E-2166's, and it cannot be skipped.
+
+The durable form still holds, and is what makes this the last time the question
+is answered by touching 115 files: **a worktree's settings should stop naming a
+binary path at all.** Once they name the installed binary, every future decision
+about which binary runs lives inside a binary that can be updated.
+
+### Who owns the settings file
+
+**E-1457 already landed the move to `settings.local.json`**, so the
+skip-worktree mechanism this task's analysis describes is historical. E-2035
+folded `.claude/settings.json` in on 2026-08-27 with a symlink-into-the-sandbox
+direction; that section is written against the pre-E-1457 mechanism and should
+be re-read against it. E-2035's core — the artifact-root resolver — is untouched
+either way, as is the separate generator bug it documents (the recipe reads
+settings from the worktree branch's HEAD, silently dropping any key added to the
+committed copy after that worktree forked).
 
 ## 7. Follow-ups spawned
 
-- **ED-1595** — the decision above. `proposed`; needs Mike's accept or reject.
-- **E-2166** — build the declaration mechanism. Retitled and rewritten after the
-  measurement above; the sweep it was filed with is dead work.
+- **ED-1595** — the decision above. **Accepted** 2026-09-20.
+- **E-2166** — build the declaration mechanism, and sweep the 115 pinned
+  worktrees.
 
 One task was filed and then withdrawn. **E-2167** proposed retracting a false
 comment in the e-1929 change file (`grep -rn "never entered in practice"
 internal/`) claiming the window between schema application and the binary swap
 "is never entered in practice" — it is entered, and that file is where later
-change files copy their ordering reasoning from. Mike pointed at ED-1550(1):
+change files copy their ordering reasoning from. The user pointed at ED-1550(1):
 filing is the exception, and the default response to a finding is to say so in
 chat. Noticing something true does not earn a task. E-2167 is `obsolete` and the
 comment was corrected directly instead.
