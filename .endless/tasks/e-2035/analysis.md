@@ -132,54 +132,51 @@ and a gitignored sibling file does not generalize to test-written state.
 
 ---
 
-# Addendum — the settings.json section's premise no longer holds (measured 2026-09-21, from E-1972)
+# Addendum — this section predates E-1457; re-read it against settings.local.json (2026-09-21, from E-1972)
 
-Evidence only. Not a scope change, and no argument about the artifact-root
-resolver, which this leaves untouched.
+Evidence only. No argument about the artifact-root resolver, which this leaves
+untouched, and no scope change.
 
-## What that section assumes
+## The mechanism described here is historical
 
-"Also in scope: `.claude/settings.json`" rests on the file "legitimately
-need[ing] a different body in every worktree — hooks pointing at that worktree's
-`bin/endless-go`, plus the `XDG_CONFIG_HOME` env block." Those two are what
-skip-worktree exists to hide, and what the symlink-into-the-sandbox direction
-was chosen to replace.
+This section says `.claude/settings.json` "is a tracked file that legitimately
+needs a different body in every worktree," hidden with
+`git update-index --skip-worktree`, and picks a symlink-into-the-sandbox
+direction to replace that.
 
-## Both are gone
+**E-1457** (`cleans_up E-998`, landed 2026-05-24, `16b2832`) already moved the
+per-worktree override to **`.claude/settings.local.json`** and added a
+`settings.local.json` gitignore rule matching that name at any path. `.gitignore`
+records this in its own comments, including that there is intentionally no rule
+for `.claude/settings.json` because a change to it on main blocked the rebase in
+every live worktree.
 
-Measured across the live worktree tree, twice on consecutive days, identical
-results:
+So the rebase collisions this section attributes to skip-worktree have a
+different cause today, and the symlink direction was chosen against the older
+mechanism.
 
-    worktrees with .claude/settings.json:     141
-      carrying a "hooks" block:                 1   (e-2122, live session)
-      carrying XDG_CONFIG_HOME:                 0
-      with skip-worktree set on that file:      1
+## Measured 2026-09-21
 
-Compare E-1972's analysis, which measured 96 of 135 pinned on 2026-08-13. The
-main checkout's copy is now down to `autoMemoryEnabled` and `enabledPlugins`,
-and hooks come from the user-level Claude settings file, pointing at the
-globally installed `endless-go`.
+    worktrees with .claude/settings.json:              141
+      carrying a "hooks" block:                          1   (e-2122, live session)
+      with skip-worktree set on that file:               1
 
-ED-1554 (accepted) accounts for the XDG half — it deletes the `XDG_CONFIG_HOME`
-injection and the sandbox bind outright. What removed the hooks blocks was not
-determined; E-1964 and `endless worktree sync` rebases are both candidates.
+    worktrees with .claude/settings.local.json:        138
+      carrying a "hooks" block:                        115
+        pinned to their OWN bin/endless-go:            115
 
-## What follows
+The per-worktree body is alive; it is simply in the other file, and that file is
+gitignored rather than skip-worktree'd. An earlier version of this addendum
+measured only `settings.json`, concluded the per-worktree body was gone, and was
+wrong — recorded so the number is not re-derived from it.
 
-If `.claude/settings.json` no longer differs per worktree, it carries no local
-modification, so skip-worktree has nothing to hide and the rebase collisions
-that "cost a live session roughly every third time" have no cause left. The
-symlink design would then be solving a problem that no longer exists.
+## What still holds regardless
 
-Two caveats before acting on this:
+**The second bug this section documents is independent of all of the above and
+still real:** the generator reads `git show HEAD:.claude/settings.json` from the
+WORKTREE BRANCH's HEAD, so any key added to the committed copy after a worktree
+forks is silently dropped there. That is a bug about the generator, not about
+per-worktree bodies or about which file holds them.
 
-- One worktree (e-2122) still carries both a hooks block and skip-worktree, and
-  holds a live session. That is a single case, not a population.
-- **The second bug that section documents is independent of all this and still
-  real:** the generator reads `git show HEAD:.claude/settings.json` from the
-  WORKTREE BRANCH's HEAD, so any key added to the committed copy after a
-  worktree forks is silently dropped there. That is a bug about the generator,
-  not about per-worktree bodies, and it survives regardless.
-
-The binary-selection half is now E-2166's (ED-1595). Cross-referenced so neither
-task re-derives this.
+The binary-selection half — which binary those hooks name — is E-2166's
+(ED-1595). Cross-referenced so neither task re-derives it.
