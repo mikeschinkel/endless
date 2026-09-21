@@ -6582,3 +6582,11 @@ A decision is a statement of intent at a moment. An implementing task may delive
 
 So: quote a decision for WHY, never for WHAT IS. Before reasoning from it, grep the code for the thing it claims was removed. Here one grep for XDG_CONFIG_HOME would have shown five live injection sites and saved a wrong claim to Mike.
 - **Project**: endless
+
+### [2026-09-21] Confirm which file or table is authoritative before measuring it — an absence counted in the wrong place reads exactly like success
+Measuring E-1972's worktree-pin population, I counted hooks blocks in .claude/settings.json, found 1 of 141, and concluded the pin had been dismantled and no sweep was needed. The override had moved to .claude/settings.local.json four months earlier (E-1457, landed 2026-05-24). The real count was 115 of 141 still pinned to their own bin/endless-go, 32 of them stale. I wrote the wrong conclusion into three durable places before Mike caught it.
+
+The task's own analysis already warned about a version of this: derive the signal from what a binary CONTAINS, not from file metadata. The same discipline applies one level up. A zero is not evidence of progress until you have confirmed you are counting the thing that is currently load-bearing.
+
+Before reporting a population count: find what MOVED. Check .gitignore comments, search the ledger for a task that relocated the file, and diff a live example against the path you assumed. A measurement that happens to confirm a hopeful story deserves more scrutiny, not less.
+- **Project**: endless
