@@ -1,55 +1,59 @@
 Implements ED-1595. Self_dev only (ED-1571): every other project has one
 installed binary and no land, so none of this mechanism exists there.
 
-# First: the premise this task was filed with is stale
+# The population, measured 2026-09-21
 
-This task was originally filed to invert the E-998 pin and sweep ~96 worktrees.
-**Both halves are obsolete.** Measured against the live tree 2026-09-21, and
-again the day before with identical results:
+The per-worktree hook override lives in **`.claude/settings.local.json`**, not
+`.claude/settings.json` — E-1457 (`cleans_up E-998`, landed 2026-05-24,
+`16b2832`) moved it there and gitignored it. Measure the right file; an earlier
+draft of this analysis measured `settings.json`, found it nearly empty, and
+wrongly concluded the pin was gone.
 
-    worktrees with .claude/settings.json:        141
-      carrying a "hooks" block:                    1   (e-2122, live session)
-      carrying XDG_CONFIG_HOME:                    0
-      with skip-worktree set on that file:         1
+    worktrees with .claude/settings.local.json:        138
+      carrying a "hooks" block:                        115
+        pinned to their OWN bin/endless-go:            115   (binary present: 115)
+        pointing at the global install:                  0
+      of the 115 pinned binaries, pre-E-2011 (stale):   32
 
-Compare the analysis on E-1972, which measured 96 of 135 pinned on 2026-08-13.
-The main checkout's `.claude/settings.json` is now down to `autoMemoryEnabled`
-and `enabledPlugins`. Hooks come from the user-level Claude settings file,
-which points at the globally installed `endless-go`.
+Discriminator: `strings <wt>/bin/endless-go | grep -q "storing project path"`.
+Compare 96 of 135 pinned on 2026-08-13 and 57 stale on 2026-08-26. The pin is
+alive and roughly a third of it is stale.
 
-So **"hooks always invoke main's binary" is already true in practice**, arrived
-at by the per-worktree hooks block disappearing rather than by decision. What
-removed it was not determined; ED-1554's implementation (E-1964, which deletes
-the XDG_CONFIG_HOME injection) and `endless worktree sync` rebases are both
-candidates. **Do not build the sweep.** There is no population to sweep — one
-worktree, held by a live session, which is a single case and not a migration.
+# What to build
 
-# What is actually unbuilt
-
-The other half of ED-1595. **There is currently no way to run a worktree's hook
-binary at all**, so candidate hook code is never exercised and E-998's purpose
-is entirely unserved. That is the gap.
+Three pieces. The first two are ED-1595; the third is what reaches the existing
+population.
 
 1. **The declaration.** A command that marks a task as wanting its worktree's
-   binary. Settable by the session or by the user, at any point in the task's
+   binary. Settable by the user or by the session, at any point in the task's
    life, changeable mid-task — discovering you are now touching hook code is
-   common. Not a hand-edited file. Stored worktree-locally, not on `tasks`:
-   it must be readable before `monitor.DB()` connects, a `tasks` column would be
-   NULL for every project that is not Endless-developing-Endless, and the
-   declaration is meaningful only while the worktree exists. Visibility in
-   `task show` comes from reading that file, not from storing the value twice.
+   common. Neither party is privileged. Not a hand-edited file. Stored
+   worktree-locally, not on `tasks`: it must be readable before `monitor.DB()`
+   connects, a `tasks` column would be NULL for every project that is not
+   Endless-developing-Endless, and the declaration is meaningful only while the
+   worktree exists. Visibility in `task show` comes from reading that file, not
+   from storing the value twice.
 
-2. **The spawn.** Main's binary reads the declaration and spawns the worktree's
-   binary only when it is declared AND the worktree binary's schema version
+2. **The spawn, and the announcement.** New worktrees' settings name the
+   installed binary. Main's binary reads the declaration and spawns the
+   worktree's only when it is declared AND the worktree binary's schema version
    exactly matches the database (ED-1570 — exact agreement, no compatibility
-   range, in both directions).
-
-3. **The announcement.** The session states which binary it is on in its opening
-   message. This costs nothing extra — the session is already making the
-   declaration — and it is what keeps the opt-in default's decay risk visible.
-   The observed failure was self-concealing in both directions: a session ran a
+   range, in both directions). The session states which binary it is on in its
+   opening message: the declaration and the announcement are one act, and the
+   observed failure was self-concealing in both directions — a session ran a
    stale binary, then a routine `git checkout` silently moved it onto a current
    one mid-session, and neither transition printed anything.
+
+3. **The sweep over the 115.** Required, and it cannot ride in as a commit.
+   `bin/` is gitignored, and `.claude/settings.local.json` is itself gitignored
+   since E-1457 — so `endless worktree sync` (E-2090) cannot deliver it either,
+   because a rebase cannot carry a file git does not track. The sweep must write
+   that file directly, outside git.
+
+   The durable form, and what makes this the last time the question is answered
+   by touching 115 files: **a worktree's settings should stop naming a binary
+   path at all.** Once they name the installed binary, every future decision
+   about which binary runs lives inside a binary that can be updated.
 
 # Gate placement — two placements ruled out by evidence
 
@@ -93,6 +97,8 @@ never migrate the real ledger. Implement ED-1570's exact agreement.
 - **E-2134** is now the live settings-placement concern: hooks currently live
   machine-wide in the user's Claude settings, so they fire in every directory
   including projects that will never use Endless.
-- **E-2035**'s `.claude/settings.json` section is moot for the reasons measured
-  above; the finding is folded into that task.
+- **E-2035**'s `.claude/settings.json` section is written against the
+  pre-E-1457 skip-worktree mechanism and should be re-read against
+  `settings.local.json`. Its core — the artifact-root resolver — is unaffected,
+  as is the separate generator bug it documents.
 - **E-2020** owns what hooks do during the land window.
