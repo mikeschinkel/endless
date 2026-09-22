@@ -445,3 +445,62 @@ Four, covering both halves in both directions: a correct-but-uncommitted mirror
 is adopted and the pass then goes quiet; an ignored mirror is written for local
 reading, never forced in, and does not re-report every pass; and at the commit
 layer an ignored path is dropped rather than failing the commit.
+
+
+
+
+# Fourth pass — 2026-09-22: "already committed" is success, not failure
+
+WARN-0001 incident 1535, reported by another session:
+
+    job "doc-mirrors" failed: commit: git commit -o .endless/tasks/e-1983/plan.md
+    -m Endless: reconcile document mirrors: exit status 1:
+    … nothing to commit, working tree clean
+
+Two writers commit the same mirror and nothing coordinates them:
+`events.CommitDoc` at write time, and the sweep on its fifteen-minute cadence.
+Three rapid `task update --plan-file` calls on one task, a sweep firing inside
+that window — the sweep read the mirror while it was briefly stale, saw a real
+byte difference, wrote the file and queued it, and by the time it reached
+`git commit` the write-time path had already committed identical bytes. Clean
+tree, exit 1, job marked failed, backoff lengthening, on a system that had done
+exactly what it should.
+
+## Both writers stay
+
+The reporting session offered removing the sweep's writer as the deeper fix,
+since CommitDoc now covers write time. It is not: CommitDoc covers the INSTANT
+of a write and nothing else. The sweep covers what write time cannot —
+relocating legacy mirrors, backfilling ones that never reached main, adopting
+correct-but-uncommitted ones, and repairing content when a write-time commit
+failed. Passes two and three of this task exist because write time is
+best-effort; removing the thing that comes back for it would reintroduce both.
+
+What was actually missing is smaller and more precise: for every caller on this
+path, "the commit I wanted has already happened" is the SUCCESS condition, not
+an error.
+
+## The fix
+
+`commitPathsOnce` checks, after staging, whether anything among the named paths
+differs from HEAD, and returns nil when nothing does. Because the collision is a
+race, the check alone cannot close it — a competing commit can land between the
+check and the commit — so a commit that fails with git's "nothing to commit" is
+also read as success.
+
+`isNothingToCommit` is kept deliberately disjoint from `isIndexLocked`, and a
+test pins that: contention is worth retrying and this is not, and confusing the
+two would either retry forever or swallow a lock error as success.
+
+## The same class, three times
+
+This is the third WARN-0001 in this function, and all three are one shape — git
+refusing a no-op that Endless treated as a fault:
+
+  - 1534: `git add` on a path in neither the working tree nor the index.
+  - (unnumbered, found by reading a tree) `git add` on an ignored path.
+  - 1535: `git commit` when nothing staged differs.
+
+Each guard stopped one call short of the next. The general rule, now stated in
+the code: before handing git a path list computed from the filesystem, establish
+that git can act on it — and treat "there was nothing to do" as done.
