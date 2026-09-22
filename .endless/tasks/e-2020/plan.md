@@ -200,9 +200,10 @@ This task is where stale binaries begin to halt, so it cannot land alone.
   a brainstorm; its deliverable is ED-1595 (accepted): hooks always invoke main's
   binary, which spawns the worktree's only on an explicit per-task declaration
   defaulting to main. **The mechanism implementing it is E-2166, which is
-  `unplanned`.** So this task's blocker is satisfied on paper while the
-  protection it relied on does not exist yet. Read the next bullet before
-  treating this as unblocked.
+  `unplanned`.** E-1972's completion therefore satisfied this task's blocker on
+  paper while leaving the protection it relied on unbuilt, so **E-2166 now
+  blocks this task directly** (recorded 2026-09-22). Landing before it ships a
+  guard the pinned binaries never execute — see the next bullet.
 - **Why that protection mattered, and NOT because stale binaries start halting.**
   An earlier draft said they would. They do not: the version check lives in the
   binary doing the connect, so a build that predates this task carries no check
