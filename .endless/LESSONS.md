@@ -6648,3 +6648,13 @@ Say which session only when it changes what he should DO: another session curren
 
 The general shape: when a question implies fault, the reflex to first establish it was not mine is exactly the reflex to distrust. Answer the substance, and let attribution come later or not at all.
 - **Project**: endless
+
+### [2026-09-22] Acknowledging a correction is not applying it — check the next tool call actually reflects what you just said
+Mike pointed out that `--db main` makes the `cd` to the main checkout unnecessary. I replied 'Noted — dropping the cd' and then opened the very next Bash call with `cd <main checkout> &&`, and four more after that. He sent a screenshot with arrows.
+
+The failure is not the cd. It is that the acknowledgement and the behavior were produced independently: I wrote the sentence from the correction and then built the command from habit, with nothing connecting the two. An agreement that costs nothing to type and changes nothing about the next action is worse than saying nothing, because it tells the user the problem is handled.
+
+The rule: when a correction names something concrete about HOW I invoke a tool, the next invocation of that tool is the test. Look at it before sending. If the thing I just promised to stop doing is in it, the promise was decorative.
+
+Narrow substance worth keeping, since it is why the prefix felt natural: this worktree's source is ~200 commits behind main, so reading main's CURRENT code does need main's path — E-2137 landed after this worktree's HEAD, and the code I was investigating only exists there. But that is served by an absolute path in the command, not by cd-ing the shell, and it was not the reason the prefix appeared. It appeared because I did not look.
+- **Project**: endless
