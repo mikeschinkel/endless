@@ -6616,3 +6616,15 @@ The pattern to watch: I reach for absolute words — cannot, never, impossible, 
 
 Say what is actually missing. 'Nothing announces it' is weaker-sounding and correct, and it points at the right fix.
 - **Project**: endless
+
+### [2026-09-22] Ask what an inherited mechanism BUYS before planning how to build it
+Planning E-2166 I spent many turns refining HOW hooks would delegate to a worktree binary — the declaration, the version probe, mid-session divergence, the notice — without once asking what delegation buys. Mike asked 'why should it EVER run the worktree binary?' That is the question I should have asked at the first reading of ED-1595.
+
+The answer, once asked, dissolved most of the task. The stated purpose is exercising candidate hook code. But verify suites already drive the real hook binary with real payloads under a temp HOME — .endless/tasks/e-1202, e-1347, e-1661, e-1662, e-1714 all do it. So the purpose is already served, deterministically and in isolation. Live delegation buys realism at the price of candidate code writing into the shared ledger, which the record says broke the machine twice.
+
+The failure pattern: I treated an accepted decision as a PREMISE and planned inside it. A decision constrains what I may choose; it does not excuse me from checking whether its purpose is still served, or served more cheaply elsewhere. Those are different questions and only the first is settled by acceptance.
+
+The check, before planning any mechanism I did not design: state what it is FOR in one sentence, then ask whether anything already does that. If something does, say so before writing a plan — the answer may be that the mechanism should shrink or go, and that is worth more than a well-built version of it.
+
+Related and distinct from 'the decision record outranks the code': that one is about not contradicting decisions. This one is about not hiding behind them.
+- **Project**: endless
