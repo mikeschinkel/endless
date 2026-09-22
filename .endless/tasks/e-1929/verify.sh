@@ -27,6 +27,17 @@
 # Absorbs E-1930 (policy scope), E-1931 (drop pending notices on removal) and
 # E-1932 (one-shot repair of session_tasks rows that predate their task).
 #
+# MAINTENANCE NOTE (2026-09-22). This suite was written against the codebase as
+# it stood when E-1929 landed and was repaired after six weeks of drift. What
+# moved, so the next reader does not mistake a rename for a regression:
+#   --llm -> --agent; --config-dir -> --db-dir
+#   sessions.active_task_id and session_statuses.active_task_id -> task_id
+#   sessions.kind_id and session_kinds dropped (E-2074)
+#   session_statuses.recorded_at -> created_at; task_landings.branch -> base_branch
+#   task titles must begin with a registered verb, so fixture titles use one
+#   sessions.task_id is now write-once (ED-1560) and is NOT cleared on removal
+#   `task import`, tasks.source_file and the bulk-clear removal retired (E-2142)
+#
 # Run from anywhere inside the worktree:
 #   endless task verify E-1929
 #
@@ -52,7 +63,7 @@
 # cache is touched. The Python CLI runs from the worktree source with
 # <worktree>/bin prepended to PATH, so the event bridge execs the candidate
 # endless-go rather than the global install; the Go renderer is invoked directly
-# from <worktree>/bin with --config-dir pointed at the temp DB.
+# from <worktree>/bin with --db-dir pointed at the temp DB.
 
 # Refuse a direct run, and pick up the shared harness vocabulary. Sourced as the
 # FIRST executable statement so the refusal fires before anything in this file
@@ -123,7 +134,7 @@ Q() { E sql "$1" --tsv 2>/dev/null; }
 W() { E sql "$1" --write >/dev/null 2>&1; }
 # GO_STATUS ...: the candidate Go renderer — the SAME code path `session status`
 # and the live monitor both render from — headless, against the isolated DB.
-GO_STATUS() { NO_COLOR=1 "$EGO" --config-dir "$DBDIR" session-status --cols 200 "$@" 2>&1; }
+GO_STATUS() { NO_COLOR=1 "$EGO" --db-dir "$DBDIR" session-status --cols 200 "$@" 2>&1; }
 
 # Ids are fixed so every assertion can name them literally.
 FOCAL=9100       # the goal task S1 is on; the session-status focal
@@ -134,8 +145,8 @@ CHILD=9201
 GRANDCHILD=9202
 RELATED=9300     # holds a relation — the E-1915 guard's subject
 PEER=9301
-S1=9501          # session whose active_task_id points at VICTIM
-S2=9502          # session whose active_task_id points at GRANDCHILD
+S1=9501          # session whose task_id points at VICTIM
+S2=9502          # session whose task_id points at GRANDCHILD
 S3=9503          # session pointing at KEEPER — must be left alone
 
 setup_fixture() {
@@ -178,14 +189,16 @@ setup_fixture() {
     # Sessions. S1 is on the focal AND points at VICTIM; S2 points at the
     # grandchild (the cascade's deepest node); S3 points at KEEPER and must be
     # untouched by either removal.
-    W "INSERT INTO sessions (id, session_id, project_id, state, kind_id, active_task_id) VALUES
-         ($S1, 'uuid-$S1', $PID, 'working', 1, $VICTIM),
-         ($S2, 'uuid-$S2', $PID, 'working', 1, $GRANDCHILD),
-         ($S3, 'uuid-$S3', $PID, 'working', 1, $KEEPER)"
+    # E-2074 dropped sessions.kind_id and the session_kinds table; platform
+    # carries the harness name.
+    W "INSERT INTO sessions (id, session_id, project_id, platform, state, task_id) VALUES
+         ($S1, 'uuid-$S1', $PID, 'claude', 'working', $VICTIM),
+         ($S2, 'uuid-$S2', $PID, 'claude', 'working', $GRANDCHILD),
+         ($S3, 'uuid-$S3', $PID, 'claude', 'working', $KEEPER)"
 
-    # session_statuses carries its own active_task_id — the second pointer that
+    # session_statuses carries its own task_id — the second pointer that
     # used to be nulled by ON DELETE SET NULL and now must be nulled explicitly.
-    W "INSERT INTO session_statuses (session_id, active_task_id, recorded_at) VALUES
+    W "INSERT INTO session_statuses (session_id, task_id, created_at) VALUES
          ($S1, $VICTIM,     '2026-08-09T00:00:00'),
          ($S2, $GRANDCHILD, '2026-08-09T00:00:00'),
          ($S3, $KEEPER,     '2026-08-09T00:00:00')"
@@ -195,13 +208,13 @@ setup_fixture() {
     W "INSERT INTO session_tasks (session_id, task_id, relation_id, created_at, updated_at) VALUES
          ($S1, $VICTIM, 3, '2026-08-09T00:00:00', '2026-08-09T00:00:00'),
          ($S1, $KEEPER, 3, '2026-08-09T00:00:00', '2026-08-09T00:00:00')"
-    # S1's active_task_id is VICTIM above, but session status resolves its row
-    # set from sessions whose active_task_id is the FOCAL, so bind S1 there too
+    # S1's task_id is VICTIM above, but session status resolves its row
+    # set from sessions whose task_id is the FOCAL, so bind S1 there too
     # once the pointer assertions have been made (see test_pointers_nulled).
 
     # Landing history — audit data that must SURVIVE the removal (the FK used to
     # cascade it away).
-    W "INSERT INTO task_landings (task_id, session_id, branch, merge_commit_sha, landed_at)
+    W "INSERT INTO task_landings (task_id, session_id, base_branch, merge_commit_sha, landed_at)
          VALUES ($VICTIM, $S1, 'task/9101-victim', 'deadbeef', '2026-08-09T00:00:00')"
 
     # Notices: one pending and one delivered for VICTIM, one pending for KEEPER.
@@ -267,14 +280,14 @@ test_migration_applies() {
     # already HAS the column. Applying the change here is the idempotence case
     # the sandbox and every test DB hit, and the one a plain `.sql` ALTER would
     # hard-error on.
-    "$EGO" --config-dir "$migdir" session-status --task 1 >/dev/null 2>&1
+    "$EGO" --db-dir "$migdir" session-status --task 1 >/dev/null 2>&1
 
-    out=$("$EGO" --config-dir "$migdir" event apply-change \
+    out=$("$EGO" --db-dir "$migdir" event apply-change \
         "$WT/internal/schema/changes/e-1929-add-tasks-removed.go" 2>&1); rc=$?
     assert_eq "the change applies through the dispatcher" "0" "$rc"
     assert_contains "...reporting applied" '"status":"applied"' "$out"
 
-    out=$("$EGO" --config-dir "$migdir" event apply-change \
+    out=$("$EGO" --db-dir "$migdir" event apply-change \
         "$WT/internal/schema/changes/e-1929-add-tasks-removed.go" 2>&1); rc=$?
     assert_eq "re-applying is a no-op, so a failed land can be retried" "0" "$rc"
     assert_contains "...reporting skipped" '"status":"skipped"' "$out"
@@ -343,10 +356,10 @@ test_show_marks_removed() {
     assert_contains "...and says why the id is retained" "retained" "$out"
     assert_contains "...while still showing the task it was" "Victim removal target" "$out"
 
-    out="$(E task show "$VICTIM" --llm 2>&1)"
-    assert_contains "--llm carries removed=true" "removed=true" "$out"
+    out="$(E task show "$VICTIM" --agent 2>&1)"
+    assert_contains "--agent carries removed=true" "removed=true" "$out"
 
-    out="$(E task show "$KEEPER" --llm 2>&1)"
+    out="$(E task show "$KEEPER" --agent 2>&1)"
     assert_not_contains "...and a live task does not" "removed=true" "$out"
 
     out="$(E task show "$VICTIM" --json 2>&1)"
@@ -364,8 +377,8 @@ test_list_removed() {
     assert_not_contains "...and live tasks are NOT interleaved" "E-$KEEPER" "$out"
     assert_contains "...under a header that says so" "Removed tasks" "$out"
 
-    out="$(E task list --removed --llm 2>&1)"
-    assert_contains "--llm marks the listing as the removed set" "(removed)" "$out"
+    out="$(E task list --removed --agent 2>&1)"
+    assert_contains "--agent marks the listing as the removed set" "(removed)" "$out"
 }
 
 # ─── F: the regression the whole change exists to prevent ────────────────────
@@ -373,11 +386,16 @@ test_list_removed() {
 test_id_monotonicity() {
     section "F. A removed id is never re-minted"
 
-    local doomed next_id out
-    out="$(E task add 'Probe the id allocator floor' 2>&1)"
+    local doomed next_id out before
+    # Compare against the pre-add maximum. Reading MAX(id) alone cannot tell a
+    # successful add from a failed one — it just returns the fixture's highest
+    # id — which is how a broken `task add` used to read as a passing check here.
+    before="$(Q "SELECT MAX(id) FROM tasks")"
+    out="$(E task add 'Add a probe task for the id allocator floor' 2>&1)"
     doomed="$(Q "SELECT MAX(id) FROM tasks")"
-    if [[ -z "$doomed" ]]; then
-        report_fail "a fresh task is allocated the highest id" "an id" "$out"
+    if [[ -z "$doomed" || "$doomed" -le "$before" ]]; then
+        report_fail "a fresh task is allocated the highest id" \
+            "an id above $before" "max=${doomed:-<none>}; task add said: $out"
         return
     fi
     report_pass "a fresh task takes the highest id (E-$doomed)"
@@ -386,7 +404,7 @@ test_id_monotonicity() {
     assert_eq "removing the HIGHEST task retains its row" \
         "1" "$(Q "SELECT removed FROM tasks WHERE id=$doomed")"
 
-    E task add 'Probe the id allocator floor again' >/dev/null 2>&1
+    E task add 'Add a second probe task for the id allocator floor' >/dev/null 2>&1
     next_id="$(Q "SELECT MAX(id) FROM tasks WHERE removed = 0")"
 
     if [[ -n "$next_id" && "$next_id" -gt "$doomed" ]]; then
@@ -402,12 +420,20 @@ test_id_monotonicity() {
 test_pointers_nulled() {
     section "G. The pointers the FKs used to clear, and the history they must not"
 
-    assert_eq "sessions.active_task_id is nulled" \
-        "" "$(Q "SELECT COALESCE(active_task_id, '') FROM sessions WHERE id=$S1")"
-    assert_eq "session_statuses.active_task_id is nulled" \
-        "" "$(Q "SELECT COALESCE(active_task_id, '') FROM session_statuses WHERE session_id=$S1")"
+    # sessions.task_id is deliberately NOT cleared (ED-1560). It was
+    # ON DELETE SET NULL under hard delete, and E-1929 first carried that forward
+    # as an explicit UPDATE — but the column is now write-once, set at claim and
+    # never repointed, enforced by the sessions_task_id_write_once trigger, so
+    # clearing it would abort the whole removal. Retention is what makes that
+    # safe: the session still resolves to a real row, which reads `removed`.
+    assert_eq "sessions.task_id is RETAINED — write-once per ED-1560" \
+        "$VICTIM" "$(Q "SELECT COALESCE(task_id, '') FROM sessions WHERE id=$S1")"
+    # A status snapshot is not an ownership record: no trigger, FK was
+    # ON DELETE SET NULL, so this one is still cleared.
+    assert_eq "session_statuses.task_id is nulled" \
+        "" "$(Q "SELECT COALESCE(task_id, '') FROM session_statuses WHERE session_id=$S1")"
     assert_eq "...and an unrelated session's pointer is untouched" \
-        "$KEEPER" "$(Q "SELECT active_task_id FROM sessions WHERE id=$S3")"
+        "$KEEPER" "$(Q "SELECT task_id FROM sessions WHERE id=$S3")"
 
     # task_landings was ON DELETE CASCADE and now simply does not fire. That is
     # the intended outcome: landing history is audit data, and the retained task
@@ -451,11 +477,13 @@ test_cascade() {
     assert_eq "...and none is visible through live_tasks" "0" \
         "$(Q "SELECT count(*) FROM live_tasks WHERE id IN ($PARENT,$CHILD,$GRANDCHILD)")"
 
-    # The pointer nulling must run for EVERY id in the tree, not just the root.
-    assert_eq "the DESCENDANT's sessions.active_task_id is nulled" \
-        "" "$(Q "SELECT COALESCE(active_task_id, '') FROM sessions WHERE id=$S2")"
+    # The pointer clearing must run for EVERY id in the tree, not just the root
+    # — for the pointer that is still cleared. sessions.task_id is write-once
+    # (ED-1560) and stays put for descendants too; see section G.
+    assert_eq "the DESCENDANT's sessions.task_id is RETAINED (ED-1560)" \
+        "$GRANDCHILD" "$(Q "SELECT COALESCE(task_id, '') FROM sessions WHERE id=$S2")"
     assert_eq "...and its session_statuses pointer too" \
-        "" "$(Q "SELECT COALESCE(active_task_id, '') FROM session_statuses WHERE session_id=$S2")"
+        "" "$(Q "SELECT COALESCE(task_id, '') FROM session_statuses WHERE session_id=$S2")"
 
     out="$(E task list 2>&1)"
     assert_not_contains "the whole subtree is gone from task list" "E-$GRANDCHILD" "$out"
@@ -464,7 +492,7 @@ test_cascade() {
 # ─── J: the guards that must still refuse ────────────────────────────────────
 
 test_guards_still_refuse() {
-    section "J. The E-1915 and E-1927 guards are unchanged"
+    section "J. The E-1915 relation guard is unchanged"
 
     E task link "$RELATED" --to "E-$PEER" --type blocks >/dev/null 2>&1
     local out rc
@@ -475,29 +503,19 @@ test_guards_still_refuse() {
     assert_eq "...and the task is neither deleted nor flagged" \
         "0" "$(Q "SELECT removed FROM tasks WHERE id=$RELATED")"
 
-    # E-1927: the bulk-clear path (task import --replace) is guarded the same way,
-    # and it retains rather than deletes for the same reason.
-    local imported
-    printf '# Plan\n\n## Now\n\n- Ship the imported probe task\n' > "$TMP/plan.md"
-    E task import "$TMP/plan.md" >/dev/null 2>&1
-    imported="$(Q "SELECT id FROM live_tasks WHERE source_file LIKE '%plan.md' ORDER BY id LIMIT 1")"
-    if [[ -z "$imported" ]]; then
-        report_fail "a task imports from a plan file" "an imported task id" "<none>"
-        return
-    fi
-    report_pass "a task imports from a plan file (E-$imported)"
-
-    E task link "$imported" --to "E-$PEER" --type blocks >/dev/null 2>&1
-    out="$(E task import "$TMP/plan.md" --replace 2>&1)"; rc=$?
-    assert_eq "a bulk clear over a related task is still refused" "1" "$rc"
-    assert_eq "...and the imported task is untouched" \
-        "0" "$(Q "SELECT removed FROM tasks WHERE id=$imported")"
-
-    E task unlink "$imported" --to "$PEER" --type blocks >/dev/null 2>&1
-    out="$(E task import "$TMP/plan.md" --replace 2>&1)"; rc=$?
-    assert_eq "...and once unlinked, the bulk clear runs" "0" "$rc"
-    assert_eq "the bulk-cleared task is RETAINED, not deleted" \
-        "1" "$(Q "SELECT removed FROM tasks WHERE id=$imported")"
+    # The E-1927 bulk-clear half of this section is GONE, deliberately.
+    #
+    # E-1929 made `task import --replace` retain its rows like every other
+    # removal, and this section verified that the E-1927 guard still refused a
+    # bulk clear that would orphan a relation. E-2142 then retired the whole
+    # path: the `task import` command, `tasks.source_file`, and
+    # removeTasksBySourceFile are all gone, and `task.bulk_cleared` now replays
+    # as a declared no-op (events.RetiredKinds).
+    #
+    # There is nothing left to exercise — not a gap in coverage, an absence of
+    # subject. The one rule those assertions protected, that a removal retains
+    # rather than deletes, is covered for every surviving path by sections B, I
+    # and the executor/projector parity tests in section A.
 }
 
 # ─── L: broader suites ───────────────────────────────────────────────────────
