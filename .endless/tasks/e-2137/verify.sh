@@ -163,6 +163,12 @@ go_claim ./internal/docsweep/ TestAnIgnoredMirrorIsWrittenButNotForcedIntoGit \
     "a gitignored mirror is written for local reading and never forced in with -f"
 go_claim ./internal/events/ TestCommitDocPathsSkipsAnIgnoredUntrackedPath \
     "and staging one is dropped rather than failing the commit"
+go_claim ./internal/events/ TestCommitDocPathsSucceedsWhenTheContentIsAlreadyCommitted \
+    "the sweep losing the race to the write-time path is SUCCESS, not a failed job"
+go_claim ./internal/events/ TestCommitDocPathsStillCommitsAChangeBesideAnUnchangedPath \
+    "and that guard never swallows a real change sitting beside a settled one"
+go_claim ./internal/events/ TestContentionAndNothingToCommitAreDistinct \
+    "contention and already-committed stay disjoint — one retries, one does not"
 
 # The write path.
 py_claim tests/test_doc_mirror_to_main.py::test_nothing_is_written_into_the_worktree \

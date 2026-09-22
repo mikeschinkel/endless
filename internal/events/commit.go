@@ -274,13 +274,76 @@ func commitPathsOnce(projectRoot string, paths []string, subject, excludeGlob st
 		return err
 	}
 
+	if nothingStaged(projectRoot, paths) {
+		return nil
+	}
+
 	commitArgs := append([]string{"commit"}, prefixOnly(paths)...)
 	if canAmend {
 		commitArgs = append(commitArgs, "--amend", "--no-edit")
 	} else {
 		commitArgs = append(commitArgs, "-m", subject)
 	}
-	return runGit(projectRoot, commitArgs...)
+	err = runGit(projectRoot, commitArgs...)
+	if err != nil && isNothingToCommit(err) {
+		// Lost the race between the check above and this commit: somebody
+		// committed the same content in the gap. See isNothingToCommit.
+		return nil
+	}
+	return err
+}
+
+// nothingStaged reports whether the named paths have nothing staged that
+// differs from HEAD — in which case the state every caller here wants (these
+// paths' current content is committed) already holds, and committing would
+// either fail or manufacture an empty commit.
+//
+// A repository with no commits yet has no HEAD to diff against; there, anything
+// added is by definition new, so the answer is no.
+func nothingStaged(projectRoot string, paths []string) bool {
+	if _, err := runGitOutput(projectRoot, "rev-parse", "--verify", "HEAD"); err != nil {
+		return false
+	}
+	out, err := runGitOutput(projectRoot,
+		append([]string{"diff", "--cached", "--name-only", "HEAD", "--"}, paths...)...)
+	if err != nil {
+		// Could not ask. Fall through to the commit, which is the behaviour
+		// that existed before this check — never skip a commit on a failed
+		// probe.
+		return false
+	}
+	return strings.TrimSpace(out) == ""
+}
+
+// isNothingToCommit reports whether a git failure is "there was nothing to
+// commit" — a refusal, not a fault.
+//
+// WARN-0001 incident 1535. E-2137 made events.CommitDoc the write-time route
+// for a mirror AND left the doc-mirrors sweep committing the same files on its
+// own cadence, with nothing coordinating the two. Three rapid `task update
+// --plan-file` calls on one task, a sweep firing inside that window: the sweep
+// read the mirror while it was briefly stale, saw a real byte difference, wrote
+// the file and queued it — and by the time it reached `git commit`, the
+// write-time path had already committed identical bytes. Clean tree, exit 1,
+// job marked failed, backoff lengthening on a system that was working correctly.
+//
+// Both writers are deliberate and both stay. CommitDoc covers the instant of a
+// write; the sweep covers everything write-time cannot — relocating legacy
+// mirrors, backfilling ones that never reached main, adopting correct-but-
+// uncommitted ones, and repairing content when a write-time commit failed.
+// Removing either leaves a hole the other cannot fill. What was missing is that
+// "the commit I wanted has already happened" is this caller's SUCCESS condition,
+// not its error.
+//
+// Distinct from isIndexLocked: contention is worth retrying, and this is not —
+// retrying would fail identically forever.
+func isNothingToCommit(err error) bool {
+	if err == nil {
+		return false
+	}
+	text := err.Error()
+	return strings.Contains(text, "nothing to commit") ||
+		strings.Contains(text, "no changes added to commit")
 }
 
 // prefixOnly returns a flat slice of "-o", path, "-o", path, ... so the

@@ -310,3 +310,99 @@ func TestCommitDocPathsSkipsAnIgnoredUntrackedPath(t *testing.T) {
 		t.Error("HEAD moved: an ignored path was committed against the project's choice")
 	}
 }
+
+// WARN-0001 incident 1535: the sweep and the write-time path both commit the
+// same mirror, and nothing coordinates them. When the write-time path wins the
+// race, the sweep's `git commit` finds a clean tree and exits 1 — a job marked
+// failed, and a backoff lengthening, on a system that did exactly what it
+// should have.
+//
+// The end state this caller wants is "these paths' current content is
+// committed". When that is already true, it has succeeded.
+
+func TestCommitDocPathsSucceedsWhenTheContentIsAlreadyCommitted(t *testing.T) {
+	root, _ := initRepo(t)
+	rel := ".endless/tasks/e-1983/plan.md"
+
+	writeAt(t, root, rel, "body\n")
+	if err := CommitDocPaths(root, []string{rel}, "Endless: add plan for E-1983"); err != nil {
+		t.Fatalf("first commit: %v", err)
+	}
+	head := mustGit(t, root, "rev-parse", "HEAD")
+
+	// The sweep arrives with identical bytes — the shape of the race.
+	if err := CommitDocPaths(root, []string{rel},
+		"Endless: reconcile document mirrors"); err != nil {
+		t.Fatalf("committing content that is already committed: %v", err)
+	}
+
+	if after := mustGit(t, root, "rev-parse", "HEAD"); after != head {
+		t.Error("an empty commit was manufactured for content already committed")
+	}
+	if got := mustGit(t, root, "status", "--porcelain", "--", ".endless/tasks"); got != "" {
+		t.Errorf("mirror paths dirty:\n%s", got)
+	}
+}
+
+// The guard must not swallow real work: a genuine change alongside an unchanged
+// path still commits.
+func TestCommitDocPathsStillCommitsAChangeBesideAnUnchangedPath(t *testing.T) {
+	root, _ := initRepo(t)
+	settled := ".endless/tasks/e-1/plan.md"
+	fresh := ".endless/tasks/e-2/plan.md"
+
+	writeAt(t, root, settled, "settled\n")
+	if err := CommitDocPaths(root, []string{settled}, "Endless: add plan for E-1"); err != nil {
+		t.Fatalf("seed commit: %v", err)
+	}
+
+	writeAt(t, root, fresh, "fresh\n")
+	if err := CommitDocPaths(root, []string{settled, fresh},
+		"Endless: reconcile document mirrors"); err != nil {
+		t.Fatalf("CommitDocPaths: %v", err)
+	}
+
+	if err := runGit(root, "cat-file", "-e", "HEAD:"+fresh); err != nil {
+		t.Error("the new mirror was not committed")
+	}
+}
+
+func TestIsNothingToCommit(t *testing.T) {
+	cases := []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{"nil", nil, false},
+		{"git's own wording",
+			errors.New("git commit: exit status 1: On branch main\nnothing to commit, working tree clean"), true},
+		{"the staged-nothing wording",
+			errors.New("git commit: no changes added to commit"), true},
+		{"contention is a different thing",
+			errors.New("fatal: Unable to create '/p/.git/index.lock': File exists"), false},
+		{"an unrelated fatal",
+			errors.New("git commit: fatal: bad revision 'HEAD'"), false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := isNothingToCommit(tc.err); got != tc.want {
+				t.Errorf("isNothingToCommit(%v) = %v, want %v", tc.err, got, tc.want)
+			}
+		})
+	}
+}
+
+// The two classifiers must stay disjoint: contention is worth retrying and
+// "already committed" is not, and confusing them either retries forever or
+// swallows a lock error as success.
+func TestContentionAndNothingToCommitAreDistinct(t *testing.T) {
+	lock := errors.New("fatal: Unable to create '/p/.git/index.lock': File exists")
+	done := errors.New("nothing to commit, working tree clean")
+
+	if !isIndexLocked(lock) || isNothingToCommit(lock) {
+		t.Error("a lock error must read as contention only")
+	}
+	if isIndexLocked(done) || !isNothingToCommit(done) {
+		t.Error("an already-committed error must read as done only")
+	}
+}
