@@ -6606,3 +6606,13 @@ The pull is real: filing feels like diligence and leaves a visible artifact. But
 
 Before filing anything from a brainstorm or a wrap-up, ask in order: can I just fix it now; if not, does an open task already own the area (fold it in as evidence); and only then file. Several symptoms of one cause are one task. Filing a task to record something I could have said in one sentence spends Mike's attention twice — once to read the task, once to close it.
 - **Project**: endless
+
+### [2026-09-22] Do not say 'cannot be observed' when the truth is 'is not announced'
+Arguing for a mid-session notice, I wrote that a session 'cannot predict or observe' that hook delegation had stopped. Mike asked why not. The honest answer is that it is fully observable — a command can print it, the status line can carry it, a fault can record it. What is missing is that nothing TELLS you at the moment it happens.
+
+Those are different claims with different remedies. 'Unobservable' argues for building an observation mechanism. 'Unannounced' argues for a notification on top of an observation that already exists. I overstated the first to strengthen a case for the second, and the overstatement would have survived into the plan as a false premise someone later builds against.
+
+The pattern to watch: I reach for absolute words — cannot, never, impossible, invisible — when I want an argument to land. They are claims about the world and they get checked. Before writing one, ask what would have to be true for it to be false, then check whether that thing is already true. Here it took one question to collapse.
+
+Say what is actually missing. 'Nothing announces it' is weaker-sounding and correct, and it points at the right fix.
+- **Project**: endless
