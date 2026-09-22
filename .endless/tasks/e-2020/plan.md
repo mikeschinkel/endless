@@ -38,6 +38,24 @@ opposite of the design, in the function this task rewrites.
   exactly one schema version, so there is nothing to evaluate: the binary must be
   upgraded. Rollback is `endless db restore` from the backup `db upgrade` takes.
 
+**WHERE the gate runs is constrained, and the obvious placement is wrong.**
+E-1972's outcome rules out two placements on evidence, and this plan's earlier
+drafts walked into one of them by saying only "monitor.DB() ... reads the
+database's goose version":
+
+- It must run **before** the connect does any schema work. A gate after the
+  connect has already let old schema land.
+- It must run **outside** the `pinnedToForeignRealDB()` test. `hook` calls
+  `PinMainDB()` on every production invocation, and that pin makes `monitor.DB()`
+  skip the schema apply and all the enum integrity gates — so a gate written
+  where `Migrate()` and those gates live "would never fire for hooks, which is
+  the exact population it exists to catch."
+
+Increment 5 removes schema-passive, which would eventually resolve this on its
+own — but only eventually. Write the gate outside that branch from the start, or
+every increment between here and there ships a check invisible to the surface it
+matters most for.
+
 There is no compatibility window and no additive-migration exemption. ED-1570
 settled that an older binary writing a newer database is unsafe even when every
 intervening migration was additive, because the new columns exist precisely
@@ -89,6 +107,22 @@ which mattered.
   answer, including "I can't".
 - **Background jobs and the tmux status line**: silent, with the fault. Same
   reasoning as the hook — high frequency, no reader.
+
+**The land window is this task's, assigned explicitly.** E-1972's outcome
+(section 5) hands it here: the seconds in which the database is migrated and the
+installed binary is not, "when every hook on the machine has nothing valid to
+run and last time printed fifty near-identical errors after a *successful*
+land." That is the same condition as any other mismatch and gets the same
+treatment — silent no-op plus one recorded fault — so it needs no separate
+mechanism, only the assurance that the window is covered rather than assumed
+away. The fifty-identical-lines outcome is precisely what the dedup in assertion
+4 exists to prevent.
+
+One observation carried over from E-1972, counter-intuitive enough to be worth
+keeping: during that window the *landing worktree's* binary is the only one on
+the machine whose version matches the migrated database. A rule of "spawn the
+worktree binary when versions match" routes that worktree's own hooks correctly
+for free — and does nothing at all for the other ~130.
 
 ## Increment 4 — `endless db upgrade`
 
@@ -162,7 +196,14 @@ This task is where stale binaries begin to halt, so it cannot land alone.
 
   If E-2158 lands first, re-read the `_incomplete_schema_hint` bullet above:
   the deferral becomes moot because its subject is already gone.
-- **E-1972 blocks this task, and NOT because stale binaries start halting.**
+- **E-1972 has LANDED (2026-09-21) — but as a DECISION, not a mechanism.** It is
+  a brainstorm; its deliverable is ED-1595 (accepted): hooks always invoke main's
+  binary, which spawns the worktree's only on an explicit per-task declaration
+  defaulting to main. **The mechanism implementing it is E-2166, which is
+  `unplanned`.** So this task's blocker is satisfied on paper while the
+  protection it relied on does not exist yet. Read the next bullet before
+  treating this as unblocked.
+- **Why that protection mattered, and NOT because stale binaries start halting.**
   An earlier draft said they would. They do not: the version check lives in the
   binary doing the connect, so a build that predates this task carries no check
   and cannot halt. Measured 2026-09-20 — 134 of 142 worktrees carry their own
@@ -175,10 +216,12 @@ This task is where stale binaries begin to halt, so it cannot land alone.
 
   So what this task achieves ALONE is narrower than it looks: the guard reaches
   a session only once that worktree has rebuilt, and the worktrees most likely
-  to be dangerous are the ones least likely to have rebuilt. E-1972 is what
-  routes hooks through main's known-good binary, which is what puts the check in
-  front of every session rather than only freshly-built ones. Without it this is
-  a guard the binaries needing guarding do not execute.
+  to be dangerous are the ones least likely to have rebuilt. ED-1595's routing —
+  hooks running main's binary — is what puts the check in front of every session
+  rather than only freshly-built ones. Until E-2166 builds it, this is a guard
+  the binaries needing guarding do not execute. E-2166 carries the live
+  measurement (2026-09-21): 115 of 141 worktrees pin every Claude hook at their
+  own binary.
 
   The cost profile inverts the same way. Once Increment 5 removes schema-passive,
   the halting population is not a one-time backlog to drain — it is every
