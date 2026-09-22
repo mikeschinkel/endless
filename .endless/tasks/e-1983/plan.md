@@ -62,29 +62,58 @@ E-2002's doc already names the population this affects: "any macOS project
 reached through /var or /tmp (both symlinks into /private) and any user whose
 projects live under a symlinked parent."
 
-## Decision 3 — no PreToolUse gate is built
+## Decision 3 — a PreToolUse gate, scoped to unbound-inside-a-worktree
 
-The earlier framing of this task proposed refusing the session: inform at
-SessionStart, then deny every tool call at PreToolUse. Under Decisions 1 and 2
-there is nothing left for it to catch.
+The gate ships, and its trigger is narrow: **cwd looks like a task worktree and
+the session holds no task.** That is the only state left after Decisions 1 and 2
+where something is genuinely wrong, and today it is silent.
 
-- cwd in the main checkout: the session is unbound, which is now the CORRECT
-  outcome rather than a breach.
-- cwd in a worktree that disagrees with the window: the session binds from cwd,
-  correctly; only the window is stale.
-- cwd in a worktree that fails to resolve: Decision 2 removes the only known
-  cause.
+It is the mirror of `enforceClaimedCwd`, which blocks when a session HOLDS a
+task and its cwd has drifted out of that task's worktree — and which returns
+early on `session.TaskID == nil`, leaving exactly this gap. The pair then covers
+both halves: bound-but-wrong-place, and right-place-but-unbound.
 
-So the gate would carry E-1669's "refusing in the hook path blocks every tool
-call" cost with no case to justify it. Not built. If a future case appears,
-E-1669's precedent stands until something overturns it deliberately.
+**Trigger, precisely.** `TaskIDFromWorktreePath(cwd)` yields an `E-NNN`. That is
+a pure regex on the path, independent of the `.endless/worktree.json` walk that
+`FindWorktreeRoot` performs — which matters, because the walk is the thing that
+failed. The path shape says "this is task N's worktree" while the session holds
+nothing, so the two signals disagree and the disagreement is the defect.
 
-What ships instead is a SessionStart message (injected context, the only lever
-SessionStart has) when a session lands unbound in a directory that LOOKS like it
-should have bound — inside the project, not the main checkout. It names which
-step failed: no project resolved, no `.endless/worktree.json` found walking up,
-or a worktree root whose path yields no `e-NNN`. Those have different fixes and
-a single "could not bind" is not actionable.
+**What it does.** SessionStart injects the explanation (its only lever), and
+PreToolUse returns `decision: "block"` on every tool call until the session is
+bound. The instruction rides in both `reason` and `additionalContext`, as
+`preToolUseBlock` already does.
+
+The message names which step failed, because the fixes differ: no project
+resolved, no `.endless/worktree.json` found walking up from cwd, or a worktree
+root whose path yields no `e-NNN`. It also names the way out —
+`endless task claim E-NNN` or `endless task bind E-NNN` — so the block is
+escapable by the agent reading it.
+
+**Deliberately NOT blocked:**
+
+- **cwd in the main checkout.** An unbound session there is the correct outcome
+  per the rule above, not a breach. `enforceWorktreeGate` already blocks the
+  different case of a session that HOLDS a task while sitting in main.
+- **A foreign or unrelated tree** inside the project. `enforceWorktreeGate`
+  leaves those alone on purpose; this does too.
+- **No project resolved.** Matching `enforceWorktreeGate`'s own precedent:
+  without a project root we cannot evaluate, so the call proceeds.
+- **Agent-tool subagents** (`payload.AgentID != ""`). They share the parent's
+  cwd but have their own session identity and are deliberately never bound
+  (E-1300). Without this screen the gate would block every subagent tool call
+  in every worktree — the single worst false positive available here.
+
+**Accepted consequence.** Opening a session in a worktree merely to read code,
+without binding, is no longer a usable state: the gate blocks until you bind.
+That is the invariant being enforced rather than an oversight. `task bind` is
+the one-command answer, and the block names it.
+
+**Why this is worth E-1669's cost.** E-1669 chose "a warning, NOT a refuse"
+because refusing in the hook path blocks every tool call. That judgment stands
+for its risk. It is overridden here for a narrower one: the trigger fires only
+on a state that is already broken, the population is small after Decision 2
+removes the known cause, and the remedy is a single command the message names.
 
 ## Decision 4 — repair the rows this bug already created
 
@@ -140,8 +169,9 @@ plumbing through the SessionStart branch goes with it.
 via the E-2002 resolver before walking, and its docstring stops claiming cwd is
 unresolved.
 
-**Go — the SessionStart message.** Emitted only when the session lands unbound
-inside the project but outside the main checkout, naming the step that failed.
+**Go — the unbound-in-a-worktree gate (Decision 3).** The SessionStart
+injection plus a PreToolUse block, sited beside `enforceWorktreeGate` and
+`enforceClaimedCwd` and screening subagents before anything else.
 
 **Schema change — the repair**, as Decision 4 specifies.
 
@@ -159,6 +189,13 @@ documented as display and lookup state that never binds.
 - `task spawn` still binds its worker on the first event.
 - A project reached through a symlinked path binds from cwd; before Decision 2
   the same case binds nothing.
+- The gate blocks a session sitting in a worktree with no task bound, and the
+  block names both the failed step and `task bind`.
+- The gate does NOT block: an unbound session in the main checkout, a foreign
+  tree inside the project, or a session whose project does not resolve.
+- **The gate does NOT block Agent-tool subagents.** Drive a real subagent inside
+  a worktree and assert its tool calls pass. This is the false positive that
+  would make the gate unusable, and it is the check most likely to be forgotten.
 - The repair: run against a copy of the real database, confirm E-1732 keeps
   ES-879 and unbinds ES-882, confirm a second run is a no-op, and confirm the
   trigger is present and functional afterward.
