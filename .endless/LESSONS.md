@@ -6658,3 +6658,20 @@ The rule: when a correction names something concrete about HOW I invoke a tool, 
 
 Narrow substance worth keeping, since it is why the prefix felt natural: this worktree's source is ~200 commits behind main, so reading main's CURRENT code does need main's path — E-2137 landed after this worktree's HEAD, and the code I was investigating only exists there. But that is served by an absolute path in the command, not by cd-ing the shell, and it was not the reason the prefix appeared. It appeared because I did not look.
 - **Project**: endless
+
+### [2026-09-22] Never reset --hard onto main without proving the branch's commits are on main
+E-2137 pass 3 was committed, rebased, handed off — and NOT landed. Mike's next message was a bug report, not 'landed'. On the next reopen I ran 'git reset --hard main' to start clean, which is right after a land and destructive before one. It moved the branch off 920b33e70 and I nearly lost the whole pass; I only noticed because a grep for a symbol I had written came back 0.
+
+The check costs one command and must happen BEFORE the reset:
+
+    git rev-list --count main..HEAD     # commits on the branch not on main
+    git log main --oneline | grep <subject>
+
+Nonzero, or no match, means the work has not landed and reset --hard discards it.
+
+Do not infer 'it landed' from any of these, all of which were true here: the handoff said ready to land; a later session referenced the work as landed ('work E-2137 landed'); the task status was unverified; the session-start gitStatus listed the commit. The only proof is the commit being reachable from main.
+
+Recovery, when it does happen: 'git reflog show <branch>' keeps the old tip. Restore with 'git reset --hard <old-tip>', rebase onto main, then re-apply anything done since — save it first with 'git diff > patch' and re-apply with 'git apply --3way'. Expect a conflict where both the restored work and the new work appended to the same file; rebuild that file from the two known-good sources rather than splicing conflict markers by hand.
+
+Third-party reports about another task's state are hearsay about MY branch. 'E-2137 landed' in someone else's message meant an earlier pass had landed, not the one sitting in my worktree.
+- **Project**: endless
