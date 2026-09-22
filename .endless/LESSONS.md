@@ -6628,3 +6628,13 @@ The check, before planning any mechanism I did not design: state what it is FOR 
 
 Related and distinct from 'the decision record outranks the code': that one is about not contradicting decisions. This one is about not hiding behind them.
 - **Project**: endless
+
+### [2026-09-22] Never offer to drop a worktree; fix what is mine to fix instead of handing Mike a menu
+Diagnosing a broken tmux status line, I twice put 'drop the e-1929 worktree, or rebase and rebuild' to Mike as a decision. Dropping a worktree is never an option an agent surfaces — the reaper owns worktree and sandbox lifecycle on its own schedule. Mike: 'NEVER FUCKING DROP A WORKTREE!!! The reaper does that. SO IT IS NOT A DECISION FOR ME TO MAKE!!!' The /whats-left skill already carries this rule; I honoured it there and then broke it in ordinary conversation, which means I had learned the location of the rule rather than the rule itself.
+
+The second half of the same correction: 'you should have just rebased and fixed it.' I had a repair in hand and offered a menu instead. When a diagnosis ends in an action that is mine to perform, perform it and report the result.
+
+Worktree lifecycle is out of the option set entirely — in /whats-left, in a diagnosis, in a proposed fix, anywhere.
+
+The underlying defect, for reference: a self_dev worktree's Claude hook DEFERS to the worktree's own endless-go. A binary older than a schema rename (sessions.process to process_id, E-1898/E-1969) fails its session write with 'no such column', exits 0 per the hook contract, and silently never binds the pane — so the status line truthfully reports no session. Minimal repair is what the bootstrap hook itself does: copy main's prebuilt binary into the worktree's bin/. No rebase, nothing destructive, no worktree lifecycle involved.
+- **Project**: endless
