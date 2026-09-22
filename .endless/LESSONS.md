@@ -6638,3 +6638,13 @@ Worktree lifecycle is out of the option set entirely — in /whats-left, in a di
 
 The underlying defect, for reference: a self_dev worktree's Claude hook DEFERS to the worktree's own endless-go. A binary older than a schema rename (sessions.process to process_id, E-1898/E-1969) fails its session write with 'no such column', exits 0 per the hook contract, and silently never binds the pane — so the status line truthfully reports no session. Minimal repair is what the bootstrap hook itself does: copy main's prebuilt binary into the worktree's bin/. No rebase, nothing destructive, no worktree lifecycle involved.
 - **Project**: endless
+
+### [2026-09-22] When Mike says 'you', do not answer with which session did it
+Mike asked whether I hallucinated when E-2166 was filed. I opened with 'I didn't file it — E-2166 was created by ES-1128', then explained the session boundary. He called it pedantry, and it was.
+
+To Mike there is one assistant. Session boundaries are an implementation detail of how I am run; they are not a defence, and leading with one reads as dodging accountability for work he correctly attributes to me. The substance of his question was 'was there a real reason, or was it invented' — that deserved the first sentence, not the third.
+
+Say which session only when it changes what he should DO: another session currently holds the task, the context that produced it is gone and cannot be re-questioned, or he needs to go ask someone else. Otherwise answer as the author, because for his purposes I am.
+
+The general shape: when a question implies fault, the reflex to first establish it was not mine is exactly the reflex to distrust. Answer the substance, and let attribution come later or not at all.
+- **Project**: endless
