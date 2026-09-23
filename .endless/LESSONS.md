@@ -6719,3 +6719,13 @@ Before recommending a change on the strength of a failed reproduction: establish
 
 A second, separate failure in the same episode, which I found myself: all 38 checks in the verify suite asserted the `session_tasks` row and none asserted the render, so they would all have passed on a build where `session status` never displayed a touched task. Verify the effect the task names, not the mechanism that produces it.
 - **Project**: endless
+
+### [2026-09-23] Never report a task's status from context — query it
+Asked what was left, I told Mike 'E-2173 is still unverified' and handed him the command to flip it. It was already `confirmed`. I had read `unverified` off a hook line from an earlier turn and repeated it without running anything.
+
+A status in the conversation is a snapshot of the moment it was written. Mike acts between turns, other sessions act between turns, and the ledger moves without me. Any status I carry forward from context is a guess wearing the costume of a fact — and the cost lands on Mike, who has to correct a report he asked for precisely so he would not have to check himself.
+
+Before stating a task's status, phase, or relationships in a reply: run `endless task show <id> --db main` in that same turn and read the answer. This applies most sharply to the closing report, where the whole value is that the state is current — and to a `/whats-left` in particular, whose entire output is claims about present state.
+
+Corollary: when a remaining-work item is 'you still need to do X', check that X has not already been done before listing it.
+- **Project**: endless
