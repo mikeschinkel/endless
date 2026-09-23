@@ -6729,3 +6729,13 @@ Before stating a task's status, phase, or relationships in a reply: run `endless
 
 Corollary: when a remaining-work item is 'you still need to do X', check that X has not already been done before listing it.
 - **Project**: endless
+
+### [2026-09-23] Searching is not enough — connect what I already read this session
+I told Mike a structural constraint on decision fields was 'worth a task, and I'm not filing it without you'. He asked whether I had researched what was already filed. I had not. E-1868 is an open epic — 'Move decisions back onto tasks' — with E-1861, an active brainstorm, explicitly owning 'the storage/content shape for decisions on tasks'. That is exactly where the constraint belongs.
+
+The part that makes this worse than a missed search: I had ALREADY READ the pointer, in this same session. Hours earlier I read internal/schema/changes/e-1000-rename-tasks-text-to-plan.go, whose header says decisions.text is deliberately not renamed because 'E-1868 rewrites decision storage wholesale, so renaming it here is work that gets thrown away'. I read that sentence, used the rest of that file, and did not connect it when the decision-field question arose.
+
+So the failure is not only 'search before filing' — I have recorded that twice already this session. It is that facts I read for one purpose do not surface when a different question makes them relevant. Searching is the backstop for what I never saw; it does not help with what I saw and filed away.
+
+The practical fix: when I am about to say a limitation is structural or worth a task, treat it as a retrieval prompt, not just a search prompt — ask what I have already read TODAY that named this subsystem. A pointer read in passing is the cheapest one to find again, and the one I am most likely to walk past.
+- **Project**: endless
