@@ -6709,3 +6709,13 @@ The test before filing: can I state the criteria the call rests on, and were the
 
 Signal I should have caught: the statement arrived as a rhetorical question, which is what reasoning-in-progress sounds like.
 - **Project**: endless
+
+### [2026-09-23] Check the reproduction before proposing a code change
+When Mike reported that `touch E-2174` did not put the task in `session status`, I diagnosed correctly (E-2174 was `assumed`, and the view drops terminal-status rows) but then recommended changing the view so touch would beat the done-filter — a change to a shared surface four other tasks built, costing a new relation or flag column to tell a deliberate touch from an automatic edit-capture. Mike's answer: 'touch should not beat the done-filter. It was my error to use a done task to test it.'
+
+The failing reproduction was not evidence of a defect. It was a test case that picked an input the feature was never meant to serve. I treated 'the user's command did not do what he expected' as automatically a bug in the code, and jumped to a design change to accommodate it.
+
+Before recommending a change on the strength of a failed reproduction: establish that the reproduction exercises the case the feature is for. Say what the input was and why it is or is not representative. A verb for putting live work on screen is not obliged to surface finished work — that is what the view's done-filter exists to decide, and it had already decided it.
+
+A second, separate failure in the same episode, which I found myself: all 38 checks in the verify suite asserted the `session_tasks` row and none asserted the render, so they would all have passed on a build where `session status` never displayed a touched task. Verify the effect the task names, not the mechanism that produces it.
+- **Project**: endless
