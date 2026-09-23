@@ -6780,3 +6780,17 @@ Two rules:
 - Verify before raising. If a check would settle it, run the check. Report the finding, or report nothing. 'You may want to look at X' with no evidence behind it is the worst of both — it costs attention and carries no information.
 - A difference between the plan and what shipped is NEWS to me, not to the user. Ask what was decided, or read the commit and learn from it. Do not present it as something for them to verify.
 - **Project**: endless
+
+### [2026-09-23] Do not infer one command's rules from another's — and check observed behavior first
+I told Mike 'task approve E-2020' was needed before it could be spawned, because 'submitted' is not in the claim-promotes set (untriaged, unplanned, ready, revisit). That set governs CLAIM. Spawn has its own path and does not require approval; Mike says approving before spawning is a case he cannot remember ever using.
+
+Two failures stacked.
+
+1. I generalized a rule from one verb to another because they felt adjacent. Claim and spawn both start work, so I assumed they shared a status gate. Adjacent verbs are exactly where this goes wrong, because the similarity is what stops me checking.
+
+2. The refutation was already in this conversation. A UserPromptSubmit notice had told me 'E-2019 status: submitted -> underway' when Mike spawned it — a submitted task being spawned, which is the precise thing I then said was impossible. I read it and did not use it.
+
+The check, and it is cheap: before asserting a command refuses something, either read that command's own gate or find a case where it did the thing. Observed behavior beats an inferred rule, and in a session this long there is usually an observation already on hand.
+
+This is the second time today a claim of mine was refuted by something I had already read in-session. The pattern is not 'search more'. It is that facts arrive for one purpose and do not resurface when a later claim depends on them.
+- **Project**: endless
