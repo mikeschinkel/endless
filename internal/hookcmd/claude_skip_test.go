@@ -182,3 +182,41 @@ func TestShouldSkipForWorktree_EmptyCwd(t *testing.T) {
 		t.Fatal("expected no skip when cwd is empty")
 	}
 }
+
+// TestWorktreeOverrideRegistered_SurvivesPathSpelling is E-1983's guard on the
+// self-skip check. FindWorktreeRoot now resolves symlinks, so the worktree root
+// this side derives can be spelled differently from the absolute path
+// claude-settings-init recorded in the settings file — /private/var vs /var on
+// macOS, or any symlinked parent. Matching on the worktree-relative tail is what
+// keeps the two agreeing; an absolute-path match silently stops recognizing the
+// override, the global binary stops deferring, and every hook fires twice.
+func TestWorktreeOverrideRegistered_SurvivesPathSpelling(t *testing.T) {
+	_, worktreeRoot := makeWorktreeLayout(t)
+	// The settings file records the override under a DIFFERENT spelling of the
+	// same project — the shape a symlinked path produces.
+	writeTestFile(t,
+		filepath.Join(worktreeRoot, ".claude", "settings.local.json"),
+		`{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":`+
+			`"/elsewhere/spelled/project/.endless/worktrees/e-test/bin/endless-go hook claude"}]}]}}`)
+
+	worktreeBin := filepath.Join(worktreeRoot, "bin", "endless-go")
+	if !worktreeOverrideRegistered(worktreeRoot, worktreeBin) {
+		t.Fatal("override not recognized when the settings file spells the project root differently")
+	}
+}
+
+// TestWorktreeOverrideRegistered_DoesNotMatchAnotherWorktree pins that the
+// relative-tail match above stays specific: the worktree's own name is part of
+// the needle, so a sibling worktree's override is not mistaken for this one's.
+func TestWorktreeOverrideRegistered_DoesNotMatchAnotherWorktree(t *testing.T) {
+	_, worktreeRoot := makeWorktreeLayout(t)
+	writeTestFile(t,
+		filepath.Join(worktreeRoot, ".claude", "settings.local.json"),
+		`{"hooks":{"PreToolUse":[{"hooks":[{"type":"command","command":`+
+			`"/p/.endless/worktrees/e-other/bin/endless-go hook claude"}]}]}}`)
+
+	worktreeBin := filepath.Join(worktreeRoot, "bin", "endless-go")
+	if worktreeOverrideRegistered(worktreeRoot, worktreeBin) {
+		t.Fatal("a sibling worktree's override was mistaken for this worktree's")
+	}
+}

@@ -210,8 +210,11 @@ func ResolveSessionStatusParentSession(tmuxPane string) int64 {
 
 // tmuxWindowOption reads a tmux window option (e.g. "@endless_task_id") for the
 // given pane's window. Returns "" when not in tmux, the option is unset, or tmux
-// errors. Mirrors hookcmd.tmuxTaskID/tmuxSpawnedBy, reused here so the read
-// command composes the same resolution rather than re-deriving pane→session.
+// errors. Mirrors hookcmd.tmuxTaskID, reused here so the read command composes
+// the same resolution rather than re-deriving pane→session. (hookcmd's
+// @endless_spawned_by reader went with the spawn-marker bind in E-1983; this one
+// stays, because the provenance row it feeds is a DISPLAY use of the window
+// option, which is all the option is for now.)
 func tmuxWindowOption(pane, name string) string {
 	if pane == "" {
 		return ""

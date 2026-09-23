@@ -635,7 +635,34 @@ Foreground flow:
 3. **Pre-claims the task**: flips status to `underway` (emitting `task.status_changed`) and creates the per-task worktree at `.endless/worktrees/e-<id>/`.
 4. Renders the handoff from the template and writes it to a temp file.
 5. Launches Claude as the tmux window's *command* through the `endless-go spawn-window` launcher: the launcher creates a window named `E-NNNN` — the task id and nothing else, since a tab is narrow and the project and title are things you already know — at the spawn-created worktree (or `--worktree <path>`), sets the window variables `@endless_spawned_by`, `@endless_task_id`, `@endless_project_id` in-process **before** exec, then execs `claude --permission-mode auto` with the handoff as its positional prompt argument. The handoff text never touches a command line or the session environment, and there is no send-keys, no readiness sleep, and no plan-mode step.
-6. The spawned Claude's `SessionStart` hook reads `@endless_spawned_by` and records the session→task binding (no status flip — spawn already did it). Because the launcher sets the window options before exec, this read no longer races the launch.
+6. The spawned Claude's `SessionStart` hook binds the session to the task **from its working directory** — the launcher opened the window at the worktree, and `.endless/worktrees/e-NNNN` names the task. No status flip; spawn already did it.
+
+### What binds a session to a task
+
+**The working directory, and nothing else.** A `claude` started inside
+`.endless/worktrees/e-NNNN` is bound to task NNNN; a `claude` started anywhere
+else — the main checkout included — is bound to nothing until you run `task
+claim` or `task bind`, and an unbound session is a normal state.
+
+The window options are **display and lookup state. They never bind.** They feed
+the tmux status line's focal task, the window name, `session status`'s
+provenance row, and the lookup below. `@endless_task_id` once decided the
+binding too, and since nothing ever clears it, a window that outlived its
+spawned session handed that task to whatever session started in it next —
+permanently, because `sessions.task_id` is write-once. A stale window option is
+now merely stale, and `session resume <ref>` rewrites it on the pane it
+relaunches in.
+
+Two consequences worth knowing before they surprise you:
+
+- A session started in worktree `e-A` binds to A even when the window still says
+  B. The directory wins.
+- A session sitting in a task worktree while holding no task is the one state
+  that is genuinely broken, so it is **refused**: `SessionStart` explains it and
+  every tool call is blocked until you run `endless task claim E-NNNN` or
+  `endless task bind E-NNNN`. Those two commands are never themselves blocked.
+  Agent-tool subagents and background agents are exempt — they are deliberately
+  never bound.
 
 The spawned session can discover its task ID from the tmux window variable:
 

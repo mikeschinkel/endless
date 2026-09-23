@@ -83,8 +83,7 @@ func TestAutoBindFromCwd_ResumeDoesNotRebindDifferentTask(t *testing.T) {
 	t.Setenv("TMUX_PANE", "")
 
 	payload := claudePayload{SessionID: "sess-997", CWD: otherWorktree}
-	// No spawn marker on a resume, so spawnBound is false and the cwd path runs.
-	maybeCwdBind(1, payload, false)
+	maybeCwdBind(1, payload)
 
 	var taskID *int64
 	if err := db.QueryRow(
@@ -150,7 +149,7 @@ func TestSessionStart_LiveOwnedWorktreeRefusesAndDoesNotBind(t *testing.T) {
 	if refusal == "" {
 		t.Fatal("expected a refusal for a live-owned worktree; got none")
 	}
-	maybeCwdBind(1, payload, false)
+	maybeCwdBind(1, payload)
 
 	var taskID *int64
 	if err := db.QueryRow(

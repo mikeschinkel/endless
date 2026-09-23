@@ -37,8 +37,13 @@ func userMachineLogPath() string {
 type SessionLogReason string
 
 const (
-	SessionLogCwdBind    SessionLogReason = "cwd-bind"    // SessionStart cwd-derived auto-bind
-	SessionLogSpawnBind  SessionLogReason = "spawn-bind"  // SessionStart spawn-marker auto-bind
+	SessionLogCwdBind SessionLogReason = "cwd-bind" // SessionStart cwd-derived auto-bind
+	// SessionLogSpawnBind is RETIRED and nothing writes it: E-1983 removed the
+	// SessionStart spawn-marker auto-bind, because a `task spawn` window option
+	// outlives its session and mis-bound the next one. Kept because log lines
+	// already on disk carry the value, and this enum is what tells their reader
+	// what it meant.
+	SessionLogSpawnBind  SessionLogReason = "spawn-bind"
 	SessionLogClaimEvent SessionLogReason = "claim-event" // task.claimed executor / claim hook mirror
 	SessionLogIdle       SessionLogReason = "idle"        // IdleSession
 	SessionLogEnd        SessionLogReason = "end"         // EndSession

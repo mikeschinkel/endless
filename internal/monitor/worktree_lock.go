@@ -243,15 +243,30 @@ func TaskIDFromWorktreePath(path string) string {
 // (somewhere strictly between cwd and projectRoot), or "" if no
 // companion is found.
 //
-// projectRoot must be the absolute, resolved path to the registered
-// project root; cwd is treated as absolute (Cleaned but not resolved
-// for symlinks — callers pass the cwd as the hook received it).
+// BOTH arguments are resolved here (E-1983) rather than merely Cleaned. The
+// walk's only stop condition is `dir == root`, so the two paths have to be in
+// the same form or the stop never fires: the walk runs past the project root to
+// the filesystem root, which defeats the E-1219 exclusion below and, when it
+// finds nothing, leaves the session silently unbound. Callers used to be
+// required to hand in a resolved projectRoot and an unresolved cwd — a contract
+// stated in this docstring and nowhere else, which is not a contract so much as
+// a trap. resolveAbs is the E-2002 resolver: idempotent on an already-resolved
+// path, and non-strict in the pathlib sense, so a path whose leaf does not exist
+// yet still resolves as far as it does.
+//
+// The population this reaches is named in E-2002's own docs: any macOS project
+// under /var or /tmp (both symlinks into /private) and any user whose projects
+// live below a symlinked parent.
+//
+// The returned worktree root is therefore RESOLVED, which is the form
+// WorktreePathForTask builds from the resolved project path — so the two compare
+// equal, as enforceWorktreeGate's "is this your worktree" check needs.
 func FindWorktreeRoot(cwd, projectRoot string) (string, error) {
 	if cwd == "" || projectRoot == "" {
 		return "", nil
 	}
-	dir := filepath.Clean(cwd)
-	root := filepath.Clean(projectRoot)
+	dir := resolveAbs(cwd)
+	root := resolveAbs(projectRoot)
 	for {
 		// Terminate before checking projectRoot's companion. main is
 		// never a worktree by definition; a stray .endless/worktree.json

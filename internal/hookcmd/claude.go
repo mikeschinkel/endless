@@ -344,21 +344,23 @@ func runClaude(args []string) (err error) {
 		if err := monitor.ReapNoticesForEndedSessions(); err != nil {
 			log.Printf("reaping notices for ended sessions: %v", err)
 		}
-		// Spawn-flow auto-bind: when `endless task spawn` launches a new
-		// Claude window, it sets `@endless_spawned_by` and pre-claims the
-		// task (status flip + worktree creation) before launching. This
-		// hook just records the session→task binding (E-1027). Status is
-		// NOT flipped here (spawn already did it). Use case 2 (end-user
-		// starts Claude directly without spawn) has no spawn marker, so
-		// this path doesn't fire.
-		// Skipped for Agent-tool subagents — they share the parent's
-		// tmux window (and thus its @endless_spawned_by marker) but
-		// have their own session_id; binding them would create a
-		// phantom co-owner on the spawned task (E-1300).
-		spawnBound := false
-		if payload.AgentID == "" {
-			spawnBound = trySpawnBind(projectID, payload)
-		}
+		// E-1983: the spawn-flow auto-bind that used to run HERE, ahead of
+		// everything below, is gone. `task spawn` sets @endless_task_id on the
+		// window it creates and nothing ever clears it, so once that window
+		// outlived its session every later SessionStart in it bound to the
+		// spawned task — and under write-once `sessions.task_id` (E-1969) that
+		// wrong bind is permanent, because it is the FIRST write on a NULL row
+		// and `task bind` can no longer move it.
+		//
+		// The working directory is now the ONLY thing that binds a session to a
+		// task. A spawned worker still binds, because `task spawn` launches it
+		// with `tmux new-window -c <worktree>`; a session started anywhere else
+		// binds from where it actually is, or not at all. The window option
+		// keeps its other jobs (the status line's focal-task fallback, the
+		// window name, `endless tmux task`) — it just no longer decides
+		// sessions.task_id. See logWindowTaskDisagreement, which records the
+		// mismatch this used to act on.
+		logWindowTaskDisagreement(projectID, payload)
 		// Worktree adoption (E-971 Layer D). If cwd is inside an
 		// endless-managed worktree, claim the lock or refuse if
 		// already owned by a live session.
@@ -367,11 +369,11 @@ func runClaude(args []string) (err error) {
 		} else if refusal != "" {
 			return writeContextInjection(payload.EventName, refusal)
 		}
-		// Cwd-based auto-bind fallback (E-1291 / E-1700). Runs after
-		// worktree adoption so a refused session is never bound. See
-		// maybeCwdBind for the gating rationale (spawn-race recovery,
-		// subagent / background-agent exclusions).
-		maybeCwdBind(projectID, payload, spawnBound)
+		// Cwd-derived auto-bind (E-1291 / E-1700, now the only bind path —
+		// E-1983). Runs after worktree adoption so a refused session is never
+		// bound. See maybeCwdBind for the subagent / background-agent
+		// exclusions.
+		maybeCwdBind(projectID, payload)
 		return handleTaskContextInjection(projectID, isRegistered, payload)
 
 	case "UserPromptSubmit":
@@ -549,6 +551,16 @@ func handleTaskContextInjection(projectID int64, isRegistered bool, payload clau
 		return err
 	}
 	combined := composeSessionStartContext(ctx, reportChannelOn(projectID, isRegistered, payload.CWD))
+	// E-1983: SessionStart cannot refuse a session — injected text is the hook's
+	// only lever here — so the unbound-in-a-worktree gate explains itself now and
+	// PreToolUse enforces it on the first tool call. Leading, because it is the
+	// reason nothing else in this session will work until it is answered.
+	// Registered-only: an unregistered project has no tasks to bind to.
+	if isRegistered {
+		if notice, blocked := unboundWorktreeDecision(projectID, payload); blocked {
+			combined = strings.TrimSpace(notice + "\n\n" + combined)
+		}
+	}
 	if combined == "" {
 		return nil
 	}
@@ -926,6 +938,13 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 	// other tool that defaults to cwd are covered, not just file writes.
 	enforceClaimedCwd(projectID, payload)
 
+	// E-1983: the other half of the cwd invariant. enforceClaimedCwd above
+	// returns early on an unbound session, so a session sitting IN a task
+	// worktree while holding no task was the one broken state nothing spoke to.
+	// Runs immediately after it, for all tool kinds and regardless of
+	// tracking_mode, for the same reasons that one does.
+	enforceUnboundWorktree(projectID, payload)
+
 	// E-1542: pause-on-revisit gate. Intercepts a session whose claimed task
 	// descends from an epic in status='revisit'. Placed BEFORE the write-tool
 	// early-return so it fires for all tool kinds (Read/Bash/Grep too), and runs
@@ -1114,7 +1133,7 @@ var revisitClearVerbRe = regexp.MustCompile(`(?i)\bendless\s+task\s+continue\b`)
 // blocks the gate-clearing command itself.
 func enforceRevisitGate(payload claudePayload) {
 	if instruction, block := revisitGateDecision(payload); block {
-		blockToolUseWithRevisitPrompt(instruction)
+		blockToolUseWithDecision(instruction)
 	}
 }
 
@@ -1177,9 +1196,11 @@ func revisitPromptInstruction(taskID, epicID int64) string {
 	)
 }
 
-// revisitBlockResponse builds the PreToolUse block response carrying the
-// instruction in both reason and additionalContext (see preToolUseBlock).
-func revisitBlockResponse(instruction string) preToolUseBlock {
+// blockResponse builds the PreToolUse block response carrying the instruction
+// in both reason and additionalContext (see preToolUseBlock). Shared by every
+// gate that blocks as a JSON decision rather than stderr+exit-2 — the revisit
+// gate (E-1542) and the unbound-in-a-worktree gate (E-1983).
+func blockResponse(instruction string) preToolUseBlock {
 	return preToolUseBlock{
 		Decision: "block",
 		Reason:   instruction,
@@ -1190,11 +1211,11 @@ func revisitBlockResponse(instruction string) preToolUseBlock {
 	}
 }
 
-// blockToolUseWithRevisitPrompt emits the PreToolUse block response (decision
+// blockToolUseWithDecision emits the PreToolUse block response (decision
 // "block" + reason + additionalContext) and exits 0. If encoding fails it falls
 // back to the always-works stderr+exit-2 form.
-func blockToolUseWithRevisitPrompt(instruction string) {
-	if err := json.NewEncoder(os.Stdout).Encode(revisitBlockResponse(instruction)); err != nil {
+func blockToolUseWithDecision(instruction string) {
+	if err := json.NewEncoder(os.Stdout).Encode(blockResponse(instruction)); err != nil {
 		blockToolUse(instruction)
 		return
 	}
@@ -1657,46 +1678,48 @@ func setTmuxSessionUUID(sessionID string) {
 	).Run()
 }
 
-// tmuxSpawnedBy reads @endless_spawned_by from the current tmux window.
-// Set only by `endless task spawn` (carries the spawning session's id or
-// a `pid-<n>` fallback for non-Claude spawners). Empty string means this
-// window was not created by spawn — callers should skip spawn-flow logic.
-// tmuxSpawnedBy is a package var (not a plain func) so tests can stub the tmux
-// read to simulate a spawned window whose @endless_task_id read raced (E-1700).
-var tmuxSpawnedBy = func() string {
-	pane := os.Getenv("TMUX_PANE")
-	if pane == "" {
-		return ""
+// logWindowTaskDisagreement records — without acting on it — a SessionStart
+// whose tmux window names a different task than its working directory does.
+//
+// This is what is left of trySpawnBind (E-1983). Acting on the window option is
+// precisely the bug: `task spawn` writes @endless_task_id on the window it
+// creates, nothing ever clears it, and a window that outlives its session hands
+// the next session a stale claim. Observing it is still worth doing, because the
+// disagreement is the fingerprint of a reused spawn window and it took three
+// tasks to identify it from the outside; a log line spends nothing and names it
+// on sight.
+//
+// Silent when the window has no claim (the ordinary hand-opened window), when
+// the project does not resolve, and when the two agree — which is every spawned
+// worker, since spawn opens the window with `-c <worktree>`.
+func logWindowTaskDisagreement(projectID int64, payload claudePayload) {
+	windowTask := tmuxTaskID()
+	if windowTask <= 0 {
+		return
 	}
-	out, err := exec.Command(
-		"tmux", "display-message", "-p", "-t", pane, "#{@endless_spawned_by}",
-	).Output()
+	projectRoot, err := monitor.ProjectPath(projectID)
 	if err != nil {
-		return ""
+		return
 	}
-	return strings.TrimSpace(string(out))
+	cwdTask := resolveCwdTaskID(projectRoot, payload.CWD)
+	if cwdTask == windowTask {
+		return
+	}
+	log.Printf(
+		"session %s: tmux window says task E-%d but cwd %s says %s — cwd wins; "+
+			"the window option is stale, and `endless session resume <ref>` "+
+			"rewrites it on the pane it relaunches in",
+		payload.SessionID, windowTask, payload.CWD, taskIDOrNone(cwdTask),
+	)
 }
 
-// trySpawnBind attempts the spawn-marker auto-bind and reports whether the
-// session was actually bound. Returns false when there is no spawn marker, the
-// @endless_task_id window option is not readable (a tmux read race, E-1700), or
-// the DB write fails — signaling the caller to fall back to cwd-derived binding.
-// Caller must already have screened out subagents.
-func trySpawnBind(projectID int64, payload claudePayload) bool {
-	if tmuxSpawnedBy() == "" {
-		return false
-	}
-	taskID := tmuxTaskID()
+// taskIDOrNone renders a resolveCwdTaskID result for a log line: "E-NNN", or
+// "no task" for the 0 that means cwd is not inside a task worktree.
+func taskIDOrNone(taskID int64) string {
 	if taskID <= 0 {
-		return false
+		return "no task"
 	}
-	snap := monitor.SnapshotSession(payload.SessionID)
-	if err := monitor.BindSessionToTask(payload.SessionID, projectID, taskID); err != nil {
-		log.Printf("spawn-bind session %s to task %d: %v", payload.SessionID, taskID, err)
-		return false
-	}
-	logSessionBind(payload.SessionID, snap, taskID, monitor.SessionLogSpawnBind, "hookcmd.trySpawnBind")
-	return true
+	return fmt.Sprintf("E-%d", taskID)
 }
 
 // logSessionBind records one BindSessionToTask transition in the machine-local
@@ -1715,22 +1738,21 @@ func logSessionBind(sessionID string, snap monitor.SessionSnapshot, taskID int64
 	})
 }
 
-// maybeCwdBind runs the cwd-derived SessionStart auto-bind when the spawn-marker
-// path did not bind (spawnBound == false). Gating on !spawnBound rather than "no
-// spawn marker" (E-1700) is the fix: a spawned window can carry
-// @endless_spawned_by while its @endless_task_id read races to empty (or
-// BindSessionToTask errors), leaving trySpawnBind a no-op. payload.CWD is the
-// worktree for a spawned worker, so this fallback binds reliably and closes the
-// gap where task_id stayed NULL and the status line showed "claim a task".
+// maybeCwdBind runs the cwd-derived SessionStart auto-bind. Since E-1983 it is
+// the ONLY path that writes sessions.task_id at SessionStart: payload.CWD is the
+// worktree for a spawned worker (`tmux new-window -c <worktree>`) and the
+// directory the user actually started in for everyone else, which makes it the
+// one signal that cannot be stale. It used to be gated on the spawn-marker path
+// having declined to bind (E-1700's !spawnBound); there is no longer a
+// spawn-marker path to defer to.
 //
 // Skipped for Agent-tool subagents — they share the parent's cwd but represent
 // tool use, not user claim intent; binding them would create a phantom co-owner.
 // Skipped for background agents (E-1568): their dispatch row already carries
-// task_id/epic_id, and the tmux-oriented bind is meaningless for a
-// headless agent — decorateBgSession is their path. Bind only; task status is
-// unchanged.
-func maybeCwdBind(projectID int64, payload claudePayload, spawnBound bool) {
-	if payload.AgentID != "" || spawnBound || os.Getenv("CLAUDE_JOB_DIR") != "" {
+// task_id/epic_id, and the tmux-oriented bind is meaningless for a headless
+// agent. Bind only; task status is unchanged.
+func maybeCwdBind(projectID int64, payload claudePayload) {
+	if payload.AgentID != "" || os.Getenv("CLAUDE_JOB_DIR") != "" {
 		return
 	}
 	autoBindFromCwd(projectID, payload)
@@ -1742,7 +1764,7 @@ func maybeCwdBind(projectID int64, payload claudePayload, spawnBound bool) {
 // the way (no project root, no worktree, missing companion, malformed
 // task_id, DB write error) results in no binding — the user can still
 // run `endless task claim` to bind explicitly. Caller must already
-// have screened out subagents and the spawn-marker case.
+// have screened out subagents.
 func autoBindFromCwd(projectID int64, payload claudePayload) {
 	projectRoot, err := monitor.ProjectPath(projectID)
 	if err != nil {
@@ -1849,13 +1871,32 @@ var osExecutable = os.Executable
 // bootstrapped before that change carries the override there until the
 // skip-worktree repair moves it, and until then it is the only place the
 // override appears.
+// The needle is the worktree-relative TAIL of the binary path
+// (`.endless/worktrees/e-NNN/bin/endless-go`), not the absolute path (E-1983).
+// The absolute form is only as stable as the spelling of everything above the
+// project root, and there is no reason for the two sides to agree on that: the
+// settings file records whatever path claude-settings-init computed, while this
+// side now derives the worktree root through a resolved walk. A project reached
+// via a symlink — /tmp or /var on macOS, or a symlinked home — gives the two
+// different strings for the same file, and the override would silently stop
+// being recognized, which means the global binary stops deferring and every hook
+// runs twice.
+//
+// The tail cannot collide with an unrelated binary: only a worktree's own copy
+// lives under `.endless/worktrees/<name>/bin/`, and the `<name>` segment is in
+// the needle, so worktree A does not match worktree B's override.
 func worktreeOverrideRegistered(worktreeRoot, worktreeBin string) bool {
-	for _, rel := range []string{"settings.local.json", "settings.json"} {
-		data, err := os.ReadFile(filepath.Join(worktreeRoot, ".claude", rel))
+	needle := worktreeBin
+	if rel, err := filepath.Rel(filepath.Dir(filepath.Dir(worktreeRoot)), worktreeBin); err == nil &&
+		!strings.HasPrefix(rel, "..") {
+		needle = rel
+	}
+	for _, name := range []string{"settings.local.json", "settings.json"} {
+		data, err := os.ReadFile(filepath.Join(worktreeRoot, ".claude", name))
 		if err != nil {
 			continue
 		}
-		if strings.Contains(string(data), worktreeBin) {
+		if strings.Contains(string(data), needle) {
 			return true
 		}
 	}
@@ -2139,6 +2180,131 @@ func enforceClaimedCwd(projectID int64, payload claudePayload) {
 		return
 	}
 	blockToolUse(cdRedirect(*session.TaskID, worktreePath, payload.CWD))
+}
+
+// bindEscapeVerbRe matches the commands that clear the unbound-in-a-worktree
+// gate, so the gate never blocks its own way out: `endless task claim E-NNN` and
+// `endless task bind E-NNN`, including path- or wrapper-prefixed forms (`uv run
+// endless task claim ...`). Same shape and same reason as revisitClearVerbRe —
+// a gate that blocks the command it tells you to run is not a gate, it is a
+// stranded window.
+var bindEscapeVerbRe = regexp.MustCompile(`(?i)\bendless\s+task\s+(claim|bind)\b`)
+
+// enforceUnboundWorktree blocks a session sitting in a task worktree while
+// holding no task (E-1983). Mirrors enforceRevisitGate's shape: the decision is
+// separate and pure enough to unit-test, the block itself is the JSON
+// decision:"block" response.
+func enforceUnboundWorktree(projectID int64, payload claudePayload) {
+	if instruction, block := unboundWorktreeDecision(projectID, payload); block {
+		blockToolUseWithDecision(instruction)
+	}
+}
+
+// unboundWorktreeDecision reports whether this tool call must be blocked because
+// the session's cwd says "task worktree" while the session holds no task, and
+// carries the message explaining it.
+//
+// This is the one state Decisions 1 and 2 of E-1983 leave genuinely wrong, and
+// until now it was silent: with the window option no longer able to bind, a
+// session whose cwd bind did not happen simply has no task, and every later
+// `endless` command answers for the wrong session or none. It is the mirror of
+// enforceClaimedCwd, which blocks when a session HOLDS a task and its cwd has
+// drifted out of that task's worktree — and which returns early on
+// session.TaskID == nil, leaving exactly this half uncovered.
+//
+// Deliberately NOT blocked, each for its own reason:
+//
+//   - Agent-tool subagents and background agents. Both share a cwd with someone
+//     else and are deliberately never bound (E-1300, E-1568), so "unbound" is
+//     their correct state, not a breach. Screened FIRST: without this the gate
+//     would block every subagent tool call in every worktree, which is the worst
+//     false positive available here.
+//   - cwd in the main checkout, or any path that is not a task worktree. An
+//     unbound session in main is the correct outcome of the cwd-only rule, not a
+//     failure. enforceWorktreeGate already covers the different case of a
+//     session that HOLDS a task while sitting in main.
+//   - A tree outside the registered project that happens to be worktree-shaped.
+//   - No project resolved — enforceWorktreeGate's own precedent: without a
+//     project root we cannot evaluate, so the call proceeds.
+//   - The gate's own escape commands, per bindEscapeVerbRe.
+func unboundWorktreeDecision(projectID int64, payload claudePayload) (string, bool) {
+	if payload.AgentID != "" || os.Getenv("CLAUDE_JOB_DIR") != "" {
+		return "", false
+	}
+	// The trigger is a pure regex on the path (E-1301's convention), NOT the
+	// .endless/worktree.json walk — which matters, because the walk failing is
+	// one of the things that puts a session here.
+	taskRef := monitor.TaskIDFromWorktreePath(payload.CWD)
+	if taskRef == "" {
+		return "", false
+	}
+	if session, err := monitor.GetActiveSession(payload.SessionID); err != nil ||
+		session == nil || session.TaskID != nil {
+		return "", false
+	}
+	if payload.ToolName == "Bash" {
+		var input toolInputBash
+		if err := json.Unmarshal(payload.ToolInput, &input); err == nil &&
+			bindEscapeVerbRe.MatchString(input.Command) {
+			return "", false
+		}
+	}
+	projectRoot, err := monitor.ProjectPath(projectID)
+	if err != nil || projectRoot == "" {
+		return "", false
+	}
+	// Both sides RESOLVED before the containment test. ProjectPath hands back the
+	// resolved form and payload.CWD is whatever the harness reported, so
+	// comparing them as they arrive answers "not in this project" for every
+	// project reached through a symlink — /var and /tmp on macOS, and any
+	// symlinked parent (E-2002). That silent false NEGATIVE is the same class of
+	// bug Decision 2 fixes one function over.
+	cwd, err := monitor.ResolvedProjectPath(payload.CWD)
+	if err != nil {
+		return "", false
+	}
+	if !pathWithin(projectRoot, cwd) {
+		return "", false
+	}
+	return unboundWorktreeInstruction(projectRoot, cwd, taskRef), true
+}
+
+// unboundWorktreeInstruction builds the gate's message. It names WHICH step of
+// the cwd bind failed, because the fixes differ and a session that is only told
+// "you are unbound" has to go find that out itself.
+func unboundWorktreeInstruction(projectRoot, cwd, taskRef string) string {
+	var diagnosis string
+	switch wtRoot, err := monitor.FindWorktreeRoot(cwd, projectRoot); {
+	case err != nil:
+		diagnosis = fmt.Sprintf(
+			"the walk up from your working directory for `.endless/worktree.json`\n"+
+				"failed: %v", err)
+	case wtRoot == "":
+		diagnosis = fmt.Sprintf(
+			"no `.endless/worktree.json` was found walking up from\n  %s\nto the project root\n  %s\n"+
+				"so nothing identified this directory as a managed worktree.",
+			tildePath(cwd), tildePath(projectRoot))
+	case monitor.TaskIDFromWorktreePath(wtRoot) == "":
+		diagnosis = fmt.Sprintf(
+			"the worktree root found\n  %s\ndoes not follow the `.endless/worktrees/e-NNN` "+
+				"naming convention,\nso it names no task.", tildePath(wtRoot))
+	default:
+		diagnosis = "the worktree resolved, but the bind was declined — most often\n" +
+			"because another live session already holds this worktree's lock\n" +
+			"(`endless worktree current` names it)."
+	}
+	return fmt.Sprintf(
+		"You are working inside %s's worktree, but this session holds no task.\n\n"+
+			"A session's task comes from its working directory and nothing else, so\n"+
+			"being unbound here means that resolution failed.\n\n"+
+			"Why it failed: %s\n\n"+
+			"Bind before continuing — either of these is one command:\n\n"+
+			"  endless task claim %s        # claim it and start work\n"+
+			"  endless task bind %s         # bind without changing task status\n\n"+
+			"Tool calls are blocked until one of them succeeds. If you only came to\n"+
+			"read and do not want the task, leave this worktree instead — an unbound\n"+
+			"session in the main checkout is a normal state.",
+		taskRef, diagnosis, taskRef, taskRef)
 }
 
 // cdRedirect builds the E-1586 block message: cwd has drifted out of the

@@ -66,7 +66,7 @@ func TestRevisitPromptInstruction(t *testing.T) {
 // PreToolUse event name and the instruction as additionalContext. This is the
 // shape the live-Claude verification (and the verify script) checks.
 func TestRevisitBlockResponse_Shape(t *testing.T) {
-	b, err := json.Marshal(revisitBlockResponse("DO THE THING"))
+	b, err := json.Marshal(blockResponse("DO THE THING"))
 	if err != nil {
 		t.Fatalf("marshal: %v", err)
 	}

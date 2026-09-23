@@ -164,8 +164,10 @@ func TestFindWorktreeRoot_FindsNestedCompanion(t *testing.T) {
 	if err != nil {
 		t.Fatalf("find: %v", err)
 	}
-	if got != wt {
-		t.Errorf("got %q, want %q", got, wt)
+	// Resolved, not as spelled: E-1983 resolves both arguments, and t.TempDir()
+	// hands back /var/... which is a symlink into /private/var on macOS.
+	if got != resolveAbs(wt) {
+		t.Errorf("got %q, want %q", got, resolveAbs(wt))
 	}
 }
 
@@ -268,8 +270,9 @@ func TestFindWorktreeRoot_PrefersRealWorktreeOverStrayAtProjectRoot(t *testing.T
 	if err != nil {
 		t.Fatalf("find: %v", err)
 	}
-	if got != wt {
-		t.Errorf("got %q, want real worktree %q", got, wt)
+	// Resolved, not as spelled — see TestFindWorktreeRoot_FindsNestedCompanion.
+	if got != resolveAbs(wt) {
+		t.Errorf("got %q, want real worktree %q", got, resolveAbs(wt))
 	}
 }
 
@@ -452,5 +455,90 @@ func TestFindLockBySessionID_EmptySessionIDReturnsEmpty(t *testing.T) {
 	}
 	if got != "" {
 		t.Errorf("empty session id: got %q, want \"\"", got)
+	}
+}
+
+// TestFindWorktreeRoot_ResolvesSymlinkedCwd is E-1983 Decision 2. The walk's
+// only stop condition is `dir == root`, so a cwd reached through a symlink —
+// which is every macOS path under /var or /tmp, and any user whose projects live
+// below a symlinked parent — never equals the resolved projectRoot. The walk
+// then runs PAST the project root to the filesystem root, which both defeats the
+// E-1219 exclusion above and, when nothing is found, leaves the session silently
+// unbound.
+//
+// Against the pre-fix code (filepath.Clean instead of resolveAbs) this fails:
+// the walk climbs through the symlinked project root and adopts the stray
+// companion planted above it.
+func TestFindWorktreeRoot_ResolvesSymlinkedCwd(t *testing.T) {
+	parent := t.TempDir()
+	realRoot := filepath.Join(parent, "real", "project")
+	if err := os.MkdirAll(filepath.Join(realRoot, "src"), 0755); err != nil {
+		t.Fatalf("mkdir root: %v", err)
+	}
+	// A stray companion ABOVE the project root — the thing the walk must never
+	// reach.
+	strayDir := filepath.Join(parent, ".endless")
+	if err := os.MkdirAll(strayDir, 0755); err != nil {
+		t.Fatalf("mkdir stray: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(strayDir, "worktree.json"), []byte(`{}`), 0644); err != nil {
+		t.Fatalf("write stray: %v", err)
+	}
+	// The project reached through a symlink, as /tmp and /var are on macOS.
+	link := filepath.Join(parent, "link")
+	if err := os.Symlink(filepath.Join(parent, "real"), link); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+
+	// projectRoot arrives resolved (monitor.ProjectPath guarantees it); cwd
+	// arrives as the harness reported it, through the symlink.
+	resolvedRoot, err := filepath.EvalSymlinks(realRoot)
+	if err != nil {
+		t.Fatalf("resolve root: %v", err)
+	}
+	got, err := FindWorktreeRoot(filepath.Join(link, "project", "src"), resolvedRoot)
+	if err != nil {
+		t.Fatalf("find: %v", err)
+	}
+	if got != "" {
+		t.Errorf("walked above projectRoot through a symlinked cwd: got %q, want empty", got)
+	}
+}
+
+// TestFindWorktreeRoot_FindsWorktreeThroughSymlinkedCwd is the positive half of
+// E-1983 Decision 2: the returned worktree root is the RESOLVED path, so it
+// compares equal to the one WorktreePathForTask builds from the resolved project
+// root — which is what enforceWorktreeGate's "is this your worktree" check
+// compares.
+func TestFindWorktreeRoot_FindsWorktreeThroughSymlinkedCwd(t *testing.T) {
+	parent := t.TempDir()
+	realRoot := filepath.Join(parent, "real", "project")
+	wt := filepath.Join(realRoot, ".endless", "worktrees", "e-1983")
+	if err := os.MkdirAll(filepath.Join(wt, ".endless"), 0755); err != nil {
+		t.Fatalf("mkdir worktree: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(wt, ".endless", "worktree.json"), []byte(`{}`), 0644); err != nil {
+		t.Fatalf("write companion: %v", err)
+	}
+	link := filepath.Join(parent, "link")
+	if err := os.Symlink(filepath.Join(parent, "real"), link); err != nil {
+		t.Skipf("cannot create symlink: %v", err)
+	}
+
+	resolvedRoot, err := filepath.EvalSymlinks(realRoot)
+	if err != nil {
+		t.Fatalf("resolve root: %v", err)
+	}
+	wantWT := filepath.Join(resolvedRoot, ".endless", "worktrees", "e-1983")
+
+	got, err := FindWorktreeRoot(
+		filepath.Join(link, "project", ".endless", "worktrees", "e-1983", "src"),
+		resolvedRoot,
+	)
+	if err != nil {
+		t.Fatalf("find: %v", err)
+	}
+	if got != wantWT {
+		t.Errorf("FindWorktreeRoot through symlinked cwd = %q, want %q", got, wantWT)
 	}
 }

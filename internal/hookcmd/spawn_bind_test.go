@@ -10,44 +10,73 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// stubSpawnMarkers points the tmux marker readers at fixed values for the
-// duration of the test, simulating what the SessionStart hook reads from the
-// tmux window. Restores the real readers on cleanup. Tests using it must NOT
-// call t.Parallel() (the readers are package-global).
-func stubSpawnMarkers(t *testing.T, spawnedBy string, taskID int64) {
+// stubWindowTaskID points the @endless_task_id window-option reader at a fixed
+// value for the duration of the test, simulating what a SessionStart reads in a
+// tmux window `endless task spawn` created. Restores the real reader on cleanup.
+// Tests using it must NOT call t.Parallel() (the reader is a package-global).
+//
+// There is no @endless_spawned_by stub any more: E-1983 removed hookcmd's reader
+// for it along with the spawn-marker bind, since nothing in the hook needs to
+// know whether a window was spawned once the window cannot decide a binding.
+func stubWindowTaskID(t *testing.T, taskID int64) {
 	t.Helper()
-	prevSpawnedBy, prevTaskID := tmuxSpawnedBy, tmuxTaskID
-	tmuxSpawnedBy = func() string { return spawnedBy }
+	prev := tmuxTaskID
 	tmuxTaskID = func() int64 { return taskID }
-	t.Cleanup(func() {
-		tmuxSpawnedBy = prevSpawnedBy
-		tmuxTaskID = prevTaskID
-	})
+	t.Cleanup(func() { tmuxTaskID = prev })
 }
 
-// TestTrySpawnBind_RaceReturnsFalse pins the SessionStart marker-read race
-// (E-1700): a spawned window carries @endless_spawned_by, but the
-// @endless_task_id read comes back empty (tmuxTaskID() == 0). trySpawnBind must
-// report "not bound" so the caller falls back to cwd-derived binding. It returns
-// before any DB call, so no DB fixture is needed.
-func TestTrySpawnBind_RaceReturnsFalse(t *testing.T) {
-	stubSpawnMarkers(t, "835", 0)
-	if trySpawnBind(1, claudePayload{SessionID: "sess-race"}) {
-		t.Fatal("trySpawnBind returned true on a taskID=0 marker race; want false (→ cwd fallback)")
+// TestLogWindowTaskDisagreement_DoesNotBind pins what is left of the spawn-marker
+// path after E-1983: it observes, it never writes. A window option naming task
+// 1732 and a session with a NULL task_id is the exact shape that used to produce
+// a permanent mis-bind — the first write on a NULL row, which the write-once
+// trigger (E-1969) permits and `task bind` can never undo.
+func TestLogWindowTaskDisagreement_DoesNotBind(t *testing.T) {
+	db := newBindTestDB(t)
+	projectRoot := t.TempDir()
+	seedProjectAndTasks(t, db, projectRoot, 1732)
+
+	stubWindowTaskID(t, 1732)
+	t.Setenv("TMUX_PANE", "")
+
+	payload := claudePayload{SessionID: "sess-observe", CWD: projectRoot}
+	if err := monitor.TouchSession(payload.SessionID, "claude", "", 1); err != nil {
+		t.Fatalf("TouchSession: %v", err)
+	}
+
+	logWindowTaskDisagreement(1, payload)
+
+	if got := sessionTaskID(t, db, payload.SessionID); got != nil {
+		t.Fatalf("task_id = %d, want NULL — the window-option observer must never "+
+			"write sessions.task_id (E-1983)", *got)
 	}
 }
 
-// TestSessionStartBind_CwdFallbackOnSpawnMarkerRace reproduces the E-1700 bug
-// and verifies the fix end to end. A spawned worker's SessionStart hook sees the
-// @endless_spawned_by marker but the @endless_task_id read races to empty, so the
-// spawn-marker bind no-ops. The cwd fallback — now gated on !spawnBound rather
-// than "no spawn marker" — must still bind the session to the task its worktree
-// path encodes, so task_id is set (not NULL) and the status line shows
-// the task instead of "claim a task".
-//
-// Against the pre-fix gate (tmuxSpawnedBy() == "") the same assertion fails:
-// the fallback is skipped and task_id stays NULL.
-func TestSessionStartBind_CwdFallbackOnSpawnMarkerRace(t *testing.T) {
+// TestTaskIDOrNone pins the log rendering of a resolveCwdTaskID result, where 0
+// means "cwd is not inside a task worktree" rather than task zero.
+func TestTaskIDOrNone(t *testing.T) {
+	cases := []struct {
+		in   int64
+		want string
+	}{
+		{0, "no task"},
+		{-1, "no task"},
+		{1699, "E-1699"},
+	}
+	for _, c := range cases {
+		if got := taskIDOrNone(c.in); got != c.want {
+			t.Errorf("taskIDOrNone(%d) = %q, want %q", c.in, got, c.want)
+		}
+	}
+}
+
+// TestSessionStartBind_SpawnedWorkerBindsFromCwd is the E-1700 case, re-pinned
+// against the E-1983 bind path. A spawned worker's SessionStart used to bind
+// from the window option, with cwd as the fallback for when that option raced to
+// empty; cwd is now the only path, and it must still bind the worker the spawn
+// launched. `task spawn` runs `tmux new-window -c <worktree>`, so the worker's
+// cwd IS its worktree and the bind is reliable by construction — which is why
+// removing the window-option bind costs the spawn flow nothing.
+func TestSessionStartBind_SpawnedWorkerBindsFromCwd(t *testing.T) {
 	// Fresh file-backed DB with the real schema, injected into the
 	// monitor.DB() singleton via the exported test seam (E-1506).
 	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "endless.db"))
@@ -67,7 +96,7 @@ func TestSessionStartBind_CwdFallbackOnSpawnMarkerRace(t *testing.T) {
 
 	// A worktree layout whose path encodes task 1699, under a project root the
 	// seeded projects row points at (so monitor.ProjectPath resolves it and the
-	// cwd fallback finds the worktree).
+	// cwd bind finds the worktree).
 	projectRoot := t.TempDir()
 	worktreeRoot := filepath.Join(projectRoot, ".endless", "worktrees", "e-1699")
 	writeTestFile(t, filepath.Join(worktreeRoot, ".endless", "worktree.json"), `{"task_id":"E-1699"}`)
@@ -79,8 +108,8 @@ func TestSessionStartBind_CwdFallbackOnSpawnMarkerRace(t *testing.T) {
 		t.Fatalf("seed task: %v", err)
 	}
 
-	// Simulate the race: spawn marker readable, @endless_task_id not.
-	stubSpawnMarkers(t, "835", 0)
+	// The E-1700 race: the window option reads empty.
+	stubWindowTaskID(t, 0)
 	t.Setenv("CLAUDE_JOB_DIR", "")
 	t.Setenv("TMUX_PANE", "")
 
@@ -94,12 +123,9 @@ func TestSessionStartBind_CwdFallbackOnSpawnMarkerRace(t *testing.T) {
 		t.Fatalf("TouchSession: %v", err)
 	}
 
-	// Drive the real SessionStart bind decision: trySpawnBind reports the race
-	// no-op, then maybeCwdBind (the production gate) recovers via cwd. Calling
-	// the actual functions means reverting the gate breaks this test — it is not
-	// a copy of the logic.
-	spawnBound := trySpawnBind(1, payload)
-	maybeCwdBind(1, payload, spawnBound)
+	// Drive the real SessionStart bind decision. Calling the actual function
+	// means changing the gate breaks this test — it is not a copy of the logic.
+	maybeCwdBind(1, payload)
 
 	var taskID *int64
 	if err = db.QueryRow(
