@@ -169,3 +169,42 @@ Concretely, this epic's implementation has to:
 - Leave the legacy `ED-NNNN` ids resolving through the alias table. The FILES
   move; the references do not, per the renumber-the-entity-never-the-references
   rule above.
+
+
+
+# Evidence from a supersede, 2026-09-23: there is nowhere to put reasoning
+
+A decision today carries a TITLE and a DESCRIPTION and nothing else. The
+description is capped at 1024 characters and must be a single line — no
+newlines. `decision add` and `decision update` offer `--description` and
+`--description-file`; there is no `--analysis`, no `--plan`, no long-form field
+of any kind.
+
+The content model has to answer for that, because it bites hardest exactly when
+a decision matters most:
+
+- **Retiring a decision has nowhere to merge its reasoning into.** ED-1570
+  superseding ED-1567, and ED-1596 superseding ED-1595, each required folding the
+  predecessor's surviving rationale into the successor so the retirement lost
+  nothing. Both merged texts (1398 and 1669 chars, several paragraphs each)
+  were refused. Every attempt was compressed until it fit, and each pass dropped
+  something real — the SQLite-nullability sentence from ED-1570, the E-1972
+  worktree measurements and the verify-suite citations from ED-1596. Nothing was
+  lost permanently only because both brainstorm outcomes (E-1944, E-1972) happen
+  to carry the same content at full length.
+- **So the durable record is the task outcome, and the decision is a pointer to
+  it.** That is the shape in practice. Whether it is the shape intended is this
+  brainstorm's question — and if it is, the decision's own field should say so
+  rather than being a place people try to write reasoning into and get refused.
+- **Single-line is a separate constraint from the cap and hurts more.** A
+  1024-character budget is defensible for a blurb; forbidding paragraph breaks
+  inside it makes even a well-sized decision unreadable, and rules out any
+  structure (the two directions of a version comparison, a list of what a change
+  drops).
+- **The refusal message points at fields that do not exist.** It reads "Long-form
+  goes in --analysis (rationale) or --plan (the plan)" — borrowed from the task
+  validator. On a decision it sends the author somewhere there is nothing.
+
+Carrying decisions on tasks would inherit tasks' own content model, where
+`analysis` and `plan` already exist and already hold long-form. That is an
+argument FOR the move that this analysis did not previously make.
