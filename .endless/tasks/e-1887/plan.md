@@ -101,22 +101,71 @@ Reproducing a failing `TouchSession` without a stale binary is the fiddly part;
 the cheapest honest lever is a database whose `sessions` table is missing a
 column the current binary writes, built in the isolated fixture.
 
-## Open question for the requester
+## 6. The fallback sink, and a notice that survives an unreadable database
 
-**Can this fault be recorded when the database is the thing that failed?**
-`faults.Record` persists through `monitor.DB`. Every failure mode we have
-actually seen is a *schema* disagreement — the database is reachable, one
-statement is invalid — so recording works. But a genuinely unreachable database
-fails both the write and the recording, and this task would then cover nothing
-in exactly the case its title suggests. Two ways to answer it, and it is a real
-choice rather than a detail:
+This section answers what was an open question: a fault raised *because* the
+database failed cannot be recorded through the database. Decided — add the
+fallback rather than accept the limit.
 
-- **Accept the limit.** Scope this to schema/statement failures, which is every
-  incident observed, and state the limit in the code so nobody assumes more.
-- **Add a fallback sink.** Record to the JSONL detail log even when the database
-  write fails, so an unreachable database still leaves a trace on disk.
+### What exists, and why it does not already cover this
 
-I lean to accepting the limit and stating it, on the grounds that an unreachable
-database breaks far more than hooks and will announce itself elsewhere — but the
-fallback is not expensive and I have not measured how loudly an unreachable
-database actually announces itself today.
+`internal/faults/detaillog.go` is a real facility, not ad-hoc: `errors.jsonl`,
+append-only, one line per fault OCCURRENCE, ConfigDir-routed so a sandbox keeps
+its own, every write best-effort. The `errors` table is the bounded index; the
+file carries what the table has no room for. It is modelled on
+`internal/monitor/usermachinelog.go` (`user-machine.jsonl`).
+
+It covers nothing here, because `faults.Record` reaches `appendDetail` ONLY
+after a successful `upsertIncident`. `database()` failing and `upsertIncident`
+failing both `goto end` first. Database unreachable means nothing is written
+anywhere at all.
+
+### 6a. Write the file line even when the database write fails
+
+Move `appendDetail` off the success path so a fault always lands on disk. The
+complication is shape, not plumbing: a detail line currently carries the
+incident `id` and `occurrence` number, and both are assigned BY the database
+write that just failed. An unindexed line needs its own discriminator — a null
+id plus an explicit marker — so a reader can tell "occurrence 4 of incident 12"
+from "this was never indexed". Do not invent a synthetic id; a fake id that
+collides with a real one later is worse than an honest absence.
+
+### 6b. A notice the fault row can render without reading the database
+
+`session status` renders its fault row via `faultrow.Render`, which reads the
+database — the exact thing that may be down. So the notice cannot be a row from
+the table; it has to be derivable from the filesystem alone:
+
+- unindexed entries exist in `errors.jsonl` newer than the clear watermark, OR
+- the database could not be read at all
+
+Both collapse to one line in the fault row: something was recorded that this
+view cannot show you, and where to look. Keep it to one line — the fault row is
+beside live work, and a broken database must not take the pane over.
+
+### 6c. Where "cleared" lives when the database is unreadable
+
+`endless errors clear` marks rows in the table today. That state is unreachable
+in exactly the case this section exists for, so the file side needs its own
+watermark — a small marker file holding the offset or timestamp cleared up to.
+`errors clear` must move BOTH, or a cleared database and an uncleared file will
+disagree and the notice will never go away.
+
+### 6d. `errors` command surface
+
+- `errors list` and `errors show` read unindexed entries from the file when the
+  database is unavailable, and mark them plainly as unindexed.
+- `errors clear` moves the file watermark as well as marking rows.
+- Worth considering: a reconcile that indexes orphaned file entries into the
+  table once the database is healthy again. Cheap to describe, easy to get
+  wrong (double-indexing on repeat runs), so it is called out here rather than
+  specified — decide during implementation whether it earns its keep.
+
+### 6e. Verification for this section
+
+7. With the database made unreadable, a failing hook event still appends to
+   `errors.jsonl`, marked unindexed.
+8. `session status` renders the notice in that state, without erroring.
+9. `errors clear` silences the notice, and it stays silenced across runs.
+10. With the database healthy, behavior is byte-identical to today — no notice,
+    no extra file line beyond the existing indexed one.
