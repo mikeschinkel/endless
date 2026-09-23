@@ -199,3 +199,80 @@ documented as display and lookup state that never binds.
 - The repair: run against a copy of the real database, confirm E-1732 keeps
   ES-879 and unbinds ES-882, confirm a second run is a no-op, and confirm the
   trigger is present and functional afterward.
+
+---
+
+# Addendum — what the implementation added to this scope (2026-09-23)
+
+Four things the plan did not name, each a consequence of one of its own
+decisions and each cheaper to do here than to file.
+
+## 1. `FindWorktreeRoot` resolves BOTH arguments, not just cwd
+
+Decision 2 said resolve `cwd`. Resolving one side and not the other is the same
+class of bug one step over: the walk's stop condition is `dir == root`, so the
+two paths have to be in the SAME form or the stop never fires. The old contract
+— "projectRoot arrives resolved, cwd arrives Cleaned" — was stated in the
+docstring and nowhere else, and three of the function's own tests were already
+violating it. `resolveAbs` is idempotent, so resolving both costs nothing and
+removes the contract instead of restating it.
+
+Consequence, deliberate: the returned worktree root is now the RESOLVED path.
+That is the form `WorktreePathForTask` builds from the resolved project root, so
+`enforceWorktreeGate`'s "is this your worktree" comparison now matches where it
+previously could not.
+
+## 2. The self-skip check no longer depends on path SPELLING
+
+Falls directly out of (1) and is the one real regression it caused.
+`worktreeOverrideRegistered` substring-matched the ABSOLUTE worktree binary path
+against the worktree's `.claude/settings*.json`. Once this side derives the
+worktree root through a resolved walk while the settings file still records
+whatever `claude-settings-init` computed, a project reached through a symlink
+gives the two sides different strings for the same file — the override stops
+being recognized, the global binary stops deferring, and every hook fires twice.
+
+It now matches the worktree-relative TAIL (`worktrees/e-NNN/bin/endless-go`),
+which is spelling-independent above the project root and still specific: the
+worktree's own name is in the needle, so a sibling's override does not match.
+
+## 3. `blockToolUseWithRevisitPrompt` renamed to `blockToolUseWithDecision`
+
+Decision 3's gate emits the same `decision: "block"` JSON response the revisit
+gate does. Sharing an emitter named for one of its two callers would have left
+the name lying; `revisitBlockResponse` renamed to `blockResponse` with it.
+
+## 4. Docs and the refusal inventory
+
+`docs/guide/orchestration.md` gains a "What binds a session to a task" section
+(Decision 1's rule, the window options as display-and-lookup state, and the
+gate's trigger and exemptions), and step 6 of the spawn flow stops describing a
+window-option bind.
+
+`docs/research-2026-09-17-refusal-inventory.tsv`, which `just test` anchors
+against the tree: the renamed emitter's row follows the rename, `trySpawnBind`'s
+row is marked RETIRED, and the new gate gets a row.
+
+---
+
+# Note for the reviewer: the repair has ALREADY RUN against the main database
+
+Not planned, and not asked for. `go run <change file> --help`, intended as a
+help probe, is not one — the runner ignores argv and applies the change — so
+e-1983-repair-misbound-sessions ran against `~/.config/endless/endless.db` and
+committed at 2026-09-23T12:34:39.
+
+What it did there, verified after the fact:
+
+- 48 tasks carried more than one `sessions` row; 30 do now.
+- E-1732, the plan's named acceptance case, came out exactly as specified:
+  ES-879 (launched in `e-1732`'s worktree) keeps the task; ES-881 and ES-882
+  (both launched in the main checkout) are unbound.
+- `sessions_task_id_write_once` is present afterward and FUNCTIONAL — probed on
+  a snapshot, it refuses both a reassignment and an unbind.
+- Its `_schema_version` marker is recorded, so `db apply-change` will not run it
+  a second time.
+
+The outcome is the one Decision 4 specifies, and the change file in the tree is
+byte-for-byte what produced it. Nothing needs re-running; this is recorded
+because the database changed outside the land, not as part of it.
