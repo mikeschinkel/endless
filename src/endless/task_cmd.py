@@ -2784,16 +2784,22 @@ def _next_sort_order(project_id: int, phase: str) -> int:
     return (val or 0) + 10
 
 
-# E-2175: the statuses whose entire content is "this work is being abandoned",
-# each mapped to the gerund and the remedy its refusal names. `superseded` is
-# deliberately absent — it names a successor and is already refused without the
-# `replaced_by` relation that names it, so the fact a later reader needs is
-# recorded by a different guard. `declined` and `obsolete` have nothing but the
-# outcome.
+# E-2175: every status that ends a task WITHOUT it having shipped, each mapped
+# to the gerund and the remedy its refusal names. These three are the whole set:
+# work that shipped keeps the terminal it earned and is not abandoned, so it
+# never appears here.
 #
-# The two remedies differ because the flags do: `task decline` spells the reason
-# `--reason`, while every route to `obsolete` spells it `--outcome` — there is no
-# `task obsolete` verb to carry a reason flag of its own.
+# `superseded` is in the set even though it is separately refused without a
+# `replaced_by` relation. That relation records WHAT took the work over; it does
+# not record WHY it was handed on, and a later reader needs both. Leaving it out
+# would have left the plainest form of the commonest abandonment —
+# `task replace <old> --by <new>` — recording no reason at all, which is the
+# side door that makes the rule undefensible everywhere else.
+#
+# The remedies differ because the flags do: `task decline` spells the reason
+# `--reason`, while every other route spells it `--outcome` — there is no
+# `task obsolete` verb to carry a reason flag of its own, and `task replace`
+# already had `--outcome`.
 _ABANDONMENT_STATUSES = {
     "declined": (
         "declining",
@@ -2803,6 +2809,12 @@ _ABANDONMENT_STATUSES = {
         "obsoleting",
         "Use --outcome (or --outcome-file) to say why it no longer applies.",
     ),
+    "superseded": (
+        "superseding",
+        "Use --outcome (on `task replace`, or `task update`) to say why the "
+        "work was handed on — the replaced_by relation names the successor, "
+        "not the reason.",
+    ),
 }
 
 
@@ -2810,17 +2822,19 @@ def _require_outcome_for_abandonment(status: str | None, outcome: str | None):
     """ED-1022, E-2175: abandoning a task requires saying why, stored as outcome.
 
     Keyed on the STATUS TRANSITION, never on a verb — `task decline`,
-    `task update --status`, `epic update --status` and `task replace --status`
-    all pass through here, so one check covers every route. A guard bolted to a
-    single command leaks the moment someone reaches the status another way, and
-    that leak is the measured difference between the two populations: since
-    ED-1022 covered all three call sites, not one `declined` row has gone in
-    without a reason, while unguarded `obsolete` accumulated 74 of them.
+    `task update --status`, `epic update --status` and `task replace` (with or
+    without an explicit `--status`) all pass through here, so one check covers
+    every route. A guard bolted to a single command leaks the moment someone
+    reaches the status another way, and that leak is the measured difference
+    between the two populations: since ED-1022 covered all three call sites, not
+    one `declined` row has gone in without a reason, while unguarded `obsolete`
+    accumulated 74 of them.
 
-    E-2175 widened the requirement from `declined` to `obsolete`. Existing
-    reasonless rows are deliberately left alone — inventing reasons nobody
-    remembers would produce authoritative-looking fiction, and the guard is on
-    the transition, not on the row.
+    E-2175 widened the requirement from `declined` alone to every status that
+    ends an unshipped task. Existing reasonless rows are deliberately left
+    alone — inventing reasons nobody remembers would produce
+    authoritative-looking fiction, and the guard is on the transition, not on
+    the row.
     """
     if status in _ABANDONMENT_STATUSES and not (outcome and outcome.strip()):
         gerund, remedy = _ABANDONMENT_STATUSES[status]
@@ -4944,7 +4958,6 @@ def update_plan(
     from endless.event_bridge import emit_event
 
     _reject_status_with_keep_status(status, keep_status)
-    _require_outcome_for_abandonment(status, outcome)
 
     row = db.query(
         "SELECT id, title, description, plan, notes, status, "
@@ -5001,6 +5014,13 @@ def update_plan(
         # `completed` flip on an implementation type is caught there.
         _require_status_allowed_for_type(status, effective_type)
         _require_a_replacement_for_superseded(item_id, status)
+        # After the relation check, deliberately. When a hand-set `superseded`
+        # has neither a successor nor a reason, "nothing replaced it" is the
+        # refusal worth printing: it says the status is wrong for this row at
+        # all, and routes to `task replace`, which then asks for the reason.
+        # Asking for the reason first would spend a round trip teaching a flag
+        # for a status the caller is about to be told not to use.
+        _require_outcome_for_abandonment(status, outcome)
 
     # Reject a maybe-phase task gaining (or keeping) a parent. Only evaluate
     # when this update touches phase or parent_id — an unrelated edit must not

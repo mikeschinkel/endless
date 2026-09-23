@@ -326,7 +326,7 @@ def test_replace_task_active_voice(isolated_env, monkeypatch):
     _seed_project_at_cwd(monkeypatch, isolated_env)
     old = _add_task("Old")
     new = _add_task("New")
-    task_cmd.replace_task(old, new)
+    task_cmd.replace_task(old, new, outcome="folded into the replacement")
 
     rows = list(db.query("SELECT source_id, target_id, dep_type FROM task_deps"))
     # Active-voice: "new replaces old" → source=new, target=old

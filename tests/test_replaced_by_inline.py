@@ -261,7 +261,7 @@ def test_replace_defaults_to_superseded_on_unshipped_work(
 ):
     old = _add_task("Add a stale idea", status="unplanned")
     new = _add_task("Add the replacement", status="underway")
-    task_cmd.replace_task(old, new)
+    task_cmd.replace_task(old, new, outcome="the rebuild subsumes it")
     assert _status(old) == "superseded"
 
 
@@ -286,7 +286,8 @@ def test_superseded_is_allowed_once_the_relation_exists(
     old = _add_task("Add a stale idea", status="ready")
     new = _add_task("Add the replacement", status="underway")
     task_cmd.replace_task(old, new, status="ready")   # relation only
-    task_cmd.update_plan(old, status="superseded")    # must not raise
+    task_cmd.update_plan(old, status="superseded",    # must not raise
+                         outcome="handed on to the replacement")
     assert _status(old) == "superseded"
 
 
@@ -344,7 +345,7 @@ def test_replace_still_emits_a_status_event_when_the_status_moves(
     kinds = _recorded_event_kinds(monkeypatch)
     old = _add_task("Add a stale idea", status="unplanned")
     new = _add_task("Add the replacement", status="underway")
-    task_cmd.replace_task(old, new)
+    task_cmd.replace_task(old, new, outcome="the rebuild subsumes it")
     assert "task.status_changed" in kinds
 
 

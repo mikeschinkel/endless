@@ -4,10 +4,10 @@
 # landed. Edit it only if you ARE E-2175. If your change breaks an
 # assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
-# E-2175: obsoleting a task must say why, as declining already does.
+# E-2175: abandoning a task must say why, as declining already did.
 #
-# Of the three ways a task can be abandoned, `obsolete` was the only one
-# recording nothing. Measured against the live ledger on 2026-09-23:
+# A task can end three ways without having shipped. Only `declined` was
+# guarded. Measured against the live ledger on 2026-09-23:
 #
 #     status                total   no reason   span of the reasonless rows
 #     declined (guarded)       74          32   2026-06-10 → 2026-06-10
@@ -17,13 +17,19 @@
 # covered all THREE of decline's call sites, not one has leaked in three and a
 # half months. `obsolete` produced one the day this task was filed.
 #
+# `superseded` is covered too. It was already refused without a `replaced_by`
+# relation, but that relation records WHAT took the work over and not WHY it
+# was handed on — so the plainest form of the commonest abandonment,
+# `task replace <old> --by <new>`, recorded no reason at all. That side door is
+# what would have made the rule unenforceable everywhere else.
+#
 # What is verified here:
 #   A. Fail-fast: this task's own tests, plus the landed suites whose
-#      `obsolete` transitions this guard now sits in front of.
+#      abandonment transitions this guard now sits in front of.
 #   B. The claims, named one by one — every route refused, and the one
 #      exemption that falls out of guarding the transition rather than a verb.
 #   C. The guard is keyed on the STATUS, not on a verb: it fires for exactly
-#      two of the vocabulary's statuses and is reachable from exactly the three
+#      the three unshipped terminals and is reachable from exactly the three
 #      front doors. Single-site enforcement is the failure this task exists to
 #      prevent, so that is asserted structurally, not by reading the diff.
 #   D. The refusal is actionable and the help text tells the truth — a
@@ -60,6 +66,7 @@ py_file tests/test_replaced_by_inline.py    "replace/obsolete on shipped and uns
 py_file tests/test_research_gate.py         "the type gate's universal terminals"
 py_file tests/test_type_status_gate.py      "obsolete still allowed for every type"
 py_file tests/test_status_lifecycle_gate.py "a retired status can still escape"
+py_file tests/test_relations.py             "the replaced_by relation, unchanged"
 
 # ---------------------------------------------------------------------------
 section "B. The claims only visible from inside, named"
@@ -91,8 +98,14 @@ py_claim "${T}::test_task_replace_with_status_obsolete_and_outcome" \
     "and succeeds with one, recording both the relation and the reason"
 py_claim "${T}::test_task_replace_on_shipped_work_needs_no_outcome" \
     "the one exemption is structural: shipped work keeps its terminal, never reaching obsolete"
-py_claim "${T}::test_task_replace_default_superseded_needs_no_outcome" \
-    "superseded is untouched — it is guarded by the relation it names"
+py_claim "${T}::test_task_replace_default_superseded_requires_outcome" \
+    "the plain task replace --by is refused: the relation names the successor, not the reason"
+py_claim "${T}::test_task_update_status_superseded_requires_outcome" \
+    "and so is the other route to superseded, once the relation already exists"
+py_claim "${T}::test_superseded_with_no_relation_is_refused_for_the_relation_first" \
+    "with both facts missing, the refusal names the missing successor — not a flag"
+py_claim "${T}::test_task_replace_default_superseded" \
+    "and the supersession still lands with its reason stored"
 py_claim "${T}::test_existing_reasonless_obsolete_rows_still_read" \
     "pre-existing reasonless rows still show, list and serialize — the guard is on the transition"
 py_claim "${T}::test_task_decline_writes_outcome" \
@@ -108,8 +121,8 @@ section "C. Keyed on the status, not on a verb — enumerated, not eyeballed"
 # reasonless rows while `declined` accumulated none. These assertions read the
 # source, so the next route added is a test failure rather than a hole.
 
-py_claim "${T}::test_the_guard_fires_for_exactly_two_statuses" \
-    "the guard fires for declined and obsolete, and for no other status"
+py_claim "${T}::test_the_guard_fires_for_exactly_the_unshipped_terminals" \
+    "the guard fires for declined, obsolete and superseded — and no other status"
 py_claim "${T}::test_the_guard_is_called_from_exactly_the_expected_front_doors" \
     "reachable from exactly update_plan, replace_task and decline_item"
 py_claim "${T}::test_task_cmd_status_emitters_are_pinned_or_guarded" \
@@ -158,6 +171,13 @@ assert_contains "and the file form, for a reason longer than a shell argument" \
     "--outcome-file" "${OBS}"
 assert_contains "declining still names its own flag, which is spelled differently" \
     "--reason" "${DEC}"
+
+SUP="$(refusal superseded)"
+[[ -n "${SUP}" ]] || setup_error "the guard did not refuse superseded"
+assert_contains "superseding is refused in the caller's own words" \
+    "superseding a task" "${SUP}"
+assert_contains "and its refusal says why the relation is not enough on its own" \
+    "names the successor" "${SUP}"
 assert_not_contains "and obsolete does NOT offer --reason: there is no task obsolete verb" \
     "--reason" "${OBS}"
 
@@ -174,15 +194,19 @@ assert_contains "task update's --outcome says obsolete requires it" \
     "obsolete" "$(printf '%s' "${UPDATE_HELP}" | grep -A2 -- '--outcome ')"
 assert_contains "epic update's does too" \
     "obsolete" "$(printf '%s' "${EPIC_HELP}" | grep -A2 -- '--outcome ')"
-assert_contains "task replace's does too" \
-    "obsolete" "$(printf '%s' "${REPLACE_HELP}" | grep -A2 -- '--outcome ')"
+assert_contains "and task replace's says the reason is required, not conditional" \
+    "Required" "$(printf '%s' "${REPLACE_HELP}" | grep -A4 -- '--outcome ')"
+assert_contains "naming the one exemption rather than leaving it a surprise" \
+    "shipped" "$(printf '%s' "${REPLACE_HELP}" | grep -A4 -- '--outcome ')"
 # E-2144 moved the unshipped default to `superseded`; this help string still
 # said 'obsolete', and a reader sent here by the new requirement would have
 # been told the wrong default. Fixed as part of this change.
 assert_contains "and task replace no longer claims obsolete is its default status" \
     "superseded" "$(printf '%s' "${REPLACE_HELP}" | grep -A4 -- '--status ')"
 
-assert_contains "the guide's status table states the requirement" \
+assert_contains "the guide's status table states the requirement for obsolete" \
     "Requires a reason" "$(grep '^| `obsolete`' docs/guide/index.md)"
+assert_contains "and for superseded, alongside the relation it already needed" \
+    "requires a reason" "$(grep '^| `superseded`' docs/guide/index.md)"
 
 summary

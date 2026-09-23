@@ -91,10 +91,10 @@ def test_task_replace_default_superseded(seeded_project_at_cwd):
     # `obsolete` means nothing did.
     old = _add_task("Old")
     new = _add_task("New")
-    task_cmd.replace_task(old, new)
+    task_cmd.replace_task(old, new, outcome="folded into the replacement")
     status, outcome = _status_outcome(old)
     assert status == "superseded"
-    assert outcome is None
+    assert outcome == "folded into the replacement"
 
 
 def test_task_replace_with_status_declined_requires_outcome(seeded_project_at_cwd):
@@ -141,12 +141,13 @@ def test_task_update_outcome_amends(seeded_project_at_cwd):
     assert outcome == "amended reason"
 
 
-# ─── obsolete (E-2175) ────────────────────────────────────────────────────────
+# ─── abandonment requires a reason (E-2175) ───────────────────────────────────
 #
-# `obsolete` is the third way to abandon a task, and until E-2175 the only one
-# recording nothing: `declined` is refused without a reason (ED-1022) and
-# `superseded` without a `replaced_by` relation. These assert the widened guard
-# on every route that can reach the status.
+# A task can end three ways without having shipped, and until E-2175 only
+# `declined` was refused without a reason (ED-1022). `obsolete` recorded
+# nothing at all; `superseded` recorded a successor, which says WHAT took the
+# work over and not WHY it was handed on. These assert the widened guard on
+# every route to all three.
 
 
 def test_task_update_status_obsolete_requires_outcome(seeded_project_at_cwd):
@@ -206,9 +207,9 @@ def test_task_replace_with_status_obsolete_and_outcome(seeded_project_at_cwd):
 
 @pytest.mark.parametrize("shipped", ["unverified", "confirmed", "assumed", "completed"])
 def test_task_replace_on_shipped_work_needs_no_outcome(seeded_project_at_cwd, shipped):
-    """The one exemption, and it is structural rather than a carve-out: shipped
-    work keeps the terminal it earned, never reaches `obsolete`, so the guard
-    does not fire."""
+    """The one exemption, and it is structural rather than a carve-out: work
+    that shipped keeps the terminal it earned, was never abandoned, and so
+    reaches none of the three statuses the guard covers."""
     old = _add_task("Old", status=shipped)
     new = _add_task("New")
     task_cmd.replace_task(old, new)
@@ -217,12 +218,45 @@ def test_task_replace_on_shipped_work_needs_no_outcome(seeded_project_at_cwd, sh
     assert outcome is None
 
 
-def test_task_replace_default_superseded_needs_no_outcome(seeded_project_at_cwd):
-    """`superseded` is guarded by the relation it names, not by the outcome."""
+def test_task_replace_default_superseded_requires_outcome(seeded_project_at_cwd):
+    """The plainest form of the commonest abandonment. The `replaced_by`
+    relation names the successor; it does not say why the work was handed on,
+    and leaving this route unguarded is the side door that would make the rule
+    unenforceable everywhere else."""
     old = _add_task("Old")
     new = _add_task("New")
-    task_cmd.replace_task(old, new)
-    assert _status_outcome(old) == ("superseded", None)
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.replace_task(old, new)
+    msg = str(exc.value.message)
+    assert "outcome is required" in msg.lower()
+    assert "--outcome" in msg
+    # Refused before anything was written: no relation, no status change.
+    assert task_cmd.replaced_by_map([old]) == {}
+    assert _status_outcome(old) == ("ready", None)
+
+
+def test_task_update_status_superseded_requires_outcome(seeded_project_at_cwd):
+    """The other route to the status, once the relation already exists."""
+    old = _add_task("Old")
+    new = _add_task("New")
+    task_cmd.replace_task(old, new, status="ready")   # relation only
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.update_plan(old, status="superseded")
+    assert "outcome is required" in str(exc.value.message).lower()
+
+
+def test_superseded_with_no_relation_is_refused_for_the_relation_first(
+    seeded_project_at_cwd
+):
+    """Both facts missing: the refusal worth printing is the one that says the
+    status is wrong for this row at all, not the one that teaches a flag for a
+    status the caller is about to be told not to use."""
+    tid = _add_task("Nothing replaced this")
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.update_plan(tid, status="superseded")
+    msg = str(exc.value.message)
+    assert "nothing replaced it" in msg
+    assert "outcome is required" not in msg.lower()
 
 
 def test_existing_reasonless_obsolete_rows_still_read(seeded_project_at_cwd):
@@ -248,9 +282,10 @@ def test_existing_reasonless_obsolete_rows_still_read(seeded_project_at_cwd):
     assert not payload.get("outcome")
 
 
-def test_the_guard_fires_for_exactly_two_statuses():
-    """Widening it to `obsolete` must not pull in any other status — including
-    `superseded`, which is guarded by the relation it names, not by a reason."""
+def test_the_guard_fires_for_exactly_the_unshipped_terminals():
+    """The rule is "every status that ends a task without it having shipped",
+    and these three are that set. A status added to the vocabulary without a
+    decision about which side of that line it falls on fails here."""
     from endless.statuses import TASK_STATUSES
 
     fired = set()
@@ -259,7 +294,7 @@ def test_the_guard_fires_for_exactly_two_statuses():
             task_cmd._require_outcome_for_abandonment(status, None)
         except click.ClickException:
             fired.add(status)
-    assert fired == {"declined", "obsolete"}
+    assert fired == {"declined", "obsolete", "superseded"}
     assert task_cmd._require_outcome_for_abandonment(None, None) is None
 
 

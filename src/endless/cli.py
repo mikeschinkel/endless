@@ -2967,7 +2967,7 @@ def task_add(title, description, description_file, plan_text, plan_file, analysi
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
 @click.option("--outcome", default=None,
-              help="Outcome / reason for status (inline; required if status=declined or status=obsolete)")
+              help="Outcome / reason for status (inline; required by any status that ends the task unshipped: declined, obsolete, superseded)")
 @click.option("--outcome-file", default=None,
               help="Load the outcome from a file")
 @click.option("--justification", default=None,
@@ -3528,7 +3528,7 @@ def task_block(item_id, blocker_id):
                    "the supersession is the relation, not a status that reads "
                    "as 'never happened'.")
 @click.option("--outcome", default=None,
-              help="Outcome — why this was replaced (inline; required if --status=declined or --status=obsolete)")
+              help="Outcome — why this was replaced (inline). Required: the relation names the successor, not the reason. Exempt only when the replaced task already shipped and keeps the status it earned.")
 @click.option("--outcome-file", default=None,
               help="Load the outcome from a file")
 @click.option("--allow-path", "allow_paths", multiple=True,
@@ -3539,6 +3539,10 @@ def task_replace(item_id, replacement_id, new_status, outcome, outcome_file, all
 
     The replaced task's status defaults to 'superseded', but work that already
     shipped keeps the status it earned — see --status.
+
+    --outcome is required whenever the replaced task is being abandoned, which
+    is every case but that one: the relation records WHAT took the work over,
+    and a later reader still needs to know WHY it was handed on.
     """
     from endless.task_cmd import replace_task
     outcome = _resolve_content_flag(outcome, outcome_file, "outcome", allow_paths)
@@ -3988,7 +3992,7 @@ def epic_show(item_ids, no_description, show_analysis, show_plan_field,
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
 @click.option("--outcome", default=None,
-              help="Outcome / reason for status (inline; required if status=declined or status=obsolete)")
+              help="Outcome / reason for status (inline; required by any status that ends the task unshipped: declined, obsolete, superseded)")
 @click.option("--outcome-file", default=None,
               help="Load the outcome from a file")
 @click.option("--allow-path", "allow_paths", multiple=True,
