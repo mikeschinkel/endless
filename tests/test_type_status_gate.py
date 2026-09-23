@@ -115,5 +115,5 @@ def test_update_research_epic_terminal_still_rejected(seeded_project_at_cwd, typ
 @pytest.mark.parametrize("type_id", [_TASK, _BUG, _RESEARCH, _EPIC])
 def test_obsolete_allowed_for_all_types(seeded_project_at_cwd, type_id):
     tid = _add_task("Some task", type_id=type_id)
-    task_cmd.update_plan(tid, status="obsolete")
+    task_cmd.update_plan(tid, status="obsolete", outcome="no longer needed")
     assert _status(tid) == "obsolete"

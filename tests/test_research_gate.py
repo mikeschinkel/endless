@@ -367,7 +367,7 @@ def test_research_declined_and_obsolete_still_allowed(seeded_project_at_cwd):
     """Universal terminals (declined, obsolete) are not gated by type."""
     epic = _add_task("Anchor epic", status="underway", task_type="epic")
     tid = _add_task("Research X", task_type="research", parent_id=epic)
-    task_cmd.update_plan(tid, status="obsolete")
+    task_cmd.update_plan(tid, status="obsolete", outcome="question answered elsewhere")
     row = db.query("SELECT status FROM tasks WHERE id = ?", (tid,))
     assert row[0]["status"] == "obsolete"
 

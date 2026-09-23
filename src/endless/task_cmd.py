@@ -2784,11 +2784,48 @@ def _next_sort_order(project_id: int, phase: str) -> int:
     return (val or 0) + 10
 
 
-def _require_outcome_for_declined(status: str | None, outcome: str | None):
-    if status == "declined" and not (outcome and outcome.strip()):
+# E-2175: the statuses whose entire content is "this work is being abandoned",
+# each mapped to the gerund and the remedy its refusal names. `superseded` is
+# deliberately absent — it names a successor and is already refused without the
+# `replaced_by` relation that names it, so the fact a later reader needs is
+# recorded by a different guard. `declined` and `obsolete` have nothing but the
+# outcome.
+#
+# The two remedies differ because the flags do: `task decline` spells the reason
+# `--reason`, while every route to `obsolete` spells it `--outcome` — there is no
+# `task obsolete` verb to carry a reason flag of its own.
+_ABANDONMENT_STATUSES = {
+    "declined": (
+        "declining",
+        "Use --reason (on `task decline`) or --outcome to explain why.",
+    ),
+    "obsolete": (
+        "obsoleting",
+        "Use --outcome (or --outcome-file) to say why it no longer applies.",
+    ),
+}
+
+
+def _require_outcome_for_abandonment(status: str | None, outcome: str | None):
+    """ED-1022, E-2175: abandoning a task requires saying why, stored as outcome.
+
+    Keyed on the STATUS TRANSITION, never on a verb — `task decline`,
+    `task update --status`, `epic update --status` and `task replace --status`
+    all pass through here, so one check covers every route. A guard bolted to a
+    single command leaks the moment someone reaches the status another way, and
+    that leak is the measured difference between the two populations: since
+    ED-1022 covered all three call sites, not one `declined` row has gone in
+    without a reason, while unguarded `obsolete` accumulated 74 of them.
+
+    E-2175 widened the requirement from `declined` to `obsolete`. Existing
+    reasonless rows are deliberately left alone — inventing reasons nobody
+    remembers would produce authoritative-looking fiction, and the guard is on
+    the transition, not on the row.
+    """
+    if status in _ABANDONMENT_STATUSES and not (outcome and outcome.strip()):
+        gerund, remedy = _ABANDONMENT_STATUSES[status]
         raise click.ClickException(
-            "An outcome is required when declining a task. "
-            "Use --reason (on `task decline`) or --outcome to explain why."
+            f"An outcome is required when {gerund} a task. {remedy}"
         )
 
 
@@ -2900,7 +2937,7 @@ def _require_outcome_for_completed(
     """ED-1520: completing a research/brainstorm task requires --outcome — the
     outcome IS the deliverable for those types. Keyed on type, not the
     'completed' status. Decline's own reason requirement is separate
-    (`_require_outcome_for_declined`, ED-1022).
+    (`_require_outcome_for_abandonment`, ED-1022/E-2175).
 
     E-2016: also required at `unreviewed`, which is where the outcome is
     written for those types."""
@@ -3351,7 +3388,7 @@ def decline_item(item_id: int, reason: str):
     """Mark a task as declined; reason is required and stored as outcome."""
     from endless.event_bridge import emit_event
 
-    _require_outcome_for_declined("declined", reason)
+    _require_outcome_for_abandonment("declined", reason)
 
     row = db.query(
         "SELECT id, COALESCE(title, description) as title, status FROM live_tasks "
@@ -4907,7 +4944,7 @@ def update_plan(
     from endless.event_bridge import emit_event
 
     _reject_status_with_keep_status(status, keep_status)
-    _require_outcome_for_declined(status, outcome)
+    _require_outcome_for_abandonment(status, outcome)
 
     row = db.query(
         "SELECT id, title, description, plan, notes, status, "
@@ -7043,7 +7080,7 @@ def replace_task(
 
     if status is None:
         status = old_status if old_status in _SHIPPED_STATUSES else "superseded"
-    _require_outcome_for_declined(status, outcome)
+    _require_outcome_for_abandonment(status, outcome)
 
     # "old replaced_by new" → display='replaced_by' resolves to stored='replaces' with
     # swap=True → row stored as source=new, target=old, dep_type='replaces' (active voice).

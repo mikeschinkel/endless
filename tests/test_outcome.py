@@ -1,6 +1,8 @@
-"""Tests for the outcome field and task decline verb (E-787)."""
+"""Tests for the outcome field and the abandonment verbs (E-787, E-2175)."""
 
+import ast
 import json
+from pathlib import Path
 
 import click
 import pytest
@@ -137,6 +139,264 @@ def test_task_update_outcome_amends(seeded_project_at_cwd):
     status, outcome = _status_outcome(tid)
     assert status == "declined"
     assert outcome == "amended reason"
+
+
+# ─── obsolete (E-2175) ────────────────────────────────────────────────────────
+#
+# `obsolete` is the third way to abandon a task, and until E-2175 the only one
+# recording nothing: `declined` is refused without a reason (ED-1022) and
+# `superseded` without a `replaced_by` relation. These assert the widened guard
+# on every route that can reach the status.
+
+
+def test_task_update_status_obsolete_requires_outcome(seeded_project_at_cwd):
+    tid = _add_task("Sample")
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.update_plan(tid, status="obsolete")
+    msg = str(exc.value.message)
+    assert "outcome is required" in msg.lower()
+    # The refusal must name the flag that satisfies it, not just complain.
+    assert "--outcome" in msg
+
+
+def test_task_update_status_obsolete_blank_outcome_rejected(seeded_project_at_cwd):
+    tid = _add_task("Sample")
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.update_plan(tid, status="obsolete", outcome="   ")
+    assert "outcome is required" in str(exc.value.message).lower()
+
+
+def test_task_update_status_obsolete_with_outcome_stores_it(seeded_project_at_cwd):
+    tid = _add_task("Sample")
+    task_cmd.update_plan(tid, status="obsolete", outcome="the API it wrapped is gone")
+    status, outcome = _status_outcome(tid)
+    assert status == "obsolete"
+    assert outcome == "the API it wrapped is gone"
+
+
+def test_epic_update_status_obsolete_requires_outcome(seeded_project_at_cwd):
+    """`epic update` is a second front door onto update_plan, so it inherits the
+    guard rather than needing one of its own."""
+    from endless import epic_cmd
+
+    tid = _add_task("Sample")
+    with pytest.raises(click.ClickException) as exc:
+        epic_cmd.update_epic(tid, status="obsolete")
+    assert "outcome is required" in str(exc.value.message).lower()
+
+
+def test_task_replace_with_status_obsolete_requires_outcome(seeded_project_at_cwd):
+    """The `replaced_by` relation records WHAT replaced a task, not WHY it went
+    away; an explicit --status obsolete still owes the reason."""
+    old = _add_task("Old")
+    new = _add_task("New")
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.replace_task(old, new, status="obsolete")
+    assert "outcome is required" in str(exc.value.message).lower()
+
+
+def test_task_replace_with_status_obsolete_and_outcome(seeded_project_at_cwd):
+    old = _add_task("Old")
+    new = _add_task("New")
+    task_cmd.replace_task(old, new, status="obsolete", outcome="deleted outright")
+    status, outcome = _status_outcome(old)
+    assert status == "obsolete"
+    assert outcome == "deleted outright"
+
+
+@pytest.mark.parametrize("shipped", ["unverified", "confirmed", "assumed", "completed"])
+def test_task_replace_on_shipped_work_needs_no_outcome(seeded_project_at_cwd, shipped):
+    """The one exemption, and it is structural rather than a carve-out: shipped
+    work keeps the terminal it earned, never reaches `obsolete`, so the guard
+    does not fire."""
+    old = _add_task("Old", status=shipped)
+    new = _add_task("New")
+    task_cmd.replace_task(old, new)
+    status, outcome = _status_outcome(old)
+    assert status == shipped
+    assert outcome is None
+
+
+def test_task_replace_default_superseded_needs_no_outcome(seeded_project_at_cwd):
+    """`superseded` is guarded by the relation it names, not by the outcome."""
+    old = _add_task("Old")
+    new = _add_task("New")
+    task_cmd.replace_task(old, new)
+    assert _status_outcome(old) == ("superseded", None)
+
+
+def test_existing_reasonless_obsolete_rows_still_read(seeded_project_at_cwd):
+    """The guard is on the TRANSITION, not on the row: the rows that predate it
+    are deliberately not backfilled, and must still read, render and query."""
+    tid = _add_task("Legacy", status="obsolete")
+    runner = CliRunner()
+
+    shown = runner.invoke(main, ["task", "show", f"E-{tid}"])
+    assert shown.exit_code == 0, shown.output
+    assert "obsolete" in shown.output
+
+    listed = runner.invoke(main, ["task", "list", "--status", "obsolete"])
+    assert listed.exit_code == 0, listed.output
+    assert f"E-{tid}" in listed.output
+
+    as_json = runner.invoke(
+        main, ["task", "show", f"E-{tid}", "--outcome", "--json"]
+    )
+    assert as_json.exit_code == 0, as_json.output
+    payload = json.loads(as_json.output)
+    assert payload["status"] == "obsolete"
+    assert not payload.get("outcome")
+
+
+def test_the_guard_fires_for_exactly_two_statuses():
+    """Widening it to `obsolete` must not pull in any other status — including
+    `superseded`, which is guarded by the relation it names, not by a reason."""
+    from endless.statuses import TASK_STATUSES
+
+    fired = set()
+    for status in TASK_STATUSES:
+        try:
+            task_cmd._require_outcome_for_abandonment(status, None)
+        except click.ClickException:
+            fired.add(status)
+    assert fired == {"declined", "obsolete"}
+    assert task_cmd._require_outcome_for_abandonment(None, None) is None
+
+
+# ─── every route to an abandonment status is guarded ──────────────────────────
+#
+# Single-site enforcement is the failure E-2175 exists to prevent: `declined`
+# has had no reasonless row since ED-1022 covered all three of its call sites,
+# while `obsolete` leaked from wherever it was not covered. These enumerate the
+# routes structurally, so the next one added is a test failure rather than a
+# hole someone notices in three months.
+
+_GUARD = "_require_outcome_for_abandonment"
+_ABANDONMENT = {"declined", "obsolete"}
+_SRC = Path(__file__).resolve().parents[1] / "src" / "endless"
+
+
+def _parse(name):
+    return ast.parse((_SRC / name).read_text())
+
+
+def _functions(tree):
+    return [n for n in ast.walk(tree)
+            if isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef))]
+
+
+def _resolve(fn, node):
+    """Possible string values of `node` inside `fn`, or None if not knowable.
+
+    Folds the one indirection the emitters actually use — a local assigned a
+    string literal and then read back into the payload dict.
+    """
+    if isinstance(node, ast.Constant) and isinstance(node.value, str):
+        return {node.value}
+    if not isinstance(node, ast.Name):
+        return None
+    values = set()
+    for stmt in ast.walk(fn):
+        if not isinstance(stmt, ast.Assign):
+            continue
+        if not any(isinstance(t, ast.Name) and t.id == node.id
+                   for t in stmt.targets):
+            continue
+        if isinstance(stmt.value, ast.Constant):
+            # `x = None` is the "nothing to emit" sentinel, not a status.
+            if isinstance(stmt.value.value, str):
+                values.add(stmt.value.value)
+            elif stmt.value.value is not None:
+                return None
+        else:
+            return None
+    return values or None
+
+
+def _emits_status_change(fn):
+    for node in ast.walk(fn):
+        if isinstance(node, ast.Call) and getattr(node.func, "id", None) == "emit_event":
+            for kw in node.keywords:
+                if (kw.arg == "kind" and isinstance(kw.value, ast.Constant)
+                        and kw.value.value == "task.status_changed"):
+                    return True
+    return False
+
+
+def _new_status_nodes(fn):
+    out = []
+    for node in ast.walk(fn):
+        if not isinstance(node, ast.Dict):
+            continue
+        for key, value in zip(node.keys, node.values):
+            if isinstance(key, ast.Constant) and key.value == "new_status":
+                out.append(value)
+    return out
+
+
+def _calls_guard(fn):
+    return any(isinstance(n, ast.Call) and getattr(n.func, "id", None) == _GUARD
+               for n in ast.walk(fn))
+
+
+def test_task_cmd_status_emitters_are_pinned_or_guarded():
+    """In task_cmd, a function emitting the status-change event either pins
+    `new_status` to literals that are not abandonment statuses, or takes it from
+    the caller — and then it must call the guard."""
+    tree = _parse("task_cmd.py")
+    emitters = [fn for fn in _functions(tree) if _emits_status_change(fn)]
+    assert len(emitters) >= 8, f"expected the status emitters, found {len(emitters)}"
+    for fn in emitters:
+        nodes = _new_status_nodes(fn)
+        assert nodes, f"task_cmd.{fn.name} emits the event with no new_status"
+        resolved = [_resolve(fn, n) for n in nodes]
+        caller_supplied = any(r is None for r in resolved)
+        pinned = set().union(*[r for r in resolved if r]) if any(resolved) else set()
+        if caller_supplied or (_ABANDONMENT & pinned):
+            assert _calls_guard(fn), (
+                f"task_cmd.{fn.name} can set an abandonment status but never "
+                f"calls {_GUARD} — that is the single-site leak E-2175 closed."
+            )
+
+
+def test_the_guard_is_called_from_exactly_the_expected_front_doors():
+    """Named, so deleting a call is a failure rather than a silent hole."""
+    callers = {fn.name for fn in _functions(_parse("task_cmd.py"))
+               if _calls_guard(fn)}
+    assert callers == {"update_plan", "replace_task", "decline_item"}, callers
+
+
+def test_triage_can_never_reach_an_abandonment_status():
+    """triage.apply takes its status from the model's verdict, so what bounds it
+    is the vocabulary it parses against."""
+    from endless import triage
+
+    assert _ABANDONMENT.isdisjoint({d.lower() for d in triage._DECISIONS})
+
+
+def test_session_cmd_only_ever_emits_pinned_non_abandonment_statuses():
+    """session_cmd routes through one helper taking `new_status` as a parameter;
+    what bounds it is the call sites, so those are what this reads."""
+    tree = _parse("session_cmd.py")
+    seen = []
+    for fn in _functions(tree):
+        for node in ast.walk(fn):
+            if not isinstance(node, ast.Call):
+                continue
+            if getattr(node.func, "id", None) != "_emit_task_status_change":
+                continue
+            assert len(node.args) >= 4, (
+                f"session_cmd.{fn.name} calls the helper without a positional "
+                "new_status — this check can no longer see what it sets."
+            )
+            values = _resolve(fn, node.args[3])
+            assert values is not None, (
+                f"session_cmd.{fn.name} passes a new_status this check cannot "
+                "resolve; pin it to a literal or route it through the guard."
+            )
+            assert _ABANDONMENT.isdisjoint(values), (fn.name, values)
+            seen.extend(values)
+    assert seen, "expected session_cmd to emit status changes"
 
 
 # ─── show ─────────────────────────────────────────────────────────────────────

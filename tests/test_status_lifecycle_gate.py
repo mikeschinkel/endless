@@ -84,7 +84,7 @@ def test_a_retired_status_can_still_escape(seeded_project_at_cwd):
     status, the rows least able to fix themselves would become permanent.
     """
     tid = _add_task("Add a legacy-status thing", status="blocked")
-    task_cmd.update_plan(item_id=tid, status="obsolete")
+    task_cmd.update_plan(item_id=tid, status="obsolete", outcome="legacy status")
     assert _status(tid) == "obsolete"
 
 

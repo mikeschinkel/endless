@@ -2967,7 +2967,7 @@ def task_add(title, description, description_file, plan_text, plan_file, analysi
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
 @click.option("--outcome", default=None,
-              help="Outcome / reason for status (inline; required if status=declined)")
+              help="Outcome / reason for status (inline; required if status=declined or status=obsolete)")
 @click.option("--outcome-file", default=None,
               help="Load the outcome from a file")
 @click.option("--justification", default=None,
@@ -3520,14 +3520,15 @@ def task_block(item_id, blocker_id):
               help="Task ID that replaces this task")
 @click.option("--status", "new_status", default=None,
               type=click.Choice(statuses.get("terminal")),
-              help="Status to set on the replaced task. Default: 'obsolete', "
-                   "except on work that already shipped "
+              help="Status to set on the replaced task. Default: 'superseded' "
+                   "— the replacement is the point — except on work that "
+                   "already shipped "
                    f"({'/'.join(statuses.get('shipped'))}), which keeps the "
                    "status it earned — "
                    "the supersession is the relation, not a status that reads "
                    "as 'never happened'.")
 @click.option("--outcome", default=None,
-              help="Outcome — why this was replaced (inline; required if --status=declined)")
+              help="Outcome — why this was replaced (inline; required if --status=declined or --status=obsolete)")
 @click.option("--outcome-file", default=None,
               help="Load the outcome from a file")
 @click.option("--allow-path", "allow_paths", multiple=True,
@@ -3536,7 +3537,7 @@ def task_block(item_id, blocker_id):
 def task_replace(item_id, replacement_id, new_status, outcome, outcome_file, allow_paths):
     """Mark a task as replaced by another task, recording a replaced_by relation.
 
-    The replaced task's status defaults to 'obsolete', but work that already
+    The replaced task's status defaults to 'superseded', but work that already
     shipped keeps the status it earned — see --status.
     """
     from endless.task_cmd import replace_task
@@ -3987,7 +3988,7 @@ def epic_show(item_ids, no_description, show_analysis, show_plan_field,
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
 @click.option("--outcome", default=None,
-              help="Outcome / reason for status (inline; required if status=declined)")
+              help="Outcome / reason for status (inline; required if status=declined or status=obsolete)")
 @click.option("--outcome-file", default=None,
               help="Load the outcome from a file")
 @click.option("--allow-path", "allow_paths", multiple=True,

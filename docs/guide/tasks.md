@@ -15,7 +15,7 @@ Every task has multiple body fields. Knowing which to use prevents long descript
 | `plan`        | Long-form      | Full implementation plan: approach, the files and functions it touches, verification steps. Name files and functions, never line numbers — see **No time-frozen specifics** below. Shown with `task show --plan`. **On a research task, `plan` instead holds the research *request* — see the Research-task field model below.** | `--plan` (inline) / `--plan-file <path>` on `task add` / `task update`. |
 | `analysis`    | Long-form      | Supporting research / exploration content that is *not* a proper plan — comparisons, findings, evidence gathered before the plan is written. Shown with `task show --analysis`. | `--analysis` (inline) / `--analysis-file <path>` on `task update`. |
 | `notes`       | Freeform       | Catch-all for content that doesn't fit elsewhere. Use sparingly.                                 | DB column; CLI flag may not yet be wired.          |
-| `outcome`     | Short to long  | Result / reason at terminal status. **Required** when completing a `research`/`brainstorm` task (the outcome IS the deliverable) and as the reason on `decline`. Optional on `confirm`/`assume`. | `--outcome` (inline) / `--outcome-file <path>` on `task confirm` / `task assume` / `task update`; `--reason` on `task decline` (stored as outcome). |
+| `outcome`     | Short to long  | Result / reason at terminal status. **Required** when completing a `research`/`brainstorm` task (the outcome IS the deliverable) and as the reason on every abandonment — `decline` and `obsolete` alike. Optional on `confirm`/`assume`. | `--outcome` (inline) / `--outcome-file <path>` on `task confirm` / `task assume` / `task update`; `--reason` on `task decline` (stored as outcome). |
 
 ### Distinctions in practice
 
@@ -24,7 +24,7 @@ Every task has multiple body fields. Knowing which to use prevents long descript
 - **Plan vs handoff.** The plan is for humans and for the spawned session, which `endless task spawn` directs it to read. The session's *opening input* (the handoff) is generated from a template at spawn time, not stored on the task; see `endless guide orchestration`.
 - **Analysis vs plan.** Analysis is supporting evidence gathered *before a plan is written on a do-task* — comparisons, findings, raw material. The plan is the actionable part. A deliverable-shaped task (an audit, or a `research`-type task) puts its *result* in `outcome`, not `plan` or `analysis`; for research tasks specifically, see the Research-task field model below.
 - **No time-frozen specifics.** No durable field — description, analysis, plan, outcome, or a decision body — may carry a byte count, a file size, a line number, a `file.ext:NNN` citation, a match count, or a sha of something that still moves. They have near-zero historical value and go stale the moment anything else lands, which leaves a later session unable to tell whether to trust them. Cite a durable identifier instead — a function, handler, command or symbol name — or better, state the SEARCH that finds the sites rather than the sites themselves. This is enforced on write, on both the inline flag and its `--<field>-file` twin, and there is no escape flag.
-- **Outcome.** Single field for "how this task ended." Required where the *why* must be captured at the moment of the decision: completing a `research`/`brainstorm` task (the outcome IS the deliverable) and declining (the reason). Optional on `confirm`/`assume`, where "we tested it and it worked" rarely needs prose. `task decline` uses `--reason` as the CLI flag (stored as outcome internally).
+- **Outcome.** Single field for "how this task ended." Required where the *why* must be captured at the moment of the decision: completing a `research`/`brainstorm` task (the outcome IS the deliverable) and abandoning one — both `declined` and `obsolete`, which carry no other field saying why. Optional on `confirm`/`assume`, where "we tested it and it worked" rarely needs prose. `task decline` uses `--reason` as the CLI flag (stored as outcome internally).
 
 ---
 
@@ -423,6 +423,7 @@ endless task confirm <id> --outcome "..."            # user-only — sessions do
 endless task confirm <id> --cascade --outcome "..."  # confirm a task and descendants
 endless task assume <id> --outcome "..."             # believed complete, can't verify
 endless task decline <id> --reason "..."             # active decision not to do
+endless task update <id> --status obsolete --outcome "..."   # no longer needed, nothing replaced it
 endless task replace <id> --by <new_id>              # supersede with another task
 ```
 
@@ -465,6 +466,15 @@ The human **tables** are the exception: `task list`, `task recent`,
 bare status. They share one Status column across every row, so annotating a
 handful of cells sized the column for all of them and took the difference out of
 every title — a real cost for a fact one `task show` away.
+
+**Obsoleting requires a reason, exactly as declining does.** `--outcome` is
+mandatory on every route to `obsolete` (`task update`, `epic update`, an
+explicit `task replace --status obsolete`), because the status records nothing
+else: `declined` has its `--reason` and `superseded` has the `replaced_by`
+relation, while a bare `obsolete` row leaves a later reader no way to tell work
+deliberately retired from work that quietly stopped being mentioned. Rows
+written before this guard are left as they are — a reason invented after the
+fact would read as authoritative and be fiction.
 
 **Shipped work CAN be `obsolete`.** Code that is being *deleted* rather than
 superseded is obsolete in the plainest sense of the word: no longer in use.

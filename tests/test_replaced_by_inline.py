@@ -210,7 +210,8 @@ def test_update_to_obsolete_is_allowed_on_shipped_work(
     seeded_project_at_cwd, shipped
 ):
     tid = _add_task("Add a shipped thing", status=shipped)
-    task_cmd.update_plan(tid, status="obsolete")  # must not raise
+    task_cmd.update_plan(tid, status="obsolete",
+                         outcome="deleted, not replaced")  # must not raise
     assert _status(tid) == "obsolete"
 
 
@@ -224,7 +225,8 @@ def test_update_to_obsolete_is_allowed_on_unshipped_work(
     # `revisit` is in this list deliberately: work that shipped and was then
     # reopened is genuinely back in play, and re-closing it is a real call.
     tid = _add_task("Add an unshipped thing", status=open_status)
-    task_cmd.update_plan(tid, status="obsolete")  # must not raise
+    task_cmd.update_plan(tid, status="obsolete",
+                         outcome="dropped from the roadmap")  # must not raise
 
 
 def test_other_transitions_on_shipped_work_are_untouched(seeded_project_at_cwd):
@@ -241,7 +243,7 @@ def test_replace_allows_an_explicit_obsolete_on_shipped_work(
     # caller overriding that, and it is no longer refused.
     old = _add_task("Add a shipped thing", status="assumed")
     new = _add_task("Add the replacement", status="underway")
-    task_cmd.replace_task(old, new, status="obsolete")
+    task_cmd.replace_task(old, new, status="obsolete", outcome="deleted outright")
     assert _status(old) == "obsolete"
     assert task_cmd.replaced_by_map([old]) == {old: [new]}
 
