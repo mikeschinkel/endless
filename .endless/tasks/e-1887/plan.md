@@ -169,3 +169,79 @@ disagree and the notice will never go away.
 9. `errors clear` silences the notice, and it stays silenced across runs.
 10. With the database healthy, behavior is byte-identical to today — no notice,
     no extra file line beyond the existing indexed one.
+
+
+
+---
+
+# As built — where the implementation departed from the plan above
+
+Recorded during implementation so the plan and the branch do not disagree.
+
+## 1. Four codes, not one (agreed with Mike mid-implementation)
+
+The plan pinned ONE code (`hook-write-failed`) and placed the recorder at the
+error sink in `hook.Run`, which catches every error ending a hook invocation —
+including ones that are not database writes. One code for all of them would
+file a malformed harness payload and a schema-drifted database under one title,
+and "a hook failed" tells a reader nothing they can act on.
+
+The sink stays single, so a handler added later is still covered. What changed
+is that the error is CLASSIFIED where it is raised — `internal/hookcmd/faultclass.go`
+— and the sink records whichever code the classification names. Nothing is
+sniffed out of an error string.
+
+- `ERR-0015 hook-write-failed` — the plan's code, its title now true because
+  the code is narrow. The session/activity writes.
+- `ERR-0016 hook-read-failed` — the project lookup, the throttle, the
+  active-task query. Same causes, narrower consequence.
+- `ERR-0017 hook-payload-unreadable` — stdin and the JSON envelope. A remedy
+  with nothing in common with the two above.
+- `ERR-0018 hook-failed` — the catch-all that keeps the sink from ever being
+  silent. Today: cwd resolution, worktree adoption.
+
+## 2. The exit-code claim in §5 was stale
+
+§5 item 2 says "the hook still exits 0". E-1661 changed that before this task:
+a hook failure on `PreToolUse`/`PostToolUse` exits 2 deliberately, so the AGENT
+is told, while `Stop`/`SubagentStop` keep the non-blocking exit to avoid a
+turn-per-iteration loop. The contract verified is therefore that recording
+changes the exit code for NO path, which is the property that actually matters.
+
+## 3. `session status` needed a change of its own for §6e item 8
+
+The plan assumed `faultrow.Render` was enough for the notice to appear with the
+database unreadable. It is not: `session-status` exits 1 on the connect failure
+before any frame is rendered, so the notice never got the chance. It now prints
+the fault row before that exit (`die` in `internal/sessionstatuscmd`), which is
+the one line of a frame an unopenable database still allows. Exit code unchanged.
+
+## 4. The watermark carries an identity digest, and the read is bounded
+
+§6c offered "the offset or timestamp cleared up to". An offset alone is unsafe:
+a log rotated, restored or truncated leaves the offset pointing at bytes it was
+never measured against, and once the file grows past it again it silently skips
+records nobody has seen. The watermark therefore also stores a digest of the
+log's opening bytes, and a mismatch reads as 0.
+
+Separately, the fault row calls this on a two-second repaint, so the read is
+proportional to what is NEW rather than to the size of the log: a bounded
+identity prefix, then a seek to the watermark and a read of the tail.
+
+## 5. Dismissal covers the backlog, not the live condition
+
+§6e item 9 asked that `errors clear` silence the notice. It silences the half
+that can honestly be acknowledged — the unindexed occurrences waiting in the
+log. It does NOT silence "the error record could not be read", because that is
+a live condition still true after the acknowledgement, and letting someone
+dismiss an ongoing failure would be worse than never reporting it. The notice
+goes away when the database becomes readable again, with the watermark holding.
+
+## 6. §6d's reconcile was declined
+
+The plan left "a reconcile that indexes orphaned file entries into the table
+once the database is healthy again" to be decided during implementation. Not
+built. Double-indexing on repeat runs is the easy bug, the log already carries
+everything a diagnosis needs, and `errors list` reads it directly — so the
+reconcile buys a tidier table at the cost of a correctness hazard on a path
+that only runs when things are already going wrong.
