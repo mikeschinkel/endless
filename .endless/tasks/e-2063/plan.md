@@ -18,7 +18,8 @@ enum plus a mirror table.
 - `internal/harness` — an int enum mirroring `gatekind`: `Harness int`, explicit
   numeric constants (no iota), `String()` returning the slug, `Label()`,
   `Parse()`, `All()`, `VerifyIntegrity(*sql.DB)`.
-- `harnesses (id, slug, label)` in `schema.sql`, seeded
+- `harnesses (id, slug, label)` declared in the migration AND mirrored into
+  `schema.sql` (still exec'd directly by tests until E-2021 generates it), seeded
   `(1,'claude_cli','Claude Code (CLI)')` and
   `(2,'claude_desktop','Claude Code (Desktop)')`, with the fail-closed integrity
   check wired into `monitor/db.go` beside the existing four.
@@ -75,7 +76,7 @@ and that is settled; the index would make it a constraint predicate over
 hook-written data, which amplifies rather than contains the unreliability. See
 the analysis.
 
-Backfill, in the same change file: one instance per existing `sessions` row —
+Backfill, in the same migration: one instance per existing `sessions` row —
 `first_seen_at` from `started_at`, `last_event_at` from `last_activity`,
 `transcript_offset` carried across, `harness_id` from `platform`, `ended_at` set
 where `state='ended'`, `launch_dir` from the earliest `activity.working_dir` for
@@ -136,14 +137,46 @@ results" rather than as an error.
 (session_id)` is an inline table constraint, so `DROP COLUMN` refuses. Three
 columns leave in one copy — `session_id`, `platform`, `transcript_offset`.
 
-Both rebuilds follow e-2074, which is the direct precedent and worked out both
-traps: a `.go` change file (the `.sql` dispatcher cannot arrange
-`PRAGMA foreign_keys=OFF`, where that pragma is a documented no-op inside
-`BEGIN IMMEDIATE`), and `PRAGMA legacy_alter_table=ON` around the rename
-(`tasks_notify_sessions` and `task_landings_notify_sessions` name `sessions` from
-other tables and would be reparsed at the moment it does not exist). The
-`sessions_task_id_write_once` trigger is recreated verbatim after the rename —
-without it, write-once silently stops holding on every populated database.
+**Both rebuilds are goose `.go` migrations** under
+`internal/schema/migrations/`, each added as a line in `migrations.Go()` — the
+set is explicit, not init()-registered, so a step that is not listed there does
+not exist. e-2074 is no longer the model: E-2019 replaced the change-file
+runner, and its package doc states when a step must be `.go` — SQLite has no
+`DROP COLUMN IF EXISTS`, and a step must tolerate a database already at the
+target shape because `schema.sql` is still exec'd directly by tests. Probe each
+named object and skip only that, with the reason stated; this is NOT the
+baseline's blanket idempotence, which 00001 alone may have.
+
+Three mechanics the rebuilds need, all now documented in the tree:
+
+- **`-- +goose NO TRANSACTION`.** `MigrateContext` sets `PRAGMA foreign_keys=ON`
+  before `Up`, and SQLite ignores that pragma inside a transaction — which is
+  why `enforceForeignKeys` sets it outside one and says in as many words that "a
+  future migration that needs enforcement off for a table rebuild has to declare
+  itself `-- +goose NO TRANSACTION` and turn it off for itself." These two are
+  that migration. The cost is that neither rebuild is atomic, so each must be
+  written to be re-runnable after a partial failure.
+- **`PRAGMA legacy_alter_table=ON` around the rename.** Unchanged from e-2074's
+  finding: `tasks_notify_sessions` and `task_landings_notify_sessions` name
+  `sessions` from other tables and would be reparsed at the moment it does not
+  exist.
+- **Recreate what `DROP TABLE` takes with it.** `sessions_task_id_write_once`
+  after the `sessions` rename — without it write-once silently stops holding on
+  every populated database — and `session_messages_ai` / `session_messages_ad`
+  after the `session_messages` rename, or the FTS index stops being maintained
+  and reads as "no results" rather than erroring.
+
+**No `Down` on either.** A rollback that recreates the columns without their
+values restores the shape while lying about having reversed anything; 00003 sets
+that precedent explicitly.
+
+**The ordering hazard, and why it is narrow.** Once these apply, any endless-go
+binary that still names `sessions.session_id` fails with "no such column" — and
+`TouchSession` names it on every hook event. 00003's header documents the same
+hazard and why it closes: `just land` rebuilds the binaries immediately after
+main advances, so the window is inside one land. The exception is the worktree
+binaries pinned in `.claude/settings.local.json`, which no land rebuilds — which
+is exactly what E-2166 removes, and why it blocks E-2020 ahead of this.
 
 `monitor.ParseTranscript` takes the instance id rather than the uuid. The hook
 already resolves the instance once per event for `TouchSession`, so it is passed
@@ -257,13 +290,13 @@ here because the previous plan's text survives only in the ledger and in
 
 - **Delete `spawn --new-session`; split `spawn --reopen` into `reopen` and
   `resume`.** Both landed in E-1968. `--reopen`, `--new-session` and
-  `--print-decision` are hidden flags at `cli.py:2796-2828` that refuse with a
+  `--print-decision` are hidden flags on `task_spawn` in cli.py that refuse with a
   pointer to `session goto --resume`; `task reopen` and `session resume` are the
   split verbs. The previous plan's one OPEN question — whether
   `--new-session`'s residue deserved a `--fresh-context` flag — is moot, since
   there is no flag left to reinterpret.
 - **Make `resume` and `goto --resume` share ONE resolver.** Already true.
-  `_resolve_resume` (`session_cmd.py:312`) backs both `resume_session` and
+  `_resolve_resume` in session_cmd.py backs both `resume_session` and
   `_resume_new_window_pane`.
 
 ## The twelve-column move, decided field by field
@@ -312,7 +345,7 @@ what became of it. It is dropped: it stores a value the harness rotates at its
 own discretion, so a copy on the durable row goes stale by design, and keeping
 it as "the current instance's uuid" means every append path must also rewrite
 it. e-2074's header predicted the opposite — "E-2063 is about to reuse the same
-nullability for harness instances" — which is now wrong; the change file is
+nullability for harness instances" — which is now wrong; that change file is
 history and stays as written.
 
 ## `launch_dir` is new
@@ -381,3 +414,5 @@ being removed entirely by E-2081.
 
 `session_messages` is the only table that re-points, which is the right answer —
 it is the only one whose rows are literally the conversation.
+
+
