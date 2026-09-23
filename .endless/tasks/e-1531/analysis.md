@@ -62,3 +62,26 @@ those rows as typed content on E-2155 and delete the file: it is per-task,
 typed, and machine-read, which is exactly the shape this table is for. Worth
 checking against the schema while designing it — a 1136-row set is a useful
 stress case for whether content rows are one-per-artifact or one-per-record.
+
+
+
+
+## Surface words are a per-type display concern, not a second stored name
+
+Folded down from E-1992 when that task became an epic, because the convention
+this task already settled is what governs it.
+
+The primary instruction content stays ONE stored name. The word varies only at
+the surface, where agents read and write it: `--plan` on todo/bugfix/epic,
+`--brief` on research, `--topic` on brainstorm, rendering under the matching
+heading. `--plan` stays accepted on every task type as a universal alias, so an
+agent reaching for it on a brainstorm lands in the right row instead of an
+error.
+
+Storage stays singular because the objection being answered is behavioural — an
+agent resists "plan" on a brainstorm — and behaviour is driven by the flag and
+the label, not by the schema. Singular storage also keeps the plan-present gate
+one question with no per-type mapping behind it.
+
+This sits with the deferred vocabulary policy above, not with the table: the
+table ships carrying today's names, and nothing here has to be answered first.
