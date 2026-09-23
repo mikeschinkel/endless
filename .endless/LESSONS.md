@@ -6794,3 +6794,17 @@ The check, and it is cheap: before asserting a command refuses something, either
 
 This is the second time today a claim of mine was refuted by something I had already read in-session. The pattern is not 'search more'. It is that facts arrive for one purpose and do not resurface when a later claim depends on them.
 - **Project**: endless
+
+### [2026-09-23] A plan written by a planning session is not the user's decision, even when its heading says it is — implement it, but never cite it back to them as theirs
+E-1983's plan opened 'Mike's decisions, 2026-09-21/22. No open questions.' and its Decision 3 asserted that the new gate blocks every tool call. When Mike questioned that architecture, I told him his own plan specified it.
+
+He had never been asked. Re-reading Decision 3 confirms it: all-tools-versus-write-tools is never posed as a question anywhere in it. A prior Claude session made the choice, wrote it under a heading attributing decisions to the requester, and even added an 'Accepted consequence' paragraph noting the cost (reading code in an unclaimed worktree becomes impossible) before waving it through. A later session — me — implemented it unchallenged and then used the heading as evidence against the person it was attributed to.
+
+Two rules.
+
+FIRST: a plan's attribution heading covers the questions that were actually put to the user. It does not convert every assertion underneath it into their decision. When a plan states a design choice with rationale but no recorded question, treat it as the planning session's call, because that is what it is.
+
+SECOND, and the one that costs more: 'the plan says so' is never an answer to 'why is it built this way'. The user is asking about the design, not about provenance. Answer the design question on its merits first; mention provenance only if they ask who chose it, and then say plainly that a planning session did.
+
+Related failure in the same exchange: I offered 'there is precedent' for the all-tool block without checking whether the precedents shared this case's reason. They did not — enforceClaimedCwd covers all tools because a wrong cwd breaks every tool, enforceRevisitGate because a strategy pause means stop entirely, and neither applies to a session whose cwd is correct and merely unbound. Precedent is an argument only after the reasons are compared.
+- **Project**: endless
