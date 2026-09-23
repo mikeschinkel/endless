@@ -6808,3 +6808,16 @@ SECOND, and the one that costs more: 'the plan says so' is never an answer to 'w
 
 Related failure in the same exchange: I offered 'there is precedent' for the all-tool block without checking whether the precedents shared this case's reason. They did not — enforceClaimedCwd covers all tools because a wrong cwd breaks every tool, enforceRevisitGate because a strategy pause means stop entirely, and neither applies to a session whose cwd is correct and merely unbound. Precedent is an argument only after the reasons are compared.
 - **Project**: endless
+
+### [2026-09-23] Endless's gates exist to catch innocent incorrect usage, not errant agent behaviour — so scope each one to the narrowest surface that can cause the actual harm
+Stated by Mike on 2026-09-23, closing out E-1983's reopen: 'I think not gating Bash is okay. You are really good at using commands and don't seem to go around using commands so I mostly want to gate on innocent incorrect usage vs. errant behavior.'
+
+This is the threat model, and I had been reasoning against the wrong one. While analysing the hook's text-matching I framed the weakness as something that could be 'spoofed open' — an adversarial framing. An agent that wanted to release a gate could simply run the real command, so adversarial resistance was never on the table and arguing from it inflated the apparent severity. The real and sufficient complaint was always the innocent one: an agent writing documentation or a test that MENTIONS a command triggers it by accident.
+
+The rule, applied forward:
+
+- Pick the gate's surface from the harm, not from a wish to be thorough. E-1983's gate shipped refusing every tool call when the harm it prevents is work landing under no task — and only a write produces work. Reading an unclaimed worktree is ordinary and should never have been refused.
+- A gate that has to carve out its own remedy is a signal the surface is too wide. That carve-out is what forced matching command TEXT, which is what made accidental release possible. Narrowing the gate to writes deleted the carve-out entirely.
+- An escape route through an ungated surface is a feature, not a hole. Bash stays ungated so the remedy always runs; the accepted cost is that an unbound session could still edit files through a shell, which is the same gap enforceWorktreeGate has always had and E-940 tracks.
+- Do not justify a gate's severity with a risk it does not actually catch. E-1983's gate fires on an UNBOUND session, yet its severity was argued from mis-binds being permanent — and a wrongly-bound session holds a task and passes the gate silently.
+- **Project**: endless
