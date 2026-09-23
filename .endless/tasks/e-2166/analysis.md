@@ -1,3 +1,36 @@
+> **MOOT BELOW, from "# What to build" onward — read this header first.**
+>
+> This analysis was written against ED-1595, which had main's binary spawn a
+> worktree's binary on an explicit per-task declaration. **ED-1596 superseded
+> ED-1595 and dropped delegation entirely**, so everything below describing HOW
+> to delegate is dead: piece 1 (the declaration command and its worktree-local
+> file), piece 2 (the spawn, the version probe, the announcement), the whole
+> "Gate placement" section, the whole "Probing the worktree binary's version"
+> section, and "Do not implement the ahead-only rule". None of it is built.
+>
+> What survives, and is the entire task: **piece 3, the sweep** — plus the
+> one-line generator change that stops new worktrees being born pinned. Both
+> live in the justfile. `claude-settings-init` computes
+> `new_bin = f"{worktree_root}/bin/endless-go"`; it names the installed binary
+> instead. The sweep is then a loop running that same recipe across worktrees,
+> exactly as `post-worktree-create.sh` already invokes it
+> (`just --justfile <main>/justfile --working-directory <worktree>
+> claude-settings-init`), so there is no separate sweep code to write.
+>
+> Re-measured 2026-09-23: **118 worktrees, 94 still pinned.** The drop from the
+> 115 below is worktrees being reaped, not swept.
+>
+> The population figures, the distribution constraint (both `bin/` and
+> `settings.local.json` are gitignored, so nothing in git reaches them), and the
+> durable form (a worktree's settings should name no binary path at all) are all
+> still correct — those sections are kept for that reason.
+>
+> Related: **E-2134** would install hooks in the project's committed
+> `.claude/settings.json` with a project-relative loader. If it lands first, the
+> generator half becomes "delete the hooks block" rather than "repoint it"; the
+> sweep stands either way, because `settings.local.json` outranks project
+> settings and a stale override would still win.
+
 Implements ED-1595. Self_dev only (ED-1571): every other project has one
 installed binary and no land, so none of this mechanism exists there.
 
@@ -102,3 +135,5 @@ never migrate the real ledger. Implement ED-1570's exact agreement.
   `settings.local.json`. Its core — the artifact-root resolver — is unaffected,
   as is the separate generator bug it documents.
 - **E-2020** owns what hooks do during the land window.
+
+
