@@ -110,7 +110,7 @@ go_claim "${H}" TestWorktreeOverrideRegistered_DoesNotMatchAnotherWorktree \
 
 # Decision 3 — the gate, and every false positive it must not produce.
 go_claim "${H}" TestUnboundWorktreeGate_BlocksUnboundSessionInWorktree \
-    "THE GATE: a session in a task worktree holding no task is blocked, and told the two ways out"
+    "THE GATE: a WRITE by a session in a task worktree holding no task is refused, and told the two ways out"
 go_claim "${H}" TestUnboundWorktreeGate_NamesTheFailedStep \
     "the block names WHICH step of the cwd bind failed, because the fixes differ"
 go_claim "${H}" TestUnboundWorktreeGate_DoesNotBlockSubagents \
@@ -123,8 +123,10 @@ go_claim "${H}" TestUnboundWorktreeGate_DoesNotBlockForeignTree \
     "NOT BLOCKED: a worktree-shaped path outside the registered project"
 go_claim "${H}" TestUnboundWorktreeGate_DoesNotBlockBoundSession \
     "NOT BLOCKED: a session that holds a task — that half is enforceClaimedCwd's"
-go_claim "${H}" TestUnboundWorktreeGate_DoesNotBlockItsOwnEscape \
-    'the gate never blocks `task claim` / `task bind` — a gate that blocks its own exit strands the window'
+go_claim "${H}" TestUnboundWorktreeGate_OnlyGatesWrites \
+    "the gate covers Write/Edit/NotebookEdit and NOTHING else — reading an unclaimed worktree is ordinary"
+go_claim "${H}" TestUnboundWorktreeGate_RemedyCommandsNeedNoExemption \
+    'the remedy is a Bash call and Bash is not gated, so no escape regex exists to be released by accident'
 
 # Decision 4 — the repair's judgment.
 go_claim "${M}" TestRepairMisboundSessions_E1732Shape \
@@ -170,6 +172,21 @@ assert_not_contains "the window-option observer cannot bind (no BindSessionToTas
 maybe_body=$(awk '/^func maybeCwdBind/,/^}/' internal/hookcmd/claude.go)
 assert_not_contains "maybeCwdBind no longer defers to a spawn-marker bind" \
     "spawnBound" "${maybe_body}"
+
+# The gate's text-matched escape hatch is GONE, not merely unused. It existed
+# only because the gate blocked every tool call; narrowing it to writes removed
+# the reason for it, and with it the way a heredoc could release the gate.
+if grep -q 'bindEscapeVerbRe' internal/hookcmd/claude.go; then
+    report_fail "the gate's escape regex is gone" "absent" "bindEscapeVerbRe still in internal/hookcmd/claude.go"
+else
+    report_pass "the gate's escape regex is gone"
+fi
+
+# And the narrowing is stated in the enforcing function, not left implicit in
+# where handlePreToolUse happens to call it.
+applies_body=$(awk '/^func unboundWorktreeApplies/,/^}/' internal/hookcmd/claude.go)
+assert_contains "the write-tool limit is explicit in the gate, not just its call-site position" \
+    "writeTools" "${applies_body}"
 
 # ---------------------------------------------------------------------------
 section "D. The repair, through the real change script, on a real database"

@@ -938,13 +938,6 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 	// other tool that defaults to cwd are covered, not just file writes.
 	enforceClaimedCwd(projectID, payload)
 
-	// E-1983: the other half of the cwd invariant. enforceClaimedCwd above
-	// returns early on an unbound session, so a session sitting IN a task
-	// worktree while holding no task was the one broken state nothing spoke to.
-	// Runs immediately after it, for all tool kinds and regardless of
-	// tracking_mode, for the same reasons that one does.
-	enforceUnboundWorktree(projectID, payload)
-
 	// E-1542: pause-on-revisit gate. Intercepts a session whose claimed task
 	// descends from an epic in status='revisit'. Placed BEFORE the write-tool
 	// early-return so it fires for all tool kinds (Read/Bash/Grep too), and runs
@@ -969,6 +962,20 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 	// name a specific path that must not be hand-edited, and both want their
 	// own refusal to arrive ahead of the worktree gate's generic one.
 	blockLandedSuiteEditIfApplicable(payload)
+
+	// E-1983: the other half of the cwd invariant. enforceClaimedCwd (above,
+	// all-tools) returns early on an UNBOUND session, so a session sitting IN a
+	// task worktree while holding no task was the one broken state nothing spoke
+	// to. Independent of tracking_mode, like the worktree gate it sits beside.
+	//
+	// WRITE TOOLS ONLY, and the distinction is the point. enforceClaimedCwd
+	// covers all tools because a wrong cwd makes EVERY tool do the wrong thing —
+	// Read opens the wrong file, Bash runs in the wrong directory. Here the cwd
+	// is RIGHT and nothing is incorrect; what is wrong is that the work will be
+	// attributed to no task. Only a write produces work to attribute, so only a
+	// write is worth refusing. Reading code in a worktree you have not claimed
+	// is an ordinary thing to do and is no longer refused.
+	enforceUnboundWorktree(projectID, payload)
 
 	// Worktree gate (E-971 Layer D). Independent of tracking_mode, like
 	// E-1012: even with per-task tracking off, edits in main and edits
@@ -2182,19 +2189,31 @@ func enforceClaimedCwd(projectID int64, payload claudePayload) {
 	blockToolUse(cdRedirect(*session.TaskID, worktreePath, payload.CWD))
 }
 
-// bindEscapeVerbRe matches the commands that clear the unbound-in-a-worktree
-// gate, so the gate never blocks its own way out: `endless task claim E-NNN` and
-// `endless task bind E-NNN`, including path- or wrapper-prefixed forms (`uv run
-// endless task claim ...`). Same shape and same reason as revisitClearVerbRe —
-// a gate that blocks the command it tells you to run is not a gate, it is a
-// stranded window.
-var bindEscapeVerbRe = regexp.MustCompile(`(?i)\bendless\s+task\s+(claim|bind)\b`)
+// unboundWorktreeApplies reports whether the unbound-in-a-worktree gate has
+// anything to say about this tool call: write tools only.
+//
+// Stated here rather than left to the call site's position in handlePreToolUse.
+// The gate shipped blocking every tool kind, which was a strength nobody chose
+// on purpose and which made reading code in an unclaimed worktree impossible;
+// an invariant that narrow should be visible in the function that enforces it,
+// not inferred from where it happens to be called. Same reasoning as
+// autoBindFromCwd's own guards, which are deliberately correct in isolation
+// rather than trusting call order.
+//
+// SessionStart does NOT go through here — it carries no tool name and wants the
+// explanation regardless, so it calls unboundWorktreeDecision directly.
+func unboundWorktreeApplies(payload claudePayload) bool {
+	return writeTools[payload.ToolName]
+}
 
-// enforceUnboundWorktree blocks a session sitting in a task worktree while
-// holding no task (E-1983). Mirrors enforceRevisitGate's shape: the decision is
-// separate and pure enough to unit-test, the block itself is the JSON
-// decision:"block" response.
+// enforceUnboundWorktree refuses a WRITE by a session sitting in a task worktree
+// while holding no task (E-1983). Mirrors enforceRevisitGate's shape: the
+// decision is separate and pure enough to unit-test, the block itself is the
+// JSON decision:"block" response.
 func enforceUnboundWorktree(projectID int64, payload claudePayload) {
+	if !unboundWorktreeApplies(payload) {
+		return
+	}
 	if instruction, block := unboundWorktreeDecision(projectID, payload); block {
 		blockToolUseWithDecision(instruction)
 	}
@@ -2226,7 +2245,12 @@ func enforceUnboundWorktree(projectID int64, payload claudePayload) {
 //   - A tree outside the registered project that happens to be worktree-shaped.
 //   - No project resolved — enforceWorktreeGate's own precedent: without a
 //     project root we cannot evaluate, so the call proceeds.
-//   - The gate's own escape commands, per bindEscapeVerbRe.
+//
+// It needs no escape hatch. The gate used to block every tool call, so it had to
+// carve out `task claim` / `task bind` — and recognizing those from command text
+// is how a heredoc or a quoted string could release it. Refusing only writes
+// removes the carve-out entirely: the remedy is a Bash call, and Bash was never
+// blocked.
 func unboundWorktreeDecision(projectID int64, payload claudePayload) (string, bool) {
 	if payload.AgentID != "" || os.Getenv("CLAUDE_JOB_DIR") != "" {
 		return "", false
@@ -2241,13 +2265,6 @@ func unboundWorktreeDecision(projectID int64, payload claudePayload) (string, bo
 	if session, err := monitor.GetActiveSession(payload.SessionID); err != nil ||
 		session == nil || session.TaskID != nil {
 		return "", false
-	}
-	if payload.ToolName == "Bash" {
-		var input toolInputBash
-		if err := json.Unmarshal(payload.ToolInput, &input); err == nil &&
-			bindEscapeVerbRe.MatchString(input.Command) {
-			return "", false
-		}
 	}
 	projectRoot, err := monitor.ProjectPath(projectID)
 	if err != nil || projectRoot == "" {
@@ -2301,9 +2318,10 @@ func unboundWorktreeInstruction(projectRoot, cwd, taskRef string) string {
 			"Bind before continuing — either of these is one command:\n\n"+
 			"  endless task claim %s        # claim it and start work\n"+
 			"  endless task bind %s         # bind without changing task status\n\n"+
-			"Tool calls are blocked until one of them succeeds. If you only came to\n"+
-			"read and do not want the task, leave this worktree instead — an unbound\n"+
-			"session in the main checkout is a normal state.",
+			"Writes are refused until one of them succeeds; reading and shell\n"+
+			"commands are not, so you can run either of the above right now. If you\n"+
+			"only came to read, carry on — an unbound session is only a problem when\n"+
+			"it produces work that lands under no task.",
 		taskRef, diagnosis, taskRef, taskRef)
 }
 

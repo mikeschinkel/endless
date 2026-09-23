@@ -10,13 +10,26 @@ import (
 	_ "modernc.org/sqlite"
 )
 
-// bashPayload builds a PreToolUse Bash payload for the gate tests.
+// bashPayload builds a PreToolUse Bash payload. Bash is NOT gated since E-1983
+// was reopened — it is kept because the remedy commands are Bash calls, and
+// asserting they pass is the point of TestUnboundWorktreeGate_OnlyGatesWrites.
 func bashPayload(sessionID, cwd, command string) claudePayload {
 	input, _ := json.Marshal(map[string]string{"command": command})
 	return claudePayload{
 		SessionID: sessionID,
 		CWD:       cwd,
 		ToolName:  "Bash",
+		ToolInput: input,
+	}
+}
+
+// writePayload builds a PreToolUse Write payload — a tool the gate does cover.
+func writePayload(sessionID, cwd string) claudePayload {
+	input, _ := json.Marshal(map[string]string{"file_path": cwd + "/x.go", "content": "x"})
+	return claudePayload{
+		SessionID: sessionID,
+		CWD:       cwd,
+		ToolName:  "Write",
 		ToolInput: input,
 	}
 }
@@ -43,7 +56,7 @@ func gateFixture(t *testing.T, sessionID string) (projectRoot, worktree string) 
 func TestUnboundWorktreeGate_BlocksUnboundSessionInWorktree(t *testing.T) {
 	_, worktree := gateFixture(t, "sess-gate")
 
-	msg, blocked := unboundWorktreeDecision(1, bashPayload("sess-gate", worktree, "ls"))
+	msg, blocked := unboundWorktreeDecision(1, writePayload("sess-gate", worktree))
 	if !blocked {
 		t.Fatal("gate did not fire on an unbound session inside a task worktree")
 	}
@@ -71,7 +84,7 @@ func TestUnboundWorktreeGate_NamesTheFailedStep(t *testing.T) {
 	}
 	t.Setenv("CLAUDE_JOB_DIR", "")
 
-	msg, blocked := unboundWorktreeDecision(1, bashPayload("sess-nostep", bare, "ls"))
+	msg, blocked := unboundWorktreeDecision(1, writePayload("sess-nostep", bare))
 	if !blocked {
 		t.Fatal("gate did not fire")
 	}
@@ -87,7 +100,7 @@ func TestUnboundWorktreeGate_NamesTheFailedStep(t *testing.T) {
 func TestUnboundWorktreeGate_DoesNotBlockSubagents(t *testing.T) {
 	_, worktree := gateFixture(t, "sess-sub")
 
-	payload := bashPayload("sess-sub", worktree, "ls")
+	payload := writePayload("sess-sub", worktree)
 	payload.AgentID = "agent-1"
 	if _, blocked := unboundWorktreeDecision(1, payload); blocked {
 		t.Fatal("gate blocked an Agent-tool subagent — the worst false positive available here")
@@ -102,7 +115,7 @@ func TestUnboundWorktreeGate_DoesNotBlockBackgroundAgents(t *testing.T) {
 	_, worktree := gateFixture(t, "sess-bg")
 	t.Setenv("CLAUDE_JOB_DIR", "/tmp/job")
 
-	if _, blocked := unboundWorktreeDecision(1, bashPayload("sess-bg", worktree, "ls")); blocked {
+	if _, blocked := unboundWorktreeDecision(1, writePayload("sess-bg", worktree)); blocked {
 		t.Fatal("gate blocked a background agent, which is deliberately never bound")
 	}
 }
@@ -113,11 +126,11 @@ func TestUnboundWorktreeGate_DoesNotBlockBackgroundAgents(t *testing.T) {
 func TestUnboundWorktreeGate_DoesNotBlockMainCheckout(t *testing.T) {
 	projectRoot, _ := gateFixture(t, "sess-main")
 
-	if _, blocked := unboundWorktreeDecision(1, bashPayload("sess-main", projectRoot, "ls")); blocked {
+	if _, blocked := unboundWorktreeDecision(1, writePayload("sess-main", projectRoot)); blocked {
 		t.Fatal("gate blocked an unbound session in the main checkout")
 	}
 	sub := filepath.Join(projectRoot, "src", "internal")
-	if _, blocked := unboundWorktreeDecision(1, bashPayload("sess-main", sub, "ls")); blocked {
+	if _, blocked := unboundWorktreeDecision(1, writePayload("sess-main", sub)); blocked {
 		t.Fatal("gate blocked an unbound session in an ordinary subdirectory of main")
 	}
 }
@@ -129,7 +142,7 @@ func TestUnboundWorktreeGate_DoesNotBlockForeignTree(t *testing.T) {
 	gateFixture(t, "sess-foreign")
 	foreign := filepath.Join(t.TempDir(), "other", ".endless", "worktrees", "e-1983")
 
-	if _, blocked := unboundWorktreeDecision(1, bashPayload("sess-foreign", foreign, "ls")); blocked {
+	if _, blocked := unboundWorktreeDecision(1, writePayload("sess-foreign", foreign)); blocked {
 		t.Fatal("gate blocked a worktree-shaped path outside the registered project")
 	}
 }
@@ -142,30 +155,48 @@ func TestUnboundWorktreeGate_DoesNotBlockBoundSession(t *testing.T) {
 		t.Fatalf("bind: %v", err)
 	}
 
-	if _, blocked := unboundWorktreeDecision(1, bashPayload("sess-bound", worktree, "ls")); blocked {
+	if _, blocked := unboundWorktreeDecision(1, writePayload("sess-bound", worktree)); blocked {
 		t.Fatal("gate blocked a session that already holds a task")
 	}
 }
 
-// TestUnboundWorktreeGate_DoesNotBlockItsOwnEscape: the gate must never block the
-// command it tells you to run, or the first false positive strands the window
-// permanently — the failure mode this task's analysis calls "the gate becomes
-// the bug".
-func TestUnboundWorktreeGate_DoesNotBlockItsOwnEscape(t *testing.T) {
-	_, worktree := gateFixture(t, "sess-escape")
+// TestUnboundWorktreeGate_OnlyGatesWrites is why E-1983 was reopened. The gate
+// shipped refusing EVERY tool kind, which meant it had to recognize its own
+// remedy (`task claim` / `task bind`) from Bash command text — and text in a
+// heredoc or a quoted string reads identically, so the escape could be released
+// by accident (E-2177).
+//
+// Refusing only writes removes the escape entirely. The justification for the
+// narrower scope is that the harm here is ATTRIBUTION, not correctness: unlike
+// enforceClaimedCwd, the cwd is right and no tool does the wrong thing — only a
+// write produces work that would land under no task. Reading code in a worktree
+// you have not claimed is ordinary, and is no longer refused.
+func TestUnboundWorktreeGate_OnlyGatesWrites(t *testing.T) {
+	for _, tool := range []string{"Write", "Edit", "NotebookEdit"} {
+		if !unboundWorktreeApplies(claudePayload{ToolName: tool}) {
+			t.Errorf("%s is a write tool and must be gated", tool)
+		}
+	}
+	for _, tool := range []string{"Bash", "Read", "Grep", "Glob", "Task", ""} {
+		if unboundWorktreeApplies(claudePayload{ToolName: tool}) {
+			t.Errorf("%s must NOT be gated — it produces no work to attribute, "+
+				"and gating Bash is what forced the text-matched escape hatch", tool)
+		}
+	}
+}
+
+// TestUnboundWorktreeGate_RemedyCommandsNeedNoExemption pins the consequence:
+// the two commands the block message names are Bash calls, and Bash is not
+// gated, so they run with no escape regex anywhere in the gate.
+func TestUnboundWorktreeGate_RemedyCommandsNeedNoExemption(t *testing.T) {
+	_, worktree := gateFixture(t, "sess-remedy")
 
 	for _, cmd := range []string{
 		"endless task claim E-1983",
 		"endless task bind E-1983",
-		"uv run endless task claim E-1983",
-		"/usr/local/bin/endless task bind E-1983",
 	} {
-		if _, blocked := unboundWorktreeDecision(1, bashPayload("sess-escape", worktree, cmd)); blocked {
-			t.Errorf("gate blocked its own escape hatch: %q", cmd)
+		if unboundWorktreeApplies(bashPayload("sess-remedy", worktree, cmd)) {
+			t.Errorf("the remedy command %q would be gated", cmd)
 		}
-	}
-	// Anything else in the same worktree still blocks.
-	if _, blocked := unboundWorktreeDecision(1, bashPayload("sess-escape", worktree, "endless task show E-1983")); !blocked {
-		t.Error("gate let an unrelated `endless task` command through")
 	}
 }

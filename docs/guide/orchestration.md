@@ -657,12 +657,13 @@ Two consequences worth knowing before they surprise you:
 
 - A session started in worktree `e-A` binds to A even when the window still says
   B. The directory wins.
-- A session sitting in a task worktree while holding no task is the one state
-  that is genuinely broken, so it is **refused**: `SessionStart` explains it and
-  every tool call is blocked until you run `endless task claim E-NNNN` or
-  `endless task bind E-NNNN`. Those two commands are never themselves blocked.
-  Agent-tool subagents and background agents are exempt — they are deliberately
-  never bound.
+- A session sitting in a task worktree while holding no task will have its
+  **writes refused** — `SessionStart` explains it, and Write/Edit are blocked
+  until you run `endless task claim E-NNNN` or `endless task bind E-NNNN`.
+  Reading and shell commands are never blocked, so the remedy is always
+  runnable and you can browse an unclaimed worktree freely. What is refused is
+  producing work that would land under no task. Agent-tool subagents and
+  background agents are exempt — they are deliberately never bound.
 
 The spawned session can discover its task ID from the tmux window variable:
 
