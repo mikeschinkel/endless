@@ -6757,3 +6757,11 @@ The distinction to hold: a gate that says 'you may not' is a constraint. A gate 
 
 Caveat that still holds: registering a NON-verb to get past the check is explicitly forbidden and that rule is real. 'Sweep' is a verb; 'adversarially' was not.
 - **Project**: endless
+
+### [2026-09-23] Do not invent prerequisite steps for a verb — spawn approves implicitly; approve-then-spawn is a two-step I made up
+I told Mike to run `endless task approve E-2168 && endless task spawn E-2168`, reasoning from the guide's line that background sessions may pick up only `ready` work. That line is about what a background picker selects on its own, not about what `task spawn` requires. Spawn takes a submitted task and approves it as part of spawning. `task approve` on its own is for the case Mike almost never uses: approving now, spawning later.
+
+The error was inferring a precondition from a statement about a DIFFERENT actor, then handing it over as a required command. It cost a superfluous step in a line he was about to run, and it teaches a workflow that is not the real one.
+
+The rule: before prefixing a command with another command, confirm the verb actually refuses without it. A status the verb can reach on its own is not a prerequisite. If I have not seen the refusal, I am guessing at a gate — and guessing at gates produces exactly the kind of ceremony that makes a tool feel heavier than it is.
+- **Project**: endless
