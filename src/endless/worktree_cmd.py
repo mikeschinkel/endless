@@ -35,6 +35,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -87,6 +88,17 @@ AMENDABLE_COMMIT_SUBJECTS = (
 # Land's retry cap for the race-with-concurrent-writers loop (E-987).
 LAND_MAX_RETRIES = 8
 
+# E-2174: the first backoff step before land re-attempts a git call that lost a
+# race for the index lock; each attempt doubles it, so the eight attempts above
+# span roughly 0.05s + 0.1 + 0.2 + ... ≈ 6s in total.
+#
+# Deliberately longer than internal/events/commit.go's 10ms base (E-2137), which
+# spans ≈2.5s, because the two paths pay different costs for waiting. That one
+# sits on the hot path of every event emit and must not hang a CLI command; land
+# is human-initiated, already rebuilds a binary, and a spurious failure there
+# costs the operator a diagnosis. Waiting seconds is cheap; failing is not.
+LAND_LOCK_BACKOFF_BASE = 0.05
+
 # E-1500's plan-viability threshold lived here and was retired by E-2137. It
 # existed to judge whether a plan recovered from an orphan BRANCH was worth
 # adopting back into the database. Mirrors are no longer written to branches, so
@@ -119,6 +131,57 @@ def _is_retryable_ff_merge_error(err_text: str) -> bool:
         or "diverging" in err_lower
         or "not possible to fast-forward" in err_lower
     )
+
+
+def _is_lock_contention(err_text: str) -> bool:
+    """True when a git failure is another process holding the index lock.
+
+    Deliberately SEPARATE from _is_retryable_ff_merge_error (E-2174). Both
+    answer "should land retry?", but about different repositories: that
+    predicate's matches describe a repository whose content moved under the
+    land, this one describes a repository that was merely busy. Folding them
+    together would make a diverged branch and a live `git status` indis-
+    tinguishable in every message that reports either.
+
+    Endless is the usual holder. `git status --porcelain` against every worktree
+    is what the session monitor repaints on, what the per-minute
+    worktree-unlanded job sweeps with, and what `worktree check` / `worktree
+    sync` shell out to — so the odds of a land colliding scale with the worktree
+    count, which is one per active task by design.
+
+    Matched on git's message rather than an exit code, because git returns the
+    same code here as for a dozen unrelated fatals; the text is what separates
+    them. Both spellings are matched: the lock file's own name (every git
+    version) and the advisory sentence git adds when it recognizes a concurrent
+    process. Mirrors isIndexLocked in internal/events/commit.go — keep in sync.
+    """
+    err_lower = err_text.lower()
+    return (
+        "index.lock" in err_lower
+        or "another git process seems to be running" in err_lower
+    )
+
+
+def _lock_contention_text(e: subprocess.CalledProcessError) -> str | None:
+    """Git's own words when this failure is lock contention, else None.
+
+    Returns the text rather than a bool so a caller can record it as the
+    land's last error in the same breath it decides to retry.
+    """
+    text = (e.stderr or "") + (e.stdout or "")
+    return text if _is_lock_contention(text) else None
+
+
+def _lock_backoff(attempt: int) -> None:
+    """Wait before land re-attempts a git call that lost the index lock.
+
+    Exponential from LAND_LOCK_BACKOFF_BASE, so the retries do not all land
+    inside the single monitor repaint that took the lock. Never removes the
+    lock file: the holder is a live process (the one observed in E-2174 was
+    still running at diagnosis and released it on its own moments later), and
+    deleting another process's lock is how an index gets corrupted.
+    """
+    time.sleep(LAND_LOCK_BACKOFF_BASE * (2 ** (attempt - 1)))
 
 
 def _project_root() -> Path:
@@ -1236,10 +1299,19 @@ def _guard_modified_worktree(worktree_path: Path, branch: str, canonical: str) -
     Refuses separately for auto-managed modifications (an upstream writer bug
     worth surfacing rather than papering over) and unmanaged user modifications
     (offers worktree-specific recovery options).
+
+    Raises CalledProcessError, rather than a ClickException, when its own `git
+    status` lost the index lock (E-2174) — see the handler below.
     """
     try:
         wt_auto, wt_user = _git_status_partition(worktree_path)
     except subprocess.CalledProcessError as e:
+        # E-2174: lock contention is not this guard's question to answer. It
+        # says nothing about whether the worktree is modified — the status
+        # never ran — so it propagates to land's retry loop, which waits the
+        # holder out. Every other failure is still reported here.
+        if _lock_contention_text(e) is not None:
+            raise
         raise click.ClickException(
             f"git status in worktree failed: {e.stderr or e}"
         )
@@ -3145,11 +3217,21 @@ def land_worktree(
         )
 
     last_error = None
+    # E-2174: which of the two races the last attempt lost, so the exhaustion
+    # message below names the right one. A busy repository and a repository
+    # moving under the land need different things from the reader.
+    last_was_contention = False
     for attempt in range(1, LAND_MAX_RETRIES + 1):
         # Step 1: partition main's working-tree modifications.
         try:
             auto_files, user_files = _git_status_partition(main_root)
         except subprocess.CalledProcessError as e:
+            # E-2174: a monitor probe holding main's index makes this a busy
+            # repository, not a broken one. Retry the attempt.
+            if (busy := _lock_contention_text(e)) is not None:
+                last_error, last_was_contention = busy, True
+                _lock_backoff(attempt)
+                continue
             raise click.ClickException(f"git status failed: {e.stderr or e}")
 
         # Step 2: refuse if user-work modified.
@@ -3171,6 +3253,10 @@ def land_worktree(
                     cwd=main_root,
                 )
             except subprocess.CalledProcessError as e:
+                if (busy := _lock_contention_text(e)) is not None:
+                    last_error, last_was_contention = busy, True
+                    _lock_backoff(attempt)
+                    continue
                 raise click.ClickException(
                     f"auto-commit failed: {e.stderr or e}"
                 )
@@ -3180,6 +3266,10 @@ def land_worktree(
         try:
             _dedup_worktree_verbs_against_main(worktree_path, main_root)
         except subprocess.CalledProcessError as e:
+            if (busy := _lock_contention_text(e)) is not None:
+                last_error, last_was_contention = busy, True
+                _lock_backoff(attempt)
+                continue
             raise click.ClickException(
                 f"verbs.jsonl dedup on worktree failed: {e.stderr or e}"
             )
@@ -3200,6 +3290,13 @@ def land_worktree(
                 worktree_path, base_branch
             )
         except subprocess.CalledProcessError as e:
+            # E-2174: before reading conflict state — a rebase that could not
+            # create index.lock never started, so there is nothing to classify
+            # and nothing to abort.
+            if (busy := _lock_contention_text(e)) is not None:
+                last_error, last_was_contention = busy, True
+                _lock_backoff(attempt)
+                continue
             # The orphan drop and the replay of the user's commits share one
             # rebase; a conflict here is the replay conflicting, not the drop.
             # Read the state BEFORE aborting, then abort — but only a rebase
@@ -3242,13 +3339,34 @@ def land_worktree(
             )
 
         # Step 3.8 (E-1416): guard against modified worktree tree before rebase.
-        _guard_modified_worktree(worktree_path, branch, canonical)
+        try:
+            _guard_modified_worktree(worktree_path, branch, canonical)
+        except subprocess.CalledProcessError as e:
+            # E-2174: the guard re-raises rather than classifies when its own
+            # `git status` lost the index lock — the same race as Step 1, one
+            # worktree over. Anything it CAN classify it raises as a
+            # ClickException, which is not caught here.
+            if (busy := _lock_contention_text(e)) is not None:
+                last_error, last_was_contention = busy, True
+                _lock_backoff(attempt)
+                continue
+            raise click.ClickException(
+                f"git status in worktree failed: {e.stderr or e}"
+            )
 
         # Step 4: rebase the worktree branch onto main.
         rebase_was_running = _rebase_in_progress(worktree_path)
         try:
             _git_run(["rebase", base_branch], cwd=worktree_path)
         except subprocess.CalledProcessError as e:
+            # E-2174: this is the failure the task was filed for. A rebase that
+            # could not create index.lock never detached HEAD, so there is no
+            # conflict to report and no rebase to abort — retry the attempt
+            # instead of leaving the loop this step is already standing inside.
+            if (busy := _lock_contention_text(e)) is not None:
+                last_error, last_was_contention = busy, True
+                _lock_backoff(attempt)
+                continue
             # Read the state (files + failing commit) BEFORE aborting, then
             # abort. What git printed decides which report this is: a conflict
             # names files and offers candidates, anything else quotes git and
@@ -3298,8 +3416,12 @@ def land_worktree(
             _git_run(["merge", "--ff-only", branch], cwd=main_root)
         except subprocess.CalledProcessError as e:
             err_text = (e.stderr or "") + (e.stdout or "")
+            if _is_lock_contention(err_text):
+                last_error, last_was_contention = err_text, True
+                _lock_backoff(attempt)
+                continue
             if _is_retryable_ff_merge_error(err_text):
-                last_error = err_text
+                last_error, last_was_contention = err_text, False
                 continue
             raise click.ClickException(
                 f"ff-merge failed: {err_text}"
@@ -3399,6 +3521,19 @@ def land_worktree(
             )
         return
 
+    if last_was_contention:
+        raise click.ClickException(
+            f"Land of {canonical} failed after {LAND_MAX_RETRIES} retries; "
+            f"the repository stayed busy throughout — every attempt lost the "
+            f"git index lock to another process holding it.\n\n"
+            f"This is NOT a conflict and nothing is wrong with your branch: "
+            f"there is nothing to resolve and nothing to inspect. Endless's own "
+            f"surfaces are the usual holders (the session monitor, the "
+            f"per-minute unlanded sweep, `worktree check`), so a quieter moment "
+            f"is normally all it takes. Do NOT delete the lock file — its holder "
+            f"is a live process, and removing it corrupts the index.\n\n"
+            f"Last error:\n{last_error or '(none)'}"
+        )
     raise click.ClickException(
         f"Land of {canonical} failed after {LAND_MAX_RETRIES} retries; "
         f"another session is appending to auto-files faster than land "
