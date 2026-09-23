@@ -6745,3 +6745,15 @@ E-1887's plan said `errors clear` should silence the unindexed-fault notice but 
 
 A plan that leaves a user-facing surface underspecified is delegating the design, not flagging a blocker. Build the surface the requirement implies — a flag, a subcommand, whatever separates the cases — and report what was built. Reserve a question for a choice that genuinely changes what the work IS, not for one I could settle by designing it properly.
 - **Project**: endless
+
+### [2026-09-23] A self-service gate is not a constraint — register the verb instead of renaming the task
+Mike suggested 'Sweep' as the verb for E-2166's title. I replied that 'sweep' is not a registered verb and picked a different word. He pointed out there is nothing stopping me registering it — 'endless verb add' exists, and the refusal message itself prints that command.
+
+I let a gate designed to make me PAUSE act as a gate that made me CHANGE THE CONTENT. The verb registry exists to stop titles starting with non-verbs, not to restrict the English language to whatever is already in the table. When the right word is a real verb and it is absent, the table is incomplete, not the title wrong.
+
+The tell I missed: I had already seen the escape hatch. Filing E-2169 earlier the same session, the refusal read 'Register a real verb with: endless verb add ...' and I rewrote the title instead. Twice in one session I treated an instruction containing its own remedy as a wall.
+
+The distinction to hold: a gate that says 'you may not' is a constraint. A gate that says 'do X first' is a step. Read which one it is before letting it change what I was going to say. The same applies to the guard that refused an absolute path in ledger content and printed --allow-path, and to any check whose message names the command that satisfies it.
+
+Caveat that still holds: registering a NON-verb to get past the check is explicitly forbidden and that rule is real. 'Sweep' is a verb; 'adversarially' was not.
+- **Project**: endless
