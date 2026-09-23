@@ -1,10 +1,11 @@
-"""Tests for `session task add` / `session task remove` (E-1696).
+"""Tests for `session task add` / `touch` / `session task remove`
+(E-1696, E-2173).
 
-Two verbs that correct what a session's task list holds. Capture is otherwise
-automatic — the Go executors record a row for every task a session claims,
-files or edits — and these cover the two cases automation cannot reach: work
-decided on but not yet touched (`add`), and a capture that should not have
-happened (`remove`).
+Three verbs that say explicitly what a session's task list holds. Capture is
+otherwise automatic — the Go executors record a row for every task a session
+claims, files or edits — and these cover what automation cannot reach: work
+decided on but not yet touched (`add`), scope entry with no edit at all
+(`touch`), and a capture that should not have happened (`remove`).
 
 These run through the real CLI and the real Go executors, so they pin the
 whole path: id normalization, the upgrade-only relation ladder, the goal
@@ -145,6 +146,100 @@ def test_add_requires_at_least_one_id():
 
     result = _run("session", "task", "add")
     assert result.exit_code != 0
+
+
+# --- touch (E-2173) ---------------------------------------------------------
+
+
+def _task_row(task_id):
+    """Every task field a mutation would move, so a test can assert the whole
+    row went unchanged rather than naming one column and missing the next."""
+    return db.query(
+        "SELECT title, status, phase, updated_at FROM tasks WHERE id = ?",
+        (task_id,),
+    )[0]
+
+
+def test_touch_enrolls_a_task_as_revisited():
+    """The verb's whole job: scope entry, one relation weaker than `queued`."""
+    _seed()
+
+    result = _run("touch", "E-500")
+    assert result.exit_code == 0, result.output
+    assert _relation(500) == "revisited"
+
+
+def test_touch_changes_nothing_about_the_task():
+    """The point of the verb. The workaround it replaces rewrote `phase` to buy
+    the same display effect, so a test that only checked session_tasks would
+    pass for the bug as readily as for the fix."""
+    _seed()
+    before = _task_row(500)
+
+    result = _run("touch", "E-500")
+    assert result.exit_code == 0, result.output
+    assert _task_row(500) == before
+
+
+def test_touch_accepts_several_ids_and_collapses_repeats():
+    _seed()
+
+    result = _run("touch", "E-500", "E-501", "E-500")
+    assert result.exit_code == 0, result.output
+    assert _relation(500) == "revisited"
+    assert _relation(501) == "revisited"
+
+
+def test_touch_leaves_a_stronger_relation_alone_and_says_which():
+    """`revisited` is the weakest relation anything emits, so a claim, an
+    agenda entry and a filing record all outrank it. The report has to name the
+    survivor — "already in this session" alone would leave the reader unable to
+    tell a claim from an incidental capture."""
+    _seed()
+    db.execute(
+        "INSERT INTO session_tasks "
+        "(session_id, task_id, relation_id, created_at, updated_at) "
+        "VALUES (?, 500, 1, '2026-08-21T00:00:00', '2026-08-21T00:00:00')",
+        (SESSION_ID,),
+    )
+
+    result = _run("touch", "E-500")
+    assert result.exit_code == 0, result.output
+    assert _relation(500) == "claimed"
+    assert "already in this session as Claimed" in result.output
+
+
+def test_touch_rejects_an_unknown_task():
+    """A typo fails the call rather than silently enrolling nothing."""
+    _seed()
+
+    result = _run("touch", "E-999")
+    assert result.exit_code != 0
+    assert _relation(999) is None
+
+
+def test_touch_rejects_a_malformed_id_naming_the_verb():
+    """Validated Python-side, before any event is emitted — and the refusal
+    names `touch`, not the `session task` group it shares a module with."""
+    _seed()
+
+    result = _run("touch", "banana")
+    assert result.exit_code != 0
+    assert "touch: malformed task id" in result.output
+
+
+def test_touch_requires_at_least_one_id():
+    _seed()
+
+    result = _run("touch")
+    assert result.exit_code != 0
+
+
+def test_touch_is_reachable_at_the_top_level():
+    """Top-level, not under `session` or `task` (E-2173): parking it under a
+    parent would only schedule a rename as subcommands move up."""
+    assert "touch" in main.commands
+    assert "touch" not in getattr(main.commands["task"], "commands", {})
 
 
 # --- remove -----------------------------------------------------------------

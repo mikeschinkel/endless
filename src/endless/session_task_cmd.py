@@ -1,13 +1,18 @@
-"""CLI implementation for `endless session task add|remove` (E-1696).
+"""CLI implementation for `endless session task add|remove` (E-1696) and the
+top-level `endless touch` (E-2173).
 
-Two verbs that correct what a session's task list holds. `session_tasks`
-capture is otherwise automatic — the Go executors record a row for every
-task a session claims, files or edits — and these are the manual overrides
-for the two cases automation gets wrong.
+Three verbs that say explicitly what a session's task list holds.
+`session_tasks` capture is otherwise automatic — the Go executors record a row
+for every task a session claims, files or edits — and these cover what
+automation cannot reach or gets wrong.
 
     session task add <ids>     promote to relation `queued`: decided session
                                work the session has not touched yet, so no
                                automatic capture would ever record it.
+
+    touch <ids>                enroll at relation `revisited`: scope entry and
+                               nothing else. Top-level, because scope entry is
+                               not a correction and is typed far more often.
 
     session task remove <ids>  drop the association entirely, for a capture
                                that should not have happened.
@@ -19,12 +24,12 @@ touch that really happened — it is for a capture that is real but noisy.
 Remove deletes the row: the touch and its relation. It also clears any hide on
 the same pair, so a later re-capture does not come back silently suppressed.
 
-This module performs no DB access. Both verbs emit an event
-(`session_tasks.queued` / `session_tasks.removed`) via event_bridge ->
-endless-go event -> events.Execute, per the "DB access in Go" policy. The
-Go executors own validation: unknown task ids are rejected there, the
-upgrade-only relation ladder decides what `add` actually stores, and
-`remove` refuses the session's own claimed task.
+This module performs no DB access. All three verbs emit an event
+(`session_tasks.queued` / `session_tasks.touched` / `session_tasks.removed`)
+via event_bridge -> endless-go event -> events.Execute, per the "DB access in
+Go" policy. The Go executors own validation: unknown task ids are rejected
+there, the upgrade-only relation ladder decides what `add` and `touch`
+actually store, and `remove` refuses the session's own claimed task.
 """
 
 import os
@@ -37,6 +42,16 @@ from endless.task_cmd import _current_endless_session_id, _resolve_project
 
 
 _TASK_ID_RE = re.compile(r"^[Ee]-(\d+)$")
+
+# Event kind -> what the user typed, so a malformed-id refusal names the command
+# that produced it rather than the module it landed in. The two `session task`
+# verbs share one label: the group is what a reader recognizes, and the
+# complaint is about the ids, which both parse identically.
+_VERB_OF = {
+    "session_tasks.queued": "session task",
+    "session_tasks.removed": "session task",
+    "session_tasks.touched": "touch",
+}
 
 
 def session_task_add(task_refs: tuple[str, ...],
@@ -51,10 +66,20 @@ def session_task_remove(task_refs: tuple[str, ...],
     _emit("session_tasks.removed", task_refs, session_id_override)
 
 
+def touch(task_refs: tuple[str, ...],
+          session_id_override: int | None) -> None:
+    """Entry point bound by cli.py for the top-level `touch` (E-2173).
+
+    Same emit path as `session task add`, one relation weaker: `revisited`
+    means the task is in this session's scope, not that it is on its agenda.
+    """
+    _emit("session_tasks.touched", task_refs, session_id_override)
+
+
 def _emit(kind: str, task_refs: tuple[str, ...],
           session_id_override: int | None) -> None:
     """Normalize the ids, emit `kind`, and print the Go handler's markdown."""
-    task_ids = _canonical_ids(task_refs)
+    task_ids = _canonical_ids(task_refs, _VERB_OF[kind])
 
     process = _resolve_process(session_id_override)
     _project_id, project_name = _resolve_project(None)
@@ -100,14 +125,16 @@ def _resolve_process(session_id_override: int | None) -> str:
     return os.environ.get("TMUX_PANE", "")
 
 
-def _canonical_ids(task_refs: tuple[str, ...]) -> list[str]:
+def _canonical_ids(task_refs: tuple[str, ...], verb: str) -> list[str]:
     """Validate each id and normalize to `E-NNN`, preserving argument order.
 
     A repeated id is collapsed rather than rejected: naming the same task twice
     is the same request, not a contradiction.
+
+    `verb` prefixes both refusals so they name the command the user typed.
     """
     if not task_refs:
-        raise click.ClickException("session task: name at least one task id")
+        raise click.ClickException(f"{verb}: name at least one task id")
 
     seen: set[str] = set()
     out: list[str] = []
@@ -115,7 +142,7 @@ def _canonical_ids(task_refs: tuple[str, ...]) -> list[str]:
         m = _TASK_ID_RE.match(raw.strip())
         if not m:
             raise click.ClickException(
-                f"session task: malformed task id {raw!r} (expected E-NNN)"
+                f"{verb}: malformed task id {raw!r} (expected E-NNN)"
             )
         cid = f"E-{m.group(1)}"
         if cid not in seen:

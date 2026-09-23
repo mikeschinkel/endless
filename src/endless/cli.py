@@ -1932,6 +1932,40 @@ def session_turn(target, session_ref, paged):
     impl(target, session_ref, paged)
 
 
+# Top-level rather than `session touch` or `task touch` (E-2173): scope entry is
+# typed far more often than the corrections under `session task`, and many
+# subcommands are slated to move to top level anyway, so parking it under a
+# parent now would only schedule a rename.
+@main.command("touch")
+@click.argument("task_refs", nargs=-1, metavar="TASK-ID...")
+@_SESSION_ID_OPTION
+def touch(task_refs, session_id_override):
+    """Put tasks in this session's scope without changing them.
+
+    The task itself is untouched — no field is written, no other session
+    holding it is notified. All that happens is a `session_tasks` row at
+    relation `revisited`, so the task shows up in `session status` and in
+    `task show`'s "Touched by:".
+
+    This is what to use when you looked at a task, or want it on screen while
+    you work, and editing it would be a lie. Rewriting `phase` to get the same
+    display effect records a re-prioritization that never happened.
+
+    Enrollment is upgrade-only, so touching a task you claimed, queued or filed
+    this session leaves its stronger relation alone (reported, not an error).
+    Use `session task add` instead for work you have decided to do — that is
+    `queued`, which ranks above `revisited` in `session status`. Unknown ids
+    fail the whole call.
+
+    Example:
+
+      \b
+      endless touch E-100 E-101
+    """
+    from endless.session_task_cmd import touch as impl
+    impl(task_refs, session_id_override)
+
+
 @main.group("minimizer")
 def minimizer_cmd():
     """Inspect and control the instruction the minimizer edits replies with.

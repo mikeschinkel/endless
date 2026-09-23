@@ -182,26 +182,28 @@ Three things this is deliberately **not**:
 
 Pass a session reference (`endless session hide ES-101 --task E-101`) to hide for a session other than your own. Note that bare `session hide <ids...>` — no `--task` — is a different command: it hides whole SESSIONS from `session list`.
 
-### Correcting what your session's list holds
+### Saying what your session's list holds
 
 Capture is automatic: Endless records a row for every task your session claims, files or edits, and classifies **how** it entered your scope — its *relation*.
 
-| Relation     | How the task got here                                    |
-|--------------|----------------------------------------------------------|
-| `claimed`    | you claimed it                                           |
-| `queued`     | you added it with `session task add` — decided work      |
-| `surfaced`   | you filed it during this session                         |
-| `revisited`  | you edited it, but you didn't claim it                   |
-| `referenced` | you only read it (reserved; no capture emits it yet)     |
+| Relation     | How the task got here                                     |
+|--------------|-----------------------------------------------------------|
+| `claimed`    | you claimed it                                            |
+| `queued`     | you added it with `session task add` — decided work       |
+| `surfaced`   | you filed it during this session                          |
+| `revisited`  | you edited it or ran `touch` on it, but didn't claim it   |
+| `referenced` | you only read it (reserved; no capture emits it yet)      |
 
-Two verbs cover what automation can't reach:
+Three verbs cover what automation can't reach:
 
 ```bash
+endless touch E-101 E-102              # in scope; nothing about the task changes
 endless session task add E-101 E-102   # decided work you haven't touched yet
 endless session task remove E-101      # a capture that shouldn't have happened
 ```
 
-- **`add`** enrolls a task as `queued`. Nothing has happened to it, so no automatic capture would ever record it — this is the only way it gets on your list. Promotion is upgrade-only: a task you merely read or edited is strengthened, and your own claimed task stays `claimed` (reported, not an error).
+- **`touch`** enrolls a task as `revisited` — scope entry, and nothing else. No field is written and no other session holding the task is notified. Reach for it when you looked at a task, or want it on screen while you work, and editing it would be a lie: rewriting `phase` to get the same display effect records a re-prioritization that never happened, and a later reader cannot tell it from a real one. It is top-level, not under `session task`, because it is typed far more often than the corrections there.
+- **`add`** enrolls a task as `queued` — decided work. Nothing has happened to it, so no automatic capture would ever record it. Promotion is upgrade-only: a task you merely read or edited is strengthened, and your own claimed task stays `claimed` (reported, not an error). The same ladder runs the other way for `touch`: `revisited` is the weakest relation anything emits, so touching a task you claimed, queued or filed leaves the stronger relation alone.
 - **`remove`** deletes the association — the touch and its relation — so `task show`'s "Touched by:" stops reporting it, and any hide on the same pair is cleared with it. There is no undo beyond touching the task again. Refused on your own claimed task: a claim cannot be dropped.
 
 **`remove` is not the inverse of `hide --task`**, and the difference is the whole point: hide suppresses a row while *keeping* the association, so the touch that really happened stays on the record. Hide is for a capture that is real but noisy; remove is for one that was simply wrong.

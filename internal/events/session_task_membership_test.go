@@ -230,10 +230,136 @@ func TestSessionTasksRemoved_AbsentIsReportedNoOp(t *testing.T) {
 	}
 }
 
+// TestSessionTasksTouched_EnrollsWithoutTouchingTheTask is `touch`'s whole
+// contract (E-2173): the task joins the session's scope at `revisited`, and
+// nothing about the task itself changes. The second half is the point of the
+// verb — the workaround it replaces rewrote tasks.phase to buy the same display
+// effect, so a test that only checked the session_tasks row would pass for the
+// bug as readily as for the fix.
+func TestSessionTasksTouched_EnrollsWithoutTouchingTheTask(t *testing.T) {
+	db := newSessionTasksTestDB(t)
+	seedSession(t, db, 42)
+	seedLiveTask(t, db, 100)
+	before := taskRowSnapshot(t, db, 100)
+
+	res, err := dispatch(db, membershipEvent(
+		t, KindSessionTasksTouched, 42, []string{"E-100"}), nil,
+	)
+	if err != nil {
+		t.Fatalf("dispatch touched: %v", err)
+	}
+	if got := sessionTaskRelation(t, db, 42, 100); got != "revisited" {
+		t.Errorf("relation = %q, want revisited", got)
+	}
+	if after := taskRowSnapshot(t, db, 100); after != before {
+		t.Errorf("touch altered the task row:\n before %s\n after  %s", before, after)
+	}
+	if !strings.Contains(markdownOf(res), "E-100") {
+		t.Errorf("expected the touch to be reported, got %q", markdownOf(res))
+	}
+}
+
+// TestSessionTasksTouched_LeavesStrongerRelationsAlone pins the half of the
+// ladder that only `touch` exercises. `revisited` is the weakest relation any
+// emitter produces, so THREE relations outrank it — and a demotion would lose a
+// claim, an agenda entry or a filing record. The report has to name which one
+// survived, or the reader cannot tell a claim from an incidental capture.
+func TestSessionTasksTouched_LeavesStrongerRelationsAlone(t *testing.T) {
+	for _, tc := range []struct {
+		rel   sessiontaskrelation.Relation
+		slug  string
+		label string
+	}{
+		{sessiontaskrelation.RelationClaimed, "claimed", "Claimed"},
+		{sessiontaskrelation.RelationQueued, "queued", "Queued"},
+		{sessiontaskrelation.RelationSurfaced, "surfaced", "Surfaced"},
+	} {
+		db := newSessionTasksTestDB(t)
+		seedSession(t, db, 42)
+		seedLiveTask(t, db, 100)
+		if err := upsertSessionTask(db, "42", 100, tc.rel); err != nil {
+			t.Fatalf("seed %s: %v", tc.slug, err)
+		}
+
+		res, err := dispatch(db, membershipEvent(
+			t, KindSessionTasksTouched, 42, []string{"E-100"}), nil,
+		)
+		if err != nil {
+			t.Fatalf("%s: dispatch touched: %v", tc.slug, err)
+		}
+		if got := sessionTaskRelation(t, db, 42, 100); got != tc.slug {
+			t.Errorf("%s was demoted: relation = %q", tc.slug, got)
+		}
+		want := "already in this session as " + tc.label
+		if !strings.Contains(markdownOf(res), want) {
+			t.Errorf("%s: expected %q in the report, got %q",
+				tc.slug, want, markdownOf(res))
+		}
+	}
+}
+
+// TestSessionTasksTouched_UpgradesReferenced pins the other direction: a
+// read-only capture is strengthened by an explicit touch, because asking for a
+// task to be in scope is a stronger statement than having read it.
+func TestSessionTasksTouched_UpgradesReferenced(t *testing.T) {
+	db := newSessionTasksTestDB(t)
+	seedSession(t, db, 42)
+	seedLiveTask(t, db, 100)
+	if err := upsertSessionTask(db, "42", 100, sessiontaskrelation.RelationReferenced); err != nil {
+		t.Fatalf("seed referenced: %v", err)
+	}
+
+	if _, err := dispatch(db, membershipEvent(
+		t, KindSessionTasksTouched, 42, []string{"E-100"}), nil,
+	); err != nil {
+		t.Fatalf("dispatch touched: %v", err)
+	}
+	if got := sessionTaskRelation(t, db, 42, 100); got != "revisited" {
+		t.Errorf("relation = %q, want revisited", got)
+	}
+}
+
+// TestSessionTasksTouched_RejectsUnknownTask pins that `touch` refuses a typo
+// for the whole call, exactly as `session task add` does — both go through
+// enrollSessionTasks, and a silently-enrolled-nothing would hide the typo.
+func TestSessionTasksTouched_RejectsUnknownTask(t *testing.T) {
+	db := newSessionTasksTestDB(t)
+	seedSession(t, db, 42)
+	seedLiveTask(t, db, 100)
+
+	_, err := dispatch(db, membershipEvent(
+		t, KindSessionTasksTouched, 42, []string{"E-100", "E-999"}), nil,
+	)
+	if err == nil || !strings.Contains(err.Error(), "E-999") {
+		t.Fatalf("expected an error naming E-999, got %v", err)
+	}
+	if hasSessionTask(t, db, 42, 100) {
+		t.Error("the valid id was enrolled despite the call failing")
+	}
+}
+
+// taskRowSnapshot renders the fields a mutation would move, so a test can
+// assert a whole task row went unchanged rather than naming one column and
+// missing the next one somebody writes.
+func taskRowSnapshot(t *testing.T, db *sql.DB, taskID int64) string {
+	t.Helper()
+	var title, status, phase, updatedAt sql.NullString
+	if err := db.QueryRow(
+		`SELECT title, status, phase, updated_at FROM tasks WHERE id = ?`, taskID,
+	).Scan(&title, &status, &phase, &updatedAt); err != nil {
+		t.Fatalf("snapshot task %d: %v", taskID, err)
+	}
+	return strings.Join([]string{
+		title.String, status.String, phase.String, updatedAt.String,
+	}, "|")
+}
+
 // TestSessionTasksMembership_RejectsEmptyList pins that a payload naming no
-// tasks fails rather than reporting a successful no-op, for both verbs.
+// tasks fails rather than reporting a successful no-op, for every verb.
 func TestSessionTasksMembership_RejectsEmptyList(t *testing.T) {
-	for _, kind := range []Kind{KindSessionTasksQueued, KindSessionTasksRemoved} {
+	for _, kind := range []Kind{
+		KindSessionTasksQueued, KindSessionTasksTouched, KindSessionTasksRemoved,
+	} {
 		db := newSessionTasksTestDB(t)
 		seedSession(t, db, 42)
 		if _, err := dispatch(db, membershipEvent(t, kind, 42, nil), nil); err == nil {

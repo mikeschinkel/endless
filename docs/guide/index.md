@@ -303,6 +303,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `task unlanded` | tasks | Which finished tasks claim to be done while their work has not reached the base branch. |
 | `task unsettled` | orchestration | Why a worktree hasn't settled — modified (commit or discard) vs unlanded (land). |
 | `tmux` | reference | Tmux status-line and popup integration. |
+| `touch` | sessions | Putting a task in this session's scope without editing it; the session_tasks relation ladder. |
 | `triage` | tasks | Automatic routing of `untriaged` tasks by description sufficiency — the sweep, the file-time path, and the manual override. |
 | `verb` | tasks | Verbs: the registered actions that can begin a task title. |
 | `worktree` | orchestration | Per-task git worktrees: getting in, landing, abandoning, inspecting. |

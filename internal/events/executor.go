@@ -319,6 +319,8 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 		return execSessionStatusRecorded(db, evt)
 	case KindSessionTasksQueued:
 		return execSessionTasksQueued(db, evt)
+	case KindSessionTasksTouched:
+		return execSessionTasksTouched(db, evt)
 	case KindSessionTasksRemoved:
 		return execSessionTasksRemoved(db, evt)
 	case KindDecisionCreated:
