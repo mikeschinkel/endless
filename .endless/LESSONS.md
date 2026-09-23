@@ -6739,3 +6739,9 @@ So the failure is not only 'search before filing' — I have recorded that twice
 
 The practical fix: when I am about to say a limitation is structural or worth a task, treat it as a retrieval prompt, not just a search prompt — ask what I have already read TODAY that named this subsystem. A pointer read in passing is the cheapest one to find again, and the one I am most likely to walk past.
 - **Project**: endless
+
+### [2026-09-23] Design the surface the plan left open; don't hand the gap back as a question
+E-1887's plan said `errors clear` should silence the unindexed-fault notice but did not say how, because Mike expected me to work that out. I implemented the minimum (the no-id form moves the log watermark), found that one half of the notice was still not dismissible, and surfaced that as a decision for Mike instead of designing the surface that resolves it — an explicit `errors clear --log`. Mike's reply: 'I had not specified exactly how clear would be handled assuming you would handle but evidently not.'
+
+A plan that leaves a user-facing surface underspecified is delegating the design, not flagging a blocker. Build the surface the requirement implies — a flag, a subcommand, whatever separates the cases — and report what was built. Reserve a question for a choice that genuinely changes what the work IS, not for one I could settle by designing it properly.
+- **Project**: endless
