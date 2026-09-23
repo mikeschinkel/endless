@@ -6699,3 +6699,13 @@ The check that would have caught it: ask WHO OWNS the thing. Ownership was the o
 
 Escalating is not free. The whats-left report exists to protect Mike's attention, so a line that could have been reasoned out costs exactly the thing the report is for.
 - **Project**: endless
+
+### [2026-09-23] File a decision only for a call that was actually settled, not for a direction still being explored
+I filed ED-1597 ('a new command lands top-level, not under a parent slated to move') off a remark Mike made while siting a touch verb: 'since I plan to move many subcommands to top-level commands, why decide parent and later move to top-level?' He rejected it: 'premature filing because the criteria has not even been fully explored let alone finalized.'
+
+This is the counterweight to the earlier lesson that decisions are mine to file and his to accept or reject. That lesson is about WHO acts, and it stands. It does not lower the bar for WHAT qualifies. A decision records a call that was made. A direction someone is reasoning aloud toward is not yet a call, and proposed is not a parking spot for a half-formed criterion — filing one there spends Mike's review attention on deciding something he was still in the middle of thinking about, and freezes an argument mid-flight.
+
+The test before filing: can I state the criteria the call rests on, and were they settled rather than gestured at? If the answer is 'the direction is clear but the criteria are not worked out', it belongs in the task's analysis or in chat, and the decision waits until the criteria exist.
+
+Signal I should have caught: the statement arrived as a rhetorical question, which is what reasoning-in-progress sounds like.
+- **Project**: endless
