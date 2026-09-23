@@ -80,6 +80,41 @@ def test_errors_raise_is_reachable_from_the_python_cli():
     assert "raise" in main.commands["errors"].commands
 
 
+def test_errors_clear_log_is_reachable_from_the_python_cli():
+    """The same regression one level down: a FLAG only the binary can reach.
+
+    The parity test above compares subcommands, so a flag added to an existing
+    verb passes it while being unshipped — which is the shape `errors clear
+    --log` would have taken (E-1887). It is the only way to dismiss an
+    occurrence recorded while the database was unreachable without also
+    attempting a table clear that cannot succeed in that state, so a Python
+    side that silently dropped it would leave the notice undismissable from the
+    command a person actually types.
+    """
+    params = {p.name for p in main.commands["errors"].commands["clear"].params}
+    assert "log" in params
+
+
+def test_errors_clear_forwards_the_log_flag_to_the_binary():
+    """Reachable is not the same as wired: the flag has to arrive in argv."""
+    from endless import jobs_cmd
+
+    seen = {}
+
+    def fake_run_go(group, args):
+        seen["group"], seen["args"] = group, args
+
+    original = jobs_cmd._run_go
+    jobs_cmd._run_go = fake_run_go
+    try:
+        jobs_cmd.errors_clear((), log=True)
+    finally:
+        jobs_cmd._run_go = original
+
+    assert seen["group"] == "errors"
+    assert "--log" in seen["args"]
+
+
 @pytest.mark.parametrize("rel_path,group_name", SURFACES)
 def test_parser_sees_the_known_verbs(rel_path, group_name):
     """Guard the guard: a parser that silently matches nothing would make the

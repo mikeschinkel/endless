@@ -114,13 +114,22 @@ def errors_show(error_id: int, detail: bool) -> None:
 
 
 def errors_clear(ids: tuple[int, ...], project: str = "",
-                 all_projects: bool = False) -> None:
-    """Mark errors cleared (never deletes)."""
+                 all_projects: bool = False, log: bool = False) -> None:
+    """Mark errors cleared (never deletes).
+
+    `log` dismisses only the occurrences waiting in the detail log — the ones
+    recorded while the database was unreachable, which therefore reached no row
+    and have no id (E-1887). It is the form that still works when the database
+    is the thing that broke.
+    """
     # Flags before positionals: Go's flag package stops parsing at the first
     # non-flag argument, so an id ahead of --all-projects would leave the flag
     # unparsed and silently narrow the clear back to the ambient project.
-    _run_go("errors", ["clear", *_project_scope_args(project, all_projects),
-                       *[str(i) for i in ids]])
+    args = ["clear", *_project_scope_args(project, all_projects)]
+    if log:
+        args.append("--log")
+    args += [str(i) for i in ids]
+    _run_go("errors", args)
 
 
 def _project_scope_args(project: str, all_projects: bool) -> list[str]:

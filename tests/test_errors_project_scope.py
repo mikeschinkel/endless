@@ -168,4 +168,8 @@ def test_click_show_with_no_id_is_a_usage_error_naming_list(impl_args):
 def test_click_clear_accepts_the_scope_options(impl_args):
     result = _invoke(["errors", "clear", "12", "--all-projects"])
     assert result.exit_code == 0, result.output
-    assert impl_args == [("clear", ((12,), "", True), {})]
+    # The trailing False is `log` (E-1887): `clear --log` dismisses only the
+    # occurrences waiting in the detail log, which have no ids and no project,
+    # so it is orthogonal to the scope this test is about — but it rides in the
+    # same forwarded call and is asserted here so the shape stays exact.
+    assert impl_args == [("clear", ((12,), "", True, False), {})]

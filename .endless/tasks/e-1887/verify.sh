@@ -84,6 +84,16 @@ check_named ./internal/faults TestUnindexed_WatermarkHoldsAcrossALogThatOutgrows
 check_named ./internal/faultrow TestRender_NoticeWhenTheStoreCannotBeRead
 check_named ./internal/faultrow TestRender_SilentWhenTheStoreIsUnbound
 
+# The Python half of `clear --log`. The Go/Python parity test compares
+# SUBCOMMANDS, so a flag added to an existing verb passes it while being
+# unshipped — which is exactly how `errors raise` went unreachable for months.
+if uv run pytest tests/test_go_cli_parity.py -q >"${TMP}/parity.txt" 2>&1; then
+    report_pass "pytest: the Go/Python CLI parity suite, --log included"
+else
+    report_fail "pytest: the Go/Python CLI parity suite, --log included" \
+        "exit 0" "$(tail -20 "${TMP}/parity.txt")"
+fi
+
 # ---------------------------------------------------------------------------
 # The fixture.
 # ---------------------------------------------------------------------------
@@ -333,9 +343,13 @@ assert_eq "in ONE line — a broken database must not take the pane over" \
     "1" "$(printf '%s\n' "${NOTICE}" | grep -c 'Run eeh')"
 
 # Dismissal has to work in this state too, or it is a notice a user learns to
-# ignore. `clear` fails on the table half — there is no table to reach — and
-# still moves the log's watermark, which is the half that can be moved.
-"${GO[@]}" errors clear >/dev/null 2>&1 || true
+# ignore — and `--log` is the spelling that says so without also requiring a
+# table clear that CANNOT succeed here.
+LOGCLEAR="$("${GO[@]}" errors clear --log 2>&1)"
+LOGCLEAR_EXIT=$?
+
+assert_eq "clear --log succeeds with no readable database at all" "0" "${LOGCLEAR_EXIT}"
+assert_contains "and says what it dismissed" "waiting in the log" "${LOGCLEAR}"
 
 # The two halves of the notice are dismissed differently, and that is the
 # design rather than a gap. A BACKLOG of reports is something a person can say
@@ -359,6 +373,22 @@ assert_eq "yet with the database readable again the notice is gone" "" "$(render
 
 assert_eq "and it stays gone on a later run — the watermark is a file, not a session" \
     "" "$(render)"
+
+# --log dismisses ONE half. A user working through open rows must not lose them
+# by acknowledging the log, and an id names a row the log does not have.
+"${GO[@]}" errors raise --severity error --summary "e-1887 row that must survive --log" >/dev/null 2>&1 \
+    || setup_error "cannot raise a row for the --log isolation check"
+"${GO[@]}" errors clear --log >/dev/null 2>&1 || true
+
+assert_eq "clear --log leaves every open row exactly as it was" \
+    "1" "$(sqlite3 "${CFG}/endless.db" 'SELECT count(*) FROM errors WHERE cleared_at IS NULL')"
+
+"${GO[@]}" errors clear --log 7 >"${TMP}/logid.txt" 2>&1
+assert_eq "clear --log with an id is refused rather than guessed at" "2" "$?"
+assert_contains "and says why the two cannot be combined" \
+    "holds no ids" "$(cat "${TMP}/logid.txt")"
+
+"${GO[@]}" errors clear >/dev/null 2>&1 || true
 
 # ---------------------------------------------------------------------------
 section "I. A healthy database is unchanged"

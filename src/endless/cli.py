@@ -4348,7 +4348,9 @@ def errors_show(error_id, detail, id_flag):
 @click.option("--project", default="", help="Scope to this project instead of the one you are in")
 @click.option("--all-projects", "all_projects", is_flag=True,
               help="Cover every project on the machine")
-def errors_clear(ids, project, all_projects):
+@click.option("--log", "log", is_flag=True,
+              help="Dismiss only the occurrences waiting in the log, leaving every row open")
+def errors_clear(ids, project, all_projects, log):
     """Mark errors cleared. Clears every open error when given no ids.
 
     Clearing NEVER deletes: the row stays as history, and a recurrence opens a
@@ -4359,9 +4361,14 @@ def errors_clear(ids, project, all_projects):
     lists under the same flags, so "dismiss what you just showed me" cannot reach
     another project's incidents. Named ids are cleared wherever they live: you
     typed the id, so the scope has nothing left to decide.
+
+    --log dismisses only the occurrences waiting in the detail log: the ones
+    recorded while the database was unreachable, which reached no row and so
+    have no id to name. It is the form that still works when the database is
+    the thing that broke, and it leaves every open row exactly as it was.
     """
     from endless.jobs_cmd import errors_clear as impl
-    impl(ids, project, all_projects)
+    impl(ids, project, all_projects, log)
 
 
 @errors_cmd.command("record", hidden=True)

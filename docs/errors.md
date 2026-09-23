@@ -41,6 +41,7 @@ endless errors show 12           # ONE incident in full, with its remedy
 endless errors show 12 --detail  # and every logged occurrence
 endless errors clear             # mark every open incident cleared
 endless errors clear 12 13       # clear specific incidents
+endless errors clear --log       # dismiss only what is waiting in the log
 endless errors codes             # print this catalog from the running binary
 ```
 
@@ -170,12 +171,27 @@ but not indexed`, or `the error record could not be read` — so the surface who
 job is to say something is wrong is not blind to the case where the thing that
 is wrong is the fault store.
 
-`errors clear` with no id dismisses them along with the open rows. They are
-dismissed by a watermark beside the log rather than by a `cleared_at` column,
-since that column is unreachable in exactly the state this exists for; the
-watermark carries a digest of what it cleared, so a log rotated or restored
-under it is detected rather than silently skipped. Clearing a *specific* id does
-not move it — an id names a table row, and these have none.
+#### Dismissing them
+
+`endless errors clear --log` dismisses them and touches nothing else. That
+separation is the point: the two halves of this record are acknowledged for
+different reasons, and `--log` is the form that still works when the database
+is the thing that broke — a plain `clear` has to fail on its table half there.
+A plain `errors clear` with no id dismisses both, because that is what "dismiss
+what you just showed me" means when the listing printed both. Clearing a
+*specific* id never touches the log: an id names a table row, and these have
+none, so `clear --log 12` is refused rather than guessed at.
+
+They are dismissed by a watermark beside the log rather than by a `cleared_at`
+column, since that column is unreachable in exactly the state this exists for.
+The watermark carries a digest of the log it was measured against, so a file
+rotated or restored under it is detected rather than silently skipped.
+
+One thing `clear` deliberately does **not** silence: `the error record could
+not be read`. That line is not a stored report — it is re-derived on every
+render from whether the database opens — so there is nothing to mark seen, and
+suppressing it would mean muting a failure that is still happening. It goes
+away when the database does.
 
 ---
 

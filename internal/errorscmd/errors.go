@@ -116,6 +116,7 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  list [--all] [--detail]           list uncleared errors (--all includes cleared)")
 	fmt.Fprintln(w, "  show <id> [--detail]              one error in full, with its remedy")
 	fmt.Fprintln(w, "  clear [<id>...]                   mark errors cleared (all open ones when no id given)")
+	fmt.Fprintln(w, "  clear --log                       dismiss only what is waiting in the log")
 	fmt.Fprintln(w, "  codes                             print the documented error catalog")
 	fmt.Fprintln(w, "  record --code ID --summary T [--source S] [--detail D]")
 	fmt.Fprintln(w, "                                   record a real catalog fault (internal; used by `endless triage run`)")
@@ -131,8 +132,9 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "left for a scope to decide.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "A fault recorded while the database was unreachable reaches no row, so it")
-	fmt.Fprintln(w, "has no id. `list` prints those from the log beneath the table, and `clear`")
-	fmt.Fprintln(w, "with no id dismisses them along with it.")
+	fmt.Fprintln(w, "has no id. `list` prints those from the log beneath the table. `clear` with")
+	fmt.Fprintln(w, "no id dismisses them along with the rows; `clear --log` dismisses only them,")
+	fmt.Fprintln(w, "and is the form that works when the database is the thing that broke.")
 }
 
 // runRaise records a synthetic fault so the fault row, the store and the detail log
@@ -307,7 +309,8 @@ func printUnindexed() {
 	fmt.Println("assigned by the database write that failed. The full capture of each is in")
 	fmt.Println(" ", faults.DetailLogPath())
 	fmt.Println()
-	fmt.Println("`endless errors clear` with no id dismisses them along with the rows above.")
+	fmt.Println("Dismiss them with `endless errors clear --log`, or along with the rows")
+	fmt.Println("above with a plain `endless errors clear`.")
 
 end:
 	return
@@ -868,6 +871,13 @@ func printFooter(incidents []faults.Incident) {
 	fmt.Println("Once you have dealt with them, dismiss them:")
 	fmt.Println("  endless errors clear            mark every open error above as seen")
 	fmt.Println("  endless errors clear <id>       dismiss just one")
+	if faults.UnindexedCount() > 0 {
+		// Named only when there is something for it to dismiss. A footer whose
+		// job is to say what you can do here must not list an action that would
+		// do nothing — that is the defect E-2148 removed when this footer named
+		// only `clear`, and re-adding it one line lower would be no better.
+		fmt.Println("  endless errors clear --log      dismiss only the unindexed occurrences below")
+	}
 	fmt.Println()
 	fmt.Println("Clearing is an acknowledgement, not a retry — it does not re-arm a failing job.")
 	fmt.Println("`clear` covers the same project scope the listing above did; pass the same")
@@ -1038,6 +1048,8 @@ func runClear(args []string) {
 	fs := flag.NewFlagSet("clear", flag.ExitOnError)
 	project := fs.String("project", "", "scope to this project instead of the one you are in")
 	allProjects := fs.Bool("all-projects", false, "cover every project on the machine")
+	logOnly := fs.Bool("log", false,
+		"dismiss ONLY the occurrences waiting in the log, leaving every table row open")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
@@ -1051,24 +1063,41 @@ func runClear(args []string) {
 		ids = append(ids, id)
 	}
 
-	// The log's watermark moves FIRST, and only on the no-id form (E-1887).
+	// --log and an id are contradictory instructions, not a precedence
+	// question: an id names a TABLE row, and --log is the half of the record
+	// that has no rows in it. Picking one silently would dismiss something the
+	// user did not name.
+	if *logOnly && len(ids) > 0 {
+		fmt.Fprintln(os.Stderr,
+			"endless-go errors: clear: --log dismisses the log, which holds no ids; "+
+				"pass one or the other")
+		os.Exit(2)
+	}
+
+	// The log's watermark moves FIRST on both forms that touch it (E-1887).
 	//
 	// First, because the whole point of an unindexed occurrence is that the
 	// database was unreachable when it was recorded — and it may still be, in
 	// which case the table clear below fails and this is the only half that can
-	// run. A notice the user cannot dismiss is a notice they learn to ignore.
+	// run. A notice a user cannot dismiss is a notice they learn to ignore.
 	//
-	// No-id only, because an id names a TABLE row and an unindexed occurrence
-	// has none. Dismissing the whole log because someone cleared one row would
-	// dismiss reports they never saw.
-	if len(ids) == 0 {
-		unindexed, uerr := faults.ClearUnindexed()
-		if uerr != nil {
-			fmt.Fprintln(os.Stderr, "endless-go errors: clear: the log watermark:", uerr)
-		}
-		if unindexed > 0 {
-			fmt.Printf("cleared %d unindexed occurrence(s) from the log\n", unindexed)
-		}
+	// Never on the id form, because an id names a row and an unindexed
+	// occurrence has none. Dismissing the whole log because someone cleared one
+	// row would dismiss reports they never saw.
+	if *logOnly || len(ids) == 0 {
+		clearLog()
+	}
+
+	// --log stops here, and that is its whole purpose: the two halves of this
+	// record are dismissed for different reasons and a user must be able to say
+	// which they mean. The bare `clear` couples them because "dismiss what you
+	// just showed me" covers both — the listing prints both — but someone who
+	// has read the unindexed occurrences and is still working through the open
+	// rows had no way to say so, and the coupling also meant that acknowledging
+	// the log at all required a table clear that FAILS when the database is the
+	// thing that broke.
+	if *logOnly {
+		return
 	}
 
 	cleared, err := faults.Clear(resolveScope("clear", *project, *allProjects).scope, ids, clearedBy())
@@ -1077,6 +1106,26 @@ func runClear(args []string) {
 		os.Exit(1)
 	}
 	fmt.Printf("cleared %d error(s)\n", cleared)
+}
+
+// clearLog moves the detail log's clear watermark and says what it covered.
+//
+// A failure here is reported and not fatal: on the bare `clear` the table half
+// still has work to do, and on `--log` the caller has already been told. What
+// must never happen is silence — this is the only acknowledgement available for
+// an occurrence that reached no row.
+func clearLog() {
+	unindexed, err := faults.ClearUnindexed()
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "endless-go errors: clear: the log watermark:", err)
+		return
+	}
+	// Said even when it is zero on the explicit form: a user who typed --log
+	// asked a question, and "nothing was waiting" is the answer to it. On the
+	// bare form it would be a line about nothing, beside a line about the rows.
+	if unindexed > 0 {
+		fmt.Printf("dismissed %d occurrence(s) waiting in the log\n", unindexed)
+	}
 }
 
 // runCodes prints the catalog, which is also what docs/errors.md documents.
