@@ -228,14 +228,26 @@ Separately, the fault row calls this on a two-second repaint, so the read is
 proportional to what is NEW rather than to the size of the log: a bounded
 identity prefix, then a seek to the watermark and a read of the tail.
 
-## 5. Dismissal covers the backlog, not the live condition
+## 5. Dismissal: `errors clear --log`, and what stays undismissable
 
-§6e item 9 asked that `errors clear` silence the notice. It silences the half
-that can honestly be acknowledged — the unindexed occurrences waiting in the
-log. It does NOT silence "the error record could not be read", because that is
-a live condition still true after the acknowledgement, and letting someone
-dismiss an ongoing failure would be worse than never reporting it. The notice
-goes away when the database becomes readable again, with the watermark holding.
+§6e item 9 asked that `errors clear` silence the notice without saying how the
+verb should be shaped. Built:
+
+- `errors clear --log` dismisses ONLY the occurrences waiting in the log and
+  leaves every open row untouched. It is the form that works when the database
+  is the thing that broke, since a plain `clear` must fail on its table half
+  there. Mirrored through the Python CLI so it is reachable from the command a
+  person types.
+- `errors clear` with no id dismisses both halves, because that is what
+  "dismiss what you just showed me" means when the listing printed both.
+- `errors clear --log <id>` is refused rather than resolved by precedence: an
+  id names a table row, and the log has none.
+
+What `clear` deliberately does NOT silence is "the error record could not be
+read". That line is not a stored report — it is re-derived on every render from
+whether the database opens — so there is nothing to mark seen, and suppressing
+it would mute a failure that is still happening. It goes away when the database
+does, with the watermark holding across the recovery.
 
 ## 6. §6d's reconcile was declined
 
