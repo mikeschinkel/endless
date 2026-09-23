@@ -113,3 +113,18 @@ for many tasks — not a weaker guard.
 - Existing reasonless `obsolete` rows still read, render and query normally —
   the guard is on the transition, not on the row.
 - `just test`, `just test-go`.
+
+
+## Folded in: `task replace --status`'s help named the wrong default
+
+Found while widening the guard, and fixed here rather than filed: the
+`--status` flag on `task replace` still advertised `obsolete` as the default
+status for the replaced task, and the command's own docstring repeated it. The
+default became `superseded` when the two were separated — `obsolete` means
+"nothing replaced it", which is the one thing `task replace` cannot be saying.
+
+It is folded in because this change is what sends a reader to that flag: the
+new requirement makes `--status obsolete` the case that now costs something, so
+a help string telling them it is the default was the next question after the
+refusal. One line of help text and one of a docstring, in a file the diff
+already touches.
