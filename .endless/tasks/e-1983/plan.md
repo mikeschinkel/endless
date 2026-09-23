@@ -276,3 +276,64 @@ What it did there, verified after the fact:
 The outcome is the one Decision 4 specifies, and the change file in the tree is
 byte-for-byte what produced it. Nothing needs re-running; this is recorded
 because the database changed outside the land, not as part of it.
+
+---
+
+# Reopened 2026-09-23 — Decision 3 was stronger than anyone chose
+
+## What was wrong
+
+Decision 3 above says the gate "returns `decision: "block"` on every tool call",
+and its "Accepted consequence" paragraph notes that reading code in a worktree
+without binding is therefore impossible — and waves that through. That was a
+planning session's call, presented under a heading attributing the decisions to
+the requester. The requester was never asked it. Nowhere in Decision 3 is
+all-tools-versus-write-tools posed as a question.
+
+Two further defects in the reasoning, recorded because they are the kind that
+repeat:
+
+1. **The severity was argued from a risk the gate does not address.** "Why this
+   is worth E-1669's cost" justifies blocking everything by citing that "under
+   write-once `task_id` a mis-bind is permanent and has no recovery". But this
+   gate fires on an UNBOUND session. A wrongly-bound session holds a task, so
+   the gate is silent for it. Preventing mis-binds is Decision 1's job; the
+   gate's severity borrowed Decision 1's risk.
+
+2. **"There is precedent" was not checked.** Two all-tool gates exist, and
+   neither shares this one's reason. `enforceClaimedCwd` (E-1586) covers all
+   tools because a wrong cwd makes EVERY tool do the wrong thing — Read opens
+   the wrong file, Bash runs in the wrong directory; that is correctness.
+   `enforceRevisitGate` (E-1542) covers all tools because a strategy revisit
+   means stop and ask; that is coordination. Here the cwd is RIGHT and nothing
+   is incorrect. The harm is that work is attributed to no task — and only a
+   write produces work.
+
+## What changed
+
+**The gate covers write tools only** (Write, Edit, NotebookEdit). It moves from
+the all-tools band in `handlePreToolUse` to sit beside `enforceWorktreeGate`,
+and the limit is stated in `unboundWorktreeApplies` rather than left implicit in
+where it is called — the same isolation principle `autoBindFromCwd`'s guards
+follow, and the specific thing that went wrong here was a strength nobody could
+see from the function itself.
+
+**The escape hatch is deleted.** `bindEscapeVerbRe` existed only because the
+gate blocked every tool call, so it had to recognize its own remedy from Bash
+command TEXT — which a heredoc or a quoted string reads identically (E-2177).
+Bash is no longer gated, so the remedy always runs and there is nothing to
+carve out. This removes one of E-2177's two halves outright.
+
+**The block message and the guide say "writes", not "tool calls"**, and both now
+say plainly that reading an unclaimed worktree is fine.
+
+SessionStart's injection is unchanged: it carries no tool name, wants to explain
+regardless, and calls `unboundWorktreeDecision` directly.
+
+## What was deliberately NOT changed
+
+The accepted cost is that an unbound session can still modify files through Bash
+(`sed -i`, `git apply`). `enforceWorktreeGate` has always had that same gap for
+the same reason, and E-940 tracks it separately. Closing it here would mean
+gating Bash, which is the thing that forced the text-matched escape in the first
+place.
