@@ -6675,3 +6675,13 @@ Recovery, when it does happen: 'git reflog show <branch>' keeps the old tip. Res
 
 Third-party reports about another task's state are hearsay about MY branch. 'E-2137 landed' in someone else's message meant an earlier pass had landed, not the one sitting in my worktree.
 - **Project**: endless
+
+### [2026-09-23] Supersede vs modify: ask whether the predecessor holds anything the successor does not
+I argued ED-1595 should stay 'accepted' because its first clause — hooks always run the installed binary — was still in force. Mike pointed out ED-1596 states that clause too. So nothing lived ONLY in ED-1595, which makes it wholly superseded, and my argument collapsed on inspection.
+
+The test I never applied, and which decides modifies-vs-supersedes every time: read the successor alone and ask whether anything in the predecessor is missing from it. If nothing is, the predecessor is superseded no matter how much of its CONTENT survives — surviving inside the successor is not surviving in the predecessor. I confused 'this clause is still true' with 'this decision is still the place to read it'.
+
+Second failure, worse. I cited ED-1567 being 'accepted' with a modifies link from ED-1570 as precedent. Mike says that pairing is itself a mischaracterization he had not caught. Citing precedent asserts the precedent is CORRECT; I treated 'it exists in the tree' as 'it was done right'. Existing practice is evidence of practice, never of correctness — especially in a project where I am the one who wrote most of it.
+
+Why Mike cares operationally, which is the part that matters: a future session finds the accepted predecessor, sees 'accepted', and stops reading. I have done exactly that repeatedly in this session — with ED-1575, and by treating ED-1570 as a settled premise. A superseded status prints a 'NOT authoritative, read X instead' banner. The banner is the whole point, and the argument for leaving a status alone has to answer why that banner is not needed.
+- **Project**: endless
