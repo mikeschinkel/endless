@@ -1,106 +1,154 @@
-# What actually happens, stated precisely
+# The threat model, stated first because an earlier version of this analysis got it wrong
 
-NOTHING IS EXECUTED. This is worth saying first because the shape invites the
-opposite reading. No shell ever runs the quoted or heredoc text; the tool call
-does exactly what it says, and the heredoc body is written to a file as bytes.
+**Gates and detectors here exist to catch INNOCENT INCORRECT USAGE, not errant
+or adversarial agent behaviour.** (Mike, 2026-09-23.)
+
+An earlier draft argued that the gate-escape regexes could be "spoofed open".
+That framing is wrong and it inflated the apparent severity. Adversarial
+resistance was never achievable and is not the goal: an agent that WANTED a
+gate released could simply run the real command. Nothing here is a security
+boundary.
+
+The sufficient complaint is the innocent one, and it is entirely real: **an
+agent writing documentation, a test, or a commit message that MENTIONS a
+command triggers that command's effect by accident.** Everything below is
+scoped to that.
+
+# What actually happens
+
+NOTHING IS EXECUTED. No shell runs the quoted or heredoc text; the tool call
+does exactly what it says, and a heredoc body is written to a file as bytes.
 
 The defect is MISATTRIBUTION, one step later:
 
 1. PostToolUse hands the hook the tool input as JSON, where `command` is the
    WHOLE command string — heredoc body included, as one blob.
-2. `handlePostToolUseSession` regexes that blob, and on a match concludes the
-   agent ran the verb.
+2. `handlePostToolUseSession` regexes that blob and concludes the agent ran the
+   verb.
 3. It then performs the effect ITSELF, in Go, by calling the monitor directly.
 
-So the blast radius is bounded by exactly what those handlers do, and arbitrary
-commands are not reachable through it.
+So the blast radius is exactly what those handlers do; arbitrary commands are
+not reachable.
 
-Why the hook infers at all: the harness never tells Endless "the agent claimed a
-task". Endless has to notice by watching Bash commands go past. Inference from
-command text is the design. The defect is that the inference has no notion of
-COMMAND POSITION versus quoted data.
+# The real problem: the hook writes state it does not own
 
-# The three inferred actions, and what each one writes
+This is the whole of the task. The other findings below are secondary.
 
-| text names | hook calls        | effect                                             |
-|------------|-------------------|----------------------------------------------------|
-| claim E-<n>   | StartWorkSession  | BindSessionToTask + promote status to underway   |
-| confirm E-<n> | CompleteTask      | UPDATE tasks SET status='confirmed', completed_at |
-| chat          | StartChatSession  | session state                                     |
+| text names | hook calls       | effect                                            |
+|------------|------------------|---------------------------------------------------|
+| claim E-<n>   | StartWorkSession | BindSessionToTask + promote status to underway |
+| confirm E-<n> | CompleteTask     | UPDATE tasks SET status='confirmed', completed_at |
+| chat          | StartChatSession | session state                                     |
 
-The claim one is the serious case. On a session whose task_id is NULL, that bind
-is the FIRST write to a write-once column (ED-1560 / E-1969), so it is PERMANENT
-and `task bind` cannot move it afterwards. That is E-1983's failure mode
-arriving through a different door: E-1983 removed the tmux window option's
-ability to mis-bind a session, and this reaches the same irreversible write from
-command text instead.
+The claim one is the serious case: on a session whose `task_id` is NULL that
+bind is the FIRST write to a write-once column (ED-1560 / E-1969), so it is
+PERMANENT and `task bind` cannot move it afterwards.
 
-The confirm one closes someone's task on the strength of prose.
+## The hook's write is redundant, and predates the code that owns the job
 
-## Verified
+Verified, and this is what makes the fix small:
 
-Against the shipped patterns, both captured the id from a quoted argument AND
-from a heredoc body:
+- `endless task claim` resolves its session and emits `task.claimed`;
+  `execTaskClaimed` does `UPDATE sessions SET task_id = ?`. The CLI and the
+  event executor already perform the binding.
+- The hook's `StartWorkSession` call is much OLDER than that executor. Its
+  earliest trace is the early "status page / plan system" era;
+  `execTaskClaimed` arrived later with E-1242 ("bind sibling-pane Claude
+  session on 'task claim' from CLI shell").
+- In the happy path the hook therefore writes the same value the executor just
+  wrote, which the write-once trigger permits because
+  `NEW.task_id IS NOT OLD.task_id` is false. A silent no-op.
 
-    endless\s+task\s+claim\s+(?:[Ee]-)?(\d+)
-    endless\s+task\s+confirm\s+(?:[Ee]-)?(\d+)
+So it is a legacy duplicate writer whose input can name a DIFFERENT id. That is
+the entire danger, and it is why deleting it is viable rather than merely
+desirable.
 
-Observed live four times in one session: a Bash call whose heredoc wrote a Go
-test file mentioning a claim command injected the whole
-claimed-into-a-running-session handoff and ran StartWorkSession. It fired again
-from the heredoc of the probe investigating it, and again from the `task add`
-that filed this task — whose own analysis text contained an example. Harmless
-each time only by accident: the id was either the task the session already held
-(refused as a write-once reassignment) or an id with no row.
+## It is also wrong in a way that has nothing to do with quoting
 
-That accident is not a mitigation. The same text naming a real, unheld id
-performs the write.
+    endless task claim E-<digits> --unattended    →  matches, captures the id
 
-# The PreToolUse half is real but MILDER — do not conflate them
+`--unattended` (E-2093) means "claim with NO Claude session bound" — manual work
+at a terminal, cron. Run it as a Bash tool call from a Claude session and the
+hook binds the session anyway, overriding the flag. No heredoc required. E-2110
+("Explore what an Endless session is without Claude and without tmux") is the
+task that cares about this case.
 
-An earlier framing of this called the gates "spoofed open". That overstates it,
-and the correction matters for how the fix is scoped.
+## Session resolution is NOT the weak link — an earlier draft claimed it was
 
-Two gates carry an escape-verb regex so they never block the command they tell
-you to run — the unbound-worktree gate (E-1983) and the pause-on-revisit gate
-(E-1542). Both decisions are STATELESS with respect to that escape: the command
-is re-read on every PreToolUse and nothing is recorded. So a call carrying the
-text passes, and the very next call without it is blocked again. The revisit
-gate's persistent state is cleared only when the epic leaves revisit or by an
+`_current_endless_session_id`'s ladder is not evidence of unreliability. Rung 2
+(`CLAUDECODE=1` + `CLAUDE_CODE_SESSION_ID`) is IN-PROCESS: the running process
+IS the Claude pane, so for a claim issued by a Claude session there is no
+guessing at all. Rungs 3-5 exist for callers that are not Claude — a human in a
+shell pane, a sibling pane, cron — not as fallbacks for a flaky rung 2.
+
+The earlier draft's proposal to give the CLI "an unforgeable session identity"
+is therefore WITHDRAWN: that identity already exists and is already used.
+
+# Secondary: the PreToolUse escapes
+
+Two gates carried an escape-verb regex so they would never block the command
+they tell you to run. **One of them is already gone.** E-1983 was reopened on
+2026-09-23 and narrowed to write tools; because Bash is no longer gated the
+remedy always runs, so `bindEscapeVerbRe` was deleted rather than hardened.
+That is the shape of fix this family wants: remove the reason for the carve-out,
+not tighten the regex.
+
+What remains is `revisitClearVerbRe` on E-1542's pause-on-revisit gate. Verified:
+`echo "endless task continue"` matches it. The consequence is MILD and must not
+be conflated with the state writes above — the decision is stateless, so only
+that one tool call slips through and the next is blocked again. The gate's
+persistent state is cleared only when the epic leaves `revisit` or by an
 explicit session command; text never reaches it.
 
-Verified: `echo "endless task claim E-<digit>"` matches bindEscapeVerbRe, and
-`echo "endless task continue"` matches revisitClearVerbRe.
+Whether that is worth changing is a judgment call about one gate, not a
+requirement of this task.
 
-So the gate half is "this one call slips through", not "the gate is now off".
-Neither gate is load-bearing against an adversary anyway — the agent could
-simply run the real command. They are load-bearing against ACCIDENT, and an
-agent writing docs or tests about these verbs weakens them without knowing.
+# Secondary: the gate-applying detectors
 
-The gate-APPLYING detectors have the mirror-image nuisance: prose quoting a
-forbidden command (the commit-on-main gate, the sqlite-on-the-endless-db gate,
-the landed-suite run gate) is refused as though it were one.
+Prose quoting a forbidden command (the commit-on-main gate, the
+sqlite-on-the-endless-db gate, the landed-suite run gate) is refused as though
+it were one. A nuisance, not a state change.
 
-# Scope, and what a fix has to decide
+# Why one rule will not serve every call site
 
-Filed as the CAUSE. The population is whatever
-`grep -rn 'input.Command' internal/hookcmd/` returns outside tests — ten sites
-at the time of filing, across claude.go and verify_suite.go.
+The families have opposite failure economies, which is why "tighten the regex"
+is not a global answer:
 
-Not the same as E-1838: that is the inline-content path gate on task
-description text — a different detector on a different surface, already underway
-on its own rule. Same class, not the same bug.
+- **State writes** — a false negative is CHEAP (the CLI already did the write);
+  a false positive is a wrong row, sometimes irreversible. Wants the strictest
+  possible treatment, up to not matching text at all.
+- **Gate escapes** — a false negative BLOCKS the agent from its own remedy. This
+  is the family where tightening is the dangerous direction, and where removing
+  the need for an escape beats improving the match.
+- **Gate applications** — a false positive is a nuisance, a false negative lets
+  the blocked thing through. Lowest stakes.
 
-The three families have different tolerances, so one rule may not serve all ten:
+# Recommendation
 
-- A missed claim is cheap (the agent re-runs it); a wrongly-performed claim is
-  irreversible. This family should be the strictest.
-- A gate escape that fails closed just means the agent runs the real command.
-- A gate that fails open is the one to avoid.
+**Delete the state writes from the hook; keep the handoff render.** The CLI and
+the event executor own the write. What the hook keeps is E-1822's
+claimed-into-a-live-session handoff message, where a false positive costs a
+stray paragraph of context and nothing else.
 
-Open questions for whoever plans it: parse the command into words and match only
-what is in COMMAND POSITION; or strip heredoc bodies and quoted strings before
-matching; or stop inferring state writes from text altogether and key them on
-something the text cannot forge — the claim's own exit status, or having the
-`endless` command itself report what it did. The last is the only one that is
-robust rather than merely better, and it is also the largest.
+Considered and rejected:
+
+- **Tighten the text match** (command-position parsing, stripping heredocs and
+  quotes). Still inference, and Bash is not parseable by a small helper —
+  pipelines, `&&`, `$( )`, `bash -c`, env prefixes, `uv run`, aliases; heredoc
+  stripping is itself a parser. It lowers probability without changing kind, in
+  the one family where a false negative is cheap anyway.
+- **Verify before writing** (check for a matching `task.claimed` event first).
+  If the event exists the hook's write is redundant, so this collapses into the
+  recommendation above; the intermediate step buys nothing.
+- **A bespoke receipt channel.** The event ledger already is one.
+- **Give the CLI an unforgeable session identity.** Withdrawn — it has one.
+
+Open for whoever plans it: whether the handoff render should keep matching text
+at all, or key on the same signal once state writes stop depending on it.
+
+The population to review is whatever `grep -rn 'input.Command' internal/hookcmd/`
+returns outside tests.
+
+Not the same as E-1838: that is the inline-content path gate on task description
+text — a different detector on a different surface, already underway on its own
+rule. Same class, not the same bug.
