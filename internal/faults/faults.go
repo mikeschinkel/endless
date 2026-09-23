@@ -230,14 +230,18 @@ func Record(f Fault) {
 		goto end
 	}
 
+	// Resolved once and threaded to every half, so the row and its detail lines
+	// can never disagree about which project the incident belongs to. It runs
+	// BEFORE the database handle is taken (E-1887) so an unindexed line still
+	// carries the project name whenever the resolver can supply one; a resolver
+	// that needs the same broken database answers (0, "") and the line says
+	// nothing rather than guessing.
+	projectID, projectName = resolveProject(f.ProjectID)
+
 	db, err = database()
 	if err != nil {
-		goto end
+		goto unindexed
 	}
-
-	// Resolved once and threaded to both halves, so the row and its detail lines
-	// can never disagree about which project the incident belongs to.
-	projectID, projectName = resolveProject(f.ProjectID)
 
 	id, occurrence, err = upsertIncident(db, f, projectID)
 	if err != nil && projectID != 0 {
@@ -254,10 +258,28 @@ func Record(f Fault) {
 		id, occurrence, err = upsertIncident(db, f, projectID)
 	}
 	if err != nil {
-		goto end
+		goto unindexed
 	}
 
-	appendDetail(f, id, occurrence, projectName)
+	appendDetail(f, &id, occurrence, projectName, "")
+	goto end
+
+unindexed:
+	// The index write did not happen, so this occurrence has no id and no
+	// occurrence number — both are assigned BY that write. It still goes to
+	// disk (E-1887).
+	//
+	// Until this branch existed, a fault raised BECAUSE the database was
+	// unreachable was written nowhere at all: database() failing and
+	// upsertIncident failing both returned before the log was touched. That is
+	// the one failure mode where losing the report costs most, because the
+	// surfaces that would otherwise carry it are reading the same broken
+	// database.
+	//
+	// No synthetic id is minted — see the Detail doc. err is recorded as the
+	// reason, which is the whole diagnosis when what failed is the fault store
+	// itself, and is then dropped: Record has no channel to report on.
+	appendDetail(f, nil, 0, projectName, err.Error())
 
 end:
 	return

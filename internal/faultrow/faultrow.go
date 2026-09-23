@@ -25,6 +25,7 @@
 package faultrow
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -167,27 +168,137 @@ const Hint = "Run eeh"
 func Render(w io.Writer, cols int, color bool, scope faults.ProjectScope) {
 	var overview faults.Overview
 	var line string
+	var unindexed int
+	var unreadable bool
 	var err error
 
 	overview, err = faults.Open(scope)
-	if err != nil {
-		goto end
+
+	// UNBOUND is not unreadable, and the difference is the whole of whether
+	// this view says anything (E-1887). An unbound store means the process
+	// never wired one — a test harness, a subcommand that touches no
+	// diagnostics — so there is no record to be missing and nothing to report.
+	// Any other error means a store exists and could not be read, which is
+	// exactly the state the notice below is for.
+	unreadable = err != nil && !errors.Is(err, faults.ErrNotBound)
+
+	// Read BEFORE deciding anything, because the interesting case is the one
+	// where the read above just failed: an occurrence the database never
+	// indexed is invisible to every query over it (E-1887).
+	unindexed = faults.UnindexedCount()
+
+	if !unreadable && overview.Total > 0 {
+		line = rowLine(overview, cols, color)
+		if line != "" {
+			// "" means too narrow to render anything legible. A blank reversed
+			// line would be worse than no line: same space, no information.
+			fmt.Fprintln(w, line)
+		}
 	}
-	if overview.Total == 0 {
+
+	if !unreadable && unindexed == 0 {
 		goto end
 	}
 
-	line = rowLine(overview, cols, color)
+	line = noticeLine(unindexed, unreadable, cols, color)
 	if line == "" {
-		// Too narrow to render anything legible. A blank reversed line would be
-		// worse than no line: it costs the same space and says nothing.
 		goto end
 	}
-
 	fmt.Fprintln(w, line)
 
 end:
 	return
+}
+
+// noticeLine is the one line that says something was recorded which this view
+// cannot show (E-1887).
+//
+// Two situations collapse into it, because the reader's next move is the same
+// for both: unindexed occurrences exist in errors.jsonl newer than the clear
+// watermark, or the fault store could not be read at all. Either way the row
+// above is not the whole story, and `eeh` — which falls back to the log when
+// the database is unavailable — is where the rest is.
+//
+// ONE line, at every width, for the same reason the fault row is one line: it
+// sits beside live work, and a broken database must not take the pane over.
+//
+// It carries no code, because no code has been assigned: the assignment is the
+// database write that did not happen. The chip holds the error glyph the tally
+// already uses rather than inventing a second vocabulary for the same colour.
+func noticeLine(unindexed int, unreadable bool, cols int, color bool) (line string) {
+	var chip string
+	var text string
+	var hint string
+	var width int
+	var chipWidth int
+	var avail int
+	var budget int
+	var pad int
+
+	width = cols - 1
+	if width < 1 {
+		goto end
+	}
+
+	chip = " " + glyphError + " "
+	chipWidth = runewidth.StringWidth(chip)
+	if chipWidth+1 >= width {
+		goto end
+	}
+
+	avail = width - chipWidth - 1
+	hint = Hint
+	budget = textBudget(avail, hint)
+	if budget == avail {
+		hint = ""
+	}
+
+	text = runewidth.Truncate(noticeText(unindexed, unreadable), budget, "…")
+	if runewidth.StringWidth(text) < minSummaryFragment {
+		text = ""
+	}
+
+	pad = avail - runewidth.StringWidth(text) - runewidth.StringWidth(hint)
+	if pad < 0 {
+		pad = 0
+	}
+
+	if !color {
+		line = strings.TrimRight(chip+" "+text+strings.Repeat(" ", pad)+hint, " ")
+		goto end
+	}
+
+	line = rowError +
+		chipError + chip + rowReset +
+		rowError + " " + text + strings.Repeat(" ", pad) + hint +
+		rowReset
+
+end:
+	return line
+}
+
+// noticeText says which of the two situations produced the notice, and how much
+// of it there is.
+//
+// An unreadable store leads, because it is the larger claim: it means nothing
+// on the row above can be trusted to be complete, whereas an unindexed count
+// beside a readable store means only that the row is short by that many.
+func noticeText(unindexed int, unreadable bool) (text string) {
+	if unreadable {
+		text = "the error record could not be read"
+		if unindexed > 0 {
+			text += " — " + strconv.Itoa(unindexed) + " in the log"
+		}
+		goto end
+	}
+	text = strconv.Itoa(unindexed) + " error"
+	if unindexed != 1 {
+		text += "s"
+	}
+	text += " recorded but not indexed"
+
+end:
+	return text
 }
 
 // rowLine assembles the single notification row: text left, right-aligned hint,

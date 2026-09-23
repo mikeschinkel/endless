@@ -32,7 +32,7 @@ func TestHookExitCode_GradesByEvent(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.event, func(t *testing.T) {
-			got := hookExitCode(taggedWithEvent(tc.event, errors.New("boom")))
+			got := hookExitCode(taggedWithEvent(tc.event, "", errors.New("boom")))
 			if got != tc.want {
 				t.Errorf("%s exits %d, want %d — %s", tc.event, got, tc.want, tc.why)
 			}
@@ -54,13 +54,13 @@ func TestHookExitCode_UntaggedStaysNonBlocking(t *testing.T) {
 // not cost callers their errors.Is/errors.As, since the tag is applied at a
 // choke point that has no idea what the error underneath is.
 func TestTaggedWithEvent_PreservesTheChain(t *testing.T) {
-	if err := taggedWithEvent("PostToolUse", nil); err != nil {
+	if err := taggedWithEvent("PostToolUse", "", nil); err != nil {
 		t.Errorf("nil in produced %v, want nil out", err)
 	}
 
 	sentinel := errors.New("task_types integrity check")
 	wrapped := fmt.Errorf("looking up project: %w", sentinel)
-	tagged := taggedWithEvent("PostToolUse", wrapped)
+	tagged := taggedWithEvent("PostToolUse", "", wrapped)
 
 	if !errors.Is(tagged, sentinel) {
 		t.Error("tagging broke errors.Is against the wrapped cause")

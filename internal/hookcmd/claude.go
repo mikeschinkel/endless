@@ -184,12 +184,12 @@ func runClaude(args []string) (err error) {
 
 	data, err := io.ReadAll(os.Stdin)
 	if err != nil {
-		return fmt.Errorf("reading stdin: %w", err)
+		return payloadUnreadable(fmt.Errorf("reading stdin: %w", err))
 	}
 
 	var payload claudePayload
 	if err := json.Unmarshal(data, &payload); err != nil {
-		return fmt.Errorf("parsing payload: %w", err)
+		return payloadUnreadable(fmt.Errorf("parsing payload: %w", err))
 	}
 
 	// E-1661: label every failure below with the event that fired. The exit
@@ -197,7 +197,7 @@ func runClaude(args []string) (err error) {
 	// this is the last frame that knows which one fired — so tagging once, at
 	// the single exit, covers every return site below and every one added
 	// after this comment. Nil stays nil. See hookExitCode.
-	defer func() { err = taggedWithEvent(payload.EventName, err) }()
+	defer func() { err = taggedWithEvent(payload.EventName, payload.SessionID, err) }()
 
 	if payload.CWD == "" {
 		return nil
@@ -223,7 +223,7 @@ func runClaude(args []string) (err error) {
 
 	projectID, isRegistered, err := monitor.ProjectIDForPath(payload.CWD)
 	if err != nil {
-		return fmt.Errorf("looking up project for %s: %w", payload.CWD, err)
+		return dbReadFailed(fmt.Errorf("looking up project for %s: %w", payload.CWD, err))
 	}
 
 	// Belt-and-suspenders for E-971's worktree lock release. The
@@ -252,7 +252,7 @@ func runClaude(args []string) (err error) {
 	// Record activity (throttled)
 	throttled, err := monitor.ShouldThrottle(projectID, "claude", 2)
 	if err != nil {
-		return err
+		return dbReadFailed(fmt.Errorf("reading the activity throttle: %w", err))
 	}
 	if !throttled {
 		sessionCtx := map[string]string{
@@ -263,7 +263,7 @@ func runClaude(args []string) (err error) {
 			sessionCtx["tool_name"] = payload.ToolName
 		}
 		if err := monitor.RecordActivity(projectID, "claude", payload.CWD, sessionCtx); err != nil {
-			return fmt.Errorf("recording activity: %w", err)
+			return dbWriteFailed(fmt.Errorf("recording activity: %w", err))
 		}
 	}
 
@@ -273,7 +273,7 @@ func runClaude(args []string) (err error) {
 	// pane-reattach is picked up on the next event. Collision invalidation
 	// inside TouchSession marks any prior occupant of this pane `ended`.
 	if err := monitor.TouchSession(payload.SessionID, "claude", os.Getenv("TMUX_PANE"), projectID); err != nil {
-		return fmt.Errorf("touching session: %w", err)
+		return dbWriteFailed(fmt.Errorf("touching session: %w", err))
 	}
 
 	// The wake (E-2093), beside the touch and before any event-specific
@@ -311,7 +311,7 @@ func runClaude(args []string) (err error) {
 		// transcript-path side effect path below and a defensive no-op
 		// UPDATE if the row exists.
 		if err := monitor.InitSession(payload.SessionID, projectID); err != nil {
-			return fmt.Errorf("initializing session: %w", err)
+			return dbWriteFailed(fmt.Errorf("initializing session: %w", err))
 		}
 		// The opportunistic dead-pane reaper (E-1426) that used to run here was
 		// removed by E-1898. It marked rows whose tmux pane it could not see as
@@ -420,7 +420,7 @@ func runClaude(args []string) (err error) {
 			return nil
 		}
 		if err := monitor.IdleSession(payload.SessionID); err != nil {
-			return fmt.Errorf("idling session: %w", err)
+			return dbWriteFailed(fmt.Errorf("idling session: %w", err))
 		}
 
 	case "StopFailure":
@@ -452,7 +452,7 @@ func runClaude(args []string) (err error) {
 			}
 		}
 		if err := monitor.EndSession(payload.SessionID); err != nil {
-			return fmt.Errorf("ending session: %w", err)
+			return dbWriteFailed(fmt.Errorf("ending session: %w", err))
 		}
 	}
 
@@ -795,7 +795,7 @@ func handlePostToolUse(projectID int64, isRegistered bool, payload claudePayload
 	// Detect endless task claim/complete/chat commands and update session state
 	claimHandoff, err := handlePostToolUseSession(projectID, payload)
 	if err != nil {
-		return fmt.Errorf("post tool use session: %w", err)
+		return dbWriteFailed(fmt.Errorf("post tool use session: %w", err))
 	}
 
 	// E-1822: a claim into an already-running session gets the per-type handoff
@@ -854,7 +854,7 @@ func handlePostToolUse(projectID int64, isRegistered bool, payload claudePayload
 
 	items, err := monitor.GetActiveTasks(projectID)
 	if err != nil {
-		return fmt.Errorf("getting active tasks: %w", err)
+		return dbReadFailed(fmt.Errorf("getting active tasks: %w", err))
 	}
 
 	return writeContextInjection(payload.EventName, fmt.Sprintf(
@@ -1333,7 +1333,7 @@ func handleExitPlanMode(projectID int64, payload claudePayload) error {
 
 	items, err := monitor.GetActiveTasks(projectID)
 	if err != nil {
-		return fmt.Errorf("getting active tasks: %w", err)
+		return dbReadFailed(fmt.Errorf("getting active tasks: %w", err))
 	}
 
 	return writeContextInjection(payload.EventName, fmt.Sprintf(

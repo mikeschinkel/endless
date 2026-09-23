@@ -585,6 +585,10 @@ func TestCatalog_NumbersAreNeverReused(t *testing.T) {
 		"0012": "unlanded-cache-unwritable",
 		"0013": "turn-failed-transient",
 		"0014": "turn-failed-fatal",
+		"0015": "hook-write-failed",
+		"0016": "hook-read-failed",
+		"0017": "hook-payload-unreadable",
+		"0018": "hook-failed",
 	}
 
 	for _, code := range faults.Codes() {

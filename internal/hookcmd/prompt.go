@@ -23,13 +23,13 @@ func runPrompt(args []string) error {
 	// Look up project
 	projectID, _, err := monitor.ProjectIDForPath(dir)
 	if err != nil {
-		return fmt.Errorf("looking up project for %s: %w", dir, err)
+		return dbReadFailed(fmt.Errorf("looking up project for %s: %w", dir, err))
 	}
 
 	// Throttle: skip if last run < 5 seconds ago
 	throttled, err := monitor.ShouldThrottle(projectID, "prompt", 5)
 	if err != nil {
-		return err
+		return dbReadFailed(fmt.Errorf("reading the activity throttle: %w", err))
 	}
 	if throttled {
 		return nil
@@ -50,7 +50,7 @@ func runPrompt(args []string) error {
 
 	// Record activity
 	if err := monitor.RecordActivity(projectID, "prompt", dir, sessionCtx); err != nil {
-		return err
+		return dbWriteFailed(fmt.Errorf("recording activity: %w", err))
 	}
 
 	return nil

@@ -53,6 +53,22 @@ func Run(args []string) {
 		// The log writer includes stderr, so this line IS the error the agent
 		// or the user reads; haltNotice below only adds the instruction.
 		log.Printf("%s: %v", args[0], err)
+
+		// E-1887: and this is for the user who is not reading either. Claude
+		// Code discards hook stderr, and a non-blocking failure exits 0 by
+		// contract, so until this line a failing hook reported to nobody and
+		// the only symptom was state that silently stopped being written.
+		//
+		// The single sink, deliberately: every error that ends a hook
+		// invocation passes through here, so a handler added later is covered
+		// without anyone remembering to. See faultclass.go for why the code it
+		// records is classified at the raise site rather than chosen here.
+		//
+		// It is additive and cannot change what follows — faults.Record never
+		// returns an error and never panics — so the exit code below is
+		// exactly what it was.
+		recordHookFault(args[0], err)
+
 		code := hookExitCode(err)
 		if code == exitBlocking {
 			fmt.Fprint(os.Stderr, haltNotice())

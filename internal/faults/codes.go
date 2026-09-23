@@ -369,6 +369,111 @@ var (
 			"session and the task for every occurrence. Dismiss with `endless " +
 			"errors clear <id>` once it is sorted.",
 	}
+
+	// The four hook codes (E-1887). A Claude hook that fails reports to NOBODY:
+	// hook.Run log.Printf's the error and exits with a code chosen to keep a
+	// broken hook from blocking a tool call, and Claude Code discards hook
+	// stderr. Session ES-1055 ran that way for four weeks — every PreToolUse
+	// died inside monitor.TouchSession with "table sessions has no column named
+	// process", `sessions.process_id` stayed NULL, and the only symptom was a
+	// blank tmux status bar, which is also what a pane with no task looks like.
+	//
+	// # Why four codes and not one
+	//
+	// They are recorded at ONE site — the error sink in hook.Run — so that a
+	// handler added later is covered without anyone remembering to. But a
+	// single code for everything that sink catches would put a malformed
+	// harness payload and a schema-drifted database under one title, and a
+	// reader whose report says only "a hook failed" has learned nothing they
+	// can act on. So the error is CLASSIFIED where it is raised (see
+	// internal/hookcmd/faultclass.go) and the sink records whichever code the
+	// classification names. Nothing is sniffed out of an error string.
+	//
+	// ErrCodeHookWriteFailed is the one the incident above would have raised:
+	// the hook could not WRITE the session or activity row it exists to write.
+	// Error severity, and the most consequential of the four — the write not
+	// happening leaves state that every later read believes, so the failure is
+	// silently load-bearing rather than merely lost.
+	ErrCodeHookWriteFailed = Code{
+		ID:       "ERR-0015",
+		Slug:     "hook-write-failed",
+		Severity: SeverityError,
+		Title:    "A Claude hook could not write to the database",
+		Remedy: "Read the detail (`endless errors show <n> --detail`); it names " +
+			"the hook event, the session, the pane and the binary that ran. A " +
+			"\"no such column\" or enum-integrity failure means that binary " +
+			"and the database disagree about the schema — most often a " +
+			"worktree's own `bin/endless-go` left behind by a schema change " +
+			"(E-2166), repaired by bringing it up to main's. Until it is " +
+			"fixed the session's `process_id` stays NULL, so the tmux status " +
+			"line renders the same hint a pane with no Endless session gets.",
+	}
+
+	// ErrCodeHookReadFailed covers a hook that could not READ what it needed —
+	// the project lookup for its cwd, the activity throttle, the active-task
+	// query.
+	//
+	// Error severity, same as the write, but the consequence is narrower and
+	// worth telling apart: the hook returns before it touches anything, so it
+	// did no work for that event rather than leaving a wrong answer behind.
+	// The next event retries from scratch.
+	ErrCodeHookReadFailed = Code{
+		ID:       "ERR-0016",
+		Slug:     "hook-read-failed",
+		Severity: SeverityError,
+		Title:    "A Claude hook could not read from the database",
+		Remedy: "Read the detail (`endless errors show <n> --detail`); it names " +
+			"the hook event, the session and the binary that ran. The causes " +
+			"are the same ones behind ERR-0015 — a binary and a database that " +
+			"disagree about the schema — but the consequence is narrower: the " +
+			"hook did no work for that event rather than leaving wrong state " +
+			"behind, and the next event retries from scratch.",
+	}
+
+	// ErrCodeHookPayloadUnreadable covers stdin, not the database: the harness
+	// sent the hook nothing, or sent something that is not the JSON event
+	// envelope.
+	//
+	// Separated from the two above because the remedy has nothing in common
+	// with theirs. No amount of rebuilding a binary fixes a hook whose stdin is
+	// being piped through another command by a `settings.json` entry, and a
+	// reader sent to look at schema drift for it is being sent the wrong way.
+	ErrCodeHookPayloadUnreadable = Code{
+		ID:       "ERR-0017",
+		Slug:     "hook-payload-unreadable",
+		Severity: SeverityError,
+		Title:    "A Claude hook could not read the event the harness sent it",
+		Remedy: "This one is not a database problem. Claude Code either sent the " +
+			"hook nothing on stdin or sent something that is not the JSON " +
+			"event envelope, so check how the hook is wired in " +
+			"`settings.json` — an entry that pipes the hook's input through " +
+			"another command is the usual cause. The detail (`endless errors " +
+			"show <n> --detail`) carries what was received.",
+	}
+
+	// ErrCodeHookFailed is the catch-all, and it exists for exactly one reason:
+	// the sink must never be silent about an error it was not taught to
+	// classify. A handler added next year raises this until someone decides it
+	// deserves a code of its own.
+	//
+	// It is the LEAST useful of the four by construction, which is the argument
+	// for keeping the other three rather than collapsing them into it. Its
+	// detail line still carries the full error text, so even here a reader can
+	// name the operation that failed.
+	//
+	// Today the unclassified paths are cwd resolution and worktree adoption.
+	ErrCodeHookFailed = Code{
+		ID:       "ERR-0018",
+		Slug:     "hook-failed",
+		Severity: SeverityError,
+		Title:    "A Claude hook failed",
+		Remedy: "Read the detail (`endless errors show <n> --detail`): it carries " +
+			"the full error text, the hook event, the session and the binary " +
+			"that ran, and the error text names the operation that failed. " +
+			"This code is the one raised when no more specific hook code " +
+			"applies, so a run of them against a single operation is a sign " +
+			"that operation has earned a code of its own.",
+	}
 )
 
 // catalog indexes every registered Code by ID. Built once at init from the
@@ -388,6 +493,10 @@ var catalog = buildCatalog(
 	ErrCodeUnlandedCacheUnwritable,
 	ErrCodeTurnFailedTransient,
 	ErrCodeTurnFailedFatal,
+	ErrCodeHookWriteFailed,
+	ErrCodeHookReadFailed,
+	ErrCodeHookPayloadUnreadable,
+	ErrCodeHookFailed,
 )
 
 // buildCatalog indexes codes by ID. It panics on a duplicate ID: a collision is

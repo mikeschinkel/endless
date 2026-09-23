@@ -129,6 +129,10 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "`show <id>` ignores the scope: you named the row, so there is nothing")
 	fmt.Fprintln(w, "left for a scope to decide.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "A fault recorded while the database was unreachable reaches no row, so it")
+	fmt.Fprintln(w, "has no id. `list` prints those from the log beneath the table, and `clear`")
+	fmt.Fprintln(w, "with no id dismisses them along with it.")
 }
 
 // runRaise records a synthetic fault so the fault row, the store and the detail log
@@ -231,7 +235,14 @@ func runList(args []string) {
 
 	incidents, err := faults.List(scoped.scope, *all, 0)
 	if err != nil {
+		// The database is what failed, which is the one state in which this
+		// listing still has something to say (E-1887): a fault raised BECAUSE
+		// the database failed was written to errors.jsonl and indexed nowhere,
+		// so the log is the only place it exists. Print those before exiting,
+		// rather than exiting on the error and leaving the user with no way to
+		// read a report that was successfully recorded.
 		fmt.Fprintln(os.Stderr, "endless-go errors: list:", err)
+		printUnindexed()
 		os.Exit(1)
 	}
 
@@ -241,6 +252,7 @@ func runList(args []string) {
 	// the rest are.
 	fmt.Println(listingHeader(scoped, len(incidents), *all))
 	if len(incidents) == 0 {
+		printUnindexed()
 		return
 	}
 	fmt.Println()
@@ -254,6 +266,51 @@ func runList(args []string) {
 	}
 
 	printFooter(incidents)
+	printUnindexed()
+}
+
+// printUnindexed prints the occurrences that reached the detail log but no
+// `errors` row, and nothing at all when there are none (E-1887).
+//
+// They are NOT folded into the table above. Every column that table is built
+// around — the id you type into the next command, the occurrence count, the
+// first-seen timestamp — is assigned by the index write that did not happen, so
+// a row for one would be mostly empty cells wearing a table's clothes. More to
+// the point, an id is what `show` and `clear <id>` address a row by, and
+// minting a synthetic one that later collides with a real id is worse than an
+// honest absence.
+//
+// Deliberately quiet on failure: this is an annotation, and it is printed in
+// exactly the state where things are already going wrong.
+func printUnindexed() {
+	var details []faults.Detail
+	var err error
+
+	details, err = faults.Unindexed()
+	if err != nil || len(details) == 0 {
+		goto end
+	}
+
+	fmt.Println()
+	fmt.Printf("%d occurrence(s) recorded to the log but never indexed:\n", len(details))
+	fmt.Println()
+	for _, d := range details {
+		fmt.Printf("  [%s] %s  %s\n", d.TS, d.Code, d.Source)
+		fmt.Printf("    %s\n", d.Summary)
+		if d.IndexError != "" {
+			fmt.Printf("    not indexed: %s\n", d.IndexError)
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("These have no id, so `errors show <id>` cannot reach them — the id is")
+	fmt.Println("assigned by the database write that failed. The full capture of each is in")
+	fmt.Println(" ", faults.DetailLogPath())
+	fmt.Println()
+	fmt.Println("`endless errors clear` with no id dismisses them along with the rows above.")
+
+end:
+	return
 }
 
 // listingWidth is the width the table is fitted to, or 0 for "do not fit".
@@ -822,6 +879,15 @@ func showOne(id int64, detail bool) {
 	incident, ok, err := faults.Get(id)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, "endless-go errors: show:", err)
+		// An id addresses a table row, so there is no fallback for `show`
+		// itself. Name the one that exists rather than leaving a dead end: any
+		// fault recorded while the store was unreadable is unindexed and is
+		// listed, without ids, by `list` (E-1887).
+		if faults.UnindexedCount() > 0 {
+			fmt.Fprintln(os.Stderr,
+				"endless-go errors: occurrences were recorded outside the database; "+
+					"`endless errors list` shows them")
+		}
 		os.Exit(1)
 	}
 	if !ok {
@@ -983,6 +1049,26 @@ func runClear(args []string) {
 			os.Exit(2)
 		}
 		ids = append(ids, id)
+	}
+
+	// The log's watermark moves FIRST, and only on the no-id form (E-1887).
+	//
+	// First, because the whole point of an unindexed occurrence is that the
+	// database was unreachable when it was recorded — and it may still be, in
+	// which case the table clear below fails and this is the only half that can
+	// run. A notice the user cannot dismiss is a notice they learn to ignore.
+	//
+	// No-id only, because an id names a TABLE row and an unindexed occurrence
+	// has none. Dismissing the whole log because someone cleared one row would
+	// dismiss reports they never saw.
+	if len(ids) == 0 {
+		unindexed, uerr := faults.ClearUnindexed()
+		if uerr != nil {
+			fmt.Fprintln(os.Stderr, "endless-go errors: clear: the log watermark:", uerr)
+		}
+		if unindexed > 0 {
+			fmt.Printf("cleared %d unindexed occurrence(s) from the log\n", unindexed)
+		}
 	}
 
 	cleared, err := faults.Clear(resolveScope("clear", *project, *allProjects).scope, ids, clearedBy())

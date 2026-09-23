@@ -51,27 +51,47 @@ var stopEvents = map[string]bool{
 	"SubagentStop": true,
 }
 
-// eventError labels an error with the harness event it happened on.
+// eventError labels an error with the harness event it happened on, and with
+// the session that fired it.
 //
 // Which exit code reaches the agent is a property of the event, and the event
 // is known only where the payload was parsed. Carrying it on the error means
 // the single exit in Run can grade a failure raised twenty call frames away
 // without re-deriving anything.
+//
+// The session rides along for the same reason and is read at the same place
+// (E-1887): the fault Run records wants to say WHICH session stopped being
+// tracked, and the payload that knows is parsed in the same frame that knows
+// the event. Nothing grades on it — it is context for a reader, not a decision.
 type eventError struct {
-	event string
-	err   error
+	event   string
+	session string
+	err     error
 }
 
 func (e *eventError) Error() string { return e.err.Error() }
 func (e *eventError) Unwrap() error { return e.err }
 
-// taggedWithEvent labels err with the event that fired. Nil in, nil out, so a
-// caller can wrap a bare return value or a deferred result without a guard.
-func taggedWithEvent(event string, err error) error {
+// taggedWithEvent labels err with the event that fired and the session it fired
+// for. Nil in, nil out, so a caller can wrap a bare return value or a deferred
+// result without a guard.
+func taggedWithEvent(event, session string, err error) error {
 	if err == nil {
 		return nil
 	}
-	return &eventError{event: event, err: err}
+	return &eventError{event: event, session: session, err: err}
+}
+
+// hookEventContext recovers the event and session tagged onto err. Both are
+// empty for an error raised before the payload could be parsed — unreadable
+// stdin, malformed JSON — and for a hook that is not a Claude event at all.
+func hookEventContext(err error) (event, session string) {
+	var ee *eventError
+
+	if errors.As(err, &ee) {
+		event, session = ee.event, ee.session
+	}
+	return event, session
 }
 
 // hookExitCode grades a hook failure into the code Claude Code should see.

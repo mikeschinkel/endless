@@ -154,6 +154,29 @@ rewrites them, since a fault's project cannot be reconstructed after the fact.
 That file is machine-local. It is not the shareable db-ledger, it is never
 replayed into the database, and faults emit no ledger events.
 
+### When the database is what failed
+
+A fault raised *because* the database could not be written cannot be recorded
+in it. The detail line is still written — that is the half of this that does not
+need a database — and it says so: `"fault_id": null` and `"unindexed": true`,
+with an `index_error` giving the reason. No id is invented for it, because an id
+is what `show <id>` and `clear <id>` address a row by, and a fake one that later
+collides with a real one is worse than an honest absence.
+
+Those occurrences are not silent. `errors list` prints them beneath the table,
+without ids, and falls back to printing them alone when the table itself cannot
+be read. The fault row on `session status` adds one line — `✕ N errors recorded
+but not indexed`, or `the error record could not be read` — so the surface whose
+job is to say something is wrong is not blind to the case where the thing that
+is wrong is the fault store.
+
+`errors clear` with no id dismisses them along with the open rows. They are
+dismissed by a watermark beside the log rather than by a `cleared_at` column,
+since that column is unreachable in exactly the state this exists for; the
+watermark carries a digest of what it cleared, so a log rotated or restored
+under it is detected rather than silently skipped. Clearing a *specific* id does
+not move it — an id names a table row, and these have none.
+
 ---
 
 ## WARN-0001 — job-failed
@@ -486,3 +509,92 @@ severity buys here: prominence, not longevity.
 organisation about an org policy or a hold. `endless errors show <n> --detail`
 names the error type, the session and the task for every occurrence.
 Dismiss with `endless errors clear <id>` once it is sorted.
+
+## ERR-0015 — hook-write-failed
+
+**Severity:** error · **Raised by:** every Endless Claude hook (E-1887)
+
+A hook could not write the row it exists to write — the `sessions` upsert that
+binds a session to its pane, the throttled activity record, the session
+lifecycle transitions.
+
+This is the code behind the incident that created all four. Session ES-1055 ran
+for roughly four weeks with a blank tmux status bar: every `PreToolUse` died
+inside `monitor.TouchSession` with `table sessions has no column named process`,
+`sessions.process_id` stayed NULL, and the status line — which resolves a pane
+through exactly that column — correctly found no session and rendered the hint a
+pane with no Endless context gets. Nothing was recorded anywhere, because hooks
+exit without blocking on failure by contract and Claude Code discards hook
+stderr.
+
+It is the most consequential of the four hook codes. A write that did not happen
+leaves state behind that every later read believes, so the failure is silently
+load-bearing rather than merely lost.
+
+**What to do.** Read the detail (`endless errors show <n> --detail`); it names
+the hook event, the session, the pane and the binary that ran. A "no such
+column" or enum-integrity failure means that binary and the database disagree
+about the schema — most often a worktree's own `bin/endless-go` left behind by
+a schema change (E-2166), repaired by bringing it up to main's. Until it is
+fixed the session's `process_id` stays NULL, so the tmux status line renders
+the same hint a pane with no Endless session gets.
+
+## ERR-0016 — hook-read-failed
+
+**Severity:** error · **Raised by:** every Endless Claude hook (E-1887)
+
+A hook could not read what it needed before it could do anything: the project
+enclosing its working directory, the activity throttle, the active-task query.
+
+Same causes as ERR-0015 and a different consequence, which is why it is a
+separate code rather than the same one. The hook returns before it touches
+anything, so it did no work for that event rather than leaving a wrong answer
+behind, and the next event retries from scratch.
+
+**What to do.** Read the detail (`endless errors show <n> --detail`); it names
+the hook event, the session and the binary that ran. The causes are the same
+ones behind ERR-0015 — a binary and a database that disagree about the schema —
+but the consequence is narrower: the hook did no work for that event rather
+than leaving wrong state behind, and the next event retries from scratch.
+
+## ERR-0017 — hook-payload-unreadable
+
+**Severity:** error · **Raised by:** every Endless Claude hook (E-1887)
+
+The harness sent the hook nothing on stdin, or sent bytes that are not the JSON
+event envelope every hook is invoked with.
+
+Separated from the two database codes because the remedy has nothing in common
+with theirs. No amount of rebuilding a binary fixes a hook whose stdin is being
+piped through another command by a `settings.json` entry, and a reader sent to
+look for schema drift is being sent the wrong way.
+
+**What to do.** This one is not a database problem. Claude Code either sent the
+hook nothing on stdin or sent something that is not the JSON event envelope, so
+check how the hook is wired in `settings.json` — an entry that pipes the hook's
+input through another command is the usual cause. The detail (`endless errors
+show <n> --detail`) carries what was received.
+
+## ERR-0018 — hook-failed
+
+**Severity:** error · **Raised by:** every Endless Claude hook (E-1887)
+
+A hook failed in a way that carries no more specific code.
+
+All four hook codes are recorded at ONE site — the error sink in `hook.Run`,
+which every error that ends a hook invocation already passes through — so that a
+handler added later is covered without anyone remembering to add a call. The
+error is CLASSIFIED where it is raised rather than sniffed out of its text at the
+sink, and this code is what an unclassified error gets.
+
+It is the least useful of the four by construction, which is the argument for
+keeping the other three rather than collapsing them into it: a report saying
+only "a hook failed" has told its reader nothing they can act on. Its detail line
+still carries the full error text, so even here the operation that failed is
+named. Today the unclassified paths are cwd resolution and worktree adoption.
+
+**What to do.** Read the detail (`endless errors show <n> --detail`): it
+carries the full error text, the hook event, the session and the binary that
+ran, and the error text names the operation that failed. This code is the one
+raised when no more specific hook code applies, so a run of them against a
+single operation is a sign that operation has earned a code of its own.

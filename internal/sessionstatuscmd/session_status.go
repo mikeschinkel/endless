@@ -360,15 +360,33 @@ func Run(args []string) {
 	// resolution error is fatal here exactly as it always has been.
 	a, err := nextAnchor()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "session-status:", err)
-		os.Exit(1)
+		die(err, *cols, color)
 	}
 	// The row count is the live monitor's pane-fit input (E-1851); a one-shot
 	// render has no pane to fit, so it is discarded here.
 	if _, err := renderSnapshot(os.Stdout, a, *all, detectCols(*cols), color, hm); err != nil {
-		fmt.Fprintln(os.Stderr, "session-status:", err)
-		os.Exit(1)
+		die(err, *cols, color)
 	}
+}
+
+// die reports a fatal render failure and exits 1 — but prints the fault row
+// first (E-1887).
+//
+// Almost every way this view dies is the database being unreachable, and that
+// is precisely when a fault has been recorded that no query can reach: it was
+// written to errors.jsonl and indexed nowhere, because the index write is the
+// thing that failed. The fault row's notice needs only the filesystem, so it is
+// the ONE line of this frame that can still be produced, and the line that
+// tells a reader reports exist and where they are.
+//
+// The exit code stays 1: the command did fail, and a caller scripting around it
+// must keep seeing that. What changes is that the failure is no longer a dead
+// end — before this, the surface whose job is to say something is wrong said
+// only that it could not say anything.
+func die(err error, cols int, color bool) {
+	fmt.Fprintln(os.Stderr, "session-status:", err)
+	faultrow.Render(os.Stdout, detectCols(cols), color, faults.AllProjects)
+	os.Exit(1)
 }
 
 // anchor is the set of ids the view pins itself to, resolved as ONE unit. The
@@ -564,8 +582,9 @@ func monitorLoop(tracker *anchorTracker, all bool, colsOverride int, color bool,
 		Pane:     os.Getenv("TMUX_PANE"),
 		FireJobs: true,
 		Fatal: func(err error) {
-			fmt.Fprintln(os.Stderr, "session-status:", err)
-			os.Exit(1)
+			// Same reasoning as the one-shot path: the notice is the only part
+			// of a frame a dead database still allows (E-1887).
+			die(err, colsOverride, color)
 		},
 	})
 }

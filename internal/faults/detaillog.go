@@ -36,6 +36,26 @@ const detailLogFile = "errors.jsonl"
 // convention, so a future reader can consume either file with one decoder. A
 // struct (not a map) keeps field order and shape stable.
 //
+// # Indexed and unindexed lines (E-1887)
+//
+// FaultID and Occurrence are assigned BY the `errors` row this occurrence
+// belongs to. A line written when that write could not happen — the database
+// unreachable, the table missing, the insert rejected — has neither, and says
+// so: a null `fault_id` plus an explicit `"unindexed": true`.
+//
+// The marker is explicit rather than inferred from the null because a reader
+// must be able to tell "occurrence 4 of incident 12" from "this was never
+// indexed at all" without knowing which fields a given version assigns. No
+// synthetic id is minted for an unindexed line: a fake id that later collides
+// with a real one is worse than an honest absence.
+//
+// IndexError says WHY it could not be indexed, which is the whole diagnosis
+// when the thing that failed is the fault store itself.
+//
+// Lines written before E-1887 carry a plain integer `fault_id` and no
+// `unindexed` key, and decode correctly: the id populates the pointer and the
+// marker stays false.
+//
 // Project carries the project NAME, not the id, because this file is read
 // without a database (E-1960). It sits beside Source for the same reason both
 // exist: one says which project the fault happened in, the other which subsystem
@@ -50,8 +70,10 @@ const detailLogFile = "errors.jsonl"
 type Detail struct {
 	Kind        string         `json:"kind"` // always "fault"
 	TS          string         `json:"ts"`
-	FaultID     int64          `json:"fault_id"`   // errors.id this occurrence belongs to
-	Occurrence  int64          `json:"occurrence"` // 1-based count within the incident
+	FaultID     *int64         `json:"fault_id"`             // errors.id; null when unindexed
+	Occurrence  int64          `json:"occurrence,omitempty"` // 1-based within the incident; absent when unindexed
+	Unindexed   bool           `json:"unindexed,omitempty"`  // this occurrence reached no `errors` row
+	IndexError  string         `json:"index_error,omitempty"`
 	Code        string         `json:"code"`
 	Severity    string         `json:"severity"`
 	Project     string         `json:"project,omitempty"` // project NAME; absent when unattributed
@@ -65,7 +87,13 @@ type Detail struct {
 // appendDetail writes one occurrence line. Best-effort and silent: an
 // unwritable log must never turn into a user-visible failure, and must never
 // recurse into Record.
-func appendDetail(f Fault, id, occurrence int64, project string) {
+//
+// id is nil for an occurrence that reached no `errors` row, and indexErr then
+// says why. That case is the whole of E-1887's section 6: a fault raised
+// BECAUSE the database failed cannot be recorded through the database, so until
+// this call moved off Record's success path it was written nowhere at all —
+// the one failure mode where losing the report costs most.
+func appendDetail(f Fault, id *int64, occurrence int64, project string, indexErr string) {
 	var dir string
 	var path string
 	var data []byte
@@ -87,6 +115,8 @@ func appendDetail(f Fault, id, occurrence int64, project string) {
 		TS:          time.Now().UTC().Format("2006-01-02T15:04:05"),
 		FaultID:     id,
 		Occurrence:  occurrence,
+		Unindexed:   id == nil,
+		IndexError:  indexErr,
 		Code:        f.Code.ID,
 		Severity:    string(f.Code.Severity),
 		Project:     project,
@@ -166,7 +196,9 @@ func Details(id int64) (details []Detail, err error) {
 		if json.Unmarshal([]byte(line), &detail) != nil {
 			continue
 		}
-		if detail.FaultID != id {
+		if detail.FaultID == nil || *detail.FaultID != id {
+			// Unindexed lines belong to no incident, so no incident's detail
+			// view may claim them. Unindexed reads them instead.
 			continue
 		}
 		details = append(details, detail)
