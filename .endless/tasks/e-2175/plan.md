@@ -128,3 +128,35 @@ new requirement makes `--status obsolete` the case that now costs something, so
 a help string telling them it is the default was the next question after the
 refusal. One line of help text and one of a docstring, in a file the diff
 already touches.
+
+## Widened, on Mike's call: `superseded` too
+
+Decided 2026-09-23, after the first implementation was in hand. The rule this
+task exists to establish is **every status that ends a task without it having
+shipped must record why** — and by that rule two statuses was the wrong set.
+
+`superseded` was originally left out because it is already refused without a
+`replaced_by` relation. But that is the same argument this plan overruled for
+`task replace`: the relation records WHAT took the work over, and not WHY it
+was handed on. Under the default that E-2144 established, the plainest form of
+the commonest abandonment —
+
+    endless task replace <old> --by <new>
+
+— lands on `superseded` and recorded no reason at all. Guarding `obsolete`
+while leaving that route open would have moved the hole rather than closed it,
+and a rule with a side door is not enforceable anywhere else.
+
+So the guard covers three statuses: `declined`, `obsolete`, `superseded`.
+`--outcome` is now required on the default `task replace` path.
+
+**Ordering, where both facts are missing.** A hand-set `superseded` with
+neither a successor nor a reason is refused for the missing SUCCESSOR. That
+refusal says the status is wrong for the row at all and routes to
+`task replace`; teaching a flag first would spend a round trip on a status the
+caller is about to be told not to use. The reason guard therefore runs after
+the relation guard in `update_plan`.
+
+**The exemption is unchanged and still structural.** `task replace` on work
+that already shipped keeps the terminal it earned, was never abandoned, and so
+reaches none of the three.
