@@ -6765,3 +6765,18 @@ The error was inferring a precondition from a statement about a DIFFERENT actor,
 
 The rule: before prefixing a command with another command, confirm the verb actually refuses without it. A status the verb can reach on its own is not a prerequisite. If I have not seen the refusal, I am guessing at a gate — and guessing at gates produces exactly the kind of ceremony that makes a tool feel heavier than it is.
 - **Project**: endless
+
+### [2026-09-23] Do not spend the user's attention on a non-finding, and never flag the task owner's own decision as a deviation from my plan
+Two in one message, same root.
+
+1. I told Mike to have E-2168's session rebase before landing. Then he asked whether E-1983's rebase would succeed, I checked, and it was clean — zero file overlap, merge-tree exit 0. It was always going to be clean, and I could have checked before saying anything. Instead I raised a hypothetical, handed it over as an action item, and then spent MORE of his attention proving the non-problem was a non-problem. A concern I have not verified is not a finding; it is a guess wearing a finding's clothes, and handing it over transfers my uncertainty to him as work.
+
+2. I flagged that E-1983's session 'narrowed the gate I wrote into the plan' and called it 'a real departure from the plan, worth reading before you confirm.' It was Mike's decision, reached in a long debate in that session. I framed the task owner's deliberate choice as a suspicious deviation and told him to go audit himself.
+
+The root is treating my own plan text as the authority that reality gets checked against. It is not. A plan is where a task starts; the session doing the work and the user own where it ends. When shipped work differs from the plan, the first assumption is that someone decided something, not that something drifted.
+
+Two rules:
+
+- Verify before raising. If a check would settle it, run the check. Report the finding, or report nothing. 'You may want to look at X' with no evidence behind it is the worst of both — it costs attention and carries no information.
+- A difference between the plan and what shipped is NEWS to me, not to the user. Ask what was decided, or read the commit and learn from it. Do not present it as something for them to verify.
+- **Project**: endless
