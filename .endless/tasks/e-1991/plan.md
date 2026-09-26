@@ -65,15 +65,51 @@ implementation calls subject to the convention above.
 
 ## Strand 2 — field shape and the plan-required spawn gate
 
+E-1993. Title 60, description 256, a plan required to spawn but never to file,
+any open question parks the task, and the re-approval reset retargets from
+description to plan. Mechanical enforcement for shape; judged enforcement for
+semantics belongs to strand 4.
+
+**Settled 2026-09-26: the description cap is 256, E-1993's number.** E-2109 was
+filed carrying 384 and has been corrected. The two children are not duplicates
+— E-1993 sets the caps and grandfathers every existing row, E-2109 is the
+migration that eventually makes them hold everywhere.
+
 ## Strand 3 — open questions get a home
 
-A table rather than a content row: a task accumulates many questions across
-many rounds, each with its own answer and state.
+E-2176. A table rather than a content row: a task accumulates many questions
+across many rounds, each with its own answer and state.
 
 ## Strand 4 — triage becomes a read-through that primes the implementing session
+
+E-1994, then E-1995. Triage spawns the real implementation session, which reads
+in, records its open questions and holds as primed — no evaluator-implementer
+gap to calibrate, and questions arrive while the user's context is still warm.
+E-1995 then automates the objection round-trip between sessions, so only genuine
+deadlocks reach the user, with both positions already argued.
 
 ## Structure
 
 Two levels, per ED-1598: these children have no children of their own. Where
 several of them are bound together by a shared mechanism, that is a
 `blocked_by` relation between siblings, not a container.
+
+## Repairs made 2026-09-26 while coordinating
+
+Dissolving E-1992 into this plan dropped two things it had been carrying, and
+neither was visible from the graph:
+
+- **Its blocking edges.** E-1993 and E-1994 were `blocked_by E-1992`, and a
+  terminal blocker releases its dependents — so both read as unblocked while
+  their plans still depended on the storage E-1992 was going to ship. The real
+  edges are now recorded: E-1531 and E-2176 block E-1993 and E-1994; E-1531 and
+  E-1993 block E-2109. The inert E-1992 edges were removed.
+- **Its child numbering.** The plans on E-1993, E-1994 and E-1995 referred to
+  "Child 1" through "Child 4" — E-1992's internal numbering, which stopped
+  resolving to anything. Rewritten to task IDs, with "Child 1" resolved per site
+  to E-1531 or E-2176 depending on which half of the old storage child was meant.
+
+The lesson for the remaining dissolutions E-2178 inventories: a container's
+plan-internal cross-references and its blocking edges are both content that has
+to be placed before it closes. E-1992's outcome accounted for the children and
+the prose; these two were still lost.
