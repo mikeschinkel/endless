@@ -6853,3 +6853,13 @@ Three fixture facts that cost E-2168 three verify iterations, for the next suite
 
 3. A drive that exercises anything reading `_live_sessions` must chdir into the FIXTURE project first. `_project_root_for_cwd` walks up from cwd looking for a registered project; run from the endless worktree it resolves to the worktree instead, `session-query list-live` is asked about a project the fixture never registered, and the check reads back an empty set — a gate that cannot fail while looking like it passes.
 - **Project**: endless
+
+### [2026-09-26] Before asserting that a guard is over-broad, find its callers — a predicate that matches says nothing about a code path that never reaches it
+Wrapping up E-2166 I recommended filing a follow-up: internal/jobs.Suppressed() gates on 'self-dev worktree AND pinned to a real database', and I argued that since E-2166 makes hooks run the installed binary, a hook fired from a worktree now satisfies both halves while running non-candidate code — so the guard over-suppresses and background jobs are starved in worktree sessions. Mike asked why I would NOT file it, which sent me to check the premise I had never checked.
+
+Suppressed() has exactly two callers: jobs.RunDue (the liveview/status-line tick and 'endless jobs run') and 'endless jobs list'. A Claude hook never reaches it. The predicate matching says nothing, because the code path does not exist. And 'endless jobs list' showed the runner perfectly healthy — worktree-unlanded at 16814 runs, triage-sufficiency at 13059, zero failures, every job last-run within minutes — so the starvation I described was not happening. Two greps and one command, either of which I could have run before writing the recommendation.
+
+Worse, I had already written that false rationale into comments in internal/jobs/suppress.go and src/endless/triage.py and landed them, so the mistake outlived the conversation until I reopened the task to fix it.
+
+Two habits. First: a claim that some guard is too broad or too narrow is a claim about a CODE PATH, so enumerate the callers before making it — matching a predicate is not reaching a function. Second: when I have written a pros-and-cons list and the 'against' column is padded with items about whether I caused the problem or how conservative the code is, that is a sign I have not checked the 'for' column's premise; the weak against-column was the tell, and Mike read it before I did.
+- **Project**: endless
