@@ -1,8 +1,8 @@
-package hookcmd
+package claimhandoffcmd
 
 import (
+	"bytes"
 	"database/sql"
-	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,35 +10,9 @@ import (
 	"testing"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/schema"
+	_ "modernc.org/sqlite"
 )
-
-// TestClaimHandoffResponse_Shape pins the structural contract E-1822's delivery
-// depends on (the E-1803 mechanism): PostToolUse additionalContext must be
-// nested under hookSpecificOutput with the event name, and must carry the
-// rendered handoff verbatim.
-func TestClaimHandoffResponse_Shape(t *testing.T) {
-	b, err := json.Marshal(claimHandoffResponse("HANDOFF TEXT"))
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	var got map[string]any
-	if err := json.Unmarshal(b, &got); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	hso, ok := got["hookSpecificOutput"].(map[string]any)
-	if !ok {
-		t.Fatalf("hookSpecificOutput missing/wrong type: %v", got["hookSpecificOutput"])
-	}
-	if hso["hookEventName"] != "PostToolUse" {
-		t.Errorf("hookEventName = %v, want PostToolUse", hso["hookEventName"])
-	}
-	if hso["additionalContext"] != "HANDOFF TEXT" {
-		t.Errorf("additionalContext = %v, want the rendered handoff", hso["additionalContext"])
-	}
-	if _, leaked := got["decision"]; leaked {
-		t.Errorf("claim handoff must not carry a decision field: %v", got)
-	}
-}
 
 // TestHierarchicalLabelPrefix mirrors Python's `_hierarchical_label_prefix`
 // (E-1620): parented tasks render `E-<parent>/E-<id>`, roots the bare `E-<id>`.
@@ -107,29 +81,15 @@ func TestChildrenBreakdown(t *testing.T) {
 	}
 }
 
-// TestClaimHandoffContext_SkipsSubagent verifies an Agent-tool subagent never
-// receives the handoff. A subagent shares its parent's cwd and represents tool
-// use, not a session taking ownership of a task.
-func TestClaimHandoffContext_SkipsSubagent(t *testing.T) {
-	if got := claimHandoffContext(1, 1, claudePayload{AgentID: "sub-1"}); got != "" {
-		t.Errorf("subagent got a claim handoff (%d bytes); want none", len(got))
-	}
-}
-
-// TestHandlePostToolUseSession_ClaimDeliversHandoff is the end-to-end delivery
-// contract (E-1822): a PostToolUse payload for `endless task claim <id>` in a
-// live session returns the rendered per-type claim handoff, which the caller
-// emits as additionalContext. Drives the real matcher load, the real
-// StartWorkSession write, and the real template render.
-func TestHandlePostToolUseSession_ClaimDeliversHandoff(t *testing.T) {
+// TestRender_DeliversTheTypeHandoff is the delivery contract (E-1822): the
+// render for a task claimed into a live session is the per-type claim handoff,
+// pointing at the task's own worktree and branch.
+func TestRender_DeliversTheTypeHandoff(t *testing.T) {
 	fx := newClaimFixture(t)
 
-	handoff, err := fx.postToolUse("endless task claim E-10")
+	handoff, err := Render(10)
 	if err != nil {
-		t.Fatalf("handlePostToolUseSession: %v", err)
-	}
-	if handoff == "" {
-		t.Fatal("claim into a live session produced no handoff")
+		t.Fatalf("Render: %v", err)
 	}
 
 	wants := []string{
@@ -158,38 +118,43 @@ func TestHandlePostToolUseSession_ClaimDeliversHandoff(t *testing.T) {
 	if strings.Contains(handoff, "--status unverified") {
 		t.Errorf("research claim handoff carries the todo terminal rule\n--- handoff ---\n%s", handoff)
 	}
+}
 
-	// The claim itself still happened.
-	var status string
-	if err := fx.db.QueryRow("SELECT status FROM tasks WHERE id = 10").Scan(&status); err != nil {
-		t.Fatalf("read task status: %v", err)
+// TestRun_ParsesTheTaskID covers the subcommand surface: an `E-` prefixed or
+// bare id renders, and anything else is a usage error rather than a guess.
+func TestRun_ParsesTheTaskID(t *testing.T) {
+	newClaimFixture(t)
+	for _, arg := range []string{"E-10", "e-10", "10"} {
+		var out bytes.Buffer
+		if err := run([]string{arg}, &out); err != nil {
+			t.Errorf("run(%q): %v", arg, err)
+			continue
+		}
+		if !strings.Contains(out.String(), "Stay focused on E-10") {
+			t.Errorf("run(%q) did not render the handoff:\n%s", arg, out.String())
+		}
 	}
-	if status != "underway" {
-		t.Errorf("task status = %q, want underway", status)
+	for _, args := range [][]string{nil, {"--task", "10"}, {"E-x"}, {"0"}, {"10", "11"}} {
+		if err := run(args, &bytes.Buffer{}); err == nil {
+			t.Errorf("run(%q): want a usage error", args)
+		}
 	}
 }
 
-// TestHandlePostToolUseSession_NonClaimYieldsNoHandoff confirms the injection is
-// scoped to the claim: other endless verbs, and unrelated commands, return "" so
-// the caller falls through to its existing PostToolUse handling.
-func TestHandlePostToolUseSession_NonClaimYieldsNoHandoff(t *testing.T) {
-	fx := newClaimFixture(t)
-	for _, cmd := range []string{
-		"endless task show E-10 --plan --db main",
-		"endless task report E-10 --db main",
-		"endless task release",
-		`git commit -m "E-10: deliver the claim handoff"`,
-		"ls -la",
-	} {
-		t.Run(cmd, func(t *testing.T) {
-			handoff, err := fx.postToolUse(cmd)
-			if err != nil {
-				t.Fatalf("handlePostToolUseSession: %v", err)
-			}
-			if handoff != "" {
-				t.Errorf("non-claim command produced a handoff\n--- handoff ---\n%s", handoff)
-			}
-		})
+// TestClaimHandoff_ChecksTheHarness pins the claim handoff's copy (E-1962).
+//
+// It has a worktree path and a project root, not a projectID/isRegistered pair,
+// so it cannot route through the hook's reportChannelOn and the check has to be
+// spelled out here. A Desktop session that claims a task would otherwise be
+// handed the reporting instructions in its handoff.
+func TestClaimHandoff_ChecksTheHarness(t *testing.T) {
+	b, err := os.ReadFile("claimhandoff.go")
+	if err != nil {
+		t.Fatalf("read claimhandoff.go: %v", err)
+	}
+	if !strings.Contains(string(b), `agentenv.Supported() && monitor.MinimizerEnabledForCwd(`) {
+		t.Error("the claim handoff's report_gate var is not harness-gated; " +
+			"a Desktop session claiming a task would be handed the reporting contract")
 	}
 }
 
@@ -202,7 +167,7 @@ func TestClaimHandoffVars_NoWorktree_YieldsNoHandoff(t *testing.T) {
 	if err := os.RemoveAll(fx.worktree); err != nil {
 		t.Fatalf("remove worktree: %v", err)
 	}
-	if got := claimHandoffContext(1, 10, claudePayload{SessionID: "sess-1"}); got != "" {
+	if got, err := Render(10); err == nil {
 		t.Errorf("expected no handoff without a worktree; got:\n%s", got)
 	}
 }
@@ -215,11 +180,10 @@ type claimFixture struct {
 	worktree string
 }
 
-// newClaimFixture builds a project root registered in a seeded DB, with the
-// `start`/`task` matcher in the project's .endless/config.json (that file is
-// where matchers.Load reads project matchers from) and a real git worktree
-// directory at the canonical path so WorktreePathForTask resolves and the branch
-// read succeeds. Task 10 is a research task so the type branch is observable.
+// newClaimFixture builds a project root registered in a seeded DB, with a real
+// git worktree directory at the canonical path so WorktreePathForTask resolves
+// and the branch read succeeds. Task 10 is a research task so the type branch
+// is observable.
 func newClaimFixture(t *testing.T) *claimFixture {
 	t.Helper()
 
@@ -227,11 +191,10 @@ func newClaimFixture(t *testing.T) *claimFixture {
 	restore := monitor.SetTestDB(db)
 	t.Cleanup(restore)
 
-	// Canonical form (E-2002): the hook normalizes the cwd it is handed and
-	// reads the project row back through ProjectPath, which resolves symlinks
-	// — so a fixture registered at the raw t.TempDir() (under /var on macOS, a
-	// symlink into /private/var) would be asserting against a spelling the
-	// product deliberately no longer emits.
+	// Canonical form (E-2002): the project row is read back through
+	// ProjectPath, which resolves symlinks — so a fixture registered at the raw
+	// t.TempDir() (under /var on macOS, a symlink into /private/var) would be
+	// asserting against a spelling the product deliberately no longer emits.
 	root, rootErr := monitor.ResolvedProjectPath(t.TempDir())
 	if rootErr != nil {
 		t.Fatalf("ResolvedProjectPath: %v", rootErr)
@@ -240,7 +203,6 @@ func newClaimFixture(t *testing.T) *claimFixture {
 	if err := os.MkdirAll(worktree, 0755); err != nil {
 		t.Fatalf("mkdir worktree: %v", err)
 	}
-	writeProjectConfig(t, root)
 	gitInitBranch(t, worktree, "task/10-claim-fixture")
 
 	mustExec := func(q string, a ...any) {
@@ -254,41 +216,8 @@ func newClaimFixture(t *testing.T) *claimFixture {
 		"INSERT INTO tasks (id, project_id, title, status, type_id) " +
 			"VALUES (10, 1, 'Investigate the thing', 'ready', 3)", // type 3 = research
 	)
-	mustExec(`INSERT INTO sessions (id, session_id, project_id, platform, state, started_at, last_activity)
-	          VALUES (1, 'sess-1', 1, 'claude', 'working', '2026-08-01T00:00:00', '2026-08-01T00:00:00')`)
 
 	return &claimFixture{db: db, root: root, worktree: worktree}
-}
-
-// postToolUse drives handlePostToolUseSession with a Bash PostToolUse payload
-// carrying cmd, and returns the claim handoff it produced (empty when none).
-func (f *claimFixture) postToolUse(cmd string) (string, error) {
-	input, err := json.Marshal(map[string]string{"command": cmd})
-	if err != nil {
-		return "", err
-	}
-	return handlePostToolUseSession(1, claudePayload{
-		EventName: "PostToolUse",
-		ToolName:  "Bash",
-		SessionID: "sess-1",
-		CWD:       f.root,
-		ToolInput: input,
-	})
-}
-
-// writeProjectConfig writes the project matchers matchers.Load reads. Only the
-// `start`/`task` entry matters here; it mirrors the shipped default pattern.
-func writeProjectConfig(t *testing.T, root string) {
-	t.Helper()
-	dir := filepath.Join(root, ".endless")
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		t.Fatalf("mkdir .endless: %v", err)
-	}
-	cfg := `{"matchers":[{"type":"start","scope":"task","method":"regex",` +
-		`"match":"endless\\s+task\\s+claim\\s+(?:[Ee]-)?(\\d+)"}]}`
-	if err := os.WriteFile(filepath.Join(dir, "config.json"), []byte(cfg), 0644); err != nil {
-		t.Fatalf("write config.json: %v", err)
-	}
 }
 
 // gitInitBranch makes dir a git repo on branch so the handoff's branch read
@@ -304,4 +233,20 @@ func gitInitBranch(t *testing.T, dir, branch string) {
 		}
 	}
 	run("init", "-q", "--initial-branch="+branch)
+}
+
+// newSchemaDB opens a fresh file-backed SQLite DB at the latest schema version.
+func newSchemaDB(t *testing.T) *sql.DB {
+	t.Helper()
+	path := filepath.Join(t.TempDir(), "endless.db")
+	db, err := sql.Open("sqlite", path)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	db.SetMaxOpenConns(1)
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("apply schema: %v", err)
+	}
+	return db
 }

@@ -627,7 +627,7 @@ yet lands outside the channel rather than silently inside it.
 One consequence worth knowing: `endless task spawn` opens a **tmux window**, so
 the session it hands off to is a terminal Claude Code one and gets the contract
 regardless of which harness ran the command. `endless task claim` renders its
-handoff in the claiming session's own hook, so that one does follow the harness.
+handoff in the claiming session's own process, so that one does follow the harness.
 
 ### Telling the minimizer how it did
 

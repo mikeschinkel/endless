@@ -5,10 +5,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/mikeschinkel/endless/internal/agentenv"
 	"github.com/mikeschinkel/endless/internal/config"
 	"github.com/mikeschinkel/endless/internal/sessionstate"
-	"github.com/mikeschinkel/endless/internal/taskstatus"
 	"github.com/mikeschinkel/go-dt"
 )
 
@@ -145,85 +143,6 @@ func collectDedupTargets(tx *sql.Tx, where string, args []any) []SessionSnapshot
 		out = append(out, scanSnapshot(rows))
 	}
 	return out
-}
-
-// stampableSession is the value to bind to a changed_by_session sub-select for
-// a task mutation this process is about to make: the session id when an AGENT is
-// making the change, nil (→ SQL NULL, suppressing nobody) when a person is.
-//
-// It is the internal/monitor spelling of the rule internal/events applies to
-// every task mutation that goes through the event executor — `Actor.Harness !=
-// ""` there, agentenv.Present() here, both resolving to the same comparison in
-// the same leaf package (E-2006). monitor cannot read an event envelope: events
-// imports monitor, so the dependency runs one way only, and these two writes
-// bypass the executor entirely.
-//
-// EXPECTED TO BE A NO-OP FOREVER, and that is the point of adding it. The only
-// caller of either write is internal/hookcmd/claude.go, and `hook claude`
-// returns before it reads stdin on an unsupported harness (E-1962) — so an
-// agent is the only thing that can reach them and an unconditional stamp is
-// right BY CONSTRUCTION. Nothing at the call site said so, which is the defect:
-// a future caller from the CLI would have inherited a stamp that silences the
-// human's own session. This states the dependency instead of leaving it to be
-// re-derived. If the gate ever does fire, the caller set changed and the notice
-// was already going to the wrong session.
-func stampableSession(sessionID string) any {
-	if !agentenv.Present() {
-		return nil
-	}
-	return sessionID
-}
-
-// StartWorkSession binds the session AND marks the task as underway.
-// Defense-in-depth mirror of Python claim_item's emitted events for the
-// post-bash `endless task claim` detector — runs in the hook so the next
-// hook invocation sees a consistent DB even if the event executor hasn't
-// processed task.claimed / task.status_changed yet.
-func StartWorkSession(sessionID string, projectID int64, taskID int64) error {
-	snap := SnapshotSession(sessionID)
-	if err := BindSessionToTask(sessionID, projectID, taskID); err != nil {
-		return err
-	}
-	newTaskID := taskID
-	LogSessionTxn(SessionTxn{
-		SessionGUID: sessionID,
-		OldState:    snap.State,
-		NewState:    sessionstate.Working, // what BindSessionToTask just wrote
-		OldTaskID:   snap.TaskID,
-		NewTaskID:   &newTaskID,
-		Reason:      SessionLogClaimEvent,
-		Caller:      "monitor.StartWorkSession",
-	})
-	db, err := DB()
-	if err != nil {
-		return err
-	}
-	_, err = db.Exec(
-		// E-1845: `untriaged` joins the promotable set. Claiming a task IS a
-		// person deciding to work on it, which moots the triage question — and
-		// without this the claim would bind the session while silently leaving
-		// the status at `untriaged`, so the task would read as untouched while
-		// someone was actively on it.
-		//
-		// E-1889: `revisit` joins it for the same reason. Every reopen route
-		// now lands `revisit`, so a reopened task would otherwise bind a
-		// session while still reading as not-started. This is the claim
-		// path only — the background-session gate (task_cmd's `ready`-only
-		// check) is separate and unchanged. (E-1968 retired the route that
-		// motivated this, `task spawn --reopen`; the promotion still matters
-		// for `task claim` on a task reopened any other way.)
-		//
-		// changed_by_session (E-1917): this UPDATE does not go through the
-		// event executor, so it stamps its own actor. Without it the claim would
-		// inherit whichever session last touched the task and notify the wrong
-		// people about a status change this session caused. Gated on an agent
-		// actually running this process — see stampableSession (E-2006).
-		"UPDATE tasks SET status='underway', "+
-			"changed_by_session=(SELECT id FROM sessions WHERE session_id=?) "+
-			"WHERE id=? AND status IN ("+taskstatus.SQLList(taskstatus.ClaimPromotes)+")",
-		stampableSession(sessionID), taskID,
-	)
-	return err
 }
 
 // InitSession creates a session row on SessionStart.
@@ -478,44 +397,6 @@ func EnsureClaudeSessionID(sessionID, process string, projectID int64) (int64, e
 		return 0, fmt.Errorf("lookup sessions.id for %s: %w", sessionID, err)
 	}
 	return id, nil
-}
-
-// CompleteTask marks a task as confirmed and idles the session.
-//
-// E-1968 / ED-1560: it no longer clears task_id. The session that
-// confirmed the task is still the session that WORKED it, and that pointer is
-// the only way back to its transcript — `session goto E-<id> --resume` resolves
-// through it. Clearing it on completion made a finished task's session
-// unfindable by task ref, and reported it as one that never claimed a task.
-// The column is write-once: set at claim, never cleared, never repointed.
-func CompleteTask(sessionID string, taskID int64) error {
-	db, err := DB()
-	if err != nil {
-		return err
-	}
-
-	now := time.Now().UTC().Format("2006-01-02T15:04:05")
-
-	// Mark task as confirmed
-	_, err = db.Exec(
-		// changed_by_session (E-1917): stamped here for the same reason as
-		// StartWorkSession — this path bypasses the event executor's stamp — and
-		// gated the same way, see stampableSession (E-2006).
-		"UPDATE tasks SET status='confirmed', completed_at=?, "+
-			"changed_by_session=(SELECT id FROM sessions WHERE session_id=?) "+
-			"WHERE id=?",
-		now, stampableSession(sessionID), taskID,
-	)
-	if err != nil {
-		return err
-	}
-
-	// Idle the session; the task binding stays (see the doc comment).
-	_, err = db.Exec(
-		"UPDATE sessions SET state=?, last_activity=? WHERE session_id=?",
-		sessionstate.Idle, now, sessionID,
-	)
-	return err
 }
 
 // IdleSession marks a session as idle (between turns, still alive).

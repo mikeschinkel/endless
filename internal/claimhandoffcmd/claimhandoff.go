@@ -1,19 +1,6 @@
-package hookcmd
-
-import (
-	"database/sql"
-	"fmt"
-	"log"
-	"os/exec"
-	"sort"
-	"strings"
-
-	"github.com/mikeschinkel/endless/internal/monitor"
-	"github.com/mikeschinkel/endless/internal/taskstatus"
-	"github.com/mikeschinkel/endless/internal/templatecmd"
-)
-
-// E-1822 — deliver the type handoff on a claim into an already-running session.
+// Package claimhandoffcmd implements `endless-go claim-handoff`: it renders the
+// per-type handoff for a task just claimed into an already-running session
+// (E-1822).
 //
 // A spawned session is born with its per-type handoff: `endless task spawn`
 // pre-claims the task and passes the rendered `handoff/<type>` text to the new
@@ -22,18 +9,58 @@ import (
 // inference — which is how one session ends up working two tasks, editing the
 // main checkout, or writing to the sandbox DB instead of the main database.
 //
-// The PostToolUse hook closes that gap: the Bash call that ran `task claim` is
-// itself the signal, so the claim handoff rides back on that tool result as
-// `additionalContext` (the E-1803 mechanism).
+// `endless task claim` closes that gap by printing this render when an agent
+// ran the claim, so the handoff arrives in the claim's own tool result.
 //
-// Retrofit-vs-spawn needs no flag. `endless task spawn` claims the task in the
-// *spawning* process, before the target session exists, so a claim never runs as
-// a PostToolUse inside a spawned session — a PostToolUse `endless task claim` is
-// definitionally the live-session retrofit.
-//
-// Best-effort throughout: every failure path returns "" so a hook that cannot
-// render the handoff still lets the claim itself succeed. The claim's own stdout
-// (which already prints the `/cd` line) remains the floor.
+// It used to arrive from the PostToolUse hook, which regex-matched the Bash
+// command text for a claim (E-2177). That fired on any heredoc, quoted argument
+// or commit message that merely NAMED a claim, and told the agent to switch to
+// whatever task the text named. Only the command that performed the claim knows
+// it did; so the command reports it, and this package is the renderer it calls.
+// Kept in Go so E-1063's port inherits it rather than re-deriving it.
+package claimhandoffcmd
+
+import (
+	"database/sql"
+	"errors"
+	"fmt"
+	"io"
+	"os"
+	"os/exec"
+	"sort"
+	"strconv"
+	"strings"
+
+	"github.com/mikeschinkel/endless/internal/agentenv"
+	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/taskstatus"
+	"github.com/mikeschinkel/endless/internal/templatecmd"
+)
+
+// Run is the `endless-go claim-handoff <task-id>` entry point: it renders the
+// claim handoff for the task to stdout. The id may carry an `E-` prefix.
+func Run(args []string) {
+	if err := run(args, os.Stdout); err != nil {
+		fmt.Fprintf(os.Stderr, "endless-go claim-handoff: %v\n", err)
+		os.Exit(1)
+	}
+}
+
+func run(args []string, stdout io.Writer) error {
+	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
+		return errors.New("usage: endless-go claim-handoff <task-id>")
+	}
+	taskID, err := strconv.ParseInt(strings.TrimPrefix(strings.ToUpper(args[0]), "E-"), 10, 64)
+	if err != nil || taskID <= 0 {
+		return fmt.Errorf("invalid task id %q", args[0])
+	}
+	out, err := Render(taskID)
+	if err != nil {
+		return err
+	}
+	_, err = fmt.Fprintln(stdout, out)
+	return err
+}
 
 // handoffTypes are the task types with a per-type handoff. Anything else — an
 // absent or unrecognized type — renders as `todo`, matching the Python spawn
@@ -63,33 +90,42 @@ func childrenStateBuckets() []string {
 	return append(taskstatus.Get(taskstatus.ChildrenStateOrder), terminalBucket)
 }
 
-// claimHandoffContext renders the claim handoff for a task just claimed into a
-// live session, or "" when it cannot be produced. Never fatal: the caller folds
-// a non-empty result into PostToolUse additionalContext and ignores an empty one.
-//
-// Subagents are skipped — an Agent-tool subagent shares its parent's cwd and
-// represents tool use, not a session taking ownership of a task, so injecting a
-// full session handoff into it would be noise aimed at the wrong reader.
-func claimHandoffContext(projectID, taskID int64, payload claudePayload) string {
-	if payload.AgentID != "" {
-		return ""
+// Render returns the claim handoff for a task that has just been claimed. It
+// fails when the task has no worktree — the claim creates one, so a missing one
+// means the claim did not get that far, and a handoff pointing at a nonexistent
+// directory would be worse than none.
+func Render(taskID int64) (string, error) {
+	projectID, err := taskProjectID(taskID)
+	if err != nil {
+		return "", err
 	}
 	vars, err := claimHandoffVars(projectID, taskID)
 	if err != nil {
-		log.Printf("claim handoff vars for task %d: %v", taskID, err)
-		return ""
+		return "", err
 	}
 	projectRoot, err := monitor.ProjectPath(projectID)
 	if err != nil {
-		log.Printf("claim handoff project path for %d: %v", projectID, err)
-		return ""
+		return "", fmt.Errorf("project path for %d: %w", projectID, err)
 	}
 	out, err := templatecmd.Render(projectRoot, "handoff/claim", vars)
 	if err != nil {
-		log.Printf("claim handoff render for task %d: %v", taskID, err)
-		return ""
+		return "", fmt.Errorf("render claim handoff for task %d: %w", taskID, err)
 	}
-	return strings.TrimSpace(out)
+	return strings.TrimSpace(out), nil
+}
+
+// taskProjectID reads the project a task belongs to.
+func taskProjectID(taskID int64) (int64, error) {
+	db, err := monitor.DB()
+	if err != nil {
+		return 0, fmt.Errorf("open db: %w", err)
+	}
+	var projectID int64
+	err = db.QueryRow("SELECT project_id FROM live_tasks WHERE id = ?", taskID).Scan(&projectID)
+	if err != nil {
+		return 0, fmt.Errorf("load task %d: %w", taskID, err)
+	}
+	return projectID, nil
 }
 
 // claimHandoffVars assembles the same var map the Python spawn path builds in
@@ -157,13 +193,13 @@ func claimHandoffVars(projectID, taskID int64) (map[string]any, error) {
 		// per-turn model round trip that nothing enforces and nothing reads.
 		//
 		// E-1962: same for an unsupported agent harness. This handoff is rendered
-		// by the claiming session's own hook, so the environment read here IS
-		// that session's — a Desktop session claiming a task must not be handed
+		// under the claiming session's own `task claim`, so the environment read
+		// here IS that session's — a Desktop session claiming a task must not be handed
 		// a contract its Stop hook will not enforce. (Contrast the Python spawn
 		// handoff, which stays harness-agnostic on purpose: `task spawn` opens a
 		// tmux window, so the session it describes is a terminal Claude Code one
 		// by construction, whatever harness ran the command.)
-		"report_gate": supportedAgent() && monitor.MinimizerEnabledForCwd(worktreePath, projectRoot),
+		"report_gate": agentenv.Supported() && monitor.MinimizerEnabledForCwd(worktreePath, projectRoot),
 	}, nil
 }
 

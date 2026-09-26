@@ -549,7 +549,7 @@ To change what every spawned session is told, edit the template — see [Customi
 
 ### Claiming into a session that's already running
 
-Spawn is not the only way a session picks up a task. When you run `endless task claim <id>` from inside a session that has been going for a while — a retrofit rather than a fresh dispatch — you get the same type handoff, delivered as context folded against that command's own output. You don't ask for it and there is nothing to render by hand.
+Spawn is not the only way a session picks up a task. When you run `endless task claim <id>` from inside a session that has been going for a while — a retrofit rather than a fresh dispatch — you get the same type handoff, printed by the claim itself at the end of its output. You don't ask for it and there is nothing to render by hand. It is printed only when an agent ran the claim — a person claiming from a shell gets the next step and nothing more — and never for `--unattended`, which binds no session.
 
 It differs from the spawn text only in its arrival framing, because that is the only thing that actually differs: a spawned session is born inside the task's worktree, whereas a claimed-in one is still wherever it was and has to `/cd` there (the cwd gate refuses write tools until it does), and it arrives carrying planning that belongs in the task's `--plan`, not in the transcript. Everything else — which worktree, the `--db main` routing that implies, one-session-one-task, and the per-type deliverable and terminal-status rules — is rendered from the shared `handoff/_mechanics.tmpl` partials that the per-type spawn templates also pull from, so the two renderings cannot drift.
 

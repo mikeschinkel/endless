@@ -106,13 +106,13 @@ func TestWriteContextInjection_Stdout(t *testing.T) {
 }
 
 // TestPostToolUseConstructors_ShareTheContractShape guards the collapse of the
-// former postToolUseResponse into the shared type: the two PostToolUse
-// injections that were already arriving (E-1803's report reinforcement and
-// E-1822's claim handoff) must keep emitting exactly what they did before.
+// former postToolUseResponse into the shared type: the PostToolUse injection
+// that was already arriving (E-1803's report reinforcement) must keep emitting
+// exactly what it did before. E-1822's claim handoff rode here too until E-2177
+// moved it onto `endless task claim`'s own output.
 func TestPostToolUseConstructors_ShareTheContractShape(t *testing.T) {
 	cases := map[string]contextInjection{
-		"reportRelay":  reportRelayResponse(),
-		"claimHandoff": claimHandoffResponse("HANDOFF"),
+		"reportRelay": reportRelayResponse(),
 	}
 	for name, resp := range cases {
 		t.Run(name, func(t *testing.T) {

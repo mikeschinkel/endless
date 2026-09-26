@@ -4509,7 +4509,10 @@ def claim_item(item_id: int, unattended: bool = False, force: bool = False):
         )
 
     _, proj_name = _resolve_project(None)
-    target_session = _resolve_session_id_with_prompt(
+    # `--unattended` binds nothing, so it resolves nothing (E-2177). It used to
+    # resolve and bind like any other claim, which from a Claude session's Bash
+    # tool bound that session anyway — the one thing the flag exists to refuse.
+    target_session = None if unattended else _resolve_session_id_with_prompt(
         project_name=proj_name,
         prompt_verb="claimed for",
     )
@@ -4588,6 +4591,48 @@ def claim_item(item_id: int, unattended: bool = False, force: bool = False):
         unattended=unattended or force,
         bound_session=target_session,
     )
+    if wt_path and target_session is not None and not (unattended or force):
+        _echo_claim_handoff(item_id)
+
+
+def _echo_claim_handoff(item_id: int) -> None:
+    """Print the claim handoff when an agent ran this claim (E-1822, E-2177).
+
+    A session that claims a task mid-flight was not spawned for it, so it never
+    received the per-type handoff a spawned session is born with. Printing it
+    here puts it in the claim's own tool result.
+
+    The PostToolUse hook used to deliver it by regex-matching the Bash command
+    for a claim, which fired on any heredoc, quoted argument or commit message
+    that merely NAMED one. Only this command knows a claim happened.
+
+    Agents only, per `agent_env.present()`: a person at a shell gets the next
+    step above and nothing more. Not reached by `--unattended` (no session is
+    bound) nor by `task spawn`, which claims through `_perform_claim_work` and
+    delivers the handoff as the new session's launch prompt instead.
+
+    Best-effort: the claim has already succeeded, and the `/cd` line above is
+    the floor. A render failure is reported on stderr, never raised.
+    """
+    from endless import agent_env
+    from endless.event_bridge import _resolve_endless_go
+
+    if not agent_env.present():
+        return
+    result = subprocess.run(
+        [_resolve_endless_go(), *config.go_db_context_args(),
+         "claim-handoff", f"E-{item_id}"],
+        capture_output=True, text=True, check=False,
+    )
+    if result.returncode != 0:
+        click.echo(
+            f"note: could not render the claim handoff for E-{item_id}: "
+            f"{result.stderr.strip()}",
+            err=True,
+        )
+        return
+    click.echo("")
+    click.echo(result.stdout.rstrip("\n"))
 
 
 def _echo_claim_next_step(
@@ -6218,8 +6263,8 @@ def _children_state(parent_id: int) -> str:
     Direct children by task_tree.effective_parent_id (E-2161): the breakdown
     describes what the claiming session will find under the epic, which is where
     those tasks render, not what parent_id literally says. The Go twin
-    (internal/hookcmd/claim_handoff.go) counts the same way — the two render the
-    same line and must not disagree.
+    (internal/claimhandoffcmd/claimhandoff.go) counts the same way — the two
+    render the same line and must not disagree.
     """
     rows = db.query(
         "SELECT status, count(*) AS n FROM task_tree WHERE effective_parent_id = ? "

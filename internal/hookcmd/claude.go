@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/docmirror"
-	"github.com/mikeschinkel/endless/internal/matchers"
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/sessionstate"
 )
@@ -724,6 +723,13 @@ func buildTaskContextInjection(projectID int64, payload claudePayload) (string, 
 	return context, nil
 }
 
+// PARKED (E-2177): the report channel this detector and reportRelayInstruction
+// serve is switched off — `minimizer.enabled: false` in project config — pending
+// E-2042 ("Make the reply minimizer trustworthy enough to leave enabled"). Its
+// implementation was found unworkable and will be revisited before it is
+// enabled again. Do not design around this detector's text matching, and do not
+// "fix" it, until then.
+//
 // taskReportRe matches a Bash command that RUNS `endless task report` (E-1803
 // Arm 1). It anchors to a command position — string start, line start, or right
 // after a `;` / `&` / `|` separator — with an optional path prefix
@@ -784,29 +790,13 @@ func reportRendered(sessionID string) bool {
 	return err == nil && found
 }
 
-// claimHandoffResponse wraps a rendered claim handoff (E-1822) in the
-// PostToolUse response shape. Pure (no I/O) so the shape is unit-testable
-// independent of the rendering.
-func claimHandoffResponse(handoff string) contextInjection {
-	return injectContext("PostToolUse", handoff)
-}
-
+// handlePostToolUse never infers a state change from the TEXT of a Bash command
+// (E-2177). It used to regex the whole command string for a claim or a confirm
+// and perform the write itself, so a heredoc or commit message that merely
+// named one bound a session into a write-once column or confirmed a task. The
+// CLI and the event executor own those writes; `endless task claim` prints its
+// own handoff.
 func handlePostToolUse(projectID int64, isRegistered bool, payload claudePayload) error {
-	// Detect endless task claim/confirm commands and update session state
-	claimHandoff, err := handlePostToolUseSession(projectID, payload)
-	if err != nil {
-		return dbWriteFailed(fmt.Errorf("post tool use session: %w", err))
-	}
-
-	// E-1822: a claim into an already-running session gets the per-type handoff
-	// a spawned session is born with, folded against the claim's own tool
-	// result. Takes precedence over the report reinforcement below — only one
-	// JSON object may go to stdout, and a compound command that both claims and
-	// reports is the claim's turn.
-	if claimHandoff != "" {
-		return json.NewEncoder(os.Stdout).Encode(claimHandoffResponse(claimHandoff))
-	}
-
 	// E-1803 Arm 1: reinforce the report channel right after a run that produced
 	// something to relay.
 	//
@@ -886,15 +876,6 @@ func extractFilePath(toolName string, raw json.RawMessage) string {
 	}
 	return probe.NotebookPath
 }
-
-// Action regexes are loaded from matchers (config files) per call. Cache
-// per process to avoid repeating the read for each detection in a hook
-// invocation. Per E-970.
-const (
-	actionStart   = "start"
-	actionConfirm = "confirm"
-	scopeTask     = "task"
-)
 
 func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload) error {
 	// E-1226: refuse `sqlite3 .endless/...` regardless of registration —
@@ -1126,7 +1107,18 @@ func blockToolUse(message string) {
 // blocked until the epic leaves `revisit` and the gate auto-clears. The verb
 // only ever existed to carry an unbind that ED-1560's write-once
 // `task_id` forbids.
-var revisitClearVerbRe = regexp.MustCompile(`(?i)\bendless\s+task\s+continue\b`)
+//
+// Anchored at cmdPos since E-2177, so a quoted `endless task continue` — an
+// echo, a commit message — no longer lets one tool call past the gate. The one
+// new miss is `bash -c "endless task continue"`: the gate blocks it and the
+// agent runs the command plainly, which is the safe direction.
+var revisitClearVerbRe = regexp.MustCompile(`(?i)` + cmdPos + `\bendless\s+task\s+continue\b`)
+
+// clearsRevisitGate reports whether cmd runs the revisit gate's clearing verb,
+// ignoring heredoc bodies (E-2177).
+func clearsRevisitGate(cmd string) bool {
+	return revisitClearVerbRe.MatchString(stripHeredocs(cmd))
+}
 
 // enforceRevisitGate intercepts a session whose claimed task descends from an
 // epic currently in status='revisit' (E-1542). On the session's next tool call
@@ -1153,7 +1145,7 @@ func revisitGateDecision(payload claudePayload) (instruction string, block bool)
 	if payload.ToolName == "Bash" {
 		var input toolInputBash
 		if err := json.Unmarshal(payload.ToolInput, &input); err == nil &&
-			revisitClearVerbRe.MatchString(input.Command) {
+			clearsRevisitGate(input.Command) {
 			return "", false
 		}
 	}
@@ -1227,59 +1219,6 @@ func blockToolUseWithDecision(instruction string) {
 	os.Exit(0)
 }
 
-// handlePostToolUseSession updates session state from an `endless task ...` Bash
-// call. It returns the rendered claim handoff (E-1822) when this call was a
-// claim into an already-running session, and "" otherwise; the caller decides
-// whether to emit it as PostToolUse additionalContext.
-func handlePostToolUseSession(projectID int64, payload claudePayload) (string, error) {
-	if payload.ToolName != "Bash" {
-		return "", nil
-	}
-
-	var input toolInputBash
-	if err := json.Unmarshal(payload.ToolInput, &input); err != nil {
-		return "", nil
-	}
-
-	all, err := matchers.Load(projectID)
-	if err != nil {
-		log.Printf("loading matchers: %v", err)
-		return "", nil
-	}
-
-	// Detect: endless task claim <id>
-	if re := matchers.ActionRegex(all, actionStart, scopeTask); re != nil {
-		if m := re.FindStringSubmatch(input.Command); m != nil {
-			taskID, err := strconv.ParseInt(m[1], 10, 64)
-			if err != nil {
-				return "", nil
-			}
-			if err := monitor.StartWorkSession(payload.SessionID, projectID, taskID); err != nil {
-				return "", fmt.Errorf("starting work session: %w", err)
-			}
-			// A claim reaching PostToolUse is definitionally the retrofit case:
-			// `task spawn` claims before the target session exists, so its claim
-			// never runs as a tool call inside the spawned session.
-			return claimHandoffContext(projectID, taskID, payload), nil
-		}
-	}
-
-	// Detect: endless task confirm <id>
-	if re := matchers.ActionRegex(all, actionConfirm, scopeTask); re != nil {
-		if m := re.FindStringSubmatch(input.Command); m != nil {
-			taskID, err := strconv.ParseInt(m[1], 10, 64)
-			if err == nil {
-				if err := monitor.CompleteTask(payload.SessionID, taskID); err != nil {
-					return "", fmt.Errorf("confirming task: %w", err)
-				}
-			}
-			return "", nil
-		}
-	}
-
-	return "", nil
-}
-
 // latestPlanFile returns the most recently modified *.md under ~/.claude/plans,
 // or "" when the directory is unreadable or holds no plan. Claude writes the
 // accepted plan there, so the newest entry is the one ExitPlanMode just fired
@@ -1339,10 +1278,18 @@ func handleExitPlanMode(projectID int64, payload claudePayload) error {
 	))
 }
 
-// gitCommitRe matches common forms of 'git commit' at the start of a command:
-// 'git commit', 'git commit -m ...', '  git commit '. Excludes 'git commit-tree'
-// (the trailing boundary requires whitespace or end-of-string).
-var gitCommitRe = regexp.MustCompile(`^\s*git\s+commit($|\s)`)
+// gitCommitRe matches `git commit` in ONE command of a Bash call (see
+// splitCommands), capturing the path of an optional `git -C <path>`. The prefix
+// may not cross a quote, which is cmdPos's rule applied per command: it admits
+// `GIT_EDITOR=true git commit` and refuses `echo "git commit"`. Excludes
+// `git commit-tree` (the trailing boundary requires whitespace or end).
+var gitCommitRe = regexp.MustCompile(`^[^'"]*\bgit\s+(?:-C\s+(` + shellWord + `)\s+)?commit(?:\s|$)`)
+
+// cdRe matches a command that is exactly `cd [path]`, capturing the path.
+var cdRe = regexp.MustCompile(`^\s*cd(?:\s+(` + shellWord + `))?\s*$`)
+
+// shellWord is one shell word: single-quoted, double-quoted, or bare.
+const shellWord = `'[^']*'|"[^"]*"|[^\s'";&|]+`
 
 // The recognizer for a DB-owned document mirror lives in internal/docmirror —
 // the one place the path convention is spelled. This gate was E-1202's, written
@@ -1357,11 +1304,16 @@ var gitCommitRe = regexp.MustCompile(`^\s*git\s+commit($|\s)`)
 // session's own `verify.sh` writable.
 
 // sqliteEndlessRe matches sqlite3 invocations targeting any path inside
-// a .endless/ directory. The character class [^|;&] stops the match at
+// a .endless/ directory. The character class [^|;&\n] stops the match at
 // command-pipeline boundaries; [ /] before \.endless/ ensures the
 // pattern is a path component (avoids false-positive on names like
 // my.endless/x). Case-insensitive (?i) catches uppercase variants.
-var sqliteEndlessRe = regexp.MustCompile(`(?i)sqlite3[^|;&]*[ /]\.endless/`)
+//
+// Anchored at cmdPos since E-2177. Unanchored, it refused plain MENTIONS — a
+// commit message saying never to point the sqlite3 CLI at a .endless/ database
+// was refused as though it were one. A leading `cd <path> &&` still matches,
+// because `&&` is a command boundary.
+var sqliteEndlessRe = regexp.MustCompile(`(?i)` + cmdPos + `\bsqlite3[^|;&\n]*[ /]\.endless/`)
 
 // cmdPos anchors a match to a COMMAND position: the start of the command, or
 // just after a pipeline separator or newline, followed by any run of characters
@@ -1402,6 +1354,19 @@ var worktreeRemovalRes = []*regexp.Regexp{
 	regexp.MustCompile(`(?i)` + cmdPos + `\brm\s+[^'"|;&\n]*-[a-z]*r[a-z]*\s[^'"|;&\n]*\.endless/worktrees/[^\s/'"|;&]+/?(?:$|[\s'"|;&])`),
 }
 
+// removesWorktree reports whether cmd runs any route in worktreeRemovalRes.
+// Heredoc bodies are stripped first: a line of documentation that begins with a
+// removal command is not one (E-2177).
+func removesWorktree(cmd string) bool {
+	cmd = stripHeredocs(cmd)
+	for _, re := range worktreeRemovalRes {
+		if re.MatchString(cmd) {
+			return true
+		}
+	}
+	return false
+}
+
 // blockWorktreeRemovalIfApplicable refuses any Bash call that would remove a
 // worktree. Unlike every other gate here it is CATEGORICAL: it does not consult
 // cwd, task state, or registration, and it names no bypass.
@@ -1430,14 +1395,7 @@ func blockWorktreeRemovalIfApplicable(payload claudePayload) {
 	if err := json.Unmarshal(payload.ToolInput, &input); err != nil {
 		return
 	}
-	matched := false
-	for _, re := range worktreeRemovalRes {
-		if re.MatchString(input.Command) {
-			matched = true
-			break
-		}
-	}
-	if !matched {
+	if !removesWorktree(input.Command) {
 		return
 	}
 	blockToolUse(`BLOCKED: refusing to remove a worktree.
@@ -1461,6 +1419,12 @@ If removal genuinely looks warranted, say so once and stop. Whoever is running
 this session removes it themselves; there is no flag here that lets you do it.`)
 }
 
+// sqliteAgainstEndless reports whether cmd runs sqlite3 against a path inside
+// a .endless/ directory, ignoring heredoc bodies (E-2177).
+func sqliteAgainstEndless(cmd string) bool {
+	return sqliteEndlessRe.MatchString(stripHeredocs(cmd))
+}
+
 // blockSqliteAgainstEndlessIfApplicable refuses Bash calls that invoke
 // sqlite3 against any path inside a .endless/ directory. Such paths
 // rarely exist, and sqlite3 silently creates 0-byte ghost DB files when
@@ -1473,7 +1437,7 @@ func blockSqliteAgainstEndlessIfApplicable(payload claudePayload) {
 	if err := json.Unmarshal(payload.ToolInput, &input); err != nil {
 		return
 	}
-	if !sqliteEndlessRe.MatchString(input.Command) {
+	if !sqliteAgainstEndless(input.Command) {
 		return
 	}
 	blockToolUse(
@@ -1488,6 +1452,130 @@ func blockSqliteAgainstEndlessIfApplicable(payload claudePayload) {
 	)
 }
 
+// commitRunsOnMain reports whether cmd runs `git commit` in main's working
+// tree outside an active merge. cwd is the session's working directory.
+//
+// It judges the directory the commit RUNS in (E-2177), not the session's cwd.
+// Until then the match was anchored to the start of the whole command, so
+// `cd <path> && git commit` — the form an agent uses most — was never examined.
+// Widening the match alone would have been worse: judged against the session's
+// cwd it would refuse a legitimate `cd <worktree> && git commit` from a session
+// sitting in main, and still miss `cd <main> && git commit` from one sitting in
+// a worktree.
+func commitRunsOnMain(cmd, cwd string) bool {
+	dir, ok := commitDir(cmd, cwd)
+	if !ok || !filepath.IsAbs(dir) {
+		return false
+	}
+	inMain, err := isInMainCheckout(dir)
+	if err != nil || !inMain {
+		// Not a git repo, git unavailable, or in a worktree — allow.
+		return false
+	}
+	// Merge in progress; the merge commit is part of completing the merge.
+	return !isInActiveMerge(dir)
+}
+
+// commitDir returns the directory the first `git commit` in cmd runs in, and
+// whether cmd commits at all. It starts at cwd, applies each `cd` that runs
+// before the commit, in order, then the commit's own `git -C <path>`. Relative
+// paths resolve against the directory reached so far; `~` expands.
+//
+// Heredoc bodies are stripped first, and each command is matched on its own, so
+// a commit named in a quoted argument or a heredoc is not a commit.
+//
+// A `cd` made in an EARLIER Bash call is not in this command's text, and need
+// not be: the payload's cwd follows the shell's persisted directory (observed
+// 2026-09-26 — after `cd internal` in one call, the next call's recorded cwd was
+// `<worktree>/internal`).
+func commitDir(cmd, cwd string) (string, bool) {
+	dir := cwd
+	for _, c := range splitCommands(stripHeredocs(cmd)) {
+		if m := gitCommitRe.FindStringSubmatch(c); m != nil {
+			if m[1] != "" {
+				dir = resolveDir(dir, unquoteWord(m[1]))
+			}
+			return dir, true
+		}
+		if m := cdRe.FindStringSubmatch(c); m != nil {
+			target := unquoteWord(m[1])
+			switch target {
+			case "-":
+				// The previous directory is not knowable from here; keep ours.
+			case "":
+				dir = resolveDir(dir, "~")
+			default:
+				dir = resolveDir(dir, target)
+			}
+		}
+	}
+	return "", false
+}
+
+// splitCommands splits a Bash command at its unquoted command separators —
+// `;`, `&`, `|` and newline — dropping empty pieces, so `a && b` yields a and b.
+// Quotes and backslash escapes are honored so a separator inside a commit
+// message does not split it.
+func splitCommands(cmd string) []string {
+	var (
+		out   []string
+		cur   strings.Builder
+		quote rune
+		esc   bool
+	)
+	flush := func() {
+		if s := strings.TrimSpace(cur.String()); s != "" {
+			out = append(out, s)
+		}
+		cur.Reset()
+	}
+	for _, r := range cmd {
+		switch {
+		case esc:
+			esc = false
+		case r == '\\' && quote != '\'':
+			esc = true
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			}
+		case r == '\'' || r == '"':
+			quote = r
+		case r == ';' || r == '&' || r == '|' || r == '\n':
+			flush()
+			continue
+		}
+		cur.WriteRune(r)
+	}
+	flush()
+	return out
+}
+
+// unquoteWord strips one layer of matching single or double quotes.
+func unquoteWord(w string) string {
+	if len(w) >= 2 && (w[0] == '\'' || w[0] == '"') && w[len(w)-1] == w[0] {
+		return w[1 : len(w)-1]
+	}
+	return w
+}
+
+// resolveDir resolves p against base, expanding a leading `~`. A relative p
+// against an empty base stays relative, which commitRunsOnMain treats as
+// unknown.
+func resolveDir(base, p string) string {
+	if p == "~" || strings.HasPrefix(p, "~/") {
+		home, err := os.UserHomeDir()
+		if err != nil {
+			return ""
+		}
+		p = filepath.Join(home, strings.TrimPrefix(p, "~"))
+	}
+	if filepath.IsAbs(p) || base == "" {
+		return filepath.Clean(p)
+	}
+	return filepath.Join(base, p)
+}
+
 // blockCommitOnMainIfApplicable inspects a Bash tool call. If it's a
 // 'git commit' invoked from main's working tree (not a worktree, not
 // during an active merge), block with an actionable message. Otherwise
@@ -1497,19 +1585,7 @@ func blockCommitOnMainIfApplicable(payload claudePayload) {
 	if err := json.Unmarshal(payload.ToolInput, &input); err != nil {
 		return
 	}
-	if !gitCommitRe.MatchString(input.Command) {
-		return
-	}
-	if payload.CWD == "" {
-		return
-	}
-	inMain, err := isInMainCheckout(payload.CWD)
-	if err != nil || !inMain {
-		// Not a git repo, git unavailable, or in a worktree — allow.
-		return
-	}
-	if isInActiveMerge(payload.CWD) {
-		// Merge in progress; the merge commit is part of completing the merge.
+	if !commitRunsOnMain(input.Command, payload.CWD) {
 		return
 	}
 

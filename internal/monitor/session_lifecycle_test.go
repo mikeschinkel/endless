@@ -12,7 +12,6 @@ import (
 	"github.com/mikeschinkel/go-cfgstore"
 
 	"github.com/mikeschinkel/endless/internal/sessionstate"
-	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
 
 // init wires cfgstore's package-global logger so GetTrackingMode tests
@@ -178,69 +177,6 @@ func TestBindSessionToTask_EmptyPaneDoesNotStompProcess(t *testing.T) {
 	}
 }
 
-// TestStartWorkSession_PromotesEligibleStatus pins the underway
-// transition: tasks in untriaged/unplanned/ready/blocked/revisit flip to
-// underway as part of the defense-in-depth mirror of claim_item events.
-//
-// `revisit` is in the set per E-1889: every reopen route now lands there, so
-// without it `task spawn --reopen` would bind a session to a task that still
-// reads as not-started.
-func TestStartWorkSession_PromotesEligibleStatus(t *testing.T) {
-	db := withTestDB(t)
-	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
-	// Walked from the registry rather than hand-listed: ClaimPromotes IS the
-	// set this helper's WHERE clause is built from, so a status added to (or
-	// removed from) the group is covered here with no edit. E-2018 removed
-	// `blocked`, which a hand-written list would have kept asserting.
-	type promotes struct {
-		taskID int64
-		status string
-	}
-	var cases []promotes
-	for i, status := range taskstatus.Get(taskstatus.ClaimPromotes) {
-		cases = append(cases, promotes{taskID: int64(i + 1), status: status})
-	}
-	for _, c := range cases {
-		seedTask(t, db, c.taskID, 1, "task", c.status)
-	}
-	t.Setenv("TMUX_PANE", "%5")
-
-	for _, c := range cases {
-		sid := "sess-" + c.status
-		if err := StartWorkSession(sid, 1, c.taskID); err != nil {
-			t.Fatalf("StartWorkSession(%s): %v", c.status, err)
-		}
-		if got := taskStatus(t, db, c.taskID); got != "underway" {
-			t.Errorf("from %s: task status = %q, want underway", c.status, got)
-		}
-	}
-}
-
-// TestStartWorkSession_DoesNotDemoteIneligibleStatus pins the WHERE
-// clause: tasks in statuses outside taskstatus.ClaimPromotes (e.g.
-// underway, confirmed) are left alone — the helper must not stomp a
-// task already past the entry gates.
-func TestStartWorkSession_DoesNotDemoteIneligibleStatus(t *testing.T) {
-	db := withTestDB(t)
-	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
-	seedTask(t, db, 50, 1, "already in progress", "underway")
-	seedTask(t, db, 60, 1, "already confirmed", "confirmed")
-	t.Setenv("TMUX_PANE", "%5")
-
-	if err := StartWorkSession("sess-A", 1, 50); err != nil {
-		t.Fatalf("StartWorkSession 50: %v", err)
-	}
-	if got := taskStatus(t, db, 50); got != "underway" {
-		t.Errorf("underway task became %q", got)
-	}
-	if err := StartWorkSession("sess-B", 1, 60); err != nil {
-		t.Fatalf("StartWorkSession 60: %v", err)
-	}
-	if got := taskStatus(t, db, 60); got != "confirmed" {
-		t.Errorf("confirmed task became %q (should be untouched)", got)
-	}
-}
-
 // TestInitSession_InsertCreatesIdle pins the SessionStart shape: first call
 // creates the row in state='idle'.
 //
@@ -328,58 +264,6 @@ func TestGetActiveSession_MissingReturnsError(t *testing.T) {
 	}
 }
 
-// TestCompleteTask_FlipsTaskAndIdlesSession pins the two-step write: the task
-// moves to 'confirmed' and the session goes state='idle'. Per E-1968 /
-// ED-1560 the binding SURVIVES — the session that confirmed the task is the
-// session that worked it, and task_id is the only route back to its
-// transcript (`session goto E-<id> --resume` resolves through it).
-func TestCompleteTask_FlipsTaskAndIdlesSession(t *testing.T) {
-	db := withTestDB(t)
-	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
-	seedTask(t, db, 42, 1, "test task", "ready")
-	t.Setenv("TMUX_PANE", "%5")
-	if err := StartWorkSession("sess-A", 1, 42); err != nil {
-		t.Fatalf("StartWorkSession: %v", err)
-	}
-
-	if err := CompleteTask("sess-A", 42); err != nil {
-		t.Fatalf("CompleteTask: %v", err)
-	}
-	if got := taskStatus(t, db, 42); got != "confirmed" {
-		t.Errorf("task status = %q, want confirmed", got)
-	}
-	state, taskID, _ := sessionLifecycleRow(t, db, "sess-A")
-	if state != "idle" {
-		t.Errorf("session state = %q, want idle", state)
-	}
-	if taskID == nil || *taskID != 42 {
-		t.Errorf("task_id = %v, want 42 (completion must not unbind)", taskID)
-	}
-}
-
-// TestCompleteTask_RecordsCompletedAt pins the audit trail: confirming
-// a task stamps completed_at, used downstream by ledgers and reporting.
-func TestCompleteTask_RecordsCompletedAt(t *testing.T) {
-	db := withTestDB(t)
-	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
-	seedTask(t, db, 42, 1, "test task", "ready")
-	t.Setenv("TMUX_PANE", "%5")
-	if err := StartWorkSession("sess-A", 1, 42); err != nil {
-		t.Fatalf("StartWorkSession: %v", err)
-	}
-
-	if err := CompleteTask("sess-A", 42); err != nil {
-		t.Fatalf("CompleteTask: %v", err)
-	}
-	var completedAt sql.NullString
-	if err := db.QueryRow("SELECT completed_at FROM tasks WHERE id=?", 42).Scan(&completedAt); err != nil {
-		t.Fatalf("read completed_at: %v", err)
-	}
-	if !completedAt.Valid || completedAt.String == "" {
-		t.Errorf("completed_at = %v, want non-empty timestamp", completedAt)
-	}
-}
-
 // TestIdleSession_FlipsState pins the between-turns transition: a live
 // session moves to 'idle' without disturbing other columns.
 func TestIdleSession_FlipsState(t *testing.T) {
@@ -398,8 +282,8 @@ func TestIdleSession_FlipsState(t *testing.T) {
 	if state != "idle" {
 		t.Errorf("state = %q, want idle", state)
 	}
-	// task_id is intentionally preserved across idle — only
-	// CompleteTask clears it. Pin that here so a future change has to
+	// task_id is intentionally preserved across idle — the column is
+	// write-once (ED-1560). Pin that here so a future change has to
 	// justify breaking the contract.
 	if taskID == nil || *taskID != 42 {
 		t.Errorf("task_id = %v, want 42 (idle should not clear)", taskID)

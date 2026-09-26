@@ -55,6 +55,7 @@ import (
 	"github.com/mikeschinkel/go-cfgstore"
 	_ "modernc.org/sqlite"
 
+	"github.com/mikeschinkel/endless/internal/claimhandoffcmd"
 	"github.com/mikeschinkel/endless/internal/errorscmd"
 	"github.com/mikeschinkel/endless/internal/eventcmd"
 	"github.com/mikeschinkel/endless/internal/faults"
@@ -219,6 +220,8 @@ func main() {
 		spawnlaunchcmd.Run(sub, rest)
 	case "template":
 		templatecmd.Run(rest)
+	case "claim-handoff":
+		claimhandoffcmd.Run(rest)
 	case "outputstyle":
 		outputstylecmd.Run(rest)
 	case "markdown":
@@ -297,6 +300,7 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  spawn-layout   build the standard pane layout around an existing Claude pane")
 	fmt.Fprintln(w, "  spawn-launch   (internal) set window options and exec claude inside the window")
 	fmt.Fprintln(w, "  template       render")
+	fmt.Fprintln(w, "  claim-handoff  <task-id>  (the handoff `task claim` prints to an agent)")
 	fmt.Fprintln(w, "  markdown       render (markdown → colorized ANSI)")
 	fmt.Fprintln(w, "  task-status    groups|get|has|sql-list|rank|label|glyph  (the task status vocabulary)")
 	fmt.Fprintln(w, "  session-state  groups|get|has|sql-list|rank|label|glyph  (the session state vocabulary)")

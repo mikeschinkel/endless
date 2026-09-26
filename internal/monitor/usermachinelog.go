@@ -44,7 +44,7 @@ const (
 	// already on disk carry the value, and this enum is what tells their reader
 	// what it meant.
 	SessionLogSpawnBind  SessionLogReason = "spawn-bind"
-	SessionLogClaimEvent SessionLogReason = "claim-event" // task.claimed executor / claim hook mirror
+	SessionLogClaimEvent SessionLogReason = "claim-event" // task.claimed executor
 	SessionLogIdle       SessionLogReason = "idle"        // IdleSession
 	SessionLogEnd        SessionLogReason = "end"         // EndSession
 	SessionLogDedup      SessionLogReason = "dedup"       // paneless stale-row dedup

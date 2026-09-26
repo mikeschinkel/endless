@@ -113,9 +113,12 @@ func suiteTaskFromPath(path string) int64 {
 }
 
 // suiteTaskFromCommand returns the task whose verification suite the command
-// would directly execute, or 0 when it runs no suite. Pure.
+// would directly execute, or 0 when it runs no suite. Pure. Heredoc bodies are
+// stripped first (E-2177): suiteRunRe treats a newline as a command boundary,
+// so a documentation line that begins with a suite path would otherwise read
+// as a run.
 func suiteTaskFromCommand(cmd string) int64 {
-	return firstSubmatchID(suiteRunRe, cmd)
+	return firstSubmatchID(suiteRunRe, stripHeredocs(cmd))
 }
 
 // firstSubmatchID parses the first capture group as a task number. A group that

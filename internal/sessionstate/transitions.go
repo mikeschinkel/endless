@@ -139,7 +139,7 @@ var transitions = []Transition{
 	{
 		From:    AnyState,
 		To:      Idle,
-		Trigger: "`Stop` → monitor.IdleSession; monitor.CompleteTask",
+		Trigger: "`Stop` → monitor.IdleSession",
 	},
 	{
 		From:    AnyState,

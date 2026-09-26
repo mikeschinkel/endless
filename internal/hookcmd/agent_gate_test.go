@@ -105,21 +105,6 @@ func TestReportChannelOn_AndsWithTheConfigKey(t *testing.T) {
 	}
 }
 
-// TestClaimHandoff_ChecksTheHarness pins the claim handoff's copy (E-1962).
-//
-// It does not route through reportChannelOn — it has a worktree path and a
-// project root, not a projectID/isRegistered pair — so the check has to be
-// spelled out there. A Desktop session that claims a task would otherwise be
-// handed the reporting instructions in its handoff, which is exactly the report
-// path that opened this task.
-func TestClaimHandoff_ChecksTheHarness(t *testing.T) {
-	src := readSource(t, "claim_handoff.go")
-	if !strings.Contains(src, `supportedAgent() && monitor.MinimizerEnabledForCwd(`) {
-		t.Error("the claim handoff's report_gate var is not harness-gated; " +
-			"a Desktop session claiming a task would be handed the reporting contract")
-	}
-}
-
 func readSource(t *testing.T, name string) string {
 	t.Helper()
 	b, err := os.ReadFile(name)
