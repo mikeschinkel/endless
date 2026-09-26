@@ -19,11 +19,14 @@ const noJobsEnv = "ENDLESS_NO_JOBS"
 // sandbox (E-1281) exists to prevent — and, because E-1818 opens a pinned real
 // DB schema-passive, at a database that will not even have the runner's tables.
 //
-// Since E-2166 the test is broader than that rationale in one case: a Claude
-// hook fired from a worktree satisfies both halves (cwd inside a worktree, main
-// pinned) while running the INSTALLED binary, so the code it would suppress is
-// not candidate at all. Left as it is — over-suppressing costs a suppressed
-// runner with an empty registry, which does what an unsuppressed one does.
+// The cwd test is the right one for the callers that exist. Suppressed() is
+// reached only from RunDue — the liveview/status-line tick and `endless jobs
+// run` — and from `endless jobs list`; a process triggering jobs from inside a
+// worktree is exactly the case this is about. A Claude hook never reaches here
+// at all, so E-2166 pointing hooks at the installed binary changes nothing for
+// this guard. An earlier revision of this comment claimed E-2166 had made the
+// test broader than its rationale; that was wrong, and named a caller that does
+// not exist.
 //
 // This guard lives on the TRIGGER rather than on the DB context. E-698
 // originally implemented it by making session-status skip its main pin inside a

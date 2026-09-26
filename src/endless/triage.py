@@ -470,15 +470,15 @@ def inline_suppressed() -> str:
     session is told to file, and agents file nearly every task, so the inline
     path was suppressed on the normal path and everything waited on the sweep.
 
-    The suppression was justified THERE by the Claude hooks invoking
-    `<worktree>/bin/endless-go`, which was genuinely candidate. E-2166 removed
-    that pin — hooks now run the installed binary — so `internal/jobs`
-    suppresses on cwd and DB pin alone and is broader than its own rationale;
-    unchanged behaviour, weaker reason. Either way it is not true HERE: under
-    `--db main` the child spawned is `sys.argv[0]` — the `endless` shim, which
-    `just install` points at the MAIN checkout's editable source — and that
-    child writes through `event_bridge._resolve_endless_go()`, which prefers the
-    worktree binary only under `--db sandbox`. Both halves are landed code.
+    The suppression is correct THERE because the process that triggers jobs from
+    inside a worktree — the liveview/status-line tick, or `endless jobs run` — is
+    genuinely candidate. (Not because of the Claude hooks: they never reach that
+    guard, and since E-2166 they run the installed binary anyway.) It is not true
+    HERE: under `--db main` the child spawned is `sys.argv[0]` — the `endless`
+    shim, which `just install` points at the MAIN checkout's editable source —
+    and that child writes through `event_bridge._resolve_endless_go()`, which
+    prefers the worktree binary only under `--db sandbox`. Both halves are
+    landed code.
 
     So gate on where the CLI that would actually be spawned LIVES, not on
     whether the project is self-dev. Path-gating rather than deleting the clause
