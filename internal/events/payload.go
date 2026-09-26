@@ -144,14 +144,19 @@ type AskedQuestion struct {
 }
 
 // TaskQuestionResolvedPayload moves the question named by the entity ref out of
-// its current status. Answer and AnsweredBy are required for `answered` and
-// refused for every other status: a withdrawal or an invalidation has no
-// answer, and storing text there would overload the column the way
+// its current status. The two kinds of text never mix:
+//
+//   - `answered` requires Answer and AnsweredBy, and refuses Reason.
+//   - `withdrawn`, `invalid` and `superseded` require Reason — why the question
+//     was closed without an answer — and refuse Answer and AnsweredBy.
+//
+// Storing a closing reason in the answer column would overload it the way
 // tasks.outcome is overloaded today.
 type TaskQuestionResolvedPayload struct {
 	Status     string `json:"status"`
 	Answer     string `json:"answer,omitempty"`
 	AnsweredBy string `json:"answered_by,omitempty"`
+	Reason     string `json:"reason,omitempty"`
 }
 
 // Epic derivation payloads (E-1541). Recorded once per epic whose status the

@@ -29,6 +29,9 @@ source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 #   C6  REPLAY REPRODUCES THE LIVE ROWS.
 #   C7  THE CLI WORKS END TO END against an isolated database.
 #   C8  NO NEW PYTHON SQLITE, and the command is documented in the guide.
+#   C9  (revisit) EVERY CLOSE WITHOUT AN ANSWER CARRIES A REQUIRED REASON, in
+#       its own column (migration 00005), never in `answer`; an answer takes
+#       no reason.
 #
 # ISOLATION: package tests, pytest under the runner's temp HOME, and one CLI
 # run against a scratch --db-dir. Nothing touches the main database or ledger.
@@ -73,6 +76,12 @@ run_check "Python: question_cmd, stubbed and end to end" "${TMP}/a6.txt" \
 section "B. The table (C1)"
 # ---------------------------------------------------------------------------
 mig="$(ls internal/schema/migrations/*_task_questions.sql 2>/dev/null | head -1)"
+mig2="$(ls internal/schema/migrations/*_task_questions_reason.go 2>/dev/null | head -1)"
+if [[ -n "${mig2}" ]]; then
+    report_pass "C9: a numbered migration adds task_questions.reason (${mig2##*/})"
+else
+    report_fail "C9: a numbered migration adds task_questions.reason" "a file" "none"
+fi
 if [[ -n "${mig}" ]]; then
     report_pass "a numbered migration adds task_questions (${mig##*/})"
 else
@@ -80,7 +89,7 @@ else
 fi
 for col in "task_id INTEGER NOT NULL" "series INTEGER NOT NULL" "question TEXT NOT NULL" \
            "answer TEXT," "status TEXT NOT NULL DEFAULT 'open'" "answered_by TEXT," \
-           "asked_by_session INTEGER,"; do
+           "asked_by_session INTEGER," "reason TEXT,"; do
     assert_contains "schema.sql declares: ${col}" "${col}" \
         "$(sed -n '/CREATE TABLE IF NOT EXISTS task_questions/,/^);/p' internal/schema/schema.sql)"
 done
@@ -120,19 +129,28 @@ assert_contains "C2: the ledger line carries the allocated numbers" '"series":2,
 emit task_question.resolved task_question 1 '{"status":"answered","answer":"yes","answered_by":"ES-77"}' >/dev/null
 assert_eq "C4: a peer answer names the peer" "answered|yes|ES-77" \
     "$(q "SELECT status||'|'||answer||'|'||answered_by FROM task_questions WHERE id=1")"
-emit task_question.resolved task_question 1 '{"status":"superseded"}' >/dev/null
-assert_eq "C3: answered → superseded keeps the answer" "superseded|yes" \
-    "$(q "SELECT status||'|'||answer FROM task_questions WHERE id=1")"
-emit task_question.resolved task_question 2 '{"status":"invalid"}' >/dev/null
+emit task_question.resolved task_question 1 '{"status":"superseded","reason":"in the plan"}' >/dev/null
+assert_eq "C3: answered → superseded keeps the answer and records the reason" \
+    "superseded|yes|in the plan" \
+    "$(q "SELECT status||'|'||answer||'|'||reason FROM task_questions WHERE id=1")"
+emit task_question.resolved task_question 2 '{"status":"invalid","reason":"wrong premise"}' >/dev/null
+assert_eq "C9: a rejection stores its reason, not an answer" "invalid|wrong premise|1" \
+    "$(q "SELECT status||'|'||reason||'|'||(answer IS NULL) FROM task_questions WHERE id=2")"
 
 before="$(cat "${ROOT}"/.endless/db-ledger/*.jsonl | wc -l | tr -d ' ')"
-out="$(emit task_question.resolved task_question 2 '{"status":"withdrawn"}')"
+out="$(emit task_question.resolved task_question 2 '{"status":"withdrawn","reason":"moot"}')"
 assert_contains "C3: invalid is terminal" "cannot become withdrawn" "${out}"
 out="$(emit task_question.resolved task_question 3 '{"status":"answered","answer":"x","answered_by":"bob"}')"
 assert_contains "C4: answered_by must be user or ES-<n>" "answered_by" "${out}"
 out="$(emit task_question.resolved task_question 3 '{"status":"open"}')"
 assert_contains "C3: nothing returns to open" "new series" "${out}"
-assert_eq "C5: the three refusals added nothing to the ledger" "${before}" \
+for st in withdrawn invalid superseded; do
+    out="$(emit task_question.resolved task_question 3 "{\"status\":\"${st}\"}")"
+    assert_contains "C9: ${st} without a reason is refused" "requires a reason" "${out}"
+done
+out="$(emit task_question.resolved task_question 3 '{"status":"answered","answer":"x","answered_by":"user","reason":"r"}')"
+assert_contains "C9: an answer takes no reason" "takes no reason" "${out}"
+assert_eq "C5: the seven refusals added nothing to the ledger" "${before}" \
     "$(cat "${ROOT}"/.endless/db-ledger/*.jsonl | wc -l | tr -d ' ')"
 
 out="$("${TMP}/endless-go" --db-dir "${DB}" event rebuild-db --project-root "${ROOT}" 2>&1)"
@@ -151,6 +169,10 @@ for verb in ask answer withdraw reject supersede list; do
 done
 assert_contains "C4: --by is documented as required for agents" "required when an agent" \
     "$(uv run endless question answer --help 2>&1)"
+for verb in withdraw reject supersede; do
+    assert_contains "C9: question ${verb} requires --reason" "--reason TEXT" \
+        "$(uv run endless question ${verb} --help 2>&1)"
+done
 assert_not_contains "C8: question_cmd.py holds no SQL" "sqlite3" "$(cat src/endless/question_cmd.py)"
 assert_not_contains "C8: question_cmd.py does not use the legacy db helper" "db.query" \
     "$(cat src/endless/question_cmd.py)"

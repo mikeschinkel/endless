@@ -2,7 +2,8 @@
 
 A question belongs to a task, not to the session that asked it. Questions asked
 together share a series; each is answered, withdrawn, rejected (status
-`invalid`: the premise is wrong) or superseded on its own. The plan stays
+`invalid`: the premise is wrong) or superseded on its own, and every one of
+those last three carries a required reason. The plan stays
 authoritative: an answer is not in force until it is folded into the plan, and
 these rows are the audit trail of how the plan got there.
 
@@ -117,8 +118,15 @@ RESOLUTIONS = {
 }
 
 
-def resolve_questions(verb: str, question_ids: tuple[int, ...]) -> None:
-    """Move questions to withdrawn, invalid or superseded."""
+def resolve_questions(verb: str, question_ids: tuple[int, ...], reason: str) -> None:
+    """Move questions to withdrawn, invalid or superseded, saying why.
+
+    The reason is required on every one of these moves: a question closed
+    without an answer and without a stated reason cannot be reviewed, and the
+    asker cannot tell what to ask instead.
+    """
+    if not reason or not reason.strip():
+        raise click.ClickException("--reason is required and may not be empty.")
     status, done = RESOLUTIONS[verb]
     for qid in question_ids:
         tgt = _target(question_id=qid)
@@ -127,7 +135,7 @@ def resolve_questions(verb: str, question_ids: tuple[int, ...]) -> None:
             project=tgt["project"],
             entity_type="task_question",
             entity_id=str(qid),
-            payload={"status": status},
+            payload={"status": status, "reason": reason},
         )
         click.echo(
             click.style("•", fg="cyan")
@@ -180,4 +188,6 @@ def render_questions(rows: list[dict]) -> str:
         )
         if r.get("answer"):
             lines.append(f"    {'':<8} {'':<10} → {r['answer']} (by {r['answered_by']})")
+        if r.get("reason"):
+            lines.append(f"    {'':<8} {'':<10} ✕ {r['reason']}")
     return "\n".join(lines)

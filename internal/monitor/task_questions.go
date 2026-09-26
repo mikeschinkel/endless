@@ -19,6 +19,7 @@ type TaskQuestion struct {
 	Answer         *string `json:"answer"`
 	Status         string  `json:"status"`
 	AnsweredBy     *string `json:"answered_by"`
+	Reason         *string `json:"reason"`
 	AskedBySession *int64  `json:"asked_by_session"`
 	CreatedAt      string  `json:"created_at"`
 	UpdatedAt      string  `json:"updated_at"`
@@ -47,7 +48,7 @@ func TaskQuestions(f TaskQuestionFilter) ([]TaskQuestion, error) {
 // listing along with the task — the same rule every other task read follows.
 func taskQuestions(db *sql.DB, f TaskQuestionFilter) ([]TaskQuestion, error) {
 	query := `SELECT q.id, q.task_id, t.title, p.name, q.series, q.question,
-	                 q.answer, q.status, q.answered_by, q.asked_by_session,
+	                 q.answer, q.status, q.answered_by, q.reason, q.asked_by_session,
 	                 q.created_at, q.updated_at
 	            FROM task_questions q
 	            JOIN live_tasks t ON t.id = q.task_id
@@ -78,7 +79,7 @@ func taskQuestions(db *sql.DB, f TaskQuestionFilter) ([]TaskQuestion, error) {
 	for rows.Next() {
 		var q TaskQuestion
 		if err = rows.Scan(&q.ID, &q.TaskID, &q.TaskTitle, &q.Project, &q.Series,
-			&q.Question, &q.Answer, &q.Status, &q.AnsweredBy, &q.AskedBySession,
+			&q.Question, &q.Answer, &q.Status, &q.AnsweredBy, &q.Reason, &q.AskedBySession,
 			&q.CreatedAt, &q.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan task question: %w", err)
 		}

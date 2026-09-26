@@ -166,8 +166,11 @@ func replayTaskQuestionResolved(db *sql.DB, evt *Event, _ *ProjectResult) error 
 }
 
 // validateQuestionResolution checks the payload's own shape, before any row is
-// read: a known target status other than open, and an answer with its answerer
-// exactly when the target is `answered`.
+// read: a known target status other than open; an answer with its answerer, and
+// no reason, when the target is `answered`; a reason, and no answer, for every
+// other target. The reason is required on every closing move without exception —
+// a question closed with no stated reason cannot be reviewed, and the asker
+// cannot tell what to ask instead.
 func validateQuestionResolution(p TaskQuestionResolvedPayload) error {
 	if err := questionstatus.Validate(p.Status); err != nil {
 		return err
@@ -179,10 +182,16 @@ func validateQuestionResolution(p TaskQuestionResolvedPayload) error {
 		if strings.TrimSpace(p.Answer) == "" {
 			return errors.New("an answered question needs a non-empty answer")
 		}
+		if p.Reason != "" {
+			return errors.New("an answered question takes no reason; the answer is the record")
+		}
 		return questionstatus.ValidateAnsweredBy(p.AnsweredBy)
 	}
 	if p.Answer != "" || p.AnsweredBy != "" {
 		return fmt.Errorf("status %q takes no answer or answered_by", p.Status)
+	}
+	if strings.TrimSpace(p.Reason) == "" {
+		return fmt.Errorf("status %q requires a reason", p.Status)
 	}
 	return nil
 }
@@ -199,19 +208,20 @@ func applyTaskQuestionResolved(db dbQuerier, evt *Event) error {
 	from := questionstatus.From(p.Status)
 	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(from)), ",")
 	args := []any{p.Status, nullIfEmpty(p.Answer), nullIfEmpty(p.AnsweredBy),
-		kairosToISO(evt.TS), evt.Entity.ID}
+		nullIfEmpty(p.Reason), kairosToISO(evt.TS), evt.Entity.ID}
 	for _, s := range from {
 		args = append(args, s)
 	}
 
-	// Only `answered` writes answer/answered_by; superseding an answered
-	// question keeps both, so the record of what was decided survives the fold
-	// into the plan.
+	// Only `answered` writes answer/answered_by, and only the other moves write
+	// reason. Superseding an answered question keeps the answer and adds the
+	// reason, so the record of what was decided survives the fold into the plan.
 	res, err := db.Exec(
 		`UPDATE task_questions
 		    SET status = ?,
 		        answer = COALESCE(?, answer),
 		        answered_by = COALESCE(?, answered_by),
+		        reason = ?,
 		        updated_at = ?
 		  WHERE id = ? AND status IN (`+placeholders+`)`,
 		args...,

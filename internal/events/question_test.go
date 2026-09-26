@@ -61,6 +61,7 @@ type questionRow struct {
 	ID, TaskID, Series int64
 	Question, Status   string
 	Answer, AnsweredBy sql.NullString
+	Reason             sql.NullString
 	AskedBySession     sql.NullInt64
 	CreatedAt, Updated string
 }
@@ -68,7 +69,7 @@ type questionRow struct {
 func readQuestions(t *testing.T, db *sql.DB) []questionRow {
 	t.Helper()
 	rows, err := db.Query(`SELECT id, task_id, series, question, status, answer,
-	    answered_by, asked_by_session, created_at, updated_at
+	    answered_by, asked_by_session, created_at, updated_at, reason
 	    FROM task_questions ORDER BY id`)
 	if err != nil {
 		t.Fatalf("query: %v", err)
@@ -78,7 +79,7 @@ func readQuestions(t *testing.T, db *sql.DB) []questionRow {
 	for rows.Next() {
 		var r questionRow
 		if err := rows.Scan(&r.ID, &r.TaskID, &r.Series, &r.Question, &r.Status,
-			&r.Answer, &r.AnsweredBy, &r.AskedBySession, &r.CreatedAt, &r.Updated); err != nil {
+			&r.Answer, &r.AnsweredBy, &r.AskedBySession, &r.CreatedAt, &r.Updated, &r.Reason); err != nil {
 			t.Fatalf("scan: %v", err)
 		}
 		out = append(out, r)
@@ -163,8 +164,8 @@ func TestTaskQuestionResolved_AnswerRecordsWhoAnswered(t *testing.T) {
 	if got[0].AnsweredBy.String != "user" || got[1].AnsweredBy.String != "ES-1236" {
 		t.Errorf("answered_by = %q, %q", got[0].AnsweredBy.String, got[1].AnsweredBy.String)
 	}
-	if got[0].Status != "answered" || got[0].Answer.String != "yes" {
-		t.Errorf("EQ-1 = %+v", got[0])
+	if got[0].Status != "answered" || got[0].Answer.String != "yes" || got[0].Reason.Valid {
+		t.Errorf("EQ-1 = %+v, want answered with no reason", got[0])
 	}
 	if got[0].Updated != "2026-09-26T13:00:00" {
 		t.Errorf("updated_at = %q, want the resolving event's ts", got[0].Updated)
@@ -179,7 +180,7 @@ func TestTaskQuestionResolved_SupersedingAnAnswerKeepsIt(t *testing.T) {
 	seedOpenQuestions(t, db)
 	steps := []TaskQuestionResolvedPayload{
 		{Status: "answered", Answer: "60", AnsweredBy: "user"},
-		{Status: "superseded"},
+		{Status: "superseded", Reason: "folded into the plan"},
 	}
 	for _, p := range steps {
 		if _, err := execTaskQuestionResolved(db, resolvedEvent(t, 1, p)); err != nil {
@@ -189,6 +190,9 @@ func TestTaskQuestionResolved_SupersedingAnAnswerKeepsIt(t *testing.T) {
 	r := readQuestions(t, db)[0]
 	if r.Status != "superseded" || r.Answer.String != "60" || r.AnsweredBy.String != "user" {
 		t.Errorf("after supersede = %+v, want the answer kept", r)
+	}
+	if r.Reason.String != "folded into the plan" {
+		t.Errorf("reason = %v, want the superseding reason recorded", r.Reason)
 	}
 }
 
@@ -204,7 +208,11 @@ func TestTaskQuestionResolved_Refusals(t *testing.T) {
 		{name: "answer without text", p: TaskQuestionResolvedPayload{Status: "answered", AnsweredBy: "user"}, want: "non-empty answer"},
 		{name: "answer without answerer", p: TaskQuestionResolvedPayload{Status: "answered", Answer: "x"}, want: "answered_by"},
 		{name: "bad answerer", p: TaskQuestionResolvedPayload{Status: "answered", Answer: "x", AnsweredBy: "1236"}, want: "answered_by"},
-		{name: "withdraw with answer", p: TaskQuestionResolvedPayload{Status: "withdrawn", Answer: "x"}, want: "takes no answer"},
+		{name: "withdraw with answer", p: TaskQuestionResolvedPayload{Status: "withdrawn", Answer: "x", Reason: "r"}, want: "takes no answer"},
+		{name: "withdraw without reason", p: TaskQuestionResolvedPayload{Status: "withdrawn"}, want: "requires a reason"},
+		{name: "reject without reason", p: TaskQuestionResolvedPayload{Status: "invalid", Reason: "  "}, want: "requires a reason"},
+		{name: "supersede without reason", p: TaskQuestionResolvedPayload{Status: "superseded"}, want: "requires a reason"},
+		{name: "answer with reason", p: TaskQuestionResolvedPayload{Status: "answered", Answer: "x", AnsweredBy: "user", Reason: "r"}, want: "takes no reason"},
 		{
 			name:  "re-answer",
 			setup: []TaskQuestionResolvedPayload{{Status: "answered", Answer: "x", AnsweredBy: "user"}},
@@ -213,8 +221,8 @@ func TestTaskQuestionResolved_Refusals(t *testing.T) {
 		},
 		{
 			name:  "withdraw an invalid one",
-			setup: []TaskQuestionResolvedPayload{{Status: "invalid"}},
-			p:     TaskQuestionResolvedPayload{Status: "withdrawn"},
+			setup: []TaskQuestionResolvedPayload{{Status: "invalid", Reason: "wrong premise"}},
+			p:     TaskQuestionResolvedPayload{Status: "withdrawn", Reason: "moot"},
 			want:  `from "invalid" to "withdrawn"`,
 		},
 	}
@@ -237,7 +245,7 @@ func TestTaskQuestionResolved_Refusals(t *testing.T) {
 
 func TestTaskQuestionResolved_UnknownQuestion(t *testing.T) {
 	db := newLandingTestDB(t)
-	_, err := execTaskQuestionResolved(db, resolvedEvent(t, 77, TaskQuestionResolvedPayload{Status: "withdrawn"}))
+	_, err := execTaskQuestionResolved(db, resolvedEvent(t, 77, TaskQuestionResolvedPayload{Status: "withdrawn", Reason: "moot"}))
 	if err == nil || !strings.Contains(err.Error(), "not found") {
 		t.Errorf("err = %v, want not found", err)
 	}
@@ -251,9 +259,9 @@ func TestTaskQuestions_ReplayMatchesLive(t *testing.T) {
 	seq := []*Event{
 		askedEvent(t, questionTask, 1, "7", map[int64]string{1: "a?", 2: "b?"}),
 		resolvedEvent(t, 1, TaskQuestionResolvedPayload{Status: "answered", Answer: "A", AnsweredBy: "ES-9"}),
-		resolvedEvent(t, 2, TaskQuestionResolvedPayload{Status: "invalid"}),
+		resolvedEvent(t, 2, TaskQuestionResolvedPayload{Status: "invalid", Reason: "wrong premise"}),
 		askedEvent(t, questionTask, 2, "", map[int64]string{3: "c?"}),
-		resolvedEvent(t, 1, TaskQuestionResolvedPayload{Status: "superseded"}),
+		resolvedEvent(t, 1, TaskQuestionResolvedPayload{Status: "superseded", Reason: "folded into the plan"}),
 	}
 	live := newLandingTestDB(t)
 	replay := newLandingTestDB(t)
@@ -277,7 +285,7 @@ func TestTaskQuestions_ReplayMatchesLive(t *testing.T) {
 func TestTaskQuestionEvents_Validate(t *testing.T) {
 	for _, evt := range []*Event{
 		askedEvent(t, questionTask, 1, "", map[int64]string{1: "a?"}),
-		resolvedEvent(t, 1, TaskQuestionResolvedPayload{Status: "withdrawn"}),
+		resolvedEvent(t, 1, TaskQuestionResolvedPayload{Status: "withdrawn", Reason: "moot"}),
 	} {
 		if err := evt.Validate(); err != nil {
 			t.Errorf("%s: %v", evt.Kind, err)

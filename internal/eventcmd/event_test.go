@@ -1042,11 +1042,12 @@ func TestEventEmit_QuestionResolvedRefusalWritesNoLedger(t *testing.T) {
 			"--payload", payload,
 		).CombinedOutput()
 	}
-	if out, err := resolve(`{"status":"invalid"}`); err != nil {
+	if out, err := resolve(`{"status":"invalid","reason":"wrong premise"}`); err != nil {
 		t.Fatalf("reject: %v\n%s", err, out)
 	}
 	for _, bad := range []string{
-		`{"status":"withdrawn"}`, // invalid is terminal
+		`{"status":"withdrawn","reason":"moot"}`, // invalid is terminal
+		`{"status":"superseded"}`,                 // no reason
 		`{"status":"answered","answer":"x","answered_by":"someone"}`,
 	} {
 		if out, err := resolve(bad); err == nil {

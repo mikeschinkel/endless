@@ -98,10 +98,21 @@ def test_answer_from_an_agent_requires_by(seams, monkeypatch):
     ("supersede", "superseded"),
 ])
 def test_resolution_verbs_write_their_status(seams, verb, status):
-    result = CliRunner().invoke(main, ["question", verb, "EQ-3", "4"])
+    result = CliRunner().invoke(main, ["question", verb, "EQ-3", "4", "--reason", "moot"])
     assert result.exit_code == 0, result.output
     assert [e["entity_id"] for e in seams] == ["3", "4"]
-    assert all(e["payload"] == {"status": status} for e in seams)
+    assert all(e["payload"] == {"status": status, "reason": "moot"} for e in seams)
+
+
+@pytest.mark.parametrize("verb", ["withdraw", "reject", "supersede"])
+def test_resolution_verbs_require_a_reason(seams, verb):
+    result = CliRunner().invoke(main, ["question", verb, "EQ-3"])
+    assert result.exit_code != 0
+    assert "--reason" in result.output
+    result = CliRunner().invoke(main, ["question", verb, "EQ-3", "--reason", "  "])
+    assert result.exit_code != 0
+    assert "--reason is required" in result.output
+    assert seams == []
 
 
 def test_render_groups_by_task_then_series():
@@ -112,6 +123,8 @@ def test_render_groups_by_task_then_series():
          "status": "open", "answer": None, "answered_by": None},
         {"id": 3, "task_id": 8, "task_title": "Eight", "series": 1, "question": "c?",
          "status": "open", "answer": None, "answered_by": None},
+        {"id": 4, "task_id": 8, "task_title": "Eight", "series": 1, "question": "d?",
+         "status": "withdrawn", "answer": None, "answered_by": None, "reason": "moot"},
     ]
     out = click.unstyle(question_cmd.render_questions(rows))
     lines = out.splitlines()
@@ -122,14 +135,19 @@ def test_render_groups_by_task_then_series():
     assert lines[4] == "  series 2"
     assert lines[6] == ""
     assert lines[7] == "E-8  Eight"
+    assert lines[-1].strip() == "✕ moot"
 
 
 # --- end to end, through the real CLI and the real Go executors ---------------
 
 
 @pytest.fixture
-def real_task(seeded_project_at_cwd):
-    from endless import db
+def real_task(seeded_project_at_cwd, monkeypatch):
+    from endless import config, db
+    # `--no-session` sets config.NO_SESSION process-wide and nothing resets it;
+    # registering it with monkeypatch restores it after the test, so later tests
+    # do not silently emit as the system actor.
+    monkeypatch.setattr(config, "NO_SESSION", False)
     project_id = db.query("SELECT id FROM projects")[0]["id"]
     db.execute(
         "INSERT INTO tasks (id, project_id, title, status, phase) "
@@ -154,28 +172,30 @@ def test_end_to_end_ask_answer_supersede_list(real_task):
 
     assert _run("question", "answer", "EQ-1", "Yes").exit_code == 0
     assert _run("question", "answer", "EQ-2", "No", "--by", "ES-5").exit_code == 0
-    assert _run("question", "supersede", "EQ-1").exit_code == 0
-    assert _run("question", "reject", "EQ-3").exit_code == 0
+    assert _run("question", "supersede", "EQ-1", "--reason", "in the plan").exit_code == 0
+    assert _run("question", "reject", "EQ-3", "--reason", "wrong premise").exit_code == 0
 
     rows = db.query(
-        "SELECT id, series, status, answer, answered_by FROM task_questions ORDER BY id")
-    assert [(r["id"], r["series"], r["status"], r["answer"], r["answered_by"]) for r in rows] == [
-        (1, 1, "superseded", "Yes", "user"),
-        (2, 1, "answered", "No", "ES-5"),
-        (3, 2, "invalid", None, None),
+        "SELECT id, series, status, answer, answered_by, reason FROM task_questions ORDER BY id")
+    assert [tuple(r[k] for k in ("id", "series", "status", "answer", "answered_by", "reason"))
+            for r in rows] == [
+        (1, 1, "superseded", "Yes", "user", "in the plan"),
+        (2, 1, "answered", "No", "ES-5", None),
+        (3, 2, "invalid", None, None, "wrong premise"),
     ]
 
     r = _run("question", "list", "E-600")
     assert r.exit_code == 0 and "No open questions on E-600." in r.output, r.output
     r = _run("question", "list", "E-600", "--all")
     assert "→ No (by ES-5)" in r.output, r.output
+    assert "✕ wrong premise" in r.output, r.output
 
 
 def test_end_to_end_refused_move_changes_nothing(real_task):
     from endless import db
 
     assert _run("question", "ask", "E-600", "One?").exit_code == 0
-    assert _run("question", "withdraw", "EQ-1").exit_code == 0
+    assert _run("question", "withdraw", "EQ-1", "--reason", "moot").exit_code == 0
     r = _run("question", "answer", "EQ-1", "late")
     assert r.exit_code != 0
     assert "cannot become answered" in r.output

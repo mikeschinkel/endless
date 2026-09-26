@@ -713,6 +713,13 @@ CREATE TABLE IF NOT EXISTS task_deps (
 -- answering peer's `ES-<n>`, set only on `answered` — peer-settled questions get
 -- rows too, so what two sessions decided between themselves stays reviewable.
 --
+-- reason is why a question was closed WITHOUT an answer (withdrawn, invalid,
+-- superseded), required on every such move. Its own column, not text in
+-- `answer`: one column holding two facts is the tasks.outcome overloading. It
+-- sits after updated_at because it arrived by ALTER TABLE (migration 00005),
+-- which places a column there; declaring it anywhere else would make a
+-- migrated database and a schema.sql one differ.
+--
 -- The plan stays authoritative: an answer here is not in force until it is
 -- folded into the task's plan. This table is the audit trail of how the plan got
 -- there, never a parallel spec.
@@ -727,6 +734,7 @@ CREATE TABLE IF NOT EXISTS task_questions (
     asked_by_session INTEGER,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     updated_at TEXT NOT NULL DEFAULT '',
+    reason TEXT,
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_task_questions_task

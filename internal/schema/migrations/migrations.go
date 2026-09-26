@@ -44,5 +44,6 @@ import "github.com/pressly/goose/v3"
 func Go() []*goose.Migration {
 	return []*goose.Migration{
 		retireCuratedNextImportAndOrder(),
+		addTaskQuestionsReason(),
 	}
 }

@@ -4616,26 +4616,32 @@ def question_answer(question_id, answer, by):
 
 @question_cmd.command("withdraw")
 @click.argument("question_ids", type=QUESTION_ID, nargs=-1, required=True)
-def question_withdraw(question_ids):
+@click.option("--reason", required=True,
+              help="Why the question is closed without an answer (required).")
+def question_withdraw(question_ids, reason):
     """Withdraw open questions — the asker retracting them."""
     from endless.question_cmd import resolve_questions
-    resolve_questions("withdraw", tuple(question_ids))
+    resolve_questions("withdraw", tuple(question_ids), reason)
 
 
 @question_cmd.command("reject")
 @click.argument("question_ids", type=QUESTION_ID, nargs=-1, required=True)
-def question_reject(question_ids):
+@click.option("--reason", required=True,
+              help="Why the question is closed without an answer (required).")
+def question_reject(question_ids, reason):
     """Reject open questions whose premise is wrong (status: invalid)."""
     from endless.question_cmd import resolve_questions
-    resolve_questions("reject", tuple(question_ids))
+    resolve_questions("reject", tuple(question_ids), reason)
 
 
 @question_cmd.command("supersede")
 @click.argument("question_ids", type=QUESTION_ID, nargs=-1, required=True)
-def question_supersede(question_ids):
+@click.option("--reason", required=True,
+              help="Why the question is closed without an answer (required).")
+def question_supersede(question_ids, reason):
     """Mark open or answered questions as rolled into a later series or plan."""
     from endless.question_cmd import resolve_questions
-    resolve_questions("supersede", tuple(question_ids))
+    resolve_questions("supersede", tuple(question_ids), reason)
 
 
 @question_cmd.command("list")

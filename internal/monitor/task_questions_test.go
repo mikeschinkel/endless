@@ -13,12 +13,13 @@ func TestTaskQuestions_FiltersAndOrder(t *testing.T) {
 		t.Fatalf("remove: %v", err)
 	}
 	if _, err := db.Exec(`INSERT INTO task_questions
-	    (id, task_id, series, question, status, answer, answered_by) VALUES
-	    (1, 10, 1, 'a1', 'answered', 'yes', 'user'),
-	    (2, 10, 2, 'a2', 'open', NULL, NULL),
-	    (3, 11, 1, 'b1', 'open', NULL, NULL),
-	    (4, 12, 1, 'gone', 'open', NULL, NULL),
-	    (5, 10, 1, 'a1b', 'open', NULL, NULL)`); err != nil {
+	    (id, task_id, series, question, status, answer, answered_by, reason) VALUES
+	    (1, 10, 1, 'a1', 'answered', 'yes', 'user', NULL),
+	    (2, 10, 2, 'a2', 'open', NULL, NULL, NULL),
+	    (3, 11, 1, 'b1', 'open', NULL, NULL, NULL),
+	    (4, 12, 1, 'gone', 'open', NULL, NULL, NULL),
+	    (5, 10, 1, 'a1b', 'open', NULL, NULL, NULL),
+	    (6, 10, 3, 'a3', 'withdrawn', NULL, NULL, 'moot')`); err != nil {
 		t.Fatalf("seed questions: %v", err)
 	}
 
@@ -41,7 +42,7 @@ func TestTaskQuestions_FiltersAndOrder(t *testing.T) {
 	}{
 		{"every open question, removed task excluded", TaskQuestionFilter{}, []int64{5, 2, 3}},
 		{"one task, open", TaskQuestionFilter{TaskID: 10}, []int64{5, 2}},
-		{"one task, all", TaskQuestionFilter{TaskID: 10, All: true}, []int64{1, 5, 2}},
+		{"one task, all", TaskQuestionFilter{TaskID: 10, All: true}, []int64{1, 5, 2, 6}},
 		{"one project", TaskQuestionFilter{Project: "beta"}, []int64{3}},
 	}
 	for _, tc := range cases {
@@ -65,5 +66,8 @@ func TestTaskQuestions_FiltersAndOrder(t *testing.T) {
 	}
 	if qs[1].Answer != nil {
 		t.Errorf("open question carries an answer: %+v", qs[1])
+	}
+	if q := qs[3]; q.Reason == nil || *q.Reason != "moot" || q.Answer != nil {
+		t.Errorf("EQ-6 = %+v, want reason moot and no answer", q)
 	}
 }

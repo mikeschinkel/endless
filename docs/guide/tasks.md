@@ -827,9 +827,9 @@ endless question list <task>              # open questions on one task
 endless question list [--project <name>]  # open questions everywhere (or on one project)
 endless question list <task> --all        # every status, answers included
 endless question answer EQ-<n> "The answer" [--by user|ES-<n>]
-endless question withdraw EQ-<n>...       # you, the asker, retract it
-endless question reject EQ-<n>...         # the premise is wrong (status: invalid)
-endless question supersede EQ-<n>...      # rolled into a later series or the plan
+endless question withdraw EQ-<n>... --reason "..."    # you, the asker, retract it
+endless question reject EQ-<n>... --reason "..."      # the premise is wrong (status: invalid)
+endless question supersede EQ-<n>... --reason "..."   # rolled into a later series or the plan
 ```
 
 - **A question belongs to the task**, not to the session that asked it. It
@@ -840,6 +840,10 @@ endless question supersede EQ-<n>...      # rolled into a later series or the pl
   and `answered` → `superseded`. Nothing returns to `open` and nothing is
   answered twice: a changed answer is a new question in a new series, so the
   record of what was first decided survives.
+- **Every close without an answer says why.** `withdraw`, `reject` and
+  `supersede` all require `--reason`, stored in its own column, never in the
+  answer. A superseded question that had an answer keeps it and gains the
+  reason.
 - **Say who answered.** `--by user` when you are relaying the user's answer,
   `--by ES-<n>` (your own session) when you settled it as a peer. From a plain
   shell it defaults to `user`; from an agent it is required. Peer-settled
