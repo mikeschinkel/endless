@@ -6825,3 +6825,9 @@ The rule, applied forward:
 ### [2026-09-26] Don't pad handoff action items with conditional alternatives
 When summarizing what the user must do after a verify handoff, name only the action that is actually expected (run the verify command, then confirm). Do not add 'or reopen' as a reflexive alternative when the suite already passed — it reads as a real concern and prompts a needless question.
 - **Project**: endless
+
+### [2026-09-26] A plan's open question must be one only the user can answer
+I ended E-1531's plan with two open questions, and both were already settled — the epic's strand 1 names the outcome split as the thing to get right on the way through, and E-1531's own naming convention already governs the token. I had a recommendation for each, which is the tell: a question with a recommendation attached is a decision I already made and then handed back.
+
+ED-1550 says reporting never means filing. The same applies inside a plan: manufacturing a question is manufacturing work for the user. Before writing an 'Open questions' section, check whether the answer is already in the parent epic, in an accepted decision, or in the task's own settled conventions. If it is, write it as settled prose and move on. If I have a recommendation, I have an answer — state it. Reserve an open question for a genuine fork where proceeding either way would be wrong, and say so plainly. Token and wording choices are never that fork; they can be wordsmithed by a later task.
+- **Project**: endless
