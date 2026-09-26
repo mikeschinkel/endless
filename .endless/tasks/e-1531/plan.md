@@ -76,11 +76,17 @@ Decisions already drew this line: `decision obsolete` has its own reason field
 for exactly this reason. Tasks never got the same split. This is where they do.
 
 Which token the deliverable keeps is an implementation call under the
-convention. `outcome` + `reason` is the obvious pair and the recommendation.
+convention. `outcome` + `reason` is the pair; `reason` matches what
+`decision obsolete` already calls its field. Tokens can be wordsmithed by a
+later task if anyone objects — nothing here waits on that.
 
 **This is the only semantic change in the task, and it is deliberate** — the
 epic names it as the one thing to get right on the way through, because lifting
-the overloading into the new storage would carry it forward permanently.
+the overloading into the new storage would carry it forward permanently. It
+belongs here and not in a follow-up: the migration has to decide which name each
+existing `outcome` value takes, so the split gets decided in this task whether or
+not it is implemented here, and deferring it means a second migration over the
+same rows.
 
 ## 3. Write paths
 
@@ -207,18 +213,3 @@ stop being blocked.
   content kind literally; `verify.sh`/`verify.toml` are still not matched.
 - Python still touches SQLite in exactly six files.
 - `go build/vet/test ./...`, `just test` and `just test-go` pass.
-
-## Open questions
-
-**Does the `outcome` split belong in this task or its own?** It is the one
-semantic change here, it touches the abandonment guard rather than only storage,
-and it is the one part a reviewer could reasonably say is scope creep.
-Recommend keeping it: the migration has to decide which name each existing
-`outcome` value takes, so the split gets decided in this task whether or not it
-is *implemented* here — and splitting later means a second migration over the
-same rows. Flagging because the alternative is defensible.
-
-**Is `reason` the right token for the closing reason?** It is short, single, and
-lowercase per the convention, and it matches what `decision obsolete` already
-calls its field. No objection known; naming it here so it is a decision rather
-than a default.
