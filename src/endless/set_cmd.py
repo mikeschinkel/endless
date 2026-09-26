@@ -21,7 +21,7 @@ SETTABLE_FIELDS = {
 # instead of opening the file (E-1934). Not a whitelist and not validated — it
 # exists so the error can say where the rest of the config lives.
 FILE_ONLY_FIELDS = (
-    "content", "dependencies", "documents", "matchers", "minimizer", "self_dev",
+    "content", "dependencies", "documents", "minimizer", "self_dev",
 )
 
 

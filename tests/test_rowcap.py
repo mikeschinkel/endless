@@ -54,7 +54,6 @@ OTHER_LISTINGS = [
     ["session", "history"],
     ["worktree", "list"],
     ["verb", "list"],
-    ["phrase", "list"],
     ["project", "list"],
 ]
 

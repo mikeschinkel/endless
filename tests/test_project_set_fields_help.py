@@ -2,7 +2,7 @@
 
 The message used to end "Settable fields: description, label, language, name,
 status", which reads as "the config file has five fields". It actually means
-"this command writes five of them" — the file also carries content, matchers,
+"this command writes five of them" — the file also carries content,
 minimizer and others, edited by hand. A reader who believed the first reading
 went looking for a flag that does not exist instead of opening the file.
 """
@@ -31,7 +31,7 @@ def test_help_names_the_file_and_the_keys_that_live_only_there():
         assert f in help_text
 
 
-@pytest.mark.parametrize("field", ["content", "minimizer", "matchers"])
+@pytest.mark.parametrize("field", ["content", "minimizer"])
 def test_a_file_only_key_is_refused_with_a_route_not_a_dead_end(field, monkeypatch):
     # The unknown-field check runs after project resolution, so a fake project
     # stands in; the refusal under test is the one about the FIELD.

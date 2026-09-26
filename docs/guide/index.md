@@ -286,7 +286,6 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 {{if .report_gate}}| `minimizer` | tasks | The minimizer's autoresearch loop — champions, variants, judge calibration, rollback. |
 {{end}}| `note` | _(none yet)_ | project notes aren't covered by the guide yet. |
 | `notes` | _(none yet)_ | project notes aren't covered by the guide yet. |
-| `phrase` | _(none yet)_ | matchers (action regexes) config isn't covered by the guide yet. |
 | `plan` | tasks | 'plan' is the former name for 'task' (renamed); use 'task'. |
 | `project` | reference | Managing registered projects (register, list, status, set, rename, scan, discover, purge, unregister). |
 | `question` | tasks | Open questions on a task — asking a series, answering (and saying who answered), withdrawing, rejecting, superseding, listing. |

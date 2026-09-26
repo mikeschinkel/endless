@@ -1,56 +1,24 @@
-"""Matcher patterns: action regexes — sourced from config files.
+"""Verb registry — sourced from layered verbs.jsonl files.
 
-Verbs were extracted from this module in E-1117. They live as their own
-top-level `verbs` array of objects (`{value, definition, ...}`); see verb_cmd.py.
-This module is now the home for non-verb pattern matchers (regex
-command-patterns).
+Verbs were extracted from matcher config in E-1117 and moved to their own files
+in E-1124 (JSONL per E-1268); see verb_cmd.py. The pattern-matcher half this
+module once hosted was removed in E-2180.
 
-Two layers, merged additively at read time:
+Two layers, plus the built-in `DEFAULT_VERBS`, resolved field-wise at read time:
 
-- Project: <project-root>/.endless/config.json under "matchers"
-- Machine: ~/.config/endless/config.json under "matchers"
+- Project: <project-root>/.endless/verbs.jsonl
+- Machine: ~/.config/endless/verbs.jsonl
 
-A matcher object:
-
-    {
-      "type":            <required, e.g. "start" | "complete" | "beacon" | ...>
-      "scope":           <optional, e.g. "task">
-      "method":          <required, "exact" | "substring" | "regex">
-      "match":           <required, list[str] for exact/substring, str for regex>
-      "case_sensitive":  <optional bool, default false>
-      "enabled":         <optional bool, default true>
-    }
-
-The verb-gate calls get_verbs() which reads from the top-level `verbs`
-array. Action-regex lookup (get_action_regex) still reads from `matchers`.
+The verb-gate calls get_verbs(); category and definition lookups share the same
+route (`_resolved_verbs`).
 """
 
 import json
-import re
 from pathlib import Path
 from typing import Any, NamedTuple
 
 from endless import config, main_commit
 from endless.project_path import project_root
-
-
-# Default matchers seeded into the machine config on first run if no
-# "matchers" property exists. Holds the action regexes lifted from
-# internal/hookcmd/claude.go.
-DEFAULT_MATCHERS: list[dict[str, Any]] = [
-    {
-        "type": "start", "scope": "task", "method": "regex",
-        "match": r"endless\s+task\s+claim\s+(?:[Ee]-)?(\d+)",
-    },
-    {
-        "type": "complete", "scope": "task", "method": "regex",
-        "match": r"endless\s+task\s+complete\s+(?:[Ee]-)?(\d+)",
-    },
-    {
-        "type": "release", "scope": "task", "method": "regex",
-        "match": r"endless\s+task\s+release(?:\s+(?:[Ee]-)?(\d+))?",
-    },
-]
 
 
 # --- Layer-aware path resolution -------------------------------------------
@@ -119,12 +87,6 @@ def _load_json(path: Path) -> dict:
 def _save_json(path: Path, data: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(data, indent=2) + "\n")
-
-
-def _read_matchers_from(path: Path) -> list[dict]:
-    data = _load_json(path)
-    raw = data.get("matchers", [])
-    return raw if isinstance(raw, list) else []
 
 
 def _legacy_json_path_for(jsonl_path: Path) -> Path:
@@ -208,10 +170,10 @@ def _resolved_verbs() -> list[dict]:
     `verb_categories`, `load_all_verbs`) share this one route, so existence,
     definition, and category can never disagree about which layer wins.
 
-    Triggers migration + default seeding via `load_all_matchers`, matching the
-    former `load_all_verbs`.
+    Triggers migration + default seeding via `_prepare_verb_layers`, matching
+    the former `load_all_verbs`.
     """
-    load_all_matchers()
+    _prepare_verb_layers()
     layers: list[list[dict]] = []
     proj_path = project_verbs_path()
     if proj_path is not None:
@@ -364,18 +326,11 @@ DEFAULT_VERBS: list[dict] = [
 
 
 def _ensure_default_seeds() -> None:
-    """Seed defaults into the machine layer when missing.
+    """Seed `DEFAULT_VERBS` into the machine verbs.jsonl when it is missing.
 
-    Idempotent. Matchers seed into ~/.config/endless/config.json; verbs seed
-    into the separate ~/.config/endless/verbs.jsonl file (E-1124, JSONL per
+    Idempotent. The file is ~/.config/endless/verbs.jsonl (E-1124, JSONL per
     E-1268). Project layer is never auto-seeded.
     """
-    cfg_path = machine_config_path()
-    cfg_data = _load_json(cfg_path)
-    if "matchers" not in cfg_data:
-        cfg_data["matchers"] = DEFAULT_MATCHERS
-        _save_json(cfg_path, cfg_data)
-
     verbs_path = machine_verbs_path()
     if not verbs_path.exists():
         _save_verbs_list(verbs_path, DEFAULT_VERBS)
@@ -455,145 +410,16 @@ def _migrate_verbs_to_separate_file(config_path: Path, verbs_path: Path) -> None
     _save_json(config_path, data)
 
 
-# Maps (type, scope, method) -> {old_match: new_match}. Only rewrites when
-# the existing match is EXACTLY the old default — leaves any user
-# customization alone. Each entry is a one-way migration; once a config is
-# migrated, the new pattern won't re-trigger on subsequent runs.
-_STALE_DEFAULTS: dict[tuple, dict[str, str]] = {
-    ("start", "task", "regex"): {
-        # E-1028: original pattern only matched bare integers; CLI accepts
-        # E-prefixed IDs, so 'endless task start E-1027' was a silent no-op.
-        r"endless\s+task\s+start\s+(\d+)":
-            r"endless\s+task\s+claim\s+(?:[Ee]-)?(\d+)",
-        # E-1232: CLI verb renamed start -> claim. The matcher type stays
-        # "start" (stable internal id); only the regex moves to the new
-        # command word.
-        r"endless\s+task\s+start\s+(?:[Ee]-)?(\d+)":
-            r"endless\s+task\s+claim\s+(?:[Ee]-)?(\d+)",
-    },
-    ("complete", "task", "regex"): {
-        r"endless\s+task\s+complete\s+(\d+)":
-            r"endless\s+task\s+complete\s+(?:[Ee]-)?(\d+)",
-    },
-}
-
-
-_ENSURED_DEFAULTS: list[dict] = [
-    # E-1232: ensure the new release matcher exists in already-seeded
-    # configs (DEFAULT_MATCHERS only seeds when the matchers list is
-    # missing entirely; this fills in newly-introduced entries).
-    {
-        "type": "release", "scope": "task", "method": "regex",
-        "match": r"endless\s+task\s+release(?:\s+(?:[Ee]-)?(\d+))?",
-    },
-]
-
-
-def _migrate_stale_defaults() -> None:
-    """Rewrite known-stale default matchers in the machine config in place,
-    and ensure newly-introduced default matchers exist.
-
-    Idempotent. Only rewrites matchers whose `match` field is exactly the
-    old default value; user-customized matchers are left untouched. New
-    entries from `_ENSURED_DEFAULTS` are added only when their (type,
-    scope, method) key is absent — never overwrites user customization.
-    """
-    path = machine_config_path()
-    data = _load_json(path)
-    matchers = data.get("matchers")
-    if not isinstance(matchers, list):
-        return
-    changed = False
-    for m in matchers:
-        key = (m.get("type"), m.get("scope"), m.get("method"))
-        rewrites = _STALE_DEFAULTS.get(key)
-        if not rewrites:
-            continue
-        if m.get("match") in rewrites:
-            m["match"] = rewrites[m["match"]]
-            changed = True
-
-    existing_keys = {
-        (m.get("type"), m.get("scope"), m.get("method"))
-        for m in matchers
-        if isinstance(m, dict)
-    }
-    for entry in _ENSURED_DEFAULTS:
-        key = (entry["type"], entry["scope"], entry["method"])
-        if key not in existing_keys:
-            matchers.append(dict(entry))
-            changed = True
-
-    if changed:
-        _save_json(path, data)
-
-
-# --- Matcher identity / merge logic ----------------------------------------
-
-def _matcher_signature(m: dict) -> tuple:
-    """Stable identity for grouping matchers that can share a 'match' list.
-
-    Two matchers with the same (type, scope, method, case_sensitive,
-    enabled-or-default) can be merged into one entry by extending the
-    match list. Regex matchers are single-string and never merge.
-    """
-    return (
-        m.get("type"),
-        m.get("scope"),
-        m.get("method"),
-        bool(m.get("case_sensitive", False)),
-        bool(m.get("enabled", True)),
-    )
-
-
-def _is_regex(m: dict) -> bool:
-    return m.get("method") == "regex"
-
-
-# --- Public load API --------------------------------------------------------
-
-def load_all_matchers() -> list[dict]:
-    """Project + machine matchers merged additively, with defaults seeded.
-
-    Returns a flat list. Duplicates across layers (same signature + same
-    match value) are de-duplicated.
+def _prepare_verb_layers() -> None:
+    """Seed the machine verbs file and migrate any pre-E-1124 verbs out of the
+    project and machine config.json files. Idempotent; run before every read.
     """
     _ensure_default_seeds()
-    _migrate_stale_defaults()
     project_path = project_config_path()
     project_vp = project_verbs_path()
     if project_path is not None and project_vp is not None:
         _migrate_verbs_to_separate_file(project_path, project_vp)
     _migrate_verbs_to_separate_file(machine_config_path(), machine_verbs_path())
-    project = _read_matchers_from(project_path) if project_path else []
-    machine = _read_matchers_from(machine_config_path())
-
-    # Merge: project entries take precedence in iteration order, but we
-    # merge match lists with same signature instead of dropping.
-    by_sig: dict[tuple, dict] = {}
-    order: list[tuple] = []
-
-    def absorb(m: dict) -> None:
-        sig = _matcher_signature(m)
-        if sig not in by_sig:
-            by_sig[sig] = json.loads(json.dumps(m))  # deep copy
-            order.append(sig)
-            return
-        existing = by_sig[sig]
-        if _is_regex(m):
-            return  # regex matchers are single-string; first one wins
-        ex_match = existing.get("match", [])
-        new_match = m.get("match", [])
-        if isinstance(ex_match, list) and isinstance(new_match, list):
-            for v in new_match:
-                if v not in ex_match:
-                    ex_match.append(v)
-            existing["match"] = ex_match
-
-    for m in project + machine:
-        absorb(m)
-
-    return [by_sig[s] for s in order]
 
 
 # --- Lookup helpers consumed by validate_title, hooks, etc. ----------------
@@ -633,227 +459,6 @@ def get_verb_definition(value: str) -> str | None:
             d = v.get("definition")
             return d if isinstance(d, str) else None
     return None
-
-
-def get_action_regex(action_type: str, scope: str) -> re.Pattern | None:
-    """Return the compiled regex for a (type, scope) action matcher, or None."""
-    for m in load_all_matchers():
-        if m.get("type") != action_type:
-            continue
-        if m.get("scope") != scope:
-            continue
-        if m.get("enabled", True) is False:
-            continue
-        if m.get("method") != "regex":
-            continue
-        pattern = m.get("match")
-        if not isinstance(pattern, str):
-            continue
-        try:
-            return re.compile(pattern)
-        except re.error:
-            return None
-    return None
-
-
-# --- Mutation API used by the phrase CLI -----------------------------------
-
-def add_match_value(
-    *,
-    type_: str,
-    value: str,
-    scope: str | None = None,
-    method: str = "exact",
-    case_sensitive: bool = False,
-    machine_only: bool = False,
-) -> tuple[bool, bool]:
-    """Add a matcher value to the appropriate config files.
-
-    Returns (wrote_project, wrote_machine). Either may be False if the
-    value was already present (no-op) or if writing was skipped (e.g.,
-    no project config and machine_only=False).
-    """
-    if type_ == "verb":
-        raise ValueError(
-            "verbs are no longer matchers; use add_verb()"
-        )
-    matcher_template = {
-        "type": type_,
-        "method": method,
-    }
-    if scope:
-        matcher_template["scope"] = scope
-    if case_sensitive:
-        matcher_template["case_sensitive"] = True
-
-    if method == "regex":
-        matcher_template["match"] = value
-    else:
-        matcher_template["match"] = [value]
-
-    wrote_project = False
-    wrote_machine = False
-
-    project_path = project_config_path()
-    if project_path is not None and not machine_only:
-        wrote_project = _add_to_file(project_path, matcher_template)
-
-    wrote_machine = _add_to_file(machine_config_path(), matcher_template)
-
-    return wrote_project, wrote_machine
-
-
-def _add_to_file(path: Path, new_matcher: dict) -> bool:
-    """Add a matcher to a config file, merging with same-signature entries.
-
-    Returns True if anything was written, False if the value was already
-    present (no-op).
-    """
-    data = _load_json(path)
-    matchers_list = data.setdefault("matchers", [])
-    if not isinstance(matchers_list, list):
-        # Corrupted property; reset
-        matchers_list = []
-        data["matchers"] = matchers_list
-
-    new_sig = _matcher_signature(new_matcher)
-    target = None
-    for m in matchers_list:
-        if isinstance(m, dict) and _matcher_signature(m) == new_sig:
-            target = m
-            break
-
-    if _is_regex(new_matcher):
-        if target is None:
-            matchers_list.append(new_matcher)
-            _save_json(path, data)
-            return True
-        # Regex single-string: refuse silent overwrite of a different value
-        return False
-
-    new_values = new_matcher.get("match", [])
-    if target is None:
-        matchers_list.append(new_matcher)
-        _save_json(path, data)
-        return True
-
-    target_match = target.setdefault("match", [])
-    if not isinstance(target_match, list):
-        return False
-    added = False
-    for v in new_values:
-        if v not in target_match:
-            target_match.append(v)
-            added = True
-    if added:
-        _save_json(path, data)
-    return added
-
-
-def remove_match_value(
-    *,
-    type_: str,
-    value: str,
-    scope: str | None = None,
-    machine_only: bool = False,
-) -> tuple[int, int]:
-    """Remove a value from matchers across both layers.
-
-    Returns (project_removals, machine_removals).
-    """
-    pr = 0
-    mr = 0
-    project_path = project_config_path()
-    if project_path is not None and not machine_only:
-        pr = _remove_from_file(project_path, type_, value, scope)
-    mr = _remove_from_file(machine_config_path(), type_, value, scope)
-    return pr, mr
-
-
-def _remove_from_file(path: Path, type_: str, value: str, scope: str | None) -> int:
-    data = _load_json(path)
-    matchers_list = data.get("matchers", [])
-    if not isinstance(matchers_list, list):
-        return 0
-    removed = 0
-    for m in list(matchers_list):
-        if not isinstance(m, dict):
-            continue
-        if m.get("type") != type_ or m.get("scope") != scope:
-            continue
-        match = m.get("match")
-        if isinstance(match, str):
-            if match == value:
-                matchers_list.remove(m)
-                removed += 1
-        elif isinstance(match, list):
-            if value in match:
-                match.remove(value)
-                removed += 1
-                if not match:
-                    matchers_list.remove(m)
-    if removed:
-        _save_json(path, data)
-    return removed
-
-
-def set_enabled(
-    *,
-    type_: str,
-    value: str,
-    enabled: bool,
-    scope: str | None = None,
-) -> tuple[int, int]:
-    """Toggle the enabled flag on the entry holding `value`.
-
-    For multi-value (exact/substring) matchers, this splits the entry: the
-    target value moves to a separate matcher object with the new enabled
-    flag, leaving siblings untouched. Returns (project_changes, machine_changes).
-    """
-    project_path = project_config_path()
-    pr = _toggle_in_file(project_path, type_, value, scope, enabled) if project_path else 0
-    mr = _toggle_in_file(machine_config_path(), type_, value, scope, enabled)
-    return pr, mr
-
-
-def _toggle_in_file(
-    path: Path | None, type_: str, value: str, scope: str | None, enabled: bool
-) -> int:
-    if path is None:
-        return 0
-    data = _load_json(path)
-    matchers_list = data.get("matchers", [])
-    if not isinstance(matchers_list, list):
-        return 0
-    changes = 0
-    for m in list(matchers_list):
-        if not isinstance(m, dict):
-            continue
-        if m.get("type") != type_ or m.get("scope") != scope:
-            continue
-        match = m.get("match")
-        current = m.get("enabled", True)
-        if isinstance(match, str):
-            if match == value and bool(current) != enabled:
-                m["enabled"] = enabled
-                changes += 1
-        elif isinstance(match, list):
-            if value not in match:
-                continue
-            if bool(current) == enabled:
-                continue
-            # Split: remove value from existing entry; add new entry with toggled enabled
-            match.remove(value)
-            new_entry = {k: v for k, v in m.items() if k != "match"}
-            new_entry["enabled"] = enabled
-            new_entry["match"] = [value]
-            matchers_list.append(new_entry)
-            if not match:
-                matchers_list.remove(m)
-            changes += 1
-    if changes:
-        _save_json(path, data)
-    return changes
 
 
 # --- Verb mutation API (E-1117 / E-1124) -----------------------------------

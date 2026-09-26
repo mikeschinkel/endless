@@ -107,13 +107,13 @@ def test_validate_missing_command(guide_tree, monkeypatch):
 
 
 def test_validate_gap_is_ok_but_reported(guide_tree, monkeypatch):
-    monkeypatch.setattr(guide_map, "walk_commands", lambda: ["phrase", "phrase list"])
-    _write(guide_tree, "phrase", "gap: matchers not covered yet.\n")
+    monkeypatch.setattr(guide_map, "walk_commands", lambda: ["widget", "widget list"])
+    _write(guide_tree, "widget", "gap: widgets not covered yet.\n")
     guide_map.update_index_block()
     rep = guide_map.validate()
     assert rep.ok(), rep.render()          # gap does not fail the gate
-    assert "phrase" in rep.gaps            # but is surfaced
-    assert "phrase list" not in rep.gaps   # inherited gap is not double-counted
+    assert "widget" in rep.gaps            # but is surfaced
+    assert "widget list" not in rep.gaps   # inherited gap is not double-counted
 
 
 def test_validate_bad_section_and_missing_fields(guide_tree, monkeypatch):

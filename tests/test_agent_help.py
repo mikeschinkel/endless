@@ -40,10 +40,10 @@ def test_directive_multiple_sections(monkeypatch):
 
 def test_gap_shows_reason(monkeypatch):
     monkeypatch.setattr(agent_help, "load_map", lambda cp: guide_map.MapEntry(
-        key=cp, sections=[], gap="matchers aren't covered yet."))
-    out = agent_help.agent_block(_ctx("endless phrase list"))
+        key=cp, sections=[], gap="widgets aren't covered yet."))
+    out = agent_help.agent_block(_ctx("endless widget list"))
     assert "No guide section covers this yet" in out
-    assert "matchers aren't covered yet." in out
+    assert "widgets aren't covered yet." in out
 
 
 def test_unmapped_command(monkeypatch):

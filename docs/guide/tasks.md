@@ -148,7 +148,7 @@ Every listing surface in Endless renders at most 20 rows — the task tree
 (`task list`, `task search`, `task next`, `task recent`, `task landed`,
 `task unsettled`, `epic list`, `decision list`), the sessions
 (`session list`, `session search`, `session history`), the
-registries (`project list`, `worktree list`, `verb list`, `phrase list`) and the
+registries (`project list`, `worktree list`, `verb list`) and the
 raw hatch (`endless sql`). When there are more, the last line says how many were
 left out and how to see them:
 

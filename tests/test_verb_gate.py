@@ -226,18 +226,6 @@ def test_auto_register_propagates_commit_failure(git_project_at_cwd, monkeypatch
     assert any(e.get("value") == "mull" for e in entries)
 
 
-def test_phrase_add_rejects_type_verb(isolated_env):
-    """phrase add no longer handles verb type; verb add is the path."""
-    from endless import phrase_cmd
-    with pytest.raises(click.ClickException) as exc:
-        phrase_cmd.add_phrase(
-            type_="verb", value="ponder",
-            scope=None, method=None, case_sensitive=False,
-            machine_only=True,
-        )
-    assert "endless verb add" in exc.value.message
-
-
 def test_legacy_verb_matcher_migrated_to_verbs_file(isolated_env, monkeypatch):
     """A pre-E-1117 config with type=verb matcher (with the bad 'definitions'
     field from E-1108) is migrated into the verbs file on first load."""
@@ -292,7 +280,7 @@ def test_inline_verbs_key_migrated_to_verbs_file(isolated_env, monkeypatch):
     if verbs_path.exists():
         verbs_path.unlink()
 
-    matchers.load_all_matchers()  # triggers migration
+    matchers._prepare_verb_layers()  # triggers migration
 
     cfg_after = json.loads(cfg_path.read_text())
     assert "verbs" not in cfg_after, "verbs key must be stripped from config.json"
@@ -311,7 +299,7 @@ def test_default_seed_creates_verbs_file(isolated_env):
     if verbs_path.exists():
         verbs_path.unlink()
 
-    matchers.load_all_matchers()  # triggers _ensure_default_seeds
+    matchers._prepare_verb_layers()  # triggers _ensure_default_seeds
 
     assert verbs_path.exists(), "verbs.jsonl must be created on first seed"
     verbs = _read_jsonl(verbs_path)
@@ -381,11 +369,6 @@ def test_legacy_verbs_json_merges_with_existing_jsonl(isolated_env):
     assert by_value["ponder"]["definition"] == "jsonl version"
     assert by_value["deliberate"]["definition"] == "only-in-legacy"
     assert not legacy_path.exists()
-
-
-def test_add_match_value_rejects_verb_type(isolated_env):
-    with pytest.raises(ValueError):
-        matchers.add_match_value(type_="verb", value="ponder", method="exact")
 
 
 # E-1264: auto-register an unrecognized first word as a verb when claude

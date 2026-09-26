@@ -8,7 +8,6 @@
   "documents": {
     "rules": []
   },
-  "matchers": [],
   "self_dev": true,
   "minimizer": {
     "enabled": false,
