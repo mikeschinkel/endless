@@ -214,3 +214,26 @@ the hook as recording claims or confirms from Bash commands. Run
   commit-directory table passes (item 4).
 - `just build`, `just test`, `just test-go`, `just guide-check` green, and the
   task's verify suite folds these in as its first, fail-fast check.
+
+## As implemented — scope grown and findings (2026-09-26)
+
+- **Folded in: the CLI bound on `--unattended` too.** `claim_item` resolved a
+  session and emitted `task.claimed` regardless of the flag, so a
+  `--unattended` claim from a Claude session's Bash tool bound that session
+  even with the hook gone — contradicting the flag's own docstring. It now
+  resolves nothing when `--unattended` is set. One line; covered by
+  `tests/test_claim_binds_without_the_hook.py`.
+- **The handoff renderer moved out of the hook** to `internal/claimhandoffcmd`
+  (`endless-go claim-handoff <id>`), since nothing in `hookcmd` uses it any
+  more. `TestClaimHandoff_ChecksTheHarness` moved with it. The subagent skip
+  went with the hook payload: there is no AgentID on a CLI call.
+- **Also deleted:** `monitor.stampableSession` and
+  `internal/monitor/harness_stamp_test.go` — they existed only for the two
+  deleted writes.
+- **`payload.CWD` does track the shell's persisted directory** (item 4's open
+  question): after `cd internal` in one Bash call, the next call's recorded
+  cwd was `<worktree>/internal`. So a `cd` in an earlier call is covered.
+- **Suite gate and wrapper prefixes:** `suiteRunRe` admits only a shell
+  interpreter before the path, by design (`cat <suite>` must stay allowed), so
+  it gained heredoc stripping only, as planned; its table skips the generic
+  wrapper-prefix row.
