@@ -6843,3 +6843,13 @@ Two habits: before asserting that something is defined 'elsewhere', open the fil
 ### [2026-09-26] Acceptance criteria must not freeze display parity across a deliberate semantic change
 When a plan deliberately changes semantics (e.g. splitting tasks.outcome into outcome + reason), do not also write an acceptance criterion like 'readable at its old heading, with no visible change' — it contradicts the change the plan exists to make. Display follows the model: E-1531's content names are Go enums whose String() gives the label, so headings are generated from content names ('reason' renders as 'Reason'). Check every 'no visible change' criterion against the plan's intended changes before submitting.
 - **Project**: endless
+
+### [2026-09-26] A verify suite that lets the real pane layout build must wait for its tmux server to die
+Three fixture facts that cost E-2168 three verify iterations, for the next suite that drives a session/tmux path.
+
+1. Do not stub build_pane_layout when the behaviour under test is that the layout gets built. It shells out to `endless-go spawn-layout`, which really splits the fixture window and leaves live processes in the new panes. `tmux kill-server` returns as soon as the request is sent, and the verify runner removes its per-run temp HOME the instant the suite exits — so a pane still running there makes that removal fail and the run ends with 'could not remove per-run dir <path>: directory not empty' after an otherwise green summary. Fix: in the cleanup trap, kill the server and then poll until the socket is gone before rm -rf.
+
+2. A pane binding is (server_uuid, address) in the `processes` table, referenced by `sessions.process_id`. There is no `sessions.pane_id` column — E-1898 moved it, because a tmux server restart reissues '%414' to an unrelated pane. Seed `processes` with server_uuid NULL (what the identity index's ifnull() collapse exists for) and UPDATE sessions.process_id.
+
+3. A drive that exercises anything reading `_live_sessions` must chdir into the FIXTURE project first. `_project_root_for_cwd` walks up from cwd looking for a registered project; run from the endless worktree it resolves to the worktree instead, `session-query list-live` is asked about a project the fixture never registered, and the check reads back an empty set — a gate that cannot fail while looking like it passes.
+- **Project**: endless
