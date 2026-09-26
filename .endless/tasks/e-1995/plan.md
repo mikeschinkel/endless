@@ -80,7 +80,7 @@ primed-sessions-stay-alive decision provides. Delivered messages count as prompt
 against usage, and an idle session starts a new turn on receipt — so the round cap
 is a cost control, not only a correctness control.
 
-See `docs/private/research-2026-08-14-cross-session-messaging.md`.
+See `docs/arch-2026-08-14-cross-session-messaging.md`.
 
 ## Absorbed from E-1948
 
