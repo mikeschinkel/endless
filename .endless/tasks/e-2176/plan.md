@@ -55,3 +55,28 @@ This table is the audit trail of how a plan reached its current state, never a
 parallel spec. An answer is not in force until it is folded into the plan.
 Without that rule, an answer in the table and a stale plan disagree with no way
 to tell which governs.
+
+## As shipped (decisions made during implementation)
+
+- **CLI (Mike, 2026-09-26):** a top-level `endless question` group, a sibling
+  of `decision` and `note`: `ask <task> "q1" "q2"...` (one call = one series),
+  `answer EQ-<n> "text" [--by]`, `withdraw`, `reject` (writes `invalid`),
+  `supersede`, `list [<task>] [--project] [--all]`. Question ids display as
+  `EQ-<n>`, alongside E-/ED-/ES-.
+- **answered_by (Mike, 2026-09-26):** stored as `user` or the peer's `ES-<n>`.
+  From a plain shell `--by` defaults to `user`; when an agent harness is
+  detected it is required, because only the agent knows whether it is relaying
+  the user or answering as a peer.
+- **Events:** `task.questions_asked` (one per series, entity = task) and
+  `task_question.resolved` (one per question, status in the payload). The
+  series and ids are allocated under the write lock by `event emit` and written
+  into the ledger payload, so replay reproduces rows instead of recomputing
+  them. An illegal move is refused before the ledger append.
+- **Lifecycle:** open → answered | withdrawn | invalid | superseded, and
+  answered → superseded. Nothing returns to open and nothing is answered twice;
+  superseding an answered question keeps its answer.
+- **Not added:** a reason/note column for `invalid`/`withdrawn`. The columns
+  are the ones this plan names; `answer` is set only on `answered`, so it is
+  not overloaded the way `tasks.outcome` is.
+- **Migration numbering:** written as 00004. Renumber at land time if E-1531
+  lands first (agreed with the E-1991 coordinator).
