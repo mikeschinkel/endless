@@ -6867,3 +6867,7 @@ Two habits. First: a claim that some guard is too broad or too narrow is a claim
 ### [2026-09-26] Require the reason on every closing move
 When a status change closes something out without an answer (withdraw, reject, supersede, and the like), require the reason every time. Do not propose making it optional for routine cases. Mike: 'Always require it.'
 - **Project**: endless
+
+### [2026-09-26] Don't cite the decisions table as design precedent
+Decision tables are being phased out in favor of task tables. Don't use the decisions schema (e.g. rejection_reason/obsolete_reason) as the precedent for a new design; argue from the design itself or from task-side precedent.
+- **Project**: endless
