@@ -4624,6 +4624,107 @@ def docs_cmd(name, type_filter):
     )
 
 
+class QuestionIDType(click.ParamType):
+    """Click parameter type that accepts question IDs with optional EQ- prefix.
+
+    E-NN inputs (task IDs) are redirected: `question answer E-2176 ...` means
+    the reader has the task and wants `question list E-2176` to find the id.
+    """
+    name = "question_id"
+
+    def convert(self, value, param, ctx):
+        if isinstance(value, int):
+            return value
+        s = str(value).strip()
+        if s.upper().startswith("EQ-"):
+            s = s[3:]
+        elif s.upper().startswith("E-"):
+            self.fail(
+                f"{value!r} is a task ID; this command takes a question ID (EQ-NN). "
+                f"Run 'endless question list {value}' to find it.",
+                param, ctx,
+            )
+        try:
+            return int(s)
+        except ValueError:
+            self.fail(
+                f"{value!r} is not a valid question ID (expected integer or EQ-NNN)",
+                param, ctx,
+            )
+
+
+QUESTION_ID = QuestionIDType()
+
+
+@main.group("question")
+def question_cmd():
+    """Ask, answer and track open questions on a task.
+
+    A question belongs to its task, not to the session that asked it.
+    Questions asked together share a series. An answer is not in force until
+    it is folded into the task's plan.
+    """
+    pass
+
+
+@question_cmd.command("ask")
+@click.argument("task_id", type=TASK_ID)
+@click.argument("questions", nargs=-1, required=True)
+def question_ask(task_id, questions):
+    """Ask one or more questions on a task, as one series."""
+    from endless.question_cmd import ask_questions
+    ask_questions(task_id, tuple(questions))
+
+
+@question_cmd.command("answer")
+@click.argument("question_id", type=QUESTION_ID)
+@click.argument("answer")
+@click.option("--by", "by", default=None,
+              help="Who answered: 'user', or a peer session's ES-<n>. Defaults "
+                   "to 'user' from a plain shell; required when an agent runs it.")
+def question_answer(question_id, answer, by):
+    """Answer an open question."""
+    from endless.question_cmd import answer_question
+    answer_question(question_id, answer, by)
+
+
+@question_cmd.command("withdraw")
+@click.argument("question_ids", type=QUESTION_ID, nargs=-1, required=True)
+def question_withdraw(question_ids):
+    """Withdraw open questions — the asker retracting them."""
+    from endless.question_cmd import resolve_questions
+    resolve_questions("withdraw", tuple(question_ids))
+
+
+@question_cmd.command("reject")
+@click.argument("question_ids", type=QUESTION_ID, nargs=-1, required=True)
+def question_reject(question_ids):
+    """Reject open questions whose premise is wrong (status: invalid)."""
+    from endless.question_cmd import resolve_questions
+    resolve_questions("reject", tuple(question_ids))
+
+
+@question_cmd.command("supersede")
+@click.argument("question_ids", type=QUESTION_ID, nargs=-1, required=True)
+def question_supersede(question_ids):
+    """Mark open or answered questions as rolled into a later series or plan."""
+    from endless.question_cmd import resolve_questions
+    resolve_questions("supersede", tuple(question_ids))
+
+
+@question_cmd.command("list")
+@click.argument("task_id", type=TASK_ID, required=False)
+@click.option("--project", default=None,
+              help="Only questions on this project's tasks")
+@click.option("--all", "show_all", is_flag=True,
+              help="Include answered, withdrawn, invalid and superseded questions")
+@output_options(agent=False)
+def question_list(task_id, project, show_all, as_json):
+    """List open questions: on one task, one project, or (default) everywhere."""
+    from endless.question_cmd import list_questions
+    list_questions(task_id, project, show_all, as_json)
+
+
 @main.command("notes")
 @click.argument("name", default=None, required=False)
 @click.option("--all", "show_all", is_flag=True,

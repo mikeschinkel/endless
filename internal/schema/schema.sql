@@ -694,6 +694,46 @@ CREATE TABLE IF NOT EXISTS task_deps (
     UNIQUE(source_type, source_id, target_type, target_id, dep_type)
 );
 
+-- Open questions on a task (E-2176). One row per question the answering party
+-- must resolve. A task accumulates many questions across many rounds, each with
+-- its own answer and state, so they are rows rather than one content blob — and
+-- rows are what make "every open question across the project" a query.
+--
+-- Scoped to the task, not the asking session: a question must outlive its
+-- asker. asked_by_session is provenance only, and deliberately carries no FK —
+-- sessions are machine-local and never rebuilt from the ledger, so an FK would
+-- refuse every replayed row.
+--
+-- series is the round: questions asked together share one, assigned as
+-- MAX(series)+1 for the task inside the write lock that also allocates the ids,
+-- and recorded in the event so a replay reproduces it rather than recomputing.
+--
+-- status: open | answered | withdrawn | invalid | superseded, validated in
+-- application code (internal/events/question.go). answered_by is `user` or the
+-- answering peer's `ES-<n>`, set only on `answered` — peer-settled questions get
+-- rows too, so what two sessions decided between themselves stays reviewable.
+--
+-- The plan stays authoritative: an answer here is not in force until it is
+-- folded into the task's plan. This table is the audit trail of how the plan got
+-- there, never a parallel spec.
+CREATE TABLE IF NOT EXISTS task_questions (
+    id INTEGER PRIMARY KEY,
+    task_id INTEGER NOT NULL,
+    series INTEGER NOT NULL,
+    question TEXT NOT NULL,
+    answer TEXT,
+    status TEXT NOT NULL DEFAULT 'open',
+    answered_by TEXT,
+    asked_by_session INTEGER,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    updated_at TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
+CREATE INDEX IF NOT EXISTS idx_task_questions_task
+    ON task_questions(task_id, series);
+CREATE INDEX IF NOT EXISTS idx_task_questions_status
+    ON task_questions(status);
+
 -- Decisions (E-1378). Lifecycle: proposed (initial) -> accepted | rejected,
 -- and accepted -> superseded | obsolete (E-1920). status validation enforced in
 -- application code.

@@ -142,6 +142,7 @@ const (
 	EntityNote             EntityType = "note"
 	EntityDecision         EntityType = "decision"          // E-1378
 	EntityDecisionRelation EntityType = "decision_relation" // E-1378
+	EntityTaskQuestion     EntityType = "task_question"     // E-2176
 )
 
 // ActorKind enumerates actor categories.
@@ -178,6 +179,21 @@ const (
 	KindTaskReleased      Kind = "task.released"
 	KindTaskClaimed       Kind = "task.claimed"
 	KindTaskLanded        Kind = "task.landed"
+)
+
+// Task question event kinds (E-2176).
+//
+//   - task.questions_asked: one event per SERIES, entity = the task. The ids and
+//     the series number are allocated under the write lock by `event emit` and
+//     written into the payload before the ledger append, so a replay inserts
+//     exactly the rows the live path did instead of recomputing either.
+//   - task_question.resolved: one event per question, entity = the question.
+//     One kind for every way out of `open` (answered, withdrawn, invalid,
+//     superseded): the payload's status names which, and the lifecycle guard in
+//     internal/questionstatus decides whether the move is legal.
+const (
+	KindTaskQuestionsAsked   Kind = "task.questions_asked"
+	KindTaskQuestionResolved Kind = "task_question.resolved"
 )
 
 // Task dependency event kinds.
@@ -364,6 +380,9 @@ var ValidKinds = map[Kind]bool{
 	KindTaskReleased:      true,
 	KindTaskClaimed:       true,
 	KindTaskLanded:        true,
+	// Task questions (E-2176)
+	KindTaskQuestionsAsked:   true,
+	KindTaskQuestionResolved: true,
 	// Task dependency
 	KindTaskDepCreated: true,
 	KindTaskDepDeleted: true,
@@ -428,6 +447,7 @@ var validEntityTypes = map[EntityType]bool{
 	EntityNote:             true,
 	EntityDecision:         true,
 	EntityDecisionRelation: true,
+	EntityTaskQuestion:     true,
 }
 
 // validActorKinds is the closed set of recognized actor kinds.

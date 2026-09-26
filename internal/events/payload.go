@@ -125,6 +125,35 @@ type TaskLandedPayload struct {
 	BaseBranch string `json:"base_branch,omitempty"`
 }
 
+// Task question payloads (E-2176).
+
+// TaskQuestionsAskedPayload records one series of questions asked together on
+// the task named by the entity ref. Callers send only the question texts;
+// `event emit` fills Series and every ID under the write lock and refuses a
+// payload that already carries them, so the numbers in the ledger are always
+// the ones the database allocated.
+type TaskQuestionsAskedPayload struct {
+	Series    int64           `json:"series"`
+	Questions []AskedQuestion `json:"questions"`
+}
+
+// AskedQuestion is one question within a series.
+type AskedQuestion struct {
+	ID       int64  `json:"id"`
+	Question string `json:"question"`
+}
+
+// TaskQuestionResolvedPayload moves the question named by the entity ref out of
+// its current status. Answer and AnsweredBy are required for `answered` and
+// refused for every other status: a withdrawal or an invalidation has no
+// answer, and storing text there would overload the column the way
+// tasks.outcome is overloaded today.
+type TaskQuestionResolvedPayload struct {
+	Status     string `json:"status"`
+	Answer     string `json:"answer,omitempty"`
+	AnsweredBy string `json:"answered_by,omitempty"`
+}
+
 // Epic derivation payloads (E-1541). Recorded once per epic whose status the
 // derivation rule changed. Mirrors TaskStatusChangedPayload's shape; the entity
 // ref carries the epic's task id and the actor is system/epic-derivation.

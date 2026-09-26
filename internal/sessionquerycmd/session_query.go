@@ -98,6 +98,16 @@ func Run(args []string) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
+	case "task-questions":
+		if err := runTaskQuestions(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+	case "question-target":
+		if err := runQuestionTarget(args[1:]); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
 	case "untriaged-tasks":
 		if err := runUntriagedTasks(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -162,6 +172,8 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "                                    project_id, project_path, task_type, task_status, task_title, landed_sha}")
 	fmt.Fprintln(os.Stderr, "                                    to relaunch (or recover) a lost session; ES-<n> is session-explicit")
 	fmt.Fprintln(os.Stderr, "  task-report --id <task-id>        JSON {task_id, status, type, landed, successors[]} of a task's computed report facts (E-1771)")
+	fmt.Fprintln(os.Stderr, "  task-questions [--id <task-id>] [--project <name>] [--all]   JSON array of open (or --all) task questions")
+	fmt.Fprintln(os.Stderr, "  question-target (--task <id> | --question <id>)   JSON {task_id, project[, status]} a question command acts on")
 	fmt.Fprintln(os.Stderr, "  untriaged-tasks [--project <name>] [--limit N]")
 	fmt.Fprintln(os.Stderr, "                                    JSON array [{id, project, title}] of the triage queue, oldest first (E-1859)")
 	fmt.Fprintln(os.Stderr, "  triage-context --id <task-id>     JSON {task_id, project, title, description, type, phase, status, has_plan,")
@@ -401,6 +413,42 @@ func runUntriagedTasks(args []string) error {
 		return fmt.Errorf("read untriaged queue: %w", err)
 	}
 	return dbprovenance.Encode(os.Stdout, tasks)
+}
+
+// runTaskQuestions prints task_questions rows (E-2176) as JSON — open ones only
+// unless --all. With neither --id nor --project it is every open question in
+// the database, which is the feed an attention surface reads.
+func runTaskQuestions(args []string) error {
+	fs := flag.NewFlagSet("task-questions", flag.ContinueOnError)
+	id := fs.Int64("id", 0, "task id (default: every task)")
+	project := fs.String("project", "", "registered project name (default: every project)")
+	all := fs.Bool("all", false, "include answered, withdrawn, invalid and superseded questions")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	qs, err := monitor.TaskQuestions(monitor.TaskQuestionFilter{
+		TaskID: *id, Project: *project, All: *all,
+	})
+	if err != nil {
+		return err
+	}
+	return dbprovenance.Encode(os.Stdout, qs)
+}
+
+// runQuestionTarget prints {task_id, project[, status]} for the task a question
+// command acts on (E-2176), named by --task or by --question.
+func runQuestionTarget(args []string) error {
+	fs := flag.NewFlagSet("question-target", flag.ContinueOnError)
+	task := fs.Int64("task", 0, "task id")
+	question := fs.Int64("question", 0, "question id")
+	if err := fs.Parse(args); err != nil {
+		return err
+	}
+	tgt, err := monitor.ResolveQuestionTarget(*task, *question)
+	if err != nil {
+		return err
+	}
+	return dbprovenance.Encode(os.Stdout, tgt)
 }
 
 // runTriageContext prints one task's triage context (E-1859) as JSON: the

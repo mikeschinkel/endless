@@ -43,6 +43,7 @@ import (
 // direct children of `tasks` misses two whole tables.
 type rebuildLoss struct {
 	TaskLandings    int64 // tasks(id) ON DELETE CASCADE — destroyed
+	TaskQuestions   int64 // tasks(id) ON DELETE CASCADE — destroyed (E-2176)
 	SessionGates    int64 // tasks(id) via epic_id, CASCADE — destroyed
 	ReportJudgments int64 // session_gates(id) CASCADE — destroyed, second hop
 	ReportLabels    int64 // session_gates(id) CASCADE — destroyed, second hop
@@ -110,6 +111,7 @@ func countRebuildLoss(db *sql.DB) rebuildLoss {
 	}
 	probes := []probe{
 		{table: "task_landings", dest: &loss.TaskLandings},
+		{table: "task_questions", dest: &loss.TaskQuestions},
 		{table: "session_gates", dest: &loss.SessionGates},
 		{table: "report_judgments", dest: &loss.ReportJudgments},
 		{table: "report_labels", dest: &loss.ReportLabels},
@@ -148,6 +150,7 @@ func writeRebuildRefusal(w io.Writer, loss rebuildLoss) {
 		num := func(n int64) string { return fmt.Sprintf("%d", n) }
 
 		row(num(loss.TaskLandings), "task_landings rows", "(landing history)")
+		row(num(loss.TaskQuestions), "task_questions rows", "(open questions and answers)")
 		row(num(loss.SessionGates), "session_gates rows",
 			fmt.Sprintf("(and %d report_judgments, %d report_labels)",
 				loss.ReportJudgments, loss.ReportLabels))

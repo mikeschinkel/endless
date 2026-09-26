@@ -362,6 +362,8 @@ func seedRebuildLossFixture(t *testing.T, dbPath, projectName string, taskID int
 		  VALUES (1, 'ES-TEST-1', 1, ?)`, []any{taskID}},
 		{`INSERT INTO task_landings (id, task_id, session_id, merge_commit_sha)
 		  VALUES (1, ?, 1, 'deadbeef')`, []any{taskID}},
+		{`INSERT INTO task_questions (id, task_id, series, question)
+		  VALUES (1, ?, 1, 'still open?')`, []any{taskID}},
 		{`INSERT INTO session_gates (id, session_id, kind_id, epic_id)
 		  VALUES (1, 1, 1, ?)`, []any{taskID}},
 		{`INSERT INTO report_judgments (id, gate_id) VALUES (1, 1)`, nil},
@@ -389,6 +391,7 @@ func rebuildLossCounts(t *testing.T, dbPath string) map[string]int64 {
 	queries := map[string]string{
 		"tasks":            "SELECT count(*) FROM tasks",
 		"task_landings":    "SELECT count(*) FROM task_landings",
+		"task_questions":   "SELECT count(*) FROM task_questions",
 		"session_gates":    "SELECT count(*) FROM session_gates",
 		"report_judgments": "SELECT count(*) FROM report_judgments",
 		"report_labels":    "SELECT count(*) FROM report_labels",
@@ -446,6 +449,7 @@ func TestEventRebuildDB_ConfirmRefusesAndDestroysNothing(t *testing.T) {
 	for _, want := range []string{
 		"rebuild-db --confirm is disabled",
 		"1 task_landings rows",
+		"1 task_questions rows",
 		"1 session_gates rows",
 		"and 1 report_judgments, 1 report_labels",
 		"1 sessions bindings",
@@ -890,5 +894,170 @@ func TestEvent_UnknownSubcommandExitsNonZero(t *testing.T) {
 	}
 	if !bytes.Contains(out, []byte("Unknown command")) {
 		t.Errorf("stderr missing 'Unknown command' marker: %s", out)
+	}
+}
+
+// emitQuestions runs `event emit --kind task.questions_asked` through the
+// binary against a git-initialised project root (the ledger segment is
+// committed on every emit outside a sandbox).
+func emitQuestions(t *testing.T, cfgDir, projectRoot, payload string) ([]byte, error) {
+	t.Helper()
+	cmd := exec.Command(endlessGoBin(t), "--db-dir", cfgDir,
+		"event", "emit",
+		"--kind", "task.questions_asked",
+		"--project", "proj-q",
+		"--entity-type", "task",
+		"--entity-id", "7",
+		"--actor-kind", "cli",
+		"--actor-id", "test",
+		"--session-id", "12",
+		"--node-id", "a7f3",
+		"--project-root", projectRoot,
+		"--payload", payload,
+	)
+	return cmd.CombinedOutput()
+}
+
+func gitInit(t *testing.T, dir string) {
+	t.Helper()
+	for _, args := range [][]string{
+		{"init", "-q"},
+		{"config", "user.email", "test@example.com"},
+		{"config", "user.name", "test"},
+		{"commit", "-q", "--allow-empty", "-m", "init"},
+	} {
+		if out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v\n%s", args, err, out)
+		}
+	}
+}
+
+// TestEventEmit_QuestionsAskedAllocatesSeriesAndIDs pins E-2176's create flow:
+// the caller sends only texts, the binary allocates the series and ids under the
+// write lock, writes THOSE into the ledger line, and reports them.
+func TestEventEmit_QuestionsAskedAllocatesSeriesAndIDs(t *testing.T) {
+	cfgDir := t.TempDir()
+	projectRoot := t.TempDir()
+	gitInit(t, projectRoot)
+	dbPath := initSchemaDB(t, cfgDir)
+	seedTaskRow(t, dbPath, "proj-q", 7, "asked of")
+
+	payload := `{"questions":[{"question":"One?"},{"question":"Two?"}]}`
+	out, err := emitQuestions(t, cfgDir, projectRoot, payload)
+	if err != nil {
+		t.Fatalf("emit 1: %v\n%s", err, out)
+	}
+	if !bytes.Contains(out, []byte(`"series":1`)) || !bytes.Contains(out, []byte(`"ids":["EQ-1","EQ-2"]`)) {
+		t.Errorf("emit 1 output = %s, want series 1 and EQ-1, EQ-2", out)
+	}
+	out, err = emitQuestions(t, cfgDir, projectRoot, `{"questions":[{"question":"Three?"}]}`)
+	if err != nil {
+		t.Fatalf("emit 2: %v\n%s", err, out)
+	}
+	if !bytes.Contains(out, []byte(`"series":2`)) || !bytes.Contains(out, []byte(`"ids":["EQ-3"]`)) {
+		t.Errorf("emit 2 output = %s, want series 2 and EQ-3", out)
+	}
+
+	evts, err := events.ReadAllEvents(projectRoot)
+	if err != nil {
+		t.Fatalf("read ledger: %v", err)
+	}
+	if len(evts) != 2 {
+		t.Fatalf("ledger holds %d events, want 2", len(evts))
+	}
+	var p events.TaskQuestionsAskedPayload
+	if err := json.Unmarshal(evts[1].Payload, &p); err != nil {
+		t.Fatalf("payload: %v", err)
+	}
+	if p.Series != 2 || len(p.Questions) != 1 || p.Questions[0].ID != 3 {
+		t.Errorf("ledger payload = %+v, want the allocated series 2 / id 3", p)
+	}
+
+	db, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		t.Fatalf("open: %v", err)
+	}
+	defer db.Close()
+	var n, asker int
+	if err := db.QueryRow(
+		"SELECT count(*), MAX(asked_by_session) FROM task_questions WHERE task_id = 7 AND status = 'open'",
+	).Scan(&n, &asker); err != nil {
+		t.Fatalf("count: %v", err)
+	}
+	if n != 3 || asker != 12 {
+		t.Errorf("open rows = %d, asker = %d; want 3 rows asked by session 12", n, asker)
+	}
+}
+
+// TestEventEmit_QuestionsAskedRefusesCallerNumbers: series and ids belong to the
+// database, so a payload naming either is refused before anything is written.
+func TestEventEmit_QuestionsAskedRefusesCallerNumbers(t *testing.T) {
+	for name, payload := range map[string]string{
+		"series": `{"series":5,"questions":[{"question":"q?"}]}`,
+		"id":     `{"questions":[{"id":9,"question":"q?"}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			cfgDir := t.TempDir()
+			projectRoot := t.TempDir()
+			dbPath := initSchemaDB(t, cfgDir)
+			seedTaskRow(t, dbPath, "proj-q", 7, "asked of")
+			out, err := emitQuestions(t, cfgDir, projectRoot, payload)
+			if err == nil {
+				t.Fatalf("accepted a caller-supplied %s\n%s", name, out)
+			}
+			if !bytes.Contains(out, []byte("allocated here")) {
+				t.Errorf("refusal = %s, want it to say the number is allocated here", out)
+			}
+			if evts, _ := events.ReadAllEvents(projectRoot); len(evts) != 0 {
+				t.Errorf("refusal still wrote %d ledger events", len(evts))
+			}
+		})
+	}
+}
+
+// TestEventEmit_QuestionResolvedRefusalWritesNoLedger: the update path appends
+// before it executes, so an illegal move has to be refused up front or it lands
+// in the permanent record and every replay fails on it.
+func TestEventEmit_QuestionResolvedRefusalWritesNoLedger(t *testing.T) {
+	cfgDir := t.TempDir()
+	projectRoot := t.TempDir()
+	gitInit(t, projectRoot)
+	dbPath := initSchemaDB(t, cfgDir)
+	seedTaskRow(t, dbPath, "proj-q", 7, "asked of")
+	if out, err := emitQuestions(t, cfgDir, projectRoot, `{"questions":[{"question":"q?"}]}`); err != nil {
+		t.Fatalf("ask: %v\n%s", err, out)
+	}
+
+	resolve := func(payload string) ([]byte, error) {
+		return exec.Command(endlessGoBin(t), "--db-dir", cfgDir,
+			"event", "emit",
+			"--kind", "task_question.resolved",
+			"--project", "proj-q",
+			"--entity-type", "task_question",
+			"--entity-id", "1",
+			"--actor-kind", "cli",
+			"--actor-id", "test",
+			"--node-id", "a7f3",
+			"--project-root", projectRoot,
+			"--payload", payload,
+		).CombinedOutput()
+	}
+	if out, err := resolve(`{"status":"invalid"}`); err != nil {
+		t.Fatalf("reject: %v\n%s", err, out)
+	}
+	for _, bad := range []string{
+		`{"status":"withdrawn"}`, // invalid is terminal
+		`{"status":"answered","answer":"x","answered_by":"someone"}`,
+	} {
+		if out, err := resolve(bad); err == nil {
+			t.Errorf("accepted %s\n%s", bad, out)
+		}
+	}
+	evts, err := events.ReadAllEvents(projectRoot)
+	if err != nil {
+		t.Fatalf("read ledger: %v", err)
+	}
+	if len(evts) != 2 {
+		t.Errorf("ledger holds %d events, want 2 (the ask and the reject only)", len(evts))
 	}
 }

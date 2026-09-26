@@ -159,6 +159,12 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 	needsDecisionPreAlloc := evtKind == events.KindDecisionCreated
 	needsPreAlloc := needsTaskPreAlloc || needsDecisionPreAlloc
 
+	if evtKind == events.KindTaskQuestionsAsked {
+		return emitQuestionsAsked(ts, project, entityTypeStr, entityID,
+			actorKindStr, actorID, sessionID, nodeIDStr, projectRoot, payloadStr,
+			correlationID)
+	}
+
 	if needsPreAlloc {
 		// Events-authoritative flow for creates:
 		// 1. Pre-allocate ID (acquires write lock)
@@ -275,6 +281,12 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 
 		if err := evt.Validate(); err != nil {
 			return err
+		}
+		// E-2176: a refused question move must not reach the ledger.
+		if evtKind == events.KindTaskQuestionResolved {
+			if err := events.PrecheckTaskQuestionResolved(&evt); err != nil {
+				return err
+			}
 		}
 
 		// Write event to segment file FIRST (events-authoritative)

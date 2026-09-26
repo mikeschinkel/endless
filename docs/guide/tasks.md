@@ -815,6 +815,42 @@ Rows orphaned before this landed are cleaned up by `reconcile` — which runs on
 
 ---
 
+## Open questions
+
+A question you cannot answer yourself, and that nobody is live to answer, goes
+on the task as a row — not in chat, where it scrolls away, and not into the
+plan as a guess.
+
+```bash
+endless question ask <task> "Question one?" "Question two?"   # one series
+endless question list <task>              # open questions on one task
+endless question list [--project <name>]  # open questions everywhere (or on one project)
+endless question list <task> --all        # every status, answers included
+endless question answer EQ-<n> "The answer" [--by user|ES-<n>]
+endless question withdraw EQ-<n>...       # you, the asker, retract it
+endless question reject EQ-<n>...         # the premise is wrong (status: invalid)
+endless question supersede EQ-<n>...      # rolled into a later series or the plan
+```
+
+- **A question belongs to the task**, not to the session that asked it. It
+  outlives its asker; `asked_by_session` is provenance only.
+- **Questions asked together share a series** — the round number, 1, 2, 3 per
+  task. Ask a round in one `question ask` call so it stays one series.
+- **Statuses:** `open` → `answered` | `withdrawn` | `invalid` | `superseded`,
+  and `answered` → `superseded`. Nothing returns to `open` and nothing is
+  answered twice: a changed answer is a new question in a new series, so the
+  record of what was first decided survives.
+- **Say who answered.** `--by user` when you are relaying the user's answer,
+  `--by ES-<n>` (your own session) when you settled it as a peer. From a plain
+  shell it defaults to `user`; from an agent it is required. Peer-settled
+  questions get rows too, so what two sessions decided between themselves stays
+  reviewable.
+- **The plan stays authoritative.** An answer is not in force until you fold it
+  into the plan (`task update --plan-file`). Then supersede the questions it
+  settled, so the old series stops reading as live.
+
+---
+
 ## Relations between tasks
 
 ```bash
