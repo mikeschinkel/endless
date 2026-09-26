@@ -113,3 +113,17 @@ The lesson for the remaining dissolutions E-2178 inventories: a container's
 plan-internal cross-references and its blocking edges are both content that has
 to be placed before it closes. E-1992's outcome accounted for the children and
 the prose; these two were still lost.
+
+## Migration numbering across parallel children
+
+E-1531 and E-2176 both add tables and were spawned in parallel. The goose
+provider is built without `WithAllowOutofOrder`, so a version gap is refused as
+firmly as a duplicate — and `LatestVersion()` compares against `DBVersion`, so
+either surfaces as E-2020's "database is ahead of your binary" fault rather than
+as a numbering mistake.
+
+The rule both sessions were given: take the next free number at LAND time, after
+rebasing on main, never when the file is written. Whoever lands second renumbers.
+E-1531 needs two adjacent numbers (additive SQL, then the Go column-drop step);
+E-2176 needs one. Applies to every later child that touches the schema.
+
