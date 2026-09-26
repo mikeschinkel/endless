@@ -1,7 +1,7 @@
 # Automated dispute resolution between sessions
 
 Absorbs E-1948 (routing reads as the agent's job) and E-1970 (surface the
-triager's decision). Depends on Child 3 — primed sessions are the transport.
+triager's decision). Depends on E-1994 — primed sessions are the transport.
 
 ## The problem, precisely
 
@@ -33,7 +33,7 @@ manually. Automate what is already being done.
    carrying both positions, and park the task.
 
 No new machinery in step 5: escalation and open question are the same object.
-The task parks exactly as it would for any unanswered question (Child 2 §3).
+The task parks exactly as it would for any unanswered question (E-1993 §3).
 
 Step 5's shape matters: the user's original complaint was that agents decide
 open questions instead of presenting pros and cons. This protocol produces the
@@ -59,7 +59,7 @@ hypothetical. Trivial now, expensive to discover in production.
 ## Re-approval
 
 When dispute resolution updates a plan, the user must get to review and
-re-approve. Child 2's retargeted reset gives this for free: a material plan
+re-approve. E-1993's retargeted reset gives this for free: a material plan
 change on a pre-work task drops approval. Verify it fires on agent-initiated
 plan edits, not only user-initiated ones.
 
@@ -75,7 +75,7 @@ the ledger after every participating session is gone.
 `SendMessage` over Claude Code's cross-session channel (v2.1.224+). Same-machine
 delivery is a per-session Unix socket, never through Anthropic servers; worktrees
 on one filesystem reach each other fine. Reachability requires the target session
-to be **live and binding an inbox socket**, which is what Child 3's
+to be **live and binding an inbox socket**, which is what E-1994's
 primed-sessions-stay-alive decision provides. Delivered messages count as prompts
 against usage, and an idle session starts a new turn on receipt — so the round cap
 is a cost control, not only a correctness control.
@@ -99,7 +99,7 @@ automates:
 
 ## Absorbed from E-1970
 
-The `triage_report` row and its rendering land in Child 3. What lands here is
+The `triage_report` row and its rendering land in E-1994. What lands here is
 the notification half: a triage verdict that changes nothing must still be
 visible and must still reach someone. E-1970's live misdiagnosis on 2026-08-08 —
 three tasks correctly triaged back to `unplanned`, reported as the feature not
@@ -159,3 +159,5 @@ to have a live counterparty worth messaging, not before.
 This also formalises something sessions already do: stopping to ask. The gain is
 that the question becomes a durable row instead of a chat message that scrolls
 away.
+
+
