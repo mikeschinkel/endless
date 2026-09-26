@@ -6839,3 +6839,7 @@ The grounding I should have checked first and led with: 'endless setup claude-ho
 
 Two habits: before asserting that something is defined 'elsewhere', open the file and name the scope; and never let a downstream task's intended end state carry the weight of a recommendation — if the change is right, it is right on the tree as it stands.
 - **Project**: endless
+
+### [2026-09-26] Acceptance criteria must not freeze display parity across a deliberate semantic change
+When a plan deliberately changes semantics (e.g. splitting tasks.outcome into outcome + reason), do not also write an acceptance criterion like 'readable at its old heading, with no visible change' — it contradicts the change the plan exists to make. Display follows the model: E-1531's content names are Go enums whose String() gives the label, so headings are generated from content names ('reason' renders as 'Reason'). Check every 'no visible change' criterion against the plan's intended changes before submitting.
+- **Project**: endless
