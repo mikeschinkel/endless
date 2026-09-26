@@ -702,20 +702,195 @@ def build_pane_layout(pane: str, cwd: str) -> None:
         return
 
 
-def _require_lone_pane(verb: str, ref: str) -> None:
+def _window_claimed_task() -> int | None:
+    """The task id THIS tmux window claims via `@endless_task_id`, or None.
+
+    None covers every way there is no claim to disagree with: no tmux, no
+    `$TMUX_PANE`, a failed query, the option unset (tmux prints an empty line
+    for one), or a value that is not a task id. A window carrying no claim is
+    the ordinary case `session resume` is run from — a plain recovery shell —
+    and must not be gated.
+
+    Read through `display-message`, the same way `_spawner_pane` reads
+    `@endless_spawned_by`: `show-options -w` needs the option to exist to print
+    anything useful, while a format string renders an unset option as empty.
+    """
+    pane = os.environ.get("TMUX_PANE", "")
+    if not pane:
+        return None
+    res = _tmux_run(
+        ["display-message", "-p", "-t", pane, "#{@endless_task_id}"]
+    )
+    if not res or res.returncode != 0:
+        return None
+    val = res.stdout.strip()
+    return int(val) if val.isdigit() else None
+
+
+def _tmux_window_of(pane: str) -> tuple[str, str] | None:
+    """(window_id, human label) for the tmux window holding `pane`, or None.
+
+    The id (`@N`) is what identity comparisons use — unique and stale-proof per
+    server. The label is what a refusal prints, because `@7` tells a human
+    nothing about which tab to go look at and `main:3 (E-2168-…)` tells them
+    exactly.
+    """
+    if not pane:
+        return None
+    res = _tmux_run([
+        "display-message", "-p", "-t", pane,
+        "#{window_id} #{session_name}:#{window_index} #{window_name}",
+    ])
+    if not res or res.returncode != 0:
+        return None
+    parts = res.stdout.strip().split(None, 2)
+    if not parts or not parts[0].startswith("@"):
+        return None
+    window_id = parts[0]
+    address = parts[1] if len(parts) > 1 else window_id
+    name = parts[2] if len(parts) > 2 else ""
+    return window_id, f"{address} ({name})" if name else address
+
+
+def _live_window_claiming(task_id: int) -> tuple[str, int] | None:
+    """(window label, endless session id) for a LIVE window OTHER than this one
+    holding a session on `task_id` — or None when there is no such window.
+
+    Backs `--rebind`'s own refusal (E-2168). The invariant is `tmux window ==
+    Endless task == one or more Claude sessions`, in SERIES: rebinding this
+    window onto a task that a live window is already working creates exactly the
+    parallel state that forbids.
+
+    Liveness is DERIVED, never read off a `state` column (E-1898), so the
+    candidate set comes from `_live_sessions` — the Go `list-live` query, which
+    already drops ended rows and sessions whose pane was observably absent from
+    a tmux server it reached. A claim left behind by a dead session must not
+    block a recovery, which is also why an unresolvable window answers None
+    rather than blocking: `_tmux_window_of` fails for a pane on a server this
+    process cannot reach, and unprovable is not the same as live.
+
+    This window is excluded by window id rather than by pane id: `session
+    resume` is most often run from a sibling shell pane, so the pane asking is
+    routinely not the pane the live session sits in, while the WINDOW is the
+    same one — and a session in this very window is not a parallel claim, it is
+    the one being re-entered.
+    """
+    try:
+        live = _live_sessions(_project_root_for_cwd())
+    except Exception:
+        return None
+    here = _tmux_window_of(os.environ.get("TMUX_PANE", ""))
+    here_id = here[0] if here else None
+    for row in live:
+        raw = row.get("task_id")
+        if raw is None or int(raw) != task_id:
+            continue
+        window = _tmux_window_of(row.get("pane_id") or "")
+        if window is None or window[0] == here_id:
+            continue
+        return window[1], int(row.get("endless_session_id") or 0)
+    return None
+
+
+def _require_window_claim(ref: str, rebind: bool) -> None:
+    """Gate `session resume` on WHICH TASK this tmux window already claims.
+
+    Two refusals from one read-only resolution of `ref` (E-2168):
+
+    1. The window claims a DIFFERENT task than the resume target. Resume is
+       about to rewrite `@endless_task_id` — `_bind_pane_window_options` has
+       done that on every resume since E-2104 — and overwriting another task's
+       claim without saying so is how a restored window silently changed hands.
+       `--rebind` is the permission. It rewrites the WINDOW option only;
+       `sessions.task_id` is write-once under ED-1560 and is not touched, which
+       is why the flag cannot breach that invariant rather than merely
+       happening not to.
+    2. `--rebind` itself, when a LIVE window still claims the target — see
+       `_live_window_claiming`. Checked on the flag's presence, not on whether a
+       mismatch was found, because the parallel state comes from the resume
+       landing here at all. It cannot fire in the case the flag exists for
+       (after a crash there is no live window), so it costs the recovery path
+       nothing and catches only misuse.
+
+    `ref` is resolved through `_try_resume_target` — the read-only Go
+    `resume-target` query — for the reason `_resume_replaces_other_work` uses it
+    (E-1968/E-2112): the gate runs BEFORE `_resolve_resume`, which can mint a
+    container task and a worktree, so a refusal here leaves nothing behind.
+
+    An unresolvable `ref` is waved through: `_resolve_resume` is about to
+    produce the real diagnostic, and a gate has no business guessing at one. A
+    target holding NO task is not — resolution would mint one, so the window's
+    claim really is about to be overwritten with a different task, and that is
+    the case `--rebind` names.
+    """
+    claimed = _window_claimed_task()
+    if claimed is None and not rebind:
+        return
+    target = _try_resume_target(ref)
+    if target is None:
+        return
+    raw = target.get("task_id")
+    target_task = None if raw is None else int(raw)
+
+    if rebind and target_task is not None:
+        held = _live_window_claiming(target_task)
+        if held is not None:
+            window, eid = held
+            raise click.ClickException(
+                f"tmux window {window} is LIVE on E-{target_task} "
+                f"(session {eid}). Rebinding this window onto it would leave "
+                f"two windows working one task at the same time.\n"
+                f"  Go to the window that already has it:\n"
+                f"      endless session goto E-{target_task}\n"
+                f"  Or close that window first, then rebind."
+            )
+
+    if claimed is None or claimed == target_task or rebind:
+        return
+    label = (
+        f"E-{target_task}" if target_task is not None
+        else "the task this resume would mint"
+    )
+    raise click.ClickException(
+        f"This tmux window claims E-{claimed}, not {label}. `session resume` "
+        f"rewrites the window's `@endless_task_id`, and taking a window over "
+        f"from the task it claims should be a decision, not a side effect.\n"
+        f"  A tmux crash restores a window's layout and name but not its "
+        f"`@endless_*` options, so a stale claim is what recovery looks like:\n"
+        f"      endless session resume {ref} --rebind\n"
+        f"  To leave this window's claim alone, open a new window instead:\n"
+        f"      endless session goto {ref} --resume"
+    )
+
+
+def _require_lone_pane(
+    verb: str, ref: str, no_sibling_panes: bool = False
+) -> None:
     """Refuse `session resume` in a tmux window that holds more than one pane.
 
     Resume execs in place and then builds the standard layout around the pane it
     took over, which only makes sense in a window that holds nothing else: in a
     populated window the splits land among panes the user arranged, resizing
     work they are in the middle of. `session goto --resume` is the verb that
-    opens a NEW window, so the route out is the sibling verb rather than a flag.
+    opens a NEW window, so that sibling verb is the route out when the panes are
+    yours.
+
+    `no_sibling_panes` (`--no-sibling-panes`, E-2168) is the route out when they
+    are NOT. A tmux crash leaves tmux-resurrect's restored window crowded with
+    panes holding dead shells — a layout nobody arranged and nobody is in the
+    middle of — and the sibling verb abandons it for a new window, losing the
+    layout and scrollback the restore just recovered. The flag says so, and
+    resume proceeds. The layout is still built afterwards: a recovered window
+    should come back looking like a spawned one, which is the point of
+    recovering it rather than opening a new one.
 
     A no-op outside tmux: there is no window to be crowded, and nothing to lay
     out. Also a no-op when the pane list cannot be read — unprovable is not the
     same as crowded, and refusing a recovery on a failed tmux query would make
     the command less reliable than the thing it is recovering from.
     """
+    if no_sibling_panes:
+        return
     panes = _tmux_window_pane_ids()
     if panes is None or len(panes) <= 1:
         return
@@ -723,8 +898,10 @@ def _require_lone_pane(verb: str, ref: str) -> None:
         f"This tmux window holds {len(panes)} panes. `{verb}` takes over the "
         f"current pane and lays out the window around it, which would resize "
         f"the panes you arranged.\n"
-        f"  Open the session in a NEW window instead:\n"
-        f"      endless session goto {ref} --resume"
+        f"  If the panes are yours, open the session in a NEW window:\n"
+        f"      endless session goto {ref} --resume\n"
+        f"  If they are debris a tmux crash restored, take this window over:\n"
+        f"      endless session resume {ref} --no-sibling-panes"
     )
 
 
@@ -770,6 +947,8 @@ def resume_session(
     dry_run: bool = False,
     force: bool = False,
     new_transcript: bool = False,
+    rebind: bool = False,
+    no_sibling_panes: bool = False,
 ) -> None:
     """Relaunch a lost Claude session in the current tmux pane.
 
@@ -808,6 +987,21 @@ def resume_session(
     coherent in a window that holds this pane alone, so a populated window is
     refused with `session goto --resume` named as the route.
 
+    `--rebind` and `--no-sibling-panes` (E-2168) are what let resume re-enter a
+    window tmux-resurrect restored after a crash. The restore brings back the
+    window's name, layout, panes and cwds but NOT its `@endless_*` options, so
+    the window is left crowded with dead shells while its task claim is stale or
+    absent, and resume refuses on both grounds. Each flag names exactly one
+    thing it permits — `--rebind` the stale claim, `--no-sibling-panes` the
+    debris — so a run that needed only one does not silently waive the other:
+
+        endless session resume E-NNNN --rebind --no-sibling-panes
+
+    Neither implies the other and neither touches `--force`, which still governs
+    replacing LIVE work in this pane. See `_require_window_claim` for why
+    `--rebind` cannot breach `sessions.task_id`'s write-once invariant, and for
+    the one case it refuses in.
+
     `--force` (E-1968) is required when the pane this runs in already holds a
     session working a task: the exec replaces that session, and doing it to live
     work should be a decision, not a side effect. `--dry-run` never needs it —
@@ -838,6 +1032,15 @@ def resume_session(
                 f"      endless session goto {ref} --resume\n"
                 f"  Or pass --force to replace this pane."
             )
+
+    # E-2168: refuse to silently take a window over from the task it claims.
+    # Beside the clobber gate and for the same reason it sits here: BEFORE
+    # `_resolve_resume`, which can mint a container task and a worktree, so a
+    # refusal leaves neither behind (E-1968's ordering). Skipped for --dry-run,
+    # which rewrites no window option because it never reaches the exec.
+    if not dry_run:
+        _require_window_claim(ref, rebind)
+
     intent = "review" if review is not None else "reopen" if reopen is not None else None
     override = review if review is not None else reopen
 
@@ -856,7 +1059,7 @@ def resume_session(
     if not new_transcript:
         _require_transcript(uuid, label, f"endless session resume {ref}")
 
-    _require_lone_pane("session resume", ref)
+    _require_lone_pane("session resume", ref, no_sibling_panes)
 
     claude = _require_claude()
 

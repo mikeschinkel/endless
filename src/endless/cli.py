@@ -1643,8 +1643,20 @@ def session_goto(target_ref, resume, revisit, no_revisit, new_transcript):
     "--new-transcript", "new_transcript", is_flag=True,
     help=NEW_TRANSCRIPT_HELP[0].upper() + NEW_TRANSCRIPT_HELP[1:],
 )
+@click.option(
+    "--rebind", is_flag=True,
+    help="Resume into this window even though its `@endless_task_id` names a "
+         "DIFFERENT task, rewriting that window option to the resumed target. "
+         "Rewrites the window only — never the session's own task binding.",
+)
+@click.option(
+    "--no-sibling-panes", "no_sibling_panes", is_flag=True,
+    help="Resume into this window even though it holds panes besides this one, "
+         "and lay the window out over them. For a window a tmux crash restored "
+         "full of dead shells — not one whose panes you arranged.",
+)
 def session_resume(ref, review, reopen, dry_run, print_decision, force,
-                   new_transcript):
+                   new_transcript, rebind, no_sibling_panes):
     """Relaunch a lost Claude session in the CURRENT tmux pane.
 
     REF is a task id (E-NNNN, as shown on the tmux tab), a session id
@@ -1667,7 +1679,14 @@ def session_resume(ref, review, reopen, dry_run, print_decision, force,
     working a task, it refuses without --force and points at
     `session goto <ref> --resume`, which opens a new window instead. It also
     refuses a window holding more than one pane, since it lays the window out
-    around the pane it takes over.
+    around the pane it takes over, and a window whose `@endless_task_id` claims
+    a different task than the target.
+
+    After a tmux crash, tmux-resurrect restores a window's name, layout and
+    panes but not its `@endless_*` options, so the last two refusals both fire
+    on a restored window. --rebind and --no-sibling-panes waive one each:
+
+        endless session resume E-NNNN --rebind --no-sibling-panes
 
     A target whose Claude transcript file is gone is refused before anything is
     launched — the file may still be recoverable from a backup, and that window
@@ -1676,7 +1695,8 @@ def session_resume(ref, review, reopen, dry_run, print_decision, force,
     from endless.session_cmd import resume_session
     resume_session(ref, review=review, reopen=reopen,
                    dry_run=dry_run or print_decision, force=force,
-                   new_transcript=new_transcript)
+                   new_transcript=new_transcript, rebind=rebind,
+                   no_sibling_panes=no_sibling_panes)
 
 
 @session_cmd.command("back")

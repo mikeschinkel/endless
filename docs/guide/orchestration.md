@@ -679,6 +679,61 @@ resume creates none. Before this, a resumed window kept whatever identity it
 already held: a different task's, when resume landed in a spawned window, or
 none at all, when it landed in a plain recovery shell.
 
+### Recovering a window after a tmux crash
+
+**tmux-resurrect restores the window; it does not restore Endless's claim on
+it.** Its save format carries `pane`, `window`, `state` and `grouped_session`
+lines — name, index, layout, flags, working directories — and no custom window
+options at all. A real save file contains zero `@endless` strings
+([tmux-resurrect#577](https://github.com/tmux-plugins/tmux-resurrect/issues/577)
+covers custom options generally, and is unanswered upstream — so this is a gap
+to work around, not a defect to wait on).
+
+So a restored window comes back looking right and answering wrong: the name
+still says `E-NNNN`, while `@endless_task_id` is stale or gone. Only
+`@endless_session_uuid` heals itself, on the resumed session's first hook event.
+
+`session resume` refuses such a window twice over — it holds panes besides
+yours, and it claims a task that is not the one being resumed. The recovery line
+waives one each:
+
+```bash
+endless session resume E-NNNN --rebind --no-sibling-panes
+```
+
+| Flag                 | Permits                                                  |
+|----------------------|----------------------------------------------------------|
+| `--rebind`           | the window claims a DIFFERENT task than the resume target |
+| `--no-sibling-panes` | the window holds panes besides this one                   |
+| `--force`            | this pane holds LIVE work the exec would replace          |
+
+Verbose on purpose. Each flag says exactly what was overridden, so a run that
+needed only one does not silently waive the other, and neither of the two new
+ones touches `--force`.
+
+**Why not just `session goto <ref> --resume`?** That was the standing
+workaround, and it opens a NEW window — abandoning the restored one along with
+the layout and scrollback the restore just recovered. `--no-sibling-panes` takes
+the restored window over instead, and still builds the standard layout over the
+dead panes: a recovered window should come back looking like a spawned one.
+
+**`--rebind` rewrites the window, never the session.** It sets
+`@endless_task_id` and `@endless_project_id` to the resumed target and stops
+there. A session's own task binding is written once and never rewritten — the
+database enforces that with a trigger, not a convention — and the flag does not
+go near it. That is why it is safe, rather than a limitation it works around:
+the thing a crash made wrong is the window's claim, while the session's own
+binding is either correct or absent, and
+[what binds a session to a task](#what-binds-a-session-to-a-task) is the
+working directory regardless.
+
+`--rebind` has one refusal of its own: it stops when **another live window still
+claims the target task**, naming that window and session. `tmux window ==
+Endless task == one or more Claude sessions` holds in series, never in parallel.
+Liveness is derived rather than read off a column, so a claim left behind by a
+dead session does not block you — which means the check cannot fire in the case
+the flag exists for, and catches only misuse.
+
 ### `--force` is going away
 
 `--force` on `task claim` spelled **two unrelated decisions**, and its help text

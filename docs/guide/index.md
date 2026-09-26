@@ -330,6 +330,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 {{if .report_gate}}| $FULL | tasks | The sigil licenses one response that bypasses the minimizer entirely, not a sticky mode. |
 | $CUT / $BLOAT / $WRONG / $GOOD | tasks | The four labels that annotate the preceding turn and build the minimizer's eval corpus. |
 {{end}}| --keep-status (edit the content, infer nothing) | tasks | Suppressing every status auto-transition that task update infers from an edit. |
+| recovering a tmux window after a crash | orchestration | tmux-resurrect restores the window but not its @endless_* options; `session resume --rebind --no-sibling-panes` re-enters it instead of abandoning it. |
 <!-- END generated -->
 
 ## Important notes (always relevant)

@@ -71,3 +71,7 @@ covers: The four labels that annotate the preceding turn and build the minimizer
 topic: --keep-status (edit the content, infer nothing)
 section: tasks
 covers: Suppressing every status auto-transition that task update infers from an edit.
+
+topic: recovering a tmux window after a crash
+section: orchestration
+covers: tmux-resurrect restores the window but not its @endless_* options; `session resume --rebind --no-sibling-panes` re-enters it instead of abandoning it.
