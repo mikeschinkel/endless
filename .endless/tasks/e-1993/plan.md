@@ -1,12 +1,13 @@
 # Task field shape and the plan-required spawn gate
 
-The mechanical half of E-1991. Blocked by Child 1 (named content slots) — the
-gate is expressed in terms of the `plan` and `questions` slots.
+The mechanical half of E-1991. Blocked by E-1531 (the `task_content` table)
+and E-2176 (the `task_questions` table) — the gate is expressed in terms of
+the `plan` content row and the questions table.
 
 The division of labour across this epic: **mechanical enforcement for shape,
 judged enforcement for semantics.** This task is the mechanical layer. It must
 be cheap, deterministic, and unbeatable. Anything requiring judgment belongs to
-the read-through (Child 3).
+the read-through (E-1994).
 
 ## 1. Length limits
 
@@ -38,7 +39,7 @@ path forward, not just the refusal.
 ## 3. Open questions park a task
 
 **Any `task_questions` row in state `open`** makes a task non-spawnable, exactly
-as a missing plan does. (The table is specified in Child 1 §4.)
+as a missing plan does. (The table is specified by E-2176.)
 
 There is no blocking-versus-clarifying classification to make, and no classifier
 to build. The medium decides: a session talking to a live user asks its
@@ -73,7 +74,7 @@ because the description is the spec. Under this epic it is not — the plan is.
 - A **description** change becomes cheap and cosmetic; no reset.
 
 This is a retarget of existing machinery, not new machinery. It also gives
-Child 4 its re-approval hook for free: when dispute resolution updates a plan,
+E-1995 its re-approval hook for free: when dispute resolution updates a plan,
 approval drops and the user gets to review, which is the required behaviour.
 
 `--keep-status` keeps suppressing all inferences, unchanged.
@@ -89,7 +90,7 @@ sink the epic is meant to eliminate. Phase cannot be the discriminator either �
 `now` currently holds 214 tasks and no longer discriminates.
 
 So the first attempt to work a grandfathered task finds no plan, and that
-refusal fires the read-through (Child 3). Evaluation happens at the moment of
+refusal fires the read-through (E-1994). Evaluation happens at the moment of
 need, on fresh context, one task at a time. No migration pass, no flood, no
 stale primed sessions.
 
@@ -124,3 +125,5 @@ some legitimate titles genuinely need 65 characters. A warning preserves flow
 but is ignorable, and ignorable limits are how we got here. Recommend hard
 refusal; flagging because it is the kind of friction that is annoying in a way
 worth knowing about before it ships.
+
+
