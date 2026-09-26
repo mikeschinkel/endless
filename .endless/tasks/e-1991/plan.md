@@ -124,6 +124,12 @@ as a numbering mistake.
 
 The rule both sessions were given: take the next free number at LAND time, after
 rebasing on main, never when the file is written. Whoever lands second renumbers.
-E-1531 needs two adjacent numbers (additive SQL, then the Go column-drop step);
-E-2176 needs one. Applies to every later child that touches the schema.
+Applies to every later child that touches the schema.
+
+Resolved 2026-09-26: E-2176 landed first and took 00004 (`task_questions`).
+E-1531 renumbers to 00005 (additive SQL) and 00006 (the Go column drop), which
+must stay adjacent and in that order — the drop is the only step in the set with
+an ordering constraint, since it depends on its own additive step and on nothing
+else. Mike has since questioned the sequential-numbering scheme itself; that is
+a separate decision and does not change what these two do.
 
