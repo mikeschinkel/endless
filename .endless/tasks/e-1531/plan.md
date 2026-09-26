@@ -92,11 +92,13 @@ same rows.
 
 Three places write content, and they must agree:
 
-- **`internal/events/executor.go`** — the live path. Its `allowedFields` map
-  (~L634) currently maps each content key to a column. It maps them to rows.
+- **`internal/events/executor.go`** — the live path. Its `allowedFields` map,
+  in the `task.fields_updated` handler, currently maps each content key to a
+  column. It maps them to rows.
 - **`internal/events/projector.go`** — the rebuild path. Its own `allowedFields`
-  map (~L355) does the same, plus the `task.created` INSERT (~L200) and the
-  standalone outcome UPDATE (~L296).
+  map does the same, plus the `task.created` INSERT and the standalone outcome
+  UPDATE. `grep -n allowedFields internal/events/*.go` finds both maps; the two
+  other sites are the only places `projector.go` names a content column in SQL.
 - **`internal/docmirror`** — the committed `.md` mirrors.
 
 The two field maps are near-duplicates that already disagree (§6). Lifting
