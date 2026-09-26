@@ -134,3 +134,20 @@ failure is invisible until it happens and the workaround is not discoverable.
   that proves the flag cannot breach write-once.
 - Neither flag waives `--force`: a pane holding live work still refuses without
   it.
+
+## Amendment, 2026-09-26 — `--no-sibling-panes` is NOT on `session goto --resume`
+
+Decision 4 put the flag on both surfaces, "for the same reason
+`--new-transcript` is on both". That reason does not hold against the code:
+`session goto --resume` never calls `_require_lone_pane`. It routes to
+`_resume_new_window_pane`, which opens a brand-new `tmux new-window` that by
+construction holds exactly one pane, so there is no sibling-pane refusal there
+to waive. `--new-transcript` differs — it changes what gets launched INTO that
+new window.
+
+Mike's call, asked and answered during implementation: omit it from `goto`. A
+flag that is accepted and does nothing is worse than one that is not offered.
+`--no-sibling-panes` is on `session resume` only, and `goto --resume` rejects it
+as an unknown option, as it does today. The suite pins that in both directions.
+
+Nothing else in the plan changed.
