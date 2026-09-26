@@ -6821,3 +6821,7 @@ The rule, applied forward:
 - An escape route through an ungated surface is a feature, not a hole. Bash stays ungated so the remedy always runs; the accepted cost is that an unbound session could still edit files through a shell, which is the same gap enforceWorktreeGate has always had and E-940 tracks.
 - Do not justify a gate's severity with a risk it does not actually catch. E-1983's gate fires on an UNBOUND session, yet its severity was argued from mis-binds being permanent — and a wrongly-bound session holds a task and passes the gate silently.
 - **Project**: endless
+
+### [2026-09-26] Don't pad handoff action items with conditional alternatives
+When summarizing what the user must do after a verify handoff, name only the action that is actually expected (run the verify command, then confirm). Do not add 'or reopen' as a reflexive alternative when the suite already passed — it reads as a real concern and prompts a needless question.
+- **Project**: endless
