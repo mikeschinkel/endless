@@ -19,6 +19,12 @@ const noJobsEnv = "ENDLESS_NO_JOBS"
 // sandbox (E-1281) exists to prevent — and, because E-1818 opens a pinned real
 // DB schema-passive, at a database that will not even have the runner's tables.
 //
+// Since E-2166 the test is broader than that rationale in one case: a Claude
+// hook fired from a worktree satisfies both halves (cwd inside a worktree, main
+// pinned) while running the INSTALLED binary, so the code it would suppress is
+// not candidate at all. Left as it is — over-suppressing costs a suppressed
+// runner with an empty registry, which does what an unsuppressed one does.
+//
 // This guard lives on the TRIGGER rather than on the DB context. E-698
 // originally implemented it by making session-status skip its main pin inside a
 // worktree, on the theory that one self_dev rule beats a per-command exception.

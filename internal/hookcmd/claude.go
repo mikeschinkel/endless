@@ -226,15 +226,19 @@ func runClaude(args []string) (err error) {
 		return dbReadFailed(fmt.Errorf("looking up project for %s: %w", payload.CWD, err))
 	}
 
-	// Belt-and-suspenders for E-971's worktree lock release. The
-	// worktree-local binary handles SessionEnd's full lifecycle; if it
-	// fails to fire (missing, crashed, misconfigured), the lock leaks
-	// and future sessions can't claim the worktree. ReleaseWorktreeLock
-	// is idempotent (os.Remove swallows ErrNotExist), so running it in
-	// both binaries is safe. Other SessionEnd ops stay single-fire in
-	// the worktree-local handler. The success log makes leaks
-	// diagnosable — its absence in stderr means SessionEnd never ran.
-	// (E-1209)
+	// Belt-and-suspenders for E-971's worktree lock release, run before
+	// anything that can fail: a leaked lock stops future sessions from
+	// claiming the worktree, and every DB error between here and the
+	// SessionEnd case below returns early, past the release there.
+	// ReleaseWorktreeLock is idempotent (os.Remove swallows ErrNotExist),
+	// so doing it twice on the happy path costs nothing. The success log
+	// makes leaks diagnosable — its absence in stderr means SessionEnd
+	// never ran. (E-1209)
+	//
+	// It used to read "the worktree-local binary handles SessionEnd's full
+	// lifecycle" — true while a worktree pinned its hooks at its own
+	// binary and this one self-skipped below. E-2166 removed both, so
+	// there is one binary and one lifecycle.
 	if payload.EventName == "SessionEnd" {
 		if wtPath, err := monitor.FindLockBySessionID(projectID, payload.SessionID); err == nil && wtPath != "" {
 			if err := monitor.ReleaseWorktreeLock(wtPath); err != nil {
@@ -243,10 +247,6 @@ func runClaude(args []string) (err error) {
 				log.Printf("released worktree lock at %s for session %s", wtPath, payload.SessionID)
 			}
 		}
-	}
-
-	if shouldSkipForWorktree(projectID, payload.CWD) {
-		return nil
 	}
 
 	// Record activity (throttled)
@@ -1849,121 +1849,6 @@ func resolveCwdTaskID(projectRoot, cwd string) int64 {
 }
 
 // --- E-971 Layer D: worktree adoption + enforcement helpers ----------------
-
-// osExecutable is a test seam for os.Executable.
-var osExecutable = os.Executable
-
-// worktreeOverrideRegistered returns true when the worktree's Claude Code
-// settings reference the worktree's own bin/endless-go path — i.e.
-// claude-settings-init was run and the override is active.
-//
-// Why: every worktree inherits the committed .claude/settings.json from
-// HEAD (which holds enabledPlugins), so file presence alone is not a
-// reliable signal that the hook override is configured. Substring-checking
-// the file content for the worktree-specific binary path correctly
-// distinguishes the inherited committed file from the regenerated one.
-//
-// Both files are read (E-1347). settings.local.json is where the generated
-// override lives now; settings.json is still checked because a worktree
-// bootstrapped before that change carries the override there until the
-// skip-worktree repair moves it, and until then it is the only place the
-// override appears.
-// The needle is the worktree-relative TAIL of the binary path
-// (`.endless/worktrees/e-NNN/bin/endless-go`), not the absolute path (E-1983).
-// The absolute form is only as stable as the spelling of everything above the
-// project root, and there is no reason for the two sides to agree on that: the
-// settings file records whatever path claude-settings-init computed, while this
-// side now derives the worktree root through a resolved walk. A project reached
-// via a symlink — /tmp or /var on macOS, or a symlinked home — gives the two
-// different strings for the same file, and the override would silently stop
-// being recognized, which means the global binary stops deferring and every hook
-// runs twice.
-//
-// The tail cannot collide with an unrelated binary: only a worktree's own copy
-// lives under `.endless/worktrees/<name>/bin/`, and the `<name>` segment is in
-// the needle, so worktree A does not match worktree B's override.
-func worktreeOverrideRegistered(worktreeRoot, worktreeBin string) bool {
-	needle := worktreeBin
-	if rel, err := filepath.Rel(filepath.Dir(filepath.Dir(worktreeRoot)), worktreeBin); err == nil &&
-		!strings.HasPrefix(rel, "..") {
-		needle = rel
-	}
-	for _, name := range []string{"settings.local.json", "settings.json"} {
-		data, err := os.ReadFile(filepath.Join(worktreeRoot, ".claude", name))
-		if err != nil {
-			continue
-		}
-		if strings.Contains(string(data), needle) {
-			return true
-		}
-	}
-	return false
-}
-
-// shouldSkipForWorktree returns true when this binary should yield to a
-// worktree-local copy of endless-go for the same hook event.
-//
-// Why: Claude Code merges hook entries across user/project settings scopes
-// (concatenate + dedupe, not replace), so a session whose cwd is inside a
-// worktree fires both the global binary and the worktree's binary for every
-// event. The global yields here so state-mutating handlers don't run twice.
-// Asymmetric by design: only the global self-skips; the worktree binary
-// handles the event without coordination.
-func shouldSkipForWorktree(projectID int64, cwd string) bool {
-	if projectID == 0 || cwd == "" {
-		return false
-	}
-	projectRoot, err := monitor.ProjectPath(projectID)
-	if err != nil {
-		log.Printf("self-skip check: project path lookup failed: %v", err)
-		return false
-	}
-	return shouldSkipForWorktreeAt(cwd, projectRoot)
-}
-
-// shouldSkipForWorktreeAt is the filesystem-only inner check, separated so
-// unit tests can drive it without a database.
-func shouldSkipForWorktreeAt(cwd, projectRoot string) bool {
-	worktreeRoot, err := monitor.FindWorktreeRoot(cwd, projectRoot)
-	if err != nil {
-		log.Printf("self-skip check: find worktree root: %v", err)
-		return false
-	}
-	if worktreeRoot == "" {
-		return false
-	}
-	worktreeBin := filepath.Join(worktreeRoot, "bin", "endless-go")
-	if !worktreeOverrideRegistered(worktreeRoot, worktreeBin) {
-		// No worktree-level Claude override is configured, so the global is
-		// the only binary firing for events here. Nothing to skip and no
-		// missing-binary warning to emit.
-		return false
-	}
-	worktreeStat, err := os.Stat(worktreeBin)
-	if err != nil {
-		if errors.Is(err, os.ErrNotExist) {
-			log.Printf("WARN: cwd %s is inside worktree %s but %s does not exist — running global as fallback.", cwd, worktreeRoot, worktreeBin)
-		} else {
-			log.Printf("self-skip check: stat %s: %v", worktreeBin, err)
-		}
-		return false
-	}
-	selfPath, err := osExecutable()
-	if err != nil {
-		log.Printf("self-skip check: os.Executable: %v", err)
-		return false
-	}
-	selfStat, err := os.Stat(selfPath)
-	if err != nil {
-		log.Printf("self-skip check: stat self %s: %v", selfPath, err)
-		return false
-	}
-	if os.SameFile(selfStat, worktreeStat) {
-		return false
-	}
-	log.Printf("deferring to %s (cwd %s is inside worktree %s)", worktreeBin, cwd, worktreeRoot)
-	return true
-}
 
 // handleWorktreeAdoption is called from SessionStart. It walks up from
 // payload.CWD to find a worktree companion, then either claims the lock

@@ -550,10 +550,12 @@ load-bearing rather than merely lost.
 **What to do.** Read the detail (`endless errors show <n> --detail`); it names
 the hook event, the session, the pane and the binary that ran. A "no such
 column" or enum-integrity failure means that binary and the database disagree
-about the schema — most often a worktree's own `bin/endless-go` left behind by
-a schema change (E-2166), repaired by bringing it up to main's. Until it is
-fixed the session's `process_id` stays NULL, so the tmux status line renders
-the same hint a pane with no Endless session gets.
+about the schema, repaired by bringing the binary up to the database — `just
+install` from the main checkout. It names the binary because a worktree used to
+pin its hooks at its own `bin/endless-go`, which a schema change left behind;
+E-2166 removed that pin, so a hook now runs the installed one. Until it is fixed
+the session's `process_id` stays NULL, so the tmux status line renders the same
+hint a pane with no Endless session gets.
 
 ## ERR-0016 — hook-read-failed
 

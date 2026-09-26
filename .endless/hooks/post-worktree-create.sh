@@ -37,11 +37,13 @@
 #      never write to the real ledger. A downstream project puts its own
 #      fixtures, throwaway database or dummy credentials here instead, and never
 #      this.
-#   4. `just claude-settings-init` writes the per-worktree hook override to
-#      .claude/settings.local.json so the PostToolUse hook fires THIS worktree's
-#      bin/endless-go (E-998), not the global one. Runs last so it sees the
-#      copied binary. The LOCAL file, not the tracked .claude/settings.json —
-#      see E-1347.
+#   4. `just claude-settings-init` writes .claude/settings.local.json — the
+#      LOCAL file, not the tracked .claude/settings.json (E-1347). Today that
+#      means worktree.bgIsolation and nothing else: E-2166 removed the hook
+#      override this step used to write, because ED-1596 has every hook run the
+#      INSTALLED endless-go, which the user-scope settings already name. The
+#      recipe also STRIPS an override an older run left behind, which is why it
+#      still runs here on a worktree recreated at a path that had one.
 
 set -euo pipefail
 

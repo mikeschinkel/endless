@@ -52,11 +52,16 @@ build: go
 #                             --worktree` is accepted as the same thing.
 #
 # The scoped install NEVER touches the global symlink or the global uv tool —
-# scoping is achieved purely by injection (.claude/settings.local.json + XDG) via
-# the existing recipes (go-work-init + build + dev-sandbox-init +
+# scoping is achieved purely by injection (XDG + the worktree's own bin/ and
+# sandbox) via the existing recipes (go-work-init + build + dev-sandbox-init +
 # claude-settings-init). This turns the `just install`-from-a-worktree footgun
 # (which used to silently repoint the system-default toolchain at transient
 # worktree code — live incident 2026-06-15) into the right outcome.
+#
+# What a scoped install no longer scopes: Claude HOOKS. E-2166 removed the
+# per-worktree hook override, so hooks run the installed binary in a worktree
+# exactly as they do everywhere else (ED-1596). A worktree's bin/endless-go
+# still serves its CLI and sandbox work; it just no longer serves hook events.
 #
 # Hardening: warns loudly if /usr/local/bin/endless-go already resolves into a
 # worktree, surfacing an existing mispointed symlink instead of letting it fester.
@@ -288,16 +293,34 @@ go-work-init:
         done
     echo "go.work generated at $(pwd)/go.work"
 
-# Generate the per-worktree .claude/settings.local.json that overrides hook
-# command paths to point at this worktree's own bin/endless-go (E-998, E-1367).
+# Generate the per-worktree .claude/settings.local.json — and strip the hook
+# override a run before E-2166 wrote into it.
 #
-# Without this, exercising new hook code in a Claude session requires
-# repointing /usr/local/bin/endless-go at the worktree's binary, which
-# affects every other live Claude session on the machine. Claude Code reads
-# settings.local.json at Local tier, above project settings, and merges it
-# with the committed .claude/settings.json — so this file scopes the override
-# to sessions whose cwd is inside this worktree without touching a tracked
-# file.
+# Hooks are NOT written here. ED-1596: every hook invocation runs the INSTALLED
+# endless-go. That binary is already the one ~/.claude/settings.json names —
+# `endless setup claude-hook` writes it there for every user and every tracked
+# project, with no self_dev gate — and Claude Code applies the user scope in
+# every directory, a worktree included. A worktree therefore needs no hooks key
+# to be hooked. The block this recipe used to write was a copy of those same
+# entries with the binary path swapped for "$(pwd)/bin/endless-go"; the swap was
+# the only thing it added, and E-2166 removes it.
+#
+# Why the pin had to go, not just be repointed: under it the candidate binary
+# was ALL that ran — the installed one self-skipped on seeing the override — so
+# when the candidate broke nothing was alive to report it. The session went
+# unregistered and the error went to a stderr nobody reads. A third of the 96
+# pinned binaries were stale, and twice a stale one resurrected dropped schema
+# objects and broke session writes machine-wide. Candidate hook code is
+# exercised by verify suites driving the real hook binary under the runner's
+# temp HOME (.endless/tasks/e-1202, e-1347, e-1661, e-1662, e-1714), which is
+# deterministic and isolated; a live session delegating to it bought realism at
+# the price of candidate code writing the shared ledger.
+#
+# Removing the key beats leaving it correct-but-duplicated, because it keeps ONE
+# authority for what the hooks are. `endless setup claude-hook` repairs the
+# user-scope file in place — adding hook events an older install never gained,
+# correcting sync/async flags — and a frozen copy in every worktree would
+# contradict each such repair until something swept all of them again.
 #
 # The LOCAL file, not the tracked one (E-1347). Writing the override into
 # .claude/settings.json made it a tracked modification, which had to be hidden
@@ -306,28 +329,22 @@ go-work-init:
 # .claude/settings.json on main blocked the rebase in every live worktree at
 # once. settings.local.json is git-ignored, so nothing can collide.
 #
-# Verified against Claude Code 2.1.236 before the split: 'hooks' entries
-# CONCATENATE across the two scopes and 'env' merges per-key with the local
-# file winning. The committed settings.json ships no hooks, so the effective
-# hook set is unchanged; enabledPlugins keeps coming from the committed file,
-# read natively rather than copied here.
+# Verified against Claude Code 2.1.236 when the two were split: 'hooks' entries
+# CONCATENATE across scopes and 'env' merges per-key with the local file
+# winning. Neither the committed settings.json nor, now, the local one ships
+# hooks, so the effective set is exactly the user scope's; enabledPlugins keeps
+# coming from the committed file, read natively rather than copied here.
 #
-# Mirrors the endless-go hook entries from ~/.claude/settings.json verbatim
-# (event, async flag, args after the binary), then rewrites the binary
-# path to "$(pwd)/bin/endless-go".
-#
-# Also writes worktree.bgIsolation:"none" (Claude v2.1.143+) so background
-# agents launched in the worktree don't create a nested .claude/worktrees/
-# under endless's tracker worktree. Required by the bg-agent dispatch system;
-# see docs/research-2026-06-12-claude-background-agents.md §3.
+# Writes worktree.bgIsolation:"none" (Claude v2.1.143+) so background agents
+# launched in the worktree don't create a nested .claude/worktrees/ under
+# endless's tracker worktree. Required by the bg-agent dispatch system; see
+# docs/research-2026-06-12-claude-background-agents.md §3.
 #
 # Idempotent: re-running produces the same file (sorted keys, stable JSON) and
 # hand-written keys such as 'permissions' survive. Refuses to run from the main
-# checkout, whose .claude/ is the committed one.
-#
-# Run AFTER `just build` (or `just go` / `just go-work-init` then `just go`)
-# so that bin/endless-go exists. The recipe writes the absolute path
-# regardless, since hook fire-time cwd is unpredictable.
+# checkout, whose .claude/ is the committed one. No longer depends on
+# bin/endless-go existing for its OUTPUT — only the legacy skip-worktree de-arm
+# below looks for a binary, and does so best-effort.
 claude-settings-init:
     #!/usr/bin/env bash
     set -euo pipefail
@@ -338,15 +355,27 @@ claude-settings-init:
         exit 1
     fi
     worktree_root="$(pwd)"
+    # The worktree's hooks now come entirely from the user scope, so assert they
+    # are actually there rather than only that the file is. A missing-file check
+    # passed happily for a settings.json with no endless hook in it, which since
+    # E-2166 means an unhooked worktree instead of a repointed one.
     user_settings="$HOME/.claude/settings.json"
     if [ ! -f "$user_settings" ]; then
         echo "claude-settings-init: $user_settings not found. Run 'endless setup claude-hook' from main first." >&2
         exit 1
     fi
+    # One line because a just recipe body is indentation-delimited: a
+    # continuation at column 0 inside the -c string ends the recipe.
+    hook_probe='import json,sys; s=json.load(open(sys.argv[1])); sys.exit(0 if any("endless-go" in h.get("command","") for es in (s.get("hooks") or {}).values() for e in es for h in e.get("hooks",[])) else 1)'
+    if ! python3 -c "$hook_probe" "$user_settings"; then
+        echo "claude-settings-init: $user_settings defines no endless-go hook, so this worktree would run unhooked. Run 'endless setup claude-hook' from main first." >&2
+        exit 1
+    fi
     mkdir -p .claude
     # A worktree bootstrapped before E-1347 still has the override inside the
-    # tracked settings.json behind a skip-worktree bit. Clear that first, or
-    # the two copies would concatenate and fire this worktree's hook twice.
+    # tracked settings.json behind a skip-worktree bit. Clear that, or the stale
+    # copy keeps firing this worktree's binary even though the local file no
+    # longer names it.
     # Non-fatal: a stale endless-go predates the subcommand, and a missing
     # de-arm is a worse outcome to abort a bootstrap over than to report.
     endless_go=""
@@ -362,46 +391,23 @@ claude-settings-init:
         echo "claude-settings-init: warning: no endless-go found; skipping the legacy skip-worktree de-arm" >&2
     fi
     # Start from whatever settings.local.json already holds — any hand-written
-    # keys — so regenerating the hooks preserves them.
+    # keys — so regenerating preserves them.
     if [ -f .claude/settings.local.json ]; then
         local_json="$(cat .claude/settings.local.json)"
     else
         local_json='{}'
     fi
-    python3 - "$user_settings" "$worktree_root" .claude/settings.local.json "$local_json" <<'PY'
+    python3 - .claude/settings.local.json "$local_json" <<'PY'
     import json, sys
-    user_path, worktree_root, out_path, local_raw = sys.argv[1:5]
-    with open(user_path) as f:
-        user = json.load(f)
-    local = json.loads(local_raw or "{}")
-    new_bin = f"{worktree_root}/bin/endless-go"
-    out_hooks = {}
-    for event, entries in (user.get("hooks") or {}).items():
-        rewritten = []
-        for entry in entries:
-            new_entry_hooks = []
-            for h in entry.get("hooks", []):
-                cmd = h.get("command", "")
-                if "endless-go" not in cmd:
-                    continue
-                parts = cmd.split(None, 1)
-                tail = f" {parts[1]}" if len(parts) > 1 else ""
-                new_h = dict(h)
-                new_h["command"] = new_bin + tail
-                new_entry_hooks.append(new_h)
-            if new_entry_hooks:
-                rewritten.append({"hooks": new_entry_hooks})
-        if rewritten:
-            out_hooks[event] = rewritten
-    # Everything already in the local file survives; only the generated keys
-    # are replaced. 'hooks' is REPLACED rather than merged (and dropped when
-    # the user config has none), so a rerun after the user removed a hook does
-    # not leave the old entry behind.
-    out = dict(local)
-    if out_hooks:
-        out["hooks"] = out_hooks
-    else:
-        out.pop("hooks", None)
+    out_path, local_raw = sys.argv[1:3]
+    out = json.loads(local_raw or "{}")
+    # Everything already in the local file survives except 'hooks', which is
+    # DROPPED (E-2166): this recipe no longer generates one, and a block left by
+    # an earlier run would keep firing a possibly-stale worktree binary — now
+    # ALONGSIDE the installed one, since the self-skip that used to defer to it
+    # is gone too. Popping it here is what makes the sweep a re-run of this
+    # recipe rather than separate code.
+    had_hooks = out.pop("hooks", None) is not None
     # bgIsolation: "none" stops Claude from creating a nested .claude/worktrees/
     # under endless's tracker worktree when background agents launch (v2.1.143+
     # schema). Required by the bg-agent dispatch system; plain assignment is
@@ -410,9 +416,77 @@ claude-settings-init:
     with open(out_path, "w") as f:
         json.dump(out, f, indent=2, sort_keys=True)
         f.write("\n")
-    print(f"wrote {out_path}: {sum(len(v) for v in out_hooks.values())} hook entries across {len(out_hooks)} events")
+    print(f"wrote {out_path}: no hooks block (hooks come from the user scope)"
+          + ("; removed the stale worktree pin" if had_hooks else ""))
     PY
     echo "claude-settings-init: $worktree_root/.claude/settings.local.json"
+
+# Re-run claude-settings-init across every existing task worktree (E-2166).
+#
+# The one-time remediation for the population the generator fix cannot reach.
+# E-2166 measured 120 worktrees, 96 of them still pinning every Claude hook at
+# their own bin/endless-go, about a third of those binaries stale — and a stale
+# one aborts before registering the session, auto-registers stray project rows,
+# and has twice resurrected dropped schema objects that broke session writes
+# machine-wide.
+#
+# It cannot ride in as a commit, which is why a sweep exists at all: bin/ and
+# .claude/settings.local.json are BOTH git-ignored, so neither a rebase nor
+# `endless worktree sync` can deliver a fix to them — a rebase cannot carry a
+# file git does not track. The sweep writes those files directly, outside git.
+#
+# There is no sweep-specific logic: each worktree gets the very recipe that
+# `.endless/hooks/post-worktree-create.sh` runs at birth, invoked the same way
+# (main's justfile, the worktree as working directory). So a swept worktree and
+# a newly created one are byte-identical by construction rather than by two
+# implementations agreeing.
+#
+# FAIL-FAST, deliberately: the first worktree it cannot rewrite stops the sweep,
+# names the worktree, replays that run's output and exits non-zero, leaving
+# every later worktree untouched. A sweep that logged failures and carried on
+# would leave an unknown number of worktrees pinned to a stale binary while
+# reporting success — the exact silent-degrade shape this task is fixing. Fix
+# the named worktree and re-run: the recipe is idempotent, so the ones already
+# swept are rewritten to the same bytes.
+#
+# Worktrees come from `git worktree list`, not a directory glob, so an
+# abandoned directory under .endless/worktrees/ is neither swept nor counted as
+# a failure. Runs from the main checkout only — it sweeps every worktree, so
+# running it from inside one of them would be reaching past its own scope.
+claude-settings-sweep:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    git_dir="$(cd "$(git rev-parse --git-dir)" && pwd)"
+    git_common_dir="$(cd "$(git rev-parse --git-common-dir)" && pwd)"
+    if [ "$git_dir" != "$git_common_dir" ]; then
+        echo "claude-settings-sweep: refusing to run from a worktree; it sweeps them all. Run from the main checkout." >&2
+        exit 1
+    fi
+    main_checkout="$(pwd)"
+    total=0
+    changed=0
+    while read -r _ worktree; do
+        case "$worktree" in
+            "${main_checkout}/.endless/worktrees/"*) ;;
+            *) continue ;;
+        esac
+        total=$((total + 1))
+        if ! out="$(just --justfile "${main_checkout}/justfile" \
+                        --working-directory "$worktree" \
+                        claude-settings-init 2>&1)"; then
+            echo "claude-settings-sweep: FAILED on $worktree" >&2
+            echo "$out" >&2
+            echo "claude-settings-sweep: stopped after $((total - 1)) worktree(s); the rest are untouched." >&2
+            echo "  Fix that worktree, then re-run — already-swept worktrees are rewritten identically." >&2
+            exit 1
+        fi
+        if [ "${out#*removed the stale worktree pin}" != "$out" ]; then
+            changed=$((changed + 1))
+            echo "  unpinned  $(basename "$worktree")"
+        fi
+    done < <(git worktree list --porcelain | grep '^worktree ')
+    echo "claude-settings-sweep: $total worktree(s) visited, $changed unpinned."
+    echo "  Restart any live Claude session in an unpinned worktree for it to pick up the change."
 
 # Seed this worktree's sandbox DB for self-dev work (E-1281, relocated by E-1964).
 #
