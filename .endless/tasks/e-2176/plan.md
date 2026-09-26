@@ -1,4 +1,3 @@
-# Give open questions a home
 
 Lifted out of E-1992 when that became an epic. It was carried there because
 both pieces were storage, but this is a different table for a different
@@ -75,8 +74,11 @@ to tell which governs.
 - **Lifecycle:** open → answered | withdrawn | invalid | superseded, and
   answered → superseded. Nothing returns to open and nothing is answered twice;
   superseding an answered question keeps its answer.
-- **Not added:** a reason/note column for `invalid`/`withdrawn`. The columns
-  are the ones this plan names; `answer` is set only on `answered`, so it is
-  not overloaded the way `tasks.outcome` is.
-- **Migration numbering:** written as 00004. Renumber at land time if E-1531
-  lands first (agreed with the E-1991 coordinator).
+- **Reason (revisit, Mike 2026-09-26):** a `reason` column, required on every
+  close without an answer — `withdrawn`, `invalid` and `superseded`, no
+  exceptions — and refused on `answered`. It is never stored in `answer`.
+  Superseding an answered question keeps the answer and adds the reason. Added
+  by migration 00005 (a Go step that checks for the column first); `withdraw`,
+  `reject` and `supersede` take a required `--reason`.
+- **Migration numbering:** 00004 landed; the reason column is 00005. Renumber
+  at land time if E-1531 lands first.
