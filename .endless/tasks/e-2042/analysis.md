@@ -71,3 +71,28 @@ and shipped correctly; nothing it did is wrong.
 
 Left here as evidence rather than a task because the area is parked, and this is
 three lines that whoever picks the epic up should make in passing.
+
+---
+
+# Scope added 2026-09-26: rename `minimizer` to `copyeditor`
+
+Mike's decision: the feature is renamed `copyeditor`, because that describes
+what it does far better than `minimizer`. Folded in here rather than filed
+separately (ED-1550(4)): this is the task that owns the area, and renaming a
+disabled feature just before redesigning it is churn — the redesign is when its
+names should be settled. Do the rename as part of this work, not after it.
+
+Footprint measured at filing, as a starting map rather than a checklist:
+- Schema: `minimizer_champions`, `minimizer_evals`, `minimizer_state`,
+  `minimizer_variants`, plus the `minimizer_evals_type` and
+  `minimizer_variants_type` types. A table rename needs a schema change file and
+  must keep schema.sql and the change in step (ED-1472).
+- Config: the `minimizer` key in project config (`enabled`, `optimizer`), read by
+  `MinimizerEnabledForCwd` and listed in `set_cmd.py`'s known fields.
+- Code, tests and guide: 53 files under `src/`, `internal/`, `cmd/`, `tests/` and
+  `docs/guide/` mention "minimizer" at filing time.
+
+Pre-beta, so no config migration is required for existing `minimizer` keys
+unless this task decides otherwise. E-2177 adds a code comment above
+`taskReportRe` citing this task and the key as `minimizer.enabled`; update that
+comment when the key is renamed.
