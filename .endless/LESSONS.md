@@ -6863,3 +6863,7 @@ Worse, I had already written that false rationale into comments in internal/jobs
 
 Two habits. First: a claim that some guard is too broad or too narrow is a claim about a CODE PATH, so enumerate the callers before making it — matching a predicate is not reaching a function. Second: when I have written a pros-and-cons list and the 'against' column is padded with items about whether I caused the problem or how conservative the code is, that is a sign I have not checked the 'for' column's premise; the weak against-column was the tell, and Mike read it before I did.
 - **Project**: endless
+
+### [2026-09-26] Require the reason on every closing move
+When a status change closes something out without an answer (withdraw, reject, supersede, and the like), require the reason every time. Do not propose making it optional for routine cases. Mike: 'Always require it.'
+- **Project**: endless
