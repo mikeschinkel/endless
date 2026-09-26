@@ -1,4 +1,4 @@
-# Plan: make the Claude hook tell a command that RUNS from one that is only MENTIONED
+# Plan: make the Claude hook differentiate a command that RUNS from one that is only MENTIONED
 
 Decisions by Mike, 2026-09-26, answering the open questions put to him in chat.
 The threat model stands as recorded in --analysis: gates catch INNOCENT
@@ -188,6 +188,13 @@ and `tests/test_refusal_inventory_anchors.py` fails if a symbol disappears.
 Every symbol this task renames or deletes needs its row updated or marked
 RETIRED — `CompleteTask`/`StartWorkSession` rows if any, the gate symbols if
 renamed.
+
+**Do not treat the inventory as accurate or complete.** It was written
+2026-09-17 and the code has drifted since. The anchor test checks only that each
+row's file and symbol still exist — not that the message text still matches, and
+not that every refusal has a row. So expect gaps: a gate this task touches may
+have no row, or a row whose message is stale. Fix the rows this task's changes
+affect; do not audit the rest of the inventory here.
 
 ## Docs
 
