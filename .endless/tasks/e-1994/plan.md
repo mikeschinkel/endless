@@ -1,8 +1,9 @@
 # Read-through and primed sessions
 
 The judged half of E-1991, and the piece that turns triage from a router into
-an evaluator. Absorbs E-1946 (type-aware routing). Depends on Child 1 (content
-slots), Child 2 (the gate), and E-1813 (complexity and risk ratings).
+an evaluator. Absorbs E-1946 (type-aware routing). Depends on E-1531
+(`task_content`), E-2176 (`task_questions`), E-1993 (the gate), and E-1813
+(complexity and risk ratings).
 
 **E-1813 is startable.** Its plan says "do not start until ED-1538/ED-1539 are
 ratified" — both went `accepted` on 2026-08-14 and nothing noticed.
@@ -49,7 +50,7 @@ when the user did.
 idle is otherwise indistinguishable from a hung one.
 
 **Primed sessions stay alive.** They do not exit after the read-through. A live
-session can receive messages; an exited one cannot, and Child 4's dispute
+session can receive messages; an exited one cannot, and E-1995's dispute
 resolution runs over exactly that channel — so liveness is enabling
 infrastructure, not an artifact. The cost is real (a live process and pane per
 primed session; comfortable in the tens, painful in the low hundreds) and is
@@ -98,7 +99,7 @@ framing to be explored, so "no implementation steps" can never mean "needs a
 plan first" — E-1946's bug. For research it is the request. For a do-task it is
 the approach. Same question, type-aware standard.
 
-Acceptance criteria (Child 1's `acceptance` slot) are an input here: the
+Acceptance criteria (an `acceptance` row in E-1531's `task_content`) are an input here: the
 read-through cannot judge sufficiency without knowing what done looks like.
 
 ## 5. Triage writes a durable report
@@ -108,15 +109,15 @@ rationale, the deciding model, and when. `task show` renders it.
 
 This is what makes a no-op routing visible — a task triaged and judged
 unspawnable currently looks identical to one never triaged, which caused a live
-misdiagnosis on 2026-08-08 (see E-1970, absorbed into Child 4's scope for the
+misdiagnosis on 2026-08-08 (see E-1970, absorbed into E-1995's scope for the
 messaging half; the report itself lands here).
 
 ## 6. Eager for new, lazy for grandfathered
 
 New tasks: read-through fires shortly after a plan is attached, while the filing
-session is still alive — which is what makes Child 4 possible at all.
+session is still alive — which is what makes E-1995 possible at all.
 
-Grandfathered tasks: fired by Child 2's spawn gate, at the moment of need.
+Grandfathered tasks: fired by E-1993's spawn gate, at the moment of need.
 
 ## Acceptance
 
@@ -154,7 +155,7 @@ stale plan to reconcile.
 E-1917 already landed the notification half of step 5 — it re-asserts a held
 task's current state in the per-prompt injection with a sticky
 "changed since you last read it" marker, suppressed when the session itself made
-the change. **Retarget that marker from description to plan**, matching Child 2
+the change. **Retarget that marker from description to plan**, matching E-1993
 §4. Do not build a second notification path.
 
 **The residual is codebase drift, not plan drift.** Between step 2 and step 6 —
@@ -187,3 +188,5 @@ participants.
 ## Open questions
 
 None.
+
+
