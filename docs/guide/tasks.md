@@ -887,14 +887,6 @@ JSON is data and a display rule has no business hiding a fact from a consumer.
 
 ---
 
-## Sessions and chat
-
-```bash
-endless task chat                                    # start a chat-only session (no task tracking)
-```
-
----
-
 ## Verbs
 
 Verbs are the registered action words that may start a task title. When you `task add`, Endless validates that the title begins with a registered verb.

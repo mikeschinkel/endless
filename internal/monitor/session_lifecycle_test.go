@@ -241,54 +241,6 @@ func TestStartWorkSession_DoesNotDemoteIneligibleStatus(t *testing.T) {
 	}
 }
 
-// TestStartChatSession_InsertWithNullTask pins the chat-only shape: a
-// fresh session lands in working state with task_id=NULL.
-func TestStartChatSession_InsertWithNullTask(t *testing.T) {
-	db := withTestDB(t)
-	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
-	t.Setenv("TMUX_PANE", "%5")
-
-	if err := StartChatSession("sess-A", 1); err != nil {
-		t.Fatalf("StartChatSession: %v", err)
-	}
-	state, taskID, process := sessionLifecycleRow(t, db, "sess-A")
-	if state != "working" {
-		t.Errorf("state = %q, want working", state)
-	}
-	if taskID != nil {
-		t.Errorf("task_id = %v, want NULL", *taskID)
-	}
-	if process != "%5" {
-		t.Errorf("process = %q, want %%5", process)
-	}
-}
-
-// TestStartChatSession_UpsertKeepsTaskID pins E-1968 / ED-1560: starting a
-// chat on a session already bound to a task must NOT drop the binding. The
-// column is write-once, and `task chat` has nothing to say about who owns a
-// task — clearing it here made the session that worked the task unreachable by
-// task ref. The session still flips to 'working'; only the unbind is gone.
-func TestStartChatSession_UpsertKeepsTaskID(t *testing.T) {
-	db := withTestDB(t)
-	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
-	seedTask(t, db, 42, 1, "test task", "ready")
-	t.Setenv("TMUX_PANE", "%5")
-
-	if err := BindSessionToTask("sess-A", 1, 42); err != nil {
-		t.Fatalf("bind: %v", err)
-	}
-	if err := StartChatSession("sess-A", 1); err != nil {
-		t.Fatalf("StartChatSession: %v", err)
-	}
-	state, taskID, _ := sessionLifecycleRow(t, db, "sess-A")
-	if state != "working" {
-		t.Errorf("state = %q, want working", state)
-	}
-	if taskID == nil || *taskID != 42 {
-		t.Errorf("task_id = %v, want 42 (chat takeover must not unbind)", taskID)
-	}
-}
-
 // TestInitSession_InsertCreatesIdle pins the SessionStart shape: first call
 // creates the row in state='idle'.
 //
@@ -613,8 +565,8 @@ func TestWakeSession_DoesNotWakeSessionHoldingNoTask(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 
-	if err := StartChatSession("sess-A", 1); err != nil {
-		t.Fatalf("StartChatSession: %v", err)
+	if err := InitSession("sess-A", 1); err != nil {
+		t.Fatalf("InitSession: %v", err)
 	}
 	if err := IdleSession("sess-A"); err != nil {
 		t.Fatalf("IdleSession: %v", err)

@@ -7,7 +7,6 @@ import re
 import shutil
 import subprocess
 import sys
-import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import NamedTuple
@@ -6877,25 +6876,6 @@ def move_task(
     click.echo(
         bullet
         + f" Moved {task_id_display(item_id)} under {dest}{suffix}"
-    )
-
-
-def start_chat():
-    """Start a chat-only session (no task tracking required)."""
-    session_id = str(uuid.uuid4())
-    # `state` is deliberately not named here (E-2105). internal/schema/schema.sql
-    # declares `state TEXT NOT NULL DEFAULT 'working'`, so the column the schema
-    # already owns supplies it; restating the value on this side made Python a
-    # fifth copy of the vocabulary for no gain.
-    cursor = db.execute(
-        "INSERT INTO sessions (session_id, platform) VALUES (?, 'claude')",
-        (session_id,),
-    )
-    row_id = cursor.lastrowid
-    click.echo(
-        click.style("•", fg="cyan")
-        + f" Chat session started (session: {row_id})."
-        + " Write operations are allowed without task tracking."
     )
 
 

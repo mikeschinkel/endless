@@ -607,9 +607,8 @@ Three consequences you will meet:
 - **`endless task reopen` leaves the binding alone.** It changes task state and
   nothing else, so the session that did the work stays reachable afterwards.
 
-The same rule governs the two places that used to clear the pointer implicitly:
-confirming a task now idles the session without unbinding it, and
-`endless task chat` no longer unbinds a session that already holds a task.
+The same rule governs confirming a task, which used to clear the pointer
+implicitly: it now idles the session without unbinding it.
 
 ### `endless task spawn`
 

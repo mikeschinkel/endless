@@ -33,7 +33,7 @@ def test_directive_omits_covers_keeps_note(monkeypatch):
 def test_directive_multiple_sections(monkeypatch):
     monkeypatch.setattr(agent_help, "load_map", lambda cp: guide_map.MapEntry(
         key=cp, sections=["tasks", "orchestration"], covers="x"))
-    out = agent_help.agent_block(_ctx("endless task chat"))
+    out = agent_help.agent_block(_ctx("endless task show"))
     assert "endless guide tasks" in out
     assert "endless guide orchestration" in out
 

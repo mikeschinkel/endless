@@ -792,7 +792,7 @@ func claimHandoffResponse(handoff string) contextInjection {
 }
 
 func handlePostToolUse(projectID int64, isRegistered bool, payload claudePayload) error {
-	// Detect endless task claim/complete/chat commands and update session state
+	// Detect endless task claim/confirm commands and update session state
 	claimHandoff, err := handlePostToolUseSession(projectID, payload)
 	if err != nil {
 		return dbWriteFailed(fmt.Errorf("post tool use session: %w", err))
@@ -893,7 +893,6 @@ func extractFilePath(toolName string, raw json.RawMessage) string {
 const (
 	actionStart   = "start"
 	actionConfirm = "confirm"
-	actionChat    = "chat"
 	scopeTask     = "task"
 )
 
@@ -1105,7 +1104,6 @@ func declarationRefusal(projectID int64, session *monitor.SessionInfo) string {
 	msg.WriteString("Run one of:\n")
 	msg.WriteString("  endless task claim <id>   — start working on a specific task\n")
 	msg.WriteString("  endless task show         — see all available tasks\n")
-	msg.WriteString("  endless task chat         — start a chat-only session (no task tracking)\n")
 
 	return msg.String()
 }
@@ -1277,14 +1275,6 @@ func handlePostToolUseSession(projectID int64, payload claudePayload) (string, e
 			}
 			return "", nil
 		}
-	}
-
-	// Detect: endless task chat
-	if re := matchers.ActionRegex(all, actionChat, scopeTask); re != nil && re.MatchString(input.Command) {
-		if err := monitor.StartChatSession(payload.SessionID, projectID); err != nil {
-			return "", fmt.Errorf("starting chat session: %w", err)
-		}
-		return "", nil
 	}
 
 	return "", nil

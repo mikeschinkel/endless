@@ -3458,13 +3458,6 @@ def task_reopen(item_id):
     reopen_item(item_id)
 
 
-@task_cmd.command("chat")
-def task_chat():
-    """Start a chat-only session (no task tracking)."""
-    from endless.task_cmd import start_chat
-    start_chat()
-
-
 @task_cmd.command("link")
 @click.argument("source_id", type=TASK_ID)
 @click.option("--to", "target", type=TASK_OR_DECISION_ID, required=True,

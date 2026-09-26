@@ -50,10 +50,6 @@ DEFAULT_MATCHERS: list[dict[str, Any]] = [
         "type": "release", "scope": "task", "method": "regex",
         "match": r"endless\s+task\s+release(?:\s+(?:[Ee]-)?(\d+))?",
     },
-    {
-        "type": "chat", "scope": "task", "method": "regex",
-        "match": r"endless\s+task\s+chat",
-    },
 ]
 
 

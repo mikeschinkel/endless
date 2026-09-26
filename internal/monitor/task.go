@@ -97,7 +97,7 @@ func FormatTasks(projectName string, items []Task) string {
 	b.WriteString("\n1. Present these tasks to the user")
 	b.WriteString("\n2. Ask which task to work on")
 	b.WriteString("\n3. Run `endless task claim <id>` after user confirms")
-	b.WriteString("\n4. If this is just a conversation (no code changes), run `endless task chat`")
+	b.WriteString("\n4. If this is just a conversation (no code changes), no action is needed — nothing is refused until you write")
 	b.WriteString("\n")
 	b.WriteString("\nUse `endless task complete <id>` when done with a task.")
 	b.WriteString("\nRead-only operations (Read, Glob, Grep) work without registration.")

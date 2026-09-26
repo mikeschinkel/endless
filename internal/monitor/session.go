@@ -226,34 +226,6 @@ func StartWorkSession(sessionID string, projectID int64, taskID int64) error {
 	return err
 }
 
-// StartChatSession creates a working session with no task (chat-only).
-//
-// E-1968 / ED-1560: the ON CONFLICT branch no longer sets task_id=NULL.
-// `task chat` on an already-known session id used to unbind whatever task that
-// session held, which is the write-once column being cleared by a verb that has
-// nothing to say about task ownership. A session that already holds a task is
-// not chat-only; the INSERT branch still binds NULL for a genuinely new one.
-func StartChatSession(sessionID string, projectID int64) error {
-	db, err := DB()
-	if err != nil {
-		return err
-	}
-
-	now := time.Now().UTC().Format("2006-01-02T15:04:05")
-	processID := currentPaneProcessID()
-
-	_, err = db.Exec(
-		`INSERT INTO sessions (session_id, project_id, platform, state, task_id, process_id, started_at, last_activity)
-		 VALUES (?, ?, 'claude', ?, NULL, ?, ?, ?)
-		 ON CONFLICT(session_id) DO UPDATE SET
-		   state=?, last_activity=?,
-		   process_id=COALESCE(?, sessions.process_id)`,
-		sessionID, projectID, sessionstate.Working, processID, now, now,
-		sessionstate.Working, now, processID,
-	)
-	return err
-}
-
 // InitSession creates a session row on SessionStart.
 //
 // It lands the row in `idle`, which is what a row that exists and has done

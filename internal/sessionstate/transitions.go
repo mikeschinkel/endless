@@ -97,12 +97,12 @@ var transitions = []Transition{
 	{
 		From:    NoState,
 		To:      Working,
-		Trigger: "`task claim` → monitor.BindSessionToTask INSERT; `hook claude` chat → monitor.StartChatSession INSERT; `task chat` → task_cmd.start_chat (via the schema default); `sandbox seed-worktree` → sandboxcmd.seedFromWorktree",
+		Trigger: "`task claim` → monitor.BindSessionToTask INSERT; `sandbox seed-worktree` → sandboxcmd.seedFromWorktree",
 	},
 	{
 		From:    AnyState,
 		To:      Working,
-		Trigger: "`task claim` → monitor.BindSessionToTask ON CONFLICT; `hook claude` chat → monitor.StartChatSession ON CONFLICT",
+		Trigger: "`task claim` → monitor.BindSessionToTask ON CONFLICT",
 	},
 	{
 		// Narrower than the row above it, and kept separate because the

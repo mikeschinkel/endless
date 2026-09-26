@@ -105,11 +105,15 @@ func TestDeclarationRefusal_UndeclaredSession(t *testing.T) {
 			for _, want := range []string{
 				"has not declared a task in project 'proj'",
 				"endless task claim <id>",
-				"endless task chat",
+				"endless task show",
 			} {
 				if !strings.Contains(msg, want) {
 					t.Errorf("refusal missing %q\n--- message ---\n%s", want, msg)
 				}
+			}
+			// E-2179: `task chat` is gone; the refusal must not offer it.
+			if strings.Contains(msg, "task chat") {
+				t.Errorf("refusal offers the removed `task chat`\n--- message ---\n%s", msg)
 			}
 			if strings.Contains(msg, "--force") {
 				t.Errorf("refusal offers --force\n--- message ---\n%s", msg)
