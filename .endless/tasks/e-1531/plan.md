@@ -215,3 +215,48 @@ stop being blocked.
   content kind literally; `verify.sh`/`verify.toml` are still not matched.
 - Python still touches SQLite in exactly six files.
 - `go build/vet/test ./...`, `just test` and `just test-go` pass.
+
+
+## As built (recorded at handoff)
+
+Decisions taken during implementation, with Mike where noted:
+
+- **Headings come from the names** (Mike). Content names are the
+  `taskcontent.Name` Go enum; `String()` is the label, so `reason` renders as
+  "Reason". The earlier "readable at its old heading, no visible change"
+  acceptance line is withdrawn: a migrated closing reason now shows under
+  Reason, not Outcome.
+- **Notices stay one line per edit** (Mike). `task_content_notify_*` triggers
+  merge their field into the undelivered notice `tasks_notify_sessions` wrote
+  for the same task, actor and second; the executor writes the row before its
+  content so the merge target exists.
+- **Stale mirrors removed** (Mike). The 194 `outcome.md` files whose values
+  became `reason` rows are `git rm`'d on the branch; the sweep writes
+  `reason.md` on main after land.
+- **Overlap in §9's rule settled by status.** Five research/brainstorm tasks
+  were also abandoned; each stored outcome read as a closing reason, so status
+  wins in the migration and in the projector's routing of legacy `outcome` keys.
+- **`--outcome` with an abandonment status is stored as `reason`**, on every
+  route (`task update`, `epic update`, `task replace`); without such a status
+  it stays the deliverable. `--reason`/`--reason-file` and `--notes`/
+  `--notes-file` added to `task update` and `epic update`; `--reason`/`--notes`
+  display flags to `task show` and `epic show`.
+- **Empty content deletes the row**; `content` is never ''.
+- **Migrations are 00005 (additive SQL) and 00006 (Go lift + drop)**, renumbered
+  after E-2176 took 00004. 00006 sets the content triggers aside for the copy so
+  the lift writes no notices.
+- **§7 finding:** E-2155's TSV is one artifact (the inventory), so it fits
+  `UNIQUE(task_id, name)` as a single content row; nothing argued for widening.
+
+Grown scope, folded in because each was cheaper than a task row describing it:
+an `abandoned` status group in `internal/taskstatus`; `endless-go task-content
+names` for Python; the hook's mirror-refusal text generated from `TaskKinds`;
+the guide (tasks, orchestration, index, sessions) and the shipped suite rules
+(`SUITE_RULES` and `.endless/tasks/CLAUDE.md`, with Mike's permission) updated
+for five mirrors and the reason split; the unused `MIRROR_PATHSPECS` removed.
+
+Open: two lessons landed during the work ("Don't cite the decisions table as
+design precedent", "Require the reason on every closing move"). §2 cites
+`decision obsolete` as precedent, and the build honours a stored reason. If the
+second lesson means the reason must be given on every closing move, the change
+is the two fallbacks to the stored reason in `update_plan` and `replace_task`.
