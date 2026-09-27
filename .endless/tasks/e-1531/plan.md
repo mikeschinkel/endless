@@ -64,20 +64,23 @@ carrying two unrelated things and must not be lifted into one row:
   and `superseded` demand. Short, written at the moment of the decision, and
   *about* the work rather than being it.
 
-Different authors, different moments, different readers. The overloading costs
-something concrete today: the guard requiring a reason on every abandonment
-cannot honour a reason already on the row, because a stored `outcome` might be a
-research task's findings, and accepting those as the answer to "why did you
-abandon this" would be wrong. So the guard demands the flag again even when the
-row already says it. Two names remove that — a stored closing reason can only
-have got there by someone writing a closing reason.
+Different authors, different moments, different readers, and a reader of the
+stored row cannot tell which of the two it is holding. That is what the split
+fixes: after it, a `reason` row is a closing reason and an `outcome` row is a
+deliverable, and neither has to be inspected to find out which.
 
-Decisions already drew this line: `decision obsolete` has its own reason field
-for exactly this reason. Tasks never got the same split. This is where they do.
+**Superseded 2026-09-27, and this is the correction that matters here.** An
+earlier draft of this section argued the split would let the abandonment guard
+HONOUR a stored closing reason instead of re-demanding the flag, and named that
+as the payoff. Mike has ruled the opposite: the reason is given again on every
+closing move, and a reason already stored on a task never satisfies the guard.
+So the guard is unchanged by this task. The split stands on the storage
+argument alone — the migration has to decide which name each existing `outcome`
+value takes, and one name cannot hold both meanings without the next reader
+having to guess.
 
 Which token the deliverable keeps is an implementation call under the
-convention. `outcome` + `reason` is the pair; `reason` matches what
-`decision obsolete` already calls its field. Tokens can be wordsmithed by a
+convention. `outcome` + `reason` is the pair. Tokens can be wordsmithed by a
 later task if anyone objects — nothing here waits on that.
 
 **This is the only semantic change in the task, and it is deliberate** — the
@@ -204,10 +207,14 @@ stop being blocked.
 - `task_content` exists in both `schema.sql` and a numbered migration, with
   `UNIQUE(task_id, name)`.
 - The four columns are gone from `tasks`; `description` is untouched.
-- Every existing plan, outcome, analysis and notes value is readable at its old
-  heading through `task show --all-fields`, with no visible change.
-- A stored closing reason and a stored deliverable are separate names, and the
-  abandonment guard honours a stored closing reason instead of re-demanding it.
+- Every existing plan, outcome, analysis and notes value survives the lift and
+  is readable through `task show --all-fields`. Headings are generated from the
+  content-name enum labels, so they are NOT required to match the old ones —
+  freezing display parity across a deliberate semantic change was the wrong
+  criterion.
+- A stored closing reason and a stored deliverable are separate names. The
+  abandonment guard still demands the reason on every closing move and is never
+  satisfied by a stored one (ruled 2026-09-27).
 - The executor and the projector write the same names from one shared list, and
   a test asserts they agree.
 - `notes` survives a rebuild (§6), covered by a test.
@@ -242,9 +249,10 @@ Decisions taken during implementation, with Mike where noted:
   `--notes-file` added to `task update` and `epic update`; `--reason`/`--notes`
   display flags to `task show` and `epic show`.
 - **Empty content deletes the row**; `content` is never ''.
-- **Migrations are 00005 (additive SQL) and 00006 (Go lift + drop)**, renumbered
-  after E-2176 took 00004. 00006 sets the content triggers aside for the copy so
-  the lift writes no notices.
+- **Migrations are 00006 (additive SQL) and 00007 (Go lift + drop)**, after two
+  renumberings: E-2176 took 00004, then its follow-up took 00005, and that second
+  collision is what failed the first land. 00007 sets the content triggers aside
+  for the copy so the lift writes no notices.
 - **§7 finding:** E-2155's TSV is one artifact (the inventory), so it fits
   `UNIQUE(task_id, name)` as a single content row; nothing argued for widening.
 
