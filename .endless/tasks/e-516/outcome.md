@@ -1,1 +1,0 @@
-Obsolete with all seven children: 'improve the status page UI' targets the proof-of-concept web code that is being discarded rather than evolved. When the web surface restarts it will be a rewrite, which makes incremental improvement of the current page moot.

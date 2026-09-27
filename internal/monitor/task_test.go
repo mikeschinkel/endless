@@ -5,8 +5,8 @@ import (
 	"testing"
 )
 
-// TestTaskPlan_ReturnsPlan pins the happy path: a tasks row whose text
-// column holds non-empty content is returned verbatim. This is the
+// TestTaskPlan_ReturnsPlan pins the happy path: a task whose plan content row
+// holds non-empty content is returned verbatim. This is the
 // content endless-go session-query task-plan writes to stdout for the
 // Python claim flow (E-894, E-1445).
 func TestTaskPlan_ReturnsPlan(t *testing.T) {
@@ -14,11 +14,12 @@ func TestTaskPlan_ReturnsPlan(t *testing.T) {
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 	want := "# Plan\n\nDo the thing.\n"
 	if _, err := db.Exec(
-		"INSERT INTO tasks (id, project_id, title, status, plan) VALUES (?, ?, ?, ?, ?)",
-		42, 1, "test task", "ready", want,
+		"INSERT INTO tasks (id, project_id, title, status) VALUES (?, ?, ?, ?)",
+		42, 1, "test task", "ready",
 	); err != nil {
 		t.Fatalf("seed task: %v", err)
 	}
+	setTaskContent(t, db, 42, "plan", want)
 
 	got, err := TaskPlan(42)
 	if err != nil {
@@ -29,15 +30,15 @@ func TestTaskPlan_ReturnsPlan(t *testing.T) {
 	}
 }
 
-// TestTaskPlan_EmptyPlanReturnsEmpty pins the COALESCE branch: when text
-// is NULL (no plan attached), the documented contract is to return ""
+// TestTaskPlan_EmptyPlanReturnsEmpty pins the absent-row branch: when there
+// is no plan row (no plan attached), the documented contract is to return ""
 // with no error so the caller (create_task_worktree) treats it as
 // "no plan file to materialize".
 func TestTaskPlan_EmptyPlanReturnsEmpty(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 	if _, err := db.Exec(
-		"INSERT INTO tasks (id, project_id, title, status, plan) VALUES (?, ?, ?, ?, NULL)",
+		"INSERT INTO tasks (id, project_id, title, status) VALUES (?, ?, ?, ?)",
 		43, 1, "test task no text", "ready",
 	); err != nil {
 		t.Fatalf("seed task: %v", err)

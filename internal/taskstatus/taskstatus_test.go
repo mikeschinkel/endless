@@ -368,8 +368,13 @@ func TestParseGroupRejectsUnknown(t *testing.T) {
 // terminal, against `obsolete` for "nothing did". It joins exactly the six
 // groups `obsolete` is in and no others, because the two are structural twins
 // and differ only in what they MEAN.
+//
+// Said, per that rule: E-1531 added `abandoned` — the statuses whose closing
+// text is a reason rather than an outcome. A new group, so no existing
+// membership moved.
 func TestGroupMembershipIsPinned(t *testing.T) {
 	want := map[string][]string{
+		"abandoned":              {"declined", "obsolete", "superseded"},
 		"all":                    {"untriaged", "unplanned", "submitted", "ready", "underway", "unverified", "unreviewed", "confirmed", "assumed", "completed", "revisit", "declined", "obsolete", "superseded"},
 		"actionable":             {"unplanned", "ready", "revisit"},
 		"not-actionable":         {"untriaged", "submitted", "underway", "unverified", "unreviewed", "confirmed", "assumed", "completed", "declined", "obsolete", "superseded"},

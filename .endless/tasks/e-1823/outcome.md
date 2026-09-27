@@ -1,1 +1,0 @@
-Merged into E-1876 as part 2 (veracity). The volume clause and the veracity clause are two halves of one test an agent applies at the same instant; splitting them cost a second shepherd cycle for no separation of concern.

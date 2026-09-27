@@ -1,11 +1,15 @@
 """Where a task's or a decision's document mirror lives, and how it gets there.
 
-A mirror is a projection of a database column — `tasks.plan`, `tasks.outcome`,
-`tasks.analysis`, a decision's body — written to a committed `.md` file so a
-human can read it on github.com without a database. The column is the source of
-truth; the file is derived from it and can always be regenerated.
+A mirror is a projection of database content — a task's plan, outcome, reason,
+analysis or notes (one task_content row each, E-1531), a decision's body —
+written to a committed `.md` file so a human can read it on github.com without a
+database. The row is the source of truth; the file is derived from it and can
+always be regenerated.
 
 Mirrors the Go definition in `internal/docmirror` — keep the two in step. The
+kind list is not typed in either: both derive it from the content-name
+vocabulary (`internal/taskcontent`, read here through `content_names`), so a new
+content kind is mirrored and recognized with no edit to either file. The
 split is the same one `AUTO_COMMIT_GLOBS` already lives with: Go owns the hook
 that refuses a hand-edit and the sweep that keeps main current, Python owns the
 CLI that writes them.
@@ -31,28 +35,41 @@ import click
 class Kind:
     """One mirrored task-document kind.
 
-    `column` is the `tasks` column holding the authoritative content, `stem` the
-    mirror's filename inside the task's own directory, `label` the noun used in
-    commit subjects and CLI output, and `legacy_dir` the directory under
-    `.endless/` this kind was mirrored into before consolidation — retained
-    because the sweep must still RECOGNIZE a file there in order to relocate it.
+    `name` is the task_content name holding the authoritative content, `stem`
+    the mirror's filename inside the task's own directory (the name's own
+    token), `label` the noun used in commit subjects and CLI output, and
+    `legacy_dir` the directory under `.endless/` this kind was mirrored into
+    before consolidation, or "" for a kind that never was — retained because the
+    sweep must still RECOGNIZE a file there in order to relocate it.
     """
 
-    column: str
+    name: str
     stem: str
     label: str
     legacy_dir: str
 
 
-# Every task-scoped document kind. Adding one here is the whole change: the
-# path, the recognizer and the sweep all read from this one list.
-TASK_KINDS: tuple[Kind, ...] = (
-    Kind("plan", "plan", "plan", "plans"),
-    Kind("outcome", "outcome", "outcome", "outcomes"),
-    Kind("analysis", "analysis", "analysis", "analyses"),
-)
+# The pre-consolidation directories, for the three kinds that existed before it.
+# Frozen: no kind added later was ever mirrored there.
+_LEGACY_DIRS = {"plan": "plans", "outcome": "outcomes", "analysis": "analyses"}
 
-KIND_BY_COLUMN: dict[str, Kind] = {k.column: k for k in TASK_KINDS}
+
+def task_kinds() -> tuple[Kind, ...]:
+    """Every task-scoped document kind, one per content name, in display order."""
+    from endless import content_names
+    return tuple(
+        Kind(slug, slug, slug, _LEGACY_DIRS.get(slug, ""))
+        for slug in content_names.slugs()
+    )
+
+
+def kind_for(name: str) -> Kind:
+    """The Kind mirroring a content name. Raises ValueError for an unknown one."""
+    for kind in task_kinds():
+        if kind.name == name:
+            return kind
+    raise ValueError(f"no document mirror for content {name!r}")
+
 
 TASKS_ROOT = ".endless/tasks"
 DECISIONS_DIR = ".endless/decisions"
@@ -179,9 +196,18 @@ def _display_path(p: Path) -> str:
 # The alternation over stems is closed on purpose: `.endless/tasks/e-NNNN/` also
 # holds `verify.sh` and `verify.toml`, which are the TASK's files to write. A
 # pattern that matched the whole directory would refuse a session's own
-# verification suite.
-TASK_DOC_RE = re.compile(r"(^|/)\.endless/tasks/e-\d+/(plan|outcome|analysis)\.md$")
-LEGACY_TASK_DOC_RE = re.compile(r"(^|/)\.endless/(plans|outcomes|analyses)/E-\d+\.md$")
+# verification suite. Closed, but built from task_kinds() rather than typed, so
+# it names exactly the stems a mirror is written under.
+def _task_doc_re() -> re.Pattern:
+    stems = "|".join(re.escape(k.stem) for k in task_kinds())
+    return re.compile(rf"(^|/)\.endless/tasks/e-\d+/({stems})\.md$")
+
+
+def _legacy_task_doc_re() -> re.Pattern:
+    dirs = "|".join(re.escape(k.legacy_dir) for k in task_kinds() if k.legacy_dir)
+    return re.compile(rf"(^|/)\.endless/({dirs})/E-\d+\.md$")
+
+
 DECISION_DOC_RE = re.compile(r"(^|/)\.endless/decisions/ED-\d+\.md$")
 
 
@@ -190,21 +216,7 @@ def is_mirror_path(path: str) -> bool:
     decision. The "this content belongs to the database, not to you" test.
     """
     return bool(
-        TASK_DOC_RE.search(path)
-        or LEGACY_TASK_DOC_RE.search(path)
+        _task_doc_re().search(path)
+        or _legacy_task_doc_re().search(path)
         or DECISION_DOC_RE.search(path)
     )
-
-
-# Git pathspecs covering every place a mirror can sit. Used to ask git which
-# commits on a branch touch one — a pathspec list rather than a regex because
-# the question is put to `git log -- <paths>`, which does the filtering itself.
-MIRROR_PATHSPECS: tuple[str, ...] = (
-    ".endless/plans",
-    ".endless/outcomes",
-    ".endless/analyses",
-    ".endless/decisions",
-    ".endless/tasks/e-*/plan.md",
-    ".endless/tasks/e-*/outcome.md",
-    ".endless/tasks/e-*/analysis.md",
-)

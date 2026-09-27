@@ -9,16 +9,28 @@ import (
 // session-status query's canonicalization and has_plan columns can be exercised.
 func snTask(t *testing.T, db *sql.DB, id, projectID int64, status, phase, plan string) {
 	t.Helper()
-	var planVal any
-	if plan != "" {
-		planVal = plan
-	}
 	if _, err := db.Exec(
-		`INSERT INTO tasks (id, project_id, title, status, phase, plan)
-		 VALUES (?, ?, ?, ?, ?, ?)`,
-		id, projectID, "task-"+status, status, phase, planVal,
+		`INSERT INTO tasks (id, project_id, title, status, phase)
+		 VALUES (?, ?, ?, ?, ?)`,
+		id, projectID, "task-"+status, status, phase,
 	); err != nil {
 		t.Fatalf("snTask id=%d: %v", id, err)
+	}
+	if plan != "" {
+		setTaskContent(t, db, id, "plan", plan)
+	}
+}
+
+// setTaskContent writes one task_content row directly — the fixture-level
+// counterpart of the executor's write, for tests that seed rows by hand.
+func setTaskContent(t *testing.T, db *sql.DB, taskID int64, name, content string) {
+	t.Helper()
+	if _, err := db.Exec(
+		`INSERT INTO task_content (task_id, name, content) VALUES (?, ?, ?)
+		 ON CONFLICT(task_id, name) DO UPDATE SET content = excluded.content`,
+		taskID, name, content,
+	); err != nil {
+		t.Fatalf("set E-%d %s: %v", taskID, name, err)
 	}
 }
 

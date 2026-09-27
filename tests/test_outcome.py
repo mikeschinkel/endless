@@ -1,4 +1,8 @@
-"""Tests for the outcome field and the abandonment verbs (E-787, E-2175)."""
+"""Tests for the outcome and reason content and the abandonment verbs (E-787,
+E-2175, E-1531).
+
+E-1531 split `tasks.outcome` in two: `outcome` is the deliverable, `reason` is
+why a task ended. Every abandonment route stores its text as `reason`."""
 
 import ast
 import json
@@ -21,20 +25,36 @@ def _add_task(title: str, status: str = "ready") -> int:
     return cur.lastrowid
 
 
+def _set_content(task_id: int, **content: str) -> None:
+    """Seed task_content rows directly (E-1531: no longer tasks columns)."""
+    for name, value in content.items():
+        db.execute(
+            "INSERT INTO task_content (task_id, name, content) VALUES (?, ?, ?) "
+            "ON CONFLICT(task_id, name) DO UPDATE SET content = excluded.content",
+            (task_id, name, value),
+        )
+
+
 def _status_outcome(task_id: int) -> tuple[str, str | None]:
-    row = db.query("SELECT status, outcome FROM tasks WHERE id = ?", (task_id,))
-    return row[0]["status"], row[0]["outcome"]
+    row = db.query("SELECT status FROM tasks WHERE id = ?", (task_id,))
+    return row[0]["status"], db.task_content(task_id).get("outcome")
+
+
+def _status_reason(task_id: int) -> tuple[str, str | None]:
+    row = db.query("SELECT status FROM tasks WHERE id = ?", (task_id,))
+    return row[0]["status"], db.task_content(task_id).get("reason")
 
 
 # ─── decline ──────────────────────────────────────────────────────────────────
 
 
-def test_task_decline_writes_outcome(seeded_project_at_cwd):
+def test_task_decline_writes_reason(seeded_project_at_cwd):
     tid = _add_task("Sample")
     task_cmd.decline_item(tid, reason="wrong premise")
-    status, outcome = _status_outcome(tid)
+    status, reason = _status_reason(tid)
     assert status == "declined"
-    assert outcome == "wrong premise"
+    assert reason == "wrong premise"
+    assert _status_outcome(tid)[1] is None
 
 
 def test_task_decline_requires_reason(seeded_project_at_cwd):
@@ -49,7 +69,7 @@ def test_task_decline_blank_reason_rejected(seeded_project_at_cwd):
     tid = _add_task("Sample")
     with pytest.raises(click.ClickException) as exc:
         task_cmd.decline_item(tid, reason="   ")
-    assert "outcome is required" in str(exc.value.message).lower()
+    assert "reason is required" in str(exc.value.message).lower()
 
 
 # ─── confirm ──────────────────────────────────────────────────────────────────
@@ -92,9 +112,9 @@ def test_task_replace_default_superseded(seeded_project_at_cwd):
     old = _add_task("Old")
     new = _add_task("New")
     task_cmd.replace_task(old, new, outcome="folded into the replacement")
-    status, outcome = _status_outcome(old)
+    status, reason = _status_reason(old)
     assert status == "superseded"
-    assert outcome == "folded into the replacement"
+    assert reason == "folded into the replacement"
 
 
 def test_task_replace_with_status_declined_requires_outcome(seeded_project_at_cwd):
@@ -102,16 +122,16 @@ def test_task_replace_with_status_declined_requires_outcome(seeded_project_at_cw
     new = _add_task("New")
     with pytest.raises(click.ClickException) as exc:
         task_cmd.replace_task(old, new, status="declined")
-    assert "outcome is required" in str(exc.value.message).lower()
+    assert "reason is required" in str(exc.value.message).lower()
 
 
 def test_task_replace_with_status_declined_and_outcome(seeded_project_at_cwd):
     old = _add_task("Old")
     new = _add_task("New")
     task_cmd.replace_task(old, new, status="declined", outcome="superseded by E-NEW")
-    status, outcome = _status_outcome(old)
+    status, reason = _status_reason(old)
     assert status == "declined"
-    assert outcome == "superseded by E-NEW"
+    assert reason == "superseded by E-NEW"
 
 
 # ─── update ───────────────────────────────────────────────────────────────────
@@ -121,7 +141,7 @@ def test_task_update_status_declined_requires_outcome(seeded_project_at_cwd):
     tid = _add_task("Sample")
     with pytest.raises(click.ClickException) as exc:
         task_cmd.update_plan(tid, status="declined")
-    assert "outcome is required" in str(exc.value.message).lower()
+    assert "reason is required" in str(exc.value.message).lower()
 
 
 def test_task_update_outcome_standalone(seeded_project_at_cwd):
@@ -132,13 +152,23 @@ def test_task_update_outcome_standalone(seeded_project_at_cwd):
     assert outcome == "initial note"
 
 
-def test_task_update_outcome_amends(seeded_project_at_cwd):
+def test_task_update_reason_amends(seeded_project_at_cwd):
     tid = _add_task("Sample")
     task_cmd.decline_item(tid, reason="first reason")
-    task_cmd.update_plan(tid, outcome="amended reason")
-    status, outcome = _status_outcome(tid)
+    task_cmd.update_plan(tid, reason="amended reason")
+    status, reason = _status_reason(tid)
     assert status == "declined"
-    assert outcome == "amended reason"
+    assert reason == "amended reason"
+
+
+def test_outcome_without_a_transition_stays_an_outcome(seeded_project_at_cwd):
+    """Only text given WITH an abandonment status is a reason. `--outcome` on
+    its own edits the deliverable, whatever status the task sits at."""
+    tid = _add_task("Sample")
+    task_cmd.decline_item(tid, reason="the reason")
+    task_cmd.update_plan(tid, outcome="a deliverable after all")
+    assert _status_reason(tid) == ("declined", "the reason")
+    assert _status_outcome(tid) == ("declined", "a deliverable after all")
 
 
 # ─── abandonment requires a reason (E-2175) ───────────────────────────────────
@@ -155,24 +185,61 @@ def test_task_update_status_obsolete_requires_outcome(seeded_project_at_cwd):
     with pytest.raises(click.ClickException) as exc:
         task_cmd.update_plan(tid, status="obsolete")
     msg = str(exc.value.message)
-    assert "outcome is required" in msg.lower()
+    assert "reason is required" in msg.lower()
     # The refusal must name the flag that satisfies it, not just complain.
-    assert "--outcome" in msg
+    assert "--reason" in msg
 
 
 def test_task_update_status_obsolete_blank_outcome_rejected(seeded_project_at_cwd):
     tid = _add_task("Sample")
     with pytest.raises(click.ClickException) as exc:
         task_cmd.update_plan(tid, status="obsolete", outcome="   ")
-    assert "outcome is required" in str(exc.value.message).lower()
+    assert "reason is required" in str(exc.value.message).lower()
 
 
-def test_task_update_status_obsolete_with_outcome_stores_it(seeded_project_at_cwd):
+def test_task_update_status_obsolete_with_outcome_stores_it_as_reason(seeded_project_at_cwd):
+    """`--outcome` with an abandonment status is that status's reason — the
+    flag every route spelled it with before E-1531 — so it lands as `reason`."""
     tid = _add_task("Sample")
     task_cmd.update_plan(tid, status="obsolete", outcome="the API it wrapped is gone")
-    status, outcome = _status_outcome(tid)
-    assert status == "obsolete"
-    assert outcome == "the API it wrapped is gone"
+    assert _status_reason(tid) == ("obsolete", "the API it wrapped is gone")
+    assert _status_outcome(tid)[1] is None
+
+
+def test_task_update_status_obsolete_with_reason(seeded_project_at_cwd):
+    tid = _add_task("Sample")
+    task_cmd.update_plan(tid, status="obsolete", reason="the API it wrapped is gone")
+    assert _status_reason(tid) == ("obsolete", "the API it wrapped is gone")
+
+
+def test_a_stored_reason_satisfies_the_guard(seeded_project_at_cwd):
+    """E-1531's acceptance: the guard honours a closing reason already on the
+    row. Before the split it could not — the stored text might have been a
+    research task's findings — so it demanded the flag again."""
+    tid = _add_task("Sample")
+    task_cmd.update_plan(tid, reason="written before the decision was taken")
+    task_cmd.update_plan(tid, status="obsolete")
+    assert _status_reason(tid) == ("obsolete", "written before the decision was taken")
+
+
+def test_a_stored_outcome_does_not_satisfy_the_guard(seeded_project_at_cwd):
+    """The other half: a deliverable is not a reason, which is the whole
+    point of keeping them apart."""
+    tid = _add_task("Sample")
+    task_cmd.update_plan(tid, outcome="some findings")
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.update_plan(tid, status="obsolete")
+    assert "reason is required" in str(exc.value.message).lower()
+
+
+def test_abandoning_findings_work_keeps_the_findings(seeded_project_at_cwd):
+    """The concrete cost the split removes: abandoning a research task used to
+    overwrite its findings with why it was abandoned."""
+    tid = _add_task("Sample")
+    task_cmd.update_plan(tid, outcome="the findings")
+    task_cmd.update_plan(tid, status="obsolete", outcome="nobody needs them now")
+    assert _status_outcome(tid) == ("obsolete", "the findings")
+    assert _status_reason(tid) == ("obsolete", "nobody needs them now")
 
 
 def test_epic_update_status_obsolete_requires_outcome(seeded_project_at_cwd):
@@ -183,7 +250,7 @@ def test_epic_update_status_obsolete_requires_outcome(seeded_project_at_cwd):
     tid = _add_task("Sample")
     with pytest.raises(click.ClickException) as exc:
         epic_cmd.update_epic(tid, status="obsolete")
-    assert "outcome is required" in str(exc.value.message).lower()
+    assert "reason is required" in str(exc.value.message).lower()
 
 
 def test_task_replace_with_status_obsolete_requires_outcome(seeded_project_at_cwd):
@@ -193,16 +260,14 @@ def test_task_replace_with_status_obsolete_requires_outcome(seeded_project_at_cw
     new = _add_task("New")
     with pytest.raises(click.ClickException) as exc:
         task_cmd.replace_task(old, new, status="obsolete")
-    assert "outcome is required" in str(exc.value.message).lower()
+    assert "reason is required" in str(exc.value.message).lower()
 
 
 def test_task_replace_with_status_obsolete_and_outcome(seeded_project_at_cwd):
     old = _add_task("Old")
     new = _add_task("New")
     task_cmd.replace_task(old, new, status="obsolete", outcome="deleted outright")
-    status, outcome = _status_outcome(old)
-    assert status == "obsolete"
-    assert outcome == "deleted outright"
+    assert _status_reason(old) == ("obsolete", "deleted outright")
 
 
 @pytest.mark.parametrize("shipped", ["unverified", "confirmed", "assumed", "completed"])
@@ -228,7 +293,7 @@ def test_task_replace_default_superseded_requires_outcome(seeded_project_at_cwd)
     with pytest.raises(click.ClickException) as exc:
         task_cmd.replace_task(old, new)
     msg = str(exc.value.message)
-    assert "outcome is required" in msg.lower()
+    assert "reason is required" in msg.lower()
     assert "--outcome" in msg
     # Refused before anything was written: no relation, no status change.
     assert task_cmd.replaced_by_map([old]) == {}
@@ -242,7 +307,7 @@ def test_task_update_status_superseded_requires_outcome(seeded_project_at_cwd):
     task_cmd.replace_task(old, new, status="ready")   # relation only
     with pytest.raises(click.ClickException) as exc:
         task_cmd.update_plan(old, status="superseded")
-    assert "outcome is required" in str(exc.value.message).lower()
+    assert "reason is required" in str(exc.value.message).lower()
 
 
 def test_superseded_with_no_relation_is_refused_for_the_relation_first(
@@ -256,7 +321,7 @@ def test_superseded_with_no_relation_is_refused_for_the_relation_first(
         task_cmd.update_plan(tid, status="superseded")
     msg = str(exc.value.message)
     assert "nothing replaced it" in msg
-    assert "outcome is required" not in msg.lower()
+    assert "reason is required" not in msg.lower()
 
 
 def test_existing_reasonless_obsolete_rows_still_read(seeded_project_at_cwd):
@@ -291,11 +356,11 @@ def test_the_guard_fires_for_exactly_the_unshipped_terminals():
     fired = set()
     for status in TASK_STATUSES:
         try:
-            task_cmd._require_outcome_for_abandonment(status, None)
+            task_cmd._require_reason_for_abandonment(status, None)
         except click.ClickException:
             fired.add(status)
     assert fired == {"declined", "obsolete", "superseded"}
-    assert task_cmd._require_outcome_for_abandonment(None, None) is None
+    assert task_cmd._require_reason_for_abandonment(None, None) is None
 
 
 # ─── every route to an abandonment status is guarded ──────────────────────────
@@ -306,7 +371,7 @@ def test_the_guard_fires_for_exactly_the_unshipped_terminals():
 # routes structurally, so the next one added is a test failure rather than a
 # hole someone notices in three months.
 
-_GUARD = "_require_outcome_for_abandonment"
+_GUARD = "_require_reason_for_abandonment"
 _ABANDONMENT = {"declined", "obsolete"}
 _SRC = Path(__file__).resolve().parents[1] / "src" / "endless"
 
@@ -450,31 +515,32 @@ def test_task_show_outcome_flag_renders_outcome(seeded_project_at_cwd):
     assert "Outcome:" not in result.output
 
 
-def test_task_show_declined_hides_outcome_by_default(seeded_project_at_cwd):
-    """E-1601: outcome is flag-gated for every status, declined included. With
+def test_task_show_declined_hides_reason_by_default(seeded_project_at_cwd):
+    """E-1601: content is flag-gated for every status, declined included. With
     no flag the snapshot shows a one-line char-count placeholder, not the
-    reason (replaces the old always-shows-for-declined behavior)."""
+    reason. E-1531: a decline's text is its Reason, under its own heading."""
     tid = _add_task("Sample")
     task_cmd.decline_item(tid, reason="declined for testing")
     runner = CliRunner()
     result = runner.invoke(main, ["task", "show", f"E-{tid}"])
     assert result.exit_code == 0
-    assert "Outcome:" in result.output
-    assert "(--outcome to display)" in result.output
-    assert "— Outcome —" not in result.output
+    assert "Reason:" in result.output
+    assert "(--reason to display)" in result.output
+    assert "— Reason —" not in result.output
     assert "declined for testing" not in result.output
+    assert "Outcome:" not in result.output
 
 
-def test_task_show_declined_outcome_flag_reveals_reason(seeded_project_at_cwd):
-    """E-1601: --outcome restores the full section for a declined task."""
+def test_task_show_declined_reason_flag_reveals_reason(seeded_project_at_cwd):
+    """E-1601: --reason restores the full section for a declined task."""
     tid = _add_task("Sample")
     task_cmd.decline_item(tid, reason="declined for testing")
     runner = CliRunner()
-    result = runner.invoke(main, ["task", "show", f"E-{tid}", "--outcome"])
+    result = runner.invoke(main, ["task", "show", f"E-{tid}", "--reason"])
     assert result.exit_code == 0
-    assert "— Outcome —" in result.output
+    assert "— Reason —" in result.output
     assert "declined for testing" in result.output
-    assert "(--outcome to display)" not in result.output
+    assert "(--reason to display)" not in result.output
 
 
 def test_task_show_outcome_placeholder_char_count(seeded_project_at_cwd):
@@ -495,10 +561,8 @@ def test_task_show_completed_hides_outcome_by_default(seeded_project_at_cwd):
     """E-1601: the motivating case (E-1600) — a `completed` task's deliverable
     no longer floods the snapshot; the old status-keyed auto-display is gone."""
     tid = _add_task("Sample")
-    db.execute(
-        "UPDATE tasks SET status = 'completed', outcome = ? WHERE id = ?",
-        ("a long research deliverable body", tid),
-    )
+    db.execute("UPDATE tasks SET status = 'completed' WHERE id = ?", (tid,))
+    _set_content(tid, outcome="a long research deliverable body")
     runner = CliRunner()
     result = runner.invoke(main, ["task", "show", f"E-{tid}"])
     assert result.exit_code == 0
@@ -511,10 +575,7 @@ def test_task_show_completed_hides_outcome_by_default(seeded_project_at_cwd):
 def test_task_show_plan_and_analysis_placeholders(seeded_project_at_cwd):
     """E-1601: plan and analysis also collapse to flag-named placeholders."""
     tid = _add_task("Sample")
-    db.execute(
-        "UPDATE tasks SET plan = ?, analysis = ? WHERE id = ?",
-        ("body plan content", "analysis design content", tid),
-    )
+    _set_content(tid, plan="body plan content", analysis="analysis design content")
     runner = CliRunner()
     result = runner.invoke(main, ["task", "show", f"E-{tid}"])
     assert result.exit_code == 0
@@ -531,10 +592,9 @@ def test_task_show_placeholder_precedes_description(seeded_project_at_cwd):
     so they render with the header group ABOVE the multi-line Description, not
     interleaved with the sections below it."""
     tid = _add_task("Sample")
-    db.execute(
-        "UPDATE tasks SET description = ?, outcome = ? WHERE id = ?",
-        ("a multi-line description body", "the outcome deliverable", tid),
-    )
+    db.execute("UPDATE tasks SET description = ? WHERE id = ?",
+               ("a multi-line description body", tid))
+    _set_content(tid, outcome="the outcome deliverable")
     runner = CliRunner()
     result = runner.invoke(main, ["task", "show", f"E-{tid}"])
     assert result.exit_code == 0
@@ -550,10 +610,9 @@ def test_task_show_full_section_follows_description(seeded_project_at_cwd):
     """E-1601: the full (flagged) body still renders as a section AFTER
     Description."""
     tid = _add_task("Sample")
-    db.execute(
-        "UPDATE tasks SET description = ?, outcome = ? WHERE id = ?",
-        ("a multi-line description body", "the outcome deliverable", tid),
-    )
+    db.execute("UPDATE tasks SET description = ? WHERE id = ?",
+               ("a multi-line description body", tid))
+    _set_content(tid, outcome="the outcome deliverable")
     runner = CliRunner()
     result = runner.invoke(main, ["task", "show", f"E-{tid}", "--outcome"])
     assert result.exit_code == 0
@@ -568,26 +627,24 @@ def test_task_show_full_section_follows_description(seeded_project_at_cwd):
 def test_task_show_all_fields_reveals_everything(seeded_project_at_cwd):
     """E-1601: --all-fields shows every section with no placeholders left."""
     tid = _add_task("Sample")
-    db.execute(
-        "UPDATE tasks SET plan = ?, analysis = ?, outcome = ? WHERE id = ?",
-        ("body plan content", "analysis design content", "outcome deliverable", tid),
-    )
+    _set_content(tid, plan="body plan content", analysis="analysis design content",
+                 outcome="outcome deliverable", reason="why it ended",
+                 notes="some notes")
     runner = CliRunner()
     result = runner.invoke(main, ["task", "show", f"E-{tid}", "--all-fields"])
     assert result.exit_code == 0
-    assert "— Analysis —" in result.output
-    assert "— Plan —" in result.output
-    assert "— Outcome —" in result.output
+    # One heading per content name, in the vocabulary's display order (E-1531).
+    order = [result.output.find(f"— {h} —")
+             for h in ("Analysis", "Plan", "Outcome", "Reason", "Notes")]
+    assert -1 not in order, result.output
+    assert order == sorted(order)
     assert "to display)" not in result.output
 
 
 def test_task_show_outcome_section_renders_after_plan(seeded_project_at_cwd):
     """E-1577: the outcome section appears AFTER the plan section."""
     tid = _add_task("Sample")
-    db.execute(
-        "UPDATE tasks SET plan = ?, outcome = ? WHERE id = ?",
-        ("body plan content", "outcome content", tid),
-    )
+    _set_content(tid, plan="body plan content", outcome="outcome content")
     runner = CliRunner()
     result = runner.invoke(main, ["task", "show", f"E-{tid}", "--plan", "--outcome"])
     assert result.exit_code == 0
@@ -598,20 +655,19 @@ def test_task_show_outcome_section_renders_after_plan(seeded_project_at_cwd):
     assert outcome_idx > plan_idx, "outcome section must follow plan section"
 
 
-def test_task_show_agent_outcome_gated(seeded_project_at_cwd):
-    """E-1601: --agent collapses outcome to a char marker by default; --outcome
-    pulls the body as a `## Outcome` section."""
+def test_task_show_agent_reason_gated(seeded_project_at_cwd):
+    """E-1601: --agent collapses content to a char marker by default; --reason
+    pulls the body as a `## Reason` section."""
     tid = _add_task("Sample")
     task_cmd.decline_item(tid, reason="agent-mode reason")
     runner = CliRunner()
     default = runner.invoke(main, ["task", "show", f"E-{tid}", "--agent"])
     assert default.exit_code == 0
-    assert f"outcome_chars={len('agent-mode reason')}" in default.output
-    assert "outcome=agent-mode reason" not in default.output
-    assert "## Outcome" not in default.output
-    revealed = runner.invoke(main, ["task", "show", f"E-{tid}", "--agent", "--outcome"])
+    assert f"reason_chars={len('agent-mode reason')}" in default.output
+    assert "## Reason" not in default.output
+    revealed = runner.invoke(main, ["task", "show", f"E-{tid}", "--agent", "--reason"])
     assert revealed.exit_code == 0
-    assert "## Outcome" in revealed.output
+    assert "## Reason" in revealed.output
     assert "agent-mode reason" in revealed.output
 
 
@@ -630,10 +686,11 @@ def test_task_show_json_outcome_ungated(seeded_project_at_cwd):
     default = json.loads(
         runner.invoke(main, ["task", "show", f"E-{tid}", "--json"]).output
     )
-    assert default["outcome"] == "json reason"
-    assert default["outcome_chars"] == len("json reason")
+    assert default["reason"] == "json reason"
+    assert default["reason_chars"] == len("json reason")
+    assert default["outcome"] is None and default["outcome_chars"] == 0
     revealed = json.loads(
-        runner.invoke(main, ["task", "show", f"E-{tid}", "--json", "--outcome"]).output
+        runner.invoke(main, ["task", "show", f"E-{tid}", "--json", "--reason"]).output
     )
     assert revealed == default, "a display flag must not change the JSON payload"
 
@@ -641,7 +698,7 @@ def test_task_show_json_outcome_ungated(seeded_project_at_cwd):
 # ─── event log ────────────────────────────────────────────────────────────────
 
 
-def test_event_log_records_outcome(seeded_project_at_cwd):
+def test_event_log_records_reason(seeded_project_at_cwd):
     tid = _add_task("Sample")
     task_cmd.decline_item(tid, reason="event-log reason")
     events_dir = seeded_project_at_cwd / ".endless" / "db-ledger"
@@ -655,10 +712,10 @@ def test_event_log_records_outcome(seeded_project_at_cwd):
                     and evt.get("entity", {}).get("id") == str(tid)):
                 payload = evt["payload"]
                 if (payload.get("new_status") == "declined"
-                        and payload.get("outcome") == "event-log reason"):
+                        and payload.get("reason") == "event-log reason"):
                     found = True
                     break
-    assert found, "decline event with outcome not found in event log"
+    assert found, "decline event with reason not found in event log"
 
 
 # ─── ledger round-trip ────────────────────────────────────────────────────────
@@ -669,8 +726,8 @@ def test_event_log_records_outcome(seeded_project_at_cwd):
 # four tables it cannot restore — and the claim never needed it. The two halves
 # it was making are covered where each one lives:
 #
-#   - the decline EMITS the outcome:
-#     test_event_log_records_outcome, immediately above.
+#   - the decline EMITS the reason:
+#     test_event_log_records_reason, immediately above.
 #   - replaying that event REPRODUCES the outcome:
 #     internal/events/projector_test.go,
 #     TestProjectToTempDB_StatusChangeCarriesOutcome.

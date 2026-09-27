@@ -14,8 +14,11 @@ Every task has multiple body fields. Knowing which to use prevents long descript
 | `description` | < 200 words    | Brief pitch — *what* and *why* in a paragraph or two. Shown by default in `task list` / `task show`. | `--description` (inline) / `--description-file <path>` on `task add` / `task update`. |
 | `plan`        | Long-form      | Full implementation plan: approach, the files and functions it touches, verification steps. Name files and functions, never line numbers — see **No time-frozen specifics** below. Shown with `task show --plan`. **On a research task, `plan` instead holds the research *request* — see the Research-task field model below.** | `--plan` (inline) / `--plan-file <path>` on `task add` / `task update`. |
 | `analysis`    | Long-form      | Supporting research / exploration content that is *not* a proper plan — comparisons, findings, evidence gathered before the plan is written. Shown with `task show --analysis`. | `--analysis` (inline) / `--analysis-file <path>` on `task update`. |
-| `notes`       | Freeform       | Catch-all for content that doesn't fit elsewhere. Use sparingly.                                 | DB column; CLI flag may not yet be wired.          |
-| `outcome`     | Short to long  | Result / reason at terminal status. **Required** when completing a `research`/`brainstorm` task (the outcome IS the deliverable) and as the reason on every abandonment — `declined`, `obsolete` and `superseded` alike. Optional on `confirm`/`assume`. | `--outcome` (inline) / `--outcome-file <path>` on `task confirm` / `task assume` / `task update`; `--reason` on `task decline` (stored as outcome). |
+| `notes`       | Freeform       | Catch-all for content that doesn't fit elsewhere. Use sparingly. `--justification` composes its `## Justification` heading in here. Shown with `task show --notes`. | `--notes` (inline) / `--notes-file <path>` on `task update`. |
+| `outcome`     | Short to long  | The result — the deliverable. **Required** when completing a `research`/`brainstorm` task (the outcome IS the deliverable). Optional on `confirm`/`assume`. Shown with `task show --outcome`. | `--outcome` (inline) / `--outcome-file <path>` on `task confirm` / `task assume` / `task update`. |
+| `reason`      | Short          | Why the task ended. **Required** on every abandonment — `declined`, `obsolete` and `superseded` alike — unless one is already stored. Kept apart from `outcome` so abandoning findings work never overwrites the findings. Shown with `task show --reason`. | `--reason` (inline) / `--reason-file <path>` on `task update` / `task decline`; `--outcome` given *with* an abandonment status, and on `task replace`, is stored as the reason. |
+
+`plan`, `analysis`, `outcome`, `reason` and `notes` are **content**: each is one row per task in the database under that name, and the name is also the CLI flag, the `task show` heading and the mirror file (`.endless/tasks/e-NNNN/<name>.md`). `title` and `description` are columns on the task itself.
 
 ### Distinctions in practice
 
@@ -423,7 +426,7 @@ endless task confirm <id> --outcome "..."            # user-only — sessions do
 endless task confirm <id> --cascade --outcome "..."  # confirm a task and descendants
 endless task assume <id> --outcome "..."             # believed complete, can't verify
 endless task decline <id> --reason "..."             # active decision not to do
-endless task update <id> --status obsolete --outcome "..."   # no longer needed, nothing replaced it
+endless task update <id> --status obsolete --reason "..."    # no longer needed, nothing replaced it
 endless task replace <id> --by <new_id> --outcome "..."      # supersede with another task
 ```
 
@@ -469,10 +472,10 @@ every title — a real cost for a fact one `task show` away.
 
 **Every abandonment requires a reason.** A task can end three ways without
 having shipped — `declined`, `obsolete`, `superseded` — and all three are
-refused without `--outcome` (`--reason` on `task decline`, which stores the
-same field). The requirement is on the STATUS, not on a verb, so it holds
-whichever route you take: `task update`, `epic update`, `task decline`,
-`task replace`.
+refused without a reason: `--reason`, or `--outcome` given with the status,
+which is stored as the reason. A reason already stored on the task satisfies
+it. The requirement is on the STATUS, not on a verb, so it holds whichever
+route you take: `task update`, `epic update`, `task decline`, `task replace`.
 
 `superseded` is included even though it already needs a `replaced_by` relation.
 The relation records WHAT took the work over; it does not record WHY it was

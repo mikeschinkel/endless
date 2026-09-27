@@ -1,1 +1,0 @@
-Superseded by E-1426; resolver no longer reads from companion files

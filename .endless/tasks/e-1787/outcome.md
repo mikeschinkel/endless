@@ -1,1 +1,0 @@
-Merged into E-1876 as part 4 (plan-write trigger). A one-trigger extension of E-1772's existing reminder mechanism did not justify a full shepherd cycle of its own.

@@ -12,12 +12,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/dbprovenance"
 	"github.com/mikeschinkel/endless/internal/docmirror"
 	"github.com/mikeschinkel/endless/internal/gatekind"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/taskcontent"
 	_ "modernc.org/sqlite"
 )
 
@@ -147,8 +149,8 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "subcommands:")
 	fmt.Fprintln(os.Stderr, "  list-live --project-root <path>   JSON array of live sessions for the project")
 	fmt.Fprintln(os.Stderr, "                                    end non-ended sessions whose tmux pane is gone (silent; DB error → exit 1)")
-	fmt.Fprintln(os.Stderr, "  task-plan --id <task-id>          raw tasks.plan for the task (empty if none)")
-	fmt.Fprintln(os.Stderr, "  task-field --id <task-id> --name <plan|outcome|analysis>")
+	fmt.Fprintln(os.Stderr, "  task-plan --id <task-id>          raw plan for the task (empty if none)")
+	fmt.Fprintln(os.Stderr, "  task-field --id <task-id> --name <"+strings.Join(taskcontent.Slugs(), "|")+">")
 	fmt.Fprintln(os.Stderr, "                                    raw value of one multiline doc column (empty if none)")
 	fmt.Fprintln(os.Stderr, "  doc-content --path <rel-path>     authoritative content behind a document mirror path")
 	fmt.Fprintln(os.Stderr, "                                    (.endless/tasks/e-N/{plan,outcome,analysis}.md, a legacy")
@@ -587,7 +589,7 @@ func runGateClear(args []string) error {
 	}
 }
 
-// runTaskPlan prints the raw tasks.plan for a task id to stdout — a Python-side
+// runTaskPlan prints the raw plan for a task id to stdout — a Python-side
 // read of a document column without a Python DB read (E-894 / E-1445). Output is
 // the raw plan, not JSON; empty output means "no plan".
 //
@@ -612,14 +614,14 @@ func runTaskPlan(args []string) error {
 	return err
 }
 
-// runTaskField prints the raw value of one whitelisted multiline document
-// column (plan/outcome/analysis) for a task, without a forbidden Python DB read
+// runTaskField prints the raw value of one content row (any taskcontent name)
+// for a task, without a forbidden Python DB read
 // (E-894/E-1486). It backed E-1747's birth-time mirror seeding until E-2137
 // retired that; see runTaskPlan for why the verb stays.
 func runTaskField(args []string) error {
 	fs := flag.NewFlagSet("task-field", flag.ContinueOnError)
 	id := fs.Int64("id", 0, "task id")
-	name := fs.String("name", "", "column name: plan|outcome|analysis")
+	name := fs.String("name", "", "content name: "+strings.Join(taskcontent.Slugs(), "|"))
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -629,7 +631,11 @@ func runTaskField(args []string) error {
 	if *name == "" {
 		return fmt.Errorf("--name is required")
 	}
-	value, err := monitor.TaskField(*id, *name)
+	content, err := taskcontent.Parse(*name)
+	if err != nil {
+		return err
+	}
+	value, err := monitor.TaskContent(*id, content)
 	if err != nil {
 		return fmt.Errorf("read task field %q for E-%d: %w", *name, *id, err)
 	}
@@ -961,7 +967,7 @@ func runDocContent(args []string) error {
 	case src.DecisionID != 0:
 		content, err = monitor.DecisionBody(src.DecisionID)
 	default:
-		content, err = monitor.TaskField(src.TaskID, src.Column)
+		content, err = monitor.TaskContent(src.TaskID, src.Name)
 	}
 	if err != nil {
 		return fmt.Errorf("read content for %s: %w", *path, err)

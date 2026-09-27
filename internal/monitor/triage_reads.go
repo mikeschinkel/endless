@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"github.com/mikeschinkel/endless/internal/taskcontent"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -173,12 +174,12 @@ func triageContext(db *sql.DB, taskID int64) (TriageContext, error) {
 
 	// A missing task is a caller error, not an empty context — triage would
 	// otherwise happily prompt about nothing and route a row that isn't there.
-	// type_id is nullable, so LEFT JOIN + COALESCE; description/plan are too.
+	// type_id is nullable, so LEFT JOIN + COALESCE; description is too.
 	var parentID sql.NullInt64
 	err := db.QueryRow(
 		`SELECT p.name, p.path, t.title, COALESCE(t.description, ''),
 		        COALESCE(tt.slug, ''), t.phase, t.status,
-		        COALESCE(t.plan, '') != '', t.effective_parent_id
+		        `+hasContentExpr("t.id", taskcontent.Plan)+`, t.effective_parent_id
 		   FROM task_tree t
 		   JOIN projects p ON p.id = t.project_id
 		   LEFT JOIN task_types tt ON tt.id = t.type_id

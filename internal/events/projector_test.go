@@ -429,8 +429,9 @@ func TestProjectToTempDB_RetiredKindsReplayAsDeclaredNoOps(t *testing.T) {
 
 // TestProjectToTempDB_StatusChangeCarriesOutcome pins the round trip E-787
 // asked for: a task declined with a reason must come back out of the ledger
-// with that reason intact, because `outcome` is the only record of WHY a task
-// was declined and it exists nowhere but the event.
+// with that reason intact, because the reason is the only record of WHY a task
+// was declined and it exists nowhere but the event. Stored under `reason` since
+// E-1531, whichever key the event spelled it with.
 //
 // Asserted against the projection, which is where the claim lives. It used to
 // be asserted by running `endless-go event rebuild-db --confirm` from
@@ -482,16 +483,25 @@ func TestProjectToTempDB_StatusChangeCarriesOutcome(t *testing.T) {
 	}
 	defer db.Close()
 
-	var status, outcome string
+	// A decline's text is a closing reason (E-1531). This event spells it
+	// `outcome`, as every event did before the split, and the projection must
+	// land it where the migration put the same value: under `reason`.
+	var status, reason, outcome string
 	if err := db.QueryRow(
-		"SELECT status, COALESCE(outcome,'') FROM tasks WHERE id = ?", 909,
-	).Scan(&status, &outcome); err != nil {
+		`SELECT status,
+		        COALESCE((SELECT content FROM task_content WHERE task_id = t.id AND name = 'reason'), ''),
+		        COALESCE((SELECT content FROM task_content WHERE task_id = t.id AND name = 'outcome'), '')
+		   FROM tasks t WHERE id = ?`, 909,
+	).Scan(&status, &reason, &outcome); err != nil {
 		t.Fatalf("query projected task: %v", err)
 	}
 	if status != "declined" {
 		t.Errorf("projected status = %q, want declined", status)
 	}
-	if outcome != "round-trip reason" {
-		t.Errorf("projected outcome = %q, want %q", outcome, "round-trip reason")
+	if reason != "round-trip reason" {
+		t.Errorf("projected reason = %q, want %q", reason, "round-trip reason")
+	}
+	if outcome != "" {
+		t.Errorf("projected outcome = %q, want none — a decline's text is its reason", outcome)
 	}
 }

@@ -1299,8 +1299,8 @@ const shellWord = `'[^']*'|"[^"]*"|[^\s'";&|]+`
 //
 // Why it matters MORE after the move: `.endless/tasks/e-NNNN/` is also where a
 // session writes its own verification suite, so this directory now holds files
-// of both kinds side by side. docmirror.TaskDocRe names the three
-// database-owned stems exactly and nothing else, which is what keeps a
+// of both kinds side by side. docmirror.TaskDocRe names the database-owned
+// stems exactly and nothing else, which is what keeps a
 // session's own `verify.sh` writable.
 
 // sqliteEndlessRe matches sqlite3 invocations targeting any path inside
@@ -1628,24 +1628,35 @@ func blockDocMirrorWriteIfApplicable(payload claudePayload) {
 	if !docmirror.TaskDocRe.MatchString(path) && !docmirror.LegacyTaskDocRe.MatchString(path) {
 		return
 	}
-	blockToolUse(
-		"BLOCKED: refusing a direct Write/Edit of a task document mirror " +
-			"(.endless/tasks/e-NNNN/{plan,outcome,analysis}.md). That content lives " +
-			"in the task's row — tasks.plan / tasks.outcome / tasks.analysis — and " +
-			"the file is a projection of it that endless writes and commits on main " +
-			"for you, so humans can read it when reviewing the repo on GitHub or " +
-			"other Git hosts. Editing it directly leaves the database stale, and the " +
-			"next sweep rewrites the file from the column without warning.\n\n" +
-			"Author the content under .endless/tmp/ (the project-local scratch " +
-			"dir), then run one of:\n" +
-			"  endless task update <id> --plan-file .endless/tmp/<file>.md\n" +
-			"  endless task update <id> --analysis-file .endless/tmp/<file>.md\n" +
-			"  endless task update <id> --outcome-file .endless/tmp/<file>.md\n\n" +
-			"(the --*-file forms load the file's content; --plan would store the " +
-			"path string itself. Use the inline forms only for short content.)\n\n" +
-			"Your task's own verify.sh in that same directory IS yours to write — " +
-			"only these three .md files are the database's.\n\n" +
-			"Never hand-edit or git-commit a mirror yourself.")
+	blockToolUse(docMirrorBlockMessage())
+}
+
+// docMirrorBlockMessage is the refusal blockDocMirrorWriteIfApplicable prints.
+// The stems and the --<name>-file flags are read from docmirror.TaskKinds, the
+// list the recognizer itself is built from, so the message names exactly the
+// files the gate refuses — a new content kind shows up here with no edit.
+func docMirrorBlockMessage() string {
+	stems := make([]string, len(docmirror.TaskKinds))
+	var flags strings.Builder
+	for i, k := range docmirror.TaskKinds {
+		stems[i] = k.Stem
+		fmt.Fprintf(&flags, "  endless task update <id> --%s-file .endless/tmp/<file>.md\n", k.Stem)
+	}
+	return "BLOCKED: refusing a direct Write/Edit of a task document mirror " +
+		"(.endless/tasks/e-NNNN/{" + strings.Join(stems, ",") + "}.md). That content " +
+		"lives in the database as the task's content — one row per name — and " +
+		"the file is a projection of it that endless writes and commits on main " +
+		"for you, so humans can read it when reviewing the repo on GitHub or " +
+		"other Git hosts. Editing it directly leaves the database stale, and the " +
+		"next sweep rewrites the file from the database without warning.\n\n" +
+		"Author the content under .endless/tmp/ (the project-local scratch " +
+		"dir), then run one of:\n" +
+		flags.String() + "\n" +
+		"(the --*-file forms load the file's content; --plan would store the " +
+		"path string itself. Use the inline forms only for short content.)\n\n" +
+		"Your task's own verify.sh in that same directory IS yours to write — " +
+		"only these .md files are the database's.\n\n" +
+		"Never hand-edit or git-commit a mirror yourself."
 }
 
 // isInMainCheckout returns true if cwd is inside the main checkout of a git

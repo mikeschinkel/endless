@@ -9,7 +9,7 @@ from endless.cli import main
 
 def _analysis_of(task_id: int) -> str | None:
     return db.query(
-        "SELECT analysis FROM tasks WHERE id = ?", (task_id,)
+        "SELECT (SELECT content FROM task_content WHERE task_id = tasks.id AND name = 'analysis') AS analysis FROM tasks WHERE id = ?", (task_id,)
     )[0]["analysis"]
 
 

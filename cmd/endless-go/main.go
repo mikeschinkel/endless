@@ -22,6 +22,7 @@
 //	endless-go template      render
 //	endless-go markdown      render
 //	endless-go task-status   groups|get|has|sql-list|rank|label|glyph  (the status vocabulary; no DB)
+//	endless-go task-content  names  (the task content-kind vocabulary; no DB)
 //	endless-go session-state groups|get|has|sql-list|rank|label|glyph  (the session state vocabulary; no DB)
 //	endless-go jobs          list|run|retry   (E-698 fire-once background job runner)
 //	endless-go errors        show|clear|codes (E-698 machine-local fault record)
@@ -70,6 +71,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/sessionstatecmd"
 	"github.com/mikeschinkel/endless/internal/sessionstatuscmd"
 	"github.com/mikeschinkel/endless/internal/spawnlaunchcmd"
+	"github.com/mikeschinkel/endless/internal/taskcontentcmd"
 	"github.com/mikeschinkel/endless/internal/taskstatuscmd"
 	"github.com/mikeschinkel/endless/internal/templatecmd"
 	"github.com/mikeschinkel/endless/internal/tmuxcmd"
@@ -228,6 +230,8 @@ func main() {
 		markdowncmd.Run(rest)
 	case "task-status":
 		taskstatuscmd.Run(rest)
+	case "task-content":
+		taskcontentcmd.Run(rest)
 	case "session-state":
 		sessionstatecmd.Run(rest)
 	case "verify":
@@ -303,6 +307,7 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  claim-handoff  <task-id>  (the handoff `task claim` prints to an agent)")
 	fmt.Fprintln(w, "  markdown       render (markdown → colorized ANSI)")
 	fmt.Fprintln(w, "  task-status    groups|get|has|sql-list|rank|label|glyph  (the task status vocabulary)")
+	fmt.Fprintln(w, "  task-content   names  (the task content-kind vocabulary)")
 	fmt.Fprintln(w, "  session-state  groups|get|has|sql-list|rank|label|glyph  (the session state vocabulary)")
 	fmt.Fprintln(w, "  verify         [--keep] <task-id>  (run a task's Tier-0 verification suite)")
 	fmt.Fprintln(w, "  jobs           list|run|retry  (the fire-once background job runner)")

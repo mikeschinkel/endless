@@ -1,1 +1,0 @@
-Replaced by snapshot-feature deletion. Original task (move snapshotPlanFile target to .git/info/endless/) is moot because the feature itself is removed.

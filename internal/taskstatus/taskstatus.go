@@ -224,6 +224,14 @@ const (
 	// exclusive to findings work — a todo-typed audit finishes there too, on
 	// the strength of its title's lead verb rather than its type.
 	ReviewTrack
+
+	// Abandoned are the statuses that end an unshipped task by decision. The
+	// text written on arriving at one is a closing REASON — why the work
+	// ended — and is stored under the `reason` content name, never `outcome`,
+	// which on findings work is the deliverable itself (E-1531). Same members
+	// as ReopenRefused today, for a different reason: that group is about
+	// reversal, this one about what the closing text means.
+	Abandoned
 )
 
 // groups is the ONE map. Every grouping in the system is a row here, so adding
@@ -263,6 +271,7 @@ var groups = map[Group][]Status{
 	Terminal:             {Confirmed, Assumed, Completed, Declined, Obsolete, Superseded},
 	VerificationTerminal: {Confirmed, Assumed},
 	VerificationTrack:    {Unverified, Confirmed, Assumed},
+	Abandoned:            {Declined, Obsolete, Superseded},
 }
 
 // groupSlugs is the CLI-facing name of each Group. The Python client passes
@@ -293,6 +302,7 @@ var groupSlugs = map[Group]string{
 	Terminal:             "terminal",
 	VerificationTerminal: "verification-terminal",
 	VerificationTrack:    "verification-track",
+	Abandoned:            "abandoned",
 }
 
 // labels is the human display string per status, mirroring tasktype.Label().

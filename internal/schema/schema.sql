@@ -284,7 +284,6 @@ CREATE TABLE IF NOT EXISTS tasks (
     parent_id INTEGER,
     title TEXT NOT NULL,
     description TEXT,
-    plan TEXT,
     phase TEXT NOT NULL DEFAULT 'now',
     status TEXT NOT NULL DEFAULT 'unplanned',
     sort_order INTEGER NOT NULL DEFAULT 0,
@@ -293,9 +292,6 @@ CREATE TABLE IF NOT EXISTS tasks (
     type_id INTEGER REFERENCES task_types(id),
     updated_at TEXT NOT NULL DEFAULT '',
     tier INTEGER,
-    outcome TEXT,
-    analysis TEXT,
-    notes TEXT,
     changed_by_session INTEGER,
     removed INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
@@ -471,9 +467,10 @@ CREATE INDEX IF NOT EXISTS idx_session_notices_undelivered
 -- rather than a 2-element array so json_extract(changes,'$.status.after') reads as
 -- what it is, and so a third key can be added later without a breaking change.
 --
--- Freeform fields (description/plan/analysis/notes) carry the single character
--- '…' (U+2026) in place of content — the notice says a field CHANGED without
--- reproducing it, while still distinguishing added / cleared / emptied / edited.
+-- Freeform fields (description here; plan/analysis/notes through the
+-- task_content triggers below) carry the single character '…' (U+2026) in place
+-- of content — the notice says a field CHANGED without reproducing it, while
+-- still distinguishing added / cleared / emptied / edited.
 --
 -- json(v) around each object is required: without it json_group_object embeds the
 -- nested object as a *string* ({"status":"{\"before\":…}"}).
@@ -504,9 +501,6 @@ WHEN OLD.status      IS NOT NEW.status
   OR OLD.phase       IS NOT NEW.phase
   OR OLD.tier        IS NOT NEW.tier
   OR OLD.description IS NOT NEW.description
-  OR OLD.plan        IS NOT NEW.plan
-  OR OLD.analysis    IS NOT NEW.analysis
-  OR OLD.notes       IS NOT NEW.notes
 BEGIN
     INSERT INTO session_notices
         (session_id, task_id, changes, changed_at, changed_by_session)
@@ -534,36 +528,6 @@ BEGIN
                                           WHEN NEW.description = ''   THEN ''
                                           ELSE '…' END)
                  WHERE OLD.description IS NOT NEW.description
-                UNION ALL
-                SELECT 'plan',
-                       json_object(
-                           'before', CASE WHEN OLD.plan IS NULL THEN NULL
-                                          WHEN OLD.plan = ''   THEN ''
-                                          ELSE '…' END,
-                           'after',  CASE WHEN NEW.plan IS NULL THEN NULL
-                                          WHEN NEW.plan = ''   THEN ''
-                                          ELSE '…' END)
-                 WHERE OLD.plan IS NOT NEW.plan
-                UNION ALL
-                SELECT 'analysis',
-                       json_object(
-                           'before', CASE WHEN OLD.analysis IS NULL THEN NULL
-                                          WHEN OLD.analysis = ''   THEN ''
-                                          ELSE '…' END,
-                           'after',  CASE WHEN NEW.analysis IS NULL THEN NULL
-                                          WHEN NEW.analysis = ''   THEN ''
-                                          ELSE '…' END)
-                 WHERE OLD.analysis IS NOT NEW.analysis
-                UNION ALL
-                SELECT 'notes',
-                       json_object(
-                           'before', CASE WHEN OLD.notes IS NULL THEN NULL
-                                          WHEN OLD.notes = ''   THEN ''
-                                          ELSE '…' END,
-                           'after',  CASE WHEN NEW.notes IS NULL THEN NULL
-                                          WHEN NEW.notes = ''   THEN ''
-                                          ELSE '…' END)
-                 WHERE OLD.notes IS NOT NEW.notes
            )),
            strftime('%Y-%m-%dT%H:%M:%S', 'now'),
            NEW.changed_by_session
@@ -572,6 +536,171 @@ BEGIN
      WHERE st.task_id = NEW.id
        AND st.session_id IS NOT NEW.changed_by_session
        AND s.state != 'ended';
+END;
+
+-- Task content (E-1531): the typed prose a task carries, one row per content
+-- kind. Replaces the fixed tasks.plan / tasks.outcome / tasks.analysis /
+-- tasks.notes columns with a 1-to-many, so a new kind of content is an INSERT
+-- rather than a column. `description` is NOT content in this sense: it is short
+-- metadata and stays a column on tasks.
+--
+-- `name` is a token of the taskcontent.Name Go enum (internal/taskcontent) — one
+-- lowercase single-token word, the same token the CLI flag, the document
+-- mirror's file stem and the Agent Folio Format `Name` header use. The enum is
+-- the vocabulary; this column stores its slugs, the way tasks.status stores a
+-- taskstatus slug, so there is no mirror table.
+--
+-- UNIQUE(task_id, name) is load-bearing: ONE row per content kind per task, not
+-- an append log. It keeps "does this task have a plan?" a single question with
+-- nothing to disambiguate, and makes every write an UPSERT rather than a
+-- decision about which row is current. A write of empty content DELETES the
+-- row, so a row's presence means the task has that content — `content` is never
+-- the empty string.
+--
+-- `outcome` and `reason` are two names on purpose. `outcome` is the deliverable
+-- (on research/brainstorm, the findings themselves); `reason` is why a task
+-- ended — what declined/obsolete/superseded demand. They used to share
+-- tasks.outcome, which is why a stored closing reason could not be honoured by
+-- the abandonment guard: it might have been a research task's findings.
+CREATE TABLE IF NOT EXISTS task_content (
+    id INTEGER PRIMARY KEY,
+    task_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    content TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    updated_at TEXT NOT NULL DEFAULT '',
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE,
+    UNIQUE(task_id, name)
+);
+
+-- task_content_notify_* (E-1531) carry tasks_notify_sessions' contract over to
+-- the content that left the tasks row: a change to plan, analysis or notes
+-- notifies every session holding the task, with the same '…' elision (content
+-- is never reproduced) and the same self-suppression, read from the actor
+-- tasks.changed_by_session was stamped with — the executor stamps it on every
+-- task event before any write lands, content included. outcome and reason are
+-- not watched, exactly as tasks.outcome was not.
+--
+-- ONE EDIT, ONE LINE. A single `task update --status X --plan-file F` writes the
+-- tasks row and a content row, and the rule session_notices was built on is
+-- that one edit renders as one line. So each trigger first MERGES its field into
+-- an undelivered notice already written for the same task, actor and second —
+-- the one tasks_notify_sessions wrote for the same edit, since the executor
+-- writes the tasks row before content — and only INSERTs a notice for a holder
+-- that has none. Merging keeps an earlier `before` and advances `after`, so two
+-- writes to one field in one edit still read as one transition. An edit that
+-- straddles a second boundary renders as two lines, which is the harmless
+-- direction.
+CREATE TRIGGER IF NOT EXISTS task_content_notify_insert AFTER INSERT ON task_content
+WHEN NEW.name IN ('plan', 'analysis', 'notes')
+BEGIN
+    UPDATE session_notices
+       SET changes = CASE
+               WHEN json_type(changes, '$.' || NEW.name) IS NULL
+               THEN json_set(changes, '$.' || NEW.name,
+                             json_object('before', NULL, 'after', '…'))
+               ELSE json_set(changes, '$.' || NEW.name || '.after', '…')
+           END
+     WHERE task_id = NEW.task_id
+       AND notified = 0
+       AND changed_at = strftime('%Y-%m-%dT%H:%M:%S', 'now')
+       AND changed_by_session IS
+           (SELECT changed_by_session FROM tasks WHERE id = NEW.task_id);
+    INSERT INTO session_notices
+        (session_id, task_id, changes, changed_at, changed_by_session)
+    SELECT st.session_id,
+           NEW.task_id,
+           json_object(NEW.name, json_object('before', NULL, 'after', '…')),
+           strftime('%Y-%m-%dT%H:%M:%S', 'now'),
+           t.changed_by_session
+      FROM session_tasks st
+      JOIN sessions s ON s.id = st.session_id
+      JOIN tasks t ON t.id = st.task_id
+     WHERE st.task_id = NEW.task_id
+       AND st.session_id IS NOT t.changed_by_session
+       AND s.state != 'ended'
+       AND NOT EXISTS (
+           SELECT 1 FROM session_notices n
+            WHERE n.session_id = st.session_id
+              AND n.task_id = NEW.task_id
+              AND n.notified = 0
+              AND n.changed_at = strftime('%Y-%m-%dT%H:%M:%S', 'now')
+              AND n.changed_by_session IS t.changed_by_session);
+END;
+
+CREATE TRIGGER IF NOT EXISTS task_content_notify_update AFTER UPDATE ON task_content
+WHEN NEW.name IN ('plan', 'analysis', 'notes')
+  AND OLD.content IS NOT NEW.content
+BEGIN
+    UPDATE session_notices
+       SET changes = CASE
+               WHEN json_type(changes, '$.' || NEW.name) IS NULL
+               THEN json_set(changes, '$.' || NEW.name,
+                             json_object('before', '…', 'after', '…'))
+               ELSE json_set(changes, '$.' || NEW.name || '.after', '…')
+           END
+     WHERE task_id = NEW.task_id
+       AND notified = 0
+       AND changed_at = strftime('%Y-%m-%dT%H:%M:%S', 'now')
+       AND changed_by_session IS
+           (SELECT changed_by_session FROM tasks WHERE id = NEW.task_id);
+    INSERT INTO session_notices
+        (session_id, task_id, changes, changed_at, changed_by_session)
+    SELECT st.session_id,
+           NEW.task_id,
+           json_object(NEW.name, json_object('before', '…', 'after', '…')),
+           strftime('%Y-%m-%dT%H:%M:%S', 'now'),
+           t.changed_by_session
+      FROM session_tasks st
+      JOIN sessions s ON s.id = st.session_id
+      JOIN tasks t ON t.id = st.task_id
+     WHERE st.task_id = NEW.task_id
+       AND st.session_id IS NOT t.changed_by_session
+       AND s.state != 'ended'
+       AND NOT EXISTS (
+           SELECT 1 FROM session_notices n
+            WHERE n.session_id = st.session_id
+              AND n.task_id = NEW.task_id
+              AND n.notified = 0
+              AND n.changed_at = strftime('%Y-%m-%dT%H:%M:%S', 'now')
+              AND n.changed_by_session IS t.changed_by_session);
+END;
+
+CREATE TRIGGER IF NOT EXISTS task_content_notify_delete AFTER DELETE ON task_content
+WHEN OLD.name IN ('plan', 'analysis', 'notes')
+BEGIN
+    UPDATE session_notices
+       SET changes = CASE
+               WHEN json_type(changes, '$.' || OLD.name) IS NULL
+               THEN json_set(changes, '$.' || OLD.name,
+                             json_object('before', '…', 'after', NULL))
+               ELSE json_set(changes, '$.' || OLD.name || '.after', NULL)
+           END
+     WHERE task_id = OLD.task_id
+       AND notified = 0
+       AND changed_at = strftime('%Y-%m-%dT%H:%M:%S', 'now')
+       AND changed_by_session IS
+           (SELECT changed_by_session FROM tasks WHERE id = OLD.task_id);
+    INSERT INTO session_notices
+        (session_id, task_id, changes, changed_at, changed_by_session)
+    SELECT st.session_id,
+           OLD.task_id,
+           json_object(OLD.name, json_object('before', '…', 'after', NULL)),
+           strftime('%Y-%m-%dT%H:%M:%S', 'now'),
+           t.changed_by_session
+      FROM session_tasks st
+      JOIN sessions s ON s.id = st.session_id
+      JOIN tasks t ON t.id = st.task_id
+     WHERE st.task_id = OLD.task_id
+       AND st.session_id IS NOT t.changed_by_session
+       AND s.state != 'ended'
+       AND NOT EXISTS (
+           SELECT 1 FROM session_notices n
+            WHERE n.session_id = st.session_id
+              AND n.task_id = OLD.task_id
+              AND n.notified = 0
+              AND n.changed_at = strftime('%Y-%m-%dT%H:%M:%S', 'now')
+              AND n.changed_by_session IS t.changed_by_session);
 END;
 
 -- Gate kinds (E-1542). SQL mirror of the GateKind Go enum (ED-1506: const-in-code

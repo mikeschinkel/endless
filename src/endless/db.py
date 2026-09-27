@@ -798,6 +798,21 @@ def query(sql: str, params: tuple = ()) -> list[sqlite3.Row]:
         raise
 
 
+def task_content(task_id: int) -> dict[str, str]:
+    """Every content row of one task, name → content (E-1531).
+
+    A task's plan, analysis, outcome, reason and notes are task_content rows,
+    not columns. A name absent from the result is a name the task has none of:
+    the table holds no empty rows.
+    """
+    return {
+        r["name"]: r["content"]
+        for r in query(
+            "SELECT name, content FROM task_content WHERE task_id = ?", (task_id,)
+        )
+    }
+
+
 def scalar(sql: str, params: tuple = ()):
     try:
         row = get_db().execute(sql, params).fetchone()

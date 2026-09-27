@@ -95,7 +95,7 @@ def test_update_plan_does_not_create_worktree(tmp_path, seeded_project_at_cwd,
     assert not (
         seeded_project_at_cwd / ".endless" / "worktrees" / f"e-{tid}"
     ).exists()
-    row = db.query("SELECT plan FROM tasks WHERE id = ?", (tid,))
+    row = db.query("SELECT (SELECT content FROM task_content WHERE task_id = tasks.id AND name = 'plan') AS plan FROM tasks WHERE id = ?", (tid,))
     assert row[0]["plan"] == "# plan\nbody\n"
 
 
@@ -108,7 +108,7 @@ def test_add_plan_does_not_create_worktree(tmp_path, seeded_project_at_cwd,
     assert not (
         seeded_project_at_cwd / ".endless" / "worktrees" / f"e-{item_id}"
     ).exists()
-    row = db.query("SELECT plan FROM tasks WHERE id = ?", (item_id,))
+    row = db.query("SELECT (SELECT content FROM task_content WHERE task_id = tasks.id AND name = 'plan') AS plan FROM tasks WHERE id = ?", (item_id,))
     assert row[0]["plan"] == "# from add\nbody\n"
 
 
@@ -221,7 +221,7 @@ def test_a_failed_commit_warns_and_keeps_the_file(seeded_project_at_cwd,
     mirror = seeded_project_at_cwd / ".endless" / "tasks" / f"e-{tid}" / "plan.md"
     assert mirror.read_text() == "# body\n"
     assert "could not commit" in capsys.readouterr().err
-    row = db.query("SELECT plan FROM tasks WHERE id = ?", (tid,))
+    row = db.query("SELECT (SELECT content FROM task_content WHERE task_id = tasks.id AND name = 'plan') AS plan FROM tasks WHERE id = ?", (tid,))
     assert row[0]["plan"] == "# body\n"
 
 
@@ -239,7 +239,7 @@ def test_sandbox_context_writes_nothing(seeded_project_at_cwd, monkeypatch):
     task_cmd.update_plan(tid, plan="# sandbox\n")
 
     assert not (seeded_project_at_cwd / ".endless" / "tasks" / f"e-{tid}").exists()
-    row = db.query("SELECT plan FROM tasks WHERE id = ?", (tid,))
+    row = db.query("SELECT (SELECT content FROM task_content WHERE task_id = tasks.id AND name = 'plan') AS plan FROM tasks WHERE id = ?", (tid,))
     assert row[0]["plan"] == "# sandbox\n"   # the column is still written
 
 

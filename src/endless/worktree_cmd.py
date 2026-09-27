@@ -1637,7 +1637,7 @@ def _check_plan_file_committed(task_id: int, project_root: Path) -> str | None:
     the recommendation resolves. Checks the legacy path too, since a tree the
     `doc-mirrors` sweep has not reached yet still has its mirrors there.
     """
-    kind = doc_mirror.KIND_BY_COLUMN["plan"]
+    kind = doc_mirror.kind_for("plan")
     candidates = [
         doc_mirror.task_doc_path(task_id, kind.stem),
         doc_mirror.legacy_task_doc_path(kind, task_id),

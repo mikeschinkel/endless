@@ -32,7 +32,7 @@ from click.testing import CliRunner
 from endless import db
 from endless.cli import BRIEF_CHARS, main
 
-BODY_FIELDS = ("description", "analysis", "plan", "outcome")
+BODY_FIELDS = ("description", "analysis", "plan", "outcome", "reason", "notes")
 
 # Every way a caller can ask for more or less of the human render. The payload
 # assertions run across all of them because the claim being made is that NONE of
@@ -44,6 +44,8 @@ FLAG_COMBOS = [
     ("--analysis",),
     ("--plan",),
     ("--outcome",),
+    ("--reason",),
+    ("--notes",),
     ("--children",),
     ("--brief",),
     ("--brief=40",),
@@ -52,17 +54,30 @@ FLAG_COMBOS = [
 ]
 
 
+# The body fields that are task_content rows rather than tasks columns (E-1531).
+CONTENT_FIELDS = ("analysis", "plan", "outcome", "reason", "notes")
+
+
 def _add_task(title: str, *, type_id: int | None = 1, parent: int | None = None,
               **fields) -> int:
-    cols = ", ".join(fields)
-    marks = ", ".join("?" for _ in fields)
+    columns = {k: v for k, v in fields.items() if k not in CONTENT_FIELDS}
+    cols = ", ".join(columns)
+    marks = ", ".join("?" for _ in columns)
     cur = db.execute(
         f"INSERT INTO tasks (project_id, title, status, type_id, parent_id, phase, "
         f"created_at, updated_at{', ' + cols if cols else ''}) "
         f"VALUES (1, ?, 'ready', ?, ?, 'now', '2026-01-01T00:00:00', "
         f"'2026-01-01T00:00:00'{', ' + marks if marks else ''})",
-        (title, type_id, parent, *fields.values()),
+        (title, type_id, parent, *columns.values()),
     )
+    for name in CONTENT_FIELDS:
+        # An empty or absent value has no row — task_content holds no empty
+        # content, which is how "" and NULL both come to read as absent.
+        if fields.get(name):
+            db.execute(
+                "INSERT INTO task_content (task_id, name, content) VALUES (?, ?, ?)",
+                (cur.lastrowid, name, fields[name]),
+            )
     return cur.lastrowid
 
 

@@ -1,1 +1,0 @@
-Obsoleted by E-1658: E-1658 removed the verb 'completable' gate on 'completed' entirely (completion is now a TYPE rule, not verb-gated), so there is no renamed property for ED-1502 to reference — its thesis was superseded, not reworded. See ED-1502 retirement.

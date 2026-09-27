@@ -53,7 +53,7 @@ func endlessGoBin(t *testing.T) string {
 }
 
 // seedTaskDB writes an endless.db at $cfgDir/endless.db with the schema
-// applied and one tasks row whose plan is `plan`. Returns the seeded task
+// applied and one task whose plan content is `plan`. Returns the seeded task
 // id. Use with --db-dir so the gate is satisfied and the binary opens
 // THIS db.
 func seedTaskDB(t *testing.T, cfgDir string, id int64, plan string) {
@@ -73,10 +73,15 @@ func seedTaskDB(t *testing.T, cfgDir string, id int64, plan string) {
 		t.Fatalf("seed project: %v", err)
 	}
 	if _, err := db.Exec(
-		"INSERT INTO tasks (id, project_id, title, status, plan) VALUES (?, 1, ?, 'ready', ?)",
-		id, "seed task", plan,
+		"INSERT INTO tasks (id, project_id, title, status) VALUES (?, 1, ?, 'ready')",
+		id, "seed task",
 	); err != nil {
 		t.Fatalf("seed task: %v", err)
+	}
+	if _, err := db.Exec(
+		"INSERT INTO task_content (task_id, name, content) VALUES (?, 'plan', ?)", id, plan,
+	); err != nil {
+		t.Fatalf("seed plan: %v", err)
 	}
 }
 

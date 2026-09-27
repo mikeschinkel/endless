@@ -43,10 +43,16 @@ def _insert_task(
     plan: str | None = None,
 ):
     db.execute(
-        "INSERT INTO tasks (id, project_id, title, status, plan) "
-        "VALUES (?, ?, 'test task', ?, ?)",
-        (pk, project_id, status, plan),
+        "INSERT INTO tasks (id, project_id, title, status) "
+        "VALUES (?, ?, 'test task', ?)",
+        (pk, project_id, status),
     )
+    if plan:
+        # E-1531: the plan is a task_content row, not a tasks column.
+        db.execute(
+            "INSERT INTO task_content (task_id, name, content) VALUES (?, 'plan', ?)",
+            (pk, plan),
+        )
 
 
 @pytest.fixture

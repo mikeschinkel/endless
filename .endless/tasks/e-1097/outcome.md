@@ -1,1 +1,0 @@
-Replaced by snapshot-feature deletion. No snapshots, no backstop needed.

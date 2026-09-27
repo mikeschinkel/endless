@@ -22,22 +22,27 @@ def _add_task(
 ) -> int:
     cur = db.execute(
         "INSERT INTO tasks (project_id, title, status, type_id, phase, "
-        "parent_id, notes, created_at) "
+        "parent_id, created_at) "
         "VALUES (1, ?, ?, (SELECT id FROM task_types WHERE slug = ?), "
-        "'now', ?, ?, datetime('now'))",
-        (title, status, task_type, parent_id, notes),
+        "'now', ?, datetime('now'))",
+        (title, status, task_type, parent_id),
     )
+    if notes:
+        # E-1531: notes are a task_content row, not a tasks column.
+        db.execute(
+            "INSERT INTO task_content (task_id, name, content) VALUES (?, 'notes', ?)",
+            (cur.lastrowid, notes),
+        )
     return cur.lastrowid
 
 
 def _notes_and_type(task_id: int) -> tuple[str | None, str]:
     row = db.query(
-        "SELECT notes, "
-        "COALESCE((SELECT slug FROM task_types WHERE id = tasks.type_id), '') AS type "
+        "SELECT COALESCE((SELECT slug FROM task_types WHERE id = tasks.type_id), '') AS type "
         "FROM tasks WHERE id = ?",
         (task_id,),
     )
-    return row[0]["notes"], row[0]["type"]
+    return db.task_content(task_id).get("notes"), row[0]["type"]
 
 
 # ---------- helper-level unit tests ----------

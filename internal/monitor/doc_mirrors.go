@@ -62,38 +62,35 @@ func ActiveProjects() ([]ProjectRef, error) {
 	return projects, rows.Err()
 }
 
-// DocRow is one row's worth of mirrored content: the entity id, the column the
-// content came from (empty for a decision, whose body has one home), and the
+// DocRow is one row's worth of mirrored content: the entity id, the content
+// name it came from (empty for a decision, whose body has one home), and the
 // content itself.
 type DocRow struct {
 	ID      int64
-	Column  string
+	Name    string
 	Content string
 }
 
-// TaskDocRows returns every non-empty task document column in a project, one
-// DocRow per (task, column).
+// TaskDocRows returns every task content row of a project's live tasks, one
+// DocRow per (task, name).
 //
-// Only non-empty values are returned, and that is a rule the sweep depends on
-// rather than an optimization. Regenerating a mirror from its column can never
-// lose anything WHEN THERE IS SOMETHING TO REGENERATE; rewriting a file from an
-// empty column would replace content with nothing. So an empty column produces
-// no row, and the sweep therefore never rewrites a file it has no content for.
+// Only non-empty content is returned, and that is a rule the sweep depends on
+// rather than an optimization. Regenerating a mirror from its content can never
+// lose anything WHEN THERE IS SOMETHING TO REGENERATE; rewriting a file from
+// empty content would replace it with nothing. task_content holds no empty rows
+// by construction (E-1531); the filter below says so anyway, because the sweep's
+// safety should not rest on a write path it cannot see.
 func TaskDocRows(projectID int64) ([]DocRow, error) {
 	db, err := DB()
 	if err != nil {
 		return nil, err
 	}
 	rows, err := db.Query(`
-		SELECT id, 'plan', plan FROM live_tasks
-			WHERE project_id = ? AND COALESCE(plan, '') != ''
-		UNION ALL
-		SELECT id, 'outcome', outcome FROM live_tasks
-			WHERE project_id = ? AND COALESCE(outcome, '') != ''
-		UNION ALL
-		SELECT id, 'analysis', analysis FROM live_tasks
-			WHERE project_id = ? AND COALESCE(analysis, '') != ''
-		ORDER BY 1, 2`, projectID, projectID, projectID)
+		SELECT c.task_id, c.name, c.content
+		  FROM task_content c
+		  JOIN live_tasks t ON t.id = c.task_id
+		 WHERE t.project_id = ? AND c.content != ''
+		 ORDER BY 1, 2`, projectID)
 	if err != nil {
 		return nil, err
 	}
@@ -101,7 +98,7 @@ func TaskDocRows(projectID int64) ([]DocRow, error) {
 	return scanDocRows(rows)
 }
 
-// DecisionDocRows returns every non-empty decision body in a project. Column is
+// DecisionDocRows returns every non-empty decision body in a project. Name is
 // empty: a decision's mirror has one source and naming it would suggest a
 // choice that does not exist.
 func DecisionDocRows(projectID int64) ([]DocRow, error) {
@@ -124,7 +121,7 @@ func scanDocRows(rows *sql.Rows) ([]DocRow, error) {
 	var out []DocRow
 	for rows.Next() {
 		var r DocRow
-		if err := rows.Scan(&r.ID, &r.Column, &r.Content); err != nil {
+		if err := rows.Scan(&r.ID, &r.Name, &r.Content); err != nil {
 			return nil, err
 		}
 		out = append(out, r)

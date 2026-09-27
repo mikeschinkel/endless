@@ -9,12 +9,12 @@ import subprocess
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import NamedTuple
+from typing import Iterable, NamedTuple
 
 import click
 from tabulate import tabulate
 
-from endless import agent_help, authority
+from endless import agent_help, authority, content_names
 from endless import db, config
 from endless import doc_mirror
 from endless import provenance
@@ -179,6 +179,8 @@ _FIELD_LABELS = {
     "parent_id":   "Parent",
     "tier":        "Tier",
     "outcome":     "Outcome",
+    "reason":      "Reason",
+    "notes":       "Notes",
 }
 
 
@@ -204,9 +206,9 @@ def _format_field_value(name: str, value) -> str:
             return task_id_display(int(value))
         except (TypeError, ValueError):
             return str(value)
-    if name == "plan":
+    if name in ("plan", "notes"):
         return "<set>" if value else "<cleared>"
-    if name in ("title", "description", "outcome"):
+    if name in ("title", "description", "outcome", "reason"):
         s = str(value)
         if not s:
             return "∅"
@@ -632,13 +634,14 @@ def _display_path(p: Path) -> str:
     return s.replace(home, "~", 1) if s.startswith(home) else s
 
 
-def _mirror_task_doc(task_id: int, column: str, content: str) -> Path | None:
-    """Mirror one multiline document field onto the project's MAIN checkout.
+def _mirror_task_doc(task_id: int, name: str, content: str) -> Path | None:
+    """Mirror one task content row onto the project's MAIN checkout.
 
-    plan / outcome / analysis each land at `.endless/tasks/e-NNNN/<kind>.md`
-    there, beside that task's own `verify.sh`. The DB column is the source of
-    truth and is written separately via the task event payload; this writes the
-    human-readable projection of it and commits that file on main.
+    Each content name (plan, outcome, reason, analysis, notes) lands at
+    `.endless/tasks/e-NNNN/<name>.md` there, beside that task's own `verify.sh`.
+    The task_content row is the source of truth and is written separately via
+    the task event payload; this writes the human-readable projection of it and
+    commits that file on main.
 
     E-2137 moved this off the task branch. It used to write
     `<worktree>/.endless/<subdir>/E-NNN.md` and commit it on the branch whenever
@@ -657,9 +660,7 @@ def _mirror_task_doc(task_id: int, column: str, content: str) -> Path | None:
     """
     if config.db_context_is_sandbox():
         return None
-    kind = doc_mirror.KIND_BY_COLUMN.get(column)
-    if kind is None:
-        raise ValueError(f"no document mirror for column {column!r}")
+    kind = doc_mirror.kind_for(name)
     main_root = _main_root_for_task(task_id)
     if main_root is None:
         return None
@@ -2382,6 +2383,8 @@ def add_item(
         _mirror_task_doc(item_id, "plan", plan_content)
     if analysis is not None and analysis.strip():
         _mirror_task_doc(item_id, "analysis", analysis)
+    if notes_value is not None and notes_value.strip():
+        _mirror_task_doc(item_id, "notes", notes_value)
 
     # E-1859: triage at file time, detached. A synchronous model call here
     # would add seconds to EVERY filing, interactive ones included, so this is
@@ -2795,30 +2798,44 @@ def _next_sort_order(project_id: int, phase: str) -> int:
 # `task replace <old> --by <new>` — recording no reason at all, which is the
 # side door that makes the rule undefensible everywhere else.
 #
-# The remedies differ because the flags do: `task decline` spells the reason
-# `--reason`, while every other route spells it `--outcome` — there is no
-# `task obsolete` verb to carry a reason flag of its own, and `task replace`
-# already had `--outcome`.
+# The remedies differ because the flags do: `task decline` and `task update`
+# spell the reason `--reason`, and `--outcome` given with an abandonment status
+# is taken as the reason too (E-1531) — it is how every route spelled it before
+# the two were split, and `task replace` still does.
 _ABANDONMENT_STATUSES = {
     "declined": (
         "declining",
-        "Use --reason (on `task decline`) or --outcome to explain why.",
+        "Use --reason (or --reason-file) to explain why.",
     ),
     "obsolete": (
         "obsoleting",
-        "Use --outcome (or --outcome-file) to say why it no longer applies.",
+        "Use --reason (or --reason-file) to say why it no longer applies.",
     ),
     "superseded": (
         "superseding",
-        "Use --outcome (on `task replace`, or `task update`) to say why the "
-        "work was handed on — the replaced_by relation names the successor, "
-        "not the reason.",
+        "Use --outcome (on `task replace`) or --reason (on `task update`) to "
+        "say why the work was handed on — the replaced_by relation names the "
+        "successor, not the reason.",
     ),
 }
 
 
-def _require_outcome_for_abandonment(status: str | None, outcome: str | None):
-    """ED-1022, E-2175: abandoning a task requires saying why, stored as outcome.
+def _with_content(row) -> dict:
+    """A task row as a dict, with its content rows keyed on by name (E-1531).
+
+    plan, analysis, outcome, reason and notes are task_content rows rather than
+    columns; callers that used to read them off the row keep doing so. Every
+    name the vocabulary declares is present — None when the task has none.
+    """
+    item = dict(row)
+    content = db.task_content(item["id"])
+    for slug in content_names.slugs():
+        item[slug] = content.get(slug)
+    return item
+
+
+def _require_reason_for_abandonment(status: str | None, reason: str | None):
+    """ED-1022, E-2175: abandoning a task requires saying why, stored as reason.
 
     Keyed on the STATUS TRANSITION, never on a verb — `task decline`,
     `task update --status`, `epic update --status` and `task replace` (with or
@@ -2834,11 +2851,16 @@ def _require_outcome_for_abandonment(status: str | None, outcome: str | None):
     alone — inventing reasons nobody remembers would produce
     authoritative-looking fiction, and the guard is on the transition, not on
     the row.
+
+    E-1531 split the reason out of `outcome`, so `reason` here is the incoming
+    text or, where a caller has one, the reason the row already holds: a stored
+    closing reason answers the question, and demanding it again only taught
+    callers to paste it twice.
     """
-    if status in _ABANDONMENT_STATUSES and not (outcome and outcome.strip()):
+    if status in _ABANDONMENT_STATUSES and not (reason and reason.strip()):
         gerund, remedy = _ABANDONMENT_STATUSES[status]
         raise click.ClickException(
-            f"An outcome is required when {gerund} a task. {remedy}"
+            f"A reason is required when {gerund} a task. {remedy}"
         )
 
 
@@ -2950,7 +2972,7 @@ def _require_outcome_for_completed(
     """ED-1520: completing a research/brainstorm task requires --outcome — the
     outcome IS the deliverable for those types. Keyed on type, not the
     'completed' status. Decline's own reason requirement is separate
-    (`_require_outcome_for_abandonment`, ED-1022/E-2175).
+    (`_require_reason_for_abandonment`, ED-1022/E-2175).
 
     E-2016: also required at `unreviewed`, which is where the outcome is
     written for those types."""
@@ -3398,10 +3420,10 @@ def mark_completed_item(item_id: int, outcome: str):
 
 
 def decline_item(item_id: int, reason: str):
-    """Mark a task as declined; reason is required and stored as outcome."""
+    """Mark a task as declined; the reason is required and stored as reason."""
     from endless.event_bridge import emit_event
 
-    _require_outcome_for_abandonment("declined", reason)
+    _require_reason_for_abandonment("declined", reason)
 
     row = db.query(
         "SELECT id, COALESCE(title, description) as title, status FROM live_tasks "
@@ -3430,16 +3452,16 @@ def decline_item(item_id: int, reason: str):
             "old_status": row[0]["status"],
             "new_status": "declined",
             "cascade": False,
-            "outcome": reason,
+            "reason": reason,
         },
     )
 
     if reason and reason.strip():
-        _mirror_task_doc(item_id, "outcome", reason)
+        _mirror_task_doc(item_id, "reason", reason)
 
     changes = [
         ("status", row[0]["status"], "declined"),
-        ("outcome", None, reason),
+        ("reason", None, reason),
     ]
     _emit_field_changes(item_id, row[0]["title"], changes)
 
@@ -3458,9 +3480,9 @@ def submit_item(item_id: int):
     """Mark a task as `submitted` — spec-complete, awaiting human approval.
 
     Agent-set. Reachable two ways, both landing here: the agent attached a
-    plan (`tasks.plan` populated — the plan-attach auto-move handles that in
+    plan (a `plan` content row — the plan-attach auto-move handles that in
     the executor) OR the agent judges the description a sufficient spec (no
-    plan, this verb). Plan-vs-no-plan is carried by `tasks.plan`, not by
+    plan, this verb). Plan-vs-no-plan is carried by the plan row, not by
     status. A human then runs `endless task approve` to reach `ready`.
     """
     from endless.event_bridge import emit_event
@@ -4908,7 +4930,7 @@ def _reopen_task_core(item_id: int) -> tuple[str, str, bool]:
     from endless.event_bridge import emit_event
 
     row = db.query(
-        "SELECT id, COALESCE(title, description) as title, status, plan "
+        "SELECT id, COALESCE(title, description) as title, status "
         "FROM live_tasks WHERE id = ?",
         (item_id,),
     )
@@ -4944,7 +4966,7 @@ def _reopen_task_core(item_id: int) -> tuple[str, str, bool]:
     #
     # `plan_present` is still returned: callers render it as the message
     # suffix, which is the one place plan-vs-no-plan is still worth saying.
-    plan_present = bool((row[0]["plan"] or "").strip())
+    plan_present = bool(db.task_content(item_id).get("plan"))
     new_status = "revisit"
 
     _, proj_name = _resolve_project(None)
@@ -4997,16 +5019,25 @@ def update_plan(
     force: bool = False,
     justification: str | None = None,
     keep_status: bool = False,
+    reason: str | None = None,
+    notes: str | None = None,
 ):
-    """Update fields on a task."""
+    """Update fields on a task.
+
+    `outcome` and `reason` are separate content (E-1531): the deliverable, and
+    why the task ended. `--outcome` passed WITH an abandonment status is that
+    status's reason — the flag every abandonment route has always spelled it
+    with — so it is stored as `reason`, and a research task's findings survive
+    being abandoned instead of being overwritten by why.
+    """
     from endless.event_bridge import emit_event
 
     _reject_status_with_keep_status(status, keep_status)
 
     row = db.query(
-        "SELECT id, title, description, plan, notes, status, "
+        "SELECT id, title, description, status, "
         "       COALESCE((SELECT slug FROM task_types WHERE id = live_tasks.type_id), '') AS type, "
-        "       phase, tier, parent_id, outcome, analysis "
+        "       phase, tier, parent_id "
         "FROM live_tasks WHERE id = ?",
         (item_id,),
     )
@@ -5014,6 +5045,10 @@ def update_plan(
         raise click.ClickException(
             f"No task found with id {item_id}"
         )
+    row = [_with_content(row[0])]
+
+    if status in _ABANDONMENT_STATUSES and outcome is not None and reason is None:
+        reason, outcome = outcome, None
 
     # E-1577: outcome-required check considers the merged value (incoming
     # --outcome overrides existing DB value; otherwise existing satisfies).
@@ -5064,7 +5099,13 @@ def update_plan(
         # all, and routes to `task replace`, which then asks for the reason.
         # Asking for the reason first would spend a round trip teaching a flag
         # for a status the caller is about to be told not to use.
-        _require_outcome_for_abandonment(status, outcome)
+        #
+        # E-1531: a reason already stored satisfies it. Before the split this
+        # could not be honoured — the stored text might have been a research
+        # task's findings — so the flag was demanded again even when the row
+        # already said why. A stored `reason` can only be a reason.
+        _require_reason_for_abandonment(
+            status, reason if reason is not None else row[0]["reason"])
 
     # Reject a maybe-phase task gaining (or keeping) a parent. Only evaluate
     # when this update touches phase or parent_id — an unrelated edit must not
@@ -5218,6 +5259,11 @@ def update_plan(
         if outcome.strip():
             _mirror_task_doc(item_id, "outcome", outcome)
 
+    if reason is not None:
+        _add("reason", reason)
+        if reason.strip():
+            _mirror_task_doc(item_id, "reason", reason)
+
     if task_type is not None:
         valid_types = ("todo", "bugfix", "research", "epic", "brainstorm")
         if task_type not in valid_types:
@@ -5243,10 +5289,18 @@ def update_plan(
             effective_parent = row[0]["parent_id"]
         _research_gate_check(effective_parent, justification)
 
+    # --notes replaces the notes; --justification composes its heading into
+    # whichever notes this update ends with — the new ones when both are given.
+    new_notes = notes
     if justification:
-        new_notes = _compose_justification_notes(row[0]["notes"], justification)
-        if new_notes is not None:
-            _add("notes", new_notes)
+        composed = _compose_justification_notes(
+            notes if notes is not None else row[0]["notes"], justification)
+        if composed is not None:
+            new_notes = composed
+    if new_notes is not None:
+        _add("notes", new_notes)
+        if new_notes.strip():
+            _mirror_task_doc(item_id, "notes", new_notes)
 
     if analysis is not None:
         _add("analysis", analysis)
@@ -5724,10 +5778,8 @@ def _echo_large_section(title: str, content: str | None, show: bool, color: bool
 def detail_item(
     item_id: int,
     show_description: bool = True,
-    show_analysis: bool = False,
-    show_plan: bool = False,
+    show_content: Iterable[str] = (),
     show_children: bool = False,
-    show_outcome: bool = False,
     agent: bool = False,
     as_json: bool = False,
     paged: bool = False,
@@ -5736,12 +5788,16 @@ def detail_item(
 ):
     """Show full detail for a task.
 
+    `show_content` names the content (E-1531: plan, analysis, outcome, reason,
+    notes — any task_content name) whose full body the human and agent renders
+    show; every other populated one collapses to a character count. JSON is
+    ungated.
+
     `brief` is the `--brief[=N]` preview length in characters, or None for the
     normal full-body render (E-2126). It means ONE thing in all three formats —
     previews, not bodies — so it wins over every display flag: under `--brief`
-    each of the four body fields renders truncated whether or not its flag was
-    passed, and a flag that would have pulled a full body yields a preview
-    instead.
+    every body field renders truncated whether or not its flag was passed, and a
+    flag that would have pulled a full body yields a preview instead.
 
     `show_children` lists EVERY direct child, in all three render paths (JSON,
     agent, human). It used to exclude `status = 'confirmed'` — and only that one
@@ -5757,10 +5813,10 @@ def detail_item(
     # if the id had never existed. Every OTHER read here goes through live_tasks.
 
     row = db.query(
-        "SELECT t.id, t.title, t.description, t.analysis, t.plan, t.phase, t.status, "
+        "SELECT t.id, t.title, t.description, t.phase, t.status, "
         "COALESCE(tt.slug, '') AS type, "
         "t.parent_id, t.created_at, t.updated_at, "
-        "t.completed_at, t.sort_order, t.tier, t.outcome, t.removed, "
+        "t.completed_at, t.sort_order, t.tier, t.removed, "
         "t.project_id, p.name as project_name "
         "FROM tasks t "
         "JOIN projects p ON t.project_id = p.id "
@@ -5773,7 +5829,17 @@ def detail_item(
             f"No task found with id {item_id}"
         )
 
-    item = row[0]
+    # The task's content rows, keyed by name onto the row (E-1531). Every name
+    # the vocabulary declares is present, None when the task has none of it, so
+    # the renders below index any name without asking whether it exists.
+    content = db.task_content(item_id)
+    content_slugs = content_names.slugs()
+    item = dict(row[0])
+    for slug in content_slugs:
+        item[slug] = content.get(slug)
+    show_content = frozenset(show_content)
+    if brief is not None:
+        show_content = frozenset(content_slugs)
     landings = _task_landings(item_id)
     # Landedness (E-2095), resolved once for all three output modes. Only for
     # finished work, and only when no landing was recorded: a recorded landing is
@@ -5858,15 +5924,14 @@ def detail_item(
             # renderer; a machine format that withheld populated content behind
             # a flag the consumer did not know to pass returned an empty-looking
             # task and gave `null` two meanings. `null` now means exactly one
-            # thing on these four keys — the field is empty — so a consumer can
-            # branch on it. `--brief` truncates rather than omits, keeping a
+            # thing on these keys — the field is empty — so a consumer can
+            # branch on it. One key per content name (E-1531), so a name added
+            # to the vocabulary appears here with no edit. `--brief` truncates rather than omits, keeping a
             # populated field a string in every mode.
-            "outcome": brief_text(item["outcome"] or None, brief),
             "description": brief_text(item["description"] or None, brief),
-            "analysis": brief_text(item["analysis"] or None, brief),
-            "plan": brief_text(item["plan"] or None, brief),
+            **{slug: brief_text(item[slug] or None, brief) for slug in content_slugs},
             # `<field>_chars` is the TRUE character count of the stored value —
-            # never the truncated preview's — present for all four body fields,
+            # never the truncated preview's — present for every body field,
             # always an integer, and 0 when the field is empty (E-2126). Never
             # null: a nullable count would force every consumer to null-check
             # before summing, and would spend `null` on a second meaning inside
@@ -5874,9 +5939,7 @@ def detail_item(
             # invariant a consumer can rely on: `<field>_chars == 0` if and only
             # if `<field>` is null.
             "description_chars": len(item["description"] or ""),
-            "analysis_chars": len(item["analysis"] or ""),
-            "plan_chars": len(item["plan"] or ""),
-            "outcome_chars": len(item["outcome"] or ""),
+            **{f"{slug}_chars": len(item[slug] or "") for slug in content_slugs},
             # Children are always advertised as a count; the full list stays
             # gated behind --children (E-2126). Always present, so 0 / {} says
             # "childless" rather than an absent key leaving it unsaid.
@@ -5963,16 +6026,12 @@ def detail_item(
                 click.echo(f"unlanded {c}")
         # Large fields collapse to a char marker unless their flag is set, so
         # `task show --agent` stays token-cheap on tasks whose outcome is a large
-        # deliverable; pass --outcome/--plan/--analysis to pull the body (E-1601).
-        # `--brief` upgrades the bare count to a readable preview (E-2126): the
-        # field counts as shown, so the marker gives way to a truncated section.
-        for name, content, shown in (
-            ("analysis", item["analysis"], show_analysis or brief is not None),
-            ("plan", item["plan"], show_plan or brief is not None),
-            ("outcome", item["outcome"], show_outcome or brief is not None),
-        ):
-            if content and not shown:
-                click.echo(f"{name}_chars={len(content)}")
+        # deliverable; pass --<name> to pull the body (E-1601). `--brief`
+        # upgrades the bare count to a readable preview (E-2126): the field
+        # counts as shown, so the marker gives way to a truncated section.
+        for slug in content_slugs:
+            if item[slug] and slug not in show_content:
+                click.echo(f"{slug}_chars={len(item[slug])}")
         # Children counted on the same rule as analysis_chars= — emitted only
         # when there are some to count (E-2126).
         if children_by_type:
@@ -5982,12 +6041,9 @@ def detail_item(
         if (show_description or brief is not None) and item["description"] \
                 and item["description"] != item["title"]:
             click.echo(f"\n## Description\n{brief_text(item['description'], brief)}")
-        if (show_analysis or brief is not None) and item["analysis"]:
-            click.echo(f"\n## Analysis\n{brief_text(item['analysis'], brief)}")
-        if (show_plan or brief is not None) and item["plan"]:
-            click.echo(f"\n## Plan\n{brief_text(item['plan'], brief)}")
-        if (show_outcome or brief is not None) and item["outcome"]:
-            click.echo(f"\n## Outcome\n{brief_text(item['outcome'], brief)}")
+        for slug in content_slugs:
+            if slug in show_content and item[slug]:
+                click.echo(f"\n## {content_names.label(slug)}\n{brief_text(item[slug], brief)}")
         if show_children:
             children = db.query(
                 "SELECT id, COALESCE(title, description) as title, status, phase "
@@ -6034,10 +6090,8 @@ def detail_item(
                 landedness=landedness,
                 caveat_line=caveat_line,
                 show_description=show_description,
-                show_analysis=show_analysis,
-                show_plan=show_plan,
+                show_content=show_content,
                 show_children=show_children,
-                show_outcome=show_outcome,
                 color=color,
                 touches=touches,
                 creator=creator,
@@ -6058,10 +6112,8 @@ def _render_detail_human(
     landedness: dict | None,
     caveat_line: str | None,
     show_description: bool,
-    show_analysis: bool,
-    show_plan: bool,
+    show_content: frozenset[str],
     show_children: bool,
-    show_outcome: bool,
     color: bool,
     touches: list[dict],
     creator: dict | None,
@@ -6070,8 +6122,9 @@ def _render_detail_human(
 ):
     """Emit the human-readable `task show` detail to the current stdout. Split
     from detail_item so the whole render can run under a color/pager proxy
-    (E-1746). Multiline markdown fields (description/analysis/plan/outcome) are
-    colorized when `color`. `touches`/`creator` are the session provenance
+    (E-1746). Multiline markdown fields (description and every content name)
+    are colorized when `color`. `show_content` names the content shown in full
+    (detail_item has already widened it to everything under `--brief`). `touches`/`creator` are the session provenance
     detail_item already resolved for every output mode (E-1866). `brief` is the
     `--brief[=N]` preview length: it wins over every display flag, rendering all
     four bodies truncated rather than gated (E-2126). `landedness` is the probe
@@ -6082,7 +6135,7 @@ def _render_detail_human(
     # --brief means previews, not bodies — one meaning in every format, so it
     # reveals a gated field rather than merely shortening a revealed one.
     if brief is not None:
-        show_description = show_analysis = show_plan = show_outcome = True
+        show_description = True
     col_w = 11  # width of label column (longest: "Confirmed:" = 10 + 1 space)
     label = lambda s: click.style(f"{s:<{col_w}}", fg="cyan")
     val = lambda s: click.style(str(s), fg="white", bold=True)
@@ -6151,10 +6204,11 @@ def _render_detail_human(
     # A hidden large field collapses to a single-line `Name: N chars` placeholder
     # grouped here with the other Label: value fields; its full body (when the
     # matching flag is set) renders as a multi-line section after Description
-    # (E-1601). Analysis precedes Plan: pre-plan design content (E-999).
-    _echo_field_placeholder(label, val, "Analysis:", item["analysis"], show_analysis, "--analysis")
-    _echo_field_placeholder(label, val, "Plan:", item["plan"], show_plan, "--plan")
-    _echo_field_placeholder(label, val, "Outcome:", item["outcome"], show_outcome, "--outcome")
+    # (E-1601). One per content name, in the vocabulary's display order, which
+    # puts Analysis before Plan: pre-plan design content (E-999).
+    for slug in content_names.slugs():
+        _echo_field_placeholder(label, val, f"{content_names.label(slug)}:", item[slug],
+                                slug in show_content, f"--{slug}")
     # Children are structure, so they are advertised as a count here whether or
     # not --children was passed to list them below — the same shape as a large
     # field's placeholder, and omitted entirely when there are none (E-2126).
@@ -6192,9 +6246,9 @@ def _render_detail_human(
         else:
             click.echo("(none)")
 
-    _echo_large_section("Analysis", brief_text(item["analysis"], brief), show_analysis, color)
-    _echo_large_section("Plan", brief_text(item["plan"], brief), show_plan, color)
-    _echo_large_section("Outcome", brief_text(item["outcome"], brief), show_outcome, color)
+    for slug in content_names.slugs():
+        _echo_large_section(content_names.label(slug), brief_text(item[slug], brief),
+                            slug in show_content, color)
 
     click.echo()
     if caveat_line:
@@ -6721,7 +6775,9 @@ def search_tasks(
         pass
 
     if search_plan:
-        search_clauses.append("COALESCE(t.plan, '') LIKE ? COLLATE NOCASE")
+        search_clauses.append(
+            "EXISTS (SELECT 1 FROM task_content c WHERE c.task_id = t.id "
+            "AND c.name = 'plan' AND c.content LIKE ? COLLATE NOCASE)")
         search_params.append(like_pattern)
 
     where += " AND (" + " OR ".join(search_clauses) + ")"
@@ -7126,7 +7182,12 @@ def replace_task(
 
     if status is None:
         status = old_status if old_status in _SHIPPED_STATUSES else "superseded"
-    _require_outcome_for_abandonment(status, outcome)
+    # E-1531: text given while abandoning the task is WHY — its reason, not a
+    # deliverable. Shipped work that keeps its status has no reason to give,
+    # so its --outcome stays an outcome.
+    name = "reason" if status in _ABANDONMENT_STATUSES else "outcome"
+    _require_reason_for_abandonment(
+        status, outcome if outcome is not None else db.task_content(old_id).get("reason"))
 
     # "old replaced_by new" → display='replaced_by' resolves to stored='replaces' with
     # swap=True → row stored as source=new, target=old, dep_type='replaces' (active voice).
@@ -7152,7 +7213,7 @@ def replace_task(
             "cascade": False,
         }
         if outcome:
-            payload["outcome"] = outcome
+            payload[name] = outcome
         emit_event(
             kind="task.status_changed",
             project=proj_name,
@@ -7167,14 +7228,14 @@ def replace_task(
             project=proj_name,
             entity_type="task",
             entity_id=str(old_id),
-            payload={"fields": {"outcome": outcome}},
+            payload={"fields": {name: outcome}},
         )
 
     if outcome and outcome.strip():
-        _mirror_task_doc(old_id, "outcome", outcome)
+        _mirror_task_doc(old_id, name, outcome)
 
     if outcome:
-        changes.append(("outcome", None, outcome))
+        changes.append((name, None, outcome))
     _emit_field_changes(
         old_id,
         old_row["title"],

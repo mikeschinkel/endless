@@ -3,18 +3,20 @@ package docmirror
 import (
 	"regexp"
 	"strconv"
+
+	"github.com/mikeschinkel/endless/internal/taskcontent"
 )
 
-// Source is what a mirror path resolves to: the database row and column that
-// own the file's content.
+// Source is what a mirror path resolves to: the task and content name, or the
+// decision, that own the file's content.
 //
-// Exactly one of TaskID / DecisionID is non-zero. Column is the `tasks` column
-// for a task mirror and empty for a decision, whose body has one home
+// Exactly one of TaskID / DecisionID is non-zero. Name is the task_content name
+// for a task mirror and zero for a decision, whose body has one home
 // (`decisions.description`) and needs no naming.
 type Source struct {
 	TaskID     int64
 	DecisionID int64
-	Column     string
+	Name       taskcontent.Name
 
 	// Legacy is true when the path matched a pre-consolidation location. The
 	// content is identical either way; the flag exists so a caller relocating
@@ -28,19 +30,24 @@ type Source struct {
 // hook on every tool call and adding groups there would make every match
 // allocate for a result nobody reads.
 var (
-	taskDocCapture       = regexp.MustCompile(`(?:^|/)\.endless/tasks/e-(\d+)/(plan|outcome|analysis)\.md$`)
-	legacyTaskDocCapture = regexp.MustCompile(`(?:^|/)\.endless/(plans|outcomes|analyses)/E-(\d+)\.md$`)
+	taskDocCapture       = regexp.MustCompile(`(?:^|/)\.endless/tasks/e-(\d+)/(` + stemAlternation() + `)\.md$`)
+	legacyTaskDocCapture = regexp.MustCompile(`(?:^|/)\.endless/(` + legacyDirAlternation() + `)/E-(\d+)\.md$`)
 	decisionDocCapture   = regexp.MustCompile(`(?:^|/)\.endless/decisions/ED-(\d+)\.md$`)
 )
 
-// legacyDirColumn maps a pre-consolidation directory to the column that owns it.
-// Derived from TaskKinds so the two can never disagree.
-var legacyDirColumn = func() map[string]string {
-	m := make(map[string]string, len(TaskKinds))
+// legacyDirName maps a pre-consolidation directory to the content name that
+// owns it, and stemName a consolidated stem to its content name. Derived from
+// TaskKinds so neither can disagree with it.
+var legacyDirName, stemName = func() (map[string]taskcontent.Name, map[string]taskcontent.Name) {
+	dirs := make(map[string]taskcontent.Name, len(TaskKinds))
+	stems := make(map[string]taskcontent.Name, len(TaskKinds))
 	for _, k := range TaskKinds {
-		m[k.LegacyDir] = k.Column
+		if k.LegacyDir != "" {
+			dirs[k.LegacyDir] = k.Name
+		}
+		stems[k.Stem] = k.Name
 	}
-	return m
+	return dirs, stems
 }()
 
 // Resolve reports which row and column own the content of a mirror path, and
@@ -62,7 +69,7 @@ func Resolve(path string) (src Source, ok bool) {
 		if err != nil {
 			goto end
 		}
-		src = Source{TaskID: id, Column: m[2]}
+		src = Source{TaskID: id, Name: stemName[m[2]]}
 		ok = true
 		goto end
 	}
@@ -73,7 +80,7 @@ func Resolve(path string) (src Source, ok bool) {
 		if err != nil {
 			goto end
 		}
-		src = Source{TaskID: id, Column: legacyDirColumn[m[1]], Legacy: true}
+		src = Source{TaskID: id, Name: legacyDirName[m[1]], Legacy: true}
 		ok = true
 		goto end
 	}
@@ -93,10 +100,10 @@ end:
 	return src, ok
 }
 
-// KindByColumn returns the Kind owning a `tasks` column.
-func KindByColumn(column string) (kind Kind, ok bool) {
+// KindByName returns the Kind mirroring a content name.
+func KindByName(name taskcontent.Name) (kind Kind, ok bool) {
 	for _, k := range TaskKinds {
-		if k.Column == column {
+		if k.Name == name {
 			kind, ok = k, true
 			break
 		}

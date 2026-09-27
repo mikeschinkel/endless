@@ -36,7 +36,7 @@ def _add_task(title: str, status: str = "underway", type_id: int = 1) -> int:
 
 
 def _status_outcome(task_id: int) -> tuple[str, str | None]:
-    row = db.query("SELECT status, outcome FROM tasks WHERE id = ?", (task_id,))
+    row = db.query("SELECT status, (SELECT content FROM task_content WHERE task_id = tasks.id AND name = 'outcome') AS outcome FROM tasks WHERE id = ?", (task_id,))
     return row[0]["status"], row[0]["outcome"]
 
 

@@ -50,7 +50,7 @@ def _finish(item_id: int, status: str, **kwargs) -> None:
 
 def _row(item_id: int) -> dict:
     rows = db.query(
-        "SELECT status, plan, tier, completed_at FROM tasks WHERE id = ?",
+        "SELECT status, (SELECT content FROM task_content WHERE task_id = tasks.id AND name = 'plan') AS plan, tier, completed_at FROM tasks WHERE id = ?",
         (item_id,),
     )
     assert rows, f"task E-{item_id} not found"
@@ -250,7 +250,7 @@ def test_keep_status_still_writes_every_other_field(seeded_project_at_cwd):
     )
 
     rows = db.query(
-        "SELECT title, description, plan, phase, status FROM tasks WHERE id = ?",
+        "SELECT title, description, (SELECT content FROM task_content WHERE task_id = tasks.id AND name = 'plan') AS plan, phase, status FROM tasks WHERE id = ?",
         (item_id,),
     )
     assert rows[0]["title"] == "Add a renamed thing"

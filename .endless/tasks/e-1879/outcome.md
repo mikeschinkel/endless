@@ -1,1 +1,0 @@
-Merged into E-1876 as part 3 (the annotate sink). Its own description declared it half of a pair that does not work alone; E-1876 now carries both halves.

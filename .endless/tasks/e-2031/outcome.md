@@ -1,1 +1,0 @@
-Filed on a false premise. A verify suite is valid immediately before its own land and expires after; E-1573 landed months ago, so its 4 failing checks are an expired artifact, not a defect. Nothing to fix.

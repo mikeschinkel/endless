@@ -73,7 +73,14 @@ type TaskStatusChangedPayload struct {
 	NewStatus   string `json:"new_status"`
 	CompletedAt string `json:"completed_at,omitempty"`
 	Cascade     bool   `json:"cascade,omitempty"`
-	Outcome     string `json:"outcome,omitempty"`
+
+	// Outcome is the deliverable written with the transition; Reason is why the
+	// task ended, written when it arrives at an abandonment status (E-1531).
+	// Historical events carry the reason under `outcome` too — outcomeName
+	// routes those by NewStatus, so a rebuild lands them where the migration
+	// did.
+	Outcome string `json:"outcome,omitempty"`
+	Reason  string `json:"reason,omitempty"`
 }
 
 type TaskFieldsUpdatedPayload struct {

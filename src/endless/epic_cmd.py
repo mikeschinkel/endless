@@ -12,6 +12,8 @@ pause-on-revisit hook (E-1542) are owned by sibling tasks and are not
 implemented here.
 """
 
+from typing import Iterable
+
 from endless import task_cmd
 
 
@@ -76,10 +78,8 @@ def list_epics(
 def show_epic(
     item_id: int,
     show_description: bool = True,
-    show_analysis: bool = False,
-    show_plan: bool = False,
+    show_content: Iterable[str] = (),
     show_children: bool = True,
-    show_outcome: bool = False,
     agent: bool = False,
     as_json: bool = False,
 ):
@@ -87,10 +87,8 @@ def show_epic(
     task_cmd.detail_item(
         item_id,
         show_description=show_description,
-        show_analysis=show_analysis,
-        show_plan=show_plan,
+        show_content=show_content,
         show_children=show_children,
-        show_outcome=show_outcome,
         agent=agent,
         as_json=as_json,
     )
@@ -108,6 +106,8 @@ def update_epic(
     analysis: str | None = None,
     outcome: str | None = None,
     force: bool = False,
+    reason: str | None = None,
+    notes: str | None = None,
 ):
     """Update an epic (wraps task_cmd.update_plan with type=epic pinned).
 
@@ -127,4 +127,6 @@ def update_epic(
         analysis=analysis,
         outcome=outcome,
         force=force,
+        reason=reason,
+        notes=notes,
     )

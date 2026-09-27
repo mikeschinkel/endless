@@ -3,6 +3,7 @@ package schema_test
 import (
 	"context"
 	"database/sql"
+	"fmt"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -276,4 +277,97 @@ func tableExists(db *sql.DB, name string) (bool, error) {
 	err := db.QueryRow(
 		"SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", name).Scan(&n)
 	return n > 0, err
+}
+
+// TestMigrate_LiftsTaskContent drives 00007 over a database shaped as it was
+// before E-1531: the four content columns populated on tasks, sessions holding
+// those tasks. After the step, every value is a task_content row under the
+// right name, the columns are gone, and not one notice was written.
+func TestMigrate_LiftsTaskContent(t *testing.T) {
+	db := buildDB(t, func(db *sql.DB) error { return schema.MigrateUpTo(db, 5) })
+
+	mustExec(t, db, `INSERT INTO projects (id, name, path) VALUES (1, 'p', '/p')`)
+	for _, row := range []struct {
+		id                             int
+		status                         string
+		plan, outcome, analysis, notes any
+	}{
+		{10, "completed", "the plan", "the findings", "the analysis", "the notes"},
+		{11, "declined", nil, "why it was declined", nil, ""},
+		{12, "obsolete", "", "why it no longer applies", nil, nil},
+		{13, "superseded", nil, "why it was handed on", nil, nil},
+		{14, "confirmed", nil, "verified by hand", nil, nil},
+		{15, "ready", nil, "", nil, nil},
+	} {
+		mustExec(t, db,
+			`INSERT INTO tasks (id, project_id, title, status, plan, outcome, analysis, notes)
+			 VALUES (?, 1, 't', ?, ?, ?, ?, ?)`,
+			row.id, row.status, row.plan, row.outcome, row.analysis, row.notes)
+	}
+	// A live session holding task 10: were the content triggers left armed for
+	// the copy, it would be told the task just gained a plan, analysis and notes.
+	mustExec(t, db, `INSERT INTO sessions (id, project_id, state) VALUES (900, 1, 'working')`)
+	mustExec(t, db, `INSERT INTO session_tasks (session_id, task_id, created_at, updated_at) VALUES (900, 10, '2026-01-01', '2026-01-01')`)
+
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	rows, err := db.Query(`SELECT task_id, name, content FROM task_content ORDER BY task_id, name`)
+	if err != nil {
+		t.Fatalf("read task_content: %v", err)
+	}
+	defer rows.Close()
+	var got []string
+	for rows.Next() {
+		var id int
+		var name, content string
+		if err = rows.Scan(&id, &name, &content); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		got = append(got, fmt.Sprintf("%d %s=%s", id, name, content))
+	}
+	want := []string{
+		"10 analysis=the analysis",
+		"10 notes=the notes",
+		"10 outcome=the findings",
+		"10 plan=the plan",
+		"11 reason=why it was declined",
+		"12 reason=why it no longer applies",
+		"13 reason=why it was handed on",
+		"14 outcome=verified by hand",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("task_content after the lift:\n%s\nwant:\n%s",
+			strings.Join(got, "\n"), strings.Join(want, "\n"))
+	}
+
+	for _, col := range []string{"plan", "outcome", "analysis", "notes"} {
+		var n int
+		if err = db.QueryRow(
+			`SELECT count(*) FROM pragma_table_info('tasks') WHERE name = ?`, col,
+		).Scan(&n); err != nil {
+			t.Fatalf("probe %s: %v", col, err)
+		}
+		if n != 0 {
+			t.Errorf("tasks.%s survived the migration", col)
+		}
+	}
+
+	var notices int
+	if err = db.QueryRow(`SELECT count(*) FROM session_notices`).Scan(&notices); err != nil {
+		t.Fatalf("count notices: %v", err)
+	}
+	if notices != 0 {
+		t.Errorf("the lift wrote %d session notices; it must write none", notices)
+	}
+
+	// The triggers came back: a real edit after the migration still notifies.
+	mustExec(t, db, `UPDATE task_content SET content = 'revised' WHERE task_id = 10 AND name = 'plan'`)
+	if err = db.QueryRow(`SELECT count(*) FROM session_notices`).Scan(&notices); err != nil {
+		t.Fatalf("count notices: %v", err)
+	}
+	if notices != 1 {
+		t.Errorf("a plan edit after the lift wrote %d notices, want 1", notices)
+	}
 }

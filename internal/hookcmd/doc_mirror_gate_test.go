@@ -31,6 +31,10 @@ func TestDocMirrorGatePaths(t *testing.T) {
 		{"absolute", "/Users/x/proj/.endless/tasks/e-999/plan.md", true},
 		{"absolute in worktree", "/abs/wt/e-1202/.endless/tasks/e-1202/plan.md", true},
 		{"multi-digit", ".endless/tasks/e-12345/plan.md", true},
+		// E-1531: notes and reason are content names, so their mirrors are
+		// the database's too.
+		{"notes", ".endless/tasks/e-1/notes.md", true},
+		{"reason", ".endless/tasks/e-1/reason.md", true},
 
 		// Should block — legacy paths, still reachable in a tree the sweep has
 		// not converged yet.
@@ -42,7 +46,7 @@ func TestDocMirrorGatePaths(t *testing.T) {
 		// Should NOT block — the task's own files, beside the database's.
 		{"the task's verify script", ".endless/tasks/e-1/verify.sh", false},
 		{"the task's manifest", ".endless/tasks/e-1/verify.toml", false},
-		{"a note the task wrote", ".endless/tasks/e-1/notes.md", false},
+		{"a scratch file the task wrote", ".endless/tasks/e-1/scratch.md", false},
 		{"the shared harness", ".endless/tasks/_harness.sh", false},
 		{"the directory's own rules", ".endless/tasks/CLAUDE.md", false},
 
@@ -53,6 +57,7 @@ func TestDocMirrorGatePaths(t *testing.T) {
 		{"no digits", ".endless/tasks/e-/plan.md", false},
 		{"legacy subdir excluded", ".endless/plans/snapshots/E-1.md", false},
 		{"legacy non-plan file", ".endless/plans/notes.md", false},
+		{"no legacy dir for a post-consolidation kind", ".endless/reasons/E-1.md", false},
 		{"legacy lowercase prefix", ".endless/plans/e-1.md", false},
 		{"normal source file", "src/foo.md", false},
 		{"not a path component", "my.endless/tasks/e-1/plan.md", false},

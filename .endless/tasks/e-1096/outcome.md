@@ -1,1 +1,0 @@
-Replaced by snapshot-feature deletion. Existing snapshots are deleted, not migrated.

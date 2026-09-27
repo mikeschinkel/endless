@@ -61,9 +61,9 @@ A fresh worktree often needs project-specific setup endless can't bake in — Go
 - **Failure is non-fatal and loud.** If the hook exits non-zero, endless keeps the worktree and prints a warning naming the script, exit code, worktree path, and the command to re-run it.
 - **The hook must be idempotent / re-runnable.** Because there's no teardown, completing a failed bootstrap is just re-running the hook. Write it so a second run on an already-bootstrapped worktree is a safe no-op (or a clean regenerate).
 
-A task's plan, outcome and analysis each have a **document mirror** on the main checkout: `.endless/tasks/e-NNNN/plan.md`, `outcome.md` and `analysis.md`, in the same directory as that task's `verify.sh`. The DB column is the source of truth; the file is a projection of it, written so a human can read it on GitHub without a database.
+Each piece of a task's content — plan, analysis, outcome, reason, notes — has a **document mirror** on the main checkout, named after it: `.endless/tasks/e-NNNN/plan.md`, `analysis.md`, `outcome.md`, `reason.md`, `notes.md`, in the same directory as that task's `verify.sh`. The database row is the source of truth; the file is a projection of it, written so a human can read it on GitHub without a database.
 
-`endless task update <id> --plan-file <path>` writes the column and the mirror, and commits the mirror on main straight away. It does **not** create a worktree, and it never writes into one. So setting a plan on an unclaimed task touches only the DB and main — no stray worktrees for tasks you aren't working on yet, and nothing waiting on a land.
+`endless task update <id> --plan-file <path>` writes the row and the mirror, and commits the mirror on main straight away. It does **not** create a worktree, and it never writes into one. So setting a plan on an unclaimed task touches only the DB and main — no stray worktrees for tasks you aren't working on yet, and nothing waiting on a land.
 
 A worktree cut from main carries whatever mirrors main had at the fork point, as ordinary tracked files. Leave them alone: a hand-edit desyncs the database and is overwritten by the next sweep, and the Claude hook refuses one. Your task's own `verify.sh` in that same directory IS yours to write.
 

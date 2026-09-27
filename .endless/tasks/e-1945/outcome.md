@@ -1,1 +1,0 @@
-Merged into E-1948. Same root cause: agents leave edited tasks un-routed because the product neither asks them to decide nor makes the right answer reachable in one call. Fixing either half alone leaves the failure reachable, so the accepted-values change ships with the message and CLAUDE.md rewording rather than as its own task.

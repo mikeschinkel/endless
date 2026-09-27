@@ -3,10 +3,11 @@
 //
 // # What a mirror is, and what can go wrong with it
 //
-// `.endless/tasks/e-NNNN/plan.md` is a projection of `tasks.plan`. The column is
-// the source of truth; the file exists so a human can read the plan on
-// github.com without a database. `endless task update` writes both — the column
-// through the event pipeline, the file straight onto the main checkout.
+// `.endless/tasks/e-NNNN/plan.md` is a projection of the task's `plan` content
+// row (task_content, E-1531). The row is the source of truth; the file exists
+// so a human can read the plan on github.com without a database. `endless task
+// update` writes both — the row through the event pipeline, the file straight
+// onto the main checkout.
 //
 // Two things can leave the file wrong, and this sweep fixes both:
 //
@@ -18,7 +19,7 @@
 //     — which may be weeks from now. A one-time rename could not see those. A
 //     sweep collects each one on its next pass.
 //
-//  2. **Its content drifted from the column.** The mirror write is best-effort by
+//  2. **Its content drifted from the database.** The mirror write is best-effort by
 //     design: the database write has already happened and is authoritative, so a
 //     failed commit warns and continues rather than reporting failure for work
 //     that partly succeeded (the reasoning E-1474 settled for `land`). Something
@@ -26,10 +27,10 @@
 //
 // # Why this can never lose content
 //
-// The sweep only ever writes a file from a NON-EMPTY column — monitor.TaskDocRows
-// returns no row for an empty one. "Regenerating a derived file is free" holds
-// only when there is something to regenerate; rewriting a file from an empty
-// column would replace content with nothing. So a task whose outcome was cleared
+// The sweep only ever writes a file from NON-EMPTY content — monitor.TaskDocRows
+// returns no row for empty content. "Regenerating a derived file is free" holds
+// only when there is something to regenerate; rewriting a file from empty
+// content would replace it with nothing. So a task whose outcome was cleared
 // keeps its outcome.md until someone deletes it deliberately, which is the
 // conservative half of the same rule.
 //
@@ -57,6 +58,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/docmirror"
 	"github.com/mikeschinkel/endless/internal/events"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/taskcontent"
 )
 
 // Result reports what one project's sweep did. Counts rather than paths because
@@ -193,6 +195,9 @@ func relocateLegacy(root string, changed map[string]bool, result *Result) (bool,
 	moved := false
 
 	for _, kind := range docmirror.TaskKinds {
+		if kind.LegacyDir == "" {
+			continue
+		}
 		dir := filepath.Join(root, ".endless", kind.LegacyDir)
 		entries, err := os.ReadDir(dir)
 		if errors.Is(err, os.ErrNotExist) {
@@ -277,7 +282,13 @@ func reconcile(project monitor.ProjectRef, changed map[string]bool, result *Resu
 		return fmt.Errorf("read task documents: %w", err)
 	}
 	for _, row := range taskRows {
-		kind, ok := docmirror.KindByColumn(row.Column)
+		name, err := taskcontent.Parse(row.Name)
+		if err != nil {
+			// A name this binary does not know — written by a newer one. Not
+			// ours to mirror until this binary learns it.
+			continue
+		}
+		kind, ok := docmirror.KindByName(name)
 		if !ok {
 			continue
 		}
@@ -374,7 +385,9 @@ func sortedKeys(m map[string]bool) []string {
 func adoptableMirrors(root string) (func(string) bool, error) {
 	dirs := []string{docmirror.TasksRoot, docmirror.DecisionsDir}
 	for _, kind := range docmirror.TaskKinds {
-		dirs = append(dirs, ".endless/"+kind.LegacyDir)
+		if kind.LegacyDir != "" {
+			dirs = append(dirs, ".endless/"+kind.LegacyDir)
+		}
 	}
 
 	tracked := gitPathSet(root, append([]string{"ls-files", "-z", "--"}, dirs...))

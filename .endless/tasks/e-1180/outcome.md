@@ -1,1 +1,0 @@
-Mike, 2026-09-08: 'E-1180 needs to be obsoleted. We don't want eswt anymore. esu is sufficient.' esu already cd's to the worktree AND exports ENDLESS_SESSION_ID; eswt's only distinction was skipping the export, which is not worth a second helper to remember. E-2106 removed the last code that referenced it — claim's printed line and the $SHELL probe behind it.

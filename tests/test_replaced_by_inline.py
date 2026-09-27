@@ -299,8 +299,10 @@ def test_replace_persists_an_outcome_when_the_status_is_held(
     old = _add_task("Add a shipped thing", status="confirmed")
     new = _add_task("Add the replacement", status="underway")
     task_cmd.replace_task(old, new, outcome="superseded by the rebuild")
-    row = db.query("SELECT status, outcome FROM tasks WHERE id = ?", (old,))[0]
+    row = db.query("SELECT status, (SELECT content FROM task_content WHERE task_id = tasks.id AND name = 'outcome') AS outcome FROM tasks WHERE id = ?", (old,))[0]
     assert row["status"] == "confirmed"
+    # Shipped work keeping the status it earned was not abandoned, so its
+    # --outcome stays an outcome rather than becoming a reason (E-1531).
     assert row["outcome"] == "superseded by the rebuild"
 
 

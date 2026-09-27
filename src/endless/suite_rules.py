@@ -29,26 +29,29 @@ sources; both belong to no task.
 
 ## Two kinds of file, and only one of them is yours
 
-| In `e-<id>/`                           | Whose          | Written by                     |
-|----------------------------------------|----------------|--------------------------------|
-| `verify.toml`, `verify.sh`             | the task's     | you, on the task branch        |
-| `plan.md`, `outcome.md`, `analysis.md` | the database's | `endless task update`, on main |
+| In `e-<id>/`                                  | Whose          | Written by                     |
+|-----------------------------------------------|----------------|--------------------------------|
+| `verify.toml`, `verify.sh`                    | the task's     | you, on the task branch        |
+| `plan.md`, `analysis.md`, `outcome.md`, `reason.md`, `notes.md` | the database's | `endless task update`, on main |
 
-The three `.md` files are **document mirrors**: projections of `tasks.plan`,
-`tasks.outcome` and `tasks.analysis`. The column is the source of truth; the
-file exists so a human can read it on a Git host without a database.
+Those `.md` files are **document mirrors**: each is a projection of one piece
+of the task's content in the database, and is named after it. The database is
+the source of truth; the file exists so a human can read it on a Git host
+without a database.
 
 **Never hand-edit one, and never `git add` one.** A direct edit leaves the
 database stale and is overwritten without warning by the `doc-mirrors` sweep,
-which rewrites any mirror whose bytes differ from its column. Write the content
-under `.endless/tmp/` and load it:
+which rewrites any mirror whose bytes differ from the database. Write the
+content under `.endless/tmp/` and load it with the flag named after it:
 
     endless task update E-<id> --plan-file .endless/tmp/<file>.md
     endless task update E-<id> --analysis-file .endless/tmp/<file>.md
     endless task update E-<id> --outcome-file .endless/tmp/<file>.md
+    endless task update E-<id> --reason-file .endless/tmp/<file>.md
+    endless task update E-<id> --notes-file .endless/tmp/<file>.md
 
-A Claude hook refuses a Write/Edit of those three names, so you meet this rule
-before you break it rather than after.
+A Claude hook refuses a Write/Edit of those names, so you meet this rule before
+you break it rather than after.
 
 Your worktree may already contain them, and that is not a second home for the
 content: they are on main, your branch was cut from main, so git checked them

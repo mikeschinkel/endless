@@ -198,7 +198,7 @@ def test_empty_db_column_is_a_mismatch_not_an_adoption(project_with_task,
 
     assert plan_rel in str(exc.value)
     assert p["branch"] in _branches(p["root"])
-    row = db.query("SELECT plan FROM tasks WHERE id = ?", (p["tid"],))[0]
+    row = db.query("SELECT (SELECT content FROM task_content WHERE task_id = tasks.id AND name = 'plan') AS plan FROM tasks WHERE id = ?", (p["tid"],))[0]
     assert not (row["plan"] or "").strip()   # nothing was adopted
 
 

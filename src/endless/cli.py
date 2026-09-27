@@ -2196,9 +2196,13 @@ def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, 
 @click.option("--outcome", "show_outcome", is_flag=True,
               help="Show the full outcome field (hidden by default; a "
                    "char-count placeholder shows otherwise)")
+@click.option("--reason", "show_reason", is_flag=True,
+              help="Show the full reason field — why the task ended")
+@click.option("--notes", "show_notes", is_flag=True,
+              help="Show the full notes field")
 @click.option("--all-fields", "all_fields", is_flag=True,
               help="Show every content section (description, analysis, plan, "
-                   "outcome, children)")
+                   "outcome, reason, notes, children)")
 @click.option("--brief", "brief", is_flag=False, flag_value=str(BRIEF_CHARS),
               default=None, type=BRIEF_LEN, metavar="[N]",
               help=f"Preview every long field instead of its full body, cut to "
@@ -2212,18 +2216,33 @@ def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, 
 @click.option("--no-color", is_flag=True,
               help="Disable ANSI color even on a TTY")
 def task_show(item_ids, no_description, show_analysis, show_plan_field,
-              show_children, show_outcome, all_fields, brief, agent, as_json,
-              paged, no_color):
+              show_children, show_outcome, show_reason, show_notes, all_fields,
+              brief, agent, as_json, paged, no_color):
     """Show detail for one or more tasks."""
     from endless.task_cmd import detail_item
+    show_content = _shown_content(
+        all_fields, analysis=show_analysis, plan=show_plan_field,
+        outcome=show_outcome, reason=show_reason, notes=show_notes)
     if all_fields:
-        show_analysis = show_plan_field = show_children = show_outcome = True
+        show_children = True
     for item_id in item_ids:
         detail_item(item_id, show_description=not no_description,
-                    show_analysis=show_analysis, show_plan=show_plan_field,
-                    show_children=show_children, show_outcome=show_outcome,
+                    show_content=show_content, show_children=show_children,
                     agent=agent, as_json=as_json, paged=paged, no_color=no_color,
                     brief=brief)
+
+
+def _shown_content(all_fields: bool, **flags: bool) -> frozenset[str]:
+    """The content names a `show` command renders in full (E-1531).
+
+    Each content name has a display flag spelled with its own token (`--plan`,
+    `--reason`), and `--all-fields` shows every name the vocabulary declares —
+    including one added after these flags were written.
+    """
+    if all_fields:
+        from endless import content_names
+        return frozenset(content_names.slugs())
+    return frozenset(name for name, on in flags.items() if on)
 
 
 task_cmd.add_command(task_show, name="detail")
@@ -2770,7 +2789,7 @@ def _guard_content_rules(content, name, allow_paths, whole_value_checked=False):
 # trail claiming it was intended. Clearing is instead an explicit, field-named
 # act (`--clear <field>`, below) that a failed pipeline cannot reach by accident.
 
-CLEARABLE_CONTENT_FIELDS = ("description", "plan", "analysis", "outcome")
+CLEARABLE_CONTENT_FIELDS = ("description", "plan", "analysis", "outcome", "reason", "notes")
 
 
 def _describe_empty_file(content):
@@ -2987,9 +3006,21 @@ def task_add(title, description, description_file, plan_text, plan_file, analysi
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
 @click.option("--outcome", default=None,
-              help="Outcome / reason for status (inline; required by any status that ends the task unshipped: declined, obsolete, superseded)")
+              help="Outcome — the deliverable (inline). Given with a status that "
+                   "ends the task unshipped (declined, obsolete, superseded), it "
+                   "is that status's reason and is stored as --reason.")
 @click.option("--outcome-file", default=None,
               help="Load the outcome from a file")
+@click.option("--reason", default=None,
+              help="Why the task ended (inline; required by any status that ends "
+                   "the task unshipped: declined, obsolete, superseded — unless "
+                   "one is already stored)")
+@click.option("--reason-file", default=None,
+              help="Load the reason from a file")
+@click.option("--notes", "notes_text", default=None,
+              help="Notes (inline) — replaces the task's notes")
+@click.option("--notes-file", default=None,
+              help="Load the notes from a file")
 @click.option("--justification", default=None,
               help="Justification text when setting --type research (stored under '## Justification' in notes). "
                    "Required unless the effective parent is an underway epic.")
@@ -3005,7 +3036,7 @@ def task_add(title, description, description_file, plan_text, plan_file, analysi
               type=click.Choice(CLEARABLE_CONTENT_FIELDS),
               help="Erase a content field, naming it (repeatable). --<field>-file "
                    "refuses an empty file, so this is the deliberate way to empty "
-                   "description/plan/analysis/outcome. Conflicts with the same "
+                   "description or any content field. Conflicts with the same "
                    "field's --<field>/--<field>-file.")
 @click.option("--duplicates", "duplicates_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) each named task duplicates — same concern, filed "
@@ -3015,7 +3046,8 @@ def task_add(title, description, description_file, plan_text, plan_file, analysi
                    "the relation only; use `task replace <old> --by <new>` to also "
                    "close the replaced task.")
 def task_update(item_ids, status, title, description, description_file, plan_text, plan_file, parent, phase, tier,
-                task_type, analysis_text, analysis_file, force, outcome, outcome_file, justification, allow_paths,
+                task_type, analysis_text, analysis_file, force, outcome, outcome_file, reason, reason_file,
+                notes_text, notes_file, justification, allow_paths,
                 keep_status, clear_fields, duplicates_ids, replaces_ids):
     """Update fields on one or more tasks."""
     from endless.task_cmd import update_plan, parse_tier, link_tasks
@@ -3024,11 +3056,15 @@ def task_update(item_ids, status, title, description, description_file, plan_tex
         "plan": _resolve_content_flag(plan_text, plan_file, "plan", allow_paths, clearable=True),
         "analysis": _resolve_content_flag(analysis_text, analysis_file, "analysis", allow_paths, clearable=True),
         "outcome": _resolve_content_flag(outcome, outcome_file, "outcome", allow_paths, clearable=True),
+        "reason": _resolve_content_flag(reason, reason_file, "reason", allow_paths, clearable=True),
+        "notes": _resolve_content_flag(notes_text, notes_file, "notes", allow_paths, clearable=True),
     })
     description = resolved["description"]
     plan_text = resolved["plan"]
     analysis_text = resolved["analysis"]
     outcome = resolved["outcome"]
+    reason = resolved["reason"]
+    notes_text = resolved["notes"]
     tier_val = parse_tier(tier) if tier else None
     # E-1185: relation flags are a change on their own. `update_plan` refuses an
     # edit that names no field ("Nothing to update"), which is still right when
@@ -3036,7 +3072,7 @@ def task_update(item_ids, status, title, description, description_file, plan_tex
     # flags given are relations.
     edits_a_field = any(v is not None for v in (
         status, title, description, plan_text, parent, phase, tier, task_type,
-        analysis_text, outcome, justification,
+        analysis_text, outcome, reason, notes_text, justification,
     ))
     relations_only = not edits_a_field and (duplicates_ids or replaces_ids)
     for item_id in item_ids:
@@ -3047,7 +3083,8 @@ def task_update(item_ids, status, title, description, description_file, plan_tex
                         phase=phase, tier=tier_val, task_type=task_type,
                         analysis=analysis_text,
                         outcome=outcome, force=force,
-                        justification=justification, keep_status=keep_status)
+                        justification=justification, keep_status=keep_status,
+                        reason=reason, notes=notes_text)
         for tid in duplicates_ids:
             link_tasks(item_id, tid, "duplicates")
         for tid in replaces_ids:
@@ -3959,21 +3996,26 @@ def epic_list(project, show_all, status, phase, tier, parent_id, sort,
 @click.option("--outcome", "show_outcome", is_flag=True,
               help="Show the full outcome field (hidden by default; a "
                    "char-count placeholder shows otherwise)")
+@click.option("--reason", "show_reason", is_flag=True,
+              help="Show the full reason field — why the epic ended")
+@click.option("--notes", "show_notes", is_flag=True,
+              help="Show the full notes field")
 @click.option("--all-fields", "all_fields", is_flag=True,
               help="Show every content section (description, analysis, plan, "
-                   "outcome, children)")
+                   "outcome, reason, notes, children)")
 @output_options()
 def epic_show(item_ids, no_description, show_analysis, show_plan_field,
-              no_children, show_outcome, all_fields, agent, as_json):
+              no_children, show_outcome, show_reason, show_notes, all_fields,
+              agent, as_json):
     """Show detail for one or more epics (children shown by default)."""
     from endless.epic_cmd import show_epic
-    show_children = not no_children
-    if all_fields:
-        show_analysis = show_plan_field = show_children = show_outcome = True
+    show_children = not no_children or all_fields
+    show_content = _shown_content(
+        all_fields, analysis=show_analysis, plan=show_plan_field,
+        outcome=show_outcome, reason=show_reason, notes=show_notes)
     for item_id in item_ids:
         show_epic(item_id, show_description=not no_description,
-                  show_analysis=show_analysis, show_plan=show_plan_field,
-                  show_children=show_children, show_outcome=show_outcome,
+                  show_content=show_content, show_children=show_children,
                   agent=agent, as_json=as_json)
 
 
@@ -4008,6 +4050,15 @@ def epic_show(item_ids, no_description, show_analysis, show_plan_field,
               help="Outcome / reason for status (inline; required by any status that ends the task unshipped: declined, obsolete, superseded)")
 @click.option("--outcome-file", default=None,
               help="Load the outcome from a file")
+@click.option("--reason", default=None,
+              help="Why the epic ended (inline; required by declined, obsolete, "
+                   "superseded unless one is already stored)")
+@click.option("--reason-file", default=None,
+              help="Load the reason from a file")
+@click.option("--notes", "notes_text", default=None,
+              help="Notes (inline) — replaces the epic's notes")
+@click.option("--notes-file", default=None,
+              help="Load the notes from a file")
 @click.option("--allow-path", "allow_paths", multiple=True,
               help="Regex matching an absolute path to permit in inline content "
                    "(repeatable; escape hatch for the path gate).")
@@ -4015,11 +4066,12 @@ def epic_show(item_ids, no_description, show_analysis, show_plan_field,
               type=click.Choice(CLEARABLE_CONTENT_FIELDS),
               help="Erase a content field, naming it (repeatable). --<field>-file "
                    "refuses an empty file, so this is the deliberate way to empty "
-                   "description/plan/analysis/outcome. Conflicts with the same "
+                   "description or any content field. Conflicts with the same "
                    "field's --<field>/--<field>-file.")
 def epic_update(item_ids, status, title, description, description_file, plan_text,
                 plan_file, parent, phase, tier, analysis_text, analysis_file,
-                force, outcome, outcome_file, allow_paths, clear_fields):
+                force, outcome, outcome_file, reason, reason_file, notes_text,
+                notes_file, allow_paths, clear_fields):
     """Update one or more epics (promotes type to epic).
 
     Updating an existing task-typed row through this verb also promotes it to
@@ -4032,6 +4084,8 @@ def epic_update(item_ids, status, title, description, description_file, plan_tex
         "plan": _resolve_content_flag(plan_text, plan_file, "plan", allow_paths, clearable=True),
         "analysis": _resolve_content_flag(analysis_text, analysis_file, "analysis", allow_paths, clearable=True),
         "outcome": _resolve_content_flag(outcome, outcome_file, "outcome", allow_paths, clearable=True),
+        "reason": _resolve_content_flag(reason, reason_file, "reason", allow_paths, clearable=True),
+        "notes": _resolve_content_flag(notes_text, notes_file, "notes", allow_paths, clearable=True),
     })
     description = resolved["description"]
     plan_text = resolved["plan"]
@@ -4042,7 +4096,8 @@ def epic_update(item_ids, status, title, description, description_file, plan_tex
         update_epic(item_id, status=status, title=title,
                     description=description, plan=plan_text, parent_id=parent,
                     phase=phase, tier=tier_val, analysis=analysis_text,
-                    outcome=outcome, force=force)
+                    outcome=outcome, force=force,
+                    reason=resolved["reason"], notes=resolved["notes"])
 
 
 @main.group("worktree")

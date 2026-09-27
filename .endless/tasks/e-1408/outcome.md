@@ -1,1 +1,0 @@
-Folded into E-1898. An empty TMUX_PANE at SessionStart is the upstream cause of the incident's unrecoverability: TouchSession's COALESCE revives state while leaving process NULL. Content and the fail-loudly directive preserved in E-1898's analysis.

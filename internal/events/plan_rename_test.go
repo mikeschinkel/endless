@@ -28,15 +28,20 @@ import (
 	"github.com/mikeschinkel/endless/internal/events"
 )
 
-// planOf reads the renamed column for a task, treating NULL as "".
+// planOf reads a task's plan content row, treating an absent row as "".
 func planOf(t *testing.T, db *sql.DB, id int64) string {
 	t.Helper()
 	var plan sql.NullString
-	if err := db.QueryRow("SELECT plan FROM tasks WHERE id = ?", id).Scan(&plan); err != nil {
+	if err := db.QueryRow(planQuery, id).Scan(&plan); err != nil {
 		t.Fatalf("read plan for E-%d: %v", id, err)
 	}
 	return plan.String
 }
+
+// planQuery reads a task's plan (E-1531: a task_content row, not a column).
+// A scalar subquery, so a task with no plan scans as NULL rather than
+// sql.ErrNoRows.
+const planQuery = "SELECT (SELECT content FROM task_content WHERE task_id = ? AND name = 'plan')"
 
 // statusOf reads a task's current status.
 func statusOf(t *testing.T, db *sql.DB, id int64) string {
@@ -315,7 +320,7 @@ func TestProjector_BothPlanKeysProjectIntoPlanColumn(t *testing.T) {
 
 			var plan sql.NullString
 			if err := db.QueryRow(
-				"SELECT plan FROM tasks WHERE id = ?", tc.id,
+				planQuery, tc.id,
 			).Scan(&plan); err != nil {
 				t.Fatalf("read projected plan: %v", err)
 			}
@@ -362,7 +367,7 @@ func TestProjector_TaskCreatedLegacyTextKeyProjectsPlan(t *testing.T) {
 	defer db.Close()
 
 	var plan sql.NullString
-	if err := db.QueryRow("SELECT plan FROM tasks WHERE id = ?", 912).Scan(&plan); err != nil {
+	if err := db.QueryRow(planQuery, 912).Scan(&plan); err != nil {
 		t.Fatalf("read projected plan: %v", err)
 	}
 	if plan.String != "# Plan\n\nborn as text\n" {

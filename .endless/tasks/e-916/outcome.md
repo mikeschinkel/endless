@@ -1,1 +1,0 @@
-E-922 raised MaxEventLineBytes from 4KB to 1MB, which is what this task existed to make reachable. The trigger was a 17KB plan file; 1MB is ~60x that and nothing has approached it since. Configurability here would be a knob with no demonstrated turn. Re-file if a real project hits the ceiling.

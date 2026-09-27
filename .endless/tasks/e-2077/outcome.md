@@ -1,1 +1,0 @@
-Duplicate of E-2023, which already owns making the own-task-only rule self-enforcing and frames it better: enforcement in the scripts beats relocation alone, since moving them stops accidental sweeps but not a deliberate wrong run. E-2077's content is folded into E-2023's analysis.

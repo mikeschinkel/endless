@@ -298,9 +298,7 @@ func TestTriageContext_MissingTaskIsAnError(t *testing.T) {
 func TestTriageContext_HasPlanReportsAnAttachedPlan(t *testing.T) {
 	db := triageTestDB(t)
 	seedTriageTask(t, db, 80, 1, "planned already", "untriaged", "2026-08-01T00:00:00", nil)
-	if _, err := db.Exec("UPDATE tasks SET plan = ? WHERE id = 80", "# Plan\n"); err != nil {
-		t.Fatalf("attach plan: %v", err)
-	}
+	setTaskContent(t, db, 80, "plan", "# Plan\n")
 	ctx, err := triageContext(db, 80)
 	if err != nil {
 		t.Fatalf("triageContext: %v", err)

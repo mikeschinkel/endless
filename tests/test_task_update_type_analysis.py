@@ -18,7 +18,7 @@ def _add_task(title: str, status: str = "ready", task_type: str = "todo") -> int
 def _type_analysis(task_id: int) -> tuple[str, str | None]:
     row = db.query(
         "SELECT COALESCE((SELECT slug FROM task_types WHERE id = tasks.type_id), '') AS type, "
-        "analysis FROM tasks WHERE id = ?",
+        "(SELECT content FROM task_content WHERE task_id = tasks.id AND name = 'analysis') AS analysis FROM tasks WHERE id = ?",
         (task_id,),
     )
     return row[0]["type"], row[0]["analysis"]
@@ -113,7 +113,7 @@ def test_update_plan_inline_and_file_forms(seeded_project_at_cwd, tmp_path):
     from endless.cli import main
 
     def _plan_of(task_id: int) -> str | None:
-        return db.query("SELECT plan FROM tasks WHERE id = ?", (task_id,))[0]["plan"]
+        return db.query("SELECT (SELECT content FROM task_content WHERE task_id = tasks.id AND name = 'plan') AS plan FROM tasks WHERE id = ?", (task_id,))[0]["plan"]
 
     runner = CliRunner()
 
@@ -143,5 +143,5 @@ def test_update_outcome_file_loads_content(seeded_project_at_cwd, tmp_path):
     runner = CliRunner()
     result = runner.invoke(main, ["task", "update", f"E-{tid}", "--outcome-file", str(p)])
     assert result.exit_code == 0, result.output
-    row = db.query("SELECT outcome FROM tasks WHERE id = ?", (tid,))
+    row = db.query("SELECT (SELECT content FROM task_content WHERE task_id = tasks.id AND name = 'outcome') AS outcome FROM tasks WHERE id = ?", (tid,))
     assert row[0]["outcome"] == "findings live here"

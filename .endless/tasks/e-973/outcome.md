@@ -1,1 +1,0 @@
-Replaced by E-1120, which broadens the scope from just 'task update' to all state-mutating task commands (confirm, update, start, etc.) and from new-values-only to old -> new format.

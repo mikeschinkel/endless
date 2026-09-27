@@ -68,12 +68,21 @@ func newDB(t *testing.T, root string) *sql.DB {
 
 func seedTask(t *testing.T, db *sql.DB, id int64, plan, outcome, analysis string) {
 	t.Helper()
-	_, err := db.Exec(
-		"INSERT INTO tasks (id, project_id, title, status, plan, outcome, analysis) "+
-			"VALUES (?, 1, 'title', 'ready', ?, ?, ?)",
-		id, nullable(plan), nullable(outcome), nullable(analysis))
-	if err != nil {
+	if _, err := db.Exec(
+		"INSERT INTO tasks (id, project_id, title, status) VALUES (?, 1, 'title', 'ready')", id,
+	); err != nil {
 		t.Fatalf("seed task %d: %v", id, err)
+	}
+	// Empty content has no row (E-1531), which is what an empty column meant.
+	for name, content := range map[string]string{"plan": plan, "outcome": outcome, "analysis": analysis} {
+		if content == "" {
+			continue
+		}
+		if _, err := db.Exec(
+			"INSERT INTO task_content (task_id, name, content) VALUES (?, ?, ?)", id, name, content,
+		); err != nil {
+			t.Fatalf("seed task %d %s: %v", id, name, err)
+		}
 	}
 }
 

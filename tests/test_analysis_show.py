@@ -18,12 +18,25 @@ def _add_task(title: str, status: str = "ready") -> int:
     return cur.lastrowid
 
 
+# Content that is a task_content row rather than a tasks column (E-1531).
+_CONTENT = ("analysis", "plan", "outcome", "reason", "notes")
+
+
 def _set_fields(task_id: int, **fields) -> None:
-    cols = ", ".join(f"{k} = ?" for k in fields)
-    db.execute(
-        f"UPDATE tasks SET {cols} WHERE id = ?",
-        (*fields.values(), task_id),
-    )
+    columns = {k: v for k, v in fields.items() if k not in _CONTENT}
+    if columns:
+        cols = ", ".join(f"{k} = ?" for k in columns)
+        db.execute(
+            f"UPDATE tasks SET {cols} WHERE id = ?",
+            (*columns.values(), task_id),
+        )
+    for name in _CONTENT:
+        if fields.get(name):
+            db.execute(
+                "INSERT INTO task_content (task_id, name, content) VALUES (?, ?, ?) "
+                "ON CONFLICT(task_id, name) DO UPDATE SET content = excluded.content",
+                (task_id, name, fields[name]),
+            )
 
 
 def test_analysis_flag_renders_analysis_section(seeded_project_at_cwd):

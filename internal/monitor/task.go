@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/mikeschinkel/endless/internal/taskcontent"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
 
@@ -133,40 +134,40 @@ func MarkContextInjected(projectID int64, sessionID, workingDir string) {
 	})
 }
 
-// TaskPlan returns the tasks.plan content for a task id (E-1445). Returns an
-// empty string (no error) when the row or the plan is absent. A thin alias for
-// TaskField, kept for the `session-query task-plan` verb.
+// TaskPlan returns a task's plan (E-1445). Returns an empty string (no error)
+// when the task or its plan is absent. A thin alias for TaskContent, kept for
+// the `session-query task-plan` verb.
 func TaskPlan(taskID int64) (string, error) {
-	return TaskField(taskID, "plan")
+	return TaskContent(taskID, taskcontent.Plan)
 }
 
-// taskDocColumns whitelists the multiline document columns TaskField may
-// read. Keyed here (not interpolated freely) because the column name is
-// substituted into SQL — the whitelist is the injection guard. These are the
-// columns mirrored to `.endless/tasks/e-NNNN/<kind>.md`; the authoritative list
-// of kinds is internal/docmirror.TaskKinds, and this set must match it.
-var taskDocColumns = map[string]bool{
-	"plan":     true,
-	"outcome":  true,
-	"analysis": true,
+// hasContentExpr is a SQL boolean: does the task whose id is idExpr carry
+// content under name? For the reads that ask "has a plan" of many rows at once,
+// which the plan column used to answer inline. The name is the enum's slug, not
+// input, so interpolating it is safe.
+func hasContentExpr(idExpr string, name taskcontent.Name) string {
+	return "EXISTS(SELECT 1 FROM task_content c WHERE c.task_id = " + idExpr +
+		" AND c.name = '" + name.Slug() + "')"
 }
 
-// TaskField returns the raw value of one whitelisted multiline document
-// column for a task (empty string when the row or the value is absent).
-// column MUST be in taskDocColumns; anything else is rejected so the caller
-// can never smuggle arbitrary SQL through the substituted identifier.
-func TaskField(taskID int64, column string) (string, error) {
-	if !taskDocColumns[column] {
-		return "", fmt.Errorf("unsupported task field %q", column)
-	}
+// TaskContent returns one content row of a live task (E-1531) — the content a
+// `.endless/tasks/e-NNNN/<name>.md` mirror projects. An empty string (no error)
+// when the task or that content is absent: task_content holds no empty rows, so
+// the two mean the same thing.
+//
+// Through live_tasks, so a removed task's content reads as absent, exactly as
+// its columns did.
+func TaskContent(taskID int64, name taskcontent.Name) (string, error) {
 	db, err := DB()
 	if err != nil {
 		return "", err
 	}
 	var value string
 	err = db.QueryRow(
-		fmt.Sprintf("SELECT COALESCE(%s, '') FROM live_tasks WHERE id = ?", column),
-		taskID,
+		`SELECT c.content FROM task_content c
+		   JOIN live_tasks t ON t.id = c.task_id
+		  WHERE c.task_id = ? AND c.name = ?`,
+		taskID, name.Slug(),
 	).Scan(&value)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", nil

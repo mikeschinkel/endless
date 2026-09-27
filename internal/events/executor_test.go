@@ -222,7 +222,7 @@ func TestExecute_TaskCreatedStoresNotes(t *testing.T) {
 
 	var notes sql.NullString
 	if err := db.QueryRow(
-		"SELECT notes FROM tasks WHERE id = ?", 501,
+		"SELECT (SELECT content FROM task_content WHERE task_id = ? AND name = 'notes')", 501,
 	).Scan(&notes); err != nil {
 		t.Fatalf("query inserted task: %v", err)
 	}

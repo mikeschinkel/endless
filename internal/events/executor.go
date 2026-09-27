@@ -454,18 +454,17 @@ func execTaskCreated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 		status = "submitted"
 	}
 
-	var notes any
-	if p.Notes != "" {
-		notes = p.Notes
-	}
 	_, err = db.Exec(
-		`INSERT INTO tasks (id, project_id, phase, title, description, plan, analysis, notes, status, type_id, sort_order, parent_id, tier, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		taskID, projectID, p.Phase, p.Title, p.Description, plan, p.Analysis, notes, status, int(typeID),
+		`INSERT INTO tasks (id, project_id, phase, title, description, status, type_id, sort_order, parent_id, tier, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		taskID, projectID, p.Phase, p.Title, p.Description, status, int(typeID),
 		sortOrder, p.ParentID, p.Tier, ts, ts,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("events: insert task: %w", err)
+	}
+	if err = writeTaskContent(db, taskID, p.createdContent()); err != nil {
+		return nil, err
 	}
 
 	if shouldRecordSessionTouch(evt) {
@@ -567,13 +566,8 @@ func execTaskStatusChanged(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 		}
 	}
 
-	if p.Outcome != "" {
-		if _, err := db.Exec(
-			"UPDATE tasks SET outcome = ? WHERE id = ?",
-			p.Outcome, taskID,
-		); err != nil {
-			return nil, fmt.Errorf("events: set outcome: %w", err)
-		}
+	if err := writeTaskContent(db, taskID, p.statusChangedContent()); err != nil {
+		return nil, err
 	}
 
 	if shouldRecordSessionTouch(evt) {
@@ -627,39 +621,34 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 	var setClauses []string
 	var args []any
 
-	// "text" and "plan" BOTH write the renamed `plan` column (E-1000). The
-	// executor runs live emissions, which all spell it `plan` now — but it also
-	// runs when an old event is re-applied, and an unknown field here is a hard
-	// error rather than a skip, so dropping the legacy key would turn a
-	// historical payload into a failed apply instead of a correct one.
+	// The column half of the payload. The content half — plan (and its legacy
+	// spelling `text`, E-1000), analysis, notes, outcome, reason — is not a
+	// column any more (E-1531): it is resolved by contentWrites, from the map
+	// the projector shares, and written to task_content after the row update.
+	// An unknown field is a hard error rather than a skip, so a key that
+	// neither half knows fails the apply instead of vanishing.
 	allowedFields := map[string]string{
 		"title": "title", "description": "description",
-		"plan": "plan", legacyPlanKey: "plan",
-		"notes": "notes",
 		"phase": "phase", "tier": "tier",
 		"type": "type_id", "status": "status", "parent_id": "parent_id",
-		"outcome": "outcome", "analysis": "analysis",
 	}
 
 	// planValue is the plan this update writes, under whichever key it arrived,
-	// and hasPlan whether it carries one at all. Both are read again by the
-	// plan-attach promotion below, so resolving the spelling once here is what
-	// keeps the promotion from having to know there are two. The forward key
-	// wins when a payload somehow carries both — otherwise the loop below would
-	// emit `plan = ?` twice in map-iteration order. Mirrored in the projector.
-	planValue, hasForwardPlan := p.Fields["plan"]
-	hasPlan := hasForwardPlan
+	// and hasPlan whether it carries one at all. Read by the plan-attach
+	// promotion below; the forward key wins when a payload somehow carries
+	// both, the same precedence contentWrites applies.
+	planValue, hasPlan := p.Fields["plan"]
 	if !hasPlan {
 		planValue, hasPlan = p.Fields[legacyPlanKey]
 	}
 
 	for field, value := range p.Fields {
+		if isTaskContentField(field) {
+			continue
+		}
 		col, ok := allowedFields[field]
 		if !ok {
 			return nil, fmt.Errorf("events: unknown field %q in task.fields_updated", field)
-		}
-		if field == legacyPlanKey && hasForwardPlan {
-			continue
 		}
 		if field == "phase" {
 			phaseStr, ok := value.(string)
@@ -806,12 +795,26 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 		}
 	}
 
-	args = append(args, taskID)
-	query := fmt.Sprintf("UPDATE tasks SET %s WHERE id = ?",
-		joinStrings(setClauses, ", "))
+	writes, err := contentWrites(p.Fields, newStatus)
+	if err != nil {
+		return nil, err
+	}
 
-	if _, err := db.Exec(query, args...); err != nil {
-		return nil, fmt.Errorf("events: update task fields: %w", err)
+	// The row first, then its content, and the order is load-bearing: the
+	// task_content notice triggers merge into the notice tasks_notify_sessions
+	// has just written for this same edit, so one `task update --status X
+	// --plan-file F` still renders as one line (E-1531). A content-only update
+	// has no row change to make.
+	if len(setClauses) > 0 {
+		args = append(args, taskID)
+		query := fmt.Sprintf("UPDATE tasks SET %s WHERE id = ?",
+			joinStrings(setClauses, ", "))
+		if _, err := db.Exec(query, args...); err != nil {
+			return nil, fmt.Errorf("events: update task fields: %w", err)
+		}
+	}
+	if err := writeTaskContent(db, taskID, writes); err != nil {
+		return nil, err
 	}
 
 	if shouldRecordSessionTouch(evt) {

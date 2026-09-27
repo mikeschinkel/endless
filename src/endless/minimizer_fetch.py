@@ -60,17 +60,19 @@ def _fetch_task_plan(task_id: int | None, session_id: int | None, spec: dict) ->
     if not task_id:
         return ""
     rows = db.query(
-        "SELECT id, title, status, phase, description, plan, analysis "
+        "SELECT id, title, status, phase, description "
         "FROM live_tasks WHERE id = ?",
         (task_id,),
     )
     if not rows:
         return ""
     t = rows[0]
+    content = db.task_content(task_id)
     parts = [f"E-{t['id']} [{t['status']}/{t['phase']}] {t['title']}"]
-    for label, key in (("Description", "description"), ("Plan", "plan"),
-                       ("Analysis", "analysis")):
-        value = (t[key] or "").strip()
+    for label, value in (("Description", t["description"]),
+                         ("Plan", content.get("plan")),
+                         ("Analysis", content.get("analysis"))):
+        value = (value or "").strip()
         if value:
             parts.append(f"--- {label} ---\n{value}")
     return _truncate("\n\n".join(parts))
@@ -79,10 +81,9 @@ def _fetch_task_plan(task_id: int | None, session_id: int | None, spec: dict) ->
 def _fetch_task_analysis(task_id: int | None, session_id: int | None, spec: dict) -> str:
     if not task_id:
         return ""
-    rows = db.query("SELECT analysis FROM live_tasks WHERE id = ?", (task_id,))
-    if not rows:
+    if not db.exists("SELECT 1 FROM live_tasks WHERE id = ?", (task_id,)):
         return ""
-    return _truncate(rows[0]["analysis"] or "")
+    return _truncate(db.task_content(task_id).get("analysis") or "")
 
 
 def _fetch_sibling_tasks(task_id: int | None, session_id: int | None, spec: dict) -> str:

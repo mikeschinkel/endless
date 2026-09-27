@@ -1,1 +1,0 @@
-Duplicate of E-1891's acceptance criterion #1, which names this exact failure verbatim (update_plan's valid tuple omitting 'submitted'). E-1891 fixes it at the source — one Go accessor owning the status vocabulary — rather than patching one of ~15 drifted sites, and also covers a second live symptom this task missed (_CHILDREN_STATE_ORDER omitting 'submitted').

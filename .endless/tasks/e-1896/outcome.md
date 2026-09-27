@@ -1,1 +1,0 @@
-Filed on a false premise. A tests/tasks/e-NNNN-verify.sh is point-in-time proof for ONE pre-land verification; after that task lands its validity is undefined. Those 6 scripts dying on the renamed `endless register` is therefore not a defect and not work — they are historical artifacts, not a living regression suite.

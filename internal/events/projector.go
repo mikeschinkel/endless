@@ -201,13 +201,18 @@ func replayTaskCreated(db *sql.DB, evt *Event, result *ProjectResult) error {
 	typeID := projectorTypeID(p.Type)
 
 	_, err = db.Exec(
-		`INSERT INTO tasks (id, project_id, phase, title, description, plan, analysis, status, type_id, sort_order, parent_id, tier, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		taskID, projectID, p.Phase, p.Title, p.Description, p.PlanText(), p.Analysis, p.Status, typeID,
+		`INSERT INTO tasks (id, project_id, phase, title, description, status, type_id, sort_order, parent_id, tier, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		taskID, projectID, p.Phase, p.Title, p.Description, p.Status, typeID,
 		sortOrder, p.ParentID, p.Tier, ts, ts,
 	)
 	if err != nil {
 		return fmt.Errorf("insert task %d: %w", taskID, err)
+	}
+	// Notes included, which this INSERT once omitted (E-1531): a task filed
+	// with notes rebuilt without them.
+	if err = writeTaskContent(db, taskID, p.createdContent()); err != nil {
+		return err
 	}
 	result.TasksCreated++
 	return nil
@@ -295,13 +300,8 @@ func replayTaskStatusChanged(db *sql.DB, evt *Event, result *ProjectResult) erro
 		}
 	}
 
-	if p.Outcome != "" {
-		if _, err := db.Exec(
-			"UPDATE tasks SET outcome = ? WHERE id = ?",
-			p.Outcome, taskID,
-		); err != nil {
-			return err
-		}
+	if err := writeTaskContent(db, taskID, p.statusChangedContent()); err != nil {
+		return err
 	}
 
 	result.TasksUpdated++
@@ -357,37 +357,26 @@ func replayTaskFieldsUpdated(db *sql.DB, evt *Event, result *ProjectResult) erro
 	var setClauses []string
 	var args []any
 
+	// The column half of the payload; the content half is contentWrites', the
+	// same map the executor reads (E-1531). "prompt" is intentionally absent
+	// from both (E-1469 dropped tasks.prompt): historical task.fields_updated
+	// events still carry it, and the unknown-field branch below skips them
+	// rather than writing to the dropped column on rebuild.
+	//
+	// The legacy `text` spelling of the plan (E-1000) is part of the content
+	// half: 1,128 historical task.fields_updated events carry it and the ledger
+	// is immutable by design; dropping them would rebuild those tasks with
+	// empty plans, silently, because an absent field is indistinguishable from
+	// an empty one.
 	allowedFields := map[string]string{
-		// "prompt" is intentionally absent (E-1469 dropped tasks.prompt):
-		// historical task.fields_updated events still carry it, and the
-		// unknown-field branch below skips them rather than writing to the
-		// dropped column on rebuild.
-		//
-		// "text" and "plan" BOTH project into the renamed `plan` column
-		// (E-1000). 1,128 historical task.fields_updated events carry the `text`
-		// key and the ledger is immutable by design; dropping them would rebuild
-		// those tasks with empty plans, silently, because an absent field is
-		// indistinguishable from an empty one. Everything emitted from E-1000 on
-		// uses `plan`. See legacyPlanKey below for the both-present case.
 		"title": "title", "description": "description",
-		"plan": "plan", legacyPlanKey: "plan",
 		"phase": "phase", "tier": "tier",
 		"type": "type_id", "status": "status", "parent_id": "parent_id",
-		"outcome": "outcome", "analysis": "analysis",
 	}
-
-	// A payload carrying both spellings would otherwise emit `plan = ?` twice,
-	// resolved by map iteration order — i.e. non-deterministically. No emitter
-	// has ever produced both, but the forward key wins by construction rather
-	// than by luck. Mirrored in the executor.
-	_, hasPlanKey := p.Fields["plan"]
 
 	for field, value := range p.Fields {
 		col, ok := allowedFields[field]
 		if !ok {
-			continue
-		}
-		if field == legacyPlanKey && hasPlanKey {
 			continue
 		}
 		if field == "phase" {
@@ -432,14 +421,22 @@ func replayTaskFieldsUpdated(db *sql.DB, evt *Event, result *ProjectResult) erro
 		}
 	}
 
-	if len(setClauses) == 0 {
-		return nil
+	// Mirrors execTaskFieldsUpdated: a non-string content value is a hard
+	// error there, and the projection must reach the state the live apply did.
+	newStatus, _ := p.Fields["status"].(string)
+	writes, err := contentWrites(p.Fields, newStatus)
+	if err != nil {
+		return err
 	}
 
-	args = append(args, taskID)
-	query := fmt.Sprintf("UPDATE tasks SET %s WHERE id = ?", joinStrings(setClauses, ", "))
-
-	if _, err := db.Exec(query, args...); err != nil {
+	if len(setClauses) > 0 {
+		args = append(args, taskID)
+		query := fmt.Sprintf("UPDATE tasks SET %s WHERE id = ?", joinStrings(setClauses, ", "))
+		if _, err := db.Exec(query, args...); err != nil {
+			return err
+		}
+	}
+	if err := writeTaskContent(db, taskID, writes); err != nil {
 		return err
 	}
 	result.TasksUpdated++

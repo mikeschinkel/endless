@@ -160,11 +160,13 @@ func TestNoticeTrigger_FreeformNeverLeaksContent(t *testing.T) {
 	snNoticeFixture(t, db)
 
 	const secret = "the-actual-description-body"
-	if _, err := db.Exec(
-		"UPDATE tasks SET description=?, plan=?, analysis=?, notes=? WHERE id=500",
-		secret, secret, secret, secret,
-	); err != nil {
+	if _, err := db.Exec("UPDATE tasks SET description=? WHERE id=500", secret); err != nil {
 		t.Fatalf("update: %v", err)
+	}
+	// plan, analysis and notes left the row (E-1531); their notices come from
+	// the task_content triggers, under the same guarantee.
+	for _, name := range []string{"plan", "analysis", "notes"} {
+		setTaskContent(t, db, 500, name, secret)
 	}
 
 	got := snNotices(t, db)

@@ -1,1 +1,0 @@
-Obsoleted by E-1459. The RequiresRebuild framework gate was removed with migrate.go. Fresh DBs are now built directly from schema.SQL with no rebuild gate to break them.

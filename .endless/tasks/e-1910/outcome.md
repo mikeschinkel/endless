@@ -1,1 +1,0 @@
-Same contract: e-1906-verify.sh is a landed suite, and its grep tripping on a sibling landed suite's historical fixture has zero product impact. Non-problem.

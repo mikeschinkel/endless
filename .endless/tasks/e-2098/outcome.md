@@ -1,1 +1,0 @@
-Retired unfiled-research. E-1882 (worktree reconcile) already holds the adjacent ground, and the immediate need — sweeping the fleet once E-2090 lands — is a this-session action, not something needing a tracked task. Filed without checking for prior art first.

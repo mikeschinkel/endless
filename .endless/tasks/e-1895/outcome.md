@@ -1,1 +1,0 @@
-Folded into E-1898. The status line swallowing every DB error into a placeholder is why the reaper incident was invisible for hours; cause and observability are one unit of work, one subsystem, one verify suite. Content preserved in E-1898's analysis under 'Absorbed from E-1895'.
