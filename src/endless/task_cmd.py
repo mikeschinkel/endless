@@ -2852,10 +2852,9 @@ def _require_reason_for_abandonment(status: str | None, reason: str | None):
     authoritative-looking fiction, and the guard is on the transition, not on
     the row.
 
-    E-1531 split the reason out of `outcome`, so `reason` here is the incoming
-    text or, where a caller has one, the reason the row already holds: a stored
-    closing reason answers the question, and demanding it again only taught
-    callers to paste it twice.
+    E-1531 split the reason out of `outcome`. `reason` here is only ever the
+    text given with this command: a reason already stored on the task never
+    satisfies the guard, because every closing move owes its own why.
     """
     if status in _ABANDONMENT_STATUSES and not (reason and reason.strip()):
         gerund, remedy = _ABANDONMENT_STATUSES[status]
@@ -5100,12 +5099,10 @@ def update_plan(
         # Asking for the reason first would spend a round trip teaching a flag
         # for a status the caller is about to be told not to use.
         #
-        # E-1531: a reason already stored satisfies it. Before the split this
-        # could not be honoured — the stored text might have been a research
-        # task's findings — so the flag was demanded again even when the row
-        # already said why. A stored `reason` can only be a reason.
-        _require_reason_for_abandonment(
-            status, reason if reason is not None else row[0]["reason"])
+        # The reason must come with THIS command: one already stored on the
+        # task does not count (E-1531, Mike's ruling). Every closing move is a
+        # decision of its own, and says why of its own.
+        _require_reason_for_abandonment(status, reason)
 
     # Reject a maybe-phase task gaining (or keeping) a parent. Only evaluate
     # when this update touches phase or parent_id — an unrelated edit must not
@@ -7186,8 +7183,7 @@ def replace_task(
     # deliverable. Shipped work that keeps its status has no reason to give,
     # so its --outcome stays an outcome.
     name = "reason" if status in _ABANDONMENT_STATUSES else "outcome"
-    _require_reason_for_abandonment(
-        status, outcome if outcome is not None else db.task_content(old_id).get("reason"))
+    _require_reason_for_abandonment(status, outcome)
 
     # "old replaced_by new" → display='replaced_by' resolves to stored='replaces' with
     # swap=True → row stored as source=new, target=old, dep_type='replaces' (active voice).

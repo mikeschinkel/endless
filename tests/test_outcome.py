@@ -212,14 +212,23 @@ def test_task_update_status_obsolete_with_reason(seeded_project_at_cwd):
     assert _status_reason(tid) == ("obsolete", "the API it wrapped is gone")
 
 
-def test_a_stored_reason_satisfies_the_guard(seeded_project_at_cwd):
-    """E-1531's acceptance: the guard honours a closing reason already on the
-    row. Before the split it could not — the stored text might have been a
-    research task's findings — so it demanded the flag again."""
+def test_a_stored_reason_does_not_satisfy_the_guard(seeded_project_at_cwd):
+    """Every closing move owes its own why (E-1531, Mike's ruling): a reason
+    already stored on the task is not accepted in place of one given now."""
     tid = _add_task("Sample")
     task_cmd.update_plan(tid, reason="written before the decision was taken")
-    task_cmd.update_plan(tid, status="obsolete")
-    assert _status_reason(tid) == ("obsolete", "written before the decision was taken")
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.update_plan(tid, status="obsolete")
+    assert "reason is required" in str(exc.value.message).lower()
+
+
+def test_a_stored_reason_does_not_satisfy_replace(seeded_project_at_cwd):
+    old = _add_task("Old")
+    new = _add_task("New")
+    task_cmd.update_plan(old, reason="stored earlier")
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.replace_task(old, new)
+    assert "reason is required" in str(exc.value.message).lower()
 
 
 def test_a_stored_outcome_does_not_satisfy_the_guard(seeded_project_at_cwd):

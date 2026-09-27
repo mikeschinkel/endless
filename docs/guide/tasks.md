@@ -16,7 +16,7 @@ Every task has multiple body fields. Knowing which to use prevents long descript
 | `analysis`    | Long-form      | Supporting research / exploration content that is *not* a proper plan — comparisons, findings, evidence gathered before the plan is written. Shown with `task show --analysis`. | `--analysis` (inline) / `--analysis-file <path>` on `task update`. |
 | `notes`       | Freeform       | Catch-all for content that doesn't fit elsewhere. Use sparingly. `--justification` composes its `## Justification` heading in here. Shown with `task show --notes`. | `--notes` (inline) / `--notes-file <path>` on `task update`. |
 | `outcome`     | Short to long  | The result — the deliverable. **Required** when completing a `research`/`brainstorm` task (the outcome IS the deliverable). Optional on `confirm`/`assume`. Shown with `task show --outcome`. | `--outcome` (inline) / `--outcome-file <path>` on `task confirm` / `task assume` / `task update`. |
-| `reason`      | Short          | Why the task ended. **Required** on every abandonment — `declined`, `obsolete` and `superseded` alike — unless one is already stored. Kept apart from `outcome` so abandoning findings work never overwrites the findings. Shown with `task show --reason`. | `--reason` (inline) / `--reason-file <path>` on `task update` / `task decline`; `--outcome` given *with* an abandonment status, and on `task replace`, is stored as the reason. |
+| `reason`      | Short          | Why the task ended. **Required** on every abandonment — `declined`, `obsolete` and `superseded` alike — given with that command; one already stored does not count. Kept apart from `outcome` so abandoning findings work never overwrites the findings. Shown with `task show --reason`. | `--reason` (inline) / `--reason-file <path>` on `task update` / `task decline`; `--outcome` given *with* an abandonment status, and on `task replace`, is stored as the reason. |
 
 `plan`, `analysis`, `outcome`, `reason` and `notes` are **content**: each is one row per task in the database under that name, and the name is also the CLI flag, the `task show` heading and the mirror file (`.endless/tasks/e-NNNN/<name>.md`). `title` and `description` are columns on the task itself.
 
@@ -473,8 +473,8 @@ every title — a real cost for a fact one `task show` away.
 **Every abandonment requires a reason.** A task can end three ways without
 having shipped — `declined`, `obsolete`, `superseded` — and all three are
 refused without a reason: `--reason`, or `--outcome` given with the status,
-which is stored as the reason. A reason already stored on the task satisfies
-it. The requirement is on the STATUS, not on a verb, so it holds whichever
+which is stored as the reason. It must come with the command that closes the
+task: a reason already stored does not satisfy it. The requirement is on the STATUS, not on a verb, so it holds whichever
 route you take: `task update`, `epic update`, `task decline`, `task replace`.
 
 `superseded` is included even though it already needs a `replaced_by` relation.

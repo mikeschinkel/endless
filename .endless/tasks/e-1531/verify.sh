@@ -12,7 +12,7 @@
 # cost a column.
 #
 # After: task_content rows under names from the taskcontent Go enum; `reason`
-# is split from `outcome`; the guard honours a stored reason; executor and
+# is split from `outcome`; every closing move must give its own reason; executor and
 # projector share one content map; every name is a flag, a heading and a mirror.
 #
 #   endless task verify E-1531
@@ -209,8 +209,11 @@ C="$(new_task "Add a thing declined later" "c")"
 need_id "${C}"
 human task update "${C}" --reason "written before the decision" >/dev/null
 out="$(human task update "${C}" --status declined)"; rc=$?
-assert_eq "a stored reason satisfies the abandonment guard" "0" "${rc}"
-assert_eq "…and is the reason the task ends with" "written before the decision" \
+assert_eq "a stored reason does NOT satisfy the abandonment guard" "nonzero" \
+    "$([[ ${rc} -ne 0 ]] && echo nonzero || echo zero)"
+out="$(human task update "${C}" --status declined --reason "given with the decline")"; rc=$?
+assert_eq "…the reason given with the closing command is accepted" "0" "${rc}"
+assert_eq "…and is the reason the task ends with" "given with the decline" \
     "$(json_field "${C}" reason)"
 
 D="$(new_task "Add a thing with only findings" "d")"

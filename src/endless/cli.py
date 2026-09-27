@@ -3013,8 +3013,7 @@ def task_add(title, description, description_file, plan_text, plan_file, analysi
               help="Load the outcome from a file")
 @click.option("--reason", default=None,
               help="Why the task ended (inline; required by any status that ends "
-                   "the task unshipped: declined, obsolete, superseded — unless "
-                   "one is already stored)")
+                   "the task unshipped: declined, obsolete, superseded)")
 @click.option("--reason-file", default=None,
               help="Load the reason from a file")
 @click.option("--notes", "notes_text", default=None,
@@ -4052,7 +4051,7 @@ def epic_show(item_ids, no_description, show_analysis, show_plan_field,
               help="Load the outcome from a file")
 @click.option("--reason", default=None,
               help="Why the epic ended (inline; required by declined, obsolete, "
-                   "superseded unless one is already stored)")
+                   "superseded)")
 @click.option("--reason-file", default=None,
               help="Load the reason from a file")
 @click.option("--notes", "notes_text", default=None,
