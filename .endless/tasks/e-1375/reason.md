@@ -1,0 +1,1 @@
+Superseded by E-1378. This task gated worktree auto-create on type=decision as a band-aid for the shared-tasks-table problem. With decisions in their own table, 'task update --text' won't touch decision rows at all; the gate becomes unnecessary.

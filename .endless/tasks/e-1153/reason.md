@@ -1,0 +1,1 @@
+Obsoleted per E-1815: the --tier design this shorthand wraps is being replaced by the complexity/risk axes (E-1813). Refile if the shorthand is wanted against the new model.

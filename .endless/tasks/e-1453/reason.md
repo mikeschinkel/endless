@@ -1,0 +1,1 @@
+Obsoleted by E-1459. The migrate-db command and its --dry-run flag, and the DB()-auto-migrate behavior, were all removed. DB() now only execs schema.SQL (no migration), so the dry-run-silently-applies bug cannot occur.

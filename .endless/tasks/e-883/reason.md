@@ -1,0 +1,1 @@
+Superseded by E-1378 (extract decisions to dedicated table). Original 'design decision recording/querying' question already answered by the type=decision implementation (E-908) and the endless decision CLI (E-927); the remaining work is the storage migration, which E-1378 owns.

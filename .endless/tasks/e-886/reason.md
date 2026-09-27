@@ -1,0 +1,1 @@
+Superseded by E-1378. Original 'design ADR-style capture' framing was answered by the type=decision implementation (E-908) plus the endless decision CLI (E-927); E-1378 finishes the migration to a dedicated decisions table.

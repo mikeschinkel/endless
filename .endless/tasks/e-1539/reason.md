@@ -1,0 +1,1 @@
+Marked obsolete: the epic row arrives in E-1538's seed values (id=4, slug='epic', label='Epic'); confirming its presence was part of E-1538's assumed-status diligence, not standalone work. This task was unnecessary granularity in the §13 decomposition of E-1537. Also: I worked this task without claiming it from E-1537's seat — a claim-discipline violation flagged on E-1537.

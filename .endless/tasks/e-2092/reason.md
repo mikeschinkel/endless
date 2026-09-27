@@ -1,0 +1,1 @@
+Folded into E-2023 rather than carried as its own task (ED-1550: several symptoms of one cause are one task; filing is the exception, and the owning task was still live). The runner now exports ENDLESS_VERIFY_DIR to both suite forms, and .endless/tasks/e-1603/verify.toml uses it instead of hand-writing its own directory — in the same change that moved the suites.

@@ -1,0 +1,1 @@
+Not a separate task: a bug E-698 introduced, caught while E-698's session and worktree were still live. Folded back into E-698 via revisit. Filing it separately was task proliferation.

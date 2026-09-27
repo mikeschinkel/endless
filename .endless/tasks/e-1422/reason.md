@@ -1,0 +1,1 @@
+Subsumed by E-1426. The companion-file gap E-1422 reports is one of three live incidents (with E-1408 and E-1419) that E-1426 explicitly cleans up by retiring companion files entirely. Every Claude hook event now UPSERTs sessions.process directly, so a pane with no prior record gets one on the next tool call — recovery IS the next hook fire, no recovery verb needed.

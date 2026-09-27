@@ -1,0 +1,1 @@
+Already shipped on main: `endless task show` has `--analysis` and `--all-fields` flags and renders the `— Analysis —` section (confirmed 2026-06-23). The gap was read from stale worktree source — this branch predates the landed change. No work needed.

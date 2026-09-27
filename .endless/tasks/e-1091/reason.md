@@ -1,0 +1,1 @@
+Replaced by snapshot-feature deletion. No snapshots, no commit policy needed.

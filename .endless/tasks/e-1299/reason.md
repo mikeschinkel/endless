@@ -1,0 +1,1 @@
+Synthetic test probe used to verify sibling-fallback ledger plumbing during E-1287/E-1294 development. Not real work; superseded by the actual confirmations of E-1287, E-1294, E-1317.

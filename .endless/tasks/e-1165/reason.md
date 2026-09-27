@@ -1,0 +1,1 @@
+Obsolete: start_item no longer exists — E-1232 renamed 'task start' to 'task claim'; the command is now a hidden deprecated stub (cli.py:1246), so there is nothing to port. claim_item's residual Python task read (task_cmd.py:2372) and all other non-task Python SQL belong to a broader 'port all Python DB access to Go' effort being scoped, not this start-specific ticket.

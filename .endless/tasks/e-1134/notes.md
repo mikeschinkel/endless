@@ -1,0 +1,1 @@
+It is quite possible that the decision was misconstrued based on a preference for specific properties to write to the main config, specifically verbs, which ironically now get written to verbs.json instead of config.json.

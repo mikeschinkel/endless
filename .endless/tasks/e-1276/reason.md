@@ -1,0 +1,1 @@
+Superseded by E-1445, which implements the decided change: task update --text never creates a worktree (plan materializes only at claim). The 'should the default flip?' question E-1276 deferred is now answered.

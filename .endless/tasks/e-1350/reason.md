@@ -1,0 +1,1 @@
+Obsolete: shipped elsewhere. This task was the read-side gap for tasks.analysis (E-1329 had added the write side). 'endless task show --analysis' and '--all-fields' both ship today, with tests/test_analysis_show.py covering the rendering. The task never left 'submitted' — the work happened under another task without closing this one.

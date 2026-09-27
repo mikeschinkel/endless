@@ -1,0 +1,1 @@
+Obsoleted by ED-1560, with E-1483. Its ownership gate is specified in terms of consulting goal_task_id, a column that is no longer being added: under the write-once invariant a session's task never changes, so the spawn gate has a single, stable value to consult. E-1967/E-1968 carry the surviving spawn-guard work.

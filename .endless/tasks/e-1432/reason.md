@@ -1,0 +1,1 @@
+Symptom required env -u XDG_CONFIG_HOME from a worktree cwd, which is the implicit-routing workaround E-1429 exists to eliminate. After E-1429 lands, the original repro can't happen; any equivalent issue under explicit --db main from a worktree cwd is E-1429's correctness scope, not a separate fix. File a new ticket with fresh evidence if a writer bug surfaces post-E-1429.

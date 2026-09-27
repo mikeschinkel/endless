@@ -1,0 +1,1 @@
+Same scope as E-1367 (consolidate endless-* Go binaries into single endless-go with subcommands), which landed first. cmd/ now contains only endless-go; consolidation complete.

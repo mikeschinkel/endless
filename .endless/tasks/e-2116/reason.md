@@ -1,0 +1,1 @@
+Junk row from an E-1934 gate probe that wrongly assumed the command would refuse. No content, nothing to keep.

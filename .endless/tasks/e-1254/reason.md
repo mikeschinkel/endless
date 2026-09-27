@@ -1,0 +1,1 @@
+Moot: the output it wanted corrected no longer exists. E-1254 was 'change claim's eswt recommendation to esu'; E-2106 deleted the whole 'To work on this task, choose one:' block, the eswt line in it, and the _eswt_defined_in_user_shell probe. With E-1180 obsoleted there is no eswt to recommend instead of, either. Nothing left to change.

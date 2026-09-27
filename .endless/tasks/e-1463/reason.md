@@ -1,0 +1,1 @@
+Complexity we don't currently envision needing. The action-enum redesign of session status displays actions rather than emitting runnable verbs, so this interactive status-transition picker is no longer a component of that view. Detached from E-1461 and declined; revisit if our determination of its usefulness changes.

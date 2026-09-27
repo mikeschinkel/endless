@@ -1,0 +1,1 @@
+Obsolete per Mike (2026-09-26): envisioned long ago, but the use-cases it targeted are now handled by more explicit mechanisms that do not rely on hooks matching regex patterns or user keywords, which produce false positives. The pivot phrases seeded for it were never read by anything, and endless phrase — the command that edits them — is being removed for the same reason.
