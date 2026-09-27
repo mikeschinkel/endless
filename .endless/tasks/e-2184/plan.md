@@ -1,0 +1,11 @@
+Parallel worktrees that each add a migration take the same next integer; goose refuses the duplicate at provider construction (every connect), and a higher number landing before a lower one surfaces as E-2020's "database is ahead of your binary". Today the only guard is a hand rename. Make `endless worktree land` refuse the collision and tell the agent exactly how to fix it, so versions stay dense, strict-order integers and land never rewrites verified code (see the E-2182 decision).
+
+Gate (hybrid — common case easy, uncommon case possible):
+- Built-in check in Go: a project declares its migrations directory; land refuses when the branch adds files there AND main has gained files there since the branch's merge-base. Tool-agnostic — a git diff over a configured path, no knowledge of goose/Alembic/Prisma.
+- Optional project hook `.endless/hooks/pre-land.sh` for projects whose needs the built-in check doesn't cover. It can veto a land and supply its own explanation; land renders it.
+- One refusal renderer for both: a plain one-line human summary, then a clearly marked block the human can paste to the agent. The block must read cleanly to a human too (no parameter soup): which migration(s) landed on main, what the branch's migration is numbered now and must become, re-check that it still holds alongside what landed, reset the sandbox (`endless sandbox reset`, see E-1608 — goose tracks versions by number, so a renumbered migration would be skipped or double-applied on a sandbox that already ran it), re-verify, land again.
+- When an agent runs land (the user may ask it to), add the agent top/bottom lines as `task show`/`task add` do, so `| head` / `| tail` still show the verdict.
+
+Endless's own guard (same root cause, folded in): a Go test over internal/schema/migrations asserting every .sql/.go version is unique, versions are contiguous from 1, every migrations.Go() entry has a matching file, and each NewGoMigration literal equals its filename prefix (nothing stops 00006_x.go registering 5 today). Moves the failure from "every command after land" to `just test`.
+
+Endless declares its own migrations directory (internal/schema/migrations) as the first user of the built-in check.
