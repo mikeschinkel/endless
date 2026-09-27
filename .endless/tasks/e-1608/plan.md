@@ -1,59 +1,19 @@
-# Plan — E-1608: reset the canonical sandbox at verify-run start (via project hook)
+# Plan — E-1608: verify always starts from a fresh sandbox
 
-Reshaped from the original "ephemeral per-run sandboxes / concurrency gap." Per
-ED-1534 and design discussion: keep one canonical sandbox per worktree (E-1655);
-a self-dev verify run just needs that sandbox in a KNOWN state, not the agent's
-dev-time cruft. Concurrent verify runs are a non-concern under one-session-one-task
-and are explicitly deferred. The generic runner stays app-agnostic (E-1603) — the
-Endless-specific reset lives in a project hook, never in verify tooling.
+Re-specced by E-2182. Replaces the earlier "project hook, never in verify tooling" plan.
 
 ## Deliver
 
-1. **A project-owned reset hook (Endless self-dev).** Endless supplies a hook
-   that resets its canonical worktree sandbox to a known state — empty schema,
-   then the E-1606 seed. The reset logic is Endless-specific and lives in the
-   hook (project-owned); the runner contains none of it.
-
-2. **Fire the project provision hook at the provision step.** E-1603's provision
-   precondition (a no-op at Tier 0) fires the project's provision hook so the
-   reset runs before the checks. Mechanism decision (deferred): reuse the existing
-   project-level `setup` machinery (E-1611: `.endless/verify.toml` setup running a
-   `.endless/verify/` script) vs. a distinct `.endless/hooks/` provision hook.
-   Lean: reuse existing machinery — add no new mechanism.
-
-3. **verify.toml snapshot opt-in — stubbed.** Add an opt-in field for "snapshot
-   the sandbox before reset" so the agent can preserve pre-verify state. It records
-   the choice and no-ops (with a clear "not yet available" note) until the sandbox
-   snapshot epic (E-1790) delivers save/restore.
-
-## Deferred mechanism (coordinate with E-1667, do not solve here)
-
-Self-dev checks must all target the *same* reset sandbox: `endless-go` resolves it
-by cwd self-detect, the Python CLI by `XDG_CONFIG_HOME` — today those can diverge.
-Aligning them so both land on the reset canonical sandbox is E-1667's routing
-domain; this plan states the requirement and consumes whatever routing E-1667
-settles, rather than inventing its own.
+1. **`endless sandbox reset`** (user-facing; lands on the Go CLI per E-1063). Clears the worktree's canonical sandbox, applies Endless's standard contents, then runs the project's seeding hook. The single front door for resetting a sandbox — callers never invoke the hook directly.
+2. **Verify calls it first.** `endless task verify` runs `sandbox reset` before any check, every run. Built into the command, not the suite script.
+3. **Snapshot opt-in stays a stub** in verify.toml until E-1790 delivers save/restore.
 
 ## Boundaries
 
-- One canonical sandbox per worktree (E-1655 intact). NO per-run/ephemeral
-  sandboxes; NO new sandbox path namespaces.
-- NO concurrency isolation (deferred; revisit only if one-session-one-task stops
-  holding).
-- Runner stays generic — the Endless reset is a project hook (E-1603 boundary).
-- Snapshot save/restore itself is E-1790, not here.
+- One canonical sandbox per worktree (E-1655). No per-run ephemeral sandboxes, no concurrency isolation.
+- Removing the stale XDG freshness claim in internal/verifycmd/verify.go belongs to the XDG phase-out task, but this task must not rely on XDG isolation for freshness.
+- Snapshot save/restore itself is E-1790.
 
-## Depends on / relates
+## Why the re-spec (E-2182)
 
-- E-1606 (seed) — the "known state" contents.
-- E-1790 (snapshot epic) — the opt-in field is a stub until it lands.
-- E-1655 (canonical single sandbox, preserved) and E-1667 (routing, deferred).
-
-## Verify — `tests/tasks/e-1608-verify.sh` (esu header; exit 0/1/2)
-
-- Seed a dummy row into the canonical sandbox, run a verify, then assert the
-  sandbox is back to the known state (schema + seed) — the pre-run cruft is gone.
-- Assert the reset ran via the project hook (e.g. a marker the hook writes), not
-  runner-internal logic.
-- The verify.toml snapshot field parses and is accepted (stub: recorded, no-op)
-  and does not block the run.
+The earlier spec kept the reset out of verify tooling to uphold E-1603's app-agnostic boundary. New information: verify silently lost its fresh DB when E-1964 moved the DB out of XDG_CONFIG_HOME, because freshness came for free from XDG isolation rather than being designed in. Freshness is now an explicit verify responsibility, delivered through an endless command (not a direct hook call) so gates added later cannot be bypassed. `endless-go sandbox init --mode worktree` alone is not enough: it seeds only Endless's own rows. The "sandbox is the project's business" wording is a guideline — Endless may add standard contents. Seeding cost is paid every run by design; revisit only if relying on state between runs becomes a real need. Also consumed by E-2184: after a migration renumber the agent resets its sandbox, because goose tracks applied migrations by number.
