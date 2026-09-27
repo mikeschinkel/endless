@@ -37,6 +37,12 @@ def isolated_env(tmp_path, monkeypatch):
     # --db) so get_db() and Go-subprocess threading both target the tmp DB.
     monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", config_dir)
 
+    # `--no-session` sets config.NO_SESSION as a process global (E-1444). A test
+    # that invokes the CLI with it would otherwise leave every later test
+    # emitting as an unattributed actor — which is how test_question_cmd.py
+    # broke test_report_reminder.py's claim-gated transitions when run first.
+    monkeypatch.setattr(config, "NO_SESSION", False)
+
     # Set XDG_CONFIG_HOME so Go subprocesses (e.g. endless-event invoked by
     # event_bridge.emit_event) resolve to the same isolated DB as the Python
     # in-process code. monkeypatch.setattr only affects the current process.
