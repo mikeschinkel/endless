@@ -255,8 +255,7 @@ the guide (tasks, orchestration, index, sessions) and the shipped suite rules
 (`SUITE_RULES` and `.endless/tasks/CLAUDE.md`, with Mike's permission) updated
 for five mirrors and the reason split; the unused `MIRROR_PATHSPECS` removed.
 
-Open: two lessons landed during the work ("Don't cite the decisions table as
-design precedent", "Require the reason on every closing move"). §2 cites
-`decision obsolete` as precedent, and the build honours a stored reason. If the
-second lesson means the reason must be given on every closing move, the change
-is the two fallbacks to the stored reason in `update_plan` and `replace_task`.
+**Stored reason does not count** (Mike, overriding §2's payoff). Every closing
+move must give its reason in the same command; a reason already stored never
+satisfies the guard. The split itself stands — it keeps a research task's
+findings from being overwritten by why it was abandoned.
