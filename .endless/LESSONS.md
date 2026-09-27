@@ -6875,3 +6875,7 @@ Decision tables are being phased out in favor of task tables. Don't use the deci
 ### [2026-09-27] A stored reason never satisfies the abandonment guard
 Every closing move (declined, obsolete, superseded) must be given its reason in the same command, even when a reason is already stored on the task. Do not let a previously stored reason satisfy the guard — E-1531's plan proposed honouring a stored reason; Mike overruled it: always require it again.
 - **Project**: endless
+
+### [2026-09-27] Agent-vs-human detection is reliable in Endless
+Do not call detecting whether an agent or a human ran a command 'fragile'. Endless has functions for it and relies on it throughout (e.g. task add / task show print top and bottom lines only for agents). Check for existing mechanisms before judging an approach fragile.
+- **Project**: endless
