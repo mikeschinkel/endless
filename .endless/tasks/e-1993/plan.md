@@ -15,7 +15,7 @@ the read-through (E-1994).
 - `description` → 256 characters. Describes the task; explicitly does not
   substitute for a plan.
 
-Both enforced at `task add` and `task update`, with an error naming the right
+Both enforced at `task add` and `task update` as hard refusals (decided), with an error naming the right
 destination rather than only the limit — a description that is too long should
 say where the excess belongs, not "256 char limit exceeded". The error message is
 the teaching surface; treat its wording as part of the work. Per E-2187's survey,
@@ -124,7 +124,7 @@ refusal fires the read-through (E-1994). Evaluation happens at the moment of
 need, on fresh context, one task at a time. No migration pass, no flood, no
 stale primed sessions.
 
-**Titles and descriptions are the exception (see Open questions).** E-2187
+**Titles and descriptions are the exception: they are applied in bulk (decided).** E-2187
 already produced a reviewed-by-sample proposal for every task:
 `.endless/tasks/e-2187/rewrites.jsonl` — proposed title and description, verbatim
 classified segments, the text each displaced segment moves to (`context`,
@@ -168,28 +168,12 @@ before/after examples, and define `context` beside the other content names.
 - A material plan edit on a pre-work task drops approval; a description edit
   does not.
 - `--keep-status` still suppresses every inference.
-- Existing over-length tasks are untouched and still readable.
+- Nothing is truncated: existing over-length tasks stay readable until the bulk
+  apply rewrites them.
+- E-2187's rewrites are applied in bulk after Mike reviews a sample; rows whose
+  `source_hash` no longer matches are reported, not applied, and no task's status
+  changes.
 - Guide and CLAUDE.md describe the new model with no stale references to
   `text`, the 100/1000/1024 limits, "what and why", or description-as-spec, and
   carry E-2187's "is NOT" rules.
 - `go build/vet/test ./...` and `just test` pass.
-
-## Open questions
-
-**Apply E-2187's rewrites in bulk, or lazily at the spawn gate?** Bulk makes every
-list view consistent at once and the proposal is already computed; its cost is a
-one-off script and a sampled review. Lazy keeps §5's single mechanism but leaves
-old and new shapes side by side in every listing for as long as grandfathered
-tasks stay unworked — which, for terminal tasks, is forever. Recommend bulk, after
-a sample review, for titles and descriptions only; plans stay lazy.
-
-**Should the length limits be hard refusals or warnings?** Refusal is
-unbeatable and teaches immediately, but it will interrupt an agent mid-flow and
-some legitimate titles genuinely need 65 characters. A warning preserves flow
-but is ignorable, and ignorable limits are how we got here. Recommend hard
-refusal; flagging because it is the kind of friction that is annoying in a way
-worth knowing about before it ships. E-2187's data supports refusal: all 1,419
-titles were rewritten within 60 with p95 at 59, so a genuine 65-character title
-was not found.
-
-
