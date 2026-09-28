@@ -6879,3 +6879,7 @@ Every closing move (declined, obsolete, superseded) must be given its reason in 
 ### [2026-09-27] Agent-vs-human detection is reliable in Endless
 Do not call detecting whether an agent or a human ran a command 'fragile'. Endless has functions for it and relies on it throughout (e.g. task add / task show print top and bottom lines only for agents). Check for existing mechanisms before judging an approach fragile.
 - **Project**: endless
+
+### [2026-09-28] Endless's standard contents exclude self_dev state
+When deciding what Endless provides to every project (standard contents, defaults), exclude anything gated on self_dev: only Endless's own repo sets that flag, so it is never PRODUCT behavior. Endless-specific state (e.g. the sandbox endless.db) belongs in Endless's own project hook, not in Endless's standard behavior.
+- **Project**: endless
