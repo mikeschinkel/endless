@@ -33,7 +33,7 @@ const SandboxGitignore = `# Endless per-worktree sandbox: isolated state this wo
 // a task needs in order to be verified, and copying them in is the exact
 // failure a sandbox exists to prevent — a worktree quietly pointed at the real
 // database or a live account. What goes in here is declared by the project, in
-// its own post-worktree-create hook.
+// its own seed-sandbox hook, which Reset runs.
 func EnsureSandboxDir(dir string) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("creating sandbox dir %s: %w", dir, err)

@@ -88,10 +88,10 @@ func initCmd(args []string) {
 // a name that could disagree with cwd is a name that eventually does.
 //
 // This is a SEEDING verb, and seeding is the project's business rather than
-// endless's: endless creates an empty sandbox at worktree-create and runs the
-// project's post-worktree-create hook, and it is that hook — endless's own, in
-// endless's repo — that calls this. A downstream project calls whatever fills
-// ITS sandbox instead, and never this.
+// endless's: `endless sandbox reset` clears the sandbox and runs the project's
+// seed-sandbox hook, and it is that hook — endless's own, in endless's repo —
+// that calls this. A downstream project calls whatever fills ITS sandbox
+// instead, and never this.
 //
 // Creating the directory here is not provision-on-miss: an explicit init is
 // exactly the moment to build what is missing, which is what makes it safe for

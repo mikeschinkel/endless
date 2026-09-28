@@ -4990,6 +4990,28 @@ def db_path():
 db_path.stdout_is_captured = True
 
 
+@main.group("sandbox")
+def sandbox_cmd():
+    """Manage the current worktree's sandbox."""
+    pass
+
+
+@sandbox_cmd.command("reset")
+def sandbox_reset():
+    """Clear this worktree's sandbox and reseed it.
+
+    Removes everything in the sandbox, writes its self-ignoring .gitignore,
+    then runs the project's .endless/hooks/seed-sandbox.sh. Prints the sandbox
+    path. `endless task verify` runs this before every run.
+    """
+    from endless.sandbox_cmd import run_reset
+    run_reset()
+
+
+# Captured, not read: $(endless sandbox reset) prints the sandbox path.
+sandbox_reset.stdout_is_captured = True
+
+
 # Hidden `endless internal` group: debug surfaces that shell through to
 # endless-go internals. Hidden so they don't clutter the main help; reachable
 # by name for debugging (E-1565).

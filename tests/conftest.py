@@ -199,6 +199,19 @@ def stub_cli_execvp(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def stub_sandbox_reset_after_create(monkeypatch, request):
+    """E-1608: worktree creation seeds the sandbox by exec'ing
+    `endless-go sandbox reset`. Stub it so claim tests don't depend on
+    whichever endless-go is on PATH. Tests of the call itself opt out with
+    the `@pytest.mark.no_sandbox_reset_stub` marker.
+    """
+    if request.node.get_closest_marker("no_sandbox_reset_stub"):
+        return
+    from endless import sandbox_cmd
+    monkeypatch.setattr(sandbox_cmd, "reset_after_create", lambda _wt: None)
+
+
+@pytest.fixture(autouse=True)
 def stub_current_session_id(monkeypatch, request):
     """E-1401: provide a deterministic session id so emit_event's attribution
     gate doesn't fire in tests.

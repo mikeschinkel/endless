@@ -19,6 +19,8 @@ func Run(args []string) {
 		enterCmd(args[1:])
 	case "init":
 		initCmd(args[1:])
+	case "reset":
+		resetCmd(args[1:])
 	case "list":
 		listCmd(args[1:])
 	case "prune":
@@ -43,6 +45,7 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  enter   [--clone] <name>")
 	fmt.Fprintln(w, "  init    --mode worktree [--force]           (this worktree's sandbox)")
 	fmt.Fprintln(w, "  init    [--mode empty|seed|clone] [--force] <name>")
+	fmt.Fprintln(w, "  reset                                        (clear + reseed this worktree's sandbox)")
 	fmt.Fprintln(w, "  list")
 	fmt.Fprintln(w, "  prune   [--older-than DURATION]")
 	fmt.Fprintln(w, "  destroy [--force] [--if-exists] <name>")

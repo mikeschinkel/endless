@@ -60,6 +60,7 @@ A fresh worktree often needs project-specific setup endless can't bake in — Go
 - **Invocation.** The script is exec'd directly (its own shebang) with **cwd = the new worktree** and **`$1` = the worktree path**. No shell-string interpolation.
 - **Failure is non-fatal and loud.** If the hook exits non-zero, endless keeps the worktree and prints a warning naming the script, exit code, worktree path, and the command to re-run it.
 - **The hook must be idempotent / re-runnable.** Because there's no teardown, completing a failed bootstrap is just re-running the hook. Write it so a second run on an already-bootstrapped worktree is a safe no-op (or a clean regenerate).
+- **Seeding is not this hook's job.** Put what goes into the worktree's sandbox in `seed-sandbox.sh` (below), which runs after this hook and before every verify. This hook runs once per worktree; that one runs on every `endless task verify`.
 
 Each piece of a task's content — plan, analysis, outcome, reason, notes — has a **document mirror** on the main checkout, named after it: `.endless/tasks/e-NNNN/plan.md`, `analysis.md`, `outcome.md`, `reason.md`, `notes.md`, in the same directory as that task's `verify.sh`. The database row is the source of truth; the file is a projection of it, written so a human can read it on GitHub without a database.
 
@@ -88,14 +89,23 @@ Three properties, and they are the whole design:
 - **Its contents are yours, not endless's.** Endless creates an empty directory
   and writes a `.gitignore` containing `*` so the sandbox keeps itself out of
   git without your `.gitignore` needing an entry. What goes in is declared by
-  your `post-worktree-create.sh`, which endless runs immediately afterwards.
-  Endless seeds nothing: it cannot know which of a checkout's files your task
-  needs, and copying them in is the exact accident a sandbox exists to prevent.
+  your `.endless/hooks/seed-sandbox.sh`, run with **cwd = the worktree**,
+  **`$1` = the worktree path** and **`$2` = the sandbox path**. Endless adds
+  nothing else: it cannot know which of a checkout's files your task needs,
+  and copying them in is the exact accident a sandbox exists to prevent.
+- **It is reset, not accumulated.** `endless sandbox reset` clears the
+  sandbox, rewrites the `.gitignore`, then runs your `seed-sandbox.sh` from the
+  worktree's own checkout. Endless runs it after `post-worktree-create.sh` when
+  a worktree is created, and `endless task verify` runs it before every run, so
+  a suite always starts from the seeded state and never from what the last run
+  left behind. It is the only way the seed hook runs; run it yourself to start
+  over. A seed hook that fails fails the reset — and the verify.
 
 Nothing creates a sandbox on demand. If one is missing, the command that needed
 it refuses rather than quietly building one, because a directory endless expects
 to exist and does not is worth understanding rather than papering over.
-`endless worktree sandbox [E-NNNN]` names the path and says how to recreate it.
+`endless worktree sandbox [E-NNNN]` names the path; `endless sandbox reset`
+recreates it.
 
 **For a tree that cannot take extra files** — one whose worktree contents are
 themselves a git repository, a build that must stay hermetic, CI that runs

@@ -12,10 +12,10 @@ import (
 // A sandbox is isolated per-worktree state that a task is exercised against: a
 // throwaway database, a fixture spreadsheet, an API document, a credentials
 // file that must not be the real one. Its CONTENTS are the project's business —
-// endless creates an empty directory and the project's post-worktree-create
-// hook fills it — so what this file owns is only the LOCATION, and there is one
-// answer for every project rather than one for endless and none for anybody
-// else.
+// endless creates an empty directory and the project's seed-sandbox hook fills
+// it (via `endless sandbox reset`) — so what this file owns is only the
+// LOCATION, and there is one answer for every project rather than one for
+// endless and none for anybody else.
 //
 // The sandbox lives INSIDE its worktree, which makes the path pure composition:
 // a fixed relative segment from a directory the caller already has. No

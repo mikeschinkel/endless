@@ -11,6 +11,7 @@ var (
 	ErrIsolatingEnv        = errors.New("preparing isolated HOME/XDG_CONFIG_HOME")
 	ErrNoSuiteForTask      = errors.New("no verification suite found for task (looked for verify.toml and verify.sh)")
 	ErrScriptStart         = errors.New("verify.sh suite failed to start")
+	ErrResettingSandbox    = errors.New("resetting the worktree's sandbox before the run")
 
 	// The own-task-only refusal (E-2023). The sentinel is what callers match
 	// on; the message a user reads is rendered by ForeignLandedSuite, which

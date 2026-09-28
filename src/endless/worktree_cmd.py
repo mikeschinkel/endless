@@ -930,16 +930,7 @@ def sandbox_dir(task_id: str | None) -> None:
 
     path = config.sandbox_root(wt_dir)
     if not path.is_dir():
-        project_root = config.enclosing_project_root(wt_dir)
-        if project_root is not None and config.project_is_self_dev(project_root):
-            remedy = (
-                "Recreate and seed it from the worktree with:  just dev-sandbox-init"
-            )
-        else:
-            remedy = (
-                "Recreate the directory, then re-run the project's "
-                ".endless/hooks/post-worktree-create.sh to fill it."
-            )
+        remedy = "Recreate and seed it from the worktree with:  endless sandbox reset"
         raise click.ClickException(
             f"{canonical}'s sandbox is missing:\n\n"
             f"    {path}\n\n"
@@ -1980,8 +1971,9 @@ def _bootstrap_task_worktree(
     """Post-`git worktree add` bootstrap shared by claim and session recovery.
 
     Writes the companion marker (`.endless/worktree.json` + scratch dir),
-    creates the worktree's sandbox, then runs the project's post-worktree-create
-    hook (go-work-init, bin copy, claude-settings-init, ...).
+    creates the worktree's sandbox, runs the project's post-worktree-create
+    hook (go-work-init, bin copy, claude-settings-init, ...), then seeds the
+    sandbox with `endless sandbox reset` (E-1608).
 
     It materializes NO document mirrors (E-2137). Those live on main, where
     `task update` writes them; a worktree copy would be a second home for
@@ -2023,6 +2015,10 @@ def _bootstrap_task_worktree(
         # `~`, and saying so would be noise on a worktree that was created fine.
         pass
     _run_post_worktree_create_hook(project_root, wt_dir)
+    # E-1608: seed through the one front door, after the create hook (which
+    # may build the binary the seed hook uses).
+    from endless.sandbox_cmd import reset_after_create
+    reset_after_create(wt_dir)
 
 
 def recreate_dropped_worktree(
@@ -2403,7 +2399,8 @@ def provision_worktree_sandbox(worktree_path: Path) -> Path:
     files a task needs, and copying them in is the exact failure a sandbox
     exists to prevent: a worktree quietly pointed at the real database or a live
     account. What goes in is the project's declaration, made in its own
-    post-worktree-create hook, which the caller runs immediately after this.
+    seed-sandbox hook, which `endless sandbox reset` runs once the worktree's
+    bootstrap is done (E-1608).
 
     Pure Python, no shellout. Provisioning is now on the path of every worktree
     for every project, so it must not depend on a Go binary being installed and

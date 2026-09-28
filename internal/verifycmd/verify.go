@@ -12,6 +12,11 @@
 // under XDG_CONFIG_HOME, isolating XDG happens to give an Endless-as-SUT suite a
 // fresh DB for free — that is incidental to the isolation, not runner logic.
 //
+// Every run starts from a fresh sandbox (E-1608): before any setup step or
+// check, the runner resets the worktree's canonical sandbox through the same
+// `sandbox reset` a user runs. Freshness is designed in here rather than
+// inherited from HOME/XDG isolation.
+//
 // Tier-0 boundary: a suite that declares needs (substrate escalation, Stage 3+)
 // or seed (E-1606) fails loudly rather than run something weaker than asked.
 package verifycmd
@@ -118,6 +123,10 @@ func run(id string, keep bool) (code int, err error) {
 				"suites_found", suiteCount(manifests, scripts), "root", root)
 			goto end
 		}
+		err = resetSandbox(root)
+		if err != nil {
+			goto end
+		}
 		code, err = runScriptSuite(id, script, root, keep)
 		goto end
 	}
@@ -131,6 +140,11 @@ func run(id string, keep bool) (code int, err error) {
 	}
 	if len(eff.Seed) > 0 {
 		err = doterr.NewErr(ErrSeedNotSupported, "task", id, "seed", strings.Join(eff.Seed, ", "))
+		goto end
+	}
+
+	err = resetSandbox(root)
+	if err != nil {
 		goto end
 	}
 
