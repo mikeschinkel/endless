@@ -6903,3 +6903,7 @@ Before putting a concern in front of Mike, check whether it actually matters —
 ### [2026-09-28] Use keep-status instead of worrying about resets
 A description or plan edit that would trigger a status inference is not a reason to skip the edit: task update --keep-status suppresses every inference. Make the edit with --keep-status instead of leaving the field stale or reporting the reset as a blocker. This was the second time in one session the same non-issue cost Mike attention.
 - **Project**: endless
+
+### [2026-09-28] Do what Mike asked even when a status would change
+Never skip or water down a requested edit because it would change a task's status, and never report the status change as a caveat. Status inferences exist to take work off Mike, not to be worried at; use --keep-status when holding status is right and otherwise let the inference happen silently. Raising it again after two lessons in one session was infuriating.
+- **Project**: endless
