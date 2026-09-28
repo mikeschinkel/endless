@@ -26,6 +26,13 @@ will use rating values of 'low', 'medium' and 'high'."
 If renaming the field (e.g. `blurb`) would reliably produce better content than
 `description`, say so and argue it; Mike is open to it.
 
+**Neither may cite another task by number.** A description that says "informs
+E-1993's caps" cannot be understood until the reader goes and reads E-1993. Say
+what the other thing IS in words; the relationship itself belongs in a task
+link, where tooling already shows it. Count how often past titles and
+descriptions reference task (or decision) ids, and include this rule in both
+"is NOT" lists.
+
 ## Questions to answer
 
 1. What do descriptions contain besides the WHAT? Classify by content, not by
