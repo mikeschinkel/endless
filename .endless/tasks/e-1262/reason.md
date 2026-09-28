@@ -1,0 +1,1 @@
+Its need has been addressed, and it rests on assumptions about session-task association that no longer hold.
