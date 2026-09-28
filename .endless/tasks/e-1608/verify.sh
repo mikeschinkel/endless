@@ -5,7 +5,7 @@
 # assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-1608: every verify run starts from a fresh sandbox, via `endless sandbox
-# reset` (clear → .gitignore → the worktree's .endless/hooks/seed-sandbox.sh).
+# reset` (clear → .gitignore → main checkout's .endless/hooks/seed-sandbox.sh).
 #
 # Everything runs through this branch's own bin/endless-go against throwaway
 # worktree layouts. Whichever runner started THIS suite may be an older install
@@ -38,25 +38,26 @@ section "endless-go sandbox reset"
 
 fwt="${fx}/proj/.endless/worktrees/e-7"
 fsb="${fwt}/.endless/sandbox"
-mkdir -p "${fsb}" "${fwt}/.endless/hooks"
+fhooks="${fx}/proj/.endless/hooks"
+mkdir -p "${fsb}" "${fhooks}"
 touch "${fsb}/stale"
 printf '#!/usr/bin/env bash\nprintf "%%s|%%s\\n" "$1" "$2" > "$2/seeded"\n' \
-    > "${fwt}/.endless/hooks/seed-sandbox.sh"
-chmod +x "${fwt}/.endless/hooks/seed-sandbox.sh"
+    > "${fhooks}/seed-sandbox.sh"
+chmod +x "${fhooks}/seed-sandbox.sh"
 
 out=$(cd "${fwt}" && "${BIN}" sandbox reset 2>/dev/null); rc=$?
 assert_eq "sandbox reset exits 0" "0" "${rc}"
 assert_eq "stdout is exactly the sandbox path" "${fsb}" "${out}"
 assert_eq "stale content is cleared" "absent" "$([[ -e ${fsb}/stale ]] && echo present || echo absent)"
 assert_eq "the self-ignoring .gitignore is written" "*" "$(tail -1 "${fsb}/.gitignore" 2>/dev/null)"
-assert_eq "the worktree's seed hook ran with worktree and sandbox" "${fwt}|${fsb}" "$(cat "${fsb}/seeded" 2>/dev/null)"
+assert_eq "the main checkout's seed hook ran with worktree and sandbox" "${fwt}|${fsb}" "$(cat "${fsb}/seeded" 2>/dev/null)"
 
-printf '#!/usr/bin/env bash\nexit 5\n' > "${fwt}/.endless/hooks/seed-sandbox.sh"
+printf '#!/usr/bin/env bash\nexit 5\n' > "${fhooks}/seed-sandbox.sh"
 out=$(cd "${fwt}" && "${BIN}" sandbox reset 2>&1); rc=$?
 assert_eq "a failing seed hook fails the reset" "1" "${rc}"
 assert_contains "the failure names the hook" "seed-sandbox.sh" "${out}"
 
-rm "${fwt}/.endless/hooks/seed-sandbox.sh"
+rm "${fhooks}/seed-sandbox.sh"
 out=$(cd "${fwt}" && "${BIN}" sandbox reset 2>&1); rc=$?
 assert_eq "no seed hook: reset still succeeds" "0" "${rc}"
 assert_eq "no seed hook: only the .gitignore remains" ".gitignore" "$(ls -A "${fsb}")"
@@ -69,10 +70,11 @@ section "endless-go verify starts every run from a fresh sandbox"
 
 rwt="${fx}/proj2/.endless/worktrees/e-9"
 rsb="${rwt}/.endless/sandbox"
-mkdir -p "${rsb}" "${rwt}/.endless/hooks" "${rwt}/.endless/tasks/e-9"
+rhooks="${fx}/proj2/.endless/hooks"
+mkdir -p "${rsb}" "${rhooks}" "${rwt}/.endless/tasks/e-9"
 touch "${rsb}/left-by-last-run"
-printf '#!/usr/bin/env bash\ntouch "$2/seeded"\n' > "${rwt}/.endless/hooks/seed-sandbox.sh"
-chmod +x "${rwt}/.endless/hooks/seed-sandbox.sh"
+printf '#!/usr/bin/env bash\ntouch "$2/seeded"\n' > "${rhooks}/seed-sandbox.sh"
+chmod +x "${rhooks}/seed-sandbox.sh"
 # The fixture suite records what it found, then dirties the sandbox for the
 # next run to clear.
 cat > "${rwt}/.endless/tasks/e-9/verify.sh" <<SUITE
@@ -90,7 +92,7 @@ for run in 1 2; do
         "fresh seeded " "$(cat "${fx}/observed" 2>/dev/null)"
 done
 
-printf '#!/usr/bin/env bash\nexit 3\n' > "${rwt}/.endless/hooks/seed-sandbox.sh"
+printf '#!/usr/bin/env bash\nexit 3\n' > "${rhooks}/seed-sandbox.sh"
 rm -f "${fx}/observed"
 out=$(cd "${rwt}" && "${BIN}" verify E-9 2>&1); rc=$?
 assert_eq "a failing seed hook aborts the run" "1" "${rc}"

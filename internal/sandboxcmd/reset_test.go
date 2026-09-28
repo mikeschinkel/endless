@@ -24,7 +24,8 @@ func resetWorktree(t *testing.T) (worktree, sandbox string) {
 
 func writeSeedHook(t *testing.T, worktree, body string, mode os.FileMode) {
 	t.Helper()
-	hook := filepath.Join(worktree, SeedSandboxHook)
+	// The hook lives in the MAIN checkout: <root>/.endless/worktrees/e-42 → <root>.
+	hook := filepath.Join(filepath.Dir(filepath.Dir(filepath.Dir(worktree))), SeedSandboxHook)
 	if err := os.MkdirAll(filepath.Dir(hook), 0o755); err != nil {
 		t.Fatal(err)
 	}

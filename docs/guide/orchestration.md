@@ -94,11 +94,11 @@ Three properties, and they are the whole design:
   nothing else: it cannot know which of a checkout's files your task needs,
   and copying them in is the exact accident a sandbox exists to prevent.
 - **It is reset, not accumulated.** `endless sandbox reset` clears the
-  sandbox, rewrites the `.gitignore`, then runs your `seed-sandbox.sh` from the
-  worktree's own checkout. Endless runs it after `post-worktree-create.sh` when
-  a worktree is created, and `endless task verify` runs it before every run, so
-  a suite always starts from the seeded state and never from what the last run
-  left behind. It is the only way the seed hook runs; run it yourself to start
+  sandbox, rewrites the `.gitignore`, then runs your `seed-sandbox.sh` — the
+  main checkout's copy, like `post-worktree-create.sh`. Endless runs it after
+  `post-worktree-create.sh` when a worktree is created, and `endless task
+  verify` runs it before every run, so a suite always starts from the seeded
+  state and never from what the last run left behind. It is the only way the seed hook runs; run it yourself to start
   over. A seed hook that fails fails the reset — and the verify.
 
 Nothing creates a sandbox on demand. If one is missing, the command that needed

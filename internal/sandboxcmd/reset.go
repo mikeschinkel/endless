@@ -21,10 +21,8 @@ import (
 // verify must never repeat — Endless's own copies main's bin/endless-go over the
 // worktree's, which would verify main's build instead of the candidate.
 //
-// Discovered in the WORKTREE, unlike post-worktree-create.sh: a verify proves
-// the candidate tree, so a task that changes how its sandbox is seeded must be
-// verified against its own hook, not main's. At creation the two are the same
-// file.
+// Discovered in the MAIN checkout, like post-worktree-create.sh: a worktree
+// on an older branch may lack the hook, or carry a stale copy of it.
 const SeedSandboxHook = ".endless/hooks/seed-sandbox.sh"
 
 func resetCmd(args []string) {
@@ -85,15 +83,17 @@ func Reset(dir string, out io.Writer) (string, error) {
 	if err := EnsureSandboxDir(sandboxDir); err != nil {
 		return "", err
 	}
-	if err := runSeedHook(worktree, sandboxDir, out); err != nil {
+	// <root>/.endless/worktrees/e-NNN → <root>
+	projectRoot := filepath.Dir(filepath.Dir(filepath.Dir(worktree)))
+	if err := runSeedHook(projectRoot, worktree, sandboxDir, out); err != nil {
 		return "", err
 	}
 	return sandboxDir, nil
 }
 
-// runSeedHook runs the worktree's seed-sandbox hook if it has one.
-func runSeedHook(worktree, sandboxDir string, out io.Writer) error {
-	hook := filepath.Join(worktree, SeedSandboxHook)
+// runSeedHook runs the project's seed-sandbox hook if it has one.
+func runSeedHook(projectRoot, worktree, sandboxDir string, out io.Writer) error {
+	hook := filepath.Join(projectRoot, SeedSandboxHook)
 	info, err := os.Stat(hook)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil
