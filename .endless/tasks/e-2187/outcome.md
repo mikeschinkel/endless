@@ -27,7 +27,7 @@ The per-task proposal is committed at `.endless/tasks/e-2187/rewrites.jsonl`
   proposed titles have a p95 of 59 characters. The proposed descriptions have a
   median of 158 and a p95 of 202, and none needed more than 256.
 - **Keep the 256 cap.** The evidence does not argue for a different number (see "The cap").
-- **One new content name is justified: `context`.** Everything else displaced has
+- **One new content name is justified: `context`** (accepted). Everything else displaced has
   an existing home.
 
 ## Why descriptions grew: three causes in the product, not just habit
@@ -310,7 +310,7 @@ The disagreements, by characters:
 - `updated_at` and `source_hash` (sha256 of title + "\n" + description).
 - `title`/`description` with `current` and `proposed`. `title.tags` is also included.
 - verbatim `segments` whose texts rebuild the description (checked for every row).
-- `moves` keyed by destination.
+- `moves` keyed by destination, and `allow_paths` where the moved text names a path on purpose.
 - `notes`.
 
 Rules for the migration that applies it:
@@ -326,11 +326,12 @@ Rules for the migration that applies it:
   which rows already have `analysis` or `notes`.
 - **`context` must exist first.** It is one `taskcontent` constant. Until it does,
   `moves.context` has nowhere to go.
-- **67 rows will be refused by the content write gate.** The moved text of 48 rows
-  cites a file by line number (`file.ext:NNN`), and 20 name an absolute path. Legacy
-  descriptions hold these, but the gate runs on every write of analysis/notes and has
-  no escape for line citations, by decision. The script must rewrite those tokens (name
-  the symbol) or report the rows for hand review. It must not skip the gate.
+- **The moved text already passes the content write gate.** In the legacy text, 54 file
+  line citations (`file.ext:NNN`) are reworded in `moves` to name the file without the line;
+  the surrounding text already names the function in nearly every case. Two home-directory
+  paths are reworded. The 25 remaining absolute paths are deliberate references (system binary directories,
+  the global Claude lessons file, a process's cwd under proc), so each row carries them in `allow_paths`, for
+  `--allow-path`. `segments` stay verbatim to the source; only `moves` are reworded.
 - **The WHAT is compressed, not moved.** The verbatim original stays in the ledger's
   history. If that is not enough, move the WHAT segments to `context` too.
 - **Pointer sentences land in their destination verbatim.** They should be
