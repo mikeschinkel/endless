@@ -6883,3 +6883,7 @@ Do not call detecting whether an agent or a human ran a command 'fragile'. Endle
 ### [2026-09-28] Endless's standard contents exclude self_dev state
 When deciding what Endless provides to every project (standard contents, defaults), exclude anything gated on self_dev: only Endless's own repo sets that flag, so it is never PRODUCT behavior. Endless-specific state (e.g. the sandbox endless.db) belongs in Endless's own project hook, not in Endless's standard behavior.
 - **Project**: endless
+
+### [2026-09-28] Descriptions must not reference other tasks by number
+A task description (and title) must be understandable on its own. Never cite another task by id (e.g. 'Informs E-1993's caps') — the reader then has to look that task up to understand this one. Say what the other thing IS in words instead ('informs the planned length caps on titles and descriptions'); relationships belong in task links, not the description.
+- **Project**: endless
