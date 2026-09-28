@@ -56,11 +56,57 @@ If renaming the field (e.g. `blurb`) would reliably produce better content than
 - A before/after rewrite of a handful of real titles and descriptions under the
   proposed rules, so the rules can be judged by their output.
 
-## Method notes
+- **The per-task artifact** (below): a JSONL file of proposed rewrites for
+  every task, for a later migration task to apply.
 
+## The per-task artifact: `.endless/tasks/e-2187/rewrites.jsonl`
+
+The classification already reads every task, so it also records what each
+task would look like under the proposed rules. One JSON object per line, one
+line per task:
+
+```json
+{
+  "task": "E-1813",
+  "updated_at": "<the task's updated_at when read>",
+  "source_hash": "<sha256 of title + \"\\n\" + description as read>",
+  "title": {"current": "...", "proposed": "..."},
+  "description": {"current": "...", "proposed": "..."},
+  "segments": [
+    {"category": "what", "text": "..."},
+    {"category": "current-workflow", "text": "..."}
+  ],
+  "moves": {"<content name>": "<text proposed for that content row>"},
+  "notes": "optional: anything a reviewer should know about this row"
+}
+```
+
+- **Segments are the durable part.** The content names this task proposes are
+  provisional until Mike reads the outcome; if a name is renamed or merged, the
+  `segments` labels let `moves` be recomputed mechanically instead of re-running
+  the classification. Keep categories stable and documented in the outcome.
+- **`updated_at` and `source_hash` make it safe to apply later.** Tasks keep
+  changing; whatever applies this file must skip a row whose hash no longer
+  matches the task.
+- **`moves` merges with, never overwrites, existing content.** If a task already
+  has a `plan` or `analysis`, say in `notes` how moved text would be combined.
+- **It is a proposal only.** This task changes no task. Applying it is a
+  separate migration task (likely part of E-1993's lazy migration), which can
+  trial it on a sample Mike reviews first.
+- Commit it in the task's own directory, beside `verify.sh` — not under
+  `docs/`, and not as a document mirror.
+
+## Method
+
+- **Use subagents; a multi-agent workflow is authorized for this task.** The
+  corpus is roughly two thousand tasks, a natural fan-out:
+  - partition the tasks into batches of about 100, one subagent per batch;
+  - give every subagent the same fixed schema (above) and the same category
+    definitions, so batch outputs concatenate without reconciliation;
+  - run an independent verification pass that re-classifies a random sample
+    (a few percent, at least 50 tasks) and report the agreement rate, with the
+    disagreements examined in the outcome.
 - Corpus: every task's title and description, including terminal and removed
   ones. Read through the CLI (`endless task list/show --json --db main`), not by
   opening the database file.
-- Roughly two thousand tasks: a model-assisted classification pass with a
-  hand-checked sample is fine; report the sample size and agreement.
-- Do not change any task. This task produces findings only.
+- Do not change any task. This task produces findings and the artifact only.
