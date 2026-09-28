@@ -1,0 +1,1 @@
+A second tmux status line is no longer needed: session monitor serves the same goal.
