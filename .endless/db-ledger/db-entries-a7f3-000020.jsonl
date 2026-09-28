@@ -60,3 +60,4 @@
 {"v":1,"ts":"5ZWAMN1SSQG19ZK","kind":"decision.accepted","project":"endless","entity":{"type":"decision","id":"1600"},"actor":{"kind":"cli","id":"mikeschinkel@m4macmini.local","session_id":"1247"},"payload":{}}
 {"v":1,"ts":"5ZWAPPGFXG819ZK","kind":"task.status_changed","project":"endless","entity":{"type":"task","id":"1608"},"actor":{"kind":"cli","id":"mikeschinkel@m4macmini.local","session_id":"1247"},"payload":{"old_status":"submitted","new_status":"underway"}}
 {"v":1,"ts":"5ZWAPPHF4W819ZK","kind":"epic.status_derived","project":"endless","entity":{"type":"task","id":"1596"},"actor":{"kind":"system","id":"epic-derivation"},"payload":{"task_id":1596,"old_status":"submitted","new_status":"underway"}}
+{"v":1,"ts":"5ZWAQ4S4AC019ZK","kind":"task.status_changed","project":"endless","entity":{"type":"task","id":"2184"},"actor":{"kind":"cli","id":"mikeschinkel@m4macmini.local","session_id":"1247"},"payload":{"old_status":"submitted","new_status":"underway"}}
