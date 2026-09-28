@@ -1,0 +1,1 @@
+Moot: built on sessions working several tasks. The one-task-per-Claude-session invariant and session monitor replaced that model. The small current-focus marker is refiled as a new task.
