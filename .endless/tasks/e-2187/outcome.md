@@ -38,16 +38,14 @@ Rules alone will not hold unless these three causes change with them:
    pitch — *what* and *why*… < 200 words", and says "max 1024 character" elsewhere. The
    word "why" is exactly the license for background, status quo and rationale, which
    together make up the largest displaced mass. 200 words is about 1,200 characters, not 256.
-2. **Triage reads only the description.** Its question is "is this description
-   already a sufficient spec?", and "Write the description for a stranger." So an
-   agent that wants its task to reach `submitted` has every reason to put the
-   backstory, current behaviour and approach into the description. With the
-   description capped at 256, triage must also read the displaced context (and
-   `analysis`), or capped tasks will be routed to `unplanned` en masse.
+2. **The description-sufficiency check reads only the description.** It asks "is
+   this description already a sufficient spec?", so an agent wanting to skip planning stuffs a mini-plan and
+   backstory into the description. This check is slated for removal once a plan is required
+   before spawn, which removes the incentive; no change to it is needed for the cap.
 3. **A description edit is a re-spec.** A material `--description` change on a
-   pre-work task resets it to `untriaged`. The migration that applies
-   `rewrites.jsonl` must use `--keep-status`, because the spec is not changing,
-   only moving. Otherwise every pre-work task falls back to `untriaged`.
+   pre-work task resets it to `untriaged`. `task update --keep-status` already suppresses
+   that reset (and every other inferred transition), so applying the rewrites needs no new
+   bypass — see "The artifact and how to apply it".
 
 ## Classification
 
@@ -223,8 +221,7 @@ needs to see that the WHAT is worth doing, but not how to do it.
 - **No existing slot fits.** `analysis` is design and investigation toward a plan.
   `notes` is miscellany. `plan` is how. Putting the problem statement into any of them
   loses the one distinction that makes it useful.
-- **It is the part triage and a reviewer need.** Pair it with the triage change
-  above: triage should read description + `context` (+ `analysis`).
+- **It is the part a reviewer needs** to see that the WHAT is worth doing, without reading the plan.
 - **It is the fastest-growing share.** Status-quo and background went from 13% to
   34% of description text across the corpus's history.
 - **Why one name, not three.** In the verification pass, background↔evidence and
@@ -245,10 +242,10 @@ needs to see that the WHAT is worth doing, but not how to do it.
 - **`history`** is `notes`, or `outcome`/`reason` for the ending.
 
 **On renaming `description` to `blurb`.** I recommend against it. The data points
-at three product causes (the guide's "what *and why*… < 200 words / 1024", triage
-reading only this field, and nothing else to hold context), not at the word. A
-cap enforced on write, the guide fix, triage reading `context`, and a place for
-the displaced text will change behaviour. A rename would touch the flag, the JSON
+at three product causes (the guide's "what *and why*… < 200 words / 1024", the
+description-sufficiency check reading only this field, and nothing else to hold
+context), not at the word. A cap enforced on write, the guide fix, requiring a plan
+before spawn, and a place for the displaced text will change behaviour. A rename would touch the flag, the JSON
 key, the ledger event shape and every muscle memory, for a smaller effect. If a
 rename happens anyway, `summary` reads better in a flag than `blurb`.
 
@@ -318,13 +315,22 @@ The disagreements, by characters:
 
 Rules for the migration that applies it:
 
+- **Apply with a one-off script, not a merged command.** Loop the rows and call
+  `endless task update <id> --title … --description-file … --keep-status --db main`,
+  plus the content flags for each move. `--keep-status` is the existing bypass: no
+  description-edit reset, no plan-attach promotion. Nothing new has to land for it.
 - **Skip any row whose hash no longer matches.**
-- **Moves merge, never overwrite.** Where `analysis` or `notes` already exists,
-  the row's `notes` says so. Append under `## From the description`.
-- **Apply with `--keep-status`.** Without it, every pre-work task resets to
-  `untriaged`.
+- **Moves merge, never overwrite.** The content flags replace (`--notes` says so
+  outright), so the script must read the current content, append the moved text under
+  `## From the description`, and write the merged result. The row's `notes` names
+  which rows already have `analysis` or `notes`.
 - **`context` must exist first.** It is one `taskcontent` constant. Until it does,
   `moves.context` has nowhere to go.
+- **67 rows will be refused by the content write gate.** The moved text of 48 rows
+  cites a file by line number (`file.ext:NNN`), and 20 name an absolute path. Legacy
+  descriptions hold these, but the gate runs on every write of analysis/notes and has
+  no escape for line citations, by decision. The script must rewrite those tokens (name
+  the symbol) or report the rows for hand review. It must not skip the gate.
 - **The WHAT is compressed, not moved.** The verbatim original stays in the ledger's
   history. If that is not enough, move the WHAT segments to `context` too.
 - **Pointer sentences land in their destination verbatim.** They should be
