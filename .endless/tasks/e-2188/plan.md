@@ -87,13 +87,15 @@ In `buildLegend` (internal/sessionstatuscmd/session_status.go), fit the legend
 to the width the table already detects:
 
 - Normal form: `<icon> <label>`, entries joined by two spaces (today's).
-- If that would exceed the width: `<icon><label>`, entries joined by ONE space.
+- If the normal form would exceed the width but the compact form fits:
+  `<icon><label>`, entries joined by ONE space.
+- If even the compact form would exceed the width, use the NORMAL form and let
+  it wrap: if it is going to wrap anyway, the easier-to-read form is better.
 
 Never truncate the legend: cutting it off drops the meaning of the icons it
 describes.
 
-If the compact form still does not fit, it wraps, and `session monitor` grows
-its pane to show every row. Today the pane is sized by
+When the legend wraps, `session monitor` grows its pane to show every row. Today the pane is sized by
 `liveview.FitPaneToFrame`, which counts the frame's newline-separated lines
 (`FrameLines`), so a line that wraps takes two screen rows but is counted as
 one — which is what hides the last task row. Count display rows instead: each
@@ -121,6 +123,7 @@ asserts, for each board: focus follows writes but not reads; focus overrides
 hidden; the owner is chosen per the ladder; the duplicate marker is shown in
 both boards in the focus-elsewhere case and in the ambiguous case; an ended
 session's tasks come back on live boards; and claimed tasks, parents and
-spawners are never hidden; and the legend switches to its compact form exactly
-when its normal form would exceed the width, in both commands; and a frame
+spawners are never hidden; and the legend is compact exactly when the normal form
+would exceed the width and the compact form fits, and is the normal form
+(wrapped) when neither fits, in both commands; and a frame
 whose line wraps sizes the monitor pane by display rows, not lines.
