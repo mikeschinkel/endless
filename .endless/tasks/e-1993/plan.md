@@ -133,8 +133,9 @@ spec, so that judgment and the status that holds tasks waiting for it both go.
 - **README.md:** the workflow section ("New tasks start `untriaged`; triage…")
   and its embedded lifecycle diagram are rewritten for the new model.
 
-Routing a task by something other than its status may still be wanted; see Open
-questions.
+Nothing replaces the description triage; its only lasting effect is the initial
+status above. Other processes that later need to run on tasks are designed on their
+own, each with a trigger chosen for what that process does.
 
 ## 5. Existing tasks
 
@@ -209,11 +210,3 @@ before/after examples, and define `context` beside the other content names.
   `text`, the 100/1000/1024 limits, "what and why", or description-as-spec, and
   carry E-2187's "is NOT" rules.
 - `go build/vet/test ./...` and `just test` pass.
-
-## Open questions
-
-**What, if anything, replaces triage?** With `untriaged` gone, nothing routes a
-new task on arrival. Some routing may still be wanted (duplicate detection, the
-right parent, phase), triggered by indicators on the task rather than by a
-status. This task removes the old triage; it does not design a replacement.
-
