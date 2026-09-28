@@ -33,6 +33,10 @@ link, where tooling already shows it. Count how often past titles and
 descriptions reference task (or decision) ids, and include this rule in both
 "is NOT" lists.
 
+The rule is for title and description ONLY. Task ids are fine — often the most
+precise reference there is — in the plan, analysis, and every other content
+row. Text moved out of a description keeps its ids; do not rewrite them away.
+
 ## Questions to answer
 
 1. What do descriptions contain besides the WHAT? Classify by content, not by
