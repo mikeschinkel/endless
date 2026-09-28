@@ -6887,3 +6887,7 @@ When deciding what Endless provides to every project (standard contents, default
 ### [2026-09-28] Descriptions must not reference other tasks by number
 A task description (and title) must be understandable on its own. Never cite another task by id (e.g. 'Informs E-1993's caps') — the reader then has to look that task up to understand this one. Say what the other thing IS in words instead ('informs the planned length caps on titles and descriptions'); relationships belong in task links, not the description.
 - **Project**: endless
+
+### [2026-09-28] Say which triage check you mean
+When a finding concerns triage's check of whether a description alone is a sufficient spec (so no plan is needed), name that specific check rather than saying 'triage' — triage is the general routing concept, and the description-sufficiency check is slated for removal once a plan is required before spawn.
+- **Project**: endless
