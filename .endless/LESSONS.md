@@ -6895,3 +6895,7 @@ When a finding concerns triage's check of whether a description alone is a suffi
 ### [2026-09-28] Project hooks run from the main checkout
 Endless runs project hooks (post-worktree-create, seed-sandbox, and any new one) from the MAIN checkout's copy, never the worktree's: worktree copies go missing or stale on older branches and break. Do not invent a worktree-copy exception to let a task test its own hook edits; that belongs to a general hook-testing solution.
 - **Project**: endless
+
+### [2026-09-28] Don't raise concerns that don't matter
+Before putting a concern in front of Mike, check whether it actually matters — e.g. whether an existing flag already solves it. A caveat that turns out to need nothing (like the description-edit reset that --keep-status already bypasses) costs his attention for no value; resolve it yourself and leave it out. Likewise, when a fix is mechanical work you can do (like rewording gate-blocked tokens), do it rather than handing it to a future script or person.
+- **Project**: endless
