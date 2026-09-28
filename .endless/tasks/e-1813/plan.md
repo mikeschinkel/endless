@@ -79,3 +79,23 @@ The plan left the propose/ratify mechanics open; these were decided in session:
   at any status; `none` clears. No status moves on a rating edit.
 - The 28 meaningfully-tiered rows are **dropped**, not mapped: a mapped value
   would read as a ratified rating nobody ratified.
+
+## 6. Grown scope, folded in during implementation
+
+- `task update --status submitted` / `--status ready` meet the same rating
+  gates as `task submit` / `task approve` — the same acts under another verb.
+  Gated only on the edge each verb accepts; from anywhere else the lifecycle
+  guard's refusal is the one shown.
+- The transition table's tier-1 exemption edges (untriaged/unplanned → ready)
+  are removed, and the generated diagram copies regenerated.
+- `src/endless/db.py`'s connect-time `_migrate_v2` re-added `tasks.tier` and
+  updated `tier = 1` rows; both removed, or they would undo migration 00008.
+- `task clear tier` became `task clear complexity` / `task clear risk`.
+- Status changes no longer zero tier in the executor/projector; the ledger
+  validator compares `complexity_id` / `risk_id` instead.
+- `task show` always renders the ratings, `unrated` included (human:
+  `Ratings:` line; `--agent`: on the status line where `tier=` sat).
+- Epic commands lose `--tier` and gain no rating flags; ratings on an epic go
+  through `task update` / `task approve`.
+
+E-1233 is superseded by this and should be closed when it lands.
