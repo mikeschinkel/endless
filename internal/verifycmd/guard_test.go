@@ -23,6 +23,7 @@ func mainDB(t *testing.T, landed []int64, sessions map[int64]int64) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "") // main follows XDG first (E-2186)
 
 	dir := filepath.Join(home, ".config", "endless")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -125,6 +126,7 @@ func TestGuard_SessionEnvNamesAnOwner(t *testing.T) {
 // was written.
 func TestGuard_FailsOpenWithNoMainDatabase(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", "") // main follows XDG first (E-2186)
 	t.Setenv("ENDLESS_SESSION_ID", "")
 
 	if err := guardOwnTaskOnly("E-1603", worktreeRoot(t, 2023)); err != nil {

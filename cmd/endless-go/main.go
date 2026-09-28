@@ -164,8 +164,7 @@ func main() {
 	}
 
 	// E-1450/E-1429: PinMainDB for surfaces whose writes are real-world
-	// activity in the main database regardless of cwd or XDG_CONFIG_HOME
-	// (hook-fired writes, tmux pane/task status). Pin pins the DB to main
+	// activity in the main database regardless of cwd (hook-fired writes, tmux pane/task status). Pin pins the DB to main
 	// unconditionally and satisfies the worktree gate via dbPathOverride.
 	// Other subcommands stay on whatever --db/--db-dir (or absence of one)
 	// ConsumeDBFlags already established above.

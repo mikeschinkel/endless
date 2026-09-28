@@ -313,6 +313,7 @@ func withTempHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "") // main follows XDG first (E-2186)
 	resolved, err := ResolvedProjectPath(home)
 	if err != nil {
 		t.Fatalf("ResolvedProjectPath(home): %v", err)

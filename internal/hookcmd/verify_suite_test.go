@@ -286,6 +286,7 @@ func seedLandings(t *testing.T, landed ...int64) {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "") // main follows XDG first (E-2186)
 	dir := filepath.Join(home, ".config", "endless")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
@@ -364,6 +365,7 @@ func TestForeignLandedSuite(t *testing.T) {
 		// a precondition for working, and a machine it cannot question is not a
 		// machine it may refuse.
 		t.Setenv("HOME", t.TempDir())
+		t.Setenv("XDG_CONFIG_HOME", "") // main follows XDG first (E-2186)
 		stubSessionTask(t, 1916)
 		if _, foreign := foreignLandedSuite(claudePayload{SessionID: "s"}, 101); foreign {
 			t.Fatal("refused on a question it could not ask")

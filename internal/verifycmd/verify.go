@@ -8,9 +8,12 @@
 // and exits 0 on all-pass / non-zero otherwise.
 //
 // The runner is deliberately app-agnostic: it knows nothing about any specific
-// application's state (no task DB, no SQLite). Because Endless's own DB lives
-// under XDG_CONFIG_HOME, isolating XDG happens to give an Endless-as-SUT suite a
-// fresh DB for free — that is incidental to the isolation, not runner logic.
+// application's state (no task DB, no SQLite). Replacing HOME and
+// XDG_CONFIG_HOME is generic isolation — it makes the developer's real config
+// unreachable (ED-1583) — and it does NOT hand an Endless-as-SUT suite a fresh
+// database: a suite runs in its task's worktree, whose sandbox is addressed by
+// `--db sandbox`, not by either variable. Starting that sandbox fresh is a
+// separate job (E-1608), not a side effect of this isolation.
 //
 // Every run starts from a fresh sandbox (E-1608): before any setup step or
 // check, the runner resets the worktree's canonical sandbox through the same

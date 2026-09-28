@@ -22,7 +22,7 @@ THE RULE, stated once so the three cases below are a rule and not a list:
     With usually one project in play, always-on is repetition, and repetition
     where nothing varies is how a line stops being read.
   - A context PINNED IN CODE: NEVER. `default_db_to_main` (and the Go side's
-    PinMainDB/ForceRealDB) choose for the caller; if the caller could not have
+    PinMainDB) choose for the caller; if the caller could not have
     influenced the choice there is nothing to disambiguate. A pin is not a
     resolution, which makes this the rule rather than an exception to it.
 

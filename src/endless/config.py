@@ -8,6 +8,11 @@ from pathlib import Path
 
 
 def _config_root() -> Path:
+    """The user's configuration root: $XDG_CONFIG_HOME, else ~/.config.
+
+    XDG_CONFIG_HOME is read as the user's own setting, per the XDG convention.
+    Endless never sets it to route a process (E-2186) — a database is chosen by
+    `--db`, so the default and `--db main` resolve the same directory."""
     xdg = os.environ.get("XDG_CONFIG_HOME")
     if xdg:
         return Path(xdg)
@@ -504,9 +509,14 @@ def _cache_root() -> Path:
 
 
 def main_config_dir() -> Path:
-    """The main database's config dir: ~/.config/endless, ignoring any injected
-    XDG_CONFIG_HOME (the whole point of --db main is to escape the sandbox)."""
-    return Path.home() / ".config" / "endless"
+    """The main database's config dir: $XDG_CONFIG_HOME/endless, else
+    ~/.config/endless — the same answer as the default (E-2186).
+
+    It once ignored XDG_CONFIG_HOME to escape the sandbox routing Endless
+    injected through it. Nothing injects it now, so ignoring it would only split
+    a user who set it across two databases. Mirrors Go's
+    dbcontext.MainConfigDir."""
+    return _config_root() / "endless"
 
 
 def main_cache_dir() -> Path:
@@ -587,8 +597,8 @@ def sandbox_root(worktree: Path) -> Path:
 def sandbox_config_dir(worktree: Path) -> Path:
     """The endless config dir inside a worktree's per-worktree sandbox.
 
-    Endless appends its own "endless" segment (as ConfigDir does to
-    XDG_CONFIG_HOME), so the DB lives at <sandbox_root>/endless/endless.db.
+    Endless appends its own "endless" segment (as it does to the user's config
+    root), so the DB lives at <sandbox_root>/endless/endless.db.
     Endless is one client of the sandbox among however many the project has, and
     this is its corner of it.
     """
@@ -727,13 +737,13 @@ def default_db_to_main():
 
     The Python analogue of the Go-side PinMainDB (E-1450/E-1429) used by
     hook/tmux: some operations are inherently real/main regardless of
-    caller routing — worktree land, schema apply-change, db backup. When run
-    from a self-dev session whose XDG_CONFIG_HOME points at a per-worktree
-    sandbox, the default config dir resolves to that sandbox, mis-targeting the
-    landing (the landed task lives only in the real DB; the task_landings FK
-    fails). Calling this at such a command's entry pins main_config_dir() so
-    Python reads use the real DB and go_db_context_args() threads
-    --db main to every downstream endless-go shellout.
+    caller routing — worktree land, schema apply-change, db backup. Inside a
+    self-dev worktree the E-1429 gate refuses a DB-opening command that named
+    no database; for these the answer is never in doubt, so this pins
+    main_config_dir() at the command's entry: Python reads use the real DB and
+    go_db_context_args() threads --db main to every downstream endless-go
+    shellout. (It was born when an injected XDG_CONFIG_HOME silently routed a
+    land at the sandbox, E-1628; that injection is gone, the pin is not.)
 
     An explicit --db main|sandbox is honored: it sets RESOLVED_CONFIG_DIR via
     DBAwareGroup before the command body runs, so this is a no-op then.
@@ -818,10 +828,11 @@ def go_db_context_args() -> list[str]:
       - anything else                -> `--db-dir <path>`
 
     `--db main` rather than `--db-dir <main>` on purpose: main_config_dir()
-    follows $HOME, so a caller already running under a temp HOME (the verify
-    runner does) gets its own isolated main in the child exactly as it did in
-    the parent. Threading the absolute path would instead hand the child a
-    directory resolved against whichever HOME the parent happened to have.
+    follows XDG_CONFIG_HOME, then HOME, so a caller already running under a
+    temp HOME and XDG_CONFIG_HOME (the verify runner does) gets its own isolated
+    main in the child exactly as it did in the parent. Threading the absolute
+    path would instead hand the child a directory resolved against whichever
+    environment the parent happened to have.
 
     `--db sandbox` is likewise safe to thread rather than spell out: the Go side
     resolves it from cwd, and every endless-go spawn inherits this process's cwd

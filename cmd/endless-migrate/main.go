@@ -186,8 +186,8 @@ var errSandboxNotRoutable = errors.New(
 // migrate. Every arm but the refusal is internal/dbcontext's own resolution, so
 // "the main database" means here exactly what it means to endless-go.
 //
-// No flag keeps the historical default (XDG_CONFIG_HOME, else ~/.config)
-// rather than refusing. A land always names its target, so the default is
+// No flag resolves the default, which is main ($XDG_CONFIG_HOME/endless, else
+// ~/.config/endless — E-2186) rather than refusing. A land always names its target, so the default is
 // reached only by a hand invocation, and the relative-path check in runApply is
 // what catches the case where that default resolves to nothing meaningful.
 func configDir(flags dbcontext.Flags) (dir dt.DirPath, err error) {
@@ -386,11 +386,10 @@ func usageText() string {
 		"                        the enum mirrors. A current database is a no-op.",
 		"",
 		"Flags:",
-		"  --db main             The project's main database, ~/.config/endless",
-		"                        (follows $HOME, ignores XDG_CONFIG_HOME).",
+		"  --db main             The main database: $XDG_CONFIG_HOME/endless when",
+		"                        set, else ~/.config/endless. Also the default.",
 		"  --db-dir <dir>        The Endless config directory holding the database",
-		"                        to migrate. Defaults to XDG_CONFIG_HOME/endless,",
-		"                        else ~/.config/endless.",
+		"                        to migrate.",
 		"",
 		"  --db sandbox is refused: this binary resolves its target from what you",
 		"  name, never from where you are standing, so it cannot say which sandbox",

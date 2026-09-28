@@ -12,9 +12,8 @@
 //     the live caller's session ended.
 //
 //   - E-1450/E-1429: The dispatcher calls monitor.PinMainDB() before
-//     hookcmd.Run so hook-fired writes always target the real DB,
-//     regardless of cwd or XDG_CONFIG_HOME, and the E-1429 worktree
-//     gate is satisfied.
+//     hookcmd.Run so hook-fired writes always target the main DB,
+//     regardless of cwd, and the E-1429 worktree gate is satisfied.
 //
 // Run owns the third contract, the one on the way out: a failure exits with
 // the code that puts it in front of the AGENT rather than only the user. See

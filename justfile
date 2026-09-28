@@ -471,7 +471,8 @@ claude-settings-sweep:
 # `sandbox init --force` to rebuild a sandbox DB whose schema has drifted.
 #
 # No name and no bind: the sandbox is composed from the worktree, and nothing is
-# written into the environment (E-1964 deleted the XDG_CONFIG_HOME injection).
+# written into the environment (E-1964 and E-2186 deleted the XDG_CONFIG_HOME
+# injections).
 # `--db sandbox` resolves the same path through the same resolver.
 #
 # Recipe must run from a worktree (not main). Refuses otherwise.

@@ -485,8 +485,12 @@ func describeTarget(setting, target string) string {
 // The Python CLI owns the spawn — the gates, the pre-claim, the worktree, the
 // handoff — so the job runs exactly what a person would, plus the two hidden
 // flags. It runs from the project's main checkout because `task spawn`
-// resolves the project and creates the worktree from its working directory,
-// and with jobs.ChildEnv so it opens this runner's database.
+// resolves the project and creates the worktree from its working directory.
+//
+// The child opens this runner's database by monitor.ChildDBRoute, never by
+// environment (E-2186). Run has already skipped a sandbox runner, so the only
+// route left is main — no flag, since the child's default IS main — and any
+// other answer is refused rather than spawned against the wrong database.
 //
 // Output is captured, never inherited: jobs.Job forbids writing to the
 // trigger's terminal. It rides along in the error on failure.
@@ -495,6 +499,7 @@ func spawn(ctx context.Context, pick candidate, target string) (err error) {
 	var cmd *exec.Cmd
 	var out []byte
 	var cancel context.CancelFunc
+	var dbArgs []string
 
 	if pick.projectPath == "" {
 		err = fmt.Errorf("E-%d: its project directory could not be resolved", pick.taskID)
@@ -506,10 +511,18 @@ func spawn(ctx context.Context, pick candidate, target string) (err error) {
 		goto end
 	}
 
+	dbArgs, _, err = monitor.ChildDBRoute()
+	if err == nil && len(dbArgs) != 0 {
+		err = fmt.Errorf("the runner's database is not main (%v)", dbArgs)
+	}
+	if err != nil {
+		err = fmt.Errorf("spawning E-%d: %w", pick.taskID, err)
+		goto end
+	}
+
 	ctx, cancel = context.WithTimeout(ctx, spawnTimeout)
 	defer cancel()
 	cmd = exec.CommandContext(ctx, bin, spawnArgs(pick.taskID, target)...)
-	cmd.Env = jobs.ChildEnv()
 	cmd.Dir = pick.projectPath
 
 	out, err = cmd.CombinedOutput()

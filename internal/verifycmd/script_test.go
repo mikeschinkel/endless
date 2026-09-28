@@ -26,6 +26,7 @@ func enterScriptSuite(t *testing.T, id, body string) (root string) {
 	}
 	t.Chdir(root)
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", "") // main follows XDG first (E-2186)
 	return root
 }
 

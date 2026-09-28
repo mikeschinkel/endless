@@ -132,6 +132,7 @@ func TestZshInjectionSourcesUserZshenv(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv("HOME", tmpHome)
+	t.Setenv("XDG_CONFIG_HOME", "") // main follows XDG first (E-2186)
 
 	inj := buildZshInjection()
 	defer inj.Clean()

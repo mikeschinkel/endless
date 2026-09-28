@@ -32,6 +32,7 @@ func enterSuite(t *testing.T, id, body string) {
 	root := writeSuite(t, id, body)
 	t.Chdir(root)
 	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", "") // main follows XDG first (E-2186)
 }
 
 func TestRun_PassingSuite(t *testing.T) {

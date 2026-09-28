@@ -75,7 +75,10 @@ func TestWorktreeSandboxDir(t *testing.T) {
 // different halves of the check — in-tree from ConfigDir() itself, out-of-tree
 // from cwd.
 func TestIsSandboxActive(t *testing.T) {
-	t.Run("no XDG_CONFIG_HOME, default ~/.config", func(t *testing.T) {
+	// Since E-2186 the only thing that routes a process at a sandbox is an
+	// explicit DB context (`--db sandbox`, or --db-dir naming one), so each
+	// case sets that context rather than an environment variable.
+	t.Run("no explicit context, default main", func(t *testing.T) {
 		resetDBContext(t)
 		t.Setenv("XDG_CONFIG_HOME", "")
 		if IsSandboxActive() {
@@ -86,7 +89,7 @@ func TestIsSandboxActive(t *testing.T) {
 	t.Run("config IS a worktree's in-tree sandbox", func(t *testing.T) {
 		resetDBContext(t)
 		wt := newWorktree(t, "e-1354", `{"self_dev": true}`)
-		t.Setenv("XDG_CONFIG_HOME", filepath.Join(wt, ".endless", "sandbox"))
+		SetDBContextDir(filepath.Join(wt, ".endless", "sandbox", "endless"))
 		if !IsSandboxActive() {
 			t.Errorf("IsSandboxActive() = false for ConfigDir() = %q", ConfigDir())
 		}
@@ -95,7 +98,7 @@ func TestIsSandboxActive(t *testing.T) {
 	t.Run("config is some other dir inside a worktree", func(t *testing.T) {
 		resetDBContext(t)
 		wt := newWorktree(t, "e-1354", `{"self_dev": true}`)
-		t.Setenv("XDG_CONFIG_HOME", filepath.Join(wt, ".endless", "elsewhere"))
+		SetDBContextDir(filepath.Join(wt, ".endless", "elsewhere", "endless"))
 		if IsSandboxActive() {
 			t.Errorf("IsSandboxActive() = true for ConfigDir() = %q, which is not the sandbox", ConfigDir())
 		}
@@ -103,7 +106,7 @@ func TestIsSandboxActive(t *testing.T) {
 
 	t.Run("config outside any worktree", func(t *testing.T) {
 		resetDBContext(t)
-		t.Setenv("XDG_CONFIG_HOME", filepath.Join(t.TempDir(), "elsewhere"))
+		SetDBContextDir(filepath.Join(t.TempDir(), "elsewhere", "endless"))
 		if IsSandboxActive() {
 			t.Error("IsSandboxActive() = true outside a worktree")
 		}
@@ -116,7 +119,7 @@ func TestIsSandboxActive(t *testing.T) {
 		t.Chdir(wt)
 		// The override path names no worktree, so only cwd can say which
 		// worktree this config dir belongs to.
-		t.Setenv("XDG_CONFIG_HOME", filepath.Join(out, "e-1354"))
+		SetDBContextDir(filepath.Join(out, "e-1354", "endless"))
 		if !IsSandboxActive() {
 			t.Errorf("IsSandboxActive() = false for override ConfigDir() = %q", ConfigDir())
 		}
@@ -127,64 +130,9 @@ func TestIsSandboxActive(t *testing.T) {
 		out := t.TempDir()
 		wt := newWorktree(t, "e-1354", `{"self_dev": true, "sandbox_root": "`+out+`"}`)
 		t.Chdir(wt)
-		t.Setenv("XDG_CONFIG_HOME", filepath.Join(out, "e-9999"))
+		SetDBContextDir(filepath.Join(out, "e-9999", "endless"))
 		if IsSandboxActive() {
 			t.Error("IsSandboxActive() = true for another worktree's sandbox")
-		}
-	})
-}
-
-func TestForceRealDB(t *testing.T) {
-	realSuffix := filepath.Join(".config", "endless", "endless.db")
-
-	t.Run("redirects DB to real path without mutating env", func(t *testing.T) {
-		resetDBContext(t)
-		wt := newWorktree(t, "e-1450", `{"self_dev": true}`)
-		sandbox := filepath.Join(wt, ".endless", "sandbox")
-		t.Setenv("XDG_CONFIG_HOME", sandbox)
-
-		if !IsSandboxActive() {
-			t.Fatal("precondition: expected sandbox routing to be active")
-		}
-		if got := DBPath(); !strings.HasPrefix(got, sandbox) {
-			t.Fatalf("precondition: DBPath() = %q, want under sandbox %q", got, sandbox)
-		}
-
-		ForceRealDB()
-
-		if got := DBPath(); !strings.HasSuffix(got, realSuffix) {
-			t.Errorf("after ForceRealDB(): DBPath() = %q, want suffix %q", got, realSuffix)
-		}
-		if strings.HasPrefix(DBPath(), sandbox) {
-			t.Errorf("after ForceRealDB(): DBPath() = %q still under sandbox", DBPath())
-		}
-		// Env must be untouched: XDG_CONFIG_HOME stays sandbox-routed, so
-		// IsSandboxActive() (and the log / config.json reads built on it) is
-		// unaffected — only the DB path is redirected.
-		if !IsSandboxActive() {
-			t.Error("ForceRealDB() must not mutate env: IsSandboxActive() should still be true")
-		}
-		// Backups follow the DB, not ConfigDir().
-		wantBackups := filepath.Join(filepath.Dir(DBPath()), "backups")
-		if strings.HasPrefix(wantBackups, sandbox) {
-			t.Errorf("backup dir %q should not be under sandbox after override", wantBackups)
-		}
-	})
-
-	t.Run("no-op when not sandbox-routed", func(t *testing.T) {
-		resetDBContext(t)
-		config := filepath.Join(t.TempDir(), "myconfig")
-		t.Setenv("XDG_CONFIG_HOME", config)
-
-		if IsSandboxActive() {
-			t.Fatal("precondition: expected no sandbox routing")
-		}
-		before := DBPath()
-
-		ForceRealDB()
-
-		if got := DBPath(); got != before {
-			t.Errorf("ForceRealDB() should be a no-op outside a sandbox: DBPath() = %q, want %q", got, before)
 		}
 	})
 }

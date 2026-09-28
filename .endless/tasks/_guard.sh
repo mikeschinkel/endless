@@ -93,8 +93,9 @@ _endless_guard() {
     # `endless task verify` replaces HOME and XDG_CONFIG_HOME with a per-run
     # temp dir, so under the runner neither spelling of the config resolves and
     # this passes. Run by hand, the real one is right there. Both spellings are
-    # checked because `--db main` deliberately ignores XDG to escape a
-    # worktree's sandbox, so testing only one leaves the other reachable.
+    # checked: main follows XDG_CONFIG_HOME when set (E-2186), and a machine
+    # whose user set it may still hold an older ~/.config/endless, so testing
+    # only one leaves the other reachable.
     for cfg in "${XDG_CONFIG_HOME:-${HOME:-}/.config}/endless" "${HOME:-}/.config/endless"; do
         [[ -d "${cfg}" ]] || continue
         _endless_guard_refuse \

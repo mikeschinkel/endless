@@ -28,8 +28,8 @@ var (
 	dbConn *sql.DB
 	dbErr  error
 
-	// dbPathOverride, when set, forces DBPath() to a fixed location regardless
-	// of XDG_CONFIG_HOME routing. Set once by ForceRealDB() at process entry.
+	// dbPathOverride, when set, forces DBPath() to the main database regardless
+	// of any other routing. Set once by PinMainDB() at process entry.
 	dbPathOverride string
 
 	// dbContextDir, when set, pins ConfigDir() (and therefore DBPath()) to an
@@ -54,8 +54,8 @@ var (
 )
 
 // ConfigDir returns the Endless configuration directory. When an explicit DB
-// context was provided (--db/--db-dir, via ConsumeDBFlags), it wins over
-// XDG_CONFIG_HOME so config.json and logs follow the same target as the DB.
+// context was provided (--db/--db-dir, via ConsumeDBFlags), it wins over the
+// default (main) so config.json and logs follow the same target as the DB.
 //
 // The resolution itself lives in internal/dbcontext, because ED-1571's
 // migration-only executable needs the same answer and may not link this
@@ -78,9 +78,9 @@ func CacheDir() string {
 }
 
 // IsSandboxActive reports whether the current process is reading/writing
-// through a per-worktree sandbox (E-1281). ForceRealDB() uses it to decide
-// whether hook-fired DB writes must be redirected to the real database, and
-// eventcmd uses it to keep the sandbox's ledger out of git. See E-1450, E-1729.
+// through a per-worktree sandbox (E-1281) — since E-2186, only ever because
+// `--db sandbox` (or a --db-dir naming a sandbox) chose it. eventcmd uses it to
+// keep the sandbox's ledger out of git. See E-1729.
 //
 // Detection asks the resolver rather than matching a path prefix (E-1964).
 // Prefix-matching worked only while every sandbox sat under one root; a sandbox
@@ -121,27 +121,6 @@ func DBPath() string {
 	return string(dbcontext.DBPath(dt.DirPath(dbContextDir)))
 }
 
-// ForceRealDB routes monitor.DB() and DBPath()-derived artifacts (e.g. backups)
-// to the real database under ~/.config/endless, ignoring the E-1281 sandbox
-// XDG_CONFIG_HOME routing. It overrides only the DB path: log files and global
-// config.json reads keep following ConfigDir(), and because XDG_CONFIG_HOME is
-// never mutated, IsSandboxActive() still reports true for any other
-// sandbox-aware behavior. The endless-hook binary calls this at startup so
-// hook-fired writes (session registration, activity, state transitions) reflect
-// real-world activity and land in the real DB rather than throwaway sandbox
-// fixtures. No-op when not sandbox-routed; must be called before the first
-// DB()/DBPath() use. See E-1450.
-func ForceRealDB() {
-	if !IsSandboxActive() {
-		return
-	}
-	path, err := dbcontext.MainDBPath()
-	if err != nil {
-		return
-	}
-	dbPathOverride = string(path)
-}
-
 // HasExplicitDBContext reports whether a per-invocation DB flag was consumed for
 // this process. Callers that would otherwise PinMainDB use this to let an
 // explicit target win — the E-1429 contract is that a flag is trustworthy and
@@ -168,11 +147,10 @@ func SetDBContextDir(dir string) {
 }
 
 // mainConfigDir is the deployed installation's config directory — what `--db
-// main` resolves to. It FOLLOWS $HOME (via os.UserHomeDir) while deliberately
-// ignoring $XDG_CONFIG_HOME, which is the whole point of asking for main: to
-// escape a sandbox the environment routed us into. Following $HOME is what lets
-// a verify suite, which runs under a temp HOME, say `--db main` and mean its own
-// isolated main rather than the developer's real one.
+// main` resolves to: $XDG_CONFIG_HOME/endless when the user set it, else
+// $HOME/.config/endless (dbcontext, "Main is the default"). Following HOME is
+// what lets a verify suite, which runs under a temp HOME and XDG_CONFIG_HOME,
+// say `--db main` and mean its own isolated main rather than the developer's.
 //
 // Mirrors Python's config.main_config_dir, so "the main database" means one
 // thing across both layers.
@@ -223,24 +201,17 @@ var errNotInSelfDevWorktree = errors.New(
 	"--db sandbox only applies inside a self-dev worktree " +
 		"(.endless/worktrees/e-NNN); cwd is not in one")
 
-// PinMainDB unconditionally routes the DB (DBPath() and DB()) to the real
-// database under ~/.config/endless and satisfies the E-1429 worktree gate.
+// PinMainDB unconditionally routes the DB (DBPath() and DB()) to the main
+// database (dbcontext.MainDBPath) and satisfies the E-1429 worktree gate.
 //
-// It differs from ForceRealDB in two ways that matter for binaries invoked
-// outside a Claude session's env injection:
-//   - Unconditional: ForceRealDB only redirects when IsSandboxActive() (i.e.
-//     XDG_CONFIG_HOME points into a sandbox). `endless-go tmux` is invoked by
-//     tmux itself, where XDG may be unset; the conditional check would miss
-//     and the gate would refuse it.
-//   - DB-path only: ConfigDir() is left untouched, so config.json and logs
-//     keep following XDG_CONFIG_HOME (the worktree's sandbox). Only the DB
-//     itself moves to main, matching the E-1450 split — session/pane state is
-//     real-world activity and belongs in the main database.
+// DB-path only: ConfigDir() is left untouched. Session/pane state is
+// real-world activity and belongs in the main database (E-1450), whatever the
+// process's cwd.
 //
-// Used by the always-main infrastructure surfaces (`endless-go tmux`). Must
-// precede the first DB()/DBPath() use. The hook keeps
-// ForceRealDB(): its XDG is always the sandbox, so the conditional path
-// already lands on main.
+// Used by the always-main surfaces (the hook, `endless-go tmux`,
+// session-status, project-status). Must precede the first DB()/DBPath() use.
+// Its sibling ForceRealDB — the conditional pin that escaped an injected
+// XDG_CONFIG_HOME — went with that injection (E-2186).
 func PinMainDB() {
 	path, err := dbcontext.MainDBPath()
 	if err != nil {
@@ -332,8 +303,8 @@ var dbOpened bool
 func DBOpened() bool { return dbOpened }
 
 // DBContextPinned reports whether this process's database was chosen IN CODE
-// rather than by its caller — PinMainDB (tmux, session-status, project-status)
-// or ForceRealDB (the hook), both of which signal through dbPathOverride.
+// rather than by its caller — PinMainDB (the hook, tmux, session-status,
+// project-status), which signals through dbPathOverride.
 //
 // It is E-1668's announce exemption. If the caller could not have influenced the
 // choice there is nothing to disambiguate, and the tmux status line has no room
@@ -878,8 +849,8 @@ func BackupDBContext(ctx context.Context) (BackupResult, error) {
 		return BackupResult{}, fmt.Errorf("no database at %s: %w", src, err)
 	}
 
-	// Backups follow the DB: when ForceRealDB() has redirected DBPath() to the
-	// real database, its backups land beside it rather than in the sandbox
+	// Backups follow the DB: when PinMainDB() has redirected DBPath() to the
+	// main database, its backups land beside it rather than in the sandbox
 	// (E-1450). In the normal case DBPath() is ConfigDir()/endless.db, so this
 	// resolves to ConfigDir()/backups exactly as before.
 	backupDir := backupsDir()

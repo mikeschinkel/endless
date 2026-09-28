@@ -171,27 +171,35 @@ func TestConsumeDBFlags(t *testing.T) {
 
 func TestPinMainDB(t *testing.T) {
 	resetDBContext(t)
-	// XDG points into a sandbox; PinMainDB must move the DB to main while
-	// leaving ConfigDir() (config.json, logs) on the sandbox.
-	cache := t.TempDir()
-	sandbox := filepath.Join(cache, "endless", "sandboxes", "e-test")
-	t.Setenv("XDG_CACHE_HOME", cache)
-	t.Setenv("XDG_CONFIG_HOME", sandbox)
+	// A self-dev worktree's sandbox is the context a pinned surface escapes:
+	// PinMainDB must move the DB to main while leaving ConfigDir() alone.
+	wt, sandboxDir := newGatedWorktree(t, "e-1450", true)
+	t.Chdir(wt)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	SetDBContextDir(sandboxDir)
 
 	PinMainDB()
 
-	wantSuffix := filepath.Join(".config", "endless", "endless.db")
-	if got := DBPath(); !strings.HasSuffix(got, wantSuffix) || strings.HasPrefix(got, sandbox) {
-		t.Errorf("DBPath() = %q, want suffix %q and not under sandbox %q", got, wantSuffix, sandbox)
+	if got, want := DBPath(), filepath.Join(home, ".config", "endless", "endless.db"); got != want {
+		t.Errorf("DBPath() = %q, want main %q", got, want)
 	}
-	// ConfigDir() (config.json, logs) must stay on the sandbox: PinMainDB
-	// moves only the DB path.
-	wantConfig := filepath.Join(sandbox, "endless")
-	if got := ConfigDir(); got != wantConfig {
-		t.Errorf("ConfigDir() = %q, want sandbox %q (config.json/logs stay in worktree)", got, wantConfig)
+	if got := ConfigDir(); got != sandboxDir {
+		t.Errorf("ConfigDir() = %q, want %q: PinMainDB moves only the DB path", got, sandboxDir)
 	}
 	if !dbContextExplicit() {
 		t.Error("PinMainDB() must satisfy the worktree gate (dbContextExplicit)")
+	}
+
+	// A user-set XDG_CONFIG_HOME is where main lives (E-2186), so the pin
+	// follows it: pinning main must never split a user's database in two.
+	resetDBContext(t)
+	xdg := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", xdg)
+	PinMainDB()
+	if got, want := DBPath(), filepath.Join(xdg, "endless", "endless.db"); got != want {
+		t.Errorf("with XDG_CONFIG_HOME set: DBPath() = %q, want %q", got, want)
 	}
 }
 
@@ -342,15 +350,29 @@ func consume(t *testing.T, args ...string) error {
 // developer's), and `--db sandbox` must read cwd for the ADDRESS while still
 // requiring the flag for the PERMISSION.
 func TestConsumeDBFlags_Choices(t *testing.T) {
-	t.Run("--db main follows $HOME and ignores XDG_CONFIG_HOME", func(t *testing.T) {
+	t.Run("--db main follows $HOME when XDG_CONFIG_HOME is unset", func(t *testing.T) {
 		resetDBContext(t)
 		home := t.TempDir()
 		t.Setenv("HOME", home)
-		t.Setenv("XDG_CONFIG_HOME", t.TempDir()) // must lose
+		t.Setenv("XDG_CONFIG_HOME", "")
 		if err := consume(t, "--db", "main", "event", "emit"); err != nil {
 			t.Fatalf("ConsumeDBFlags() = %v, want nil", err)
 		}
 		want := filepath.Join(home, ".config", "endless")
+		if dbContextDir != want {
+			t.Errorf("dbContextDir = %q, want %q", dbContextDir, want)
+		}
+	})
+
+	t.Run("--db main follows a user-set XDG_CONFIG_HOME (E-2186)", func(t *testing.T) {
+		resetDBContext(t)
+		t.Setenv("HOME", t.TempDir())
+		xdg := t.TempDir()
+		t.Setenv("XDG_CONFIG_HOME", xdg)
+		if err := consume(t, "--db", "main", "event", "emit"); err != nil {
+			t.Fatalf("ConsumeDBFlags() = %v, want nil", err)
+		}
+		want := filepath.Join(xdg, "endless")
 		if dbContextDir != want {
 			t.Errorf("dbContextDir = %q, want %q", dbContextDir, want)
 		}
@@ -420,6 +442,7 @@ func TestConsumeDBFlags_Choices(t *testing.T) {
 	t.Run("--db and --db-dir together are refused", func(t *testing.T) {
 		resetDBContext(t)
 		t.Setenv("HOME", t.TempDir())
+		t.Setenv("XDG_CONFIG_HOME", "") // main follows XDG first (E-2186)
 		err := consume(t, "--db", "main", "--db-dir", "/tmp/x")
 		if !errors.Is(err, ErrDBFlagConflict) {
 			t.Fatalf("err = %v, want ErrDBFlagConflict", err)
@@ -475,6 +498,7 @@ func TestGateRefusesWithoutAFlag(t *testing.T) {
 		resetDBContext(t)
 		home := t.TempDir()
 		t.Setenv("HOME", home)
+		t.Setenv("XDG_CONFIG_HOME", "") // main follows XDG first (E-2186)
 		wt, sandboxDir := newGatedWorktree(t, "e-1668", true)
 		t.Chdir(wt)
 		if err := consume(t, "--db", "main"); err != nil {
@@ -512,22 +536,21 @@ func TestMainPinRoutingSurvivesTheDeletion(t *testing.T) {
 		}
 	}
 
-	t.Run("dev session (no flag): DB->main, config->XDG", func(t *testing.T) {
+	t.Run("dev session (no flag): DB->main", func(t *testing.T) {
 		resetDBContext(t)
 		wt, sandboxDir := newGatedWorktree(t, "e-1700", true)
 		t.Chdir(wt)
-		// The worktree's .claude/settings.local.json exports this for a Claude
-		// session's hook processes, which is what keeps config.json and logs on
-		// the sandbox now that nothing self-detects it.
-		t.Setenv("XDG_CONFIG_HOME", filepath.Dir(sandboxDir))
+		home := t.TempDir()
+		t.Setenv("HOME", home)
+		t.Setenv("XDG_CONFIG_HOME", "")
 
 		applyGuard()
 
-		if got := DBPath(); !strings.HasSuffix(got, filepath.Join(".config", "endless", "endless.db")) || strings.HasPrefix(got, sandboxDir) {
-			t.Errorf("DBPath() = %q, want the real main DB (not under sandbox %q)", got, sandboxDir)
+		if got, want := DBPath(), filepath.Join(home, ".config", "endless", "endless.db"); got != want {
+			t.Errorf("DBPath() = %q, want the main DB %q", got, want)
 		}
-		if got := ConfigDir(); got != sandboxDir {
-			t.Errorf("ConfigDir() = %q, want sandbox %q (config/logs follow XDG)", got, sandboxDir)
+		if strings.HasPrefix(DBPath(), sandboxDir) {
+			t.Errorf("DBPath() = %q, must not be under sandbox %q", DBPath(), sandboxDir)
 		}
 	})
 
@@ -608,6 +631,7 @@ func TestDBProvenance(t *testing.T) {
 		openedDB(t)
 		home := t.TempDir()
 		t.Setenv("HOME", home)
+		t.Setenv("XDG_CONFIG_HOME", "") // main follows XDG first (E-2186)
 		wt, _ := newGatedWorktree(t, "e-1668", true)
 		t.Chdir(wt)
 		if err := consume(t, "--db", "main"); err != nil {

@@ -1,6 +1,7 @@
 package schemachange_test
 
 import (
+	"database/sql"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -309,60 +310,63 @@ func TestMigrateExecutable_AppliesAChangeEndToEnd(t *testing.T) {
 	}
 }
 
-// TestMigrateExecutable_DBMainFollowsHOMEAndIgnoresXDG is the flag the land
-// actually threads (E-2157), proved against the one thing that could make it
-// lie. Endless injects XDG_CONFIG_HOME to route a process at a worktree's
-// sandbox, so this runs with HOME and XDG_CONFIG_HOME pointing at DIFFERENT
-// directories, each holding a database, and asserts the one under HOME is the
-// one that moved. A resolver that honoured XDG here would migrate a sandbox
-// during a land and report success.
-func TestMigrateExecutable_DBMainFollowsHOMEAndIgnoresXDG(t *testing.T) {
+// TestMigrateExecutable_DBMainFollowsXDGThenHOME is the flag the land
+// actually threads (E-2157), under E-2186's rule for where main lives:
+// $XDG_CONFIG_HOME/endless when the user set it, else $HOME/.config/endless.
+// It runs with HOME and XDG_CONFIG_HOME pointing at DIFFERENT directories, each
+// holding a database, and asserts the XDG one moved and the HOME one did not —
+// then that HOME wins once XDG is unset. A resolver that disagreed with the
+// application's default would migrate one database and leave the user running
+// on another.
+func TestMigrateExecutable_DBMainFollowsXDGThenHOME(t *testing.T) {
 	binary := buildMigrate(t)
 
 	home := t.TempDir()
 	xdg := t.TempDir()
 
-	mainDB := filepath.Join(home, ".config", "endless", "endless.db")
-	if err := os.MkdirAll(filepath.Dir(mainDB), 0o755); err != nil {
-		t.Fatalf("creating the main config dir: %v", err)
-	}
-	if _, err := openDBAt(t, mainDB); err != nil {
-		t.Fatalf("create %s: %v", mainDB, err)
-	}
-
-	// The decoy: a database exactly where an injected XDG_CONFIG_HOME would
-	// send a resolver that honoured it.
+	homeDB := filepath.Join(home, ".config", "endless", "endless.db")
 	xdgDB := filepath.Join(xdg, "endless", "endless.db")
-	if err := os.MkdirAll(filepath.Dir(xdgDB), 0o755); err != nil {
-		t.Fatalf("creating the sandbox config dir: %v", err)
+	dbs := map[string]*sql.DB{}
+	for _, path := range []string{homeDB, xdgDB} {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("creating %s: %v", filepath.Dir(path), err)
+		}
+		db, err := openDBAt(t, path)
+		if err != nil {
+			t.Fatalf("create %s: %v", path, err)
+		}
+		dbs[path] = db
 	}
-	decoy, err := openDBAt(t, xdgDB)
-	if err != nil {
-		t.Fatalf("create %s: %v", xdgDB, err)
+	hasTable := func(path, table string) bool {
+		var name string
+		return dbs[path].QueryRow(
+			"SELECT name FROM sqlite_master WHERE type='table' AND name=?", table,
+		).Scan(&name) == nil
 	}
 
-	change := writeChange(t, "e-2157-db-main.sql", "CREATE TABLE migrated (id INTEGER);\n")
-
+	change := writeChange(t, "e-2186-db-main-xdg.sql", "CREATE TABLE via_xdg (id INTEGER);\n")
 	stdout, stderr, code := runWithEnv(t, binary,
 		[]string{"HOME=" + home, "XDG_CONFIG_HOME=" + xdg},
 		"--db", "main", "apply", string(change))
 	if code != 0 {
 		t.Fatalf("apply exited %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
-	if !strings.Contains(stdout, mainDB) {
-		t.Errorf("--db main did not open the database under HOME\n got: %s\nwant it to name: %s",
-			stdout, mainDB)
+	if !strings.Contains(stdout, xdgDB) {
+		t.Errorf("--db main with XDG_CONFIG_HOME set did not open %s: %s", xdgDB, stdout)
 	}
-	if strings.Contains(stdout, xdgDB) {
-		t.Errorf("--db main resolved through XDG_CONFIG_HOME: %s", stdout)
+	if !hasTable(xdgDB, "via_xdg") || hasTable(homeDB, "via_xdg") {
+		t.Error("--db main with XDG_CONFIG_HOME set migrated the wrong database")
 	}
 
-	var name string
-	err = decoy.QueryRow(
-		"SELECT name FROM sqlite_master WHERE type='table' AND name='migrated'",
-	).Scan(&name)
-	if err == nil {
-		t.Error("--db main migrated the XDG-routed database, not the one under HOME")
+	change = writeChange(t, "e-2186-db-main-home.sql", "CREATE TABLE via_home (id INTEGER);\n")
+	stdout, stderr, code = runWithEnv(t, binary,
+		[]string{"HOME=" + home, "XDG_CONFIG_HOME="},
+		"--db", "main", "apply", string(change))
+	if code != 0 {
+		t.Fatalf("apply exited %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
+	}
+	if !hasTable(homeDB, "via_home") || hasTable(xdgDB, "via_home") {
+		t.Error("--db main with XDG_CONFIG_HOME unset did not migrate the database under HOME")
 	}
 }
 

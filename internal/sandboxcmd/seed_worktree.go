@@ -28,8 +28,8 @@ const nullSessionID = "00000000-0000-0000-0000-000000000000"
 
 // seedFromWorktree populates the sandbox DB at sandboxDir with the project +
 // session rows the CLI needs on first use. cwd must be inside a git worktree
-// of a registered project; the project row is copied from the main DB at
-// ~/.config/endless/endless.db.
+// of a registered project; the project row is copied from the main DB
+// (dbcontext.MainDBPath).
 func seedFromWorktree(sandboxDir string) error {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -41,10 +41,8 @@ func seedFromWorktree(sandboxDir string) error {
 	}
 
 	// The main database, resolved the one way `--db main` resolves it: through
-	// internal/dbcontext, following $HOME and ignoring XDG_CONFIG_HOME. Seeding
-	// runs under a sandbox's own injected XDG, so a resolver that honoured it
-	// would read the sandbox being seeded rather than the database it is being
-	// seeded FROM.
+	// internal/dbcontext. Never ConfigDir()-relative to the sandbox — the sandbox
+	// is the database being seeded, main is the one it is seeded FROM.
 	mainDBPath, err := dbcontext.MainDBPath()
 	if err != nil {
 		return err

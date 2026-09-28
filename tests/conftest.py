@@ -16,7 +16,8 @@ def isolated_env(tmp_path, monkeypatch):
 
     Sets up:
     - tmp config dir (overrides CONFIG_DIR, DB_PATH, CONFIG_FILE)
-    - XDG_CONFIG_HOME env var pointing at tmp (so Go subprocesses are isolated)
+    - HOME and XDG_CONFIG_HOME pointing at a separate tmp home (so the real
+      config and database are unreachable from any subprocess)
     - tmp projects root with a sample project
     - fresh DB with schema applied
     """
@@ -43,10 +44,20 @@ def isolated_env(tmp_path, monkeypatch):
     # broke test_report_reminder.py's claim-gated transitions when run first.
     monkeypatch.setattr(config, "NO_SESSION", False)
 
-    # Set XDG_CONFIG_HOME so Go subprocesses (e.g. endless-event invoked by
-    # event_bridge.emit_event) resolve to the same isolated DB as the Python
-    # in-process code. monkeypatch.setattr only affects the current process.
-    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / ".config"))
+    # Point BOTH config roots at an isolated tmp home, so nothing — this process
+    # or a Go subprocess, flagged or not — can resolve the developer's real
+    # database. HOME as well as XDG, because main follows XDG_CONFIG_HOME then
+    # HOME (E-2186) and a stale bin/endless-go from before E-2186 follows HOME
+    # alone.
+    #
+    # A SEPARATE home, not tmp_path itself: the test DB above must not BE main.
+    # A worktree build refuses to migrate main (E-1975), so a test DB that
+    # resolved as main would never get its schema. Kept distinct, it is threaded
+    # to Go as `--db-dir <config_dir>` by go_db_context_args.
+    isolated_home = tmp_path / ".isolated-home"
+    isolated_home.mkdir()
+    monkeypatch.setenv("HOME", str(isolated_home))
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(isolated_home / ".config"))
 
     # Always auto-migrate in tests, regardless of the developer's shell setting
     # for ENDLESS_AUTO_MIGRATE. Tests need a fully migrated schema.

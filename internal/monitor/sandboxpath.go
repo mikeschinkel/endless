@@ -108,8 +108,8 @@ func WorktreeSandboxDir(dir string) string {
 // WorktreeSandboxConfigDir returns the endless config directory inside the
 // sandbox of the worktree enclosing dir, or "" when dir is not inside one.
 //
-// Endless appends its own "endless" segment exactly as it does to
-// XDG_CONFIG_HOME, so endless's files occupy one named subdirectory of a
+// Endless appends its own "endless" segment exactly as it does to the user's
+// config root, so endless's files occupy one named subdirectory of a
 // sandbox it shares with whatever else the project put there. The database
 // therefore lands at <worktree>/.endless/sandbox/endless/endless.db.
 func WorktreeSandboxConfigDir(dir string) string {

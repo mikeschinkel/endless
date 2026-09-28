@@ -87,8 +87,9 @@ end:
 // isolatedEnv creates the temp HOME and XDG_CONFIG_HOME under runDir and returns
 // the environment the suite runs under: the parent environment with HOME and
 // XDG_CONFIG_HOME replaced so the suite cannot read or pollute the developer's
-// real home/config. Nothing here is app-specific; that Endless's own DB lives
-// under XDG and thus gets isolated for free is incidental.
+// real home/config. Generic isolation, and nothing here is app-specific: both
+// variables are replaced because either may locate a tool's config, Endless's
+// main database included (E-2186: main follows XDG_CONFIG_HOME, then HOME).
 func isolatedEnv(runDir dt.DirPath) (env []string, err error) {
 	var home, xdg dt.DirPath
 

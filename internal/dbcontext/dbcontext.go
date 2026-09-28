@@ -45,21 +45,30 @@
 // database be opened that nobody had chosen. Detection may decide where to look;
 // only a flag decides that you may open it.
 //
-// # Main is not Default
+// # Main is the default
 //
-// ConfigDir resolves the DEFAULT target: XDG_CONFIG_HOME, then $HOME/.config.
-// MainConfigDir resolves `--db main`, which skips XDG_CONFIG_HOME entirely.
+// ConfigDir resolves the DEFAULT target and MainConfigDir resolves `--db main`,
+// and both follow one rule: $XDG_CONFIG_HOME/endless when the user set it, else
+// $HOME/.config/endless. XDG_CONFIG_HOME is the USER's, read as the XDG
+// convention intends — Endless never sets it to route a process (E-2186).
 //
-// The two are not the same function waiting to be merged. Endless injects
-// XDG_CONFIG_HOME to route a child process at a worktree's sandbox
-// (sandboxcmd.Sandbox.Env, minimizerjob), so escaping that injection
-// is the whole meaning of asking for main. E-1964 deleted `sandbox bind` — the
-// PERSISTENT injection written into a settings file — but the per-invocation
-// one remains, by design, and so does this distinction.
+// They were once different on purpose. Endless used to inject XDG_CONFIG_HOME
+// to route a worktree session at its sandbox (`sandbox bind`, and later
+// per-child injections), so `--db main` had to ignore it to escape. That
+// injection was the source of the E-1425/E-1450/E-1628 wrong-database
+// failures: one inherited variable meant both "isolate this" and "the real
+// database is here", with no way to tell them apart. E-1964 deleted the
+// persistent injection and E-2186 the per-child ones; a sandbox is now named
+// only by `--db sandbox`. With no injected value left to escape, ignoring the
+// user's own setting would only split one user's database in two.
 //
-// Following $HOME rather than hardcoding a path is what lets a verify suite,
-// which runs under a temp HOME, say `--db main` and mean its own isolated main
-// rather than the developer's real one.
+// The functions stay separate for their failure contracts, not their answers:
+// ConfigDir keeps its relative fallback, MainConfigDir reports an unresolvable
+// HOME.
+//
+// Following $HOME (or a temp XDG_CONFIG_HOME) is what lets a verify suite,
+// which runs under a temp HOME and temp XDG_CONFIG_HOME, say `--db main` and
+// mean its own isolated main rather than the developer's real one.
 package dbcontext
 
 import (
@@ -252,11 +261,8 @@ end:
 }
 
 // ConfigDir returns the DEFAULT Endless configuration directory. An explicit
-// directory (ChoiceDir) wins; otherwise XDG_CONFIG_HOME, and failing that the
-// home directory's .config.
-//
-// This is not MainConfigDir and does not become it — see "Main is not Default"
-// in the package doc.
+// directory (ChoiceDir) wins; otherwise the same answer as MainConfigDir — see
+// "Main is the default" in the package doc.
 //
 // When no home directory can be resolved the result is relative — the shape
 // internal/monitor has always produced here, kept because changing it would
@@ -264,8 +270,6 @@ end:
 // database would be a silent disaster rejects one itself: cmd/endless-migrate
 // refuses any database path that is not absolute.
 func ConfigDir(explicit dt.DirPath) (dir dt.DirPath) {
-	var root dt.DirPath
-	var home string
 	var err error
 
 	if explicit != "" {
@@ -273,22 +277,15 @@ func ConfigDir(explicit dt.DirPath) (dir dt.DirPath) {
 		goto end
 	}
 
-	root = dt.DirPath(os.Getenv("XDG_CONFIG_HOME"))
-	if root != "" {
-		dir = dt.DirPathJoin(root, ConfigDirName)
-		goto end
-	}
-
-	home, err = os.UserHomeDir()
+	dir, err = MainConfigDir()
 	if err != nil {
 		// Not an error to report: this function's contract is a path, and
 		// every caller has always been handed the join onto whatever
 		// os.UserHomeDir returned — the empty string in this case. The
 		// resulting relative path fails at the first open, loudly, which is
 		// how a caller learns about an unresolvable HOME.
-		home = ""
+		dir = dt.DirPathJoin(configRootName, ConfigDirName)
 	}
-	dir = dt.DirPathJoin3(home, configRootName, ConfigDirName)
 
 end:
 	return dir
@@ -301,16 +298,22 @@ func DBPath(explicit dt.DirPath) dt.Filepath {
 }
 
 // MainConfigDir resolves `--db main`: the deployed installation's configuration
-// directory. It FOLLOWS $HOME while deliberately ignoring $XDG_CONFIG_HOME,
-// which is the whole point of asking for main — to escape a sandbox the
-// environment routed this process into.
+// directory, $XDG_CONFIG_HOME/endless when the user set it, else
+// $HOME/.config/endless.
 //
 // Mirrors Python's config.main_config_dir, so "the main database" means one
 // thing across both layers. Unlike ConfigDir it reports an unresolvable HOME
 // rather than returning a relative path: a caller that NAMED main has been
 // specific, and handing it a silently relative answer would defeat that.
 func MainConfigDir() (dir dt.DirPath, err error) {
+	var root dt.DirPath
 	var home string
+
+	root = dt.DirPath(os.Getenv("XDG_CONFIG_HOME"))
+	if root != "" {
+		dir = dt.DirPathJoin(root, ConfigDirName)
+		goto end
+	}
 
 	home, err = os.UserHomeDir()
 	if err != nil {

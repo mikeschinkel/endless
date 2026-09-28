@@ -90,6 +90,7 @@ func withChdir(t *testing.T, dir string) {
 func withHomeAndSessionEnv(t *testing.T, home, sessionID string) {
 	t.Helper()
 	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "") // main follows XDG first (E-2186)
 	if sessionID == "" {
 		t.Setenv("CLAUDE_CODE_SESSION_ID", "")
 		os.Unsetenv("CLAUDE_CODE_SESSION_ID")

@@ -2921,19 +2921,19 @@ def _builtin_allowed_dirs():
     endless-owned locations outside the project root (the main database, sandbox
     caches — e.g. ~/.config/endless/endless.db, ~/.cache/endless/sandboxes/…).
 
-    Resolved through endless's own config/cache-dir resolution so XDG_CONFIG_HOME /
-    XDG_CACHE_HOME are honored (a sandbox session's redirected endless dir is
-    exempt too), UNIONed with the HOME-anchored main dirs so a literal
-    ~/.config/endless reference stays exempt even inside an XDG-redirected sandbox
-    session. Returned as a data-driven table (a list of resolved dirs), NOT an
-    if/switch: it is the single built-in allow-set that project-config
-    allowed_paths (a later task) will extend at the same composition point."""
+    Resolved through endless's own config/cache-dir resolution, so a user's
+    XDG_CONFIG_HOME / XDG_CACHE_HOME are honored, UNIONed with the HOME-anchored
+    dirs so a literal ~/.config/endless or ~/.cache/endless reference stays
+    exempt even when the user's XDG roots point elsewhere. Returned as a
+    data-driven table (a list of resolved dirs), NOT an if/switch: it is the
+    single built-in allow-set that project-config allowed_paths (a later task)
+    will extend at the same composition point."""
     from endless import config
     dirs = {
-        config._config_root() / "endless",   # honors XDG_CONFIG_HOME
-        config.main_config_dir(),            # ~/.config/endless (main database)
-        config._cache_root() / "endless",    # honors XDG_CACHE_HOME
-        config.main_cache_dir(),             # ~/.cache/endless (main database)
+        config.main_config_dir(),                  # honors XDG_CONFIG_HOME
+        Path.home() / ".config" / "endless",       # literal ~/.config/endless
+        config._cache_root() / "endless",          # honors XDG_CACHE_HOME
+        config.main_cache_dir(),                   # ~/.cache/endless
     }
     return [d.expanduser() for d in dirs]
 

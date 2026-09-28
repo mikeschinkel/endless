@@ -80,7 +80,7 @@ type backupFile struct {
 }
 
 // backupsDir is where backups live: beside the database they back up, so that
-// ForceRealDB() redirecting DBPath() at the real database also moves its
+// PinMainDB() redirecting DBPath() at the main database also moves its
 // backups out of the sandbox (E-1450).
 func backupsDir() string {
 	return filepath.Join(filepath.Dir(DBPath()), "backups")

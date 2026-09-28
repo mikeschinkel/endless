@@ -56,7 +56,7 @@ func enterCmd(args []string) {
 
 	// -i forces interactive mode. Without it, bash/zsh launched via exec
 	// can decide they are non-interactive and exit immediately, defeating
-	// the subshell semantics from E-1072.
+	// the subshell semantics from ED-1072.
 	shellArgs := append(inject.Args, "-i")
 	sup := NewSupervisor(shell, shellArgs...)
 	sup.Env = append(os.Environ(), sb.Env()...)

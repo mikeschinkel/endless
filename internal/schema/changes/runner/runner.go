@@ -100,7 +100,7 @@ func Run(apply func(*sql.Tx) error) {
 
 // dbPath is the DB the change writes to. Whichever program applies the change
 // passes the path it resolved via ENDLESS_CHANGE_DB, so this subprocess targets
-// the exact same file (honoring any ForceRealDB redirect) instead of resolving
+// the exact same file (honoring any PinMainDB redirect) instead of resolving
 // one of its own. A developer running the script directly falls back to the
 // default location.
 //

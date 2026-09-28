@@ -17,6 +17,7 @@ import (
 func TestSuiteOwnershipDB_OpensReadOnly(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "") // main follows XDG first (E-2186)
 	dir := filepath.Join(home, ".config", "endless")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
@@ -66,6 +67,7 @@ func TestReadOnlyDSN(t *testing.T) {
 func TestSuiteOwnershipDB_NeverCreatesTheDatabase(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "") // main follows XDG first (E-2186)
 
 	db, err := suiteOwnershipDB()
 	if err != nil {

@@ -54,21 +54,19 @@ func TestDBPath_IsTheDatabaseInsideTheConfigDir(t *testing.T) {
 	}
 }
 
-// TestMainConfigDir_IgnoresXDG is the assertion that makes `--db main` mean
-// main. Endless injects XDG_CONFIG_HOME to route a child process at a
-// worktree's sandbox, so a resolver that honoured it would answer "the sandbox"
-// to a caller that said "main" — the wrong-database failure the flag exists to
-// prevent, inside the flag that exists to prevent it.
-func TestMainConfigDir_IgnoresXDG(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", "/a/worktree/.endless/sandbox")
+// TestMainConfigDir_HonoursUserXDG is the E-2186 contract: XDG_CONFIG_HOME is
+// the user's own setting, so `--db main` follows it. Endless no longer injects
+// it to route anything, so there is no injected value for main to escape.
+func TestMainConfigDir_HonoursUserXDG(t *testing.T) {
+	t.Setenv("XDG_CONFIG_HOME", "/home/someone/.xdg")
 	t.Setenv("HOME", "/home/someone")
 
 	got, err := dbcontext.MainConfigDir()
 	if err != nil {
 		t.Fatalf("MainConfigDir() error = %v", err)
 	}
-	if got != "/home/someone/.config/endless" {
-		t.Errorf("MainConfigDir() = %q, want %q", got, "/home/someone/.config/endless")
+	if got != "/home/someone/.xdg/endless" {
+		t.Errorf("MainConfigDir() = %q, want %q", got, "/home/someone/.xdg/endless")
 	}
 }
 
@@ -88,20 +86,23 @@ func TestMainConfigDir_FollowsHOME(t *testing.T) {
 	}
 }
 
-// TestMainConfigDir_IsNotConfigDir pins the distinction that E-2157 had to
-// resist collapsing. With XDG set the two resolvers MUST disagree; a refactor
-// that makes them agree has silently redirected every `--db main`.
-func TestMainConfigDir_IsNotConfigDir(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", "/xdg")
-	t.Setenv("HOME", "/home/someone")
+// TestMainConfigDir_IsConfigDir pins the E-2186 collapse: with no explicit
+// directory the default and `--db main` are one database. Two answers for one
+// user is the split E-2186 removed — a user with XDG_CONFIG_HOME set used to
+// get one database by default and another under `--db main`.
+func TestMainConfigDir_IsConfigDir(t *testing.T) {
+	for _, xdg := range []string{"/xdg", ""} {
+		t.Setenv("XDG_CONFIG_HOME", xdg)
+		t.Setenv("HOME", "/home/someone")
 
-	main, err := dbcontext.MainConfigDir()
-	if err != nil {
-		t.Fatalf("MainConfigDir() error = %v", err)
-	}
-	if def := dbcontext.ConfigDir(""); def == main {
-		t.Fatalf("ConfigDir(\"\") and MainConfigDir() both = %q; --db main must "+
-			"ignore XDG_CONFIG_HOME while the default honours it", main)
+		main, err := dbcontext.MainConfigDir()
+		if err != nil {
+			t.Fatalf("MainConfigDir() error = %v", err)
+		}
+		if def := dbcontext.ConfigDir(""); def != main {
+			t.Errorf("XDG_CONFIG_HOME=%q: ConfigDir(\"\") = %q, MainConfigDir() = %q; "+
+				"want one database", xdg, def, main)
+		}
 	}
 }
 
@@ -113,9 +114,8 @@ func TestMainDBPath(t *testing.T) {
 	if err != nil {
 		t.Fatalf("MainDBPath() error = %v", err)
 	}
-	if got != "/home/someone/.config/endless/endless.db" {
-		t.Errorf("MainDBPath() = %q, want %q", got,
-			"/home/someone/.config/endless/endless.db")
+	if got != "/xdg/endless/endless.db" {
+		t.Errorf("MainDBPath() = %q, want %q", got, "/xdg/endless/endless.db")
 	}
 }
 

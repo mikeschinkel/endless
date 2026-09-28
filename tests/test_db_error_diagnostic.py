@@ -264,3 +264,28 @@ def test_insert_into_a_missing_column_is_diagnosed(tmp_path, monkeypatch):
     msg = _flat(exc.value.message)
     assert "missing column: decisions.superseded_by" in msg
     assert "e-1920-decision-end-states.sql" in msg
+
+
+# --- E-2186: a set XDG_CONFIG_HOME is the user's own config dir --------------
+
+def test_user_set_xdg_is_reported_not_waved_off(tmp_path, monkeypatch):
+    """XDG_CONFIG_HOME is the user's own setting, so a schemaless database
+    under it is their real data: REPORT. Only the `endless-go sandbox`
+    subshell's redirect is something the agent may fix by leaving it."""
+    from endless import agent_help
+
+    empty_db = tmp_path / "empty.db"
+    _build_empty_db_at(empty_db)
+    _swap_db_path(monkeypatch, empty_db)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "user-xdg"))
+    monkeypatch.delenv("ENDLESS_SANDBOX", raising=False)
+
+    with pytest.raises(agent_help.Refusal) as exc:
+        db.query("SELECT id FROM tasks")
+    assert exc.value.cls == agent_help.REPORT
+
+    _swap_db_path(monkeypatch, empty_db)
+    monkeypatch.setenv("ENDLESS_SANDBOX", str(tmp_path / "sb"))
+    with pytest.raises(agent_help.Refusal) as exc:
+        db.query("SELECT id FROM tasks")
+    assert exc.value.cls == agent_help.NO_REPORT

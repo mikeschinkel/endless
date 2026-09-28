@@ -24,8 +24,8 @@ import (
 // session write, so all errors here are swallowed.
 
 // userMachineLogPath is the single resolver for the diagnostic log's location.
-// It is XDG_CONFIG_HOME-routed via ConfigDir(), so a worktree sandbox gets its
-// own file rather than polluting the real one. The location may move later;
+// It follows ConfigDir(), so a process on `--db sandbox` gets its own file
+// rather than polluting the main one. The location may move later;
 // keep every reference behind this one function so a future move is one change.
 func userMachineLogPath() string {
 	return filepath.Join(ConfigDir(), "log", "user-machine.jsonl")

@@ -231,6 +231,13 @@ func (sb *Sandbox) Destroy() error {
 }
 
 // Env returns env vars to inject into a child process or subshell.
+//
+// This is the one place Endless still sets XDG_CONFIG_HOME, and it is kept on
+// purpose (E-2186): a named sandbox is a subshell the user deliberately enters
+// and leaves with `exit` (ED-1072), so the variable isolates that subshell's
+// generic XDG environment for every tool run inside it — it does not route an
+// Endless session. Endless's own commands are held apart by ENDLESS_SANDBOX,
+// which the Python CLI refuses project-bound subcommands under (E-1162).
 func (sb *Sandbox) Env() []string {
 	return []string{
 		"XDG_CONFIG_HOME=" + sb.Dir,

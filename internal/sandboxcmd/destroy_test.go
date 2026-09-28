@@ -70,6 +70,7 @@ func TestDestroyExistingWithIfExistsStillDestroysAndReports(t *testing.T) {
 	tmp := t.TempDir()
 	t.Setenv("XDG_CACHE_HOME", tmp)
 	t.Setenv("HOME", tmp)
+	t.Setenv("XDG_CONFIG_HOME", "") // main follows XDG first (E-2186)
 
 	sb, err := Provision("test-if-exists-existing", modeKeep)
 	if err != nil {
