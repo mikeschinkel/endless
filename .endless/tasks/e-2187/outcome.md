@@ -249,6 +249,38 @@ before spawn, and a place for the displaced text will change behaviour. A rename
 key, the ledger event shape and every muscle memory, for a smaller effect. If a
 rename happens anyway, `summary` reads better in a flag than `blurb`.
 
+### Other fields considered, and why only one now
+
+**The test for a new field is more than volume.** A field earns its place when its
+text has its own lifecycle or its own reader, and when agents can reliably tell it
+apart from its neighbours.
+
+**The overload risk is `analysis`, not `context`.** Under the mapping above, five
+categories flow into `analysis` (1,054 tasks, 235K characters), more than `context`
+receives. If any field becomes the catch-all, it is that one.
+
+**The two categories most tempting to split are the least separable.** In the blind
+re-check, open questions (59% agreement) and rationale (63%) were the categories the
+two passes agreed on least. A separate `rationale` field would give agents one more
+place to misfile, not a clearer one. The categories that did separate cleanly
+(status-quo 95%, scope 90%) either already go to `context` or are too small to stand
+alone.
+
+**Two candidates have a real case, but this data cannot settle it:**
+
+- **`questions`**: open questions get answered and then go away, a lifecycle
+  `analysis` does not have. They also have a dedicated reader, the `needs-plan`
+  skill, and the planned spawn gate.
+- **`acceptance`**: the verification step is its reader. It appears in only 7% of
+  descriptions, which may mean acceptance criteria are usually missing, not unneeded.
+
+Both would live mainly in plans, and this survey classified descriptions only. Once
+a plan is required before spawn, a survey of plans can decide these two with data.
+
+**`context` has its own overload risk.** It could become the new home for a
+mini-plan. Its definition is the guard: it covers why the task exists and what is
+true today, never how the work will be done.
+
 ## The cap
 
 **Keep 256.** Supporting evidence:
