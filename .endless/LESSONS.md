@@ -6907,3 +6907,7 @@ A description or plan edit that would trigger a status inference is not a reason
 ### [2026-09-28] Do what Mike asked even when a status would change
 Never skip or water down a requested edit because it would change a task's status, and never report the status change as a caveat. Status inferences exist to take work off Mike, not to be worried at; use --keep-status when holding status is right and otherwise let the inference happen silently. Raising it again after two lessons in one session was infuriating.
 - **Project**: endless
+
+### [2026-09-28] Don't turn a retired process into a successor
+When Mike says a process is no longer needed, do not recast his remarks about other future processes as a replacement for it. Retiring the description triage meant nothing replaces it; future processes each get their own trigger, designed for what they do.
+- **Project**: endless
