@@ -1,0 +1,1 @@
+The E-987 auto-commit problems it documented were resolved long ago; the .endless/focus/ directory it names was never built.
