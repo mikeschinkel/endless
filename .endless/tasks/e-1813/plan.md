@@ -55,3 +55,27 @@ no longer exist. E-1153 is already obsoleted.
 - Thresholds beyond the initial hardcoded low/low (E-1814).
 - Any auto-spawn runtime concern — window, throttle, cap (E-1815, folded into
   E-1814).
+
+
+
+## 5. Settled with Mike during implementation (ES-1248)
+
+The plan left the propose/ratify mechanics open; these were decided in session:
+
+- **`task submit` requires both ratings.** `--complexity` / `--risk` on the call,
+  or already on the task; refused otherwise, naming the flags.
+- **The triager proposes ratings** when it routes a task to `submitted`: the
+  sufficiency template asks for `COMPLEXITY:` / `RISK:` lines, and the parsed
+  values are emitted as a `task.fields_updated` by actor `triager`. Missing or
+  malformed ratings do NOT fail the routing (fail-open stays fail-open) — the
+  task is simply unrated and approve catches it.
+- **Plan-attach auto-promote does not require ratings** (it is a system
+  inference, not an explicit submit); it prints a one-line nudge naming
+  `--complexity` / `--risk` when the promoted task is unrated.
+- **`task approve` refuses an unrated task.** It accepts `--complexity` /
+  `--risk` to supply or override, and reports the ratings it approved.
+- **Claiming/spawning never requires ratings.**
+- **Ratings are freely editable** via `task add/update --complexity/--risk`
+  at any status; `none` clears. No status moves on a rating edit.
+- The 28 meaningfully-tiered rows are **dropped**, not mapped: a mapped value
+  would read as a ratified rating nobody ratified.
