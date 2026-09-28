@@ -696,3 +696,10 @@ func debugLogGit(projectRoot string, args []string) {
 		os.Getenv("GIT_DIR"), os.Getenv("GIT_WORK_TREE"),
 	).Print()
 }
+
+// SanitizedGitEnv is sanitizedGitEnv for callers outside this package that
+// shell out to git themselves (E-2184's land gate), so the E-1309 stripping
+// has one definition rather than a copy per package.
+func SanitizedGitEnv() []string {
+	return sanitizedGitEnv()
+}

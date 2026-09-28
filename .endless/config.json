@@ -9,6 +9,9 @@
     "rules": []
   },
   "self_dev": true,
+  "migrations": {
+    "dirs": ["internal/schema/migrations"]
+  },
   "minimizer": {
     "enabled": false,
     "optimizer": false

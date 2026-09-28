@@ -447,6 +447,42 @@ non-zero, because a conflict re-derived now would be against today's base
 branch, not the one the land failed against. The record lives with the worktree
 and is reaped with it.
 
+#### Pre-land gate: migration collisions and `pre-land.sh`
+
+Two worktrees that each add a migration take the same next number. Git sees two
+different filenames and rebases cleanly, and the collision surfaces only after
+the land, as a migration tool refusing a duplicate version on every connect. So
+`worktree land` refuses first, before it rebases anything, and nothing is merged.
+
+- **Built-in check.** Declare the project's migration directories in
+  `.endless/config.json`:
+
+  ```json
+  "migrations": { "dirs": ["db/migrations"] }
+  ```
+
+  Land refuses when the branch **adds** files there **and** the base branch has
+  also added files there since the branch forked. It is a git diff over those
+  paths, so it works for any migration tool. For numeric names (`00008_x.sql`)
+  the refusal names each file's new number; for other schemes it says to
+  re-order in the tool's own terms. No `migrations` key → no check.
+- **`.endless/hooks/pre-land.sh`** (optional, `chmod +x`), for rules the built-in
+  check does not cover. Run with **cwd = the worktree**, **`$1` = the worktree
+  path**, **`$2` = the base branch**; `ENDLESS_TASK_ID` and `ENDLESS_BASE_BRANCH`
+  are exported. Exit 0 allows the land. Any other exit refuses it: the first
+  line of stdout is the one-line summary, the rest is the block for the agent
+  (silent → a generic summary plus its stderr). Present but not executable →
+  the land is **refused**, not skipped.
+- Both the config and the hook are read from the **main checkout**, never from
+  the branch being judged.
+
+A refusal is one plain line, then a block between `──── paste this to the
+agent ────` and `──── end ────` that you can hand to the agent unchanged. For a
+migration collision it says: rebase onto the base branch, rename as shown, check
+the migration still holds alongside what landed, reset the sandbox (the sandbox
+database already ran the old number), re-verify, land again. `worktree land
+--dry-run` runs the same gate.
+
 #### Post-land script
 
 If a task's change needs a one-time action on **main** *after* it lands — most often removing the untracked files a newly-un-ignored path leaves behind (a commit only moves tracked content, so no merge can delete them), or a fixup git won't perform on merge — commit an **idempotent** `.endless/hooks/post-land/e-<id>.sh` (`chmod +x`) on your branch. It rides into main with the task, and `worktree land` runs it once right after the merge:

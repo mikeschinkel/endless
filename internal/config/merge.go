@@ -73,6 +73,9 @@ func (c *EndlessConfig) Merge(other cfgstore.RootConfig) cfgstore.RootConfig {
 	if len(out.Documents.Rules) == 0 {
 		out.Documents.Rules = o.Documents.Rules
 	}
+	if len(out.Migrations.Dirs) == 0 {
+		out.Migrations.Dirs = o.Migrations.Dirs
+	}
 
 	// Layered field: Tracking. Project value wins if explicitly set;
 	// empty string means inherit from CLI. Final empty string after

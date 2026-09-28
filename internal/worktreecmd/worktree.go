@@ -15,7 +15,8 @@
 // `config.go_db_context_args()`. Pinning main instead would answer a self-dev
 // worktree's question from the real ledger and report no live session.
 // `ledger-orphans` opens no database at all: it is pure git, so its caller
-// threads nothing and the resolved context is simply unused.
+// threads nothing and the resolved context is simply unused. `land-gate` opens
+// no database either: it is git, the project config and the project's hook.
 package worktreecmd
 
 import (
@@ -25,6 +26,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/dbprovenance"
 	"github.com/mikeschinkel/endless/internal/events"
+	"github.com/mikeschinkel/endless/internal/landgate"
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/refusal"
 )
@@ -50,6 +52,8 @@ func Run(args []string) {
 		os.Exit(runInUse(args[1:]))
 	case "ledger-orphans":
 		os.Exit(runLedgerOrphans(args[1:]))
+	case "land-gate":
+		os.Exit(runLandGate(args[1:]))
 	case "-h", "--help", "help":
 		fmt.Fprint(os.Stdout, usageText())
 	default:
@@ -61,8 +65,8 @@ func Run(args []string) {
 		// its own working directory.
 		refusal.ReportIf(
 			fmt.Sprintf("endless-go worktree: unknown verb %q", args[0]),
-			"this came from `endless worktree drop` rather than from a verb you typed",
-			"retry with in-use or ledger-orphans",
+			"this came from `endless worktree drop` or `endless worktree land` rather than from a verb you typed",
+			"retry with in-use, ledger-orphans or land-gate",
 			"the installed endless-go is older than the endless CLI calling it, and only the user can reinstall a matching pair",
 		).Command("worktree").Detail(usageText()).Exit(exitUsage)
 	}
@@ -209,6 +213,58 @@ func ledgerOrphansFault(format string, args ...any) *refusal.Error {
 		Command("worktree ledger-orphans")
 }
 
+// runLandGate asks whether a land may proceed (E-2184).
+//
+//	endless-go worktree land-gate --project <main root> --worktree <path>
+//	    --base <branch> --task <E-NNN>
+//
+// Always JSON on stdout (landgate.Verdict); the only caller is `endless
+// worktree land`, which renders a refusal. Exit 0 whenever the gate could
+// answer — refused or not, the verdict is in the JSON — and 1 when it could
+// not, which the caller must treat as a refusal: a gate that cannot run has not
+// said yes.
+func runLandGate(args []string) int {
+	fs := refusal.NewFlags("land-gate")
+	var a landgate.Args
+	fs.StringVar(&a.ProjectRoot, "project", "", "main checkout: config and hook are read here (required)")
+	fs.StringVar(&a.Worktree, "worktree", "", "task worktree being landed (required)")
+	fs.StringVar(&a.Base, "base", "", "branch the land merges into (required)")
+	fs.StringVar(&a.Task, "task", "", "task id, E-NNN (required)")
+	if err := fs.Parse(args); err != nil {
+		landGateFault("%s", err).Text(fs.Output()).Print()
+		return exitUsage
+	}
+	for name, val := range map[string]string{
+		"--project": a.ProjectRoot, "--worktree": a.Worktree,
+		"--base": a.Base, "--task": a.Task,
+	} {
+		if val == "" {
+			landGateFault("%s is required", name).Print()
+			return exitUsage
+		}
+	}
+
+	v, err := landgate.Check(a)
+	if err != nil {
+		landGateFault("%s", err).Print()
+		return exitUndetermined
+	}
+	if err = dbprovenance.EncodeIndent(os.Stdout, v, "  "); err != nil {
+		landGateFault("%s", err).Print()
+		return exitUndetermined
+	}
+	return exitNotInUse
+}
+
+// landGateFault classifies every way land-gate can fail, for ledgerOrphansFault's
+// reason: its sole caller, `endless worktree land`, builds the argv itself and
+// treats any non-zero exit as a refusal, so a failure here is Endless unable to
+// judge a land — a fault, never a usage error somebody can retype.
+func landGateFault(format string, args ...any) *refusal.Error {
+	return refusal.Faultf("endless-go worktree land-gate: "+format, args...).
+		Command("worktree land-gate")
+}
+
 func usageText() string {
 	return strings.Join([]string{
 		"Usage: endless-go worktree <verb> [flags]",
@@ -218,5 +274,8 @@ func usageText() string {
 		"  ledger-orphans --repo <path> --base <rev> --branch <rev>",
 		"         JSON on stdout: which commits in base..branch hold ledger",
 		"         content the base branch provably already has",
+		"  land-gate --project <path> --worktree <path> --base <branch> --task <E-NNN>",
+		"         JSON verdict on stdout: may this land proceed (migration",
+		"         collision check, then .endless/hooks/pre-land.sh)",
 	}, "\n") + "\n"
 }

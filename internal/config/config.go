@@ -25,7 +25,8 @@ const ConfigFile = "config.json"
 //
 //   - Global-only: Roots, ScanInterval, Ignore, Ownership, NodeID.
 //     These have no project-layer analog; the project layer ignores them.
-//   - Project-only: Name, Label, Description, Language, Status, Dependencies, Documents.
+//   - Project-only: Name, Label, Description, Language, Status, Dependencies, Documents,
+//     Migrations.
 //     These have no CLI-layer analog; the CLI layer ignores them.
 //   - Layered: Tracking, Checks, Tmux. Project values override CLI values.
 //
@@ -40,13 +41,14 @@ type EndlessConfig struct {
 	NodeID       string              `json:"node_id,omitempty"`
 
 	// Project-only fields.
-	Name         string    `json:"name,omitempty"`
-	Label        string    `json:"label,omitempty"`
-	Description  string    `json:"description,omitempty"`
-	Language     string    `json:"language,omitempty"`
-	Status       string    `json:"status,omitempty"`
-	Dependencies []string  `json:"dependencies,omitempty"`
-	Documents    Documents `json:"documents,omitzero"`
+	Name         string     `json:"name,omitempty"`
+	Label        string     `json:"label,omitempty"`
+	Description  string     `json:"description,omitempty"`
+	Language     string     `json:"language,omitempty"`
+	Status       string     `json:"status,omitempty"`
+	Dependencies []string   `json:"dependencies,omitempty"`
+	Documents    Documents  `json:"documents,omitzero"`
+	Migrations   Migrations `json:"migrations,omitzero"`
 
 	// Layered fields.
 	//
@@ -138,6 +140,17 @@ type Tmux struct {
 // "rules" but may grow.
 type Documents struct {
 	Rules []string `json:"rules,omitempty"`
+}
+
+// Migrations is the per-project "migrations" object: where the project keeps
+// its versioned migration files, so `endless worktree land` can refuse a land
+// whose migrations would collide with ones main gained meanwhile (E-2184).
+//
+// Tool-agnostic by design: the land gate diffs these paths in git and knows
+// nothing of goose, Alembic or Prisma.
+type Migrations struct {
+	// Dirs are repo-relative directories holding migration files.
+	Dirs []string `json:"dirs,omitempty"`
 }
 
 // RootConfig satisfies cfgstore.RootConfig (marker method).

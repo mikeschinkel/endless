@@ -1591,6 +1591,94 @@ def _guard_modified_worktree(worktree_path: Path, branch: str, canonical: str) -
         )
 
 
+
+# E-2184: how the pasteable half of a land-gate refusal is marked off. Fixed
+# strings rather than a box: a person selects the lines between them with a
+# mouse, and an agent reading the scrollback finds them with a search.
+LAND_GATE_BLOCK_START = "──── paste this to the agent ────"
+LAND_GATE_BLOCK_END = "──── end ────"
+
+
+def render_land_gate_refusal(summary: str, block: str) -> str:
+    """Render a land-gate refusal: one plain line, then the marked block (E-2184).
+
+    ONE renderer for both halves of the gate — the built-in migration check and
+    a project's pre-land hook both reduce to a one-line summary and a block, so
+    a hook's refusal reads exactly like Endless's own.
+
+    `agent_error` adds the repeated verdict at both ends when an agent is
+    reading, as `task show`/`task add` refusals do, so `| head` and `| tail`
+    each still carry the verdict. A person gets the summary once.
+    """
+    from endless.agent_help import agent_error
+
+    guidance = summary
+    if block.strip():
+        guidance += (
+            f"\n\n{LAND_GATE_BLOCK_START}\n{block.rstrip()}\n"
+            f"{LAND_GATE_BLOCK_END}"
+        )
+    return agent_error(summary, guidance, command="worktree land")
+
+
+def _land_gate(
+    main_root: Path, worktree_path: Path, base_branch: str, canonical: str,
+) -> dict:
+    """Ask `endless-go worktree land-gate` whether this land may proceed.
+
+    E-2184. The check itself is Go (internal/landgate): a git diff over the
+    project's declared migration directories, then the project's optional
+    `.endless/hooks/pre-land.sh`. Returns the verdict JSON.
+
+    Runs the INSTALLED endless-go — main's build — even in self_dev, where the
+    rest of the land uses the worktree's (E-1664). The gate is main's rule, like
+    the config and hook it reads from main: a branch must not supply the code
+    that judges it. And a worktree cut before this gate existed has a binary
+    that does not know the verb, so asking it would refuse every such land.
+
+    Fails CLOSED. A gate that could not run has not said yes, and the migration
+    collision it exists to catch is silent in git and loud only after main has
+    advanced.
+
+    Must run BEFORE anything rebases the branch onto base — Step 3.7 can, and
+    Step 4 does. Afterwards the merge-base is base's tip, base has "gained"
+    nothing, and the check passes the very collision it is for.
+    """
+    binary = shutil.which("endless-go")
+    if not binary:
+        raise click.ClickException(
+            f"cannot land {canonical}: endless-go is not on PATH, so the land "
+            f"gate (migration collisions, pre-land hook) cannot run."
+        )
+    r = subprocess.run(
+        [binary, "worktree", "land-gate",
+         "--project", str(main_root), "--worktree", str(worktree_path),
+         "--base", base_branch, "--task", canonical],
+        capture_output=True, text=True, check=False,
+    )
+    try:
+        verdict = json.loads(r.stdout) if r.returncode == 0 else None
+    except ValueError:
+        verdict = None
+    if verdict is None:
+        raise click.ClickException(
+            f"cannot land {canonical}: the land gate could not decide, so "
+            f"nothing was merged.\n\n"
+            f"{(r.stderr or r.stdout).strip() or f'exit {r.returncode}'}"
+        )
+    return verdict
+
+
+def _refuse_if_land_gated(
+    main_root: Path, worktree_path: Path, base_branch: str, canonical: str,
+) -> None:
+    verdict = _land_gate(main_root, worktree_path, base_branch, canonical)
+    if verdict.get("refused"):
+        raise click.ClickException(render_land_gate_refusal(
+            verdict.get("summary") or f"cannot land {canonical}: the land gate refused.",
+            verdict.get("block") or "",
+        ))
+
 def _read_verbs_list(path: Path) -> list[dict]:
     """Read a verbs.jsonl file as a list of dicts (E-1268).
 
@@ -3997,6 +4085,8 @@ def land_worktree(
       2. If user-work is non-empty: refuse with actionable message.
       3. If auto-commit is non-empty: 'git add' and commit them as
          'Endless: auto-record session activity'.
+      3.6 Refuse if the branch and main both added migrations since they
+         diverged, or the project's pre-land hook vetoes (E-2184).
       4. Rebase the worktree branch onto main (in the worktree).
       4.2 Rebuild the worktree's endless-go from the now-current source,
          self_dev only (E-1941): the rebased branch must compile before main
@@ -4094,6 +4184,8 @@ def land_worktree(
         click.echo(f"  Base:     {base_branch}")
         click.echo(f"  Main:     {main_root}")
         click.echo("")
+        # E-2184: the gate is part of what a real land would do first.
+        _refuse_if_land_gated(main_root, worktree_path, base_branch, canonical)
         # E-1957: rehearse the rebase rather than describe it. A preview that
         # cannot preview the failure it exists to preview is a preview of
         # nothing, and the rebase is the only step of a land that fails in a way
@@ -4299,6 +4391,13 @@ def land_worktree(
                 ),
                 str(e.stderr or e),
             )
+
+        # Step 3.6 (E-2184): refuse when the branch and base both added
+        # migrations since they diverged, or the project's pre-land hook vetoes.
+        # BEFORE Step 3.7, whose rebase can move the merge-base to base's tip and
+        # blind the check. Per attempt, not once: a retry means base moved, and
+        # what it moved by may be a migration.
+        _refuse_if_land_gated(main_root, worktree_path, base_branch, canonical)
 
         # Step 3.7: drop orphan auto-amend commits at branch base (E-1342).
         # canAmend in commit.go rewrites the ledger commit SHAs on

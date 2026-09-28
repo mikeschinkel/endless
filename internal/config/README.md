@@ -59,6 +59,7 @@ pattern.
 | `status`       | `string`    | Receiver wins on non-empty; otherwise inherit from other.  |
 | `dependencies` | `string[]`  | Receiver wins on non-empty; otherwise inherit from other.  |
 | `documents`    | `object`    | `documents.rules`: receiver wins on non-empty.             |
+| `migrations`   | `object`    | `migrations.dirs`: receiver wins on non-empty.             |
 
 These are not expected to appear in CLI files. Same safety-net pattern.
 

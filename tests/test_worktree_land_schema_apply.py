@@ -131,6 +131,10 @@ def _patch_land(monkeypatch, main, worktree, *, self_dev=True):
         worktree_cmd, "_drop_orphan_amendable_commits", lambda wt, base: (0, "")
     )
     monkeypatch.setattr(worktree_cmd, "_ledger_touching_commits", lambda wt, base: [])
+    # E-2184's gate shells to the installed endless-go; not this test's subject.
+    monkeypatch.setattr(
+        worktree_cmd, "_refuse_if_land_gated", lambda root, wt, base, canon: None
+    )
     monkeypatch.setattr(
         worktree_cmd, "_guard_modified_worktree", lambda wt, branch, canon: None
     )
