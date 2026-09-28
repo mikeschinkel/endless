@@ -79,8 +79,8 @@ const (
 	ActorSession
 
 	// ActorSystem is Endless itself, transitioning a task as a consequence of
-	// some other edit — the tier-1 planning exemption, the description-re-spec
-	// reset. No human or agent names these statuses; they are inferred.
+	// some other edit — the description-re-spec reset. No human or agent
+	// names these statuses; they are inferred.
 	ActorSystem
 )
 
@@ -193,13 +193,6 @@ var transitionGroups = []transitionGroup{
 			{From: Submitted, To: Ready, Actor: ActorUser, Label: "approves"},
 			{From: Submitted, To: Unplanned, Actor: ActorUser, Label: "sends back — the spec is not sufficient"},
 			{From: Revisit, To: Submitted, Actor: ActorAgent, Label: "re-submits"},
-		},
-	},
-	{
-		Name: "Planning exemption — a tier-1 task skips both planning and triage",
-		Transitions: []Transition{
-			{From: Untriaged, To: Ready, Actor: ActorSystem, Label: "advances a tier-1 task"},
-			{From: Unplanned, To: Ready, Actor: ActorSystem, Label: "advances a tier-1 task"},
 		},
 	},
 	{

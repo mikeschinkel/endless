@@ -63,13 +63,33 @@ Parent description:
 
 {{range .decisions}}- ED-{{.id}} [{{.status}}] ({{.relation}}): {{.title}}
 {{end}}{{end}}
+## Ratings, when you route to SUBMITTED
+
+A submitted task carries two ratings a person ratifies when they approve it.
+Propose both, judged on the same written material as the routing:
+
+- **COMPLEXITY** — how much human-AI interaction is still needed to nail down
+  the specifics. `low`: an implementer can proceed without asking anything.
+  `medium`: a few details will need confirming along the way. `high`: expect
+  real back-and-forth before the work settles.
+- **RISK** — the blast radius if the work is wrong. `low`: contained, easy to
+  notice and revert. `medium`: touches shared behavior or data others rely on.
+  `high`: could corrupt durable state, break many users, or be hard to undo.
+
+They are independent: a one-line change can still be high risk.
+
 ## Your reply
 
-Reply with EXACTLY ONE line, in one of these two forms, and nothing else — no
-preamble, no markdown, no explanation beyond the single sentence:
+Reply in one of these two forms, and nothing else — no preamble, no markdown,
+no explanation beyond the single sentence:
 
 SUBMITTED: <one sentence saying why the description is a sufficient spec>
+COMPLEXITY: <low|medium|high>
+RISK: <low|medium|high>
+
 UNPLANNED: <one sentence saying what design decision is still open>
 
-The sentence is recorded as provenance on the transition, so a person reading
-the ledger later can see why the call was made. Keep it to one line.
+UNPLANNED is that ONE line alone; SUBMITTED is its line followed by the two
+rating lines. The sentence is recorded as provenance on the transition, so a
+person reading the ledger later can see why the call was made. Keep it to one
+line.

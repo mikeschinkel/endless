@@ -18,6 +18,7 @@ from endless import agent_help, authority, content_names
 from endless import db, config
 from endless import doc_mirror
 from endless import provenance
+from endless import ratings
 from endless import rowcap
 from endless import session_states
 from endless import statuses
@@ -25,13 +26,6 @@ from endless.statuses import TASK_STATUSES
 from endless.project_path import project_name_for_cwd, resolved
 
 
-_TIER_LABELS = {0: "n/a", 1: "auto", 2: "quick", 3: "deep", 4: "discuss"}
-_TIER_FROM_LABEL = {v: k for k, v in _TIER_LABELS.items()}
-
-# Sentinel meaning "tier IS NULL" for filtering
-TIER_NONE = -1
-# Sentinel meaning "clear tier to NULL" for update
-TIER_CLEAR = -2
 # Sentinel meaning "parent_id IS NULL" (root tasks only)
 PARENT_NONE = 0
 
@@ -108,44 +102,6 @@ RELATION_LABELS = {
 }
 
 
-def parse_tier(value: str) -> int:
-    """Parse a tier value from user input: accepts none (NULL), 0/n/a, 1-4, or label names."""
-    s = value.strip().lower()
-    if s == "none":
-        return TIER_CLEAR  # reset to NULL (untriaged)
-    if s in _TIER_FROM_LABEL:
-        return _TIER_FROM_LABEL[s]
-    try:
-        n = int(s)
-        if n in _TIER_LABELS:
-            return n
-    except ValueError:
-        pass
-    valid = ", ".join(f"{k}={v}" for k, v in _TIER_LABELS.items())
-    raise click.ClickException(
-        f"Invalid tier '{value}'. Valid: none, {valid}"
-    )
-
-
-def parse_tier_filter(value: str) -> int:
-    """Parse a tier value for filtering: accepts none/0, 1-4, or label names."""
-    s = value.strip().lower()
-    if s in ("none", "0"):
-        return TIER_NONE
-    if s in _TIER_FROM_LABEL:
-        return _TIER_FROM_LABEL[s]
-    try:
-        n = int(s)
-        if n in _TIER_LABELS:
-            return n
-    except ValueError:
-        pass
-    valid = ", ".join(f"{k}={v}" for k, v in _TIER_LABELS.items())
-    raise click.ClickException(
-        f"Invalid tier '{value}'. Valid: none, {valid}"
-    )
-
-
 def parse_parent_filter(value: str) -> int:
     """Parse a --parent value: 'none' for root tasks, or a task ID (E-NNN or NNN)."""
     s = value.strip().lower()
@@ -161,14 +117,6 @@ def parse_parent_filter(value: str) -> int:
         )
 
 
-def tier_display(tier: int | None) -> str:
-    """Format a tier for display: '1 (auto)'."""
-    if tier is None:
-        return ""
-    label = _TIER_LABELS.get(tier, "?")
-    return f"{tier} ({label})"
-
-
 # Field labels for change output emitted by state-mutating commands (E-1120).
 _FIELD_LABELS = {
     "status":      "Status",
@@ -177,7 +125,8 @@ _FIELD_LABELS = {
     "description": "Description",
     "plan":        "Plan",
     "parent_id":   "Parent",
-    "tier":        "Tier",
+    "complexity":  "Complexity",
+    "risk":        "Risk",
     "outcome":     "Outcome",
     "reason":      "Reason",
     "notes":       "Notes",
@@ -196,11 +145,6 @@ def _format_field_value(name: str, value) -> str:
     """Format a field value for change-output display ('<old> -> <new>')."""
     if value is None:
         return "∅"
-    if name == "tier":
-        try:
-            return _TIER_LABELS.get(int(value), str(value))
-        except (TypeError, ValueError):
-            return str(value)
     if name == "parent_id":
         try:
             return task_id_display(int(value))
@@ -704,17 +648,26 @@ def _resolve_project(name: str | None) -> tuple[int, str]:
     return row[0]["id"], row[0]["name"]
 
 
+def _agent_rating_str(row) -> str:
+    """The --agent rendering of a row's ratings: ' complexity=low risk=high',
+    each key present only when that axis is rated."""
+    return "".join(
+        f" {axis}={row[axis]}" for axis in ratings.AXES if row[axis]
+    )
+
+
 def _render_flat_table(rows):
-    """Render rows as a flat table with ID, Phase, Status, Tier, Title columns."""
+    """Render rows as a flat table with ID, Phase, Status, Rating, Title columns."""
     try:
         term_width = os.get_terminal_size().columns
     except OSError:
         term_width = 80
 
-    # Check if any rows have tier data (column may not exist in all queries)
-    has_tier = (
-        rows and "tier" in rows[0].keys()
-        and any(r["tier"] is not None for r in rows)
+    # The Rating column (complexity/risk, E-1813) appears only when some row is
+    # rated; the columns may not exist in every query that renders here.
+    has_rating = (
+        rows and "complexity" in rows[0].keys()
+        and any(r["complexity"] or r["risk"] for r in rows)
     )
 
     # E-2064: the Status cell is the BARE status here. The supersession notes
@@ -727,14 +680,13 @@ def _render_flat_table(rows):
     id_w = max(2, max(len(task_id_display(r["id"])) for r in rows))
     ph_w = max(5, max(len(r["phase"]) for r in rows))
     st_w = max(6, max(len(r["status"]) for r in rows))
-    ti_w = max(4, max(
-        (len(_TIER_LABELS.get(r["tier"], "-")) if r["tier"] is not None else 1)
-        for r in rows
-    )) if has_tier else 0
+    ra_w = max(6, max(
+        len(ratings.pair(r["complexity"], r["risk"])) for r in rows
+    )) if has_rating else 0
     gap = "  "
     fixed_width = id_w + ph_w + st_w + len(gap) * 3
-    if has_tier:
-        fixed_width += ti_w + len(gap)
+    if has_rating:
+        fixed_width += ra_w + len(gap)
     title_width = max(20, term_width - fixed_width)
     display_titles = []
     for row in rows:
@@ -746,9 +698,9 @@ def _render_flat_table(rows):
 
     header = f"{'ID':<{id_w}}{gap}{'Phase':<{ph_w}}{gap}{'Status':<{st_w}}"
     sep = f"{'─'*id_w}{gap}{'─'*ph_w}{gap}{'─'*st_w}"
-    if has_tier:
-        header += f"{gap}{'Tier':<{ti_w}}"
-        sep += f"{gap}{'─'*ti_w}"
+    if has_rating:
+        header += f"{gap}{'Rating':<{ra_w}}"
+        sep += f"{gap}{'─'*ra_w}"
     header += f"{gap}Title"
     sep += f"{gap}{'─'*max_title_len}"
     click.echo(header)
@@ -760,10 +712,9 @@ def _render_flat_table(rows):
             f"{row['phase']:<{ph_w}}{gap}"
             f"{row['status']:<{st_w}}"
         )
-        if has_tier:
-            tier_val = row["tier"]
-            tier_str = _TIER_LABELS.get(tier_val, "-") if tier_val is not None else "-"
-            line += f"{gap}{tier_str:<{ti_w}}"
+        if has_rating:
+            rating_str = ratings.pair(row["complexity"], row["risk"])
+            line += f"{gap}{rating_str:<{ra_w}}"
         line += f"{gap}{title}"
         click.echo(line)
 
@@ -773,7 +724,8 @@ def show_plan(
     show_all: bool = False,
     status_filter: list[str] | None = None,
     phase_filter: str | None = None,
-    tier_filter: int | None = None,
+    complexity_filter: str | None = None,
+    risk_filter: str | None = None,
     parent_id: int | None = None,
     related_to_id: int | None = None,
     rel_type: str | None = None,
@@ -833,12 +785,11 @@ def show_plan(
     if phase_filter:
         where += " AND pi.phase = ?"
         params.append(phase_filter)
-    if tier_filter is not None:
-        if tier_filter == TIER_NONE:
-            where += " AND pi.tier IS NULL"
-        else:
-            where += " AND pi.tier = ?"
-            params.append(tier_filter)
+    for axis, value in (("complexity", complexity_filter), ("risk", risk_filter)):
+        if value is not None:
+            clause, clause_params = ratings.filter_sql("pi", axis, value)
+            where += clause
+            params.extend(clause_params)
     if parent_id is not None:
         if parent_id == PARENT_NONE:
             where += f" AND pi.{parent_col} IS NULL"
@@ -859,7 +810,8 @@ def show_plan(
         "id": "pi.id",
         "status": "pi.status",
         "phase": "CASE pi.phase WHEN 'urgent' THEN 0 WHEN 'now' THEN 1 WHEN 'next' THEN 2 WHEN 'later' THEN 3 WHEN 'maybe' THEN 4 ELSE 5 END",
-        "tier": "CASE WHEN pi.tier IS NULL THEN 99 ELSE pi.tier END",
+        "complexity": ratings.sort_sql("pi", "complexity"),
+        "risk": ratings.sort_sql("pi", "risk"),
         "created": "pi.created_at",
         "title": "pi.title",
     }
@@ -870,7 +822,7 @@ def show_plan(
     rows = db.query(
         f"SELECT pi.id, pi.phase, COALESCE(pi.title, pi.description) as title, "
         f"pi.description, pi.status, pi.parent_id, "
-        f"pi.created_at, pi.completed_at, pi.tier "
+        f"pi.created_at, pi.completed_at, {ratings.select_sql('pi')} "
         f"FROM {table} pi{join} {where} "
         f"ORDER BY {order_by}",
         tuple(params),
@@ -927,7 +879,8 @@ def show_plan(
                 "duplicates": [
                     f"E-{i}" for i in duplicated.get(row["id"], ())
                 ],
-                "tier": row["tier"],
+                "complexity": row["complexity"],
+                "risk": row["risk"],
                 "title": row["title"],
                 "parent": f"E-{row['parent_id']}" if row["parent_id"] else None,
                 "created": row["created_at"],
@@ -949,8 +902,7 @@ def show_plan(
     if agent:
         click.echo(f"# {proj_name} (removed)" if removed_only else f"# {proj_name}")
         for row in rows:
-            tier_val = row["tier"]
-            tier_str = f" tier={_TIER_LABELS[tier_val]}" if tier_val else ""
+            rating_str = _agent_rating_str(row)
             # key=value rather than the human view's parenthetical, so the line
             # stays parseable — but in the same position, right after the status
             # it qualifies.
@@ -966,7 +918,7 @@ def show_plan(
             ) if duplicates_note(row["status"], duplicated.get(row["id"])) else ""
             click.echo(
                 f"E-{row['id']} {row['phase']} "
-                f"{row['status']}{tier_str}{rb_str}{dup_str} {row['title']}"
+                f"{row['status']}{rating_str}{rb_str}{dup_str} {row['title']}"
             )
         rowcap.echo_footer(hidden, agent=True)
         return
@@ -1002,7 +954,8 @@ def next_tasks(
     no_limit: bool = False,
     agent: bool = False,
     as_json: bool = False,
-    tier: int | None = None,
+    complexity: str | None = None,
+    risk: str | None = None,
     phase_filter: str | None = None,
     parent_id: int | None = None,
 ):
@@ -1031,12 +984,11 @@ def next_tasks(
     )
     params: list = []
 
-    if tier is not None:
-        if tier == TIER_NONE:
-            where += " AND t.tier IS NULL"
-        else:
-            where += " AND t.tier = ?"
-            params.append(tier)
+    for axis, value in (("complexity", complexity), ("risk", risk)):
+        if value is not None:
+            clause, clause_params = ratings.filter_sql("t", axis, value)
+            where += clause
+            params.extend(clause_params)
 
     if phase_filter:
         where += " AND t.phase = ?"
@@ -1066,7 +1018,7 @@ def next_tasks(
 
     rows = db.query(
         f"SELECT t.id, t.phase, COALESCE(t.title, t.description) as title, "
-        f"t.status, t.tier, p.name as project_name "
+        f"t.status, {ratings.select_sql('t')}, p.name as project_name "
         f"FROM task_tree t "
         f"JOIN projects p ON t.project_id = p.id "
         f"{where} "
@@ -1077,7 +1029,6 @@ def next_tasks(
         f"  CASE t.status "
         f"    WHEN 'ready' THEN 0 WHEN 'unplanned' THEN 1 "
         f"    WHEN 'revisit' THEN 2 ELSE 3 END, "
-        f"  CASE WHEN t.tier IS NULL THEN 99 ELSE t.tier END, "
         f"  t.updated_at DESC",
         tuple(params),
     )
@@ -1107,6 +1058,8 @@ def next_tasks(
                 "id": f"E-{row['id']}",
                 "phase": row["phase"],
                 "status": row["status"],
+                "complexity": row["complexity"],
+                "risk": row["risk"],
                 "title": row["title"],
                 "project": row["project_name"],
             }
@@ -1134,7 +1087,7 @@ def next_tasks(
             for item in items:
                 click.echo(
                     f"E-{item['id']} {item['phase']} "
-                    f"{item['status']} {item['title']}"
+                    f"{item['status']}{_agent_rating_str(item)} {item['title']}"
                 )
         else:
             click.echo()
@@ -1211,7 +1164,7 @@ def active_tasks(
 
     rows = db.query(
         f"SELECT t.id, t.phase, COALESCE(t.title, t.description) as title, "
-        f"t.status, t.tier, p.name as project_name "
+        f"t.status, {ratings.select_sql('t')}, p.name as project_name "
         f"FROM task_tree t "
         f"JOIN projects p ON t.project_id = p.id "
         f"{where} "
@@ -1242,7 +1195,8 @@ def active_tasks(
                 "id": f"E-{row['id']}",
                 "phase": row["phase"],
                 "status": row["status"],
-                "tier": row["tier"],
+                "complexity": row["complexity"],
+                "risk": row["risk"],
                 "title": row["title"],
                 "project": row["project_name"],
             }
@@ -1316,7 +1270,7 @@ def recent_tasks(
 
     rows = db.query(
         f"SELECT t.id, t.phase, COALESCE(t.title, t.description) as title, "
-        f"t.status, t.tier, p.name as project_name "
+        f"t.status, {ratings.select_sql('t')}, p.name as project_name "
         f"FROM task_tree t "
         f"JOIN projects p ON t.project_id = p.id "
         f"{where} "
@@ -1448,7 +1402,7 @@ def landed_list(
 
     rows = db.query(
         f"SELECT t.id, t.phase, COALESCE(t.title, t.description) AS title, "
-        f"t.status, t.tier, p.name AS project_name, "
+        f"t.status, {ratings.select_sql('t')}, p.name AS project_name, "
         f"MAX(l.landed_at) AS last_landed, COUNT(l.id) AS land_count "
         f"FROM task_landings l "
         f"JOIN live_tasks t ON t.id = l.task_id "
@@ -2312,11 +2266,16 @@ def add_item(
     parent_id: int | None = None,
     task_type: str | None = None,
     status: str | None = None,
-    tier: int | None = None,
+    complexity: str | None = None,
+    risk: str | None = None,
     force: bool = False,
     justification: str | None = None,
 ):
-    """Add a single task."""
+    """Add a single task.
+
+    `complexity` / `risk` are rating slugs (E-1813); None or `none` files the
+    task unrated. A rating never moves status.
+    """
     from endless.event_bridge import emit_event
 
     task_type = task_type or "todo"
@@ -2326,10 +2285,9 @@ def add_item(
     _, proj_name = _resolve_project(project_name)
     # E-1845: a new task is `untriaged` — filed, not yet looked at. Triage
     # decides whether the description is already a sufficient spec (→ submitted)
-    # or design work is needed first (→ unplanned). Tier-1's auto-`ready` is
-    # unchanged: a tier-1 task is explicitly exempt from planning, so it is
-    # exempt from triage too.
-    status = status or ("ready" if tier == 1 else "untriaged")
+    # or design work is needed first (→ unplanned). E-1813 removed the tier-1
+    # exemption that filed straight to `ready`: a rating does not move status.
+    status = status or "untriaged"
 
     # E-1577/E-1579: research/epic tasks cannot be created in
     # 'unverified'/'assumed'/'confirmed'.
@@ -2360,8 +2318,10 @@ def add_item(
         payload["analysis"] = analysis
     if notes_value is not None:
         payload["notes"] = notes_value
-    if tier is not None:
-        payload["tier"] = tier
+    for axis, value in (("complexity", complexity), ("risk", risk)):
+        value = ratings.normalize(value)
+        if value and value != ratings.NONE:
+            payload[axis] = value
     if parent_id is not None:
         payload["parent_id"] = parent_id
     if after is not None:
@@ -2392,9 +2352,8 @@ def add_item(
     # guarantee. If the child never starts or dies, the task simply stays
     # `untriaged` and the sweep picks it up.
     #
-    # Gated on the RESOLVED status, not on the absence of --status: that leaves
-    # tier-1's auto-`ready` untouched (a tier-1 task is exempt from planning,
-    # so it is exempt from triage), and equally skips any explicit --status.
+    # Gated on the RESOLVED status, not on the absence of --status: an explicit
+    # --status is a routing decision already made, so triage has nothing to do.
     if status == "untriaged":
         from endless import triage
         triage.spawn_detached(item_id)
@@ -3475,7 +3434,70 @@ def decline_item(item_id: int, reason: str):
 _SUBMITTABLE_FROM = statuses.get("submittable-from")
 
 
-def submit_item(item_id: int):
+def _read_for_rating(item_id: int):
+    """The row submit/approve judge: id, title, status and both ratings."""
+    row = db.query(
+        "SELECT id, COALESCE(title, description) as title, status, "
+        f"{ratings.select_sql('live_tasks')} "
+        "FROM live_tasks WHERE id = ?",
+        (item_id,),
+    )
+    if not row:
+        raise click.ClickException(
+            f"No task found with id {item_id}"
+        )
+    return row[0]
+
+
+def _resolve_ratings(row, complexity: str | None, risk: str | None):
+    """Merge rating flags onto a row's current ratings.
+
+    Returns ({axis: effective slug or None}, {axis: new value} for the flags
+    that actually change something). `none` clears.
+    """
+    effective = {}
+    changed = {}
+    for axis, flag in (("complexity", complexity), ("risk", risk)):
+        flag = ratings.normalize(flag)
+        current = row[axis]
+        if flag is None:
+            effective[axis] = current
+            continue
+        new = None if flag == ratings.NONE else flag
+        effective[axis] = new
+        if new != current:
+            changed[axis] = new
+    return effective, changed
+
+
+def _emit_ratings(item_id: int, proj_name: str, changed: dict):
+    """Write rating changes as one task.fields_updated. No-op when empty."""
+    if not changed:
+        return
+    from endless.event_bridge import emit_event
+    emit_event(
+        kind="task.fields_updated",
+        project=proj_name,
+        entity_type="task",
+        entity_id=str(item_id),
+        payload={"fields": changed},
+    )
+
+
+def _refuse_unrated(item_id: int, verb: str, effective: dict, why: str):
+    """Refuse `verb` when either rating is still unset, naming the flags."""
+    unrated = ratings.missing(effective["complexity"], effective["risk"])
+    if not unrated:
+        return
+    flags = " ".join(f"--{a} <low|medium|high>" for a in unrated)
+    raise click.ClickException(
+        f"Cannot {verb} {task_id_display(item_id)}: {' and '.join(unrated)} "
+        f"{'is' if len(unrated) == 1 else 'are'} unrated. {why} Pass {flags}."
+    )
+
+
+def submit_item(item_id: int, complexity: str | None = None,
+                risk: str | None = None):
     """Mark a task as `submitted` — spec-complete, awaiting human approval.
 
     Agent-set. Reachable two ways, both landing here: the agent attached a
@@ -3483,21 +3505,28 @@ def submit_item(item_id: int):
     the executor) OR the agent judges the description a sufficient spec (no
     plan, this verb). Plan-vs-no-plan is carried by the plan row, not by
     status. A human then runs `endless task approve` to reach `ready`.
+
+    E-1813: submitting is where the agent PROPOSES both ratings (ED-1538), so
+    it is refused while either is unset — from the flags here or already on
+    the task. The plan-attach promotion does not demand them (it is inferred,
+    not asked for); it nudges instead, and approve is the backstop.
     """
     from endless.event_bridge import emit_event
 
-    row = db.query(
-        "SELECT id, COALESCE(title, description) as title, status FROM live_tasks "
-        "WHERE id = ?",
-        (item_id,),
-    )
-    if not row:
-        raise click.ClickException(
-            f"No task found with id {item_id}"
-        )
+    row = _read_for_rating(item_id)
+    current = row["status"]
+    effective, changed = _resolve_ratings(row, complexity, risk)
+    _, proj_name = _resolve_project(None)
 
-    current = row[0]["status"]
     if current == "submitted":
+        # Re-proposing ratings on an already-submitted task is a rating edit,
+        # not a second submission.
+        _emit_ratings(item_id, proj_name, changed)
+        if changed:
+            _emit_field_changes(item_id, row["title"], [
+                (a, row[a], v) for a, v in changed.items()
+            ])
+            return
         click.echo(
             click.style("•", fg="cyan")
             + f" Item {task_id_display(item_id)} is already submitted"
@@ -3509,8 +3538,12 @@ def submit_item(item_id: int):
             f"{' or '.join(_SUBMITTABLE_FROM)} tasks (spec-complete, awaiting "
             "approval)."
         )
+    _refuse_unrated(
+        item_id, "submit", effective,
+        "Submitting proposes both ratings for the user to ratify at approve.",
+    )
 
-    _, proj_name = _resolve_project(None)
+    _emit_ratings(item_id, proj_name, changed)
     emit_event(
         kind="task.status_changed",
         project=proj_name,
@@ -3524,31 +3557,29 @@ def submit_item(item_id: int):
     )
 
     _emit_field_changes(
-        item_id, row[0]["title"], [("status", current, "submitted")]
+        item_id, row["title"],
+        [("status", current, "submitted")]
+        + [(a, row[a], v) for a, v in changed.items()],
     )
 
 
-def approve_item(item_id: int):
+def approve_item(item_id: int, complexity: str | None = None,
+                 risk: str | None = None):
     """Approve a `submitted` task → `ready` (the human approval gate).
 
     Approval being a human act stays a CONVENTION, not an enforced gate. It was
     enforced against `kind=background` sessions only, and E-2074 removed that
     kind along with background agents — leaving nothing the system can tell
     apart, since it cannot distinguish a human from an agent in a tmux pane.
+
+    E-1813: approving RATIFIES the proposed ratings (ED-1538), so an unrated
+    task is refused. `--complexity` / `--risk` supply or override a rating in
+    the same call; the ratings approved are reported either way.
     """
     from endless.event_bridge import emit_event
 
-    row = db.query(
-        "SELECT id, COALESCE(title, description) as title, status FROM live_tasks "
-        "WHERE id = ?",
-        (item_id,),
-    )
-    if not row:
-        raise click.ClickException(
-            f"No task found with id {item_id}"
-        )
-
-    current = row[0]["status"]
+    row = _read_for_rating(item_id)
+    current = row["status"]
     if current == "ready":
         click.echo(
             click.style("•", fg="cyan")
@@ -3561,8 +3592,14 @@ def approve_item(item_id: int):
             "'submitted' tasks (spec-complete, awaiting approval). Have the "
             "agent submit it first."
         )
+    effective, changed = _resolve_ratings(row, complexity, risk)
+    _refuse_unrated(
+        item_id, "approve", effective,
+        "Approving ratifies both ratings, so supply them here.",
+    )
 
     _, proj_name = _resolve_project(None)
+    _emit_ratings(item_id, proj_name, changed)
     emit_event(
         kind="task.status_changed",
         project=proj_name,
@@ -3576,7 +3613,13 @@ def approve_item(item_id: int):
     )
 
     _emit_field_changes(
-        item_id, row[0]["title"], [("status", current, "ready")]
+        item_id, row["title"],
+        [("status", current, "ready")]
+        + [(a, row[a], v) for a, v in changed.items()],
+    )
+    click.echo(
+        click.style("•", fg="cyan") + " Ratified: "
+        + ", ".join(f"{a} {effective[a]}" for a in ratings.AXES)
     )
 
 
@@ -4113,7 +4156,7 @@ def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
 
 
 # E-1891: `settled` — the work is over one way or another, shipped or
-# abandoned. The same group gates the tier clear in the Go executor.
+# abandoned.
 #
 # E-2093 renamed this from `_CLAIM_REQUIRES_FORCE`. It no longer names a flag,
 # because no flag clears it any more: re-claiming settled work goes through an
@@ -5011,7 +5054,8 @@ def update_plan(
     plan: str | None = None,
     parent_id: int | None = None,
     phase: str | None = None,
-    tier: int | None = None,
+    complexity: str | None = None,
+    risk: str | None = None,
     task_type: str | None = None,
     analysis: str | None = None,
     outcome: str | None = None,
@@ -5028,6 +5072,9 @@ def update_plan(
     status's reason — the flag every abandonment route has always spelled it
     with — so it is stored as `reason`, and a research task's findings survive
     being abandoned instead of being overwritten by why.
+
+    `complexity` / `risk` (E-1813) set a rating slug, or clear it with `none`.
+    They are editable at any status and never move status.
     """
     from endless.event_bridge import emit_event
 
@@ -5036,7 +5083,7 @@ def update_plan(
     row = db.query(
         "SELECT id, title, description, status, "
         "       COALESCE((SELECT slug FROM task_types WHERE id = live_tasks.type_id), '') AS type, "
-        "       phase, tier, parent_id "
+        f"       phase, parent_id, {ratings.select_sql('live_tasks')} "
         "FROM live_tasks WHERE id = ?",
         (item_id,),
     )
@@ -5045,6 +5092,34 @@ def update_plan(
             f"No task found with id {item_id}"
         )
     row = [_with_content(row[0])]
+
+    # E-1813: an explicit --status submitted / ready is `task submit` /
+    # `task approve` under another verb, so it meets the same rating gate —
+    # otherwise either gate is one `task update` away from meaningless. Ratings
+    # given in this same call count. The plan-attach promotion is not explicit
+    # and is not gated here; it nudges instead (below).
+    #
+    # Only from the status each verb itself accepts. From anywhere else the edge
+    # is illegal outright, and the lifecycle guard's refusal — which names the
+    # reachable statuses — is the useful one; "unrated" would misdirect.
+    current_status = row[0]["status"]
+    gated = (
+        (status == "submitted" and current_status in _SUBMITTABLE_FROM)
+        or (status == "ready" and current_status == "submitted")
+    )
+    if gated:
+        effective, _ = _resolve_ratings(row[0], complexity, risk)
+        if status == "submitted":
+            _refuse_unrated(
+                item_id, "submit", effective,
+                "Submitting proposes both ratings for the user to ratify at "
+                "approve.",
+            )
+        else:
+            _refuse_unrated(
+                item_id, "approve", effective,
+                "Approving ratifies both ratings, so supply them here.",
+            )
 
     if status in _ABANDONMENT_STATUSES and outcome is not None and reason is None:
         reason, outcome = outcome, None
@@ -5187,7 +5262,7 @@ def update_plan(
     #
     # Pinned ONLY when the promotion would actually fire. A status field is not
     # inert in the executor: whenever one is present it also rewrites
-    # `completed_at` and clears the tier of a terminal-status task, so pinning
+    # `completed_at`, so pinning
     # unconditionally would restamp the completion time of a `confirmed` task
     # whose plan text was merely typo-fixed. `status is None` is not re-checked
     # here: passing both --status and --keep-status was rejected at the top of
@@ -5233,23 +5308,13 @@ def update_plan(
     if parent_id is not None:
         _add("parent_id", parent_id if parent_id > 0 else None)
 
-    if tier is not None:
-        if tier == TIER_CLEAR:
-            _add("tier", None)
-        else:
-            _add("tier", tier)
-            # Tier 1 tasks are exempt from planning — and (E-1845) from triage
-            # too — so auto-advance either pre-work status to ready. E-1913:
-            # --keep-status suppresses this the same as the other three
-            # auto-transitions; the flag means no inferred status change, and
-            # "which tier is this" is a separate question from "is it approved".
-            if (
-                tier == 1
-                and status is None
-                and not keep_status
-                and row[0]["status"] in _PRE_JUDGMENT_STATUSES
-            ):
-                _add("status", "ready")
+    # E-1813: a rating is a field edit and nothing more. The tier-1 advance to
+    # `ready` that stood here is gone on purpose — status routing is triage plus
+    # approve, never a rating value.
+    for axis, value in (("complexity", complexity), ("risk", risk)):
+        value = ratings.normalize(value)
+        if value is not None:
+            _add(axis, None if value == ratings.NONE else value)
 
     if outcome is not None:
         _add("outcome", outcome)
@@ -5320,7 +5385,7 @@ def update_plan(
 
     # E-2120: audience-gate the status render. An agent is shown the fields it
     # ASKED to change; a status entry it did not ask for — the E-1845
-    # description-edit reset, the tier-1 advance — is a completed, correct
+    # description-edit reset, the plan-attach promotion — is a completed, correct
     # transition it can do nothing about, and every one of them got relayed to
     # the user as if it were news, spending the scarcest resource in the loop.
     # Rewording that output was tried (E-1859) and did not take: the stimulus is
@@ -5376,6 +5441,23 @@ def update_plan(
                 f"{task_id_display(item_id)} → {untriage_target} ({because})."
             )
 
+    # E-1813: a task promoted to `submitted` by attaching a plan was not
+    # submitted through `task submit`, which is the route that demands ratings.
+    # Say so while the agent that wrote the plan is still here to rate it —
+    # approve will refuse the task until someone does. Shown to agents too:
+    # unlike the status render above, this names something they can act on.
+    promoted = (
+        (auto_untriage and untriage_target == "submitted")
+        or (
+            status is None and not keep_status and plan_attached
+            and row[0]["status"] in _PRE_JUDGMENT_STATUSES
+        )
+    )
+    if promoted:
+        _nudge_unrated(item_id, *(
+            fields.get(a, row[0][a]) for a in ratings.AXES
+        ))
+
     # E-1772: nudge toward `endless task report` on an agent's wind-down. Only
     # when this update actually set a status; effective_outcome covers the
     # "outcome authored earlier, status flipped now" workflow the same way the
@@ -5384,6 +5466,21 @@ def update_plan(
         _maybe_emit_report_reminder(
             item_id, row[0]["status"], status, bool(effective_outcome and effective_outcome.strip())
         )
+
+
+def _nudge_unrated(item_id: int, complexity: str | None, risk: str | None):
+    """One line naming the flags that rate a task just promoted to `submitted`
+    without ratings. Silent when both are already set."""
+    unrated = ratings.missing(complexity, risk)
+    if not unrated:
+        return
+    flags = " ".join(f"--{a} <low|medium|high>" for a in unrated)
+    click.echo(
+        f"{task_id_display(item_id)} is submitted without "
+        f"{' or '.join(unrated)}; propose it with "
+        f"`endless task update {task_id_display(item_id)} {flags}` — "
+        "approve refuses an unrated task."
+    )
 
 
 def _format_timestamp(ts: str) -> str:
@@ -5813,7 +5910,8 @@ def detail_item(
         "SELECT t.id, t.title, t.description, t.phase, t.status, "
         "COALESCE(tt.slug, '') AS type, "
         "t.parent_id, t.created_at, t.updated_at, "
-        "t.completed_at, t.sort_order, t.tier, t.removed, "
+        "t.completed_at, t.sort_order, t.removed, "
+        f"{ratings.select_sql('t')}, "
         "t.project_id, p.name as project_name "
         "FROM tasks t "
         "JOIN projects p ON t.project_id = p.id "
@@ -5916,7 +6014,8 @@ def detail_item(
                 }
                 if landedness is not None else None
             ),
-            "tier": item["tier"],
+            "complexity": item["complexity"],
+            "risk": item["risk"],
             # Bodies are UNGATED here (E-2126). The display flags gate the human
             # renderer; a machine format that withheld populated content behind
             # a flag the consumer did not know to pass returned an empty-looking
@@ -5980,7 +6079,6 @@ def detail_item(
             # that skims must not act on it.
             click.echo("removed=true")
         click.echo(f"project={item['project_name']}")
-        tier_str = f" tier={tier_display(item['tier'])}" if item["tier"] else ""
         # E-1956: key=value rather than the human view's parenthetical, so the
         # line stays parseable — but on the status line, not buried in `links=`,
         # because a terminal status read without it is misleading on its own.
@@ -5992,8 +6090,15 @@ def detail_item(
         dup_str = (
             " duplicates=" + ",".join(f"E-{i}" for i in duplicate_ids)
         ) if duplicates_note(item["status"], duplicate_ids) else ""
+        # Where tier= used to sit, but ALWAYS present, `unrated` included
+        # (E-1813): tier was invisible for ~98% of tasks because it rendered
+        # only when set, and an agent cannot propose a rating it cannot see is
+        # missing.
+        rating_str = "".join(
+            f" {a}={ratings.display(item[a])}" for a in ratings.AXES
+        )
         click.echo(f"type={item['type']} phase={item['phase']} "
-                    f"status={item['status']}{tier_str}{rb_str}{dup_str}")
+                    f"status={item['status']}{rb_str}{dup_str}{rating_str}")
         if item["parent_id"]:
             click.echo(f"parent=E-{item['parent_id']}")
         links = _flatten_relations(item_id)
@@ -6180,8 +6285,14 @@ def _render_detail_human(
         f"{label('Status:')} {val(item['status'])}"
         + click.style(status_note, dim=True)
     )
-    if item["tier"]:
-        click.echo(f"{label('Tier:')} {val(tier_display(item['tier']))}")
+    # Always rendered, `unrated` included (E-1813): tier's line appeared only
+    # when set, which made it invisible for ~98% of tasks.
+    click.echo(
+        f"{label('Ratings:')} "
+        + click.style(" · ", dim=True).join(
+            f"{a} {val(ratings.display(item[a]))}" for a in ratings.AXES
+        )
+    )
     if item["parent_id"]:
         click.echo(f"{label('Parent:')} {val(task_id_display(item['parent_id']))}")
     created_line = f"{label('Created:')} {val(_format_timestamp(item['created_at']))}"

@@ -89,7 +89,7 @@ func runStatusLine(args []string) {
 
 // format renders the active-task status line in the order:
 //
-//	[E-NNN] · project · type · phase · tier · status [· {E-AAA E-BBB +}]
+//	[E-NNN] · project · type · phase · status [· {E-AAA E-BBB +}]
 //
 // Title is intentionally omitted — bar space is scarce; title lives
 // in the menu popup. Style mirrors the user's right-status "Help"
@@ -105,7 +105,6 @@ func format(info *monitor.TaskInfo) string {
 		info.ProjectName,
 		info.Type,
 		info.Phase,
-		tierString(info.Tier),
 		info.Status,
 	} {
 		if field != "" {
@@ -173,16 +172,6 @@ func taskIDPrefix(info *monitor.TaskInfo) string {
 		return fmt.Sprintf("E-%d", info.TaskID)
 	}
 	return fmt.Sprintf("E-%d:E-%d", *info.EpicID, info.TaskID)
-}
-
-// tierString formats the nullable tier integer for display, returning
-// an empty string when tier is nil or 0 ("n/a") so those rows skip the
-// segment entirely.
-func tierString(tier *int64) string {
-	if tier == nil || *tier == 0 {
-		return ""
-	}
-	return fmt.Sprintf("t%d", *tier)
 }
 
 // hintNoTask is shown when the pane (or its window) has an Endless

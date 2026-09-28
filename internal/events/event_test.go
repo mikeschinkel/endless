@@ -88,14 +88,14 @@ func TestEventJSONRoundTrip_WithCorrelation(t *testing.T) {
 	})
 
 	evt := events.Event{
-		V:       events.Version,
-		TS:      ts2,
-		Kind:    events.KindTaskStatusChanged,
-		Project: "endless",
-		Entity:  events.EntityRef{Type: events.EntityTask, ID: "496"},
-		Actor:   events.Actor{Kind: events.ActorSession, ID: "abc-123"},
+		V:             events.Version,
+		TS:            ts2,
+		Kind:          events.KindTaskStatusChanged,
+		Project:       "endless",
+		Entity:        events.EntityRef{Type: events.EntityTask, ID: "496"},
+		Actor:         events.Actor{Kind: events.ActorSession, ID: "abc-123"},
 		CorrelationID: ts1,
-		Payload: payload,
+		Payload:       payload,
 	}
 
 	data, err := json.Marshal(evt)
@@ -341,7 +341,7 @@ func TestValidate_RetiredKindsPassAndUndeclaredDoNot(t *testing.T) {
 
 func TestPayloadRoundTrips(t *testing.T) {
 	// Verify that each payload type marshals and unmarshals correctly.
-	tier := 2
+	complexity := "medium"
 	parentID := int64(100)
 
 	tests := []struct {
@@ -349,13 +349,13 @@ func TestPayloadRoundTrips(t *testing.T) {
 		payload any
 	}{
 		{"TaskCreated", events.TaskCreatedPayload{
-			Title: "Test", Phase: "now", Status: "unplanned", Type: "todo", Tier: &tier, ParentID: &parentID, SortOrder: 5,
+			Title: "Test", Phase: "now", Status: "unplanned", Type: "todo", Complexity: &complexity, ParentID: &parentID, SortOrder: 5,
 		}},
 		{"TaskStatusChanged", events.TaskStatusChangedPayload{
 			OldStatus: "underway", NewStatus: "confirmed", CompletedAt: "2026-04-25T14:00:00",
 		}},
 		{"TaskFieldsUpdated", events.TaskFieldsUpdatedPayload{
-			Fields: map[string]any{"title": "New title", "tier": float64(3)},
+			Fields: map[string]any{"title": "New title", "risk": "high"},
 		}},
 		{"TaskMoved", events.TaskMovedPayload{OldParentID: &parentID, NewParentID: nil}},
 		{"TaskDeleted", events.TaskDeletedPayload{Cascade: true, Title: "Removed task"}},

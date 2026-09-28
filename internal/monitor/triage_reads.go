@@ -80,6 +80,11 @@ type TriageContext struct {
 	// the plan: a task with a plan is not a triage candidate at all, so the
 	// prompt needs to know only that one exists.
 	HasPlan bool `json:"has_plan"`
+	// Complexity and Risk are the task's current rating slugs, "" when unrated
+	// (E-1813). The triager proposes a rating only for an axis still unrated, so
+	// a rating given at filing is never overwritten by the model's guess.
+	Complexity string `json:"complexity"`
+	Risk       string `json:"risk"`
 
 	// Parent is nil for a root task.
 	Parent *TriageParent `json:"parent"`
@@ -179,13 +184,17 @@ func triageContext(db *sql.DB, taskID int64) (TriageContext, error) {
 	err := db.QueryRow(
 		`SELECT p.name, p.path, t.title, COALESCE(t.description, ''),
 		        COALESCE(tt.slug, ''), t.phase, t.status,
-		        `+hasContentExpr("t.id", taskcontent.Plan)+`, t.effective_parent_id
+		        `+hasContentExpr("t.id", taskcontent.Plan)+`, t.effective_parent_id,
+		        COALESCE(cl.slug, ''), COALESCE(rl.slug, '')
 		   FROM task_tree t
 		   JOIN projects p ON p.id = t.project_id
 		   LEFT JOIN task_types tt ON tt.id = t.type_id
+		   LEFT JOIN complexity_levels cl ON cl.id = t.complexity_id
+		   LEFT JOIN risk_levels rl ON rl.id = t.risk_id
 		  WHERE t.id = ?`, taskID,
 	).Scan(&ctx.Project, &ctx.ProjectRoot, &ctx.Title, &ctx.Description,
-		&ctx.Type, &ctx.Phase, &ctx.Status, &ctx.HasPlan, &parentID)
+		&ctx.Type, &ctx.Phase, &ctx.Status, &ctx.HasPlan, &parentID,
+		&ctx.Complexity, &ctx.Risk)
 	if errors.Is(err, sql.ErrNoRows) {
 		return ctx, fmt.Errorf("no such task E-%d", taskID)
 	}

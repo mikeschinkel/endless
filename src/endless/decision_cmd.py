@@ -417,7 +417,7 @@ def detail_decision(item_id: int, agent: bool = False, as_json: bool = False):
         return
 
     # Human-readable output (mirrors detail_item's shape but no phase /
-    # outcome / source_file / completed_at / tier — decisions don't have them).
+    # outcome / source_file / completed_at — decisions don't have them).
     col_w = 11
     label = lambda s: click.style(f"{s:<{col_w}}", fg="cyan")
     val = lambda s: click.style(str(s), fg="white", bold=True)

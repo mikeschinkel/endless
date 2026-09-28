@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/rating"
 	"github.com/mikeschinkel/endless/internal/sessionstate"
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
@@ -443,9 +444,8 @@ func execTaskCreated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 	// Attaching a non-empty plan at creation moves the task to `submitted`
 	// (spec-complete, awaiting human approval — NOT `ready`, which now means
 	// human-approved). Mirrors task.fields_updated when --plan is supplied.
-	// Only fires from a pre-judgment status — an explicit override (e.g. a
-	// tier-1 task created at `ready`, or any other non-default status) is
-	// preserved. E-1845 added `untriaged`, which is now the default `task add`
+	// Only fires from a pre-judgment status — an explicit override (any
+	// non-default status) is preserved. E-1845 added `untriaged`, which is now the default `task add`
 	// lands on; without it, `task add --plan-file plan.md` would file a fully
 	// planned task as untriaged and strand it there.
 	plan := p.PlanText()
@@ -454,11 +454,16 @@ func execTaskCreated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 		status = "submitted"
 	}
 
+	complexityID, riskID, err := p.ratingIDs()
+	if err != nil {
+		return nil, err
+	}
+
 	_, err = db.Exec(
-		`INSERT INTO tasks (id, project_id, phase, title, description, status, type_id, sort_order, parent_id, tier, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO tasks (id, project_id, phase, title, description, status, type_id, sort_order, parent_id, complexity_id, risk_id, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		taskID, projectID, p.Phase, p.Title, p.Description, status, int(typeID),
-		sortOrder, p.ParentID, p.Tier, ts, ts,
+		sortOrder, p.ParentID, complexityID, riskID, ts, ts,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("events: insert task: %w", err)
@@ -537,7 +542,6 @@ func execTaskStatusChanged(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 	taskID := evt.Entity.ID
 
 	var completedAt *string
-	tier := 0
 	if taskstatus.Has(taskstatus.SetsCompletedAt, p.NewStatus) {
 		ts := now()
 		completedAt = &ts
@@ -549,17 +553,17 @@ func execTaskStatusChanged(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 				SELECT id FROM tasks WHERE id = ?
 				UNION ALL
 				SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id
-			) UPDATE tasks SET status = ?, completed_at = ?, tier = ?
+			) UPDATE tasks SET status = ?, completed_at = ?
 			WHERE id IN (SELECT id FROM tree) AND status != ?`,
-			taskID, p.NewStatus, completedAt, tier, p.NewStatus,
+			taskID, p.NewStatus, completedAt, p.NewStatus,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("events: cascade status change: %w", err)
 		}
 	} else {
 		_, err := db.Exec(
-			"UPDATE tasks SET status = ?, completed_at = ?, tier = ? WHERE id = ?",
-			p.NewStatus, completedAt, tier, taskID,
+			"UPDATE tasks SET status = ?, completed_at = ? WHERE id = ?",
+			p.NewStatus, completedAt, taskID,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("events: status change: %w", err)
@@ -626,11 +630,16 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 	// column any more (E-1531): it is resolved by contentWrites, from the map
 	// the projector shares, and written to task_content after the row update.
 	// An unknown field is a hard error rather than a skip, so a key that
-	// neither half knows fails the apply instead of vanishing.
+	// neither half knows fails the apply instead of vanishing. `tier` is
+	// unknown since E-1813: nothing emits it, and the projector skips it on
+	// replay.
 	allowedFields := map[string]string{
 		"title": "title", "description": "description",
-		"phase": "phase", "tier": "tier",
-		"type": "type_id", "status": "status", "parent_id": "parent_id",
+		"phase": "phase",
+		"type":  "type_id", "status": "status", "parent_id": "parent_id",
+	}
+	for _, a := range rating.Axes() {
+		allowedFields[a.Field] = a.Column
 	}
 
 	// planValue is the plan this update writes, under whichever key it arrived,
@@ -669,6 +678,13 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 				return nil, err
 			}
 			value = int(tt)
+		}
+		if axis, ok := rating.AxisForField(field); ok {
+			v, err := axis.ColumnValue(value)
+			if err != nil {
+				return nil, fmt.Errorf("events: %w", err)
+			}
+			value = v
 		}
 		setClauses = append(setClauses, col+" = ?")
 		args = append(args, value)
@@ -778,15 +794,6 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 
 	if status, ok := p.Fields["status"]; ok {
 		statusStr := fmt.Sprintf("%v", status)
-		// Settled = the work is over one way or another, shipped or abandoned,
-		// so a priority tier no longer means anything (E-1891 relocated this
-		// set; it is unchanged).
-		if taskstatus.Has(taskstatus.Settled, statusStr) {
-			if _, tierSet := p.Fields["tier"]; !tierSet {
-				setClauses = append(setClauses, "tier = ?")
-				args = append(args, 0)
-			}
-		}
 		if taskstatus.Has(taskstatus.SetsCompletedAt, statusStr) {
 			setClauses = append(setClauses, "completed_at = ?")
 			args = append(args, now())

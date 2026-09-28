@@ -5,8 +5,8 @@ starts there; triage routes it to `submitted` (the description is already a
 sufficient spec) or `unplanned` (design work needed first).
 
 Covered here:
-  - `task add` defaults to `untriaged`; `--tier 1` and an explicit `--status`
-    still win.
+  - `task add` defaults to `untriaged`; an explicit `--status` still wins, and
+    a rating does not (E-1813 removed the `--tier 1` exemption).
   - No deadlock: a freshly filed task can leave `untriaged` with no triager
     present (the `submit` route lives in test_submit_approve.py; the
     plan-attach route in test_plan_auto_promote.py).
@@ -48,12 +48,14 @@ def test_add_defaults_to_untriaged(seeded_project_at_cwd):
     assert _status_of(item_id) == "untriaged"
 
 
-def test_add_tier_1_still_lands_ready(seeded_project_at_cwd):
-    """A tier-1 task is exempt from planning, so it is exempt from triage."""
+def test_add_with_ratings_still_lands_untriaged(seeded_project_at_cwd):
+    """E-1813 removed tier-1's exemption: a rating given at filing is a rating,
+    not a routing decision, so the task is triaged like any other."""
     item_id = task_cmd.add_item(
-        title="Add a quick thing", description="short", tier=1
+        title="Add a quick thing", description="short",
+        complexity="low", risk="low",
     )
-    assert _status_of(item_id) == "ready"
+    assert _status_of(item_id) == "untriaged"
 
 
 @pytest.mark.parametrize("status", ["unplanned", "ready", "submitted", "revisit"])
@@ -64,12 +66,12 @@ def test_add_explicit_status_wins(status, seeded_project_at_cwd):
     assert _status_of(item_id) == status
 
 
-def test_setting_tier_1_later_advances_untriaged_to_ready(seeded_project_at_cwd):
+def test_rating_an_untriaged_task_later_leaves_it_untriaged(seeded_project_at_cwd):
     item_id = task_cmd.add_item(title="Add a thing", description="short")
     assert _status_of(item_id) == "untriaged"
 
-    task_cmd.update_plan(item_id=item_id, tier=1)
-    assert _status_of(item_id) == "ready"
+    task_cmd.update_plan(item_id=item_id, complexity="low", risk="low")
+    assert _status_of(item_id) == "untriaged"
 
 
 def test_untriaged_is_a_registered_status(seeded_project_at_cwd):

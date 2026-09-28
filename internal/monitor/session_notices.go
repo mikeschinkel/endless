@@ -26,9 +26,9 @@ type Notice struct {
 }
 
 // noticeChange is one field's before/after inside Notice.Changes. The values are
-// `any` because they are heterogeneous by design: a string for status and phase,
-// a number for tier, JSON null for an absent value, and the elision sentinel for
-// freeform fields.
+// `any` because they are heterogeneous by design: a string for status, phase and
+// the two ratings, a number for a legacy tier notice, JSON null for an absent
+// value, and the elision sentinel for freeform fields.
 type noticeChange struct {
 	Before any `json:"before"`
 	After  any `json:"after"`
@@ -50,8 +50,13 @@ const noticeLandedKey = "landed"
 // iteration is randomised, so without this the same edit would render its fields
 // in a different order on every run — noise in a log meant for eyeballing, and
 // churn in golden test output.
+//
+// "tier" stays at the end for undelivered notices written before E-1813 dropped
+// tasks.tier: without it a tier-only notice would render nothing and be held
+// back forever as unrenderable. Nothing writes the key any more.
 var noticeFieldOrder = []string{
-	"status", "phase", "tier", "description", "plan", "analysis", "notes",
+	"status", "phase", "complexity", "risk", "description", "plan", "analysis", "notes",
+	"tier",
 }
 
 // noticeLegacyPlanKey is the pre-E-1000 key the trigger wrote for the plan
@@ -216,7 +221,7 @@ func freeformVerb(c noticeChange) string {
 }
 
 // noticeValue renders one side of an enumerated change. An em dash stands in for
-// a value that was absent, so "tier: — → 2" reads as a value arriving rather
+// a value that was absent, so "complexity: — → low" reads as a value arriving rather
 // than as a missing field.
 func noticeValue(v any) string {
 	switch t := v.(type) {
@@ -239,11 +244,9 @@ func noticeValue(v any) string {
 
 // TaskHeadline is the mutable state of a task worth re-stating on every turn.
 type TaskHeadline struct {
-	Title   string
-	Status  string
-	Phase   string
-	Tier    int64
-	HasTier bool
+	Title  string
+	Status string
+	Phase  string
 }
 
 // GetTaskHeadline loads the fields the per-prompt active-task line re-asserts.
@@ -264,10 +267,9 @@ func GetTaskHeadline(taskID int64) (TaskHeadline, error) {
 		return h, err
 	}
 	var title, status, phase sql.NullString
-	var tier sql.NullInt64
 	err = db.QueryRow(
-		`SELECT title, status, phase, tier FROM live_tasks WHERE id=?`, taskID,
-	).Scan(&title, &status, &phase, &tier)
+		`SELECT title, status, phase FROM live_tasks WHERE id=?`, taskID,
+	).Scan(&title, &status, &phase)
 	if err == sql.ErrNoRows {
 		return h, nil
 	}
@@ -277,14 +279,12 @@ func GetTaskHeadline(taskID int64) (TaskHeadline, error) {
 	h.Title = title.String
 	h.Status = status.String
 	h.Phase = phase.String
-	h.Tier = tier.Int64
-	h.HasTier = tier.Valid && tier.Int64 > 0
 	return h, nil
 }
 
 // Render formats the active-task line, e.g.
 //
-//	Active task: E-1234 (underway · tier 2 · now) — Some title.
+//	Active task: E-1234 (underway · now) — Some title.
 //
 // The parenthetical is omitted entirely when nothing is known, so a task row
 // that has gone missing degrades to the old ID-and-title line rather than
@@ -293,9 +293,6 @@ func (h TaskHeadline) Render(taskID int64) string {
 	var facts []string
 	if h.Status != "" {
 		facts = append(facts, h.Status)
-	}
-	if h.HasTier {
-		facts = append(facts, fmt.Sprintf("tier %d", h.Tier))
 	}
 	if h.Phase != "" {
 		facts = append(facts, h.Phase)

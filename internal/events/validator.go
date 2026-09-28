@@ -8,10 +8,10 @@ import (
 
 // Mismatch describes a difference between projected and current task state.
 type Mismatch struct {
-	TaskID  int64
-	Title   string
-	Field   string
-	Current string
+	TaskID    int64
+	Title     string
+	Field     string
+	Current   string
 	Projected string
 }
 
@@ -74,14 +74,15 @@ func ValidateTasks(currentDB *sql.DB, projectedDBPath string) (*ValidationResult
 }
 
 type taskRow struct {
-	title       string
-	description string
-	phase       string
-	status      string
-	typeID      *int
-	parentID    *int64
-	tier        *int
-	removed     int
+	title        string
+	description  string
+	phase        string
+	status       string
+	typeID       *int
+	parentID     *int64
+	complexityID *int
+	riskID       *int
+	removed      int
 }
 
 // loadTasks reads the raw tasks table, NOT live_tasks (E-1929). This compares
@@ -92,7 +93,7 @@ type taskRow struct {
 func loadTasks(db *sql.DB) (map[int64]taskRow, error) {
 	rows, err := db.Query(
 		`SELECT id, COALESCE(title,''), COALESCE(description,''),
-		 phase, status, type_id, parent_id, tier, removed
+		 phase, status, type_id, parent_id, complexity_id, risk_id, removed
 		 FROM tasks`)
 	if err != nil {
 		return nil, err
@@ -103,7 +104,7 @@ func loadTasks(db *sql.DB) (map[int64]taskRow, error) {
 	for rows.Next() {
 		var id int64
 		var t taskRow
-		if err := rows.Scan(&id, &t.title, &t.description, &t.phase, &t.status, &t.typeID, &t.parentID, &t.tier, &t.removed); err != nil {
+		if err := rows.Scan(&id, &t.title, &t.description, &t.phase, &t.status, &t.typeID, &t.parentID, &t.complexityID, &t.riskID, &t.removed); err != nil {
 			return nil, err
 		}
 		tasks[id] = t
@@ -142,7 +143,8 @@ func compareTasks(id int64, proj, cur taskRow, result *ValidationResult) {
 	check("type_id", fmtOptInt(proj.typeID), fmtOptInt(cur.typeID))
 
 	check("parent_id", fmtOptInt64(proj.parentID), fmtOptInt64(cur.parentID))
-	check("tier", fmtOptInt(proj.tier), fmtOptInt(cur.tier))
+	check("complexity_id", fmtOptInt(proj.complexityID), fmtOptInt(cur.complexityID))
+	check("risk_id", fmtOptInt(proj.riskID), fmtOptInt(cur.riskID))
 	// E-1929: removal is now a field, so it is comparable — and it is the one
 	// field whose drift silently re-frees an id. A task the ledger removed but
 	// the DB still shows live is exactly what ED-1547 exists to catch.

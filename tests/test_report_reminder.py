@@ -144,7 +144,7 @@ def test_confirm_does_not_fire(seeded_project_at_cwd, capsys):
 
 def test_submit_does_not_fire(seeded_project_at_cwd, capsys):
     tid = _add_task("Fix the leak", status="unplanned")
-    task_cmd.submit_item(tid)
+    task_cmd.submit_item(tid, complexity="low", risk="low")
     assert not _fired(capsys)
 
 

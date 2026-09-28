@@ -154,7 +154,7 @@ const (
 	SetsCompletedAt
 
 	// Settled means the work is over one way or another — shipped or
-	// abandoned. Claiming one needs --force, and reaching one clears the tier.
+	// abandoned. Claiming one needs --force.
 	Settled
 
 	// Shipped means the work reached the verification gate or passed it.

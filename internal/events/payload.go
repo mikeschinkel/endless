@@ -1,5 +1,11 @@
 package events
 
+import (
+	"fmt"
+
+	"github.com/mikeschinkel/endless/internal/rating"
+)
+
 // legacyPlanKey is the pre-E-1000 spelling of the plan field in event payloads.
 // It survives only as a READ path: 1,257 db-ledger events carry it, the ledger
 // is immutable, and a projector that ignored the key would rebuild those tasks
@@ -25,15 +31,20 @@ type TaskCreatedPayload struct {
 	// more; `omitempty` keeps it out of every payload this struct marshals.
 	LegacyText string `json:"text,omitempty"`
 
-	Analysis  string `json:"analysis,omitempty"`
-	Notes     string `json:"notes,omitempty"`
-	Phase     string `json:"phase"`
-	Status    string `json:"status"`
-	Type      string `json:"type"`
-	Tier      *int   `json:"tier,omitempty"`
-	ParentID  *int64 `json:"parent_id,omitempty"`
-	SortOrder int    `json:"sort_order"`
-	AfterID   *int64 `json:"after_id,omitempty"` // Go resolves to sort_order
+	Analysis string `json:"analysis,omitempty"`
+	Notes    string `json:"notes,omitempty"`
+	Phase    string `json:"phase"`
+	Status   string `json:"status"`
+	Type     string `json:"type"`
+	// Complexity and Risk are rating slugs (internal/rating) or absent for an
+	// unrated task. Historical payloads carry a `tier` key instead (E-1813
+	// removed tasks.tier); it decodes into nothing, deliberately — tier values
+	// were dropped, not mapped onto a rating.
+	Complexity *string `json:"complexity,omitempty"`
+	Risk       *string `json:"risk,omitempty"`
+	ParentID   *int64  `json:"parent_id,omitempty"`
+	SortOrder  int     `json:"sort_order"`
+	AfterID    *int64  `json:"after_id,omitempty"` // Go resolves to sort_order
 }
 
 // PlanText is the plan this event carries, whichever key spelled it. Post-E-1000
@@ -45,6 +56,23 @@ func (p TaskCreatedPayload) PlanText() string {
 		return p.Plan
 	}
 	return p.LegacyText
+}
+
+// ratingIDs resolves the payload's rating slugs to the ids stored in
+// tasks.complexity_id / tasks.risk_id; nil for an absent rating. An unknown
+// slug is an error, so it never reaches the database.
+func (p TaskCreatedPayload) ratingIDs() (complexityID, riskID any, err error) {
+	if p.Complexity != nil {
+		if complexityID, err = rating.ComplexityAxis.ColumnValue(*p.Complexity); err != nil {
+			return nil, nil, fmt.Errorf("events: %w", err)
+		}
+	}
+	if p.Risk != nil {
+		if riskID, err = rating.RiskAxis.ColumnValue(*p.Risk); err != nil {
+			return nil, nil, fmt.Errorf("events: %w", err)
+		}
+	}
+	return complexityID, riskID, nil
 }
 
 // TaskImportedPayload is replay-only from E-2142 on: `task import` and

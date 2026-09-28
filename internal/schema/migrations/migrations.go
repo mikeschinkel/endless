@@ -46,5 +46,6 @@ func Go() []*goose.Migration {
 		retireCuratedNextImportAndOrder(),
 		addTaskQuestionsReason(),
 		liftTaskContent(),
+		ratingsReplaceTier(),
 	}
 }

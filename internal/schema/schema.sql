@@ -277,7 +277,45 @@ INSERT INTO task_types (id, slug, label) VALUES
     (5, 'brainstorm', 'Brainstorm')
 ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
 
+-- Rating levels (E-1813, implementing ED-1538/ED-1539). SQL mirrors of the
+-- rating.Level Go enum, one table per axis so each tasks column has its own FK
+-- target: complexity (how much human-AI interaction nailing down the specifics
+-- takes) and risk (the blast radius if the work is wrong). Same ED-1506 shape and
+-- upsert reconcile as task_types above; rating.VerifyIntegrity fails closed on
+-- drift. Ids 2 and 4 are deliberately unseeded so medium-low and medium-high can
+-- be added later without renumbering persisted ids.
+CREATE TABLE IF NOT EXISTS complexity_levels (
+    id    INTEGER PRIMARY KEY,
+    slug  TEXT UNIQUE NOT NULL,
+    label TEXT NOT NULL
+);
+
+INSERT INTO complexity_levels (id, slug, label) VALUES
+    (1, 'low',    'Low'),
+    (3, 'medium', 'Medium'),
+    (5, 'high',   'High')
+ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
+
+CREATE TABLE IF NOT EXISTS risk_levels (
+    id    INTEGER PRIMARY KEY,
+    slug  TEXT UNIQUE NOT NULL,
+    label TEXT NOT NULL
+);
+
+INSERT INTO risk_levels (id, slug, label) VALUES
+    (1, 'low',    'Low'),
+    (3, 'medium', 'Medium'),
+    (5, 'high',   'High')
+ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
+
 -- Task items
+--
+-- complexity_id / risk_id (E-1813) replaced the bare `tier INTEGER` column.
+-- Both are nullable: NULL is "unrated", and an unrated task can be claimed but
+-- not approved. The agent proposes them at submit and the user ratifies them at
+-- approve (ED-1538). They are declared after `removed` because that is where
+-- ALTER TABLE ADD COLUMN puts them on a migrated database (00008), and the two
+-- shapes must match.
 CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY,
     project_id INTEGER NOT NULL,
@@ -291,9 +329,10 @@ CREATE TABLE IF NOT EXISTS tasks (
     completed_at TEXT,
     type_id INTEGER REFERENCES task_types(id),
     updated_at TEXT NOT NULL DEFAULT '',
-    tier INTEGER,
     changed_by_session INTEGER,
     removed INTEGER NOT NULL DEFAULT 0,
+    complexity_id INTEGER REFERENCES complexity_levels(id),
+    risk_id INTEGER REFERENCES risk_levels(id),
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE SET NULL
 );
@@ -432,7 +471,7 @@ END;
 -- one.
 --
 -- One row per (session, update event) rather than per field: a single
--- `task update` may change status, tier and description at once, and that is one
+-- `task update` may change status, complexity and description at once, and that is one
 -- edit — one line, one notified flip, one queryable event.
 --
 -- Per-session rows (rather than one row + a delivery table) so `notified` stays
@@ -496,11 +535,17 @@ CREATE INDEX IF NOT EXISTS idx_session_notices_undelivered
 -- whose session is gone entirely has nobody to notify. A session that ends AFTER
 -- its notice is written still strands a row, which is what
 -- ReapNoticesForEndedSessions cleans up.
+--
+-- Ratings (E-1813) render as their slugs, not their ids, so a notice reads
+-- "complexity: — → low" and stays readable if a level is later relabelled.
+-- Keep this body byte-identical (modulo whitespace) to the copy in
+-- internal/schema/migrations/00008_ratings_replace_tier.go.
 CREATE TRIGGER IF NOT EXISTS tasks_notify_sessions AFTER UPDATE ON tasks
-WHEN OLD.status      IS NOT NEW.status
-  OR OLD.phase       IS NOT NEW.phase
-  OR OLD.tier        IS NOT NEW.tier
-  OR OLD.description IS NOT NEW.description
+WHEN OLD.status        IS NOT NEW.status
+  OR OLD.phase         IS NOT NEW.phase
+  OR OLD.complexity_id IS NOT NEW.complexity_id
+  OR OLD.risk_id       IS NOT NEW.risk_id
+  OR OLD.description   IS NOT NEW.description
 BEGIN
     INSERT INTO session_notices
         (session_id, task_id, changes, changed_at, changed_by_session)
@@ -515,9 +560,17 @@ BEGIN
                        json_object('before', OLD.phase, 'after', NEW.phase)
                  WHERE OLD.phase IS NOT NEW.phase
                 UNION ALL
-                SELECT 'tier',
-                       json_object('before', OLD.tier, 'after', NEW.tier)
-                 WHERE OLD.tier IS NOT NEW.tier
+                SELECT 'complexity',
+                       json_object(
+                           'before', (SELECT slug FROM complexity_levels WHERE id = OLD.complexity_id),
+                           'after',  (SELECT slug FROM complexity_levels WHERE id = NEW.complexity_id))
+                 WHERE OLD.complexity_id IS NOT NEW.complexity_id
+                UNION ALL
+                SELECT 'risk',
+                       json_object(
+                           'before', (SELECT slug FROM risk_levels WHERE id = OLD.risk_id),
+                           'after',  (SELECT slug FROM risk_levels WHERE id = NEW.risk_id))
+                 WHERE OLD.risk_id IS NOT NEW.risk_id
                 UNION ALL
                 SELECT 'description',
                        json_object(

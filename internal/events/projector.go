@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 
 	"github.com/mikeschinkel/endless/internal/kairos"
+	"github.com/mikeschinkel/endless/internal/rating"
 	"github.com/mikeschinkel/endless/internal/schema"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
 	"github.com/mikeschinkel/endless/internal/tasktype"
@@ -200,11 +201,16 @@ func replayTaskCreated(db *sql.DB, evt *Event, result *ProjectResult) error {
 	// type assigned. E-1548 reclassifies them.
 	typeID := projectorTypeID(p.Type)
 
+	complexityID, riskID, err := p.ratingIDs()
+	if err != nil {
+		return err
+	}
+
 	_, err = db.Exec(
-		`INSERT INTO tasks (id, project_id, phase, title, description, status, type_id, sort_order, parent_id, tier, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO tasks (id, project_id, phase, title, description, status, type_id, sort_order, parent_id, complexity_id, risk_id, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		taskID, projectID, p.Phase, p.Title, p.Description, p.Status, typeID,
-		sortOrder, p.ParentID, p.Tier, ts, ts,
+		sortOrder, p.ParentID, complexityID, riskID, ts, ts,
 	)
 	if err != nil {
 		return fmt.Errorf("insert task %d: %w", taskID, err)
@@ -271,7 +277,6 @@ func replayTaskStatusChanged(db *sql.DB, evt *Event, result *ProjectResult) erro
 	taskID := evt.Entity.ID
 
 	var completedAt *string
-	tier := 0
 	if taskstatus.Has(taskstatus.SetsCompletedAt, p.NewStatus) {
 		ts := kairosToISO(evt.TS)
 		completedAt = &ts
@@ -283,17 +288,17 @@ func replayTaskStatusChanged(db *sql.DB, evt *Event, result *ProjectResult) erro
 				SELECT id FROM tasks WHERE id = ?
 				UNION ALL
 				SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id
-			) UPDATE tasks SET status = ?, completed_at = ?, tier = ?
+			) UPDATE tasks SET status = ?, completed_at = ?
 			WHERE id IN (SELECT id FROM tree) AND status != ?`,
-			taskID, p.NewStatus, completedAt, tier, p.NewStatus,
+			taskID, p.NewStatus, completedAt, p.NewStatus,
 		)
 		if err != nil {
 			return err
 		}
 	} else {
 		_, err := db.Exec(
-			"UPDATE tasks SET status = ?, completed_at = ?, tier = ? WHERE id = ?",
-			p.NewStatus, completedAt, tier, taskID,
+			"UPDATE tasks SET status = ?, completed_at = ? WHERE id = ?",
+			p.NewStatus, completedAt, taskID,
 		)
 		if err != nil {
 			return err
@@ -328,7 +333,7 @@ func replayTaskFieldsUpdated(db *sql.DB, evt *Event, result *ProjectResult) erro
 		for field, value := range p.Fields {
 			col, ok := allowedDecisionFields[field]
 			if !ok {
-				continue // skip task-only fields (phase, type, parent_id, tier, ...)
+				continue // skip task-only fields (phase, type, parent_id, ...)
 			}
 			setClauses = append(setClauses, col+" = ?")
 			args = append(args, value)
@@ -368,10 +373,17 @@ func replayTaskFieldsUpdated(db *sql.DB, evt *Event, result *ProjectResult) erro
 	// is immutable by design; dropping them would rebuild those tasks with
 	// empty plans, silently, because an absent field is indistinguishable from
 	// an empty one.
+	//
+	// `tier` is absent too (E-1813 dropped tasks.tier): historical events carry
+	// it and are skipped, and a tier value is deliberately not mapped onto a
+	// rating — nobody ratified one.
 	allowedFields := map[string]string{
 		"title": "title", "description": "description",
-		"phase": "phase", "tier": "tier",
-		"type": "type_id", "status": "status", "parent_id": "parent_id",
+		"phase": "phase",
+		"type":  "type_id", "status": "status", "parent_id": "parent_id",
+	}
+	for _, a := range rating.Axes() {
+		allowedFields[a.Field] = a.Column
 	}
 
 	for field, value := range p.Fields {
@@ -399,6 +411,13 @@ func replayTaskFieldsUpdated(db *sql.DB, evt *Event, result *ProjectResult) erro
 				value = nil
 			}
 		}
+		if axis, ok := rating.AxisForField(field); ok {
+			v, err := axis.ColumnValue(value)
+			if err != nil {
+				return fmt.Errorf("projector: %w", err)
+			}
+			value = v
+		}
 		setClauses = append(setClauses, col+" = ?")
 		args = append(args, value)
 	}
@@ -407,12 +426,6 @@ func replayTaskFieldsUpdated(db *sql.DB, evt *Event, result *ProjectResult) erro
 		statusStr := fmt.Sprintf("%v", status)
 		// Mirrors execTaskFieldsUpdated exactly — projection(ledger) must equal
 		// the live DB, so the two read the same groups (E-1891).
-		if taskstatus.Has(taskstatus.Settled, statusStr) {
-			if _, tierSet := p.Fields["tier"]; !tierSet {
-				setClauses = append(setClauses, "tier = ?")
-				args = append(args, 0)
-			}
-		}
 		if taskstatus.Has(taskstatus.SetsCompletedAt, statusStr) {
 			setClauses = append(setClauses, "completed_at = ?")
 			args = append(args, kairosToISO(evt.TS))

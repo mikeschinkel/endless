@@ -31,6 +31,13 @@ permanent override.
 **The human always wins.** `apply` re-reads the task's status immediately before
 emitting and refuses to move a row that is no longer `untriaged`, so a person
 who routed the task by hand in the interval is never overwritten.
+
+**Ratings ride along, and never block the route (E-1813).** A task routed to
+`submitted` also gets the model's proposed complexity and risk, for the user to
+ratify at approve — but only for an axis the task does not already carry, so a
+rating given at filing is never replaced by a guess. A missing or malformed
+rating line costs the rating, not the routing: the task still moves, unrated,
+and approve refuses it until someone rates it.
 """
 
 import functools
@@ -45,6 +52,7 @@ import click
 
 from endless import provenance
 from endless import config
+from endless import ratings
 
 # How long one sufficiency call may take. Generous: the prompt carries a
 # parent, siblings and decisions, and a slow call is not a wrong call.
@@ -210,12 +218,14 @@ def render_prompt(context: dict) -> str:
 # --- the model call ---------------------------------------------------------
 
 
-def evaluate(prompt: str) -> tuple[str, str] | None:
-    """Ask the model to route one task; return (decision, rationale) or None.
+def evaluate(prompt: str) -> tuple[str, str, dict] | None:
+    """Ask the model to route one task; return (decision, rationale, ratings)
+    or None.
 
     None is every failure: timeout, missing binary, non-zero exit, a reply that
     does not lead with one of the two tokens. The caller leaves the task
-    `untriaged` for the next sweep.
+    `untriaged` for the next sweep. `ratings` is whatever parse_ratings found,
+    possibly empty — never a reason to fail.
     """
     from endless import internal_claude
 
@@ -229,7 +239,10 @@ def evaluate(prompt: str) -> tuple[str, str] | None:
         return None
     if result.returncode != 0:
         return None
-    return parse_reply(result.stdout)
+    verdict = parse_reply(result.stdout)
+    if verdict is None:
+        return None
+    return (*verdict, parse_ratings(result.stdout))
 
 
 def parse_reply(reply: str) -> tuple[str, str] | None:
@@ -252,22 +265,71 @@ def parse_reply(reply: str) -> tuple[str, str] | None:
     return None
 
 
+def parse_ratings(reply: str) -> dict:
+    """The `COMPLEXITY:` / `RISK:` lines of a reply, as {axis: slug}.
+
+    Lenient by design: any line, any case, first valid value per axis wins, and
+    an absent or unrecognized value simply leaves that axis out. The ratings are
+    a proposal a human ratifies, so a dropped one costs a keystroke at approve,
+    while a strict parser would cost the whole routing.
+    """
+    found: dict = {}
+    for raw in (reply or "").splitlines():
+        key, sep, value = raw.partition(":")
+        axis = key.strip().lower()
+        if not sep or axis not in ratings.AXES or axis in found:
+            continue
+        slug = value.strip().strip(".").lower()
+        if slug in ratings.LEVELS:
+            found[axis] = slug
+    return found
+
+
 # --- the write --------------------------------------------------------------
 
 
-def apply(task_id: int, decision: str, rationale: str) -> bool:
+def apply(task_id: int, decision: str, rationale: str,
+          proposed: dict | None = None) -> bool:
     """Emit the transition, guarded on the task still being `untriaged`.
 
     Returns True when the status moved. Re-reads the row first — the model call
     it follows takes seconds, and in that window a human may have routed the
     task by hand. They win. The same guard is what makes a re-claimed sweep
     transition each task at most once.
+
+    `proposed` ratings are written only on a route to `submitted`, and only for
+    an axis the re-read row still has unrated — see the module docstring.
     """
     from endless.event_bridge import emit_event
 
     current = build_context(task_id)
     if current.get("status") != "untriaged":
         return False
+
+    ratings_to_write = {
+        axis: slug for axis, slug in (proposed or {}).items()
+        if decision == "submitted" and not current.get(axis)
+    }
+    if ratings_to_write:
+        # Before the status change, so the task is never observed `submitted`
+        # and unrated when it did not have to be. Same actor and provenance
+        # shape as the transition: a person disagreeing with a rating should be
+        # able to see where it came from.
+        emit_event(
+            kind="task.fields_updated",
+            project=current["project"],
+            entity_type="task",
+            entity_id=str(task_id),
+            payload={
+                "fields": ratings_to_write,
+                "triage": {
+                    "model": config.internal_model("triage"),
+                    "template": TEMPLATE_NAME,
+                },
+            },
+            actor_kind="triager",
+            project_root=current.get("project_root"),
+        )
 
     emit_event(
         kind="task.status_changed",
@@ -396,16 +458,18 @@ def _triage_one(task_id: int, dry_run: bool = False) -> dict:
             result["detail"] = "no usable verdict from the model"
             return result
 
-        decision, rationale = verdict
+        decision, rationale, proposed = verdict
         result["decision"] = decision
         result["rationale"] = rationale
+        if proposed:
+            result["ratings"] = proposed
 
         if dry_run:
             result["outcome"] = "dry-run"
             return result
 
         try:
-            moved = apply(task_id, decision, rationale)
+            moved = apply(task_id, decision, rationale, proposed)
         except (TriageError, click.ClickException) as exc:
             result["detail"] = str(exc)
             return result

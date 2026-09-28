@@ -18,6 +18,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/dbcontext"
 	"github.com/mikeschinkel/endless/internal/gatekind"
 	"github.com/mikeschinkel/endless/internal/processkind"
+	"github.com/mikeschinkel/endless/internal/rating"
 	"github.com/mikeschinkel/endless/internal/schema"
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 	"github.com/mikeschinkel/endless/internal/tasktype"
@@ -850,6 +851,16 @@ func DB() (*sql.DB, error) {
 			if hasTable(dbConn, "session_task_relations") {
 				if err := sessiontaskrelation.VerifyIntegrity(dbConn); err != nil {
 					dbErr = fmt.Errorf("session_task_relations integrity check on %s: %w", path, err)
+					dbConn = nil
+					return
+				}
+			}
+			// E-1813: same fail-closed contract for the complexity_levels and
+			// risk_levels rating mirrors. Both are created by the same
+			// migration, so one probe covers the pair.
+			if hasTable(dbConn, "complexity_levels") {
+				if err := rating.VerifyIntegrity(dbConn); err != nil {
+					dbErr = fmt.Errorf("rating levels integrity check on %s: %w", path, err)
 					dbConn = nil
 					return
 				}

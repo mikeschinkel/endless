@@ -62,8 +62,8 @@ func TestUntriagedTasks_OldestFirstAndCapped(t *testing.T) {
 	// Not untriaged — a triaged task must never be re-selected, which is what
 	// makes a re-claimed sweep idempotent.
 	seedTriageTask(t, db, 13, 1, "already", "submitted", "2026-07-01T00:00:00", nil)
-	// Tier-1 filings land straight in `ready` and are exempt from triage.
-	seedTriageTask(t, db, 14, 1, "tier one", "ready", "2026-07-02T00:00:00", nil)
+	// A task already approved is past triage too.
+	seedTriageTask(t, db, 14, 1, "approved", "ready", "2026-07-02T00:00:00", nil)
 
 	got, err := untriagedTasks(db, "", 2)
 	if err != nil {
@@ -305,5 +305,22 @@ func TestTriageContext_HasPlanReportsAnAttachedPlan(t *testing.T) {
 	}
 	if !ctx.HasPlan {
 		t.Error("has_plan false for a task with an attached plan")
+	}
+}
+
+// TestTriageContext_CarriesCurrentRatings pins E-1813: the triager proposes a
+// rating only for an axis still unrated, so the context must say which are set.
+func TestTriageContext_CarriesCurrentRatings(t *testing.T) {
+	db := triageTestDB(t)
+	seedTriageTask(t, db, 81, 1, "rated at filing", "untriaged", "2026-08-01T00:00:00", nil)
+	if _, err := db.Exec(`UPDATE tasks SET risk_id = 5 WHERE id = 81`); err != nil {
+		t.Fatalf("rate: %v", err)
+	}
+	ctx, err := triageContext(db, 81)
+	if err != nil {
+		t.Fatalf("triageContext: %v", err)
+	}
+	if ctx.Complexity != "" || ctx.Risk != "high" {
+		t.Errorf("ratings = %q/%q, want unrated/high", ctx.Complexity, ctx.Risk)
 	}
 }

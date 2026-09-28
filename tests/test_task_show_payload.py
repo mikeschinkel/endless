@@ -269,7 +269,9 @@ def test_agent_default_output_is_unchanged_but_for_the_children_lines(
     assert _run(f"E-{tid}", "--agent").splitlines() == [
         f"# E-{tid} Sample",
         "project=test",
-        "type=todo phase=now status=ready",
+        # E-1813: the ratings ride on the status line, always, `unrated`
+        # included.
+        "type=todo phase=now status=ready complexity=unrated risk=unrated",
         "created=2026-01-01T00:00:00",
         "updated=2026-01-01T00:00:00",
         "analysis_chars=12",

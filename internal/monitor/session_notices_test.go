@@ -128,7 +128,7 @@ func TestNoticeTrigger_OneRowPerUpdateEvent(t *testing.T) {
 	snNoticeFixture(t, db)
 
 	if _, err := db.Exec(
-		"UPDATE tasks SET status='underway', tier=2, description='hello' WHERE id=500",
+		"UPDATE tasks SET status='underway', complexity_id=3, description='hello' WHERE id=500",
 	); err != nil {
 		t.Fatalf("update: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestNoticeTrigger_OneRowPerUpdateEvent(t *testing.T) {
 	if err := json.Unmarshal([]byte(got[0][1].(string)), &changes); err != nil {
 		t.Fatalf("changes is not JSON: %v", err)
 	}
-	for _, field := range []string{"status", "tier", "description"} {
+	for _, field := range []string{"status", "complexity", "description"} {
 		if _, ok := changes[field]; !ok {
 			t.Errorf("changes should carry %q, got %v", field, changes)
 		}
@@ -271,8 +271,8 @@ func TestRenderNotice(t *testing.T) {
 		},
 		{
 			name:    "absent value renders as a dash",
-			changes: `{"tier":{"before":null,"after":2}}`,
-			want:    "FYI — E-500 tier: — → 2",
+			changes: `{"risk":{"before":null,"after":"high"}}`,
+			want:    "FYI — E-500 risk: — → high",
 		},
 		{
 			name:    "freeform renders a verb, never content",
@@ -282,9 +282,17 @@ func TestRenderNotice(t *testing.T) {
 		{
 			name: "multi-field keeps a stable order",
 			changes: `{"description":{"before":null,"after":"…"},` +
-				`"tier":{"before":null,"after":3},` +
+				`"risk":{"before":"low","after":"medium"},` +
+				`"complexity":{"before":null,"after":"low"},` +
 				`"status":{"before":"ready","after":"underway"}}`,
-			want: "FYI — E-500 status: ready → underway; tier: — → 3; description added",
+			want: "FYI — E-500 status: ready → underway; complexity: — → low; risk: low → medium; description added",
+		},
+		{
+			// E-1813 dropped tasks.tier. A tier notice still undelivered when it
+			// landed must render rather than be held back forever.
+			name:    "a pre-E-1813 tier notice still renders",
+			changes: `{"tier":{"before":null,"after":2}}`,
+			want:    "FYI — E-500 tier: — → 2",
 		},
 		{
 			// E-1000 renamed the trigger's key from `text` to `plan`. A notice
@@ -376,11 +384,6 @@ func TestTaskHeadlineRender(t *testing.T) {
 	}{
 		{
 			name: "all facts present",
-			h:    TaskHeadline{Title: "Do a thing", Status: "underway", Phase: "now", Tier: 2, HasTier: true},
-			want: "Active task: E-500 (underway · tier 2 · now) — Do a thing.",
-		},
-		{
-			name: "no tier set",
 			h:    TaskHeadline{Title: "Do a thing", Status: "ready", Phase: "next"},
 			want: "Active task: E-500 (ready · next) — Do a thing.",
 		},
@@ -406,14 +409,14 @@ func TestGetTaskHeadlineReadsCurrentValues(t *testing.T) {
 	db := withTestDB(t)
 	snNoticeFixture(t, db)
 
-	if _, err := db.Exec("UPDATE tasks SET status='underway', tier=2 WHERE id=500"); err != nil {
+	if _, err := db.Exec("UPDATE tasks SET status='underway' WHERE id=500"); err != nil {
 		t.Fatalf("update: %v", err)
 	}
 	h, err := GetTaskHeadline(500)
 	if err != nil {
 		t.Fatalf("GetTaskHeadline: %v", err)
 	}
-	if h.Status != "underway" || !h.HasTier || h.Tier != 2 || h.Phase != "now" {
+	if h.Status != "underway" || h.Phase != "now" {
 		t.Errorf("headline should reflect current row, got %+v", h)
 	}
 }

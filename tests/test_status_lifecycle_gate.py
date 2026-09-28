@@ -52,7 +52,9 @@ def test_the_refusal_names_the_reachable_statuses(seeded_project_at_cwd):
     with pytest.raises(click.ClickException) as exc:
         task_cmd.update_plan(item_id=tid, status="confirmed")
 
-    for reachable in ("submitted", "ready", "underway", "revisit"):
+    # `ready` is not among them since E-1813 removed the tier-1 edge: from
+    # `unplanned`, `ready` is reached only through submit and approve.
+    for reachable in ("submitted", "underway", "revisit"):
         assert reachable in exc.value.message, (
             f"the refusal does not offer {reachable!r}: {exc.value.message}"
         )
@@ -73,7 +75,11 @@ def test_the_documented_path_runs_unimpeded(seeded_project_at_cwd):
     """
     tid = _add_task("Add a thing and walk it", status="untriaged")
     for status in ("unplanned", "submitted", "ready", "underway"):
-        task_cmd.update_plan(item_id=tid, status=status)
+        # E-1813: submitting and approving carry both ratings.
+        rated = (
+            {"complexity": "low", "risk": "low"} if status == "submitted" else {}
+        )
+        task_cmd.update_plan(item_id=tid, status=status, **rated)
         assert _status(tid) == status
 
 

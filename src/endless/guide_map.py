@@ -8,7 +8,7 @@ files, validating coverage, and assembling the cross-reference table that lives
 in `docs/guide/index.md`.
 
 Map-file inheritance: a command resolves to the nearest map file walking up its
-path — `task clear tier` tries `task-clear-tier.md`, then `task-clear.md`, then
+path — `task clear risk` tries `task-clear-risk.md`, then `task-clear.md`, then
 `task.md`. So one `task.md` covers every task subcommand, and a leaf file is
 needed only when a subcommand belongs to a *different* section than its group
 (e.g. `task-spawn.md` -> orchestration while `task.md` -> tasks).

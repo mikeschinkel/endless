@@ -163,10 +163,6 @@ stateDiagram-v2
     submitted --> unplanned: user sends back — the spec is not sufficient
     revisit --> submitted: agent re-submits
 
-    %% Planning exemption — a tier-1 task skips both planning and triage
-    untriaged --> ready: system advances a tier-1 task
-    unplanned --> ready: system advances a tier-1 task
-
     %% Re-spec — a material description edit invalidates triage and approval
     unplanned --> untriaged: system resets on a description re-spec
     submitted --> untriaged: system resets on a description re-spec

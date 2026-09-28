@@ -26,7 +26,6 @@ def add_epic(
     after: int | None = None,
     parent_id: int | None = None,
     status: str | None = None,
-    tier: int | None = None,
     force: bool = False,
 ) -> int | None:
     """Create an epic-typed task (wraps task_cmd.add_item with type=epic)."""
@@ -40,7 +39,6 @@ def add_epic(
         parent_id=parent_id,
         task_type="epic",
         status=status,
-        tier=tier,
         force=force,
     )
 
@@ -50,7 +48,6 @@ def list_epics(
     show_all: bool = False,
     status_filter: list[str] | None = None,
     phase_filter: str | None = None,
-    tier_filter: int | None = None,
     parent_id: int | None = None,
     sort_by: str | None = None,
     agent: bool = False,
@@ -64,7 +61,6 @@ def list_epics(
         show_all=show_all,
         status_filter=status_filter,
         phase_filter=phase_filter,
-        tier_filter=tier_filter,
         parent_id=parent_id,
         sort_by=sort_by,
         agent=agent,
@@ -102,7 +98,6 @@ def update_epic(
     plan: str | None = None,
     parent_id: int | None = None,
     phase: str | None = None,
-    tier: int | None = None,
     analysis: str | None = None,
     outcome: str | None = None,
     force: bool = False,
@@ -122,7 +117,6 @@ def update_epic(
         plan=plan,
         parent_id=parent_id,
         phase=phase,
-        tier=tier,
         task_type="epic",
         analysis=analysis,
         outcome=outcome,

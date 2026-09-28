@@ -43,7 +43,9 @@ endless task list --phase now
 endless task list --parent E-101
 endless task list --parent none                      # roots only
 endless task list --related-to <id> --rel-type blocks
-endless task list --sort status                      # id, status, phase, tier, created, title
+endless task list --sort status                      # id, status, phase, complexity, risk, created, title
+endless task list --complexity low --risk low        # filter by rating
+endless task list --complexity none                  # unrated only
 endless task list --agent                            # token-efficient agent output
 endless task list --json
 endless task list --format agent                     # the long form of --agent
@@ -70,7 +72,7 @@ endless task unlanded                                # finished tasks whose work
 endless task next
 endless task next --limit 5
 endless task next --all                              # across all projects
-endless task next --tier 1
+endless task next --complexity low --risk low
 endless task next --phase now
 endless task next --agent
 
@@ -221,7 +223,7 @@ endless task add "Title here" --parent <parent_id>
 endless task add "Title here" --description "Brief pitch" --phase now
 endless task add "Title here" --plan-file /path/to/plan.md --status ready
 endless task add "Title here" --type bugfix          # todo|bugfix|research|epic|brainstorm
-endless task add "Title here" --tier 1               # 1-4 or auto|quick|deep|discuss
+endless task add "Title here" --complexity low --risk medium   # ratings: low|medium|high
 endless task add "Title here" --blocked-by E-100     # also: --blocks, --relates-to,
                                                      # --implements, --cleans-up,
                                                      # --cleaned-up-by, --duplicates,
@@ -359,7 +361,7 @@ endless task update <id> --description "..."
 endless task update <id> --plan-file /path/to/plan.md
 endless task update <id> --status ready
 endless task update <id> --phase later
-endless task update <id> --tier 2
+endless task update <id> --complexity medium --risk high   # none clears either
 endless task update <id> --parent 444                # move under different parent
 endless task update <id> --parent 0                  # make it a root
 endless task update <id> --outcome "What was done"
@@ -372,17 +374,20 @@ Attaching a non-empty plan (`--plan`) to a `unplanned` task moves it to `submitt
 
 ### `--keep-status`: edit the content, infer nothing
 
-`task update` reads a status change out of what you edited, in three places:
+`task update` reads a status change out of what you edited, in two places:
 
 | The edit | Infers |
 |---|---|
 | non-empty `--plan` on an `untriaged`/`unplanned` task | → `submitted` (plan attached = spec-complete) |
 | a material `--description` change on a pre-work task | → `untriaged` (the spec every later judgment was made against changed) |
-| `--tier 1` on an `untriaged`/`unplanned` task | → `ready` (tier 1 is exempt from planning and triage) |
 
-**`--keep-status` suppresses all three.** The status you see is the status you keep. Reach for it when the edit is not a re-spec — a typo fix, a formatting pass, appending a finding to a plan that is deliberately parked at an unapproved status. Without it, a one-line append to an `unplanned` task's plan silently promotes it to `submitted`.
+A rating edit infers nothing: `--complexity`/`--risk` never move status. (The
+retired `--tier 1` used to advance a pre-work task to `ready`; see
+[Ratings](#ratings-complexity-and-risk).)
 
-`--keep-status` cannot be combined with `--status`; the call is refused rather than silently resolved. Naming a status is already the explicit way to say what the status should be, and it wins over all three inferences on its own.
+**`--keep-status` suppresses both.** The status you see is the status you keep. Reach for it when the edit is not a re-spec — a typo fix, a formatting pass, appending a finding to a plan that is deliberately parked at an unapproved status. Without it, a one-line append to an `unplanned` task's plan silently promotes it to `submitted`.
+
+`--keep-status` cannot be combined with `--status`; the call is refused rather than silently resolved. Naming a status is already the explicit way to say what the status should be, and it wins over both inferences on its own.
 
 **Editing a done task's plan changes nothing but the plan.** There was a fourth inference: a real `--plan` change on a `confirmed`/`assumed`/`completed` task flipped it to `revisit`, reading the edit as unshipped scope. Recording what shipped is now an obligation (test 1 above), so that edit is routine and benign — and the flip cost a verification `revisit` cannot walk back. Reopening is still spelled `--status revisit`, and it is your user's call, not an inference.
 
@@ -416,8 +421,9 @@ endless task update <id> --clear description --clear plan
 ## Status transitions
 
 ```bash
-endless task submit <id>                             # agent: unplanned/revisit → submitted (spec-complete, awaiting approval)
-endless task approve <id>                            # human: submitted → ready (background sessions refused)
+endless task submit <id> --complexity low --risk low # agent: unplanned/revisit → submitted, proposing both ratings
+endless task approve <id>                            # human: submitted → ready, ratifying both ratings
+endless task approve <id> --risk medium              # ...overriding (or supplying) a rating as you ratify
 endless task claim <id>                              # ready → underway + create worktree
 endless task update <id> --status revisit            # hand the task back (see `task release`: disabled)
 endless task update <id> --status unverified             # work done, awaiting verification
@@ -498,13 +504,49 @@ There is no successor to name, so
 fact that it shipped is not lost by saying so: that lives in the landing record,
 which is where `task show`'s `Landed:` line comes from.
 
+### Ratings: complexity and risk
+
+Every task carries two independent ratings, each `low`, `medium` or `high`, or
+unrated:
+
+- **complexity** — how much human-AI interaction is still needed to nail down
+  the specifics.
+- **risk** — the blast radius if the work is wrong.
+
+They are separate on purpose: a one-line change can still be high risk, and one
+scalar would hide that.
+
+**The agent proposes, the user ratifies.** `task submit` is refused until both
+are set — pass `--complexity`/`--risk` on the call, or set them earlier with
+`task add`/`task update`. `task approve` is refused while either is unrated, and
+accepts the same two flags to supply or override one; it reports the ratings it
+ratified. `task update --status submitted` and `--status ready` meet the same
+gates, since they are the same acts under another verb.
+
+Two routes reach `submitted` without `task submit`, and neither is refused for
+missing ratings. The triager proposes both when it routes a task to `submitted`,
+for any axis not already set; a missing or malformed rating in its reply costs
+the rating, never the routing. Attaching a plan promotes a task too, and prints
+the exact `task update` flags for whatever is still unrated. Either way, approve
+is the backstop.
+
+**Ratings never move status**, and nothing requires them to claim or spawn a
+task. They stay editable at any status. `task show` always prints them,
+`unrated` included; `task list`/`task next` filter on them (`none` means
+unrated), and `task list --sort complexity|risk` puts unrated last.
+
+They replaced `tier`, which was the same judgment under another name. Tier
+values were dropped rather than mapped, because a mapped value would read as a
+rating someone had ratified.
+
 ---
 
 ## Triage (`untriaged` → `submitted` | `unplanned`)
 
 Every new task is filed `untriaged` — nobody has looked at it. Triage moves it
 one hop by answering one question: **is this description already a sufficient
-spec?** Sufficient → `submitted` (awaiting the human's `approve`); not
+spec?** Sufficient → `submitted` (awaiting the human's `approve`), with a
+proposed complexity and risk rating for any axis not already set; not
 sufficient → `unplanned` (design work first).
 
 This is automatic. `endless task add` spawns the triage of that one task

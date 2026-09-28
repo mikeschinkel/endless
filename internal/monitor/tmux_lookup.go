@@ -10,11 +10,8 @@ import (
 
 // TaskInfo is the read-only projection used by the tmux status
 // line and menu: enough to render the second status row
-// ("[E-NNNN] · project · type · phase · tier · status") plus the title
+// ("[E-NNNN] · project · type · phase · status") plus the title
 // for popup display.
-//
-// Tier is a *int64 because `tasks.tier` is nullable; nil means
-// "not set", which the renderer skips so the row doesn't show "tier: ".
 //
 // EpicID is the session's epic_id (E-1571): nil for a non-epic
 // session, the epic task id otherwise. The renderer compares it against TaskID
@@ -25,7 +22,6 @@ type TaskInfo struct {
 	Status      string
 	Type        string
 	Phase       string
-	Tier        *int64
 	ProjectName string
 	EpicID      *int64
 }
@@ -98,7 +94,7 @@ func queryTaskForPanes(db *sql.DB, panes []string) (*TaskInfo, error) {
 	//
 	// The Live filter is still required, for the unrelated case of a session
 	// that ended cleanly in a pane still open and rebound to a new session.
-	q := `SELECT t.id, t.title, t.status, COALESCE(tt.slug, ''), t.phase, t.tier, COALESCE(p.name, ''), s.epic_id
+	q := `SELECT t.id, t.title, t.status, COALESCE(tt.slug, ''), t.phase, COALESCE(p.name, ''), s.epic_id
 	      FROM sessions s
 	      JOIN live_tasks t ON t.id = s.task_id
 	      LEFT JOIN projects p ON p.id = t.project_id
@@ -112,7 +108,7 @@ func queryTaskForPanes(db *sql.DB, panes []string) (*TaskInfo, error) {
 	var info TaskInfo
 	err = db.QueryRow(q, args...).Scan(
 		&info.TaskID, &info.Title, &info.Status,
-		&info.Type, &info.Phase, &info.Tier, &info.ProjectName, &info.EpicID,
+		&info.Type, &info.Phase, &info.ProjectName, &info.EpicID,
 	)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrNoTask

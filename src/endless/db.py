@@ -310,14 +310,11 @@ def _migrate_v2(conn: sqlite3.Connection):
         conn.execute("UPDATE task_deps SET target_type='task' WHERE target_type='plan'")
         conn.commit()
 
-    # Step 8: Add 'tier' column to tasks (E-786) — safe ADD COLUMN
-    if _has_table(conn, "tasks"):
-        cols = [
-            r[1] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()
-        ]
-        if "tier" not in cols:
-            conn.execute("ALTER TABLE tasks ADD COLUMN tier INTEGER")
-            conn.commit()
+    # Step 8 (E-786) added tasks.tier, and a later data update advanced tier-1
+    # tasks to `ready`; Step 13 (E-856, E-1240) cleared tier on settled tasks.
+    # All three are gone: E-1813 dropped the column (migration 00008) in favour
+    # of the complexity and risk ratings, and re-adding it here on every connect
+    # would undo that migration.
 
     # Safe data updates: fix completed_at on non-confirmed (legacy completed->confirmed
     # rename removed in E-1240; `completed` is once again a real terminal status with
@@ -327,19 +324,6 @@ def _migrate_v2(conn: sqlite3.Connection):
             "UPDATE tasks SET completed_at = NULL "
             "WHERE completed_at IS NOT NULL AND status NOT IN "
             f"({statuses.sql_list('sets-completed-at')})"
-        )
-        conn.execute(
-            "UPDATE tasks SET status = 'ready' "
-            "WHERE tier = 1 AND status = 'unplanned'"
-        )
-        conn.commit()
-
-    # Step 13: Clear tier to 0 (n/a) on terminal and unverified tasks (E-856, E-1240)
-    if _has_table(conn, "tasks"):
-        conn.execute(
-            "UPDATE tasks SET tier = 0 "
-            "WHERE tier IS NOT NULL AND tier != 0 "
-            f"AND status IN ({statuses.sql_list('settled')})"
         )
         conn.commit()
 

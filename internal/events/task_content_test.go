@@ -194,7 +194,7 @@ func TestTaskContent_OneEditOneNotice(t *testing.T) {
 	}
 
 	evt := taskEvent(t, events.KindTaskFieldsUpdated, 720, "5WYM00000901",
-		events.TaskFieldsUpdatedPayload{Fields: map[string]any{"tier": 2, "plan": "a plan"}})
+		events.TaskFieldsUpdatedPayload{Fields: map[string]any{"complexity": "low", "plan": "a plan"}})
 	if _, err := events.Execute(&evt, nil); err != nil {
 		t.Fatalf("Execute: %v", err)
 	}
@@ -219,7 +219,7 @@ func TestTaskContent_OneEditOneNotice(t *testing.T) {
 	if len(notices) != 1 {
 		t.Fatalf("one edit wrote %d notices, want 1: %v", len(notices), notices)
 	}
-	for _, field := range []string{"tier", "plan"} {
+	for _, field := range []string{"complexity", "plan"} {
 		if _, ok := notices[0][field]; !ok {
 			t.Errorf("the notice does not name %s: %v", field, notices[0])
 		}

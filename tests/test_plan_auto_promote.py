@@ -68,20 +68,6 @@ def test_add_with_plan_and_explicit_status_preserves_caller_status(tmp_path, see
     assert _status_of(item_id) == "ready"
 
 
-def test_add_tier_1_with_plan_stays_ready(tmp_path, seeded_project_at_cwd):
-    """Tier-1 already defaults to ready; the plan path keeps it ready."""
-    plan = tmp_path / "plan.md"
-    plan.write_text("# plan")
-
-    item_id = task_cmd.add_item(
-        title="Add a quick thing",
-        description="short",
-        plan=plan.read_text(),
-        tier=1,
-    )
-    assert _status_of(item_id) == "ready"
-
-
 # --- task update ------------------------------------------------------------
 
 @pytest.mark.parametrize("start", ["untriaged", "unplanned"])
@@ -107,7 +93,7 @@ def test_update_with_plan_on_ready_task_no_change(tmp_path, seeded_project_at_cw
     item_id = task_cmd.add_item(
         title="Add a thing",
         description="short",
-        tier=1,
+        status="ready",
     )
     assert _status_of(item_id) == "ready"
 
@@ -125,11 +111,14 @@ def test_update_with_plan_plus_explicit_status_caller_wins(tmp_path, seeded_proj
     )
     assert _status_of(item_id) == "untriaged"
 
+    # `unplanned` rather than `ready`: E-1813 removed the tier-1 edge that made
+    # `ready` reachable from `untriaged`, and the caller-wins rule is about the
+    # explicit status beating the promotion, whichever legal one it names.
     plan = tmp_path / "plan.md"
     plan.write_text("# plan")
-    task_cmd.update_plan(item_id=item_id, plan=plan.read_text(), status="ready")
+    task_cmd.update_plan(item_id=item_id, plan=plan.read_text(), status="unplanned")
 
-    assert _status_of(item_id) == "ready"
+    assert _status_of(item_id) == "unplanned"
 
 
 def test_update_with_empty_plan_does_not_promote(tmp_path, seeded_project_at_cwd):
@@ -144,3 +133,34 @@ def test_update_with_empty_plan_does_not_promote(tmp_path, seeded_project_at_cwd
     task_cmd.update_plan(item_id=item_id, plan=plan.read_text())
 
     assert _status_of(item_id) == "untriaged"
+
+
+# --- E-1813: the promotion nudges for ratings -------------------------------
+
+def test_promotion_names_the_missing_ratings(capsys, tmp_path, seeded_project_at_cwd):
+    """The promotion does not demand ratings — it is inferred, not asked for —
+    but the agent that wrote the plan is told which are missing and how to set
+    them, because approve will refuse the task until someone does."""
+    item_id = task_cmd.add_item(title="Add a thing", description="short",
+                                status="unplanned")
+    capsys.readouterr()
+
+    task_cmd.update_plan(item_id=item_id, plan="# plan\n", risk="low")
+
+    out = capsys.readouterr().out
+    assert _status_of(item_id) == "submitted"
+    assert "without complexity" in out, out
+    assert "--complexity <low|medium|high>" in out, out
+    assert "--risk <" not in out, "a rating set in the same call is not missing"
+
+
+def test_promotion_with_both_ratings_says_nothing(capsys, seeded_project_at_cwd):
+    item_id = task_cmd.add_item(title="Add a thing", description="short",
+                                status="unplanned")
+    capsys.readouterr()
+
+    task_cmd.update_plan(item_id=item_id, plan="# plan\n",
+                         complexity="medium", risk="low")
+
+    out = capsys.readouterr().out
+    assert "without" not in out, out

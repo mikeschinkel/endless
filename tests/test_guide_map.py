@@ -41,7 +41,7 @@ def _write(hdir, stem, text):
 def test_command_path_to_filename():
     assert guide_map.command_path_to_filename("task spawn") == "task-spawn"
     assert guide_map.command_path_to_filename("shell-init") == "shell-init"
-    assert guide_map.command_path_to_filename("task clear tier") == "task-clear-tier"
+    assert guide_map.command_path_to_filename("task clear risk") == "task-clear-risk"
 
 
 def test_parse_entry_section_covers_note():
@@ -79,7 +79,7 @@ def test_load_map_inheritance(guide_tree):
     inherited = guide_map.load_map("task add")
     assert inherited.sections == ["tasks"] and inherited.inherited_from == "task"
 
-    deep = guide_map.load_map("task clear tier")
+    deep = guide_map.load_map("task clear risk")
     assert deep.sections == ["tasks"] and deep.inherited_from == "task"
 
     assert guide_map.load_map("nonexistent cmd") is None

@@ -66,7 +66,6 @@ func seedBlocks(t *testing.T, db *sql.DB, blockerID, taskID int64) {
 // is empty, so a barely-populated task doesn't render gratuitous bullet
 // separators.
 func TestFormat_OmitsEmptyFields(t *testing.T) {
-	tier := int64(3)
 	tests := []struct {
 		name           string
 		info           *monitor.TaskInfo
@@ -78,19 +77,10 @@ func TestFormat_OmitsEmptyFields(t *testing.T) {
 			name: "all fields present",
 			info: &monitor.TaskInfo{
 				TaskID: 42, ProjectName: "proj", Type: "todo",
-				Phase: "now", Tier: &tier, Status: "underway",
+				Phase: "now", Status: "underway",
 			},
-			wantParts:      []string{"[E-42]", "proj", "todo", "now", "t3", "underway"},
-			wantSeparators: 5, // all five non-ID fields contribute
-		},
-		{
-			name: "tier nil drops the t-segment",
-			info: &monitor.TaskInfo{
-				TaskID: 7, ProjectName: "proj", Type: "todo",
-				Phase: "now", Tier: nil, Status: "ready",
-			},
-			wantParts:      []string{"[E-7]", "proj", "todo", "now", "ready"},
-			wantSeparators: 4, // proj, todo, now, ready → 4 " · " separators (no tier)
+			wantParts:      []string{"[E-42]", "proj", "todo", "now", "underway"},
+			wantSeparators: 4, // all four non-ID fields contribute
 		},
 		{
 			name:           "blank project + type + phase omitted",
@@ -115,30 +105,6 @@ func TestFormat_OmitsEmptyFields(t *testing.T) {
 				if strings.Contains(got, bad) {
 					t.Errorf("format() = %q, should not contain %q", got, bad)
 				}
-			}
-		})
-	}
-}
-
-// TestTierString_HandlesNilAndZero pins the documented rule: nil or 0
-// tier prints "" so callers can drop the segment entirely; positive
-// values render as "tN".
-func TestTierString_HandlesNilAndZero(t *testing.T) {
-	zero := int64(0)
-	five := int64(5)
-	tests := []struct {
-		name string
-		in   *int64
-		want string
-	}{
-		{"nil", nil, ""},
-		{"zero", &zero, ""},
-		{"positive", &five, "t5"},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := tierString(tc.in); got != tc.want {
-				t.Errorf("tierString(%v) = %q, want %q", tc.in, got, tc.want)
 			}
 		})
 	}

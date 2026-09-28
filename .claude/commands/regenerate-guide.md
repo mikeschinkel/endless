@@ -22,7 +22,7 @@ scaffold.
 - Map files live in `docs/guide/help/<command-path>.md`, where the command path is
   hyphenated: `endless task spawn` → `docs/guide/help/task-spawn.md`.
 - **Inheritance:** a command resolves to the nearest file walking up its path
-  (`task clear tier` → `task-clear` → `task`). So one `task.md` covers every task
+  (`task clear risk` → `task-clear` → `task`). So one `task.md` covers every task
   subcommand. Add a leaf file (e.g. `task-spawn.md`) **only** when a subcommand
   belongs to a *different* section than its group.
 - Each file is either a **mapped** file:

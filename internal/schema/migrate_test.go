@@ -12,6 +12,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/gatekind"
 	"github.com/mikeschinkel/endless/internal/processkind"
+	"github.com/mikeschinkel/endless/internal/rating"
 	"github.com/mikeschinkel/endless/internal/schema"
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 	"github.com/mikeschinkel/endless/internal/tasktype"
@@ -66,6 +67,9 @@ func TestMigrate_SeedsSurviveTheReplay(t *testing.T) {
 	}
 	if err := sessiontaskrelation.VerifyIntegrity(db); err != nil {
 		t.Errorf("session_task_relations: %v", err)
+	}
+	if err := rating.VerifyIntegrity(db); err != nil {
+		t.Errorf("rating levels: %v", err)
 	}
 }
 
@@ -369,5 +373,60 @@ func TestMigrate_LiftsTaskContent(t *testing.T) {
 	}
 	if notices != 1 {
 		t.Errorf("a plan edit after the lift wrote %d notices, want 1", notices)
+	}
+}
+
+// TestMigrate_RatingsReplaceTier drives 00008 over a database at version 7:
+// tasks.tier populated, a live session holding a task. After the step the tier
+// column is gone (its values dropped, not mapped), both rating columns exist,
+// the migration itself wrote no notice, and the rebuilt trigger reports a
+// rating change by slug.
+func TestMigrate_RatingsReplaceTier(t *testing.T) {
+	db := buildDB(t, func(db *sql.DB) error { return schema.MigrateUpTo(db, 7) })
+
+	mustExec(t, db, `INSERT INTO projects (id, name, path) VALUES (1, 'p', '/p')`)
+	mustExec(t, db, `INSERT INTO tasks (id, project_id, title, status, tier) VALUES (10, 1, 't', 'ready', 1), (11, 1, 'u', 'ready', 0)`)
+	mustExec(t, db, `INSERT INTO sessions (id, project_id, state) VALUES (900, 1, 'working')`)
+	mustExec(t, db, `INSERT INTO session_tasks (session_id, task_id, created_at, updated_at) VALUES (900, 10, '2026-01-01', '2026-01-01')`)
+
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	for col, want := range map[string]int{"tier": 0, "complexity_id": 1, "risk_id": 1} {
+		var n int
+		if err := db.QueryRow(
+			`SELECT count(*) FROM pragma_table_info('tasks') WHERE name = ?`, col,
+		).Scan(&n); err != nil {
+			t.Fatalf("probe %s: %v", col, err)
+		}
+		if n != want {
+			t.Errorf("tasks.%s: %d columns, want %d", col, n, want)
+		}
+	}
+
+	var rated int
+	if err := db.QueryRow(`SELECT count(*) FROM tasks WHERE complexity_id IS NOT NULL OR risk_id IS NOT NULL`).Scan(&rated); err != nil {
+		t.Fatalf("count rated: %v", err)
+	}
+	if rated != 0 {
+		t.Errorf("%d tasks carry a rating after the migration; tier must be dropped, not mapped", rated)
+	}
+
+	var notices int
+	if err := db.QueryRow(`SELECT count(*) FROM session_notices`).Scan(&notices); err != nil {
+		t.Fatalf("count notices: %v", err)
+	}
+	if notices != 0 {
+		t.Errorf("the migration wrote %d session notices; it must write none", notices)
+	}
+
+	mustExec(t, db, `UPDATE tasks SET complexity_id = 1 WHERE id = 10`)
+	var changes string
+	if err := db.QueryRow(`SELECT changes FROM session_notices WHERE task_id = 10`).Scan(&changes); err != nil {
+		t.Fatalf("read notice: %v", err)
+	}
+	if want := `{"complexity":{"before":null,"after":"low"}}`; changes != want {
+		t.Errorf("rating notice = %s, want %s", changes, want)
 	}
 }

@@ -13,6 +13,7 @@ from endless import __version__
 from endless import agent_help
 from endless import help_settings
 from endless import project_status_cmd
+from endless import ratings
 from endless import rowcap
 from endless.agent_help import AgentHelpMixin
 from endless import statuses
@@ -2149,8 +2150,10 @@ def task_cmd():
 @click.option("--phase", default=None,
               type=click.Choice(["urgent", "now", "next", "later", "maybe"]),
               help="Filter by phase")
-@click.option("--tier", default=None,
-              help="Filter by tier (1-4 or auto/quick/deep/discuss)")
+@click.option("--complexity", default=None, type=ratings.CHOICES,
+              help="Filter by complexity rating (low/medium/high, or none for unrated)")
+@click.option("--risk", default=None, type=ratings.CHOICES,
+              help="Filter by risk rating (low/medium/high, or none for unrated)")
 @click.option("--parent", "parent_id", default=None,
               help="Filter to children of this task (e.g. E-101), or 'none' for root tasks")
 @click.option("--related-to", "--relates-to", "related_to_id", type=TASK_ID, default=None,
@@ -2158,25 +2161,25 @@ def task_cmd():
 @click.option("--rel-type", "rel_type", default=None,
               help="Narrow --related-to by relation type (blocks, implements, informs, ...)")
 @click.option("--sort", default=None,
-              type=click.Choice(["id", "status", "phase", "tier", "created", "title"]),
+              type=click.Choice(["id", "status", "phase", "complexity", "risk", "created", "title"]),
               help="Sort by column (default: id)")
 @click.option("--removed", "removed_only", is_flag=True,
               help="List REMOVED tasks instead of live ones")
 @output_options()
 @rowcap.limit_options
-def task_list(project, show_all, status, phase, tier, parent_id, related_to_id, rel_type,
+def task_list(project, show_all, status, phase, complexity, risk, parent_id, related_to_id, rel_type,
               sort, removed_only, agent, as_json, limit, no_limit):
     """List tasks for a project.
 
     Stops at --limit rows and says how many it left out; --no-limit renders
     every one. --json is uncapped unless you ask for a limit.
     """
-    from endless.task_cmd import show_plan, parse_tier_filter, parse_parent_filter
-    tier_val = parse_tier_filter(tier) if tier else None
+    from endless.task_cmd import show_plan, parse_parent_filter
     parent_val = parse_parent_filter(parent_id) if parent_id else None
     show_plan(project_name=project, show_all=show_all,
               status_filter=status, phase_filter=phase,
-              tier_filter=tier_val, parent_id=parent_val,
+              complexity_filter=ratings.normalize(complexity),
+              risk_filter=ratings.normalize(risk), parent_id=parent_val,
               related_to_id=related_to_id, rel_type=rel_type,
               sort_by=sort, removed_only=removed_only, agent=agent, as_json=as_json,
               limit=limit, no_limit=no_limit)
@@ -2254,8 +2257,10 @@ task_cmd.add_command(task_show, name="detail")
 @click.option("--all", "show_all", is_flag=True,
               help="Show tasks from all projects")
 @output_options()
-@click.option("--tier", default=None,
-              help="Filter by tier (1-4 or auto/quick/deep/discuss)")
+@click.option("--complexity", default=None, type=ratings.CHOICES,
+              help="Filter by complexity rating (low/medium/high, or none for unrated)")
+@click.option("--risk", default=None, type=ratings.CHOICES,
+              help="Filter by risk rating (low/medium/high, or none for unrated)")
 @click.option("--phase", default=None,
               type=click.Choice(["urgent", "now", "next", "later", "maybe"]),
               help="Filter by phase")
@@ -2263,7 +2268,7 @@ task_cmd.add_command(task_show, name="detail")
               help="Filter to children of this task (e.g. E-101), or 'none' for root tasks")
 @rowcap.limit_options
 @click.pass_context
-def task_next(ctx, project, show_all, limit, agent, as_json, tier, phase, parent_id,
+def task_next(ctx, project, show_all, limit, agent, as_json, complexity, risk, phase, parent_id,
               no_limit):
     """Show top actionable tasks, ranked by priority."""
     # Still a group, with no subcommands since E-2142 retired `revise`: the
@@ -2272,12 +2277,13 @@ def task_next(ctx, project, show_all, limit, agent, as_json, tier, phase, parent
     # having to be undone to add one.
     if ctx.invoked_subcommand is not None:
         return
-    from endless.task_cmd import next_tasks, parse_tier_filter, parse_parent_filter
-    tier_val = parse_tier_filter(tier) if tier else None
+    from endless.task_cmd import next_tasks, parse_parent_filter
     parent_val = parse_parent_filter(parent_id) if parent_id else None
     next_tasks(project_name=project, show_all=show_all,
                limit=limit, no_limit=no_limit, agent=agent, as_json=as_json,
-               tier=tier_val, phase_filter=phase, parent_id=parent_val)
+               complexity=ratings.normalize(complexity),
+               risk=ratings.normalize(risk), phase_filter=phase,
+               parent_id=parent_val)
 
 
 @task_cmd.command("active")
@@ -2907,9 +2913,13 @@ def _apply_clear_flags(clear_fields, resolved):
               help="Task type (default: todo)")
 @click.option("--status", default=None,
               type=click.Choice(TASK_STATUSES),
-              help="Initial status (default: untriaged; --tier 1 defaults to ready)")
-@click.option("--tier", default=None,
-              help="Tier (1-4 or auto/quick/deep/discuss)")
+              help="Initial status (default: untriaged)")
+@click.option("--complexity", default=None, type=ratings.CHOICES,
+              help="Complexity rating: how much human-AI interaction nailing down the "
+                   "specifics takes (low/medium/high; none clears)")
+@click.option("--risk", default=None, type=ratings.CHOICES,
+              help="Risk rating: the blast radius if the work is wrong "
+                   "(low/medium/high; none clears)")
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
 @click.option("--justification", default=None,
@@ -2937,20 +2947,20 @@ def _apply_clear_flags(clear_fields, resolved):
 @click.option("--allow-path", "allow_paths", multiple=True,
               help="Regex matching an absolute path to permit in inline content "
                    "(repeatable; escape hatch for the path gate).")
-def task_add(title, description, description_file, plan_text, plan_file, analysis_text, analysis_file, phase, project, parent, after, task_type, status, tier, force,
+def task_add(title, description, description_file, plan_text, plan_file, analysis_text, analysis_file, phase, project, parent, after, task_type, status, complexity, risk, force,
              justification,
              blocks_ids, blocked_by_ids, relates_to_ids, implements_ids,
              cleans_up_ids, cleaned_up_by_ids, duplicates_ids, replaces_ids,
              allow_paths):
     """Add a task."""
-    from endless.task_cmd import add_item, parse_tier, link_tasks, print_add_hints
+    from endless.task_cmd import add_item, link_tasks, print_add_hints
     description = _resolve_content_flag(description, description_file, "description", allow_paths)
     plan_text = _resolve_content_flag(plan_text, plan_file, "plan", allow_paths)
     analysis_text = _resolve_content_flag(analysis_text, analysis_file, "analysis", allow_paths)
-    tier_val = parse_tier(tier) if tier else None
     new_id = add_item(title, description=description, plan=plan_text, analysis=analysis_text,
                       phase=phase, project_name=project, after=after, parent_id=parent,
-                      task_type=task_type, status=status, tier=tier_val, force=force,
+                      task_type=task_type, status=status, complexity=complexity,
+                      risk=risk, force=force,
                       justification=justification)
     if new_id is None:
         return
@@ -2994,8 +3004,12 @@ def task_add(title, description, description_file, plan_text, plan_file, analysi
 @click.option("--phase", default=None,
               type=click.Choice(["urgent", "now", "next", "later", "maybe"]),
               help="Phase: urgent, now, next, later, maybe")
-@click.option("--tier", default=None,
-              help="Tier (0=n/a, 1-4 or auto/quick/deep/discuss, none=clear)")
+@click.option("--complexity", default=None, type=ratings.CHOICES,
+              help="Complexity rating: how much human-AI interaction nailing down the "
+                   "specifics takes (low/medium/high; none clears)")
+@click.option("--risk", default=None, type=ratings.CHOICES,
+              help="Risk rating: the blast radius if the work is wrong "
+                   "(low/medium/high; none clears)")
 @click.option("--type", "task_type", default=None,
               type=click.Choice(["todo", "bugfix", "research", "epic", "brainstorm"]),
               help="Task type")
@@ -3028,9 +3042,9 @@ def task_add(title, description, description_file, plan_text, plan_file, analysi
                    "(repeatable; escape hatch for the path gate).")
 @click.option("--keep-status", is_flag=True,
               help="Hold the current status: no auto-transition fires for this edit "
-                   "(plan-attach promotion, description-edit reset, tier-1 "
-                   "advance). For a typo- or formatting-only edit. Cannot be "
-                   "combined with --status.")
+                   "(plan-attach promotion, description-edit reset). For a "
+                   "typo- or formatting-only edit. Cannot be combined with "
+                   "--status.")
 @click.option("--clear", "clear_fields", multiple=True,
               type=click.Choice(CLEARABLE_CONTENT_FIELDS),
               help="Erase a content field, naming it (repeatable). --<field>-file "
@@ -3044,12 +3058,12 @@ def task_add(title, description, description_file, plan_text, plan_file, analysi
               help="Task ID(s) each named task supersedes (repeatable). Records "
                    "the relation only; use `task replace <old> --by <new>` to also "
                    "close the replaced task.")
-def task_update(item_ids, status, title, description, description_file, plan_text, plan_file, parent, phase, tier,
+def task_update(item_ids, status, title, description, description_file, plan_text, plan_file, parent, phase, complexity, risk,
                 task_type, analysis_text, analysis_file, force, outcome, outcome_file, reason, reason_file,
                 notes_text, notes_file, justification, allow_paths,
                 keep_status, clear_fields, duplicates_ids, replaces_ids):
     """Update fields on one or more tasks."""
-    from endless.task_cmd import update_plan, parse_tier, link_tasks
+    from endless.task_cmd import update_plan, link_tasks
     resolved = _apply_clear_flags(clear_fields, {
         "description": _resolve_content_flag(description, description_file, "description", allow_paths, clearable=True),
         "plan": _resolve_content_flag(plan_text, plan_file, "plan", allow_paths, clearable=True),
@@ -3064,13 +3078,12 @@ def task_update(item_ids, status, title, description, description_file, plan_tex
     outcome = resolved["outcome"]
     reason = resolved["reason"]
     notes_text = resolved["notes"]
-    tier_val = parse_tier(tier) if tier else None
     # E-1185: relation flags are a change on their own. `update_plan` refuses an
     # edit that names no field ("Nothing to update"), which is still right when
     # nothing at all was passed — so it is skipped, not weakened, when the only
     # flags given are relations.
     edits_a_field = any(v is not None for v in (
-        status, title, description, plan_text, parent, phase, tier, task_type,
+        status, title, description, plan_text, parent, phase, complexity, risk, task_type,
         analysis_text, outcome, reason, notes_text, justification,
     ))
     relations_only = not edits_a_field and (duplicates_ids or replaces_ids)
@@ -3079,7 +3092,8 @@ def task_update(item_ids, status, title, description, description_file, plan_tex
             update_plan(item_id, status=status, title=title,
                         description=description, plan=plan_text,
                         parent_id=parent,
-                        phase=phase, tier=tier_val, task_type=task_type,
+                        phase=phase, complexity=complexity, risk=risk,
+                        task_type=task_type,
                         analysis=analysis_text,
                         outcome=outcome, force=force,
                         justification=justification, keep_status=keep_status,
@@ -3107,13 +3121,22 @@ def task_clear():
     pass
 
 
-@task_clear.command("tier")
+@task_clear.command("complexity")
 @click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
-def task_clear_tier(item_ids):
-    """Clear tier on one or more tasks (set to NULL/untriaged)."""
-    from endless.task_cmd import update_plan, TIER_CLEAR
+def task_clear_complexity(item_ids):
+    """Clear the complexity rating on one or more tasks (unrated)."""
+    from endless.task_cmd import update_plan
     for item_id in item_ids:
-        update_plan(item_id, tier=TIER_CLEAR)
+        update_plan(item_id, complexity=ratings.NONE)
+
+
+@task_clear.command("risk")
+@click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
+def task_clear_risk(item_ids):
+    """Clear the risk rating on one or more tasks (unrated)."""
+    from endless.task_cmd import update_plan
+    for item_id in item_ids:
+        update_plan(item_id, risk=ratings.NONE)
 
 
 @task_cmd.command("verify")
@@ -3256,29 +3279,42 @@ def task_decline(item_ids, reason):
 
 @task_cmd.command("submit")
 @click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
-def task_submit(item_ids):
+@click.option("--complexity", default=None, type=ratings.CHOICES,
+              help="Proposed complexity rating (low/medium/high)")
+@click.option("--risk", default=None, type=ratings.CHOICES,
+              help="Proposed risk rating (low/medium/high)")
+def task_submit(item_ids, complexity, risk):
     """Submit one or more tasks (untriaged/unplanned/revisit → submitted).
 
     Agent-set signal that a task is spec-complete and awaiting human
     approval — either a plan was attached or the description is a sufficient
     spec. A human then runs `endless task approve` to reach `ready`.
+
+    Submitting proposes both ratings — complexity and risk — for the user to
+    ratify at approve, so it is refused while either is unrated. Pass them
+    here, or set them first with `task update`.
     """
     from endless.task_cmd import submit_item
     for item_id in item_ids:
-        submit_item(item_id)
+        submit_item(item_id, complexity=complexity, risk=risk)
 
 
 @task_cmd.command("approve")
 @click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
-def task_approve(item_ids):
+@click.option("--complexity", default=None, type=ratings.CHOICES,
+              help="Ratify with this complexity rating instead of the proposed one")
+@click.option("--risk", default=None, type=ratings.CHOICES,
+              help="Ratify with this risk rating instead of the proposed one")
+def task_approve(item_ids, complexity, risk):
     """Approve one or more submitted tasks (submitted → ready).
 
-    The human approval gate: `ready` provably means human-approved. Refused
-    for background sessions.
+    The human approval gate: `ready` provably means human-approved. Approving
+    also ratifies the task's complexity and risk ratings, so an unrated task is
+    refused — supply or override either rating here.
     """
     from endless.task_cmd import approve_item
     for item_id in item_ids:
-        approve_item(item_id)
+        approve_item(item_id, complexity=complexity, risk=risk)
 
 
 @task_cmd.command("complete")
@@ -3886,9 +3922,7 @@ def epic_cmd():
               help="Insert after this task ID")
 @click.option("--status", default=None,
               type=click.Choice(TASK_STATUSES),
-              help="Initial status (default: untriaged; --tier 1 defaults to ready)")
-@click.option("--tier", default=None,
-              help="Tier (1-4 or auto/quick/deep/discuss)")
+              help="Initial status (default: untriaged)")
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
 @click.option("--blocks", "blocks_ids", type=TASK_ID, multiple=True,
@@ -3914,19 +3948,18 @@ def epic_cmd():
               help="Regex matching an absolute path to permit in inline content "
                    "(repeatable; escape hatch for the path gate).")
 def epic_add(title, description, description_file, plan_text, plan_file, phase, project,
-             parent, after, status, tier, force,
+             parent, after, status, force,
              blocks_ids, blocked_by_ids, relates_to_ids, implements_ids,
              cleans_up_ids, cleaned_up_by_ids, duplicates_ids, replaces_ids,
              allow_paths):
     """Add an epic (a task with type=epic)."""
     from endless.epic_cmd import add_epic
-    from endless.task_cmd import parse_tier, link_tasks
+    from endless.task_cmd import link_tasks
     description = _resolve_content_flag(description, description_file, "description", allow_paths)
     plan_text = _resolve_content_flag(plan_text, plan_file, "plan", allow_paths)
-    tier_val = parse_tier(tier) if tier else None
     new_id = add_epic(title, description=description, plan=plan_text,
                       phase=phase, project_name=project, after=after,
-                      parent_id=parent, status=status, tier=tier_val, force=force)
+                      parent_id=parent, status=status, force=force)
     if new_id is None:
         return
     for tid in blocks_ids:
@@ -3958,25 +3991,22 @@ def epic_add(title, description, description_file, plan_text, plan_file, phase, 
 @click.option("--phase", default=None,
               type=click.Choice(["urgent", "now", "next", "later", "maybe"]),
               help="Filter by phase")
-@click.option("--tier", default=None,
-              help="Filter by tier (1-4 or auto/quick/deep/discuss)")
 @click.option("--parent", "parent_id", default=None,
               help="Filter to children of this task (e.g. E-101), or 'none' for root tasks")
 @click.option("--sort", default=None,
-              type=click.Choice(["id", "status", "phase", "tier", "created", "title"]),
+              type=click.Choice(["id", "status", "phase", "complexity", "risk", "created", "title"]),
               help="Sort by column (default: id)")
 @output_options()
 @rowcap.limit_options
-def epic_list(project, show_all, status, phase, tier, parent_id, sort,
+def epic_list(project, show_all, status, phase, parent_id, sort,
               agent, as_json, limit, no_limit):
     """List epics for a project."""
     from endless.epic_cmd import list_epics
-    from endless.task_cmd import parse_tier_filter, parse_parent_filter
-    tier_val = parse_tier_filter(tier) if tier else None
+    from endless.task_cmd import parse_parent_filter
     parent_val = parse_parent_filter(parent_id) if parent_id else None
     list_epics(project_name=project, show_all=show_all,
                status_filter=status, phase_filter=phase,
-               tier_filter=tier_val, parent_id=parent_val,
+               parent_id=parent_val,
                sort_by=sort, agent=agent, as_json=as_json,
                limit=limit, no_limit=no_limit)
 
@@ -4037,8 +4067,6 @@ def epic_show(item_ids, no_description, show_analysis, show_plan_field,
 @click.option("--phase", default=None,
               type=click.Choice(["urgent", "now", "next", "later", "maybe"]),
               help="Phase: urgent, now, next, later, maybe")
-@click.option("--tier", default=None,
-              help="Tier (0=n/a, 1-4 or auto/quick/deep/discuss, none=clear)")
 @click.option("--analysis", "analysis_text", default=None,
               help="Analysis content (inline)")
 @click.option("--analysis-file", default=None,
@@ -4068,7 +4096,7 @@ def epic_show(item_ids, no_description, show_analysis, show_plan_field,
                    "description or any content field. Conflicts with the same "
                    "field's --<field>/--<field>-file.")
 def epic_update(item_ids, status, title, description, description_file, plan_text,
-                plan_file, parent, phase, tier, analysis_text, analysis_file,
+                plan_file, parent, phase, analysis_text, analysis_file,
                 force, outcome, outcome_file, reason, reason_file, notes_text,
                 notes_file, allow_paths, clear_fields):
     """Update one or more epics (promotes type to epic).
@@ -4077,7 +4105,6 @@ def epic_update(item_ids, status, title, description, description_file, plan_tex
     an epic — e.g. `endless epic update E-NNN --status ready`.
     """
     from endless.epic_cmd import update_epic
-    from endless.task_cmd import parse_tier
     resolved = _apply_clear_flags(clear_fields, {
         "description": _resolve_content_flag(description, description_file, "description", allow_paths, clearable=True),
         "plan": _resolve_content_flag(plan_text, plan_file, "plan", allow_paths, clearable=True),
@@ -4090,11 +4117,10 @@ def epic_update(item_ids, status, title, description, description_file, plan_tex
     plan_text = resolved["plan"]
     analysis_text = resolved["analysis"]
     outcome = resolved["outcome"]
-    tier_val = parse_tier(tier) if tier else None
     for item_id in item_ids:
         update_epic(item_id, status=status, title=title,
                     description=description, plan=plan_text, parent_id=parent,
-                    phase=phase, tier=tier_val, analysis=analysis_text,
+                    phase=phase, analysis=analysis_text,
                     outcome=outcome, force=force,
                     reason=resolved["reason"], notes=resolved["notes"])
 

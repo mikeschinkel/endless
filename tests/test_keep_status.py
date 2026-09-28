@@ -4,13 +4,14 @@
 
   1. non-empty `--plan` on a pre-judgment task      -> `submitted`  (E-1266/E-1648)
   2. a material `--description` edit on pre-work    -> `untriaged`  (E-1845)
-  3. `--tier 1` on a pre-judgment task              -> `ready`
+  3. `--tier 1` on a pre-judgment task              -> `ready`   (removed, E-1813)
 
 Leg 2 was already guarded by the flag. Leg 1 leaked: the promotion lives in the
 Go executor, and the flag had no way to cross the Python-to-executor boundary —
 so appending a line to an `unplanned` task's plan silently promoted it, which is
 how E-1671 lost a deliberately-unapproved status. Leg 3 was never guarded
-either.
+either; E-1813 removed it outright, and its replacement — a complexity/risk
+rating — infers no status at all.
 
 There was a fourth: a real `--plan` edit on a done task inferred `revisit`
 (E-1762). E-2120 removed the inference rather than the guard, so that edit is
@@ -43,14 +44,25 @@ def _finish(item_id: int, status: str, **kwargs) -> None:
     reports work is refused on a task no work was done on. These tests want a
     task IN a done state, so they walk it there rather than asserting it.
     """
-    for step in ("ready", "underway", "unverified"):
+    # E-1813: approving ratifies both ratings, so the walk supplies them.
+    task_cmd.update_plan(item_id=item_id, status="ready",
+                         complexity="low", risk="low")
+    for step in ("underway", "unverified"):
         task_cmd.update_plan(item_id=item_id, status=step)
     task_cmd.update_plan(item_id=item_id, status=status, **kwargs)
 
 
+def _approve(item_id: int) -> None:
+    """Take an unrated pre-work task to `ready` the legal way: submit with
+    ratings, then approve (E-1813 removed the tier-1 shortcut)."""
+    task_cmd.update_plan(item_id=item_id, status="submitted",
+                         complexity="low", risk="low")
+    task_cmd.update_plan(item_id=item_id, status="ready")
+
+
 def _row(item_id: int) -> dict:
     rows = db.query(
-        "SELECT status, (SELECT content FROM task_content WHERE task_id = tasks.id AND name = 'plan') AS plan, tier, completed_at FROM tasks WHERE id = ?",
+        "SELECT status, (SELECT content FROM task_content WHERE task_id = tasks.id AND name = 'plan') AS plan, complexity_id, completed_at FROM tasks WHERE id = ?",
         (item_id,),
     )
     assert rows, f"task E-{item_id} not found"
@@ -107,7 +119,7 @@ def test_keep_status_holds_an_append_to_an_existing_plan(seeded_project_at_cwd):
 
 def test_keep_status_suppresses_the_description_reset(seeded_project_at_cwd):
     item_id = task_cmd.add_item(title="Add a thing", description="original")
-    task_cmd.update_plan(item_id=item_id, status="ready")
+    _approve(item_id)
 
     task_cmd.update_plan(item_id=item_id, description="Original.", keep_status=True)
 
@@ -173,8 +185,7 @@ def test_keep_status_on_a_done_task_does_not_restamp_completed_at(
 
     Suppressing leg 1 works by sending the current status, which the executor's
     "caller wins" branch honors. But a status field is not inert there: whenever
-    one is present the executor also rewrites `completed_at` and clears the tier
-    of a terminal-status task. Pinning unconditionally would therefore restamp
+    one is present the executor also rewrites `completed_at`. Pinning unconditionally would therefore restamp
     the completion time of a `confirmed` task whose plan was merely
     typo-fixed — so the pin fires only where the promotion would have.
     """
@@ -191,27 +202,23 @@ def test_keep_status_on_a_done_task_does_not_restamp_completed_at(
     assert after["completed_at"] == before, "the completion time is history"
 
 
-# --- leg 3: the tier-1 planning exemption -----------------------------------
+# --- leg 3, retired: a rating infers no status (E-1813) ----------------------
 
 @pytest.mark.parametrize("start", ["untriaged", "unplanned"])
-def test_keep_status_suppresses_the_tier_1_advance(start, seeded_project_at_cwd):
+@pytest.mark.parametrize("keep_status", [False, True])
+def test_a_rating_edit_infers_no_status(start, keep_status, seeded_project_at_cwd):
+    """Tier 1 advanced a pre-work task to `ready`. Its replacement must not:
+    status routing is triage plus approve, never a rating value."""
     item_id = task_cmd.add_item(
         title="Add a thing", description="short", status=start
     )
 
-    task_cmd.update_plan(item_id=item_id, tier=1, keep_status=True)
+    task_cmd.update_plan(item_id=item_id, complexity="low", risk="low",
+                         keep_status=keep_status)
 
     row = _row(item_id)
-    assert row["status"] == start, "the advance must not fire"
-    assert row["tier"] == 1, "the tier must still be set"
-
-
-def test_without_the_flag_tier_1_still_advances(seeded_project_at_cwd):
-    item_id = task_cmd.add_item(title="Add a thing", description="short")
-
-    task_cmd.update_plan(item_id=item_id, tier=1)
-
-    assert _status_of(item_id) == "ready"
+    assert row["status"] == start, "a rating must not move status"
+    assert row["complexity_id"] == 1, "the rating must still be set"
 
 
 # --- the flag contradicts an explicit --status ------------------------------

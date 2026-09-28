@@ -47,6 +47,8 @@ def _status_of(item_id: int) -> str:
 def _ready_task() -> int:
     """A `ready` task, built as a human so no gate is open during setup."""
     item_id = task_cmd.add_item(title="Add a thing", description="original")
+    task_cmd.update_plan(item_id=item_id, status="submitted",
+                         complexity="low", risk="low")
     task_cmd.update_plan(item_id=item_id, status="ready")
     return item_id
 
@@ -98,20 +100,23 @@ def test_an_agent_still_sees_a_status_it_named(
     assert "revisit" in out, out
 
 
-def test_an_agent_is_not_told_about_the_tier_1_advance(
+def test_an_agent_is_not_told_about_the_plan_attach_promotion(
     capsys, monkeypatch, seeded_project_at_cwd
 ):
-    """The other inference on this path, held to the same rule."""
-    item_id = task_cmd.add_item(title="Add a thing", description="short")
+    """The other inference on this path, held to the same rule. (It replaced
+    the tier-1 advance here when E-1813 removed tier.)"""
+    item_id = task_cmd.add_item(title="Add a thing", description="short",
+                                status="unplanned")
     capsys.readouterr()
     _as_agent(monkeypatch)
 
-    task_cmd.update_plan(item_id=item_id, tier=1)
+    task_cmd.update_plan(item_id=item_id, plan="# plan\n",
+                         complexity="low", risk="low")
 
     out = capsys.readouterr().out
-    assert "Tier:" in out, "the field it DID ask for still renders"
+    assert "Plan:" in out, "the field it DID ask for still renders"
     assert "Status:" not in out, out
-    assert _status_of(item_id) == "ready", "the advance still happened"
+    assert _status_of(item_id) == "submitted", "the promotion still happened"
 
 
 def test_the_agent_render_is_never_left_empty(

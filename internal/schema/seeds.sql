@@ -1,6 +1,6 @@
 -- E-2019: the enum mirror seeds, reconciled on every connect.
 --
--- These four tables are the ED-1506 SQL mirrors of Go enums. They are DATA
+-- These tables are the ED-1506 SQL mirrors of Go enums. They are DATA
 -- derived from code, not schema, which is why they live here and not in the
 -- baseline migration: a migration runs once, and a mirror that runs once stops
 -- being a mirror the moment the Go enum it mirrors is edited.
@@ -45,4 +45,18 @@ INSERT INTO session_task_relations (id, slug, label) VALUES
     -- live rows. Prominence order is Relation.Rank() in Go, not the id.
     (4, 'referenced', 'Referenced'),
     (5, 'queued',     'Queued')
+ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
+
+-- E-1813: the rating-level mirrors of rating.Level, one table per axis. Ids 2
+-- and 4 are deliberately unseeded; see internal/rating.
+INSERT INTO complexity_levels (id, slug, label) VALUES
+    (1, 'low',    'Low'),
+    (3, 'medium', 'Medium'),
+    (5, 'high',   'High')
+ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
+
+INSERT INTO risk_levels (id, slug, label) VALUES
+    (1, 'low',    'Low'),
+    (3, 'medium', 'Medium'),
+    (5, 'high',   'High')
 ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;

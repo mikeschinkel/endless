@@ -155,8 +155,11 @@ def test_epic_update_promotes_task_to_epic(seeded_project_at_cwd):
     tid = _add_task(pid, "Was a plain task", task_type="todo")
     assert _type_slug(tid) == "todo"
     runner = CliRunner()
+    # Any legal status change rides along; `revisit` is reachable from the
+    # fixture's `unplanned`. (E-1813 removed the tier-1 edge that once made
+    # `ready` reachable from it directly.)
     result = runner.invoke(
-        main, ["epic", "update", f"E-{tid}", "--status", "ready"]
+        main, ["epic", "update", f"E-{tid}", "--status", "revisit"]
     )
     assert result.exit_code == 0, result.output
     assert _type_slug(tid) == "epic"

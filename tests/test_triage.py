@@ -11,6 +11,7 @@ by `.endless/tasks/e-1859/verify.sh`.
 import json
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
@@ -55,6 +56,111 @@ def test_parse_reply_bounds_the_rationale():
     decision, rationale = triage.parse_reply("SUBMITTED: " + "x" * 5000)
     assert decision == "submitted"
     assert len(rationale) <= triage._RATIONALE_MAX
+
+
+# --- E-1813: the proposed ratings -------------------------------------------
+
+@pytest.mark.parametrize("reply,expected", [
+    ("SUBMITTED: fine.\nCOMPLEXITY: low\nRISK: high",
+     {"complexity": "low", "risk": "high"}),
+    # Case, blank lines and a trailing period are ordinary model output.
+    ("SUBMITTED: fine.\n\ncomplexity: Medium.\n  Risk:LOW  ",
+     {"complexity": "medium", "risk": "low"}),
+    # A missing or unrecognized value drops that axis, never the reply.
+    ("SUBMITTED: fine.\nCOMPLEXITY: trivial\nRISK: medium", {"risk": "medium"}),
+    ("SUBMITTED: fine.", {}),
+    # The first valid value per axis wins.
+    ("SUBMITTED: x\nRISK: low\nRISK: high", {"risk": "low"}),
+    ("", {}),
+    (None, {}),
+])
+def test_parse_ratings(reply, expected):
+    assert triage.parse_ratings(reply) == expected
+
+
+def test_a_rating_line_does_not_disturb_the_verdict():
+    """parse_reply reads only the first real line, so the extra lines a
+    SUBMITTED reply now carries cannot turn it into a rejection."""
+    assert triage.parse_reply("SUBMITTED: fine.\nCOMPLEXITY: low\nRISK: low") == (
+        "submitted", "fine.")
+
+
+def test_evaluate_returns_the_ratings_with_the_verdict(monkeypatch, isolated_env):
+    from endless import internal_claude
+    monkeypatch.setattr(
+        internal_claude, "run_internal_claude",
+        lambda *_a, **_k: SimpleNamespace(
+            returncode=0, stdout="SUBMITTED: ok\nCOMPLEXITY: high\nRISK: low\n"),
+    )
+    assert triage.evaluate("prompt") == (
+        "submitted", "ok", {"complexity": "high", "risk": "low"})
+
+
+def _capture_apply(monkeypatch, context):
+    """Run apply() against a stubbed context, returning the emitted events."""
+    from endless import event_bridge
+    emitted = []
+    monkeypatch.setattr(triage, "build_context", lambda _id: context)
+    monkeypatch.setattr(event_bridge, "emit_event", lambda **kw: emitted.append(kw))
+    return emitted
+
+
+def test_apply_writes_ratings_before_the_route(monkeypatch):
+    emitted = _capture_apply(monkeypatch, {
+        "status": "untriaged", "project": "p", "project_root": "/p",
+        "complexity": "", "risk": "",
+    })
+
+    assert triage.apply(9, "submitted", "why", {"complexity": "low", "risk": "high"})
+
+    assert [e["kind"] for e in emitted] == ["task.fields_updated", "task.status_changed"]
+    assert emitted[0]["payload"]["fields"] == {"complexity": "low", "risk": "high"}
+    assert emitted[0]["actor_kind"] == "triager"
+
+
+def test_apply_never_overwrites_a_rating_the_task_already_has(monkeypatch):
+    emitted = _capture_apply(monkeypatch, {
+        "status": "untriaged", "project": "p", "project_root": "/p",
+        "complexity": "high", "risk": "",
+    })
+
+    triage.apply(9, "submitted", "why", {"complexity": "low", "risk": "medium"})
+
+    assert emitted[0]["payload"]["fields"] == {"risk": "medium"}
+
+
+@pytest.mark.parametrize("decision,proposed", [
+    ("unplanned", {"complexity": "low", "risk": "low"}),
+    ("submitted", {}),
+])
+def test_apply_writes_no_ratings_unless_submitting_with_some(
+    monkeypatch, decision, proposed
+):
+    emitted = _capture_apply(monkeypatch, {
+        "status": "untriaged", "project": "p", "project_root": "/p",
+        "complexity": "", "risk": "",
+    })
+
+    assert triage.apply(9, decision, "why", proposed)
+
+    assert [e["kind"] for e in emitted] == ["task.status_changed"], (
+        "missing ratings cost the rating, never the routing")
+
+
+def test_triage_one_passes_the_ratings_through(monkeypatch):
+    seen = []
+    monkeypatch.setattr(triage, "build_context", lambda _id: {"status": "untriaged", "project": "p"})
+    monkeypatch.setattr(triage, "render_prompt", lambda _c: "prompt")
+    monkeypatch.setattr(triage, "claim", lambda _id: True)
+    monkeypatch.setattr(triage, "release", lambda _id: None)
+    monkeypatch.setattr(triage, "evaluate",
+                        lambda _p: ("submitted", "why", {"risk": "low"}))
+    monkeypatch.setattr(triage, "apply", lambda *a: seen.append(a) or True)
+
+    result = triage.triage_one(5)
+
+    assert result["ratings"] == {"risk": "low"}
+    assert seen == [(5, "submitted", "why", {"risk": "low"})]
 
 
 # --- the shared model resolver ----------------------------------------------
@@ -191,7 +297,7 @@ def test_triage_one_dry_run_writes_nothing(monkeypatch):
     monkeypatch.setattr(triage, "render_prompt", lambda _ctx: "prompt")
     monkeypatch.setattr(triage, "claim", lambda _id: True)
     monkeypatch.setattr(triage, "release", lambda _id: None)
-    monkeypatch.setattr(triage, "evaluate", lambda _p: ("submitted", "because"))
+    monkeypatch.setattr(triage, "evaluate", lambda _p: ("submitted", "because", {}))
 
     def fail(*_a, **_kw):
         raise AssertionError("--dry-run must not write")
@@ -234,18 +340,23 @@ def test_inline_triage_runs_when_nothing_suppresses_it(monkeypatch):
 def test_task_add_spawns_triage_only_for_an_untriaged_filing(
     monkeypatch, seeded_project_at_cwd,
 ):
-    """Gated on the RESOLVED status: tier-1's auto-`ready` is exempt from
-    planning, so it is exempt from triage — and so is any explicit --status."""
+    """Gated on the RESOLVED status: an explicit --status is a routing decision
+    already made, so it is exempt from triage. A rating is not one (E-1813)."""
     spawned = []
     monkeypatch.setattr(triage, "spawn_detached", lambda tid: spawned.append(tid))
 
     task_cmd.add_item(title="Add a normal thing", description="short")
     assert len(spawned) == 1
 
-    task_cmd.add_item(title="Add a tier one thing", description="short", tier=1)
+    task_cmd.add_item(title="Add a rated thing", description="short",
+                      complexity="low", risk="low")
+    assert len(spawned) == 2, "a rated filing is still untriaged"
+
+    task_cmd.add_item(title="Add a ready thing", description="short",
+                      status="ready")
     task_cmd.add_item(title="Add a planned thing", description="short",
                       status="unplanned")
-    assert len(spawned) == 1, "only the untriaged filing may spawn triage"
+    assert len(spawned) == 2, "only an untriaged filing may spawn triage"
 
 
 def test_child_db_args_recover_an_explicit_db_choice(monkeypatch):
@@ -346,7 +457,7 @@ def test_claim_is_taken_before_the_model_call(monkeypatch):
     monkeypatch.setattr(triage, "render_prompt", lambda _c: "prompt")
     monkeypatch.setattr(triage, "claim", lambda _id: order.append("claim") or True)
     monkeypatch.setattr(triage, "release", lambda _id: order.append("release"))
-    monkeypatch.setattr(triage, "evaluate", lambda _p: order.append("evaluate") or ("submitted", "why"))
+    monkeypatch.setattr(triage, "evaluate", lambda _p: order.append("evaluate") or ("submitted", "why", {}))
     monkeypatch.setattr(triage, "apply", lambda *_a: True)
 
     triage.triage_one(5)
@@ -409,7 +520,7 @@ def test_a_routed_task_records_no_fault(monkeypatch):
     monkeypatch.setattr(triage, "render_prompt", lambda _c: "prompt")
     monkeypatch.setattr(triage, "claim", lambda _id: True)
     monkeypatch.setattr(triage, "release", lambda _id: None)
-    monkeypatch.setattr(triage, "evaluate", lambda _p: ("submitted", "why"))
+    monkeypatch.setattr(triage, "evaluate", lambda _p: ("submitted", "why", {}))
     monkeypatch.setattr(triage, "apply", lambda *_a: True)
     monkeypatch.setattr(triage, "report_failure", lambda *a: recorded.append(a))
 
