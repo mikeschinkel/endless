@@ -6891,3 +6891,7 @@ A task description (and title) must be understandable on its own. Never cite ano
 ### [2026-09-28] Say which triage check you mean
 When a finding concerns triage's check of whether a description alone is a sufficient spec (so no plan is needed), name that specific check rather than saying 'triage' — triage is the general routing concept, and the description-sufficiency check is slated for removal once a plan is required before spawn.
 - **Project**: endless
+
+### [2026-09-28] Project hooks run from the main checkout
+Endless runs project hooks (post-worktree-create, seed-sandbox, and any new one) from the MAIN checkout's copy, never the worktree's: worktree copies go missing or stale on older branches and break. Do not invent a worktree-copy exception to let a task test its own hook edits; that belongs to a general hook-testing solution.
+- **Project**: endless
