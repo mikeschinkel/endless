@@ -6899,3 +6899,7 @@ Endless runs project hooks (post-worktree-create, seed-sandbox, and any new one)
 ### [2026-09-28] Don't raise concerns that don't matter
 Before putting a concern in front of Mike, check whether it actually matters — e.g. whether an existing flag already solves it. A caveat that turns out to need nothing (like the description-edit reset that --keep-status already bypasses) costs his attention for no value; resolve it yourself and leave it out. Likewise, when a fix is mechanical work you can do (like rewording gate-blocked tokens), do it rather than handing it to a future script or person.
 - **Project**: endless
+
+### [2026-09-28] Use keep-status instead of worrying about resets
+A description or plan edit that would trigger a status inference is not a reason to skip the edit: task update --keep-status suppresses every inference. Make the edit with --keep-status instead of leaving the field stale or reporting the reset as a blocker. This was the second time in one session the same non-issue cost Mike attention.
+- **Project**: endless
