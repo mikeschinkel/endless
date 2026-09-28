@@ -77,6 +77,21 @@ session, and focus overrides the hide, so E-150 shows on E-101's board with the
 duplicate marker — and on E-100's board too. When E-101's focus moves on,
 E-150 drops off E-101's board.
 
+## Part 3 — keep the legend on one line
+
+`session monitor` sizes its tmux pane to the frame, so a legend that wraps pushes
+the last task row out of view. Parts 1 and 2 add two legend entries (`◼︎` focus,
+`◫` duplicate), which makes that more likely.
+
+In `buildLegend` (internal/sessionstatuscmd/session_status.go), fit the legend
+to the width the table already detects:
+
+- Normal form: `<icon> <label>`, entries joined by two spaces (today's).
+- If that would exceed the width: `<icon><label>`, entries joined by ONE space.
+
+If the compact form still does not fit, it wraps as today; revisit only if it
+happens in practice.
+
 ## Boundaries
 
 - Display only: `task next`, blocking, claims and `session_tasks` rows do not
@@ -86,9 +101,15 @@ E-150 drops off E-101's board.
 
 ## Verify
 
+Cover BOTH surfaces. `session monitor` redraws the same frame as `session
+status` (`session_status_resolve(monitor=True)`), so the assertions run against
+`session status` output, and at least one check captures a `session monitor`
+frame and asserts it matches — so a later split between the two is caught.
+
 A suite that builds several sessions with overlapping `session_tasks` rows and
 asserts, for each board: focus follows writes but not reads; focus overrides
 hidden; the owner is chosen per the ladder; the duplicate marker is shown in
 both boards in the focus-elsewhere case and in the ambiguous case; an ended
 session's tasks come back on live boards; and claimed tasks, parents and
-spawners are never hidden.
+spawners are never hidden; and the legend switches to its compact form exactly
+when its normal form would exceed the width, in both commands.
