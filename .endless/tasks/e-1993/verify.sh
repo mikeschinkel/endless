@@ -192,10 +192,13 @@ assert_eq "an update that does not write an old long title is not refused" "0" "
 assert_eq "nothing is truncated" "84" "$(sql "SELECT length(title) FROM tasks WHERE id = ${n}")"
 
 # ── 5. context ──────────────────────────────────────────────────────────────
-section "5. context: flags, default render after the description, --clear"
+section "5. context: flags, hidden by default, --context renders it after the description, --clear"
 
-shown="$(human task show "${A}" --no-color)"
-assert_contains "context renders by default" "— Context —" "${shown}"
+hidden="$(human task show "${A}" --no-color)"
+assert_not_contains "context is hidden by default" "— Context —" "${hidden}"
+assert_contains "a hidden context collapses to a placeholder" "(--context to display)" "${hidden}"
+shown="$(human task show "${A}" --no-color --context)"
+assert_contains "--context renders it" "— Context —" "${shown}"
 desc_line="$(grep -n '— Description —' <<<"${shown}" | cut -d: -f1)"
 ctx_line="$(grep -n '— Context —' <<<"${shown}" | cut -d: -f1)"
 assert_eq "context renders directly after the description" "1" \

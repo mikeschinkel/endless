@@ -3,7 +3,8 @@
 It gets its storage, heading and mirror stem from the `taskcontent` enum; the
 CLI flags are declared by hand and match `analysis`: `--context` /
 `--context-file` on add and update, `--clear context`, `task show --context`.
-It renders by default, directly after the description.
+Like every content name it is hidden until asked for (`--context`,
+`--all-fields`), and then renders directly after the description.
 """
 
 import json
@@ -70,17 +71,29 @@ def test_a_context_edit_never_changes_status(seeded_project_at_cwd):
     assert db.query("SELECT status FROM tasks WHERE id = ?", (item_id,))[0]["status"] == "ready"
 
 
-def test_show_renders_context_by_default_after_the_description(seeded_project_at_cwd):
+def test_show_hides_context_by_default(seeded_project_at_cwd):
+    item_id = task_cmd.add_item(
+        title="Fix a thing", description="The thing is broken.",
+        context="Because of the frobnicator.",
+    )
+    out = CliRunner().invoke(main, ["task", "show", str(item_id), "--no-color"]).output
+    assert "— Context —" not in out
+    assert "Because of the frobnicator." not in out
+    assert "(--context to display)" in out
+
+
+def test_show_context_renders_after_the_description(seeded_project_at_cwd):
     item_id = task_cmd.add_item(
         title="Fix a thing", description="The thing is broken.",
         context="Because of the frobnicator.", analysis="Design notes here.",
     )
-    out = CliRunner().invoke(main, ["task", "show", str(item_id), "--no-color"]).output
-    assert "— Context —" in out
-    assert "Because of the frobnicator." in out
-    assert out.index("— Description —") < out.index("— Context —")
-    # Other content stays gated behind its flag.
-    assert "Design notes here." not in out
+    runner = CliRunner()
+    for flags in (["--context"], ["--all-fields"]):
+        out = runner.invoke(main, ["task", "show", str(item_id), "--no-color", *flags]).output
+        assert "Because of the frobnicator." in out, flags
+        assert out.index("— Description —") < out.index("— Context —"), flags
+    out = runner.invoke(main, ["task", "show", str(item_id), "--no-color", "--context"]).output
+    assert "Design notes here." not in out, "other content stays behind its own flag"
 
 
 def test_show_agent_and_json_carry_context(seeded_project_at_cwd):
@@ -89,6 +102,8 @@ def test_show_agent_and_json_carry_context(seeded_project_at_cwd):
     )
     runner = CliRunner()
     agent = runner.invoke(main, ["task", "show", str(item_id), "--agent"]).output
+    assert "context_chars=" in agent and "Because reasons." not in agent
+    agent = runner.invoke(main, ["task", "show", str(item_id), "--agent", "--context"]).output
     assert "## Context\nBecause reasons." in agent
     data = json.loads(runner.invoke(main, ["task", "show", str(item_id), "--json"]).output)
     assert data["context"] == "Because reasons."

@@ -6485,8 +6485,9 @@ def _render_detail_human(
         click.echo(click.style("— Description —", fg="cyan"))
         _echo_field_body(brief_text(item["description"], brief), color)
 
-    # Context is the description's other half — why the task exists — so it
-    # renders directly after it, ahead of the structure below (E-1993).
+    # Context is the description's other half — why the task exists — so when
+    # it is shown (--context, --all-fields) it renders directly after it, ahead
+    # of the structure below (E-1993).
     #
     # `.get`, not `[...]`: the item carries one key per name the vocabulary
     # declares, and the vocabulary comes from whichever endless-go answered. In

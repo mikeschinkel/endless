@@ -2201,8 +2201,8 @@ def task_list(project, show_all, status, phase, complexity, risk, parent_id, rel
 @click.option("--no-description", is_flag=True,
               help="Hide description")
 @click.option("--context", "show_context", is_flag=True,
-              help="Show the context field — why the task exists (shown by "
-                   "default, directly after the description)")
+              help="Show the context field — why the task exists (renders "
+                   "directly after the description)")
 @click.option("--analysis", "show_analysis", is_flag=True,
               help="Show analysis field")
 @retired_option("--text", "--plan", is_flag=True)
@@ -2255,15 +2255,11 @@ def _shown_content(all_fields: bool, **flags: bool) -> frozenset[str]:
     Each content name has a display flag spelled with its own token (`--plan`,
     `--reason`), and `--all-fields` shows every name the vocabulary declares —
     including one added after these flags were written.
-
-    `context` is always shown (E-1993): it is why the task exists, and it
-    renders directly after the description as the description's other half.
-    Its `--context` flag is accepted for symmetry with every other name.
     """
     if all_fields:
         from endless import content_names
         return frozenset(content_names.slugs())
-    return frozenset({"context"} | {name for name, on in flags.items() if on})
+    return frozenset(name for name, on in flags.items() if on)
 
 
 task_cmd.add_command(task_show, name="detail")
@@ -4061,8 +4057,8 @@ def epic_list(project, show_all, status, phase, parent_id, sort,
 @click.option("--no-description", is_flag=True,
               help="Hide description")
 @click.option("--context", "show_context", is_flag=True,
-              help="Show the context field — why the task exists (shown by "
-                   "default, directly after the description)")
+              help="Show the context field — why the task exists (renders "
+                   "directly after the description)")
 @click.option("--analysis", "show_analysis", is_flag=True,
               help="Show analysis field")
 @retired_option("--text", "--plan", is_flag=True)
