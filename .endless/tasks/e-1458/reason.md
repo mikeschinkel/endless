@@ -1,0 +1,1 @@
+E-1682 shipped this as a side effect: an explicit --db/--config-dir on endless-go hook now wins over the main-database pin (cmd/endless-go/main.go, HasExplicitDBContext), so a developer can drive the hook against a sandbox; with no flag, hooks still write to main. E-1458 was never linked to it, so it stayed open.
