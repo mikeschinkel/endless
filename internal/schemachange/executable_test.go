@@ -1,11 +1,14 @@
 package schemachange_test
 
 import (
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/mikeschinkel/endless/internal/schema"
 )
 
 // migrateCmdPkg is ED-1571's migration-only executable, by module path so
@@ -26,6 +29,12 @@ var allowedEndlessDeps = map[string]bool{
 	migrateCmdPkg: true,
 	"github.com/mikeschinkel/endless/internal/dbcontext":    true,
 	"github.com/mikeschinkel/endless/internal/schemachange": true,
+	// E-2192: `up` runs the versioned migration set. internal/schema is that
+	// set (embedded) plus the seeds, and links no Endless package but its own
+	// migrations subpackage — migration machinery by any reading, which is the
+	// only reason either is here.
+	"github.com/mikeschinkel/endless/internal/schema":            true,
+	"github.com/mikeschinkel/endless/internal/schema/migrations": true,
 }
 
 // TestMigrateExecutable_LinksNothingButTheMigrationMachinery is the guard on
@@ -156,15 +165,16 @@ func TestMigrateExecutable_HasNoApplicationSurface(t *testing.T) {
 	}
 }
 
-// TestMigrateExecutable_OffersOnlyApply pins the surface from the other
-// direction: whatever else changes, `apply` is the only command the help text
-// advertises, so a later subcommand cannot arrive documented-but-unnoticed.
+// TestMigrateExecutable_OffersOnlyApplyAndUp pins the surface from the other
+// direction: whatever else changes, `apply` and `up` (E-2192) are the only
+// commands the help text advertises, so a later subcommand cannot arrive
+// documented-but-unnoticed.
 //
 // Read from the Commands block rather than by grepping the whole page, because
 // the page deliberately says the words "hook", "task" and "query" in the
 // sentence that disclaims them — and a check that cannot tell an offer from a
 // disclaimer would force the disclaimer out to stay green.
-func TestMigrateExecutable_OffersOnlyApply(t *testing.T) {
+func TestMigrateExecutable_OffersOnlyApplyAndUp(t *testing.T) {
 	binary := buildMigrate(t)
 
 	stdout, _, code := run(t, binary, "--help")
@@ -173,8 +183,8 @@ func TestMigrateExecutable_OffersOnlyApply(t *testing.T) {
 	}
 
 	commands := helpCommands(stdout)
-	if len(commands) != 1 || commands[0] != "apply" {
-		t.Errorf("help offers commands %v, want exactly [apply]:\n%s",
+	if strings.Join(commands, " ") != "apply up" {
+		t.Errorf("help offers commands %v, want exactly [apply up]:\n%s",
 			commands, stdout)
 	}
 }
@@ -378,5 +388,147 @@ func TestMigrateExecutable_RefusesRetiredConfigDirFlag(t *testing.T) {
 	}
 	if !strings.Contains(stderr, "--db-dir") {
 		t.Errorf("the refusal does not name the replacement flag: %s", stderr)
+	}
+}
+
+// upDB creates an empty database file in a fresh config directory and returns
+// both. A zero-byte file is an empty SQLite database at goose version 0 — as
+// far behind the embedded set as a database can be.
+func upDB(t *testing.T) (cfgDir, dbPath string) {
+	t.Helper()
+
+	cfgDir = t.TempDir()
+	dbPath = filepath.Join(cfgDir, "endless.db")
+	if err := os.WriteFile(dbPath, nil, 0o644); err != nil {
+		t.Fatalf("create %s: %v", dbPath, err)
+	}
+	return cfgDir, dbPath
+}
+
+// runUp runs `up` against cfgDir and decodes its document.
+func runUp(t *testing.T, binary, cfgDir string) (doc map[string]any) {
+	t.Helper()
+
+	stdout, stderr, code := run(t, binary, "--db-dir", cfgDir, "up")
+	if code != 0 {
+		t.Fatalf("up exited %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
+	}
+	if err := json.Unmarshal([]byte(stdout), &doc); err != nil {
+		t.Fatalf("up printed no JSON document: %v\n%s", err, stdout)
+	}
+	return doc
+}
+
+// TestMigrateExecutable_UpBringsABehindDatabaseToLatestAndSeedsIt is E-2192's
+// mechanism through its real command line: a database behind the embedded set
+// reaches LatestVersion, and the enum mirrors are seeded — `up` is
+// schema.Migrate, not goose Up alone, so the database it leaves passes the
+// integrity gates the recording binary's connect reads next.
+func TestMigrateExecutable_UpBringsABehindDatabaseToLatestAndSeedsIt(t *testing.T) {
+	binary := buildMigrate(t)
+	cfgDir, dbPath := upDB(t)
+
+	latest, err := schema.LatestVersion()
+	if err != nil {
+		t.Fatalf("LatestVersion: %v", err)
+	}
+
+	doc := runUp(t, binary, cfgDir)
+	if doc["status"] != "migrated" {
+		t.Errorf("status = %v, want migrated", doc["status"])
+	}
+	if doc["from"] != float64(0) || doc["to"] != float64(latest) {
+		t.Errorf("from/to = %v/%v, want 0/%d", doc["from"], doc["to"], latest)
+	}
+	if doc["db"] != dbPath {
+		t.Errorf("db = %v, want %s", doc["db"], dbPath)
+	}
+
+	db, err := openDBAt(t, dbPath)
+	if err != nil {
+		t.Fatalf("open %s: %v", dbPath, err)
+	}
+	var slug string
+	err = db.QueryRow("SELECT slug FROM task_types WHERE id = 2").Scan(&slug)
+	if err != nil || slug != "bugfix" {
+		t.Errorf("the enum mirrors were not seeded: slug=%q err=%v", slug, err)
+	}
+
+	// Part-way behind, the E-2188 shape: stamped one version short of latest.
+	// The newest step is idempotent by the migration set's own rule, so
+	// forgetting its stamp is enough to put the database one behind.
+	_, err = db.Exec("DELETE FROM goose_db_version WHERE version_id = ?", latest)
+	if err != nil {
+		t.Fatalf("un-stamping version %d: %v", latest, err)
+	}
+	_, err = db.Exec("DELETE FROM task_types WHERE id = 2")
+	if err != nil {
+		t.Fatalf("removing a mirror row: %v", err)
+	}
+	if err = db.Close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	doc = runUp(t, binary, cfgDir)
+	if doc["from"] != float64(latest-1) || doc["to"] != float64(latest) {
+		t.Errorf("from/to = %v/%v, want %d/%d", doc["from"], doc["to"], latest-1, latest)
+	}
+	db, err = openDBAt(t, dbPath)
+	if err != nil {
+		t.Fatalf("reopen %s: %v", dbPath, err)
+	}
+	err = db.QueryRow("SELECT slug FROM task_types WHERE id = 2").Scan(&slug)
+	if err != nil || slug != "bugfix" {
+		t.Errorf("up did not re-seed the enum mirrors: slug=%q err=%v", slug, err)
+	}
+}
+
+// TestMigrateExecutable_UpOnACurrentDatabaseIsANoOp: every self_dev land runs
+// `up`, so on the ordinary land — no migration on the branch — it must change
+// nothing and say so.
+func TestMigrateExecutable_UpOnACurrentDatabaseIsANoOp(t *testing.T) {
+	binary := buildMigrate(t)
+	cfgDir, _ := upDB(t)
+
+	runUp(t, binary, cfgDir)
+	doc := runUp(t, binary, cfgDir)
+	if doc["status"] != "current" {
+		t.Errorf("status = %v, want current", doc["status"])
+	}
+	if doc["from"] != doc["to"] {
+		t.Errorf("a current database moved: from %v to %v", doc["from"], doc["to"])
+	}
+}
+
+// TestMigrateExecutable_UpRefusesDBSandbox: `up` resolves its target exactly
+// as `apply` does, so ED-1571's one refusal holds for it too.
+func TestMigrateExecutable_UpRefusesDBSandbox(t *testing.T) {
+	binary := buildMigrate(t)
+
+	_, stderr, code := run(t, binary, "--db", "sandbox", "up")
+	if code == 0 {
+		t.Fatal("--db sandbox up was accepted")
+	}
+	if !strings.Contains(stderr, "--db-dir") {
+		t.Errorf("the refusal does not name the remedy: %s", stderr)
+	}
+}
+
+// TestMigrateExecutable_UpRefusesADatabaseThatDoesNotExist: a migration that
+// creates its target has migrated nothing. `up` on a missing file would build a
+// complete, empty ledger and report success.
+func TestMigrateExecutable_UpRefusesADatabaseThatDoesNotExist(t *testing.T) {
+	binary := buildMigrate(t)
+	cfgDir := t.TempDir()
+
+	stdout, _, code := run(t, binary, "--db-dir", cfgDir, "up")
+	if code == 0 {
+		t.Fatal("up succeeded against a config dir holding no database")
+	}
+	if !strings.Contains(stdout, "no database at") {
+		t.Errorf("the refusal does not say the database is missing: %q", stdout)
+	}
+	if _, err := os.Stat(filepath.Join(cfgDir, "endless.db")); err == nil {
+		t.Error("the refusal created the database it was refusing to migrate")
 	}
 }

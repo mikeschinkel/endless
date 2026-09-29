@@ -17,9 +17,9 @@ nothing the database can disappoint.
 
 What this module pins, and nothing else does:
 
-  1. The build is CONDITIONAL. A land carrying no schema change builds no
-     executable and invokes none. Building a tool in order not to use it would
-     make its absence untestable.
+  1. The build is UNCONDITIONAL in self_dev (E-2192 reversed this: it was
+     conditional on a change file). Every self_dev land runs `endless-migrate
+     up`, so every one builds it; a land with no change file applies nothing.
   2. The build precedes the ff-merge and the INVOKE follows it. E-1941's window
      is unchanged for the apply; the build is earlier for E-1941's own reason —
      a tree that cannot compile its migration tool must abort while base and the
@@ -168,6 +168,10 @@ def _patch_land(monkeypatch, main, worktree, *, self_dev=True):
     )
     monkeypatch.setattr(
         "endless.event_bridge.backup_db", lambda endless_go_bin=None: {}
+    )
+    # Step 5.5's `endless-migrate up` (E-2192); a no-op unless a test records it.
+    monkeypatch.setattr(
+        worktree_cmd, "_migrate_up", lambda migrate_bin: {"status": "current"}
     )
 
 
@@ -360,12 +364,16 @@ def test_land_builds_and_invokes_it_around_the_ff_merge(landable, monkeypatch):
     monkeypatch.setattr(worktree_cmd, "_build_migration_executable", fake_build)
     monkeypatch.setattr(worktree_cmd, "_resolve_land_migrate_bin", fake_resolve)
     monkeypatch.setattr(worktree_cmd, "_migrate_change", fake_apply)
+    monkeypatch.setattr(
+        worktree_cmd, "_migrate_up",
+        lambda migrate_bin: calls.append("up") or {},
+    )
     monkeypatch.setattr(worktree_cmd, "_record_landing", fake_record)
 
     feat_tip = _head(wt)
     land_worktree(CANON, dry_run=False)
 
-    assert calls == ["build-migrate", "resolve-migrate", "apply", "record"]
+    assert calls == ["build-migrate", "resolve-migrate", "up", "apply", "record"]
     # Built while base is still behind: a broken build aborts having touched
     # neither base nor the database.
     assert main_at["build"] != feat_tip
@@ -410,9 +418,12 @@ def test_the_migration_executable_applies_and_endless_go_records(
     assert seen["apply_bin"] != seen["record_bin"]
 
 
-def test_a_land_with_no_schema_change_builds_nothing(landable, monkeypatch):
-    """Assertion 4. Nothing to apply means nothing to build — and if the build
-    were unconditional, its absence could never be asserted."""
+def test_a_land_with_no_schema_change_still_builds_and_migrates_up(
+    landable, monkeypatch
+):
+    """E-2192 reversed assertion 1. Every self_dev land builds the executable and
+    runs `up`, because a goose migration the database lacks is not visible in
+    the diff. With no change file, nothing is applied."""
     main, wt = landable["main"], landable["worktree"]
     (wt / "README").write_text("edited\n")
     _git(["git", "add", "-A"], wt)
@@ -426,17 +437,21 @@ def test_a_land_with_no_schema_change_builds_nothing(landable, monkeypatch):
     )
     monkeypatch.setattr(
         worktree_cmd, "_resolve_land_migrate_bin",
-        lambda wt_, root: calls.append("resolve-migrate"),
+        lambda wt_, root: calls.append("resolve-migrate") or "/bin/echo",
     )
     monkeypatch.setattr(
         worktree_cmd, "_migrate_change",
         lambda migrate_bin, change_path: calls.append("apply"),
     )
+    monkeypatch.setattr(
+        worktree_cmd, "_migrate_up",
+        lambda migrate_bin: calls.append("up") or {},
+    )
     monkeypatch.setattr(worktree_cmd, "_record_landing", _noop_record)
 
     land_worktree(CANON, dry_run=False)
 
-    assert calls == []
+    assert calls == ["build-migrate", "resolve-migrate", "up"]
     assert _head(main, "main") == _head(wt)
 
 
@@ -465,6 +480,10 @@ def test_a_non_self_dev_land_builds_nothing_and_applies_nothing(
     monkeypatch.setattr(
         worktree_cmd, "_migrate_change",
         lambda migrate_bin, change_path: calls.append("apply"),
+    )
+    monkeypatch.setattr(
+        worktree_cmd, "_migrate_up",
+        lambda migrate_bin: calls.append("up") or {},
     )
     monkeypatch.setattr(worktree_cmd, "_record_landing", _noop_record)
 

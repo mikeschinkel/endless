@@ -427,6 +427,38 @@ If a task's change needs a one-time action on **main** *after* it lands — most
 
 After the post-land script runs (or if none was shipped), `worktree land` verifies the *outcome*: it compares the files that were ignored-and-present on main **before** the land against the files that are untracked-and-present **after** it, and the intersection is **residue** — files a path this land un-ignored left behind that neither the merge nor any script removed. Empty intersection → silent (the common case, and every land that un-ignores nothing). Non-empty → a loud, actionable error listing the residual paths and pointing at the script that should have removed them (or noting none was shipped). It is **non-fatal** — the merge already advanced main — but the land **exits non-zero** so automation notices, because a *later* land could otherwise sweep the residue into a commit. Intentionally-tracked content under an un-ignored path is tracked, never untracked, so it passes silently.
 
+#### Per-branch land settings (`land.toml`)
+
+How a branch lands can be told to `land` by the branch itself, in
+`.endless/tasks/e-<id>/land.toml` — a task-owned file beside `verify.toml` and
+`verify.sh`, written and committed on the task branch. It travels with the
+branch, rebases with the code it describes, shows up in the reviewed diff, and
+`land` reads it from the **worktree** (the landing branch) at the moment it
+lands, so the agent that wrote the change is the one who says how it lands.
+
+Keys always live in tables, never at the top level, so each later setting gets
+its own section. Settings that only mean something to Endless landing itself go
+under `[self_dev]`. Today there is exactly one:
+
+```toml
+[self_dev]
+schema_order = "changes-first"   # default: "migrations-first"
+```
+
+In a self_dev land, step 3 is followed by the schema steps, behind one database
+backup: `endless-migrate up` brings the database to the newest goose migration
+the branch carries, and the branch's new `internal/schema/changes/` files are
+applied. `up` runs on **every** self_dev land (a no-op when the database is
+current), so the binary that records the landing never meets a database missing
+its own migration — including on the re-run after "recording the landing
+failed". Migrations run first unless `schema_order` says `changes-first`.
+
+A missing file, or one with no `[self_dev]` table, means the defaults. Anything
+`land` does not understand — an unknown table or key, a top-level key, a value
+that is not one of the two orders, unreadable TOML — **refuses the land before
+the merge**, naming the file and the offender: a typo in a landing instruction
+is never silently ignored. Fix the file on the branch, commit, and land again.
+
 ### Abandoning a worktree
 
 ```bash

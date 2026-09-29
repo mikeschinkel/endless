@@ -31,7 +31,7 @@ sources; both belong to no task.
 
 | In `e-<id>/`                                  | Whose          | Written by                     |
 |-----------------------------------------------|----------------|--------------------------------|
-| `verify.toml`, `verify.sh`                    | the task's     | you, on the task branch        |
+| `verify.toml`, `verify.sh`, `land.toml`       | the task's     | you, on the task branch        |
 | `context.md`, `plan.md`, `analysis.md`, `outcome.md`, `reason.md`, `notes.md` | the database's | `endless task update`, on main |
 
 Those `.md` files are **document mirrors**: each is a projection of one piece
@@ -159,6 +159,21 @@ report; you write assertions, not plumbing.
 
 Fold the task's own unit tests in as a first, fail-fast check, so the one suite
 is a complete proof for that task at land time.
+
+## A second file of yours: `land.toml`
+
+`.endless/tasks/e-<id>/land.toml` is where a branch tells `endless worktree
+land` how it lands — task-owned like `verify.toml` and `verify.sh`, written and
+committed on the task branch, and read from the landing branch at land time.
+Keys live in tables, never at the top level; settings that only mean something
+to Endless landing itself live under `[self_dev]`:
+
+    [self_dev]
+    schema_order = "changes-first"   # default: "migrations-first"
+
+A missing file means the defaults. An unknown table or key, or a value the land
+does not accept, refuses the land before the merge and names the offender. See
+**Landing the work** in `endless guide orchestration`.
 """
 
 

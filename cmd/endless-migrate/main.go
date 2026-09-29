@@ -1,5 +1,5 @@
-// Command endless-migrate applies Endless's schema changes, and does nothing
-// else.
+// Command endless-migrate applies Endless's schema changes and versioned
+// migrations, and does nothing else.
 //
 // ED-1571's third thing. In self_dev a candidate binary and an installed binary
 // coexist against one real ledger, and during the pre-land window neither of
@@ -22,6 +22,7 @@
 // Usage:
 //
 //	endless-migrate [--db main | --db-dir <dir>] apply <change-file>
+//	endless-migrate [--db main | --db-dir <dir>] up
 //
 // The flags are internal/dbcontext's, the same vocabulary endless-go takes
 // (E-2157), minus one word. `--db sandbox` is REFUSED here rather than
@@ -31,11 +32,21 @@
 // name is what tells a reader who learned `--db` from the guide why it does
 // not apply — which "unknown command" could not.
 //
-// There is one subcommand, and the absence of the others is a property rather
-// than an omission: no hook, no task, no event, no query, no tmux, no schema
-// application. internal/schemachange/executable_test.go asserts both halves —
-// the surface this exposes, and that its build links nothing but the migration
-// machinery.
+// There are two subcommands, one per kind of schema step a landing branch can
+// carry. `apply` applies one internal/schema/changes/ file. `up` brings the
+// database to the newest goose migration this binary embeds, then reconciles
+// the enum mirrors — internal/schema's own Migrate, the same call every other
+// opener makes, run here without the application around it (E-2192). Without
+// `up` a branch's goose migration reached the real ledger only when an
+// installed binary next connected, so the candidate that records the landing
+// could meet a database missing its own new column; E-2188 was that.
+//
+// The absence of every other subcommand is a property rather than an omission:
+// no hook, no task, no event, no query, no tmux. internal/schemachange/
+// executable_test.go asserts both halves — the surface this exposes, and that
+// its build links nothing but the migration machinery. internal/schema is part
+// of that machinery: it carries the embedded migration set and the seeds, and
+// links no other Endless package.
 //
 // Scope is self_dev ONLY. Every other project has one installed binary and no
 // land at all, so it carries and applies its own migrations under ED-1570
@@ -44,6 +55,7 @@
 package main
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
@@ -56,8 +68,20 @@ import (
 	"github.com/mikeschinkel/go-dt"
 
 	"github.com/mikeschinkel/endless/internal/dbcontext"
+	"github.com/mikeschinkel/endless/internal/schema"
 	"github.com/mikeschinkel/endless/internal/schemachange"
 )
+
+// upResult is the JSON document `up` prints on stdout: the version the
+// database was at, the version it is at now, and the file. Status is
+// "migrated" when the version moved and "current" when there was nothing to do,
+// so a caller can tell the two without comparing numbers.
+type upResult struct {
+	Status string      `json:"status"`
+	From   int64       `json:"from"`
+	To     int64       `json:"to"`
+	DB     dt.Filepath `json:"db"`
+}
 
 // result is the JSON document an apply prints on stdout. It is
 // schemachange.Result — the same shape `endless-go event apply-change` prints,
@@ -97,6 +121,17 @@ func main() {
 		res, err := runApply(args[2:], dir)
 		if err != nil {
 			emitError(res.Name, err)
+		}
+		emit(res)
+		return
+	case "up":
+		dir, err := configDir(flags)
+		if err != nil {
+			errUsage(err.Error())
+		}
+		res, err := runUp(args[2:], dir)
+		if err != nil {
+			emitError("", err)
 		}
 		emit(res)
 		return
@@ -151,7 +186,6 @@ func configDir(flags dbcontext.Flags) (dir dt.DirPath, err error) {
 func runApply(args []string, dir dt.DirPath) (res result, err error) {
 	var db *sql.DB
 	var path dt.Filepath
-	var exists bool
 
 	if len(args) != 1 {
 		err = errUsage("apply requires exactly one <change-file>")
@@ -164,39 +198,7 @@ func runApply(args []string, dir dt.DirPath) (res result, err error) {
 		goto end
 	}
 
-	res.DB = dt.FilepathJoin(dir, dbcontext.DBFileName)
-
-	// An absolute database or nothing. dbcontext resolves a RELATIVE path when
-	// no home directory and no XDG_CONFIG_HOME can be found, and a relative one
-	// would be created under whatever directory this happened to be invoked
-	// from — a fresh, empty database that migrates flawlessly and is not the
-	// ledger anyone meant. Refusing is the only honest answer.
-	if !res.DB.IsAbs() {
-		err = fmt.Errorf(
-			"refusing to migrate a database at a relative path: %s\n"+
-				"Neither %s main, nor %s, nor XDG_CONFIG_HOME, nor a home "+
-				"directory resolved, so there is no way to know which ledger "+
-				"was meant.",
-			res.DB, dbcontext.DBFlag, dbcontext.DBDirFlag)
-		goto end
-	}
-
-	// The database must already exist. sql.Open would create one, and a
-	// migration that CREATES its target has migrated nothing — it has
-	// manufactured an empty file and reported success. A land reaches here only
-	// after backing the real ledger up, so a missing file means the path is
-	// wrong, not that the ledger is new.
-	exists, err = res.DB.Exists()
-	if err != nil {
-		err = fmt.Errorf("checking for the database at %s: %w", res.DB, err)
-		goto end
-	}
-	if !exists {
-		err = fmt.Errorf("no database at %s", res.DB)
-		goto end
-	}
-
-	db, err = openDB(res.DB)
+	db, res.DB, err = openTarget(dir)
 	if err != nil {
 		goto end
 	}
@@ -206,6 +208,92 @@ func runApply(args []string, dir dt.DirPath) (res result, err error) {
 
 end:
 	return res, err
+}
+
+// runUp brings exactly one database to the newest migration this binary embeds.
+//
+// It is schema.MigrateContext — goose Up, then the enum-mirror seeds — and
+// nothing of its own, so the database `up` leaves is the one any other opener
+// would have left. Against a database already at the latest version it changes
+// no version and reports "current".
+func runUp(args []string, dir dt.DirPath) (res upResult, err error) {
+	var db *sql.DB
+	ctx := context.Background()
+
+	if len(args) != 0 {
+		err = errUsage("up takes no arguments")
+		goto end
+	}
+
+	db, res.DB, err = openTarget(dir)
+	if err != nil {
+		goto end
+	}
+	defer closeDB(db)
+
+	res.From, err = schema.DBVersion(ctx, db)
+	if err != nil {
+		goto end
+	}
+	err = schema.MigrateContext(ctx, db)
+	if err != nil {
+		goto end
+	}
+	res.To, err = schema.DBVersion(ctx, db)
+	if err != nil {
+		goto end
+	}
+	res.Status = "current"
+	if res.To != res.From {
+		res.Status = "migrated"
+	}
+
+end:
+	return res, err
+}
+
+// openTarget resolves dir to its database file and opens it, refusing a
+// relative path and a file that does not exist. Both subcommands come through
+// here, so neither can migrate a database the other would have refused.
+func openTarget(dir dt.DirPath) (db *sql.DB, path dt.Filepath, err error) {
+	var exists bool
+
+	path = dt.FilepathJoin(dir, dbcontext.DBFileName)
+
+	// An absolute database or nothing. dbcontext resolves a RELATIVE path when
+	// no home directory and no XDG_CONFIG_HOME can be found, and a relative one
+	// would be created under whatever directory this happened to be invoked
+	// from — a fresh, empty database that migrates flawlessly and is not the
+	// ledger anyone meant. Refusing is the only honest answer.
+	if !path.IsAbs() {
+		err = fmt.Errorf(
+			"refusing to migrate a database at a relative path: %s\n"+
+				"Neither %s main, nor %s, nor XDG_CONFIG_HOME, nor a home "+
+				"directory resolved, so there is no way to know which ledger "+
+				"was meant.",
+			path, dbcontext.DBFlag, dbcontext.DBDirFlag)
+		goto end
+	}
+
+	// The database must already exist. sql.Open would create one, and a
+	// migration that CREATES its target has migrated nothing — it has
+	// manufactured an empty file and reported success. A land reaches here only
+	// after backing the real ledger up, so a missing file means the path is
+	// wrong, not that the ledger is new.
+	exists, err = path.Exists()
+	if err != nil {
+		err = fmt.Errorf("checking for the database at %s: %w", path, err)
+		goto end
+	}
+	if !exists {
+		err = fmt.Errorf("no database at %s", path)
+		goto end
+	}
+
+	db, err = openDB(path)
+
+end:
+	return db, path, err
 }
 
 // openDB opens the database file directly: no schema application, no enum seed,
@@ -282,7 +370,7 @@ func errUsage(msg string) error {
 }
 
 // emit prints the result document on stdout and exits 0.
-func emit(res result) {
+func emit(res any) {
 	b, err := json.Marshal(res)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "endless-migrate: encoding the result: %v\n", err)
@@ -309,15 +397,19 @@ func emitError(name string, cause error) {
 }
 
 func usage(w io.Writer) {
-	fmt.Fprintln(w, "endless-migrate — apply Endless schema changes, and nothing else.")
+	fmt.Fprintln(w, "endless-migrate — apply Endless schema changes and migrations, and nothing else.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Usage:")
 	fmt.Fprintln(w, "  endless-migrate [--db main | --db-dir <dir>] apply <change-file>")
+	fmt.Fprintln(w, "  endless-migrate [--db main | --db-dir <dir>] up")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Commands:")
 	fmt.Fprintln(w, "  apply <change-file>   Apply one internal/schema/changes/<name>.{sql,go}")
 	fmt.Fprintln(w, "                        file and record it in _schema_version. Already")
 	fmt.Fprintln(w, "                        applied changes are skipped.")
+	fmt.Fprintln(w, "  up                    Apply every versioned migration this binary")
+	fmt.Fprintln(w, "                        embeds that the database lacks, then reconcile")
+	fmt.Fprintln(w, "                        the enum mirrors. A current database is a no-op.")
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Flags:")
 	fmt.Fprintln(w, "  --db main             The project's main database, ~/.config/endless")

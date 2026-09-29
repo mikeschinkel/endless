@@ -626,10 +626,10 @@ go:
 # Build just the land-time migration-only executable (ED-1571, E-2088).
 #
 # Deliberately NOT part of `just build` / `just go`. This binary exists for one
-# moment — a self_dev land whose branch adds a schema change — and `endless
-# worktree land` builds it then, from the landing branch, only when there is a
-# change to apply. A land carrying no migration never builds it, and neither
-# does an ordinary development build.
+# moment — a self_dev land — and `endless worktree land` builds it then, from
+# the landing branch, on every self_dev land: the land always runs its `up`
+# (E-2192), and may also `apply` the branch's change files. An ordinary
+# development build never builds it.
 #
 # It is a recipe rather than an inlined `go build` inside the land for the same
 # reason `just go` is: the build command has one definition, and the land runs

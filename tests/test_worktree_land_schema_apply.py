@@ -157,6 +157,11 @@ def _patch_land(monkeypatch, main, worktree, *, self_dev=True):
     monkeypatch.setattr(
         worktree_cmd, "_resolve_land_migrate_bin", lambda wt, root: MIGRATE_BIN
     )
+    # Step 5.5's `endless-migrate up` (E-2192) runs on every self_dev land;
+    # stubbed as a no-op against a current database unless a test records it.
+    monkeypatch.setattr(
+        worktree_cmd, "_migrate_up", lambda migrate_bin: {"status": "current"}
+    )
 
 
 def _noop_record(item_id, proj_name, branch, base_branch, canonical,
@@ -306,6 +311,10 @@ def test_apply_runs_after_merge_and_before_record(landable, monkeypatch):
 
     monkeypatch.setattr("endless.event_bridge.backup_db", fake_backup)
     monkeypatch.setattr(worktree_cmd, "_migrate_change", fake_apply)
+    monkeypatch.setattr(
+        worktree_cmd, "_migrate_up",
+        lambda migrate_bin: calls.append(("up", migrate_bin)) or {},
+    )
     def fake_record(item_id, proj_name, branch, base_branch, canonical,
                     merge_sha, endless_go_bin=None):
         calls.append(("record", merge_sha))
@@ -316,7 +325,7 @@ def test_apply_runs_after_merge_and_before_record(landable, monkeypatch):
     land_worktree(CANON, dry_run=False)
 
     assert [c[0] for c in calls] == [
-        "rebuild", "build-migrate", "backup", "apply", "record",
+        "rebuild", "build-migrate", "backup", "up", "apply", "record",
     ]
     # Both builds happen BEFORE main advances, so a broken build of either
     # binary aborts with base and the DB untouched.
@@ -331,7 +340,11 @@ def test_apply_runs_after_merge_and_before_record(landable, monkeypatch):
     assert by_name["backup"] == "/bin/echo"
 
 
-def test_no_schema_changes_skips_backup_and_apply(landable, monkeypatch):
+def test_no_schema_changes_still_backs_up_and_migrates_up(landable, monkeypatch):
+    """E-2192 reversed what this used to assert. A branch with no change file
+    still builds the migrator, backs up once and runs `up`: whether the database
+    lacks a goose migration is a question about the database, not the diff.
+    It applies no change file, because there is none."""
     main, wt = landable["main"], landable["worktree"]
     (wt / "README").write_text("edited\n")
     _git(["git", "add", "-A"], wt)
@@ -351,10 +364,14 @@ def test_no_schema_changes_skips_backup_and_apply(landable, monkeypatch):
         worktree_cmd, "_build_migration_executable",
         lambda wt_, canon: calls.append("build-migrate"),
     )
+    monkeypatch.setattr(
+        worktree_cmd, "_migrate_up",
+        lambda migrate_bin: calls.append("up") or {},
+    )
     monkeypatch.setattr(worktree_cmd, "_record_landing", _noop_record)
 
     land_worktree(CANON, dry_run=False)
-    assert calls == []
+    assert calls == ["build-migrate", "backup", "up"]
     assert _head(main, "main") == _head(wt)
 
 
