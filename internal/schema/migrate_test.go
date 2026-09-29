@@ -431,12 +431,12 @@ func TestMigrate_RatingsReplaceTier(t *testing.T) {
 	}
 }
 
-// TestMigrate_RetiresUntriaged drives 00009 (E-1993) over a database still
+// TestMigrate_RetiresUntriaged drives 00010 (E-1993) over a database still
 // carrying the retired status and the triage sweep's state: an `untriaged` row
 // lands `submitted` when it has a plan and `unplanned` otherwise, no other row
 // moves, and the triage claim table and job row are gone.
 func TestMigrate_RetiresUntriaged(t *testing.T) {
-	db := buildDB(t, func(db *sql.DB) error { return schema.MigrateUpTo(db, 8) })
+	db := buildDB(t, func(db *sql.DB) error { return schema.MigrateUpTo(db, 9) })
 
 	mustExec(t, db, `INSERT INTO projects (id, name, path) VALUES (1, 'p', '/p')`)
 	mustExec(t, db, `INSERT INTO tasks (id, project_id, title, status) VALUES
