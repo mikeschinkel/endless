@@ -1,0 +1,1 @@
+E-1206 commits every db-ledger segment at write time, so merge path no longer matters; .endless/events/ no longer exists.
