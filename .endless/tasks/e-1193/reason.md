@@ -1,0 +1,1 @@
+Its premise reversed: E-986 shipped and .endless/extensions/ no longer exists, so there is nothing to merge in either direction.
