@@ -2894,7 +2894,7 @@ def _apply_clear_flags(clear_fields, resolved):
 @task_cmd.command("add")
 @click.argument("title")
 @click.option("--description", default=None,
-              help="Longer description of the task (inline)")
+              help="WHAT the task is: ≤256 chars, one line, no task ids (inline)")
 @click.option("--description-file", default=None,
               help="Load the task description from a file")
 @retired_content_options("text", "plan")
@@ -2964,7 +2964,14 @@ def task_add(title, description, description_file, plan_text, plan_file, context
              blocks_ids, blocked_by_ids, relates_to_ids, implements_ids,
              cleans_up_ids, cleaned_up_by_ids, duplicates_ids, replaces_ids,
              allow_paths):
-    """Add a task."""
+    """Add a task.
+
+    TITLE names WHAT in at most 60 characters: no how, no why, no id.
+    --description says WHAT the task is in at most 256 characters on one line:
+    no backstory (--context), no how (--analysis or --plan), no task ids (use
+    a task link). A task needs a plan before it can be claimed or spawned.
+    Rules and examples: endless guide tasks.
+    """
     from endless.task_cmd import add_item, link_tasks, print_add_hints
     description = _resolve_content_flag(description, description_file, "description", allow_paths)
     plan_text = _resolve_content_flag(plan_text, plan_file, "plan", allow_paths)
@@ -3003,9 +3010,10 @@ def task_add(title, description, description_file, plan_text, plan_file, context
 @click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
 @click.option("--status", default=None, help=TASK_STATUS_HELP)
 @click.option("--title", default=None,
-              help="New title")
+              help="New title: WHAT, ≤60 chars, no task ids")
 @click.option("--description", default=None,
-              help="New description (inline)")
+              help="New description: WHAT the task is, ≤256 chars, one line, "
+                   "no task ids (inline)")
 @click.option("--description-file", default=None,
               help="Load the new description from a file")
 @retired_content_options("text", "plan")
@@ -3081,7 +3089,12 @@ def task_update(item_ids, status, title, description, description_file, plan_tex
                 task_type, context_text, context_file, analysis_text, analysis_file, force, outcome, outcome_file, reason, reason_file,
                 notes_text, notes_file, justification, allow_paths,
                 keep_status, clear_fields, duplicates_ids, replaces_ids):
-    """Update fields on one or more tasks."""
+    """Update fields on one or more tasks.
+
+    --title: at most 60 characters. --description: at most 256, one line.
+    Neither may cite a task id. Only the fields you pass are checked.
+    Rules and examples: endless guide tasks.
+    """
     from endless.task_cmd import update_plan, link_tasks
     resolved = _apply_clear_flags(clear_fields, {
         "description": _resolve_content_flag(description, description_file, "description", allow_paths, clearable=True),
@@ -4076,9 +4089,10 @@ def epic_show(item_ids, no_description, show_context, show_analysis, show_plan_f
 @click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
 @click.option("--status", default=None, help=TASK_STATUS_HELP)
 @click.option("--title", default=None,
-              help="New title")
+              help="New title: WHAT, ≤60 chars, no task ids")
 @click.option("--description", default=None,
-              help="New description (inline)")
+              help="New description: WHAT the task is, ≤256 chars, one line, "
+                   "no task ids (inline)")
 @click.option("--description-file", default=None,
               help="Load the new description from a file")
 @retired_content_options("text", "plan")
