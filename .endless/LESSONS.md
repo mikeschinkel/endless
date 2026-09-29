@@ -6939,3 +6939,7 @@ I made the new 'context' content name render by default in task show because the
 ### [2026-09-29] Descriptions lead with what the task does, not why or when
 Mike rejected rewritten descriptions that led with context (the missing thing, the current behavior, the incident), led with 'when/on X' before the what, named specific hooks or tables, or used undefined jargon like 'pivot gate'. Leading with context makes a task about 3x harder to understand. A description starts with the title's verb and says what will be implemented, high-level; 'when' comes after 'what'; context goes in --context, specifics (hook names, tables) in --analysis or --plan.
 - **Project**: endless
+
+### [2026-09-29] Operational commands for Mike go in an executable script file, built on Endless's own --json surfaces
+When Mike needs a multi-step shell operation (e.g. restarting every session monitor), write it to an executable script file (chmod +x), not a one-liner to paste. Discover state through Endless's own --json output with jq before reaching for pgrep/ps process-tree walking, and check whether it should be an endless command instead of a script. Never hardcode tmux pane ids; they change after a tmux crash/restore.
+- **Project**: endless
