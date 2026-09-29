@@ -1,0 +1,1 @@
+There is no clear-on-release to replace: sessions.active_task_id became write-once sessions.task_id (E-1969, ED-1560).
