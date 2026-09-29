@@ -71,3 +71,26 @@ global install, so they restart once per upgrade.
   says why.
 - Nothing names the binary by `endless-go`; the check survives the E-1063
   rename.
+
+
+
+## As implemented (deviations and additions)
+
+- **argv:** the exec re-runs the argv captured at package init, not
+  `os.Args` — main strips `--db` from `os.Args` before dispatch, so re-running
+  it would drop `--db main`.
+- **Exec target:** the watched path (the symlink), not the resolved file, so
+  the re-exec'd process watches the same path and sees the next repoint. The
+  plan said "exec the resolved path"; that would miss every later upgrade
+  under a versioned-directory install (e.g. Homebrew's Cellar).
+- **Which path is watched:** argv[0] when it names the same file as
+  `os.Executable()`, else `os.Executable()`. PRODUCT: on Linux
+  `os.Executable()` is already resolved past symlinks. No name is hardcoded.
+- **Jobs in flight:** a ready replacement waits (firing nothing new) until
+  the running job finishes, so an exec never kills a job holding its lease.
+- **Retry:** after a failed restart, a later, different replacement is
+  tried afresh.
+- **Fault:** new WARN-0019 `monitor-restart-failed`.
+- **Tests:** `LoopConfig.Tick` overrides `Interval` so the end-to-end test
+  (`TestLoopReexecsIntoReplacedBinary`, helper in
+  `internal/liveview/testdata/reexecprobe`) runs in ~3s.
