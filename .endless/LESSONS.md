@@ -6911,3 +6911,7 @@ Never skip or water down a requested edit because it would change a task's statu
 ### [2026-09-28] Don't turn a retired process into a successor
 When Mike says a process is no longer needed, do not recast his remarks about other future processes as a replacement for it. Retiring the description triage meant nothing replaces it; future processes each get their own trigger, designed for what they do.
 - **Project**: endless
+
+### [2026-09-29] Work delivered by another task is superseded, not obsolete
+When a task's work was actually shipped by a different task, close it with endless task replace <old> --by <new> --outcome ... (superseded + replaced_by link), not --status obsolete. Obsolete means no longer needed and nothing replaced it; the link is what lets a reader find where the work went.
+- **Project**: endless
