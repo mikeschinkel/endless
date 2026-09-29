@@ -1,0 +1,1 @@
+E-986 shipped the same per-project hook at .endless/hooks/post-worktree-create.sh; the tiered and naming questions remain in E-1188.
