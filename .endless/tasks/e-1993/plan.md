@@ -210,3 +210,42 @@ before/after examples, and define `context` beside the other content names.
   `text`, the 100/1000/1024 limits, "what and why", or description-as-spec, and
   carry E-2187's "is NOT" rules.
 - `go build/vet/test ./...` and `just test` pass.
+
+## Scope grown during implementation
+
+Folded in because each followed directly from the plan and was cheaper to do
+than to file:
+
+- **`submitted` needs a plan by every route.** With no description ever a
+  sufficient spec, `task submit` and `task update --status submitted` refuse a
+  task with no plan (the plan-attach promotion already implied one).
+- **No planning exemption.** E-1813 (landed first) removed the tier-1
+  advance to `ready`; confirmed with that session that neither task keeps an
+  exemption, so the plan gate applies to every task and no reconciliation task
+  was needed. Rebased onto it: the retire-untriaged migration is 00010.
+- **Ledger replay of the retired status.** Historical events carry `untriaged`
+  (task.created, the description-edit reset, reconsidering). The projector and
+  the executor map it to `submitted` with a plan, else `unplanned`, matching
+  migration 00010, so a rebuild agrees with a migrated database.
+- **`description-reset-from` stays resolvable, empty.** The global install asks
+  a worktree's newer endless-go for it at import time; an unknown group is
+  fatal there, an empty one means "never reset", which is the new rule.
+- **Triage removal footprint:** `endless triage run`, triage.py, the
+  triage-sufficiency job, the triage session-query verbs and monitor reads, the
+  `triage_claims` table (dropped in 00010 along with the job row), the
+  sufficiency template, `◌ triage` in session status, the `triage` model
+  default, and the triage help page. WARN-0009 stays in the catalog, retired,
+  since numbers are never reused. `ActorTriager` stays valid for history.
+  `errors record` is kept: it is the Python bridge to the fault store.
+  E-1813's rating proposal inside triage went with it; ratings are proposed at
+  `task submit` and nudged on plan-attach, as E-1813 already does.
+- **`context` on epics too** (`epic show --context`, `epic update --context`),
+  matching `analysis`.
+- **CLAUDE.md:** the Python-reads-SQLite count went from six to five, because
+  triage.py was one of them. The field model itself lives in the guide.
+
+The bulk rewrite (§5) is a one-off script kept outside the merge
+(`.endless/tmp/e-1993-apply-rewrites.py` in this worktree); it runs after land.
+A full dry run against main: 1404 rows apply, 8 are removed tasks, 6 need no
+change, 1 is stale by source_hash. Every proposed title and description passes
+the new rules.
