@@ -1,0 +1,1 @@
+Per analysis 2026-06-15 of session_gates data (335 rows over ~6 weeks): only 28% of gates were resolved by user-action verbs (task_add/claim/start/confirm); 33% were superseded by another phrase match; 39% were abandoned unresolved. Most-triggered phrases (instead, wait, different, btw, actually) have high false-positive rates in normal conversation.
