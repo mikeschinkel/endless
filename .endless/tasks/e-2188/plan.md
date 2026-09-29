@@ -127,3 +127,21 @@ spawners are never hidden; and the legend is compact exactly when the normal for
 would exceed the width and the compact form fits, and is the normal form
 (wrapped) when neither fits, in both commands; and a frame
 whose line wraps sizes the monitor pane by display rows, not lines.
+
+## Settled during implementation (Mike, 2026-09-29)
+
+- **The claiming session is outside ownership.** "Duplicate" means a task is in
+  session_tasks for more than one live session *other than* the session whose
+  sessions.task_id is that task. The claimer neither owns the task nor makes it
+  ambiguous, and its focus on its own claimed task is never "focus elsewhere".
+  So the spawn flow (A files E-150, B claims it) marks nothing.
+- **Column 4.** ◼︎ and ◫ always replace the unsettled mark in column 4, EXCEPT
+  on the session's own claimed-task row, which cannot be a duplicate and shows
+  focus by colour alone. In plain text, no ◼︎ on any row means the claimed task
+  has focus. JSON states it explicitly.
+- **"Agent output".** `session status` has no agent rendering, so the explicit
+  machine form is `--json`: `focus` on the frame, and `focused`,
+  `duplicate_work`, `owned_elsewhere` on every row (rows the table omits
+  included).
+- A row omitted because another session owns it is not counted in the
+  `… N hidden` footer: that footer reports what this session hid.
