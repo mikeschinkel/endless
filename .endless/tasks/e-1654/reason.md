@@ -1,0 +1,1 @@
+E-2062 disables rebuild-db --confirm outright and reports what it would destroy; the faithful-replay cure is E-1671.
