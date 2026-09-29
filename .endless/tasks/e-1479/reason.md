@@ -1,0 +1,1 @@
+E-1719 shipped --record-only; the remaining extras (sha auto-discovery, dedup guard, --session-id) were never needed in practice.
