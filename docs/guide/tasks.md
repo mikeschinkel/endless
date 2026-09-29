@@ -11,7 +11,7 @@ Every task has one short name, one short description, and a set of long-form con
 | Field         | Length         | Purpose                                                                                          | How to set                                         |
 |---------------|----------------|--------------------------------------------------------------------------------------------------|----------------------------------------------------|
 | `title`       | ≤ 60 chars     | The task name: WHAT, recognizable rather than descriptive. Verb-first (see Verbs below). | Positional arg on `task add`; `--title` on update. |
-| `description` | ≤ 256 chars, one line | WHAT the task is — for a bug, the defect in one sentence. Shown by default in `task list` / `task show`. It describes the task; it is never a spec. | `--description` (inline) / `--description-file <path>` on `task add` / `task update`. |
+| `description` | ≤ 256 chars, one line | WHAT the task will do, starting with the title's verb. Shown by default in `task list` / `task show`. It describes the task; it is never a spec. | `--description` (inline) / `--description-file <path>` on `task add` / `task update`. |
 | `context`     | Long-form      | Why the task exists: how things work today, what prompted the task, and the evidence for it (logs, counts, repro). Never how the work will be done. Shown with `task show --context`, directly after the description. | `--context` (inline) / `--context-file <path>` on `task add` / `task update`. |
 | `analysis`    | Long-form      | Design and investigation toward a plan: the how, rationale and rejected alternatives, scope, acceptance ideas, open design questions. Shown with `task show --analysis`. | `--analysis` (inline) / `--analysis-file <path>` on `task add` / `task update`. |
 | `plan`        | Long-form      | The approved work: approach, the files and functions it touches, verification steps. **Required before a task can be claimed or spawned.** Name files and functions, never line numbers — see **No time-frozen specifics** below. Shown with `task show --plan`. **On a research task, `plan` instead holds the research *request* — see the Research-task field model below.** | `--plan` (inline) / `--plan-file <path>` on `task add` / `task update`. |
@@ -21,7 +21,7 @@ Every task has one short name, one short description, and a set of long-form con
 
 `context`, `analysis`, `plan`, `outcome`, `reason` and `notes` are **content**: each is one row per task in the database under that name, and the name is also the CLI flag, the `task show` heading and the mirror file (`.endless/tasks/e-NNNN/<name>.md`). `title` and `description` are columns on the task itself.
 
-**The limits are enforced on write.** `task add` and `task update` refuse a title over 60 characters, a description over 256 characters or containing a newline, and a task, decision or session id (`E-NNN`, `ED-NNN`, `ES-NNN`) in either — and the refusal names where the text belongs instead. A limit applies to the field being written: an update that does not touch an older, longer title or description is not refused, and nothing is ever truncated. Ids are fine in every content slot.
+**The limits are enforced on write.** `task add` and `task update` refuse a title over 60 characters, a description over 256 characters, containing a newline, or not starting with the title's verb, and a task, decision or session id (`E-NNN`, `ED-NNN`, `ES-NNN`) in either — and the refusal names where the text belongs instead. A limit applies to the field being written: an update that does not touch an older, longer title or description is not refused, and nothing is ever truncated. Ids are fine in every content slot.
 
 ### What a title is NOT
 
@@ -44,7 +44,10 @@ Every task has one short name, one short description, and a set of long-form con
 
 ### What a description is NOT
 
-A description is the blurb on a page that lists tasks: WHAT the task is, in at most 256 characters. For a bug, it is the defect in one sentence ("X does Y when it should do Z").
+A description is the blurb on a page that lists tasks: WHAT the task will do, in at most 256 characters. **It starts with the title's verb** — enforced on write — so the first thing it says is what the task will do: under *Fix worktree land writing to sandbox DB*, "Fix worktree land so it always writes the landing to the main database…", never "Running worktree land from a self-dev shell…".
+
+- **Not when before what.** "When X happens, do Y" becomes "Do Y when X happens".
+- **Not jargon a stranger can't decode.** An internal nickname ("the pivot gate") is replaced by what the thing does ("the hooks that match topic-change phrases").
 
 - **Not the how.** Mechanism, files, tables, flags and steps go in `analysis` (design) or `plan` (approved work).
   - before: *Replace tasks.tier with two rating axes per ED-138/ED-139: nullable FK columns to seeded complexity_levels and risk_levels tables (low=1, medium=3, high=5; 2 and 4 unseeded), Go int-const enums with String()/Parse(), agent-proposed at submit and user-ratified at approve. Ratings do not move status. Tier is removed rather than kept — …*

@@ -2974,9 +2974,9 @@ def task_add(title, description, description_file, plan_text, plan_file, context
     """Add a task.
 
     TITLE names WHAT in at most 60 characters: no how, no why, no id.
-    --description says WHAT the task is in at most 256 characters on one line:
-    no backstory (--context), no how (--analysis or --plan), no task ids (use
-    a task link). A task needs a plan before it can be claimed or spawned.
+    --description starts with the title's verb and says WHAT the task will do,
+    in at most 256 characters on one line: no backstory (--context), no how
+    (--analysis or --plan), no task ids (use a task link). A task needs a plan before it can be claimed or spawned.
     Rules and examples: endless guide tasks.
     """
     from endless.task_cmd import add_item, link_tasks, print_add_hints
@@ -3098,8 +3098,8 @@ def task_update(item_ids, status, title, description, description_file, plan_tex
                 keep_status, clear_fields, duplicates_ids, replaces_ids):
     """Update fields on one or more tasks.
 
-    --title: at most 60 characters. --description: at most 256, one line.
-    Neither may cite a task id. Only the fields you pass are checked.
+    --title: at most 60 characters. --description: at most 256, one line,
+    starting with the title's verb. Neither may cite a task id. Only the fields you pass are checked.
     Rules and examples: endless guide tasks.
     """
     from endless.task_cmd import update_plan, link_tasks

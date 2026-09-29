@@ -182,6 +182,21 @@ def disable_haiku_verb_check(monkeypatch, request):
 
 
 @pytest.fixture(autouse=True)
+def disable_description_verb_rule(monkeypatch, request):
+    """E-1993: suspend the description-starts-with-the-title's-verb rule.
+
+    Most tests file tasks with placeholder descriptions ("d", "short") because
+    what the description says is not their subject. Tests of the rule itself,
+    and anything asserting a real filing is accepted, opt back in with
+    `@pytest.mark.description_verb_rule`.
+    """
+    if request.node.get_closest_marker("description_verb_rule"):
+        return
+    from endless import task_cmd
+    monkeypatch.setattr(task_cmd, "_description_verb_problems", lambda _t, _d: [])
+
+
+@pytest.fixture(autouse=True)
 def stub_cli_execvp(monkeypatch):
     """E-1513: under `--db sandbox` from a self-dev worktree, cli.DBAwareGroup
     re-execs into the worktree's Python source via `uv run --directory ...

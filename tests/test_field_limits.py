@@ -146,3 +146,47 @@ def test_the_cli_refusal_names_the_destination(seeded_project_at_cwd):
     ])
     assert result.exit_code != 0
     assert "--context" in result.output
+
+
+# --- a description starts with its title's verb -----------------------------
+
+@pytest.mark.description_verb_rule
+def test_a_description_must_start_with_the_titles_verb(seeded_project_at_cwd):
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.add_item(title="Fix the widget",
+                          description="The widget breaks on Tuesdays.")
+    msg = str(exc.value)
+    assert "'the'" in msg and "'fix'" in msg
+    assert "--context" in msg
+
+
+@pytest.mark.description_verb_rule
+def test_the_verb_match_ignores_case_and_punctuation(seeded_project_at_cwd):
+    assert task_cmd.add_item(title="Fix the widget",
+                             description="fix, then test, the widget.")
+
+
+@pytest.mark.description_verb_rule
+def test_update_checks_a_new_description_against_the_stored_title(seeded_project_at_cwd):
+    item_id = task_cmd.add_item(title="Fix the widget", description="Fix it.")
+    with pytest.raises(click.ClickException):
+        task_cmd.update_plan(item_id=item_id, description="Widgets break.")
+    task_cmd.update_plan(item_id=item_id, description="Fix it properly.")
+
+
+@pytest.mark.description_verb_rule
+def test_update_checks_against_a_title_changed_in_the_same_call(seeded_project_at_cwd):
+    item_id = task_cmd.add_item(title="Fix the widget", description="Fix it.")
+    task_cmd.update_plan(item_id=item_id, title="Remove the widget",
+                         description="Remove it entirely.")
+    with pytest.raises(click.ClickException):
+        task_cmd.update_plan(item_id=item_id, title="Add a widget",
+                             description="Remove it entirely.")
+
+
+@pytest.mark.description_verb_rule
+def test_a_title_only_edit_is_not_refused_for_an_older_description(seeded_project_at_cwd):
+    item_id = task_cmd.add_item(title="Fix the widget", description="Fix it.")
+    task_cmd.update_plan(item_id=item_id, title="Remove the widget")
+    row = db.query("SELECT title FROM tasks WHERE id = ?", (item_id,))[0]
+    assert row["title"] == "Remove the widget"

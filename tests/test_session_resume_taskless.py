@@ -94,13 +94,27 @@ def test_taskless_session_gets_a_claimed_task_and_worktree(
 
     # The title is the pinned placeholder, and the task is created in the
     # RESUMED session's project — not in whatever project cwd names.
-    assert stub_create["title"] == "Auto-resumed task for session ES-963"
+    assert stub_create["title"] == session_cmd._TASKLESS_RESUME_TITLE
+    assert "ES-963" in stub_create["context"], "the session is named in context"
     assert stub_create["project_name"] == "probe"
     assert str(stub_create["project_root"]) == str(tmp_path / "proj")
     assert stub_create["session_id"] == 963
 
 
-def test_description_names_the_tasks_the_session_touched():
+@pytest.mark.description_verb_rule
+def test_the_placeholder_passes_the_task_field_rules():
+    """E-1993 bars ids from titles and descriptions and caps their length; the
+    placeholder is created with force=True, which bypasses only the verb check,
+    so it has to satisfy everything else on its own."""
+    from endless import task_cmd
+    task_cmd.validate_fields(
+        title=session_cmd._TASKLESS_RESUME_TITLE,
+        description=session_cmd._TASKLESS_RESUME_DESCRIPTION,
+        force=True,
+    )
+
+
+def test_context_names_the_tasks_the_session_touched():
     db.execute(
         "INSERT INTO session_tasks (session_id, task_id, relation_id, "
         "created_at, updated_at) VALUES "
@@ -108,16 +122,14 @@ def test_description_names_the_tasks_the_session_touched():
         "(963, 1801, 3, '2026-08-01', '2026-08-01'), "
         "(964, 1999, 3, '2026-08-01', '2026-08-01')"
     )
-    desc = session_cmd._taskless_resume_description(963)
-    assert "ES-963" in desc
-    assert "E-1776, E-1801" in desc
-    assert "E-1999" not in desc          # another session's touches
-    assert "\n" not in desc              # validate_description rejects newlines
-    assert len(desc) <= 1024
+    ctx = session_cmd._taskless_resume_context(963)
+    assert "ES-963" in ctx
+    assert "E-1776, E-1801" in ctx
+    assert "E-1999" not in ctx           # another session's touches
 
 
-def test_description_is_still_a_sentence_when_nothing_was_touched():
-    assert "had not touched any tasks" in session_cmd._taskless_resume_description(963)
+def test_context_is_still_a_sentence_when_nothing_was_touched():
+    assert "had not touched any tasks" in session_cmd._taskless_resume_context(963)
 
 
 def test_projectless_session_errors_and_names_the_uuid(monkeypatch):

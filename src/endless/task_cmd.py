@@ -532,11 +532,45 @@ def _refuse(problems: list[_Refusal], action: str) -> None:
     raise click.ClickException(agent_help.agent_error(summary, guidance))
 
 
+def _first_word(text: str) -> str:
+    """The lowercased first word of `text`, trailing punctuation dropped."""
+    words = text.split()
+    return words[0].lower().rstrip(".,:;!?") if words else ""
+
+
+def _description_verb_problems(title: str, description: str) -> list[_Refusal]:
+    """A description starts with its title's verb (E-1993).
+
+    A description that opens with why the task exists, what is broken today, or
+    when something happens is measurably harder to read than one that says what
+    the task will do. Starting with the title's verb makes the WHAT the first
+    thing written, mechanically. Compared case-insensitively, first word to
+    first word.
+    """
+    want, got = _first_word(title), _first_word(description)
+    if not want or not description.strip() or want == got:
+        return []
+    return [_Refusal(
+        verdict=f"description starts with '{got}', title with '{want}'",
+        remedy=(f"Start the description with the title's verb ('{want.capitalize()}') "
+                f"and say what the task will do; when comes after what, why it "
+                f"exists goes in --context, specifics in --analysis or --plan."),
+        guidance=(
+            f"The description starts with '{got}'; it must start with the title's\n"
+            f"  verb, '{want}'.\n"
+            f"  Lead with what the task will do. Say when after what, not before;\n"
+            f"  put why it exists and how things work today in --context, and\n"
+            f"  specifics (hooks, tables, flags) in --analysis or --plan."
+        ),
+    )]
+
+
 def validate_fields(
     title: str | None = None,
     description: str | None = None,
     force: bool = False,
     action: str = NOTHING_WRITTEN,
+    current_title: str | None = None,
 ) -> None:
     """Validate every field of one write, and refuse ONCE with all the problems.
 
@@ -553,6 +587,12 @@ def validate_fields(
         problems.extend(_title_problems(title, force))
     if description is not None:
         problems.extend(_description_problems(description))
+        # Checked only when the description is written, against the title it
+        # will sit under: the new one if this write sets it, else the stored
+        # one. A title-only edit is not refused for an older description.
+        effective_title = title if title is not None else current_title
+        if effective_title:
+            problems.extend(_description_verb_problems(effective_title, description))
     _refuse(problems, action)
 
 
@@ -4528,6 +4568,7 @@ def create_claimed_task_for_session(
     project_name: str,
     project_root: Path,
     session_id: int,
+    context: str | None = None,
 ) -> tuple[int, Path]:
     """Create a task already claimed by `session_id`, and give it a worktree.
 
@@ -4547,6 +4588,7 @@ def create_claimed_task_for_session(
     item_id = add_item(
         title,
         description=description,
+        context=context,
         project_name=project_name,
         status="underway",
         force=True,
@@ -5264,7 +5306,7 @@ def update_plan(
     effective_type_for_outcome = task_type if task_type is not None else row[0]["type"]
     _require_outcome_for_completed(status, effective_type_for_outcome, effective_outcome)
     validate_fields(title=title, description=description, force=force,
-                    action=NOTHING_CHANGED)
+                    action=NOTHING_CHANGED, current_title=row[0]["title"])
 
     # E-1658: when the title or type is being changed, re-gate the effective
     # (title, type) against the verb-category accepts map. Closes the

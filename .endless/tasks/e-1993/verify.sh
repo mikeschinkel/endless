@@ -179,6 +179,9 @@ assert_eq "a task id in the title is refused" "1" "${rc}"
 out="$(human task add "Fix the widget" --description "Follow-up to ED-4.")"; rc=$?
 assert_eq "a decision id in the description is refused" "1" "${rc}"
 assert_contains "the id refusal says to use a task link" "task link" "${out}"
+out="$(human task add "Fix the widget" --description "The widget breaks on Tuesdays.")"; rc=$?
+assert_eq "a description not starting with the title's verb is refused" "1" "${rc}"
+assert_contains "the refusal names the title's verb" "'fix'" "${out}"
 assert_eq "nothing was created by any refusal" "${before}" "$(tasks_count)"
 
 A="$(new_task "Add a widget to the cache" --description "Add a widget." --context "Today the cache has no widget; see E-99.")"

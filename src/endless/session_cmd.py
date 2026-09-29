@@ -257,14 +257,23 @@ _REOPEN_TO_REVISIT: frozenset[str] = frozenset(statuses.get("reopenable"))
 _REOPEN_REFUSED: frozenset[str] = frozenset(statuses.get("reopen-refused"))
 
 
-def _taskless_resume_description(eid: int) -> str:
-    """Describe the container task minted for task-less session `eid` (E-1918).
+# The container task's title and description (E-1918). Fixed text with no ids:
+# E-1993 bars task and session ids from both, and a description starts with its
+# title's verb. What identifies this container — the session, and the tasks it
+# had touched — goes in its context, where ids are allowed.
+_TASKLESS_RESUME_TITLE = "Resume a session that never claimed a task"
+_TASKLESS_RESUME_DESCRIPTION = (
+    "Resume a session that never claimed a task, in a worktree of its own."
+)
 
-    Names the tasks the session had already touched, so the placeholder is not
-    contentless: those ids are the only evidence on hand of what the session was
-    doing, and they are what makes the container findable later. Kept to one
-    line and inside `validate_description`'s length cap — long tails are elided
-    rather than truncated mid-id.
+
+def _taskless_resume_context(eid: int) -> str:
+    """The context of the container task minted for task-less session `eid`.
+
+    Names the session and the tasks it had already touched, so the placeholder
+    is not contentless: those ids are the only evidence on hand of what the
+    session was doing, and they are what makes the container findable later.
+    Long tails are elided rather than truncated mid-id.
     """
     base = (
         f"Container task auto-created so session ES-{eid} could be resumed "
@@ -322,7 +331,7 @@ def _auto_task_for_taskless_session(target: dict) -> tuple[str, int]:
             f"    claude --resume {uuid}"
         )
 
-    title = f"Auto-resumed task for session ES-{eid}"
+    title = _TASKLESS_RESUME_TITLE
     click.echo(
         click.style("•", fg="cyan")
         + f" session ES-{eid} never claimed a task — creating one to resume into",
@@ -331,7 +340,8 @@ def _auto_task_for_taskless_session(target: dict) -> tuple[str, int]:
     try:
         task_id, wt_path = create_claimed_task_for_session(
             title=title,
-            description=_taskless_resume_description(eid),
+            description=_TASKLESS_RESUME_DESCRIPTION,
+            context=_taskless_resume_context(eid),
             project_name=rows[0]["name"],
             project_root=root,
             session_id=eid,
