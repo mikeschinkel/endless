@@ -231,7 +231,7 @@ assert_eq "claim refuses a task with no plan" "1" "${rc}"
 assert_contains "the refusal gives the route forward" "--plan-file" "${out}"
 assert_eq "a refused claim changes nothing" "unplanned" "$(json_field "${B}" status)"
 
-human task approve "${C}" >/dev/null
+human task approve "${C}" --complexity low --risk low >/dev/null
 human question ask "${C}" "Which cache tier?" >/dev/null
 shown="$(human task show "${C}" --no-color)"
 assert_contains "task show marks the task parked" "Parked:" "${shown}"
@@ -251,7 +251,7 @@ section "8. A description edit never moves status; a plan edit on ready does"
 
 D="$(new_task "Add a doohickey" --description "Add a doohickey." --plan "# Plan\nv1\n")"
 need_id "${D}"
-human task approve "${D}" >/dev/null
+human task approve "${D}" --complexity low --risk low >/dev/null
 human task update "${D}" --description "Add a doohickey, again." >/dev/null
 assert_eq "a description edit on a ready task keeps it ready" "ready" "$(json_field "${D}" status)"
 human task update "${D}" --plan "# Plan\nv1 (typo fixed)\n" --keep-status >/dev/null
