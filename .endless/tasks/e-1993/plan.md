@@ -241,8 +241,11 @@ than to file:
   `task submit` and nudged on plan-attach, as E-1813 already does.
 - **`context` on epics too** (`epic show --context`, `epic update --context`),
   matching `analysis`.
-- **CLAUDE.md:** the Python-reads-SQLite count went from six to five, because
-  triage.py was one of them. The field model itself lives in the guide.
+- **CLAUDE.md stays minimal (Mike's call, overriding the acceptance line
+  above).** The "is NOT" rules live in `endless guide tasks`, and `task
+  add/update --help` state the limits and point there. The only CLAUDE.md edit
+  is the Python-reads-SQLite count, six to five, because triage.py was one of
+  them.
 
 The bulk rewrite (§5) is a one-off script kept outside the merge
 (`.endless/tmp/e-1993-apply-rewrites.py` in this worktree); it runs after land.
