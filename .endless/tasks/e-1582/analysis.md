@@ -3,3 +3,7 @@ Mike's evolution toward structural alternatives (epics, type-aware spawn, coordi
 Layer 1 (active-task context-refresh injection) stays.
 
 Tests for pivot-gate behavior get deleted, not adapted. Schema migration must cleanly DROP session_gates;
+
+## From the description
+
+What goes: the UserPromptSubmit phrase matching (the 'pivot gate'), the PreToolUse gate check, and the session_gates table.
