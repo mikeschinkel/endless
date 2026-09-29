@@ -6927,3 +6927,7 @@ An approved plan's acceptance criteria said CLAUDE.md should carry E-2187's 'is 
 ### [2026-09-29] Skip caveats Mike didn't ask for
 When handing Mike a small artifact he requested (e.g. an ad-hoc SQL table), don't pad the reply with caveats he already knows or didn't ask about: durability/ledger status of throwaway data, schema-design choices like omitted FKs, how to drop it, or where a throwaway loader script lives. State what was built and how to use it; mention a caveat only if it would actually change what he does.
 - **Project**: endless
+
+### [2026-09-29] Rule out the worktree binary before calling main broken
+Inside a worktree, the global endless (main's Python) prefers the worktree's bin/endless-go. When a command fails from a worktree, run it again from the main checkout before reporting a main regression or proposing to reopen another task. A worktree branched before a recent landing has a stale binary; fix it in place with git rebase main plus just build.
+- **Project**: endless
