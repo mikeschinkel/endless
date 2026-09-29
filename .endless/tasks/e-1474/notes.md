@@ -1,0 +1,1 @@
+Investigation (2026-05-26) corrected the original diagnosis: worktree land's clean-worktree guard (_guard_dirty_worktree, Step 3.8) already runs BEFORE the ff-merge (Step 5), so it does not advance main before checking.
