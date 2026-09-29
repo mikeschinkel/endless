@@ -62,11 +62,11 @@ type jsonRow struct {
 	Relation   string `json:"relation,omitempty"`
 	BlockedByN int    `json:"blocked_by_n"`
 	BlocksN    int    `json:"blocks_n"`
-	// ReplacedBy is emitted UNGATED — the table only draws the supersession on a
+	// SupersededBy is emitted UNGATED — the table only draws the supersession on a
 	// terminal row because that is a display rule, and --json is data. A
 	// consumer is entitled to the raw relation. Always present (possibly empty)
 	// so an absent key never has to be read as "not replaced".
-	ReplacedBy []string `json:"replaced_by"`
+	SupersededBy []string `json:"superseded_by"`
 	// Duplicates is emitted on the same terms, for the same reason (E-1185).
 	Duplicates []string `json:"duplicates"`
 	// Focused, DuplicateWork and OwnedElsewhere are E-2188's focus and
@@ -134,9 +134,9 @@ func renderJSON(w io.Writer, a anchor, all bool) error {
 		Graph:         graph.toJSON(),
 	}
 	for _, r := range rows {
-		replaced := make([]string, 0, len(r.ReplacedBy))
-		for _, id := range r.ReplacedBy {
-			replaced = append(replaced, "E-"+strconv.FormatInt(id, 10))
+		superseded := make([]string, 0, len(r.SupersededBy))
+		for _, id := range r.SupersededBy {
+			superseded = append(superseded, "E-"+strconv.FormatInt(id, 10))
 		}
 		duplicates := make([]string, 0, len(r.Duplicates))
 		for _, id := range r.Duplicates {
@@ -163,7 +163,7 @@ func renderJSON(w io.Writer, a anchor, all bool) error {
 			Relation:       relationSlug(r),
 			BlockedByN:     r.BlockedByN,
 			BlocksN:        r.BlocksN,
-			ReplacedBy:     replaced,
+			SupersededBy:   superseded,
 			Duplicates:     duplicates,
 			Focused:        r.Focused,
 			DuplicateWork:  r.DuplicateWork,

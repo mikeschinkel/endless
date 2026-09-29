@@ -46,7 +46,7 @@ def _seed_project():
 def _seed_project_at_cwd(monkeypatch, isolated_env):
     """Seed a project AT pytest tmp_path and chdir there.
 
-    Required for tests that call functions emitting events (e.g. replace_task),
+    Required for tests that call functions emitting events (e.g. supersede_task),
     because _resolve_project(None) inspects cwd. The default cwd (the endless
     repo) has a .endless/config.json that resolves to a name not present in the
     test DB, so we chdir to a clean tmp dir and seed the project at that path.
@@ -322,17 +322,17 @@ def test_get_all_relations_groups_correctly(isolated_env):
     assert {r["id"] for r in rels["blocked_by"]} == {c}
 
 
-def test_replace_task_active_voice(isolated_env, monkeypatch):
+def test_supersede_task_active_voice(isolated_env, monkeypatch):
     _seed_project_at_cwd(monkeypatch, isolated_env)
     old = _add_task("Old")
     new = _add_task("New")
-    task_cmd.replace_task(old, new, outcome="folded into the replacement")
+    task_cmd.supersede_task(old, new, outcome="folded into the replacement")
 
     rows = list(db.query("SELECT source_id, target_id, dep_type FROM task_deps"))
     # Active-voice: "new replaces old" → source=new, target=old
     assert rows[0]["source_id"] == new
     assert rows[0]["target_id"] == old
-    assert rows[0]["dep_type"] == "replaces"
+    assert rows[0]["dep_type"] == "supersedes"
 
     # Old should be superseded
     status = db.scalar("SELECT status FROM tasks WHERE id = ?", (old,))
@@ -571,19 +571,19 @@ def test_duplicates_in_canonical_registries():
 
 
 def test_duplicates_is_its_own_stored_type():
-    """E-1185: the whole point — a duplicate is not a `replaces` and not a
+    """E-1185: the whole point — a duplicate is not a `supersedes` and not a
     `relates_to`. Storing it as either loses the fact."""
     assert task_cmd.CANONICAL_DEP_TYPES["duplicates"][0] not in (
-        "replaces", "relates_to",
+        "supersedes", "relates_to",
     )
     assert task_cmd.STORED_DEP_TYPES.count("duplicates") == 1
 
 
-def test_duplicates_display_order_sits_with_replaces():
-    """E-1185: adjacent to `replaces` — the two are told apart by reading them
+def test_duplicates_display_order_sits_with_supersedes():
+    """E-1185: adjacent to `supersedes` — the two are told apart by reading them
     side by side, and the order is what puts them there."""
     order = task_cmd.RELATION_DISPLAY_ORDER
-    assert order.index("duplicates") == order.index("replaced_by") + 1
+    assert order.index("duplicates") == order.index("superseded_by") + 1
     assert order.index("duplicated_by") == order.index("duplicates") + 1
 
 

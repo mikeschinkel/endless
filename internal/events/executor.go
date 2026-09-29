@@ -1150,7 +1150,7 @@ func execTaskDepCreated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	if _, err := db.Exec(
 		`INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type)
 		 VALUES ('task', ?, 'task', ?, ?)`,
-		p.SourceID, p.TargetID, p.DepType,
+		p.SourceID, p.TargetID, canonicalDepType(p.DepType),
 	); err != nil {
 		return nil, fmt.Errorf("events: insert task_dep: %w", err)
 	}
@@ -1175,7 +1175,7 @@ func execTaskDepDeleted(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		`DELETE FROM task_deps
 		  WHERE source_type = 'task' AND source_id = ?
 		    AND target_type = 'task' AND target_id = ? AND dep_type = ?`,
-		p.SourceID, p.TargetID, p.DepType,
+		p.SourceID, p.TargetID, canonicalDepType(p.DepType),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("events: delete task_dep: %w", err)

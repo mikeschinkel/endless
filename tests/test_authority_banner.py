@@ -12,7 +12,7 @@ last, byte-identical, so whichever end a truncating pipe leaves is sufficient
 alone.
 
 The audience gate is stricter than E-2097's and the negative tests below are the
-point of it. A human sees NOTHING new: the status line and the `Replaced by:`
+point of it. A human sees NOTHING new: the status line and the `Superseded by:`
 link are already on screen and a person reads them as the qualifiers they are.
 """
 
@@ -57,11 +57,11 @@ def _add_decision(title: str, status: str) -> int:
     return cur.lastrowid
 
 
-def _link_replaces(new_id: int, old_id: int) -> None:
-    """`old replaced_by new` is stored active-voice: source=new, target=old."""
+def _link_supersedes(new_id: int, old_id: int) -> None:
+    """`old superseded_by new` is stored active-voice: source=new, target=old."""
     db.execute(
         "INSERT INTO task_deps (source_type, source_id, target_type, target_id, "
-        "dep_type) VALUES ('task', ?, 'task', ?, 'replaces')",
+        "dep_type) VALUES ('task', ?, 'task', ?, 'supersedes')",
         (new_id, old_id),
     )
 
@@ -92,7 +92,7 @@ def test_a_live_or_finished_task_carries_no_caveat(status):
 
 
 def test_a_replaced_task_triggers_whatever_its_status():
-    """`task replace` deliberately holds shipped work at the status it earned,
+    """`task supersede` deliberately holds shipped work at the status it earned,
     so a replaced task can read `confirmed` and still not be the record to
     quote. Keying the banner on status alone would miss all 84 of them."""
     caveat = authority.for_task("confirmed", ["E-456"], [])
@@ -189,7 +189,7 @@ def test_task_show_json_carries_the_fact_as_a_key(seeded_project_at_cwd):
     repetition would buy nothing — but a consumer still has to be able to ask."""
     keeper = _add_task("Add the thing that is kept", "underway")
     old = _add_task("Add the superseded thing", "confirmed")
-    _link_replaces(keeper, old)
+    _link_supersedes(keeper, old)
     out = json.loads(_run("task", "show", f"E-{old}", "--json"))
     assert out["authority"]["authoritative"] is False
     assert out["authority"]["see"] == [f"E-{keeper}"]

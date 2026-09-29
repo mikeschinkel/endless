@@ -35,7 +35,7 @@ PARENT_NONE = 0
 # conflicts_with added per E-2164).
 # display_name -> (stored_dep_type, swap_source_target)
 # Stored types are active voice (source is the actor): blocks, implements,
-# replaces, duplicates, documents, cleans_up, reverses, modifies, relates_to,
+# supersedes, duplicates, documents, cleans_up, reverses, modifies, relates_to,
 # precedes, conflicts_with.
 # Inverse views (blocked_by, implemented_by, etc.) resolve to the same stored
 # row queried with source/target swapped. The reverses/modifies pair (E-1156)
@@ -46,8 +46,8 @@ CANONICAL_DEP_TYPES: dict[str, tuple[str, bool]] = {
     "blocked_by":      ("blocks",     True),   # inverse view
     "implements":      ("implements", False),  # source implements target
     "implemented_by":  ("implements", True),
-    "replaces":        ("replaces",   False),  # source replaces target
-    "replaced_by":     ("replaces",   True),
+    "supersedes":      ("supersedes", False),  # source supersedes target
+    "superseded_by":   ("supersedes", True),
     "duplicates":      ("duplicates", False),  # source is the redundant filing of target's concern; target is the one kept
     "duplicated_by":   ("duplicates", True),
     "documents":       ("documents",  False),  # source documents target (records rationale for)
@@ -71,13 +71,13 @@ SYMMETRIC_DEP_TYPES = ("relates_to", "conflicts_with")
 
 # The 11 canonical stored types (the values in CANONICAL_DEP_TYPES, deduplicated).
 STORED_DEP_TYPES = (
-    "blocks", "implements", "replaces", "duplicates", "documents",
+    "blocks", "implements", "supersedes", "duplicates", "documents",
     "cleans_up", "reverses", "modifies", "relates_to",
     "precedes", "conflicts_with",
 )
 
 # Display order for `task show` — actionability descending; symmetric last.
-# `duplicates` sits with `replaces`: both say "this one is not the task to do,
+# `duplicates` sits with `supersedes`: both say "this one is not the task to do,
 # that one is", and reading them adjacently is how you tell them apart. The
 # advisory ordering pair and conflicts_with sit directly below the blocking
 # rows (E-2164): they answer the same question — what to do before what — only
@@ -87,7 +87,7 @@ RELATION_DISPLAY_ORDER = (
     "preceded_by", "precedes",
     "conflicts_with",
     "implements", "implemented_by",
-    "replaces",   "replaced_by",
+    "supersedes", "superseded_by",
     "duplicates", "duplicated_by",
     "reverses",   "reversed_by",
     "modifies",   "modified_by",
@@ -105,8 +105,8 @@ RELATION_LABELS = {
     "conflicts_with": "Conflicts with",
     "implements":     "Implements",
     "implemented_by": "Implemented by",
-    "replaces":       "Replaces",
-    "replaced_by":    "Replaced by",
+    "supersedes":     "Supersedes",
+    "superseded_by":  "Superseded by",
     "duplicates":     "Duplicates",
     "duplicated_by":  "Duplicated by",
     "reverses":       "Reverses",
@@ -317,7 +317,7 @@ _DESCRIPTION_REMEDY = (
 _CITED_ID_REMEDY = (
     "Name the other task or decision in words and record the relationship as a "
     "task link (--blocks, --blocked-by, --relates-to, --implements, --cleans-up, "
-    "--duplicates, --replaces). Ids are fine in --context, --analysis, --plan and "
+    "--duplicates, --supersedes). Ids are fine in --context, --analysis, --plan and "
     "--notes."
 )
 # Decisions keep the older wording: their description is not under E-1993's
@@ -810,9 +810,9 @@ def _render_flat_table(rows):
     )
 
     # E-2064: the Status cell is the BARE status here. The supersession notes
-    # (E-1956 `replaced by`, E-1185 `duplicates`) belong to `task show`, which
+    # (E-1956 `superseded by`, E-1185 `duplicates`) belong to `task show`, which
     # has one status and unlimited width. A table has many rows sharing one
-    # column, so the longest cell — 'obsolete (replaced by E-1367)', roughly
+    # column, so the longest cell — 'obsolete (superseded by E-1367)', roughly
     # three times a bare status — is charged to every row's title. A handful of
     # annotated rows cannot cost the whole table its titles for a fact any
     # reader recovers by opening the task.
@@ -996,7 +996,7 @@ def show_plan(
     rows, hidden = rowcap.cap_rows(rows, cap)
 
     _ids = [row["id"] for row in rows]
-    replaced = replaced_by_map(_ids) if (as_json or agent) else {}
+    superseded = superseded_by_map(_ids) if (as_json or agent) else {}
     duplicated = duplicates_map(_ids) if (as_json or agent) else {}
 
     if as_json:
@@ -1012,8 +1012,8 @@ def show_plan(
                 # entitled to the raw fact. Always present (possibly empty) so
                 # an absent key never has to be read as "not replaced" /
                 # "not a duplicate" (E-1185 adds `duplicates` on the same rule).
-                "replaced_by": [
-                    f"E-{i}" for i in replaced.get(row["id"], ())
+                "superseded_by": [
+                    f"E-{i}" for i in superseded.get(row["id"], ())
                 ],
                 "duplicates": [
                     f"E-{i}" for i in duplicated.get(row["id"], ())
@@ -1046,10 +1046,10 @@ def show_plan(
             # stays parseable — but in the same position, right after the status
             # it qualifies.
             rb_str = (
-                " replaced_by=" + ",".join(
-                    f"E-{i}" for i in replaced[row["id"]]
+                " superseded_by=" + ",".join(
+                    f"E-{i}" for i in superseded[row["id"]]
                 )
-            ) if replaced_by_note(row["status"], replaced.get(row["id"])) else ""
+            ) if superseded_by_note(row["status"], superseded.get(row["id"])) else ""
             dup_str = (
                 " duplicates=" + ",".join(
                     f"E-{i}" for i in duplicated[row["id"]]
@@ -2880,16 +2880,16 @@ def _next_sort_order(project_id: int, phase: str) -> int:
 # never appears here.
 #
 # `superseded` is in the set even though it is separately refused without a
-# `replaced_by` relation. That relation records WHAT took the work over; it does
+# `superseded_by` relation. That relation records WHAT took the work over; it does
 # not record WHY it was handed on, and a later reader needs both. Leaving it out
 # would have left the plainest form of the commonest abandonment —
-# `task replace <old> --by <new>` — recording no reason at all, which is the
+# `task supersede <old> --by <new>` — recording no reason at all, which is the
 # side door that makes the rule undefensible everywhere else.
 #
 # The remedies differ because the flags do: `task decline` and `task update`
 # spell the reason `--reason`, and `--outcome` given with an abandonment status
 # is taken as the reason too (E-1531) — it is how every route spelled it before
-# the two were split, and `task replace` still does.
+# the two were split, and `task supersede` still does.
 _ABANDONMENT_STATUSES = {
     "declined": (
         "declining",
@@ -2901,8 +2901,8 @@ _ABANDONMENT_STATUSES = {
     ),
     "superseded": (
         "superseding",
-        "Use --outcome (on `task replace`) or --reason (on `task update`) to "
-        "say why the work was handed on — the replaced_by relation names the "
+        "Use --outcome (on `task supersede`) or --reason (on `task update`) to "
+        "say why the work was handed on — the superseded_by relation names the "
         "successor, not the reason.",
     ),
 }
@@ -2926,7 +2926,7 @@ def _require_reason_for_abandonment(status: str | None, reason: str | None):
     """ED-1022, E-2175: abandoning a task requires saying why, stored as reason.
 
     Keyed on the STATUS TRANSITION, never on a verb — `task decline`,
-    `task update --status`, `epic update --status` and `task replace` (with or
+    `task update --status`, `epic update --status` and `task supersede` (with or
     without an explicit `--status`) all pass through here, so one check covers
     every route. A guard bolted to a single command leaks the moment someone
     reaches the status another way, and that leak is the measured difference
@@ -3164,7 +3164,7 @@ def _require_status_allowed_for_type(status: str | None, task_type: str | None):
 # whether it shipped — the same line Endless already drew for decisions, where
 # `obsolete` means "it stopped applying and nothing replaced it". Shipped code
 # that is being deleted rather than superseded is obsolete in the plainest
-# sense, and `task replace` had no id to name for it. What survives here is the
+# sense, and `task supersede` had no id to name for it. What survives here is the
 # one use that was always about shipped-ness: `_apply_replacement` holds a
 # replaced task at the status it EARNED instead of overwriting it.
 _SHIPPED_STATUSES = statuses.get("shipped")
@@ -3175,7 +3175,7 @@ def _require_a_replacement_for_superseded(item_id: int, status: str | None):
     """Refuse `superseded` on a task that nothing actually replaced.
 
     `superseded` is the one status that asserts a FACT ABOUT ANOTHER ROW — that
-    some other task took this work over. Set by hand with no `replaced_by`
+    some other task took this work over. Set by hand with no `superseded_by`
     relation, it names no successor, so every reader is told to go look for one
     that does not exist. `obsolete` is the status for "no longer needed and
     nothing replaced it", and it is one word away.
@@ -3190,13 +3190,13 @@ def _require_a_replacement_for_superseded(item_id: int, status: str | None):
     """
     if status != "superseded":
         return
-    if replaced_by_map([item_id]).get(item_id):
+    if superseded_by_map([item_id]).get(item_id):
         return
     raise click.ClickException(
         f"{task_id_display(item_id)} cannot be 'superseded': nothing "
         f"replaced it.\n\n"
         f"'superseded' names a successor, so it needs one on the row:\n"
-        f"    endless task replace {task_id_display(item_id)} --by <new-id>\n"
+        f"    endless task supersede {task_id_display(item_id)} --by <new-id>\n"
         f"(records the relation AND sets the status in one step)\n\n"
         f"If nothing replaced it and it simply no longer needs doing, that is "
         f"'obsolete'."
@@ -5363,7 +5363,7 @@ def update_plan(
         # After the relation check, deliberately. When a hand-set `superseded`
         # has neither a successor nor a reason, "nothing replaced it" is the
         # refusal worth printing: it says the status is wrong for this row at
-        # all, and routes to `task replace`, which then asks for the reason.
+        # all, and routes to `task supersede`, which then asks for the reason.
         # Asking for the reason first would spend a round trip teaching a flag
         # for a status the caller is about to be told not to use.
         #
@@ -6133,9 +6133,9 @@ def detail_item(
     # Authority (E-2095), resolved once for all three output modes: is this
     # record still the one to quote? The status line is already on screen and is
     # demonstrably not enough — it is read as provenance, not as a caveat.
-    replaced_display = [f"E-{i}" for i in replaced_by_map([item_id]).get(item_id, ())]
+    superseded_display = [f"E-{i}" for i in superseded_by_map([item_id]).get(item_id, ())]
     duplicates_display = [f"E-{i}" for i in duplicates_map([item_id]).get(item_id, ())]
-    caveat = authority.for_task(item["status"], replaced_display, duplicates_display)
+    caveat = authority.for_task(item["status"], superseded_display, duplicates_display)
     caveat_line = authority.banner(caveat, task_id_display(item_id))
     # Session provenance (E-1866): who created the task and who else touched it.
     # Resolved once here so all three output modes report the same facts.
@@ -6161,7 +6161,7 @@ def detail_item(
             # E-1956/E-1185: emitted ungated (a terminal status is a display
             # rule; this is data) and always present, so an absent key never has
             # to be read as "not replaced" / "not a duplicate".
-            "replaced_by": replaced_display,
+            "superseded_by": superseded_display,
             "duplicates": duplicates_display,
             # E-2095: the same fact the agent banner carries, as a key rather
             # than a repeated line — nothing truncates JSON by lines. Null means
@@ -6276,10 +6276,10 @@ def detail_item(
         # E-1956: key=value rather than the human view's parenthetical, so the
         # line stays parseable — but on the status line, not buried in `links=`,
         # because a terminal status read without it is misleading on its own.
-        replaced_ids = replaced_by_map([item_id]).get(item_id)
+        superseded_ids = superseded_by_map([item_id]).get(item_id)
         rb_str = (
-            " replaced_by=" + ",".join(f"E-{i}" for i in replaced_ids)
-        ) if replaced_by_note(item["status"], replaced_ids) else ""
+            " superseded_by=" + ",".join(f"E-{i}" for i in superseded_ids)
+        ) if superseded_by_note(item["status"], superseded_ids) else ""
         duplicate_ids = duplicates_map([item_id]).get(item_id)
         dup_str = (
             " duplicates=" + ",".join(f"E-{i}" for i in duplicate_ids)
@@ -6481,7 +6481,7 @@ def _render_detail_human(
     # a task closed BECAUSE it duplicated another has exactly that problem.
     status_note = status_notes(
         item["status"],
-        replaced_by_map([item_id]).get(item_id),
+        superseded_by_map([item_id]).get(item_id),
         duplicates_map([item_id]).get(item_id),
     )
     click.echo(
@@ -7528,17 +7528,17 @@ def _relation_display_name_from(row, perspective_id: int) -> str:
     return stored
 
 
-def replace_task(
+def supersede_task(
     old_id: int,
     new_id: int,
     status: str | None = None,
     outcome: str | None = None,
 ):
-    """Mark old_id as replaced by new_id: record the relation, set the status.
+    """Mark old_id as superseded by new_id: record the relation, set the status.
 
     `status` is what the REPLACED task becomes. None means "derive it from what
     the task is now": work that already SHIPPED keeps the status it earned — the
-    supersession is carried by the `replaced_by` relation, and overwriting a
+    supersession is carried by the `superseded_by` relation, and overwriting a
     true terminal would throw away which terminal it reached — while everything
     else takes the 'obsolete' default. An explicit status still wins.
 
@@ -7550,7 +7550,7 @@ def replace_task(
     from endless.event_bridge import emit_event
 
     if old_id == new_id:
-        raise click.ClickException("A task cannot replace itself.")
+        raise click.ClickException("A task cannot supersede itself.")
     for tid in (old_id, new_id):
         if not db.exists("SELECT 1 FROM live_tasks WHERE id = ?", (tid,)):
             raise click.ClickException(f"Task {task_id_display(tid)} not found.")
@@ -7572,14 +7572,14 @@ def replace_task(
     name = "reason" if status in _ABANDONMENT_STATUSES else "outcome"
     _require_reason_for_abandonment(status, outcome)
 
-    # "old replaced_by new" → display='replaced_by' resolves to stored='replaces' with
-    # swap=True → row stored as source=new, target=old, dep_type='replaces' (active voice).
+    # "old superseded_by new" → display='superseded_by' resolves to stored='supersedes' with
+    # swap=True → row stored as source=new, target=old, dep_type='supersedes' (active voice).
     try:
-        link_tasks(old_id, new_id, "replaced_by")
+        link_tasks(old_id, new_id, "superseded_by")
     except click.ClickException as e:
         if "already linked" in str(e):
             raise click.ClickException(
-                f"{task_id_display(old_id)} is already replaced by {task_id_display(new_id)}."
+                f"{task_id_display(old_id)} is already superseded by {task_id_display(new_id)}."
             )
         raise
 
@@ -7623,7 +7623,7 @@ def replace_task(
         old_id,
         old_row["title"],
         changes,
-        suffix=f"(replaced by {task_id_display(new_id)})",
+        suffix=f"(superseded by {task_id_display(new_id)})",
     )
     if status == old_status:
         # The header alone would read as "nothing happened". Say what was kept
@@ -7729,20 +7729,20 @@ def _relation_map(item_ids, dep_type: str, note_col: str, other_col: str) -> dic
     return out
 
 
-def replaced_by_map(item_ids) -> dict[int, list[int]]:
-    """Map each id in `item_ids` to the ids of the tasks that replace it.
+def superseded_by_map(item_ids) -> dict[int, list[int]]:
+    """Map each id in `item_ids` to the ids of the tasks that supersede it.
 
-    `old replaced_by new` is stored active-voice as (source=new, target=old,
-    dep_type='replaces'), so a task's replacements are the source_ids of the
-    'replaces' rows pointing AT it — the note lands on the TARGET.
+    `old superseded_by new` is stored active-voice as (source=new, target=old,
+    dep_type='supersedes'), so a task's replacements are the source_ids of the
+    'supersedes' rows pointing AT it — the note lands on the TARGET.
     """
-    return _relation_map(item_ids, "replaces", "target_id", "source_id")
+    return _relation_map(item_ids, "supersedes", "target_id", "source_id")
 
 
 def duplicates_map(item_ids) -> dict[int, list[int]]:
     """Map each id in `item_ids` to the ids of the tasks it duplicates.
 
-    E-1185. The arguments are `replaced_by_map`'s, swapped, and that is the
+    E-1185. The arguments are `superseded_by_map`'s, swapped, and that is the
     whole difference: both annotate the task that gets CLOSED, but that task
     sits on the opposite end of each relation. `dupe duplicates keeper` stores
     (source=dupe, target=keeper) and it is the DUPE that is closed, so the note
@@ -7767,16 +7767,16 @@ def _supersession_note(status: str | None, ids: list[int] | None, phrase: str) -
     return f" ({phrase} " + ", ".join(task_id_display(i) for i in ids) + ")"
 
 
-def replaced_by_note(status: str | None, ids: list[int] | None) -> str:
-    """The inline ' (replaced by E-NNN)' annotation for a status display, or ''."""
-    return _supersession_note(status, ids, "replaced by")
+def superseded_by_note(status: str | None, ids: list[int] | None) -> str:
+    """The inline ' (superseded by E-NNN)' annotation for a status display, or ''."""
+    return _supersession_note(status, ids, "superseded by")
 
 
 def duplicates_note(status: str | None, ids: list[int] | None) -> str:
     """The inline ' (duplicates E-NNN)' annotation for a status display, or ''.
 
     E-1185: one token — `duplicates` — across the human, --agent and --json
-    renderings, as `replaced_by` has. It reads as a verb phrase with the row as
+    renderings, as `superseded_by` has. It reads as a verb phrase with the row as
     its subject: "E-986  obsolete (duplicates E-1086)".
     """
     return _supersession_note(status, ids, "duplicates")
@@ -7784,16 +7784,16 @@ def duplicates_note(status: str | None, ids: list[int] | None) -> str:
 
 def status_notes(
     status: str | None,
-    replaced_ids: list[int] | None = None,
+    superseded_ids: list[int] | None = None,
     duplicate_ids: list[int] | None = None,
 ) -> str:
     """Every inline annotation a status cell carries, in one string.
 
     A task can be both superseded and a duplicate; the notes compose rather than
-    one winning. Ordered replaced-by first because that is the relation the
+    one winning. Ordered superseded-by first because that is the relation the
     reader has been seeing since E-1956.
     """
-    return (replaced_by_note(status, replaced_ids)
+    return (superseded_by_note(status, superseded_ids)
             + duplicates_note(status, duplicate_ids))
 
 
@@ -8155,7 +8155,7 @@ def show_relations(item_id: int, agent: bool = False, as_json: bool = False):
         click.echo(json.dumps(provenance.attach({
             "id": task_id_display(item_id),
             # Always present, so `[]` says "no relations" rather than an absent
-            # key leaving it unsaid (E-1956's rule for `replaced_by`).
+            # key leaving it unsaid (E-1956's rule for `superseded_by`).
             "links": [
                 {
                     "id": task_id_display(r["id"]),

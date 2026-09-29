@@ -1,5 +1,6 @@
 """Endless CLI — Click entry point."""
 
+import copy
 import functools
 import os
 import re
@@ -3061,10 +3062,12 @@ def _apply_clear_flags(clear_fields, resolved):
 @click.option("--duplicates", "duplicates_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) this new task duplicates — same concern, already "
                    "filed (repeatable)")
-@click.option("--replaces", "replaces_ids", type=TASK_ID, multiple=True,
+@click.option("--supersedes", "supersedes_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) this new task supersedes (repeatable). Records the "
-                   "relation only; use `task replace <old> --by <new>` to also "
-                   "close the replaced task.")
+                   "relation only; use `task supersede <old> --by <new>` to also "
+                   "close the superseded task.")
+# E-2189: renamed with the relation it records.
+@retired_option("--replaces", "--supersedes")
 @click.option("--allow-path", "allow_paths", multiple=True,
               help="Regex matching an absolute path to permit in inline content "
                    "(repeatable; escape hatch for the path gate).")
@@ -3072,7 +3075,7 @@ def task_add(title, description, description_file, plan_text, plan_file, context
              justification,
              blocks_ids, blocked_by_ids, precedes_ids, preceded_by_ids,
              conflicts_with_ids, relates_to_ids, implements_ids,
-             cleans_up_ids, cleaned_up_by_ids, duplicates_ids, replaces_ids,
+             cleans_up_ids, cleaned_up_by_ids, duplicates_ids, supersedes_ids,
              allow_paths):
     """Add a task.
 
@@ -3115,8 +3118,8 @@ def task_add(title, description, description_file, plan_text, plan_file, context
         link_tasks(new_id, tid, "cleaned_up_by")
     for tid in duplicates_ids:
         link_tasks(new_id, tid, "duplicates")
-    for tid in replaces_ids:
-        link_tasks(new_id, tid, "replaces")
+    for tid in supersedes_ids:
+        link_tasks(new_id, tid, "supersedes")
     # E-1889: file-time hints, after the row and its relations exist. Advisory
     # only — never blocks the add, never raises.
     print_add_hints(new_id, cleans_up_ids)
@@ -3197,14 +3200,16 @@ def task_add(title, description, description_file, plan_text, plan_file, context
 @click.option("--duplicates", "duplicates_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) each named task duplicates — same concern, filed "
                    "twice (repeatable)")
-@click.option("--replaces", "replaces_ids", type=TASK_ID, multiple=True,
+@click.option("--supersedes", "supersedes_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) each named task supersedes (repeatable). Records "
-                   "the relation only; use `task replace <old> --by <new>` to also "
-                   "close the replaced task.")
+                   "the relation only; use `task supersede <old> --by <new>` to also "
+                   "close the superseded task.")
+# E-2189: renamed with the relation it records.
+@retired_option("--replaces", "--supersedes")
 def task_update(item_ids, status, title, description, description_file, plan_text, plan_file, parent, phase, complexity, risk,
                 task_type, context_text, context_file, analysis_text, analysis_file, force, outcome, outcome_file, reason, reason_file,
                 notes_text, notes_file, justification, allow_paths,
-                keep_status, clear_fields, duplicates_ids, replaces_ids):
+                keep_status, clear_fields, duplicates_ids, supersedes_ids):
     """Update fields on one or more tasks.
 
     --title: at most 60 characters. --description: at most 256, one line,
@@ -3236,7 +3241,7 @@ def task_update(item_ids, status, title, description, description_file, plan_tex
         status, title, description, plan_text, parent, phase, complexity, risk, task_type,
         context_text, analysis_text, outcome, reason, notes_text, justification,
     ))
-    relations_only = not edits_a_field and (duplicates_ids or replaces_ids)
+    relations_only = not edits_a_field and (duplicates_ids or supersedes_ids)
     for item_id in item_ids:
         if not relations_only:
             update_plan(item_id, status=status, title=title,
@@ -3250,8 +3255,8 @@ def task_update(item_ids, status, title, description, description_file, plan_tex
                         reason=reason, notes=notes_text)
         for tid in duplicates_ids:
             link_tasks(item_id, tid, "duplicates")
-        for tid in replaces_ids:
-            link_tasks(item_id, tid, "replaces")
+        for tid in supersedes_ids:
+            link_tasks(item_id, tid, "supersedes")
 
 
 @task_cmd.command("remove")
@@ -3715,7 +3720,7 @@ def task_reopen(item_id):
               help="Relation type — legal set depends on target kind "
                    "(task→task: blocks, blocked_by, precedes, preceded_by, "
                    "conflicts_with, implements, implemented_by, "
-                   "replaces, replaced_by, duplicates, duplicated_by, "
+                   "supersedes, superseded_by, duplicates, duplicated_by, "
                    "documents, documented_by, "
                    "cleans_up, cleaned_up_by, relates_to; "
                    "task→decision: implements, cleans_up, documents, relates_to)")
@@ -3757,39 +3762,50 @@ def task_block(item_id, blocker_id):
     link_tasks(item_id, blocker_id, "blocked_by")
 
 
-@task_cmd.command("replace")
+@task_cmd.command("supersede")
 @click.argument("item_id", type=TASK_ID)
-@click.option("--by", "replacement_id", type=TASK_ID, required=True,
-              help="Task ID that replaces this task")
+@click.option("--by", "successor_id", type=TASK_ID, required=True,
+              help="Task ID that supersedes this task")
 @click.option("--status", "new_status", default=None,
               type=click.Choice(statuses.get("terminal")),
-              help="Status to set on the replaced task. Default: 'superseded' "
-                   "— the replacement is the point — except on work that "
+              help="Status to set on the superseded task. Default: 'superseded' "
+                   "— the successor is the point — except on work that "
                    "already shipped "
                    f"({'/'.join(statuses.get('shipped'))}), which keeps the "
                    "status it earned — "
                    "the supersession is the relation, not a status that reads "
                    "as 'never happened'.")
 @click.option("--outcome", default=None,
-              help="Outcome — why this was replaced (inline). Required: the relation names the successor, not the reason. Exempt only when the replaced task already shipped and keeps the status it earned.")
+              help="Outcome — why this was superseded (inline). Required: the relation names the successor, not the reason. Exempt only when the superseded task already shipped and keeps the status it earned.")
 @click.option("--outcome-file", default=None,
               help="Load the outcome from a file")
 @click.option("--allow-path", "allow_paths", multiple=True,
               help="Regex matching an absolute path to permit in inline content "
                    "(repeatable; escape hatch for the path gate).")
-def task_replace(item_id, replacement_id, new_status, outcome, outcome_file, allow_paths):
-    """Mark a task as replaced by another task, recording a replaced_by relation.
+def task_supersede(item_id, successor_id, new_status, outcome, outcome_file, allow_paths):
+    """Mark a task as superseded by another task, recording a superseded_by relation.
 
-    The replaced task's status defaults to 'superseded', but work that already
+    The superseded task's status defaults to 'superseded', but work that already
     shipped keeps the status it earned — see --status.
 
-    --outcome is required whenever the replaced task is being abandoned, which
+    --outcome is required whenever the superseded task is being abandoned, which
     is every case but that one: the relation records WHAT took the work over,
     and a later reader still needs to know WHY it was handed on.
     """
-    from endless.task_cmd import replace_task
+    from endless.task_cmd import supersede_task
     outcome = _resolve_content_flag(outcome, outcome_file, "outcome", allow_paths)
-    replace_task(item_id, replacement_id, status=new_status, outcome=outcome)
+    supersede_task(item_id, successor_id, status=new_status, outcome=outcome)
+
+
+# E-2189: `task replace` was this command's name until the relation it records
+# was renamed with it. Kept as a WORKING alias, hidden, because agent muscle
+# memory and years of lessons and task text say `task replace`, and unlike a
+# retired flag the old verb spells exactly one decision. A copy rather than
+# add_command(name=...), since `hidden` belongs to the command object and the
+# primary name must stay listed.
+_task_replace_alias = copy.copy(task_supersede)
+_task_replace_alias.hidden = True
+task_cmd.add_command(_task_replace_alias, name="replace")
 
 
 @task_cmd.command("unblock")
@@ -4098,17 +4114,19 @@ def epic_cmd():
 @click.option("--duplicates", "duplicates_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) this new epic duplicates — same concern, already "
                    "filed (repeatable)")
-@click.option("--replaces", "replaces_ids", type=TASK_ID, multiple=True,
+@click.option("--supersedes", "supersedes_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) this new epic supersedes (repeatable). Records the "
-                   "relation only; use `task replace <old> --by <new>` to also "
-                   "close the replaced task.")
+                   "relation only; use `task supersede <old> --by <new>` to also "
+                   "close the superseded task.")
+# E-2189: renamed with the relation it records.
+@retired_option("--replaces", "--supersedes")
 @click.option("--allow-path", "allow_paths", multiple=True,
               help="Regex matching an absolute path to permit in inline content "
                    "(repeatable; escape hatch for the path gate).")
 def epic_add(title, description, description_file, plan_text, plan_file, phase, project,
              parent, after, status, force,
              blocks_ids, blocked_by_ids, relates_to_ids, implements_ids,
-             cleans_up_ids, cleaned_up_by_ids, duplicates_ids, replaces_ids,
+             cleans_up_ids, cleaned_up_by_ids, duplicates_ids, supersedes_ids,
              allow_paths):
     """Add an epic (a task with type=epic)."""
     from endless.epic_cmd import add_epic
@@ -4134,8 +4152,8 @@ def epic_add(title, description, description_file, plan_text, plan_file, phase, 
         link_tasks(new_id, tid, "cleaned_up_by")
     for tid in duplicates_ids:
         link_tasks(new_id, tid, "duplicates")
-    for tid in replaces_ids:
-        link_tasks(new_id, tid, "replaces")
+    for tid in supersedes_ids:
+        link_tasks(new_id, tid, "supersedes")
 
 
 @epic_cmd.command("list")

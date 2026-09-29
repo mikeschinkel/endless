@@ -1,13 +1,13 @@
 """Tests for E-2064: the supersession note is a DETAIL-view annotation.
 
-E-1956 put ` (replaced by E-NNN)` beside a terminal status, and E-1185 added
+E-1956 put ` (superseded by E-NNN)` beside a terminal status, and E-1185 added
 ` (duplicates E-NNN)` on the same rule. Both landed on every surface that shows
 a status — including the human tables, where the cost is not what it is in a
 detail view.
 
 A detail view has ONE status and unlimited width, so an annotation there is
 free. A table has many rows sharing ONE Status column, so the column is sized by
-its longest cell: 'obsolete (replaced by E-1367)' is roughly three times a bare
+its longest cell: 'obsolete (superseded by E-1367)' is roughly three times a bare
 status, and the difference comes out of every row's Title. A handful of
 annotated rows were charging the whole table for a fact any reader recovers by
 opening the task.
@@ -65,7 +65,7 @@ def _list_table(capsys) -> str:
 # ─── the task table ──────────────────────────────────────────────────────────
 
 
-def test_replaced_by_does_not_change_the_task_table(seeded_project_at_cwd, capsys):
+def test_superseded_by_does_not_change_the_task_table(seeded_project_at_cwd, capsys):
     # Every row exists in BOTH renders. The only difference is the relation, so
     # any difference in the output is the relation's cost — and there must be
     # none. Before this fix the Status column grew from 8 to 26 columns and both
@@ -74,11 +74,11 @@ def test_replaced_by_does_not_change_the_task_table(seeded_project_at_cwd, capsy
     replacement = _add_task("The replacement")
     before = _list_table(capsys)
 
-    _link(replacement, closed, "replaces")
+    _link(replacement, closed, "supersedes")
     after = _list_table(capsys)
 
     assert after == before
-    assert "replaced by" not in after
+    assert "superseded by" not in after
 
 
 def test_duplicates_does_not_change_the_task_table(seeded_project_at_cwd, capsys):
@@ -99,7 +99,7 @@ def test_the_status_column_is_sized_by_the_longest_bare_status(
     """The width claim, asserted directly rather than by comparison: the header
     rule under 'Status' is as wide as the widest status word and no wider."""
     closed, _ = _seed_rows()
-    _link(_add_task("The replacement"), closed, "replaces")
+    _link(_add_task("The replacement"), closed, "supersedes")
 
     lines = _list_table(capsys).splitlines()
     header = next(ln for ln in lines if ln.startswith("ID "))
@@ -116,12 +116,12 @@ def test_the_status_column_is_sized_by_the_longest_bare_status(
 def test_a_row_that_is_both_stays_bare(seeded_project_at_cwd, capsys):
     """Composed notes were the widest cell of all — the case that cost the most."""
     closed, _ = _seed_rows()
-    _link(_add_task("The replacement"), closed, "replaces")
+    _link(_add_task("The replacement"), closed, "supersedes")
     _link(closed, _add_task("The keeper"), "duplicates")
 
     out = _list_table(capsys)
     assert f"E-{closed}" in out
-    assert "replaced by" not in out
+    assert "superseded by" not in out
     assert "(duplicates" not in out
 
 
@@ -131,12 +131,12 @@ def test_task_show_children_table_is_bare_too(seeded_project_at_cwd, capsys):
     parent = _add_task("The parent", status="underway")
     child = _add_task("The superseded child", status="obsolete")
     db.execute("UPDATE tasks SET parent_id = ? WHERE id = ?", (parent, child))
-    _link(_add_task("The replacement"), child, "replaces")
+    _link(_add_task("The replacement"), child, "supersedes")
 
     task_cmd.detail_item(parent, show_children=True, no_color=True)
     out = capsys.readouterr().out
     assert f"E-{child}" in out
-    assert "replaced by" not in out
+    assert "superseded by" not in out
 
 
 # ─── what must NOT change ────────────────────────────────────────────────────
@@ -146,33 +146,33 @@ def test_task_show_keeps_the_note(seeded_project_at_cwd, capsys):
     """The detail view is where E-1956 asked for it, and it stays."""
     closed, _ = _seed_rows()
     new = _add_task("The replacement")
-    _link(new, closed, "replaces")
+    _link(new, closed, "supersedes")
 
     task_cmd.detail_item(closed, no_color=True)
     status_line = next(
         ln for ln in capsys.readouterr().out.splitlines()
         if ln.startswith("Status:"))
-    assert f"(replaced by E-{new})" in status_line
+    assert f"(superseded by E-{new})" in status_line
 
 
 def test_task_list_agent_keeps_the_note(seeded_project_at_cwd, capsys):
     """--agent is one line per row with no shared column, so it pays no width."""
     closed, _ = _seed_rows()
     new = _add_task("The replacement")
-    _link(new, closed, "replaces")
+    _link(new, closed, "supersedes")
 
     task_cmd.show_plan(show_all=True, agent=True)
-    assert f"obsolete replaced_by=E-{new}" in capsys.readouterr().out
+    assert f"obsolete superseded_by=E-{new}" in capsys.readouterr().out
 
 
 def test_task_list_json_keeps_the_relation(seeded_project_at_cwd, capsys):
     closed, _ = _seed_rows()
     new = _add_task("The replacement")
-    _link(new, closed, "replaces")
+    _link(new, closed, "supersedes")
 
     task_cmd.show_plan(show_all=True, as_json=True)
     rows = {r["id"]: r for r in json.loads(capsys.readouterr().out)["rows"]}
-    assert rows[f"E-{closed}"]["replaced_by"] == [f"E-{new}"]
+    assert rows[f"E-{closed}"]["superseded_by"] == [f"E-{new}"]
 
 
 # ─── the decision table, same defect ─────────────────────────────────────────

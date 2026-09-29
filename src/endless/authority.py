@@ -22,7 +22,7 @@ end a truncating pipe leaves is sufficient alone.
 AUDIENCE: agents only, and this is stricter than E-2097's split, deliberately.
 There the underlying message is a REFUSAL a human must see or the command fails
 silently, so only the bracketing is gated. Here there is no message a human is
-owed — the status line and the `Replaced by:` link are already on screen, and a
+owed — the status line and the `Superseded by:` link are already on screen, and a
 person reads them as the qualifiers they are. The banner exists because an agent
 does not. So the whole thing is gated, and a human reaches it only by asking,
 with `--agent-view`, to see what an agent sees.
@@ -74,17 +74,17 @@ class Caveat:
         }
 
 
-def for_task(status: str | None, replaced_by: list[str] | None,
+def for_task(status: str | None, superseded_by: list[str] | None,
              duplicates: list[str] | None) -> Caveat | None:
     """The caveat on a task row, or None when it is straightforwardly current.
 
     The two relations trigger regardless of status, because that is the point of
-    them: `task replace` deliberately holds shipped work at the status it earned,
+    them: `task supersede` deliberately holds shipped work at the status it earned,
     so a REPLACED task can read `confirmed` and still not be the record to quote.
     """
-    if replaced_by:
-        return Caveat("not-ever", "it has been replaced by "
-                      + ", ".join(replaced_by), list(replaced_by))
+    if superseded_by:
+        return Caveat("not-ever", "it has been superseded by "
+                      + ", ".join(superseded_by), list(superseded_by))
     if duplicates:
         return Caveat("not-ever", "it duplicates "
                       + ", ".join(duplicates) + ", which is the record kept",
@@ -99,7 +99,7 @@ def for_task(status: str | None, replaced_by: list[str] | None,
         return Caveat("not-ever",
                       "it is obsolete: retired as no longer needed")
     if status == "superseded":
-        # Reached only when the relation is missing: `replaced_by` is checked
+        # Reached only when the relation is missing: `superseded_by` is checked
         # first above and names the successor, which is the useful answer. The
         # status alone can only say THAT something took over, so it says that
         # and no more rather than inventing a successor it cannot see.

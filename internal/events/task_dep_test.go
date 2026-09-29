@@ -170,3 +170,47 @@ func TestReplayTaskDep_ReproducesRows(t *testing.T) {
 		t.Errorf("after replay delete: row count = %d, want 0", got)
 	}
 }
+
+// TestTaskDep_LegacyReplacesResolvesToSupersedes: E-2189 renamed the stored
+// dep_type 'replaces' to 'supersedes', but the ledger is immutable and its
+// task_dep events still say 'replaces'. Replay must land them on the row a
+// current write produces, and a delete naming either spelling must find that
+// row — both on the live executor path and the full-ledger replay path.
+func TestTaskDep_LegacyReplacesResolvesToSupersedes(t *testing.T) {
+	actor := Actor{Kind: ActorSession, ID: "s1", SessionID: "42"}
+
+	t.Run("replay", func(t *testing.T) {
+		db := newSessionTasksTestDB(t)
+		if err := replayTaskDepCreated(db, taskDepCreatedEvent(t, 101, 100, "replaces", actor), &ProjectResult{}); err != nil {
+			t.Fatalf("replay legacy create: %v", err)
+		}
+		if got := countTaskDeps(t, db, 101, 100, "supersedes"); got != 1 {
+			t.Errorf("supersedes rows = %d, want 1", got)
+		}
+		if got := countTaskDeps(t, db, 101, 100, "replaces"); got != 0 {
+			t.Errorf("replaces rows = %d, want 0 — the legacy name must not be stored", got)
+		}
+		if err := replayTaskDepDeleted(db, taskDepDeletedEvent(t, 101, 100, "supersedes", actor), &ProjectResult{}); err != nil {
+			t.Fatalf("replay current delete: %v", err)
+		}
+		if got := countTaskDeps(t, db, 101, 100, "supersedes"); got != 0 {
+			t.Errorf("after delete: supersedes rows = %d, want 0", got)
+		}
+	})
+
+	t.Run("executor", func(t *testing.T) {
+		db := newSessionTasksTestDB(t)
+		if _, err := dispatch(db, taskDepCreatedEvent(t, 101, 100, "replaces", actor), nil); err != nil {
+			t.Fatalf("dispatch legacy create: %v", err)
+		}
+		if got := countTaskDeps(t, db, 101, 100, "supersedes"); got != 1 {
+			t.Errorf("supersedes rows = %d, want 1", got)
+		}
+		if _, err := dispatch(db, taskDepDeletedEvent(t, 101, 100, "replaces", actor), nil); err != nil {
+			t.Fatalf("dispatch legacy delete: %v", err)
+		}
+		if got := countTaskDeps(t, db, 101, 100, "supersedes"); got != 0 {
+			t.Errorf("after delete: supersedes rows = %d, want 0", got)
+		}
+	})
+}

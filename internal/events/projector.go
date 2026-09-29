@@ -546,7 +546,7 @@ func replayTaskDepCreated(db *sql.DB, evt *Event, result *ProjectResult) error {
 	if _, err := db.Exec(
 		`INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type)
 		 VALUES ('task', ?, 'task', ?, ?)`,
-		p.SourceID, p.TargetID, p.DepType,
+		p.SourceID, p.TargetID, canonicalDepType(p.DepType),
 	); err != nil {
 		return fmt.Errorf("insert task_dep: %w", err)
 	}
@@ -562,7 +562,7 @@ func replayTaskDepDeleted(db *sql.DB, evt *Event, result *ProjectResult) error {
 		`DELETE FROM task_deps
 		  WHERE source_type = 'task' AND source_id = ?
 		    AND target_type = 'task' AND target_id = ? AND dep_type = ?`,
-		p.SourceID, p.TargetID, p.DepType,
+		p.SourceID, p.TargetID, canonicalDepType(p.DepType),
 	); err != nil {
 		return fmt.Errorf("delete task_dep: %w", err)
 	}

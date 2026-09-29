@@ -471,3 +471,40 @@ func TestMigrate_RetiresUntriaged(t *testing.T) {
 	assertCount(t, db, "jobs WHERE name = 'triage-sufficiency'", 0)
 	assertCount(t, db, "jobs WHERE name = 'backup'", 1)
 }
+
+// TestMigrate_RenamesReplacesToSupersedes drives 00012 over a database at
+// version 11: 'replaces' rows become 'supersedes' in place, direction kept; a
+// pair already holding both folds to one row instead of aborting the step; and
+// every other dep_type is left alone.
+func TestMigrate_RenamesReplacesToSupersedes(t *testing.T) {
+	db := buildDB(t, func(db *sql.DB) error { return schema.MigrateUpTo(db, 11) })
+
+	mustExec(t, db, `INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type) VALUES
+		('task', 2, 'task', 1, 'replaces'),
+		('task', 4, 'task', 3, 'replaces'),
+		('task', 4, 'task', 3, 'supersedes'),
+		('task', 5, 'task', 6, 'blocks')`)
+
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	rows, err := db.Query(`SELECT source_id, target_id, dep_type FROM task_deps ORDER BY source_id`)
+	if err != nil {
+		t.Fatalf("read task_deps: %v", err)
+	}
+	defer rows.Close()
+	var got []string
+	for rows.Next() {
+		var src, tgt int
+		var dep string
+		if err := rows.Scan(&src, &tgt, &dep); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		got = append(got, fmt.Sprintf("%d→%d %s", src, tgt, dep))
+	}
+	want := []string{"2→1 supersedes", "4→3 supersedes", "5→6 blocks"}
+	if strings.Join(got, "; ") != strings.Join(want, "; ") {
+		t.Errorf("task_deps = %v, want %v", got, want)
+	}
+}

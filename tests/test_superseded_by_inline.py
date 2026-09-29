@@ -1,4 +1,4 @@
-"""Tests for E-1956: `replaced_by` inline with terminal status, `obsolete` guarded.
+"""Tests for E-1956: `superseded_by` inline with terminal status, `obsolete` guarded.
 
 Three things ship here and all three trace to one root cause — `obsolete` reads
 as "never happened", and nothing on a status display said otherwise:
@@ -9,7 +9,7 @@ as "never happened", and nothing on a status display said otherwise:
    back out of the human TABLES — see tests/test_status_column_width.py — so
    `task list`'s human assertion here is now the negative one.
 2. `obsolete` is refused on work that already shipped, pointing at
-   `task replace`, which records the relation and keeps the earned status.
+   `task supersede`, which records the relation and keeps the earned status.
 3. The task-status vocabulary lives in ONE list (`endless.statuses`), which is
    what stopped `task update --help` from advertising 11 of 13 statuses while
    `update_plan` rejected a 12th.
@@ -19,6 +19,7 @@ import json
 
 import click
 import pytest
+from click.testing import CliRunner
 
 from endless import cli, db, statuses, task_cmd
 
@@ -34,12 +35,12 @@ def _add_task(title: str, status: str = "underway", type_id: int = _TASK) -> int
     return cur.lastrowid
 
 
-def _link_replaced_by(old_id: int, new_id: int) -> None:
-    """Write the relation directly: `old replaced_by new` is stored active-voice
-    as (source=new, target=old, dep_type='replaces')."""
+def _link_superseded_by(old_id: int, new_id: int) -> None:
+    """Write the relation directly: `old superseded_by new` is stored active-voice
+    as (source=new, target=old, dep_type='supersedes')."""
     db.execute(
         "INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type) "
-        "VALUES ('task', ?, 'task', ?, 'replaces')",
+        "VALUES ('task', ?, 'task', ?, 'supersedes')",
         (new_id, old_id),
     )
 
@@ -51,34 +52,34 @@ def _status(task_id: int) -> str:
 # ─── the relation lookup ─────────────────────────────────────────────────────
 
 
-def test_replaced_by_map_reads_the_stored_direction(seeded_project_at_cwd):
+def test_superseded_by_map_reads_the_stored_direction(seeded_project_at_cwd):
     old = _add_task("Add the old thing", status="assumed")
     new = _add_task("Add the new thing", status="underway")
-    _link_replaced_by(old, new)
+    _link_superseded_by(old, new)
     # The OLD task is the one that was replaced; the new one replaces nothing.
-    assert task_cmd.replaced_by_map([old, new]) == {old: [new]}
+    assert task_cmd.superseded_by_map([old, new]) == {old: [new]}
 
 
-def test_replaced_by_map_is_empty_for_an_empty_id_set(seeded_project_at_cwd):
+def test_superseded_by_map_is_empty_for_an_empty_id_set(seeded_project_at_cwd):
     # Guards the short-circuit: an empty `IN ()` is a SQL error.
-    assert task_cmd.replaced_by_map([]) == {}
+    assert task_cmd.superseded_by_map([]) == {}
 
 
-def test_replaced_by_map_ignores_a_removed_replacement(seeded_project_at_cwd):
+def test_superseded_by_map_ignores_a_removed_replacement(seeded_project_at_cwd):
     old = _add_task("Add the old thing", status="assumed")
     new = _add_task("Add the new thing", status="underway")
-    _link_replaced_by(old, new)
+    _link_superseded_by(old, new)
     db.execute("UPDATE tasks SET removed = 1 WHERE id = ?", (new,))
-    assert task_cmd.replaced_by_map([old]) == {}
+    assert task_cmd.superseded_by_map([old]) == {}
 
 
-def test_replaced_by_map_collects_every_replacement(seeded_project_at_cwd):
+def test_superseded_by_map_collects_every_replacement(seeded_project_at_cwd):
     old = _add_task("Add the old thing", status="assumed")
     a = _add_task("Add replacement A", status="underway")
     b = _add_task("Add replacement B", status="underway")
-    _link_replaced_by(old, a)
-    _link_replaced_by(old, b)
-    assert task_cmd.replaced_by_map([old]) == {old: [a, b]}
+    _link_superseded_by(old, a)
+    _link_superseded_by(old, b)
+    assert task_cmd.superseded_by_map([old]) == {old: [a, b]}
 
 
 # ─── the terminal-status gate on the note ────────────────────────────────────
@@ -88,7 +89,7 @@ def test_replaced_by_map_collects_every_replacement(seeded_project_at_cwd):
     "status", ["confirmed", "assumed", "completed", "declined", "obsolete"]
 )
 def test_note_renders_for_every_terminal_status(status):
-    assert task_cmd.replaced_by_note(status, [7]) == " (replaced by E-7)"
+    assert task_cmd.superseded_by_note(status, [7]) == " (superseded by E-7)"
 
 
 @pytest.mark.parametrize(
@@ -96,18 +97,18 @@ def test_note_renders_for_every_terminal_status(status):
                "unverified", "revisit"]
 )
 def test_note_is_silent_for_a_non_terminal_status(status):
-    # An open task's replaced_by still shows in `task show`'s relations block;
+    # An open task's superseded_by still shows in `task show`'s relations block;
     # keeping it off the status line is what leaves default listings unchanged.
-    assert task_cmd.replaced_by_note(status, [7]) == ""
+    assert task_cmd.superseded_by_note(status, [7]) == ""
 
 
 def test_note_is_silent_with_no_replacement():
-    assert task_cmd.replaced_by_note("assumed", None) == ""
-    assert task_cmd.replaced_by_note("assumed", []) == ""
+    assert task_cmd.superseded_by_note("assumed", None) == ""
+    assert task_cmd.superseded_by_note("assumed", []) == ""
 
 
 def test_note_lists_every_replacement():
-    assert task_cmd.replaced_by_note("assumed", [7, 9]) == " (replaced by E-7, E-9)"
+    assert task_cmd.superseded_by_note("assumed", [7, 9]) == " (superseded by E-7, E-9)"
 
 
 # ─── the rendered surfaces ───────────────────────────────────────────────────
@@ -116,7 +117,7 @@ def test_note_lists_every_replacement():
 def _superseded_pair(status: str = "assumed") -> tuple[int, int]:
     old = _add_task("Add the superseded thing", status=status)
     new = _add_task("Add the replacement thing", status="underway")
-    _link_replaced_by(old, new)
+    _link_superseded_by(old, new)
     return old, new
 
 
@@ -127,7 +128,7 @@ def test_task_show_human_puts_the_note_on_the_status_line(
     task_cmd.detail_item(old, no_color=True)
     for line in capsys.readouterr().out.splitlines():
         if line.startswith("Status:"):
-            assert line.strip() == f"Status:     assumed (replaced by E-{new})"
+            assert line.strip() == f"Status:     assumed (superseded by E-{new})"
             return
     pytest.fail("no Status: line in `task show` output")
 
@@ -139,7 +140,7 @@ def test_task_show_agent_puts_the_note_on_the_status_line(
     task_cmd.detail_item(old, agent=True)
     out = capsys.readouterr().out
     # key=value, in the status line's own position — not buried in `links=`.
-    assert f"status=assumed replaced_by=E-{new}" in out
+    assert f"status=assumed superseded_by=E-{new}" in out
 
 
 def test_task_show_json_emits_the_relation_ungated(seeded_project_at_cwd, capsys):
@@ -148,13 +149,13 @@ def test_task_show_json_emits_the_relation_ungated(seeded_project_at_cwd, capsys
     old, new = _superseded_pair(status="unverified")
     task_cmd.detail_item(old, as_json=True)
     payload = json.loads(capsys.readouterr().out)
-    assert payload["replaced_by"] == [f"E-{new}"]
+    assert payload["superseded_by"] == [f"E-{new}"]
 
 
 def test_task_show_json_always_carries_the_key(seeded_project_at_cwd, capsys):
     tid = _add_task("Add an unreplaced thing", status="assumed")
     task_cmd.detail_item(tid, as_json=True)
-    assert json.loads(capsys.readouterr().out)["replaced_by"] == []
+    assert json.loads(capsys.readouterr().out)["superseded_by"] == []
 
 
 def test_task_list_renders_the_bare_status(seeded_project_at_cwd, capsys):
@@ -165,7 +166,7 @@ def test_task_list_renders_the_bare_status(seeded_project_at_cwd, capsys):
     task_cmd.show_plan(show_all=True)
     out = capsys.readouterr().out
     assert f"E-{old}" in out
-    assert "replaced by" not in out
+    assert "superseded by" not in out
 
 
 def test_task_list_default_view_is_unchanged(seeded_project_at_cwd, capsys):
@@ -175,22 +176,22 @@ def test_task_list_default_view_is_unchanged(seeded_project_at_cwd, capsys):
     _add_task("Add an open thing", status="ready")
     task_cmd.show_plan()
     out = capsys.readouterr().out
-    assert "replaced by" not in out
+    assert "superseded by" not in out
 
 
 def test_task_list_agent_puts_the_note_after_the_status(seeded_project_at_cwd, capsys):
     old, new = _superseded_pair()
     task_cmd.show_plan(show_all=True, agent=True)
     out = capsys.readouterr().out
-    assert f"E-{old} now assumed replaced_by=E-{new} " in out
+    assert f"E-{old} now assumed superseded_by=E-{new} " in out
 
 
 def test_task_list_json_emits_the_relation_ungated(seeded_project_at_cwd, capsys):
     old, new = _superseded_pair(status="underway")
     task_cmd.show_plan(show_all=True, as_json=True)
     rows = {r["id"]: r for r in json.loads(capsys.readouterr().out)["rows"]}
-    assert rows[f"E-{old}"]["replaced_by"] == [f"E-{new}"]
-    assert rows[f"E-{new}"]["replaced_by"] == []
+    assert rows[f"E-{old}"]["superseded_by"] == [f"E-{new}"]
+    assert rows[f"E-{new}"]["superseded_by"] == []
 
 
 # ─── obsolete and the replacement axis ───────────────────────────────────────
@@ -199,7 +200,7 @@ def test_task_list_json_emits_the_relation_ungated(seeded_project_at_cwd, capsys
 # Endless already draws for decisions. It is keyed on whether anything took the
 # work over, NEVER on whether the work shipped. The gate that refused it on
 # shipped work is gone: code being DELETED rather than superseded has no
-# successor for `task replace` to name, and `declined` (an active decision not
+# successor for `task supersede` to name, and `declined` (an active decision not
 # to DO the work) is false of work that was built and landed.
 
 
@@ -235,7 +236,7 @@ def test_other_transitions_on_shipped_work_are_untouched(seeded_project_at_cwd):
     assert _status(tid) == "declined"
 
 
-def test_replace_allows_an_explicit_obsolete_on_shipped_work(
+def test_supersede_allows_an_explicit_obsolete_on_shipped_work(
     seeded_project_at_cwd
 ):
     # The DEFAULT still holds a shipped status (next test) — that is about not
@@ -243,25 +244,25 @@ def test_replace_allows_an_explicit_obsolete_on_shipped_work(
     # caller overriding that, and it is no longer refused.
     old = _add_task("Add a shipped thing", status="assumed")
     new = _add_task("Add the replacement", status="underway")
-    task_cmd.replace_task(old, new, status="obsolete", outcome="deleted outright")
+    task_cmd.supersede_task(old, new, status="obsolete", outcome="deleted outright")
     assert _status(old) == "obsolete"
-    assert task_cmd.replaced_by_map([old]) == {old: [new]}
+    assert task_cmd.superseded_by_map([old]) == {old: [new]}
 
 
-def test_replace_holds_a_shipped_status_by_default(seeded_project_at_cwd):
+def test_supersede_holds_a_shipped_status_by_default(seeded_project_at_cwd):
     old = _add_task("Add a shipped thing", status="assumed")
     new = _add_task("Add the replacement", status="underway")
-    task_cmd.replace_task(old, new)
+    task_cmd.supersede_task(old, new)
     assert _status(old) == "assumed"
-    assert task_cmd.replaced_by_map([old]) == {old: [new]}
+    assert task_cmd.superseded_by_map([old]) == {old: [new]}
 
 
-def test_replace_defaults_to_superseded_on_unshipped_work(
+def test_supersede_defaults_to_superseded_on_unshipped_work(
     seeded_project_at_cwd
 ):
     old = _add_task("Add a stale idea", status="unplanned")
     new = _add_task("Add the replacement", status="underway")
-    task_cmd.replace_task(old, new, outcome="the rebuild subsumes it")
+    task_cmd.supersede_task(old, new, outcome="the rebuild subsumes it")
     assert _status(old) == "superseded"
 
 
@@ -275,7 +276,7 @@ def test_superseded_is_refused_without_an_actual_replacement(
         task_cmd.update_plan(tid, status="superseded")
     msg = str(exc.value.message)
     assert "nothing replaced it" in msg
-    assert "task replace" in msg       # names the command that records both
+    assert "task supersede" in msg       # names the command that records both
     assert "obsolete" in msg           # names the status that IS true of it
     assert _status(tid) == "ready"     # and nothing was written
 
@@ -285,20 +286,20 @@ def test_superseded_is_allowed_once_the_relation_exists(
 ):
     old = _add_task("Add a stale idea", status="ready")
     new = _add_task("Add the replacement", status="underway")
-    task_cmd.replace_task(old, new, status="ready")   # relation only
+    task_cmd.supersede_task(old, new, status="ready")   # relation only
     task_cmd.update_plan(old, status="superseded",    # must not raise
                          outcome="handed on to the replacement")
     assert _status(old) == "superseded"
 
 
-def test_replace_persists_an_outcome_when_the_status_is_held(
+def test_supersede_persists_an_outcome_when_the_status_is_held(
     seeded_project_at_cwd
 ):
     # The held path skips task.status_changed (it would record a no-op
     # transition), so the outcome has to reach the row some other way.
     old = _add_task("Add a shipped thing", status="confirmed")
     new = _add_task("Add the replacement", status="underway")
-    task_cmd.replace_task(old, new, outcome="superseded by the rebuild")
+    task_cmd.supersede_task(old, new, outcome="superseded by the rebuild")
     row = db.query("SELECT status, (SELECT content FROM task_content WHERE task_id = tasks.id AND name = 'outcome') AS outcome FROM tasks WHERE id = ?", (old,))[0]
     assert row["status"] == "confirmed"
     # Shipped work keeping the status it earned was not abandoned, so its
@@ -307,7 +308,7 @@ def test_replace_persists_an_outcome_when_the_status_is_held(
 
 
 def _recorded_event_kinds(monkeypatch) -> list[str]:
-    """Capture the event kinds replace_task emits, in order."""
+    """Capture the event kinds supersede_task emits, in order."""
     from endless import event_bridge
     kinds: list[str] = []
 
@@ -318,36 +319,36 @@ def _recorded_event_kinds(monkeypatch) -> list[str]:
     return kinds
 
 
-def test_replace_emits_no_status_event_when_the_status_is_held(
+def test_supersede_emits_no_status_event_when_the_status_is_held(
     seeded_project_at_cwd, monkeypatch
 ):
     kinds = _recorded_event_kinds(monkeypatch)
     old = _add_task("Add a shipped thing", status="assumed")
     new = _add_task("Add the replacement", status="underway")
-    task_cmd.replace_task(old, new)
+    task_cmd.supersede_task(old, new)
     # A status_changed whose old and new are the same value would write a no-op
     # transition into the ledger and misreport the replace as a status change.
     assert "task.status_changed" not in kinds
 
 
-def test_replace_routes_a_held_outcome_through_fields_updated(
+def test_supersede_routes_a_held_outcome_through_fields_updated(
     seeded_project_at_cwd, monkeypatch
 ):
     kinds = _recorded_event_kinds(monkeypatch)
     old = _add_task("Add a shipped thing", status="assumed")
     new = _add_task("Add the replacement", status="underway")
-    task_cmd.replace_task(old, new, outcome="superseded by the rebuild")
+    task_cmd.supersede_task(old, new, outcome="superseded by the rebuild")
     assert "task.status_changed" not in kinds
     assert "task.fields_updated" in kinds
 
 
-def test_replace_still_emits_a_status_event_when_the_status_moves(
+def test_supersede_still_emits_a_status_event_when_the_status_moves(
     seeded_project_at_cwd, monkeypatch
 ):
     kinds = _recorded_event_kinds(monkeypatch)
     old = _add_task("Add a stale idea", status="unplanned")
     new = _add_task("Add the replacement", status="underway")
-    task_cmd.replace_task(old, new, outcome="the rebuild subsumes it")
+    task_cmd.supersede_task(old, new, outcome="the rebuild subsumes it")
     assert "task.status_changed" in kinds
 
 
@@ -392,3 +393,32 @@ def test_update_still_rejects_an_unknown_status(seeded_project_at_cwd):
     with pytest.raises(click.ClickException) as exc:
         task_cmd.update_plan(tid, status="nonsense")
     assert "Invalid status" in str(exc.value.message)
+
+
+# ─── the command name (E-2189) ───────────────────────────────────────────────
+
+
+def test_supersede_is_listed_and_replace_is_hidden():
+    out = CliRunner().invoke(cli.main, ["task", "--help"]).output
+    commands = [ln.split()[0] for ln in out.splitlines() if ln.startswith("  ") and ln.split()]
+    assert "supersede" in commands
+    assert "replace" not in commands
+
+
+@pytest.mark.parametrize("verb", ["supersede", "replace"])
+def test_supersede_and_its_replace_alias_record_the_same_thing(
+        seeded_project_at_cwd, verb):
+    """`task replace` stays a WORKING hidden alias: same callback, so the same
+    `supersedes` row and the same `superseded` status."""
+    old = _add_task("Add the old thing", status="ready")
+    new = _add_task("Add the successor", status="underway")
+    result = CliRunner().invoke(cli.main, [
+        "task", verb, str(old), "--by", str(new),
+        "--outcome", "the successor subsumes it"])
+    assert result.exit_code == 0, result.output
+    assert task_cmd.superseded_by_map([old]) == {old: [new]}
+    assert db.query(
+        "SELECT dep_type FROM task_deps WHERE source_id = ? AND target_id = ?",
+        (new, old))[0]["dep_type"] == "supersedes"
+    assert _status(old) == "superseded"
+    assert f"(superseded by E-{new})" in result.output

@@ -218,6 +218,29 @@ type TaskDepDeletedPayload struct {
 	DepType  string `json:"dep_type"`
 }
 
+// legacyDepTypes maps a stored dep_type that has since been renamed to the name
+// it has now. The ledger is immutable, so task_dep events written before a
+// rename still carry the old name; every task_dep executor and replay handler
+// resolves the payload through canonicalDepType, so those events replay onto
+// the row a current write would produce — and a later task_dep.deleted naming
+// the new type still finds the row an old task_dep.created made. The same
+// read-path alias tasktype.Parse keeps for 'task'/'bug'.
+//
+// 'replaces' became 'supersedes' in E-2189, matching the `superseded` status
+// and `decision supersede`. Migration 00012 renames the rows already stored.
+var legacyDepTypes = map[string]string{
+	"replaces": "supersedes",
+}
+
+// canonicalDepType returns the current name for a stored dep_type, which is
+// the name itself unless it was renamed.
+func canonicalDepType(s string) string {
+	if current, ok := legacyDepTypes[s]; ok {
+		return current
+	}
+	return s
+}
+
 // Decision payloads (E-1378). status defaults to 'proposed' when omitted.
 // origin_task_id and origin_session_id are 0 when unknown — Python emit
 // only populates them when a triggering task / session is identifiable.
@@ -256,7 +279,7 @@ type DecisionUnrejectedPayload struct{}
 // DecisionSupersededPayload carries the replacement's id purely so the ledger
 // entry is self-describing — the authoritative link is the `supersedes` row in
 // decision_relations, emitted alongside as its own decision_relation.created
-// event (the same split `task replace` uses: relation first, then status).
+// event (the same split `task supersede` uses: relation first, then status).
 type DecisionSupersededPayload struct {
 	BySupersedingID int64 `json:"by_superseding_id"`
 }

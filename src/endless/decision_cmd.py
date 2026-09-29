@@ -890,7 +890,7 @@ def superseded_by_map(decision_ids) -> dict[int, list[int]]:
     target=old, relation_type='supersedes'), so a decision's replacements are
     the source_decision_ids of the `supersedes` rows pointing AT it.
 
-    Batched over the whole id set (mirroring task_cmd.replaced_by_map): this
+    Batched over the whole id set (mirroring task_cmd.superseded_by_map): this
     feeds the list renderer, which would otherwise issue a query per row.
     """
     ids = list(decision_ids)
@@ -914,7 +914,7 @@ def superseded_by_map(decision_ids) -> dict[int, list[int]]:
 def superseded_by_note(status: str | None, ids: list[int] | None) -> str:
     """The inline ' (by ED-NNN)' annotation for a status display, or ''.
 
-    Rendered ONLY alongside `superseded`, mirroring task_cmd.replaced_by_note:
+    Rendered ONLY alongside `superseded`, mirroring task_cmd.superseded_by_note:
     that is the one status which reads as the end of the story while leaving
     the reader unable to recover WHAT took over. Every other status either
     names its own reason or has none to name, so annotating them would be
@@ -960,7 +960,7 @@ def _require_governing(decision_id: int, row: dict, verb: str) -> None:
 def supersede_decision(old_id: int, new_id: int):
     """Mark old_id superseded by new_id: record the relation, set the status.
 
-    Two events, relation first, mirroring `task replace`. The relation is the
+    Two events, relation first, mirroring `task supersede`. The relation is the
     authoritative record of WHICH decision took over — a status alone cannot
     carry a pointer, and "superseded" without a name is the same dead end as
     "accepted" on something that stopped governing.

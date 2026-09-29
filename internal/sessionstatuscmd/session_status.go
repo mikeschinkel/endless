@@ -871,7 +871,7 @@ const minTitleBudget = 10
 // beside its status, or "".
 //
 // The TERMINAL-status gate lives here, once, for every relation that uses this
-// shape (E-1956 for `replaced by`, E-1185 for `duplicates`). A terminal status
+// shape (E-1956 for `superseded by`, E-1185 for `duplicates`). A terminal status
 // is where the row otherwise reads as the end of the story — ⇥ closed on a
 // superseded or duplicated task looks abandoned rather than handed on. An open
 // task keeps its plain row; the fact is still in `task show`. Gating also means
@@ -892,8 +892,8 @@ func relationNote(ids []int64, status, phrase string) string {
 	return "  (" + phrase + " " + strings.Join(out, ", ") + ")"
 }
 
-func replacedByNote(r monitor.SessionStatusRow) string {
-	return relationNote(r.ReplacedBy, r.Status, "replaced by")
+func supersededByNote(r monitor.SessionStatusRow) string {
+	return relationNote(r.SupersededBy, r.Status, "superseded by")
 }
 
 func duplicatesNote(r monitor.SessionStatusRow) string {
@@ -903,7 +903,7 @@ func duplicatesNote(r monitor.SessionStatusRow) string {
 // statusNotes is every inline annotation a row carries. A task can be both
 // superseded and a duplicate; the notes compose rather than one winning.
 func statusNotes(r monitor.SessionStatusRow) string {
-	return replacedByNote(r) + duplicatesNote(r)
+	return supersededByNote(r) + duplicatesNote(r)
 }
 
 // hiddenField renders the ⊘ column for a row to width hw (0 = column absent,

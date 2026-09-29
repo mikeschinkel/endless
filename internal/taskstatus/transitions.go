@@ -298,7 +298,7 @@ var transitionGroups = []transitionGroup{
 		// record kinds now agree: `decision supersede --by` when there IS a
 		// successor, `decision obsolete --reason` when "it stopped applying
 		// and nothing replaced it". For tasks the successor is the
-		// `replaced_by` relation (`task replace <old> --by <new>`), and
+		// `superseded_by` relation (`task supersede <old> --by <new>`), and
 		// `obsolete` is the no-replacement terminal.
 		//
 		// E-1956 keyed this on the wrong column: it refused `obsolete` from
@@ -328,10 +328,11 @@ var transitionGroups = []transitionGroup{
 	{
 		// The other half of the axis. `obsolete` is "nothing replaced it";
 		// this is "something did", and the successor is named by the
-		// `replaced_by` relation that `task replace <old> --by <new>` writes.
+		// `superseded_by` relation that `task supersede <old> --by <new>` writes.
 		// Decisions have had exactly this pair since E-1920 — `decision
 		// supersede --by` against `decision obsolete --reason` — and tasks
-		// had only the second, which is why `task replace` used to close an
+		// had only the second, which is why `task supersede` (then `task
+		// replace`) used to close an
 		// unshipped task as `obsolete` while recording a replacement: a row
 		// asserting in one column that nothing replaced it and in another
 		// that something did.
@@ -339,14 +340,13 @@ var transitionGroups = []transitionGroup{
 		// Pre-ship statuses only, and that is not an oversight. A task that
 		// SHIPPED earned a terminal — `confirmed`, `assumed`, `completed` —
 		// and that terminal is still true after something supersedes it, so
-		// `task replace` holds it and the relation rides alongside
-		// ("assumed (replaced by E-101)"). There is no earned terminal to
+		// `task supersede` holds it and the relation rides alongside
+		// ("assumed (superseded by E-101)"). There is no earned terminal to
 		// protect before the work ships, which is where this one goes.
 		//
-		// Note for the decisions/tasks merge: the STATUS here is `superseded`
-		// while the RELATION is `replaced_by`, because renaming a stored
-		// dep_type is a data change this task is not. The two vocabularies
-		// converging is the merge's business.
+		// The STATUS and the RELATION share one vocabulary, and it is the one
+		// decisions use: `superseded` / `superseded_by`, set by `task
+		// supersede` as by `decision supersede` (E-2189).
 		Name: "Superseding — something else took the work over",
 		Transitions: []Transition{
 			{From: Unplanned, To: Superseded, Actor: ActorUser, Label: "supersedes — another task took it over"},

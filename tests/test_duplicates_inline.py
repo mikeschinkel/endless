@@ -1,20 +1,20 @@
 """Tests for E-1185's second half: `duplicates` as a FIRST-CLASS relation type.
 
 The first landing added the type to the vocabulary, `task link` and the guide,
-and stopped there — because `replaces`, its nearest neighbour, stopped there too.
+and stopped there — because `supersedes`, its nearest neighbour, stopped there too.
 That was the wrong yardstick. Two gaps close here:
 
-1. `--duplicates` / `--replaces` on `task add`, `task update` and `epic add`.
+1. `--duplicates` / `--supersedes` on `task add`, `task update` and `epic add`.
    `task update` had no relation flags at all before this.
 2. The inline `(duplicates E-NNN)` note beside a TERMINAL status, on every
-   surface that already carries `(replaced by E-NNN)` from E-1956 — `task show`
+   surface that already carries `(superseded by E-NNN)` from E-1956 — `task show`
    and `task list`, human/--agent/--json. The Go `session status` side is covered
    by the Go tests. E-2064 later pulled it back out of the human TABLES — see
    tests/test_status_column_width.py — so `task list`'s human assertion here is
    now the negative one.
 
 The recurring trap, and what most of these tests exist to catch: the two
-relations annotate OPPOSITE endpoints. `replaces` notes the target (`new
+relations annotate OPPOSITE endpoints. `supersedes` notes the target (`new
 replaces old`, old is closed); `duplicates` notes the source (`dupe duplicates
 keeper`, dupe is closed).
 """
@@ -66,23 +66,23 @@ def _deps() -> list[tuple[int, int, str]]:
 
 
 def test_duplicates_map_notes_the_source_not_the_target(seeded_project_at_cwd):
-    """The mirror-image assertion. `replaced_by_map` keys on the target; this
+    """The mirror-image assertion. `superseded_by_map` keys on the target; this
     keys on the source, because that is the end that gets closed."""
     dupe, keeper = _duplicate_pair()
     assert task_cmd.duplicates_map([dupe, keeper]) == {dupe: [keeper]}
 
 
-def test_duplicates_map_is_not_replaced_by_map(seeded_project_at_cwd):
+def test_duplicates_map_is_not_superseded_by_map(seeded_project_at_cwd):
     """A `duplicates` row must be invisible to the supersession lookup, and vice
     versa — the two read the same table with swapped columns."""
     dupe, keeper = _duplicate_pair()
-    assert task_cmd.replaced_by_map([dupe, keeper]) == {}
+    assert task_cmd.superseded_by_map([dupe, keeper]) == {}
 
     old = _add_task("Add the superseded thing", status="assumed")
     new = _add_task("Add the replacement", status="underway")
     db.execute(
         "INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type) "
-        "VALUES ('task', ?, 'task', ?, 'replaces')", (new, old))
+        "VALUES ('task', ?, 'task', ?, 'supersedes')", (new, old))
     assert task_cmd.duplicates_map([old, new]) == {}
 
 
@@ -133,7 +133,7 @@ def test_note_lists_every_id():
 def test_status_notes_compose_without_either_winning():
     """A task can be both superseded and a duplicate."""
     got = task_cmd.status_notes("obsolete", [7], [9])
-    assert got == " (replaced by E-7) (duplicates E-9)"
+    assert got == " (superseded by E-7) (duplicates E-9)"
 
 
 # ─── the rendered surfaces ───────────────────────────────────────────────────
@@ -185,7 +185,7 @@ def test_task_show_json_always_carries_the_key(seeded_project_at_cwd, capsys):
 
 def test_task_list_renders_the_bare_status(seeded_project_at_cwd, capsys):
     """E-2064: the shared Status column carries the bare status. The sibling
-    assertion in test_replaced_by_inline.py covers the other relation."""
+    assertion in test_superseded_by_inline.py covers the other relation."""
     dupe, keeper = _duplicate_pair()
     task_cmd.show_plan(show_all=True)
     out = capsys.readouterr().out
@@ -223,11 +223,11 @@ def test_both_notes_render_together(seeded_project_at_cwd, capsys):
     other = _add_task("Add the replacement", status="underway")
     db.execute(
         "INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type) "
-        "VALUES ('task', ?, 'task', ?, 'replaces')", (other, dupe))
+        "VALUES ('task', ?, 'task', ?, 'supersedes')", (other, dupe))
     task_cmd.detail_item(dupe, no_color=True)
     status_line = next(
         ln for ln in capsys.readouterr().out.splitlines() if ln.startswith("Status:"))
-    assert f"(replaced by E-{other})" in status_line
+    assert f"(superseded by E-{other})" in status_line
     assert f"(duplicates E-{keeper})" in status_line
 
 
@@ -257,14 +257,14 @@ def test_task_add_duplicates_flag(seeded_project_at_cwd, monkeypatch):
     assert src != keeper  # the new task is the redundant filing
 
 
-def test_task_add_replaces_flag(seeded_project_at_cwd, monkeypatch):
+def test_task_add_supersedes_flag(seeded_project_at_cwd, monkeypatch):
     _stub_add(monkeypatch)
     old = _add_task("Add the old thing")
     result = CliRunner().invoke(cli.main, [
-        "task", "add", "Add the new thing", "--replaces", str(old)])
+        "task", "add", "Add the new thing", "--supersedes", str(old)])
     assert result.exit_code == 0, result.output
     (src, tgt, dep), = _deps()
-    assert (tgt, dep) == (old, "replaces")
+    assert (tgt, dep) == (old, "supersedes")
     assert src != old
 
 
@@ -309,21 +309,21 @@ def test_task_update_applies_the_relation_to_every_named_task(seeded_project_at_
     assert _deps() == [(a, keeper, "duplicates"), (b, keeper, "duplicates")]
 
 
-def test_task_update_replaces_flag(seeded_project_at_cwd):
+def test_task_update_supersedes_flag(seeded_project_at_cwd):
     new = _add_task("Add the new thing")
     old = _add_task("Add the old thing")
     result = CliRunner().invoke(cli.main, [
-        "task", "update", str(new), "--replaces", str(old)])
+        "task", "update", str(new), "--supersedes", str(old)])
     assert result.exit_code == 0, result.output
-    assert _deps() == [(new, old, "replaces")]
+    assert _deps() == [(new, old, "supersedes")]
 
 
-def test_task_update_replaces_does_not_close_the_replaced_task(seeded_project_at_cwd):
-    """`task replace` is the status-bearing surface; the flag records the
+def test_task_update_supersedes_does_not_close_the_replaced_task(seeded_project_at_cwd):
+    """`task supersede` is the status-bearing surface; the flag records the
     relation only, and the help text says so."""
     new = _add_task("Add the new thing")
     old = _add_task("Add the old thing", status="ready")
-    CliRunner().invoke(cli.main, ["task", "update", str(new), "--replaces", str(old)])
+    CliRunner().invoke(cli.main, ["task", "update", str(new), "--supersedes", str(old)])
     assert db.query(
         "SELECT status FROM tasks WHERE id = ?", (old,))[0]["status"] == "ready"
 
@@ -336,6 +336,23 @@ def test_task_update_replaces_does_not_close_the_replaced_task(seeded_project_at
 def test_the_flags_are_advertised(command):
     out = CliRunner().invoke(cli.main, command).output
     assert "--duplicates" in out
-    assert "--replaces" in out
+    assert "--supersedes" in out
     # The trap the help text exists to close.
-    assert "task replace" in out
+    assert "task supersede" in out
+
+
+@pytest.mark.parametrize("command", [
+    ["task", "add", "Add the new thing"],
+    ["task", "update", "{new}"],
+    ["epic", "add", "Add the new epic"],
+])
+def test_the_retired_replaces_flag_is_refused_by_name(seeded_project_at_cwd, command):
+    """E-2189: `--replaces` was renamed with the relation it records. Refused
+    with a pointer, never silently recorded under the old name."""
+    new = _add_task("Add the new thing")
+    old = _add_task("Add the old thing")
+    argv = [a.format(new=new) for a in command] + ["--replaces", str(old)]
+    result = CliRunner().invoke(cli.main, argv)
+    assert result.exit_code != 0
+    assert "--replaces was renamed to --supersedes" in result.output
+    assert _deps() == []

@@ -21,7 +21,7 @@ func snDuplicates(t *testing.T, db *sql.DB, dupeID, keeperID int64) {
 // TestSessionStatusRows_Duplicates drives the E-1185 column through the focal
 // query. The assertion that matters is the ENDPOINT: the note belongs to the
 // task that gets closed, which for `duplicates` is the relation's SOURCE — the
-// opposite end from `replaces`. Get it backwards and the annotation lands on
+// opposite end from `supersedes`. Get it backwards and the annotation lands on
 // the task that is still being worked, which is the one row it must never
 // appear on.
 func TestSessionStatusRows_Duplicates(t *testing.T) {
@@ -66,11 +66,11 @@ func TestSessionStatusRows_Duplicates(t *testing.T) {
 	}
 }
 
-// TestSessionStatusRows_DuplicatesIsNotReplacedBy: the two columns are mirror
+// TestSessionStatusRows_DuplicatesIsNotSupersededBy: the two columns are mirror
 // images over the same table, so a swapped column in either expression would
 // still return plausible ids. Seeding one relation and asserting the OTHER
 // column stays empty is what catches that.
-func TestSessionStatusRows_DuplicatesIsNotReplacedBy(t *testing.T) {
+func TestSessionStatusRows_DuplicatesIsNotSupersededBy(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p1", "/p1")
 
@@ -96,9 +96,9 @@ func TestSessionStatusRows_DuplicatesIsNotReplacedBy(t *testing.T) {
 		if !ok {
 			t.Fatalf("row %d missing", id)
 		}
-		if len(r.ReplacedBy) != 0 {
-			t.Errorf("row %d ReplacedBy = %v, want empty — a duplicates row is not a replaces row",
-				id, r.ReplacedBy)
+		if len(r.SupersededBy) != 0 {
+			t.Errorf("row %d SupersededBy = %v, want empty — a duplicates row is not a replaces row",
+				id, r.SupersededBy)
 		}
 	}
 }

@@ -105,30 +105,30 @@ def test_task_assume_with_outcome(seeded_project_at_cwd):
 # ─── replace ──────────────────────────────────────────────────────────────────
 
 
-def test_task_replace_default_superseded(seeded_project_at_cwd):
+def test_task_supersede_default_superseded(seeded_project_at_cwd):
     # E-2144: the unshipped default is `superseded`, not `obsolete` — the whole
     # point of this call is recording that something replaced it, and
     # `obsolete` means nothing did.
     old = _add_task("Old")
     new = _add_task("New")
-    task_cmd.replace_task(old, new, outcome="folded into the replacement")
+    task_cmd.supersede_task(old, new, outcome="folded into the replacement")
     status, reason = _status_reason(old)
     assert status == "superseded"
     assert reason == "folded into the replacement"
 
 
-def test_task_replace_with_status_declined_requires_outcome(seeded_project_at_cwd):
+def test_task_supersede_with_status_declined_requires_outcome(seeded_project_at_cwd):
     old = _add_task("Old")
     new = _add_task("New")
     with pytest.raises(click.ClickException) as exc:
-        task_cmd.replace_task(old, new, status="declined")
+        task_cmd.supersede_task(old, new, status="declined")
     assert "reason is required" in str(exc.value.message).lower()
 
 
-def test_task_replace_with_status_declined_and_outcome(seeded_project_at_cwd):
+def test_task_supersede_with_status_declined_and_outcome(seeded_project_at_cwd):
     old = _add_task("Old")
     new = _add_task("New")
-    task_cmd.replace_task(old, new, status="declined", outcome="superseded by E-NEW")
+    task_cmd.supersede_task(old, new, status="declined", outcome="superseded by E-NEW")
     status, reason = _status_reason(old)
     assert status == "declined"
     assert reason == "superseded by E-NEW"
@@ -222,12 +222,12 @@ def test_a_stored_reason_does_not_satisfy_the_guard(seeded_project_at_cwd):
     assert "reason is required" in str(exc.value.message).lower()
 
 
-def test_a_stored_reason_does_not_satisfy_replace(seeded_project_at_cwd):
+def test_a_stored_reason_does_not_satisfy_supersede(seeded_project_at_cwd):
     old = _add_task("Old")
     new = _add_task("New")
     task_cmd.update_plan(old, reason="stored earlier")
     with pytest.raises(click.ClickException) as exc:
-        task_cmd.replace_task(old, new)
+        task_cmd.supersede_task(old, new)
     assert "reason is required" in str(exc.value.message).lower()
 
 
@@ -262,50 +262,50 @@ def test_epic_update_status_obsolete_requires_outcome(seeded_project_at_cwd):
     assert "reason is required" in str(exc.value.message).lower()
 
 
-def test_task_replace_with_status_obsolete_requires_outcome(seeded_project_at_cwd):
-    """The `replaced_by` relation records WHAT replaced a task, not WHY it went
+def test_task_supersede_with_status_obsolete_requires_outcome(seeded_project_at_cwd):
+    """The `superseded_by` relation records WHAT replaced a task, not WHY it went
     away; an explicit --status obsolete still owes the reason."""
     old = _add_task("Old")
     new = _add_task("New")
     with pytest.raises(click.ClickException) as exc:
-        task_cmd.replace_task(old, new, status="obsolete")
+        task_cmd.supersede_task(old, new, status="obsolete")
     assert "reason is required" in str(exc.value.message).lower()
 
 
-def test_task_replace_with_status_obsolete_and_outcome(seeded_project_at_cwd):
+def test_task_supersede_with_status_obsolete_and_outcome(seeded_project_at_cwd):
     old = _add_task("Old")
     new = _add_task("New")
-    task_cmd.replace_task(old, new, status="obsolete", outcome="deleted outright")
+    task_cmd.supersede_task(old, new, status="obsolete", outcome="deleted outright")
     assert _status_reason(old) == ("obsolete", "deleted outright")
 
 
 @pytest.mark.parametrize("shipped", ["unverified", "confirmed", "assumed", "completed"])
-def test_task_replace_on_shipped_work_needs_no_outcome(seeded_project_at_cwd, shipped):
+def test_task_supersede_on_shipped_work_needs_no_outcome(seeded_project_at_cwd, shipped):
     """The one exemption, and it is structural rather than a carve-out: work
     that shipped keeps the terminal it earned, was never abandoned, and so
     reaches none of the three statuses the guard covers."""
     old = _add_task("Old", status=shipped)
     new = _add_task("New")
-    task_cmd.replace_task(old, new)
+    task_cmd.supersede_task(old, new)
     status, outcome = _status_outcome(old)
     assert status == shipped
     assert outcome is None
 
 
-def test_task_replace_default_superseded_requires_outcome(seeded_project_at_cwd):
-    """The plainest form of the commonest abandonment. The `replaced_by`
+def test_task_supersede_default_superseded_requires_outcome(seeded_project_at_cwd):
+    """The plainest form of the commonest abandonment. The `superseded_by`
     relation names the successor; it does not say why the work was handed on,
     and leaving this route unguarded is the side door that would make the rule
     unenforceable everywhere else."""
     old = _add_task("Old")
     new = _add_task("New")
     with pytest.raises(click.ClickException) as exc:
-        task_cmd.replace_task(old, new)
+        task_cmd.supersede_task(old, new)
     msg = str(exc.value.message)
     assert "reason is required" in msg.lower()
     assert "--outcome" in msg
     # Refused before anything was written: no relation, no status change.
-    assert task_cmd.replaced_by_map([old]) == {}
+    assert task_cmd.superseded_by_map([old]) == {}
     assert _status_outcome(old) == ("ready", None)
 
 
@@ -313,7 +313,7 @@ def test_task_update_status_superseded_requires_outcome(seeded_project_at_cwd):
     """The other route to the status, once the relation already exists."""
     old = _add_task("Old")
     new = _add_task("New")
-    task_cmd.replace_task(old, new, status="ready")   # relation only
+    task_cmd.supersede_task(old, new, status="ready")   # relation only
     with pytest.raises(click.ClickException) as exc:
         task_cmd.update_plan(old, status="superseded")
     assert "reason is required" in str(exc.value.message).lower()
@@ -472,7 +472,7 @@ def test_the_guard_is_called_from_exactly_the_expected_front_doors():
     """Named, so deleting a call is a failure rather than a silent hole."""
     callers = {fn.name for fn in _functions(_parse("task_cmd.py"))
                if _calls_guard(fn)}
-    assert callers == {"update_plan", "replace_task", "decline_item"}, callers
+    assert callers == {"update_plan", "supersede_task", "decline_item"}, callers
 
 
 def test_session_cmd_only_ever_emits_pinned_non_abandonment_statuses():

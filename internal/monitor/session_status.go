@@ -105,9 +105,9 @@ type SessionStatusRow struct {
 	OwnedElsewhere bool
 	BlockedByN     int
 	BlocksN        int
-	// ReplacedBy holds the ids of the tasks that supersede this one. `old
-	// replaced_by new` is stored active-voice as (source=new, target=old,
-	// dep_type='replaces'), so these are the source_ids of the 'replaces' rows
+	// SupersededBy holds the ids of the tasks that supersede this one. `old
+	// superseded_by new` is stored active-voice as (source=new, target=old,
+	// dep_type='supersedes'), so these are the source_ids of the 'supersedes' rows
 	// pointing AT this task.
 	//
 	// E-1956: a terminal status is the end of the story as the view tells it —
@@ -116,9 +116,9 @@ type SessionStatusRow struct {
 	// show`. Part of the row query rather than an annotation (unlike Unsettled
 	// and Hidden) because it is a property of the task alone: viewer-agnostic,
 	// no git, no session. Empty for the overwhelming majority of rows.
-	ReplacedBy []int64
+	SupersededBy []int64
 	// Duplicates holds the ids of the tasks this one was a redundant filing of
-	// (E-1185). Same rule as ReplacedBy — a task closed BECAUSE it duplicated
+	// (E-1185). Same rule as SupersededBy — a task closed BECAUSE it duplicated
 	// another reads as abandoned when the row shows only ⇥ closed — but the
 	// OPPOSITE endpoint: `dupe duplicates keeper` is stored (source=dupe,
 	// target=keeper) and it is the dupe that gets closed, so these are the
@@ -138,17 +138,17 @@ func (r SessionStatusRow) HasShippedWork() bool {
 	return taskstatus.Has(taskstatus.Shipped, r.Status)
 }
 
-// replacedByExpr is the `enr`-CTE column that collects a task's replacements as
+// supersededByExpr is the `enr`-CTE column that collects a task's replacements as
 // a comma-separated id list (NULL when there are none). Shared by both row
 // queries so the two cannot drift. The live_tasks join keeps a removed
 // replacement from being named.
-const replacedByExpr = `
+const supersededByExpr = `
     (SELECT group_concat(d.source_id)
        FROM task_deps d JOIN live_tasks rep ON rep.id = d.source_id
       WHERE d.source_type = 'task' AND d.target_type = 'task'
-        AND d.dep_type = 'replaces' AND d.target_id = b.id) AS replaced_by`
+        AND d.dep_type = 'supersedes' AND d.target_id = b.id) AS superseded_by`
 
-// duplicatesExpr is replacedByExpr's mirror image: same shape, swapped columns,
+// duplicatesExpr is supersededByExpr's mirror image: same shape, swapped columns,
 // because the task the annotation lands on sits on the other end of this
 // relation (see SessionStatusRow.Duplicates). Reading the two together, the
 // swap looks like a copy-paste slip; it is the point.
@@ -409,12 +409,12 @@ enr AS (
          AND blk.status NOT IN (` + terminalStatusSet + `)) AS blocked_by_n,
     (SELECT count(*) FROM task_deps d
        WHERE d.source_type = 'task' AND d.source_id = b.id
-         AND d.dep_type = 'blocks') AS blocks_n,` + replacedByExpr + `,` + duplicatesExpr + `
+         AND d.dep_type = 'blocks') AS blocks_n,` + supersededByExpr + `,` + duplicatesExpr + `
   FROM allbase b
 )
 SELECT id, project_id, title, status, phase, type_slug, has_plan,
        is_focal, is_parent, is_from, in_flight, landed, blocked_by_n, blocks_n,
-       replaced_by, duplicates
+       superseded_by, duplicates
   FROM enr
  WHERE (? = 1) OR is_focal OR is_parent OR is_from
        OR status NOT IN (` + terminalStatusSet + `)
@@ -437,15 +437,15 @@ func scanSessionStatusRows(rows *sql.Rows) ([]SessionStatusRow, error) {
 	var out []SessionStatusRow
 	for rows.Next() {
 		var r SessionStatusRow
-		var replaced, duplicates sql.NullString
+		var superseded, duplicates sql.NullString
 		if err := rows.Scan(
 			&r.ID, &r.ProjectID, &r.Title, &r.Status, &r.Phase, &r.TypeSlug, &r.HasPlan,
 			&r.IsFocal, &r.IsParent, &r.IsFrom, &r.InFlight, &r.Landed, &r.BlockedByN, &r.BlocksN,
-			&replaced, &duplicates,
+			&superseded, &duplicates,
 		); err != nil {
 			return nil, err
 		}
-		r.ReplacedBy = parseRelationIDs(replaced.String)
+		r.SupersededBy = parseRelationIDs(superseded.String)
 		r.Duplicates = parseRelationIDs(duplicates.String)
 		out = append(out, r)
 	}
@@ -520,12 +520,12 @@ enr AS (
          AND blk.status NOT IN (` + terminalStatusSet + `)) AS blocked_by_n,
     (SELECT count(*) FROM task_deps d
        WHERE d.source_type = 'task' AND d.source_id = b.id
-         AND d.dep_type = 'blocks') AS blocks_n,` + replacedByExpr + `,` + duplicatesExpr + `
+         AND d.dep_type = 'blocks') AS blocks_n,` + supersededByExpr + `,` + duplicatesExpr + `
   FROM base b
 )
 SELECT id, project_id, title, status, phase, type_slug, has_plan,
        is_focal, is_parent, is_from, in_flight, landed, blocked_by_n, blocks_n,
-       replaced_by, duplicates
+       superseded_by, duplicates
   FROM enr
  WHERE (? = 1) OR status NOT IN (` + terminalStatusSet + `)
 `

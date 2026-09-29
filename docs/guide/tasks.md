@@ -17,7 +17,7 @@ Every task has one short name, one short description, and a set of long-form con
 | `plan`        | Long-form      | The work to do: approach, the files and functions it touches, verification steps. **Required before a task can be claimed or spawned.** Name files and functions, never line numbers — see **No time-frozen specifics** below. Shown with `task show --plan`. **On a research task, `plan` instead holds the research *request* — see the Research-task field model below.** | `--plan` (inline) / `--plan-file <path>` on `task add` / `task update`. |
 | `notes`       | Freeform       | Catch-all: history, progress, dated updates, who said what. Use sparingly. `--justification` composes its `## Justification` heading in here. Shown with `task show --notes`. | `--notes` (inline) / `--notes-file <path>` on `task update`. |
 | `outcome`     | Short to long  | The result — the deliverable. **Required** when completing a `research`/`brainstorm` task (the outcome IS the deliverable). Optional on `confirm`/`assume`. Shown with `task show --outcome`. | `--outcome` (inline) / `--outcome-file <path>` on `task confirm` / `task assume` / `task update`. |
-| `reason`      | Short          | Why the task ended. **Required** on every abandonment — `declined`, `obsolete` and `superseded` alike — given with that command; one already stored does not count. Kept apart from `outcome` so abandoning findings work never overwrites the findings. Shown with `task show --reason`. | `--reason` (inline) / `--reason-file <path>` on `task update` / `task decline`; `--outcome` given *with* an abandonment status, and on `task replace`, is stored as the reason. |
+| `reason`      | Short          | Why the task ended. **Required** on every abandonment — `declined`, `obsolete` and `superseded` alike — given with that command; one already stored does not count. Kept apart from `outcome` so abandoning findings work never overwrites the findings. Shown with `task show --reason`. | `--reason` (inline) / `--reason-file <path>` on `task update` / `task decline`; `--outcome` given *with* an abandonment status, and on `task supersede`, is stored as the reason. |
 
 `context`, `analysis`, `plan`, `outcome`, `reason` and `notes` are **content**: each is one row per task in the database under that name, and the name is also the CLI flag, the `task show` heading and the mirror file (`.endless/tasks/e-NNNN/<name>.md`). `title` and `description` are columns on the task itself.
 
@@ -290,20 +290,20 @@ endless task add "Title here" --blocked-by E-100     # also: --blocks, --relates
                                                      # --conflicts-with,
                                                      # --implements, --cleans-up,
                                                      # --cleaned-up-by, --duplicates,
-                                                     # --replaces (all repeatable)
+                                                     # --supersedes (all repeatable)
 ```
 
-`--duplicates` and `--replaces` are also on **`task update`** — the only relation
+`--duplicates` and `--supersedes` are also on **`task update`** — the only relation
 flags there, so an existing task can be marked without reaching for `task link`:
 
 ```bash
 endless task update E-101 --duplicates E-102         # applies to every id named
-endless task update E-9 --replaces E-5               # relation only — see below
+endless task update E-9 --supersedes E-5             # relation only — see below
 ```
 
-Both record the relation and **nothing else**. `endless task replace <old> --by
-<new>` remains the surface that also closes the replaced task (and knows to hold
-a shipped status); `--replaces` deliberately does not, so it never closes
+Both record the relation and **nothing else**. `endless task supersede <old> --by
+<new>` remains the surface that also closes the superseded task (and knows to hold
+a shipped status); `--supersedes` deliberately does not, so it never closes
 something you only meant to link.
 
 To record a decision prompted by a task, use `endless decision add "..." --about <id>` — see `endless guide decisions`. (There is no `--decision` flag on `task add` or `task update`.)
@@ -498,7 +498,7 @@ endless task confirm <id> --cascade --outcome "..."  # confirm a task and descen
 endless task assume <id> --outcome "..."             # believed complete, can't verify
 endless task decline <id> --reason "..."             # active decision not to do
 endless task update <id> --status obsolete --reason "..."    # no longer needed, nothing replaced it
-endless task replace <id> --by <new_id> --outcome "..."      # supersede with another task
+endless task supersede <id> --by <new_id> --outcome "..."    # supersede with another task
 ```
 
 Found a bug in work you already landed? Reopen that task (`--status revisit`) instead of filing a new one — see [Fix a bug in your own landed work](orchestration.md#fix-a-bug-in-your-own-landed-work).
@@ -516,7 +516,7 @@ away the one fact worth keeping.
 That fact is a relation **and** its own terminal — one command writes both:
 
 ```bash
-endless task replace <old> --by <new> --outcome "..."   # replaced_by recorded; status → superseded
+endless task supersede <old> --by <new> --outcome "..."   # superseded_by recorded; status → superseded
 ```
 
 `superseded` is refused unless the relation is actually there, which is the
@@ -525,13 +525,13 @@ Set by hand on a task nothing replaced, it would send every reader looking for a
 task that does not exist. Decisions have enforced the same shape for as long as
 they have had the status — `decision supersede` requires `--by`.
 
-`task replace` keeps a shipped task's status exactly as it stands (an unshipped
-one becomes `superseded`) and records `replaced_by`. Holding the shipped
+`task supersede` keeps a shipped task's status exactly as it stands (an unshipped
+one becomes `superseded`) and records `superseded_by`. Holding the shipped
 status is about not overwriting which terminal the work actually reached — the
 supersession rides on the relation either way. A **terminal**
-status then shows the supersession alongside it — `assumed (replaced by E-101)`
+status then shows the supersession alongside it — `assumed (superseded by E-101)`
 on `task show`'s `Status:` line, appended to the row in `session status`, and as
-a `replaced_by` key in the `--agent` and `--json` modes of both. So a superseded
+a `superseded_by` key in the `--agent` and `--json` modes of both. So a superseded
 task reads as *handed on*, not *abandoned*, without anyone having to go looking
 for its relations.
 
@@ -546,15 +546,15 @@ having shipped — `declined`, `obsolete`, `superseded` — and all three are
 refused without a reason: `--reason`, or `--outcome` given with the status,
 which is stored as the reason. It must come with the command that closes the
 task: a reason already stored does not satisfy it. The requirement is on the STATUS, not on a verb, so it holds whichever
-route you take: `task update`, `epic update`, `task decline`, `task replace`.
+route you take: `task update`, `epic update`, `task decline`, `task supersede`.
 
-`superseded` is included even though it already needs a `replaced_by` relation.
+`superseded` is included even though it already needs a `superseded_by` relation.
 The relation records WHAT took the work over; it does not record WHY it was
 handed on, and a later reader needs both. Exempting it would have left the
-plainest form of the commonest abandonment — `task replace <old> --by <new>` —
+plainest form of the commonest abandonment — `task supersede <old> --by <new>` —
 recording no reason at all.
 
-The one exemption is structural rather than a carve-out: `task replace` on work
+The one exemption is structural rather than a carve-out: `task supersede` on work
 that ALREADY SHIPPED keeps the terminal it earned, was never abandoned, and so
 reaches none of the three statuses.
 
@@ -564,7 +564,7 @@ the fact would read as authoritative and be fiction.
 **Shipped work CAN be `obsolete`.** Code that is being *deleted* rather than
 superseded is obsolete in the plainest sense of the word: no longer in use.
 There is no successor to name, so
-`task replace` had no answer for it, and `declined` — an active decision not to
+`task supersede` has no answer for it, and `declined` — an active decision not to
 *do* the work — says something false about work that was built and landed. The
 fact that it shipped is not lost by saying so: that lives in the landing record,
 which is where `task show`'s `Landed:` line comes from.
@@ -936,7 +936,7 @@ endless task unlink <a> --to <b> --type implements
 | `implements`    | A is the implementation of a plan, idea, or decision recorded in B. Common pattern: B is type=`plan` or type=`decision`, A is the work. |
 | `cleans_up` / `cleaned_up_by` | A handles a loose end discovered while working on B. **This is the canonical "follow-up" link** — use it for follow-up tasks filed mid-stream. (We considered `follows_up` and rejected it in favor of `cleans_up` to keep the vocabulary tight.) |
 | `documents`    | A is a decision that explains B. Auto-created when you pass `--about <task>` to `endless decision add`.              |
-| `replaces`     | A supersedes B. Record it with `task replace B --by A`, which sets B to `superseded` — or holds B's status if B's work already shipped, since the terminal it earned is still true. |
+| `supersedes`    | A supersedes B. Record it with `task supersede B --by A`, which sets B to `superseded` — or holds B's status if B's work already shipped, since the terminal it earned is still true. |
 | `duplicates` / `duplicated_by` | A and B were filed for the **same concern** — two descriptions of one piece of work, not two pieces. A is the redundant filing; B is the one kept. |
 
 **Quick decision tree:**
@@ -951,12 +951,12 @@ endless task unlink <a> --to <b> --type implements
 
 If you find yourself reaching for an undocumented type or `relates_to` for everything, that's a signal — surface it to the user.
 
-### `duplicates` vs `replaces` vs `relates_to`
+### `duplicates` vs `supersedes` vs `relates_to`
 
 The three are easy to confuse, and picking the wrong one loses the fact you were
 trying to record:
 
-- `replaces` says B **was** the work and A **took over** from it — the concern
+- `supersedes` says B **was** the work and A **took over** from it — the concern
   moved, usually because B's approach was wrong or its scope changed. Two
   distinct pieces of work, one handing off to the other.
 - `duplicates` says there was only ever **one** piece of work, described twice.
@@ -967,7 +967,7 @@ trying to record:
 
 Recorded, not enforced: linking `duplicates` changes no status. Close the
 redundant task separately — `obsolete` when nothing replaced it, and for work that
-already shipped the relation *is* the record, exactly as with `replaces` (see
+already shipped the relation *is* the record, exactly as with `supersedes` (see
 the `obsolete` row in [Task statuses](index.md#task-statuses)).
 
 ```bash
@@ -979,7 +979,7 @@ endless task update E-101 --duplicates E-102             # same fact, no --type 
 Once the redundant task **is** closed, the relation rides along with its status
 — `obsolete (duplicates E-102)` in `task show` and `session status`, and as a
 `duplicates` key in their `--agent` and `--json` modes. This is the same rule
-`replaces` follows, applied for the same reason: a terminal status reads as the
+`supersedes` follows, applied for the same reason: a terminal status reads as the
 end of the story, and `obsolete` alone says "no longer needs doing" rather than
 "already being done over there". It follows that rule's exception too: the human tables
 render the bare status, for the column-width reason given above.

@@ -55,13 +55,13 @@ func TestDuplicatesNote_Formatting(t *testing.T) {
 // note wins — dropping one would lose a fact the row is the only place to see.
 func TestStatusNotesCompose(t *testing.T) {
 	r := monitor.SessionStatusRow{
-		Status: "obsolete", ReplacedBy: []int64{1953}, Duplicates: []int64{1086},
+		Status: "obsolete", SupersededBy: []int64{1953}, Duplicates: []int64{1086},
 	}
 	got := statusNotes(r)
 	if !strings.Contains(got, "E-1953") || !strings.Contains(got, "E-1086") {
 		t.Errorf("statusNotes = %q, want both ids", got)
 	}
-	if strings.Index(got, "replaced by") > strings.Index(got, "duplicates") {
+	if strings.Index(got, "superseded by") > strings.Index(got, "duplicates") {
 		t.Errorf("statusNotes = %q, want replaced-by first", got)
 	}
 }
