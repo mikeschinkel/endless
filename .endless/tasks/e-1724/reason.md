@@ -1,0 +1,1 @@
+Endless lessons replaced MEMORY.md here (E-2007); E-2057 owns generating MEMORY.md from the lessons table, and any research should target its read-only-mode question.
