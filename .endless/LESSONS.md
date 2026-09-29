@@ -6915,3 +6915,7 @@ When Mike says a process is no longer needed, do not recast his remarks about ot
 ### [2026-09-29] Work delivered by another task is superseded, not obsolete
 When a task's work was actually shipped by a different task, close it with endless task replace <old> --by <new> --outcome ... (superseded + replaced_by link), not --status obsolete. Obsolete means no longer needed and nothing replaced it; the link is what lets a reader find where the work went.
 - **Project**: endless
+
+### [2026-09-29] Model per-value behavior as an enum property, not a list of values
+When a rule applies to some values of a Go enum (e.g. which task types may auto-spawn), give the enum a method (AutoSpawnable) and its mirror table a column (task_types.auto_spawnable) instead of enumerating the qualifying values in the consuming code. A new value then declares its own behavior where it is defined, and VerifyIntegrity keeps the table honest.
+- **Project**: endless
