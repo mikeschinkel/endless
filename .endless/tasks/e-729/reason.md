@@ -1,0 +1,1 @@
+E-721 writes the postmortem into outcome, which task show already renders as its Outcome section; there is no separate field to display.
