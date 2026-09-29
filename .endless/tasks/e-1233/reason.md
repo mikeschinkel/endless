@@ -1,0 +1,1 @@
+Superseded: E-1813 removed tasks.tier; task show now always renders the complexity and risk ratings, unrated included.
