@@ -21,3 +21,9 @@ Naming details for clarity:
 - Both are 'companion files' for their respective entity (session vs worktree)
 
 Verification: 'grep -rn sidecar' across the repo returns only matches in unrelated documentation that legitimately uses the dictionary word.
+
+## From the description
+
+Verification: 'grep -rn sidecar' returns only legitimate dictionary usage.
+
+File list and naming details in the analysis field.
