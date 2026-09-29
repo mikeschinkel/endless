@@ -93,3 +93,17 @@ def test_show_agent_and_json_carry_context(seeded_project_at_cwd):
     data = json.loads(runner.invoke(main, ["task", "show", str(item_id), "--json"]).output)
     assert data["context"] == "Because reasons."
     assert data["context_chars"] == len("Because reasons.")
+
+
+def test_show_survives_a_vocabulary_without_context(seeded_project_at_cwd, monkeypatch):
+    """A worktree branched before `context` existed answers the vocabulary from
+    its own older endless-go, so the item has no `context` key at all. The
+    global CLI running there must still render the task."""
+    item_id = task_cmd.add_item(title="Fix a thing", description="The thing is broken.")
+    older = tuple(n for n in content_names.names() if n.slug != "context")
+    monkeypatch.setattr(content_names, "_NAMES", older)
+
+    result = CliRunner().invoke(main, ["task", "show", str(item_id), "--no-color"])
+    assert result.exit_code == 0, result.output
+    assert "The thing is broken." in result.output
+    assert "— Context —" not in result.output

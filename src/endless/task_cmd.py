@@ -6487,7 +6487,12 @@ def _render_detail_human(
 
     # Context is the description's other half — why the task exists — so it
     # renders directly after it, ahead of the structure below (E-1993).
-    _echo_large_section(content_names.label("context"), brief_text(item["context"], brief),
+    #
+    # `.get`, not `[...]`: the item carries one key per name the vocabulary
+    # declares, and the vocabulary comes from whichever endless-go answered. In
+    # a worktree branched before `context` existed that is an older binary, so
+    # there is no key — and no context to show.
+    _echo_large_section(content_names.label("context"), brief_text(item.get("context"), brief),
                         "context" in show_content, color)
 
     if open_questions:
