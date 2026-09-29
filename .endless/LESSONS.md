@@ -6923,3 +6923,7 @@ When a rule applies to some values of a Go enum (e.g. which task types may auto-
 ### [2026-09-29] Don't treat a plan's acceptance line as permission to add to CLAUDE.md
 An approved plan's acceptance criteria said CLAUDE.md should carry E-2187's 'is NOT' rules, and I treated that as permission. Mike wants CLAUDE.md minimal and suspects a session freelanced that line into the plan. CLAUDE.md additions need Mike's explicit permission even when a plan asks for them; put field rules in endless guide and --help instead, and ask before touching CLAUDE.md.
 - **Project**: endless
+
+### [2026-09-29] Skip caveats Mike didn't ask for
+When handing Mike a small artifact he requested (e.g. an ad-hoc SQL table), don't pad the reply with caveats he already knows or didn't ask about: durability/ledger status of throwaway data, schema-design choices like omitted FKs, how to drop it, or where a throwaway loader script lives. State what was built and how to use it; mention a caveat only if it would actually change what he does.
+- **Project**: endless
