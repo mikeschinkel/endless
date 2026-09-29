@@ -6947,3 +6947,7 @@ When Mike needs a multi-step shell operation (e.g. restarting every session moni
 ### [2026-09-29] Phase 'next' is being phased out; file tasks in now/urgent/later/maybe
 Endless's 'next' phase is being phased out. Do not file or move tasks into 'next'; use 'now' (or urgent/later/maybe when that is what is meant).
 - **Project**: endless
+
+### [2026-09-29] Lead task descriptions with WHAT, using the title's verb
+A task description starts with the same leading verb as the title and states WHAT the task does. Do not open with context or the problem statement (e.g. 'The hook tells agents X; replace it...'). Context goes in --context, how goes in --plan.
+- **Project**: endless
