@@ -1,0 +1,1 @@
+Monitors run for days and keep the binary they started with. After E-1993 landed, twelve pre-land monitors kept firing the retired triage-sufficiency job, which called the removed `endless triage run` and raised WARN-0001 until each pane was restarted by hand.
