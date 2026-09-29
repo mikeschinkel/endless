@@ -12,3 +12,7 @@ Options:
 Recommendation pending: option 1. Tradeoff: schema migration cost up front, paying off as soon as plan-bearing detection lands.
 
 This is the design decision; the rename itself is filed separately so they can land in order. Origin: E-989 finalization revealed the gap.
+
+## From the description
+
+Constraints from E-1073 decision: analysis is pre-plan design content only, no time-frozen specifics (bytes/line numbers), MUST NOT be NULLed when the plan file fully documents the design. The new analysis column also needs a CLI surface (--analysis / --analysis-file on add/update; render in task show); the column added ahead of E-999 has no surface today.
