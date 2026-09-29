@@ -1,0 +1,1 @@
+sessions.active_task_id became write-once sessions.task_id (E-1969, ED-1560), and the suspected causes were fixed by E-1640, E-1700 and E-1856; the incident can no longer recur.
