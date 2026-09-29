@@ -1,0 +1,3 @@
+`handlePostToolUse` in `internal/hookcmd/claude.go` injects "Plan file synced to Endless. N active item(s) tracked." after any Write that `isPlanFile` matches (a path under `.claude/plans/`, or ending in `/plan.md`). Nothing is synced: the NOTE beside it says auto-import is disabled, and the plan-snapshot feature was deleted (E-1449). The message tells every agent that writes a plan file that Endless captured it, which invites skipping `task update --plan-file`. The 2026-09-17 refusal inventory (`docs/research-2026-09-17-refusal-inventory.tsv`) already flags it: "claims a sync that no longer happens".
+
+Found while triaging E-1098 in E-2191. Mike chose the shape: reword to a nudge, naming the session's bound task.
