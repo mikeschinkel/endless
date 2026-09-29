@@ -1,30 +1,30 @@
 ## Decided (Mike)
 
-- Per window in scope: read the task id from the window name, kill every pane
-  but one, then resume that task in the remaining pane.
+- Per window in scope: read the task id from the window name (an optional
+  leading `*` is the user's attention marker), kill every pane but one, then
+  resume that task in the remaining pane.
 - A window already running Claude: skip it.
 - A window whose name is not a task id: skip it.
-- Which pane to keep: any, as long as it is at a shell prompt. A window with no
-  pane at a shell prompt is skipped, and the summary says why.
-- Scope: the current tmux session by default; `--tmux-session=<name>` for a
-  named one; `--all-tmux-sessions` for every one.
-- Preview: `--dry-run` prints what each window would get.
-- Settled tasks (assumed/confirmed/completed) resume with `--no-revisit`. This
-  is crash recovery, not reopening work, and most sessions stay open after
-  their task is done, to track tasks filed while working on it.
-- A failed resume in one window is reported IN THAT WINDOW'S PANE, where the
-  user sees it on selecting the tab, and the run continues with the next
-  window. The run never stops for one window.
+- Which pane to keep: any, as long as it is at a shell prompt.
+- Scope: `--tmux-session` (the current tmux session), `--tmux-session=<name>`,
+  `--all-tmux-sessions`. Chosen over `--all`, which on `session resume` could
+  read as "every Claude session".
+- Preview: `--dry-run`.
+- Settled tasks resume without changing status. This is crash recovery, and
+  most sessions stay open after their task is done, to track tasks filed
+  while working on it.
+- A failure in one window is reported in that window's pane; the run
+  continues.
+- The window NAME is authoritative. A pane restored in the wrong directory is
+  corrected (resume changes into the task's worktree), not refused.
+- A dropped worktree is rebuilt with `--review` automatically.
+- The resume is typed into the kept pane with `send-keys`.
+- New logic goes in Go where reasonably possible (E-1063 is spawned but not
+  started).
 
-## Which task a window is (Mike)
+## Observed after the 2026-09-29 crash
 
-The worktree directory is authoritative, consistent with the rest of Endless:
-the kept pane's working directory, as tmux-resurrect puts it back. The window
-name must agree with it. When they agree, resume that task and rewrite the
-window's `@endless_*` options as needed; tmux-resurrect does not restore them,
-and stale ones are the suspected cause of the wrong-task resumes. When the
-window name DIFFERS from the worktree's task id, do not resume. Write the
-error into that window's pane and continue with the other windows.
-
-Fixing the single-window wrong-task bug is part of this task: `--all` fails
-wherever `resume` resolves the wrong task, so it isn't done until that's fixed.
+Restored windows had 3 panes, all at zsh: one in the task's worktree, the
+others in the main checkout or in another task's worktree (`e-2157`). Some
+windows came back as a single pane in the main checkout; three of those tasks
+had had their worktrees dropped after landing.
