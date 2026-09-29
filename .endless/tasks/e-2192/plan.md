@@ -77,9 +77,15 @@ orchestration` under Landing the work.
 - **One backup** before whichever step runs first, not one per step. Reuse the
   pre-apply backup `_apply_branch_schema_changes` already takes; do not add a
   second.
-- **The record-only re-run** (`just land` after "main was advanced, but recording
-  the landing failed") runs `up` before emitting `task.landed`. That is the
-  E-2188 recovery path, and it must not depend on an incidental migration.
+- **The recovery re-run** — a plain `just land E-NNNN` after "main was
+  advanced, but recording the landing failed" — runs `up` before emitting
+  `task.landed`. That is the E-2188 recovery path, and it must not depend on an
+  incidental migration. It goes through the full land, so running `up` on every
+  self_dev land covers it; a test pins that a second land calls `up`, then
+  records. NOT `worktree land --record-only --sha` (E-1719's backfill,
+  `_record_only_landing`): it records history that already landed, may have no
+  landing branch to build a migrator from, and emits through the resolved
+  (installed) binary, which migrates on connect. It is out of scope.
 - **Failure after the ff-merge** is surfaced like a `changes/` failure today:
   main advanced, the database lags, re-run fixes it. No rollback of the merge.
 
@@ -92,7 +98,7 @@ orchestration` under Landing the work.
 - Unit (Python, land): Step 5.5 calls `up` before `task.landed` on every self_dev
   land; the order follows `land.toml`'s `[self_dev].schema_order` (default,
   `changes-first`, an invalid value and an unknown key/table each refused
-  before the merge); the record-only path calls `up`; one backup.
+  before the merge); the recovery re-run (a second full land) calls `up`, then records; one backup.
 - End to end (verify suite, throwaway repo + database): a branch adding a
   migration whose code writes the new column during `task.landed` lands AND
   records the landing in one run. It is the E-2188 failure reproduced, and it
