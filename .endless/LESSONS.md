@@ -6931,3 +6931,7 @@ When handing Mike a small artifact he requested (e.g. an ad-hoc SQL table), don'
 ### [2026-09-29] Rule out the worktree binary before calling main broken
 Inside a worktree, the global endless (main's Python) prefers the worktree's bin/endless-go. When a command fails from a worktree, run it again from the main checkout before reporting a main regression or proposing to reopen another task. A worktree branched before a recent landing has a stale binary; fix it in place with git rebase main plus just build.
 - **Project**: endless
+
+### [2026-09-29] New content slots are hidden by default like the rest
+I made the new 'context' content name render by default in task show because the E-1993 plan said so. Mike does not want it shown without --context or --all-fields. A new content slot follows the existing convention (collapsed to a char-count placeholder, shown by its flag) unless Mike says otherwise at review — question a plan line that breaks a convention before implementing it.
+- **Project**: endless
