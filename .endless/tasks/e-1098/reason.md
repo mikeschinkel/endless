@@ -1,0 +1,1 @@
+The plan-snapshot feature it served was deleted (E-1449); isPlanFile now only gates an informational message, so matching more files adds nothing.
