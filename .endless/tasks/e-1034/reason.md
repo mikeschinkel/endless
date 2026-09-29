@@ -1,0 +1,1 @@
+Companion files were deprecated, so this work no longer needs doing.
