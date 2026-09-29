@@ -525,6 +525,12 @@ func renderSnapshot(w io.Writer, a anchor, all bool, cols int, color bool, hm hi
 	if err := annotateRelation(rows, a.emittingSession); err != nil {
 		return 0, err
 	}
+	// Layer the VIEWING session's focus and the display-time ownership verdicts
+	// on (E-2188). Annotated for the same reason as the two above: both depend
+	// on who is looking, and the row set must not.
+	if err := annotateOwnership(rows, a.emittingSession, a.focal); err != nil {
+		return 0, err
+	}
 	renderTo(w, rows, a.focal, a.hint, cols, color, hm)
 	return len(rows), nil
 }
@@ -537,6 +543,10 @@ var annotateHidden = monitor.AnnotateSessionStatusHidden
 // annotateRelation is the per-session relation source, seamed as a package var
 // on the same rule as annotateHidden so the tier is testable without a DB.
 var annotateRelation = monitor.AnnotateSessionStatusRelation
+
+// annotateOwnership is the focus/ownership source (E-2188), seamed on the same
+// rule as annotateHidden so the renderer's handling is testable without a DB.
+var annotateOwnership = monitor.AnnotateSessionStatusOwnership
 
 // monitorFrame produces one live-monitor frame: refresh the anchor, then render
 // against it. Split out of monitorLoop so tests can drive the resolve→render
@@ -599,8 +609,8 @@ func paneHeightForFrame(lines, rows, windowHeight int) int {
 	return liveview.PaneHeightForFrame(lines, rows, windowHeight)
 }
 
-func fitPaneToFrame(pane, frame string, rows, fitted int) int {
-	return liveview.FitPaneToFrame(pane, frame, rows, fitted)
+func fitPaneToFrame(pane, frame string, cols, rows, fitted int) int {
+	return liveview.FitPaneToFrame(pane, frame, cols, rows, fitted)
 }
 
 func eraseEachLineToEOL(frame string) string { return liveview.EraseEachLineToEOL(frame) }
@@ -654,7 +664,7 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 	}
 
 	sortRows(rows)
-	fmt.Fprintln(w, dim(buildLegend(rows), color))
+	fmt.Fprintln(w, dim(buildLegend(rows, cols), color))
 
 	// Block-column width: 0 if nothing is blocked anywhere, 1 if no single row
 	// is both blocked and blocking, 2 only when some row needs both glyphs.
@@ -699,8 +709,8 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 
 	for _, r := range rows {
 		act := classify(r)
-		line := fmt.Sprintf("%s %s%s%-6s %s ",
-			act.icon(), typeLetter(r.TypeSlug), unsettledMark(r), "E-"+strconv.FormatInt(r.ID, 10), phaseChar(r),
+		line := fmt.Sprintf("%s %s%s%s %s ",
+			act.icon(), typeLetter(r.TypeSlug), columnFourMark(r), idField(r, color), phaseChar(r),
 		)
 		line += hiddenField(r, hw)
 		line += relationField(r, rw)
@@ -768,14 +778,22 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 //   - hiddenOmit: drop hidden rows; the count is what was dropped (→ footer).
 //   - hiddenShow: keep everything; nothing is suppressed, so the count is 0.
 //   - hiddenOnly: keep only hidden rows; nothing hidden is suppressed, so 0.
+//
+// Two E-2188 rules apply in every mode. A FOCUSED row is never suppressed by a
+// hide — the task the conversation is on right now is the last row that should
+// vanish, and a manual `session hide --task` does not outrank it; it still wears
+// ⊘, because the hide is still recorded. And a row another live session OWNS is
+// omitted outright, and uncounted: the footer reports what this session hid, and
+// ownership is not something it did. It is still on the owner's board, and in
+// --json with `owned_elsewhere`.
 func applyHiddenMode(rows []monitor.SessionStatusRow, hm hiddenMode) ([]monitor.SessionStatusRow, int) {
-	if hm == hiddenShow {
-		return rows, 0
-	}
 	out := make([]monitor.SessionStatusRow, 0, len(rows))
 	suppressed := 0
 	for _, r := range rows {
-		if r.Hidden == (hm == hiddenOnly) {
+		if r.OwnedElsewhere {
+			continue
+		}
+		if hm == hiddenShow || r.Hidden == (hm == hiddenOnly) || (hm == hiddenOmit && r.Focused) {
 			out = append(out, r)
 			continue
 		}
@@ -842,17 +860,54 @@ func hiddenField(r monitor.SessionStatusRow, hw int) string {
 	return "  "
 }
 
+// legendEntry is one glyph and its label in the legend line.
+type legendEntry struct{ icon, label string }
+
 // buildLegend returns the dynamic header line: only the glyphs actually present
-// in rows, in enum order (actions) then a fixed order (decorations), joined by
-// the same two-space separator with NO group divider. Rebuilt from the current
-// rows each frame by renderTo, so `session status` (one-shot) and `session
-// monitor` (looped) stay byte-identical by construction. Because only present
-// glyphs are included there is never any absent-glyph padding; the set fits one
-// line in >99% of cases and the terminal soft-wraps in the rare overflow (no
-// truncation, which would hide a real glyph).
-func buildLegend(rows []monitor.SessionStatusRow) string {
+// in rows, in enum order (actions) then a fixed order (decorations), with NO
+// group divider. Rebuilt from the current rows each frame by renderTo, so
+// `session status` (one-shot) and `session monitor` (looped) stay byte-identical
+// by construction. Because only present glyphs are included there is never any
+// absent-glyph padding.
+//
+// It is fitted to cols (E-2188) rather than left to soft-wrap, because `session
+// monitor` sizes its pane to the frame and a wrapped legend used to push the
+// last task row out of view:
+//
+//   - the NORMAL form, `<icon> <label>` joined by two spaces, when it fits;
+//   - the COMPACT form, `<icon><label>` joined by one space, when only it fits;
+//   - the NORMAL form again, wrapping, when neither fits — if it is going to
+//     wrap anyway, the easier-to-read form is the better one to wrap.
+//
+// Never truncated: cutting the legend off drops the meaning of the glyphs it
+// documents. The pane fit counts display rows (liveview.FrameDisplayRows), so a
+// wrapped legend still gets every row it needs.
+func buildLegend(rows []monitor.SessionStatusRow, cols int) string {
+	entries := legendEntries(rows)
+	normal := joinLegend(entries, " ", "  ")
+	if displayWidth(normal) <= cols {
+		return normal
+	}
+	if compact := joinLegend(entries, "", " "); displayWidth(compact) <= cols {
+		return compact
+	}
+	return normal
+}
+
+// joinLegend renders entries as icon+sep+label, separated by between.
+func joinLegend(entries []legendEntry, sep, between string) string {
+	parts := make([]string, 0, len(entries))
+	for _, e := range entries {
+		parts = append(parts, e.icon+sep+e.label)
+	}
+	return strings.Join(parts, between)
+}
+
+// legendEntries is the ordered set of glyphs present in rows.
+func legendEntries(rows []monitor.SessionStatusRow) []legendEntry {
 	var present [len(actionMeta)]bool
 	var done, blocked, blocks, unsettled, notStarted, undetermined, hidden, queued, referenced bool
+	var focus, duplicate bool
 	for _, r := range rows {
 		present[classify(r)] = true
 		if isTerminal(r.Status) {
@@ -873,7 +928,14 @@ func buildLegend(rows []monitor.SessionStatusRow) string {
 		if r.BlocksN > 0 {
 			blocks = true
 		}
-		switch unsettledMark(r) {
+		// Column 4 is read through columnFourMark, the function that draws it, so
+		// a row whose ◼︎/◫ displaced its unsettled mark documents the glyph it
+		// shows and not the one it would have shown.
+		switch columnFourMark(r) {
+		case focusGlyph:
+			focus = true
+		case duplicateGlyph:
+			duplicate = true
 		case unsettledGlyph:
 			unsettled = true
 		case notStartedGlyph:
@@ -882,10 +944,10 @@ func buildLegend(rows []monitor.SessionStatusRow) string {
 			undetermined = true
 		}
 	}
-	var parts []string
+	var parts []legendEntry
 	for a := action(0); int(a) < len(actionMeta); a++ {
 		if present[a] {
-			parts = append(parts, a.icon()+" "+a.label())
+			parts = append(parts, legendEntry{a.icon(), a.label()})
 		}
 	}
 	// Decorations after the actions, each shown only when a row bears it. ✓ is the
@@ -896,44 +958,112 @@ func buildLegend(rows []monitor.SessionStatusRow) string {
 	// (a focal/parent/from row can be terminal) before the relational/worktree
 	// markers.
 	if done {
-		parts = append(parts, "✓ done")
+		parts = append(parts, legendEntry{"✓", "done"})
 	}
 	if blocked {
-		parts = append(parts, "⊗ blocked")
+		parts = append(parts, legendEntry{"⊗", "blocked"})
 	}
 	if blocks {
-		parts = append(parts, "⏸ blocks")
+		parts = append(parts, legendEntry{"⏸", "blocks"})
+	}
+	// ◼︎/◫ open column 4's run: when a row wears one, it is the most urgent thing
+	// that column says about it (E-2188).
+	if focus {
+		parts = append(parts, legendEntry{focusGlyph, "focus"})
+	}
+	if duplicate {
+		parts = append(parts, legendEntry{duplicateGlyph, "duplicate"})
 	}
 	if unsettled {
-		parts = append(parts, unsettledGlyph+" unsettled")
+		parts = append(parts, legendEntry{unsettledGlyph, "unsettled"})
 	}
 	// ⊙ sits beside ◆ because they are two states of the SAME column, and after
 	// it because the column reads in descending order of outstanding work: ◆ has
 	// some, ⊙ has none yet, a space has none left (E-2107).
 	if notStarted {
-		parts = append(parts, notStartedGlyph+" not started")
+		parts = append(parts, legendEntry{notStartedGlyph, "not started"})
 	}
 	// ~ closes the same column's run, after the three states that are answers,
 	// because it is the absence of one (E-2128).
 	if undetermined {
-		parts = append(parts, undeterminedGlyph+" not yet determined")
+		parts = append(parts, legendEntry{undeterminedGlyph, "not yet determined"})
 	}
 	// ⊘ comes last: it is the only decoration that describes THIS SESSION's view
 	// of the row rather than a property of the task or its worktree, and it can
 	// only ever appear under --show-hidden/--only-hidden.
 	if hidden {
-		parts = append(parts, hiddenGlyph+" hidden")
+		parts = append(parts, legendEntry{hiddenGlyph, "hidden"})
 	}
 	// ⊕/· join ⊘ in the view-scoped tail: like hidden, they describe how the row
 	// entered THIS SESSION's scope rather than anything about the task (E-1696).
 	// ⊕ before ·, matching the order they sort in.
 	if queued {
-		parts = append(parts, queuedGlyph+" queued")
+		parts = append(parts, legendEntry{queuedGlyph, "queued"})
 	}
 	if referenced {
-		parts = append(parts, referencedGlyph+" referenced")
+		parts = append(parts, legendEntry{referencedGlyph, "referenced"})
 	}
-	return strings.Join(parts, "  ")
+	return parts
+}
+
+// focusGlyph and duplicateGlyph are E-2188's column-4 marks. ◼︎ is U+25FC BLACK
+// MEDIUM SQUARE followed by U+FE0E VARIATION SELECTOR-15, which asks for the
+// text rather than the emoji presentation — without it some terminals draw a
+// double-width emoji and the prefix loses its alignment. ◫ is U+25EB WHITE
+// SQUARE WITH VERTICAL BISECTING LINE: a square split in two, for one task on
+// two boards. Both measure one column (asserted in TestColumnFourMarkWidths).
+const (
+	focusGlyph     = "\u25fc\ufe0e"
+	duplicateGlyph = "\u25eb"
+)
+
+// columnFourMark is the glyph between the type letter and the id. ◫ duplicate
+// and ◼︎ focus displace the unsettled mark there (E-2188), duplicate first — it
+// is the warning, and a task can be both focused here and owned elsewhere.
+//
+// The board's claimed-task row is the exception and keeps its unsettled mark:
+// it cannot be a duplicate by definition, and when it is the focus the colour
+// highlight on its id says so. In plain text the absence of ◼︎ on every other
+// row says the same thing.
+func columnFourMark(r monitor.SessionStatusRow) string {
+	if !r.IsFocal {
+		switch {
+		case r.DuplicateWork:
+			return duplicateGlyph
+		case r.Focused:
+			return focusGlyph
+		}
+	}
+	return unsettledMark(r)
+}
+
+// ANSI for the id highlight (E-2188). Each is paired with the code that undoes
+// ONLY what it set, not with a full reset, so the row's own dim or bold
+// (colorize) survives past the id.
+const (
+	ansiInverse      = "\x1b[7m"
+	ansiInverseOff   = "\x1b[27m"
+	ansiDuplicateID  = "\x1b[97;40m" // bright white on black
+	ansiDuplicateOff = "\x1b[39;49m" // default foreground and background
+)
+
+// idField renders the row's id, padded to its six-column slot. With colour on,
+// a duplicate's id is bright white on black and a focused id is inverse video;
+// the padding stays outside the escapes so the slot keeps its width.
+func idField(r monitor.SessionStatusRow, color bool) string {
+	id := "E-" + strconv.FormatInt(r.ID, 10)
+	pad := ""
+	if n := 6 - len(id); n > 0 {
+		pad = strings.Repeat(" ", n)
+	}
+	switch {
+	case !color:
+	case r.DuplicateWork:
+		id = ansiDuplicateID + id + ansiDuplicateOff
+	case r.Focused:
+		id = ansiInverse + id + ansiInverseOff
+	}
+	return id + pad
 }
 
 // classify maps a row to its action, applying the status canonicalization from

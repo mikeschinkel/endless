@@ -66,7 +66,7 @@ func TestPaneHeightForFrame(t *testing.T) {
 // no-op returning the prior height — `session monitor` in a plain terminal must
 // not shell out to tmux on every repaint.
 func TestFitPaneToFrame_NoTmux(t *testing.T) {
-	if got := fitPaneToFrame("", "legend\nrow\n", 1, 7); got != 7 {
+	if got := fitPaneToFrame("", "legend\nrow\n", 80, 1, 7); got != 7 {
 		t.Fatalf("fitPaneToFrame with no pane = %d, want 7 (unchanged)", got)
 	}
 }

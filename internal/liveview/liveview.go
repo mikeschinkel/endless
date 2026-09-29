@@ -18,12 +18,14 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"regexp"
 	"strconv"
 	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
 
+	"github.com/mattn/go-runewidth"
 	"golang.org/x/term"
 
 	"github.com/mikeschinkel/endless/internal/jobs"
@@ -162,7 +164,8 @@ func Loop(cfg LoopConfig) {
 		var b strings.Builder
 
 		fireJobs()
-		rows, err := cfg.Render(&b, DetectCols(cfg.ColsOverride, cfg.FallbackCols), cfg.Color)
+		cols := DetectCols(cfg.ColsOverride, cfg.FallbackCols)
+		rows, err := cfg.Render(&b, cols, cfg.Color)
 		if err != nil {
 			restore()
 			fatal(err)
@@ -171,7 +174,7 @@ func Loop(cfg LoopConfig) {
 		if frame := b.String(); frame != prev {
 			// Resize BEFORE painting so the frame lands in a pane already the
 			// right size (a shrink after the paint would scroll rows away).
-			fitted = FitPaneToFrame(cfg.Pane, frame, rows, fitted)
+			fitted = FitPaneToFrame(cfg.Pane, frame, cols, rows, fitted)
 			// Home, repaint each line (erased to end-of-line), then clear to
 			// end-of-display so a now-shorter frame leaves no stale rows behind.
 			io.WriteString(out, "\x1b[H"+EraseEachLineToEOL(frame)+"\x1b[J")
@@ -197,6 +200,40 @@ func Loop(cfg LoopConfig) {
 func FrameLines(frame string) int {
 	return strings.Count(frame, "\n")
 }
+
+// FrameDisplayRows counts the SCREEN rows a frame occupies in a pane `width`
+// columns wide: each line takes ceil(display width / width) rows, and an empty
+// line takes one (E-2188). FrameLines counts a line that wraps as one, which is
+// what hid a monitor's last task row behind a wrapped legend; this is what the
+// pane fit measures instead.
+//
+// Width is measured with go-runewidth, as the views measure their own columns,
+// after stripping the ANSI escapes a coloured frame carries — they occupy no
+// columns. width <= 0 means the width is unknown, and every line counts as one
+// row, which is FrameLines' answer.
+func FrameDisplayRows(frame string, width int) int {
+	if width <= 0 {
+		return FrameLines(frame)
+	}
+	lines := strings.Split(frame, "\n")
+	// Every line is Fprintln'd, so the segment after the last newline is empty
+	// and is not a row.
+	lines = lines[:len(lines)-1]
+	n := 0
+	for _, line := range lines {
+		w := runewidth.StringWidth(ansiEscape.ReplaceAllString(line, ""))
+		if w == 0 {
+			n++
+			continue
+		}
+		n += (w + width - 1) / width
+	}
+	return n
+}
+
+// ansiEscape matches the CSI sequences a frame is painted with (SGR colours
+// and the like).
+var ansiEscape = regexp.MustCompile(`\x1b\[[0-9;?]*[A-Za-z]`)
 
 // PaneHeightForFrame is the pure sizing rule: the frame's lines plus a slack
 // row, floored at PaneMinHeight and capped at PanePctOfWindow percent of
@@ -228,14 +265,15 @@ func PaneHeightForFrame(lines, rows, windowHeight int) int {
 }
 
 // FitPaneToFrame resizes pane to hold frame and returns the height now in
-// effect. `fitted` is the height the last successful resize applied, so an
+// effect. cols is the width the frame was rendered for — the pane's own width —
+// and is what its wrapped lines are counted against (FrameDisplayRows). `fitted` is the height the last successful resize applied, so an
 // unchanged fit costs no tmux subprocess; a failed resize leaves it untouched so
 // the next repaint retries. Returns fitted unchanged when not running in tmux.
-func FitPaneToFrame(pane, frame string, rows, fitted int) int {
+func FitPaneToFrame(pane, frame string, cols, rows, fitted int) int {
 	if pane == "" {
 		return fitted
 	}
-	height := PaneHeightForFrame(FrameLines(frame), rows, monitor.PaneWindowHeight(pane))
+	height := PaneHeightForFrame(FrameDisplayRows(frame, cols), rows, monitor.PaneWindowHeight(pane))
 	if height == fitted {
 		return fitted
 	}

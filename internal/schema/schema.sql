@@ -185,13 +185,20 @@ CREATE TABLE IF NOT EXISTS sessions (
     last_user_prompt TEXT,
     report_bounces INTEGER NOT NULL DEFAULT 0,
     report_exempt INTEGER NOT NULL DEFAULT 0,
-    report_runs INTEGER NOT NULL DEFAULT 0,
+    report_runs INTEGER NOT NULL DEFAULT 0, focus_task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
     UNIQUE (session_id),
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL,
     FOREIGN KEY (epic_id) REFERENCES tasks(id) ON DELETE SET NULL,
     FOREIGN KEY (process_id) REFERENCES processes(id)
 );
+
+-- sessions.focus_task_id (E-2188) is the task the session touched last — the
+-- one its conversation is on now — as opposed to task_id, the one it claimed.
+-- Unlike task_id it moves freely: every claimed, surfaced or revisited touch in
+-- upsertSessionTask repoints it. Display only; nothing gates on it. Declared on
+-- the report_runs line because that is where ALTER TABLE ADD COLUMN splices it
+-- (migration 00009), and TestMigrate_MatchesSchemaSQL compares the two texts.
 
 -- sessions.task_id is write-once (ED-1560, enforced by E-1969): NULL -> one
 -- value, then never again. Not cleared, not repointed. A session owns exactly

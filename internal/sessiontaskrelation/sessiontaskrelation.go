@@ -222,3 +222,20 @@ func VerifyIntegrity(db *sql.DB) error {
 
 	return nil
 }
+
+// MovesFocus reports whether a capture of this relation repoints the session's
+// focused task (sessions.focus_task_id, E-2188): claimed, surfaced and
+// revisited do — the session wrote to the task, so its conversation is on it
+// now. queued and referenced do not: adding a task to the board or merely
+// reading a neighbour must not steal focus from the task being worked.
+//
+// A per-capture judgment, independent of Rank: focus follows the LATEST write,
+// while the stored relation keeps the STRONGEST one.
+func (r Relation) MovesFocus() bool {
+	switch r {
+	case RelationClaimed, RelationSurfaced, RelationRevisited:
+		return true
+	default:
+		return false
+	}
+}

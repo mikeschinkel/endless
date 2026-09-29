@@ -65,6 +65,32 @@ func upsertSessionTask(db dbQuerier, sessionIDStr string, taskID int64, relation
 	if err != nil {
 		return fmt.Errorf("upsert session_tasks (%d, %d): %w", sessionID, taskID, err)
 	}
+	return setSessionFocus(db, sessionID, taskID, relation)
+}
+
+// setSessionFocus repoints the session's focused task (E-2188) when the capture
+// is one that moves focus (Relation.MovesFocus). It runs on EVERY such touch,
+// first or repeat — unlike relation_id, which is upgraded once and then sticks —
+// so returning to a task already on the board moves focus back to it.
+//
+// Lives here because upsertSessionTask is the single write path for
+// session_tasks: every capture that could move focus already passes through it,
+// and a second call site would be a second place to forget.
+func setSessionFocus(db dbQuerier, sessionID, taskID int64, relation sessiontaskrelation.Relation) error {
+	if !relation.MovesFocus() {
+		return nil
+	}
+	// The EXISTS guard keeps a capture for a task id with no tasks row — which
+	// session_tasks tolerates by design, having no FK on task_id — from failing
+	// the focus column's foreign key and, with it, the task mutation that carried
+	// the capture. Focus is a display aid; it is never worth an event.
+	if _, err := db.Exec(
+		`UPDATE sessions SET focus_task_id = ?
+		  WHERE id = ? AND EXISTS (SELECT 1 FROM tasks WHERE id = ?)`,
+		taskID, sessionID, taskID,
+	); err != nil {
+		return fmt.Errorf("set focus for session %d to task %d: %w", sessionID, taskID, err)
+	}
 	return nil
 }
 

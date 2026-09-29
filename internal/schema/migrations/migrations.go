@@ -47,5 +47,6 @@ func Go() []*goose.Migration {
 		addTaskQuestionsReason(),
 		liftTaskContent(),
 		ratingsReplaceTier(),
+		addSessionFocusTask(),
 	}
 }

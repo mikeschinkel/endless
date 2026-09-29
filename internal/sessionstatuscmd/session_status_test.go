@@ -401,8 +401,10 @@ func TestRenderFourStateColumn(t *testing.T) {
 		// (E-2128). The state the other four are answers to.
 		{ID: 2105, Title: "not yet determined", Status: "underway", Phase: "now", TypeSlug: "todo"},
 	}
+	// 120 columns: this legend's normal form is 94 wide, and E-2188 compacts a
+	// legend that overflows — this test is about the column, not the fit.
 	var b strings.Builder
-	renderTo(&b, rows, 2101, hintClaimBind, 90, false, hiddenOmit)
+	renderTo(&b, rows, 2101, hintClaimBind, 120, false, hiddenOmit)
 	lines := strings.Split(strings.TrimRight(b.String(), "\n"), "\n")
 	if len(lines) != 6 {
 		t.Fatalf("want 6 lines (legend + 5 rows), got %d:\n%s", len(lines), b.String())
@@ -635,7 +637,7 @@ func TestBuildLegend(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			got := buildLegend(c.rows)
+			got := buildLegend(c.rows, 1000)
 			if c.want != "" || c.name == "no rows yields empty legend" {
 				if got != c.want {
 					t.Errorf("buildLegend = %q, want %q", got, c.want)
@@ -970,6 +972,8 @@ func TestLegendGlyphsAreUnique(t *testing.T) {
 		{hiddenGlyph, "hidden"},
 		{queuedGlyph, "queued"},
 		{referencedGlyph, "referenced"},
+		{focusGlyph, "focus"},
+		{duplicateGlyph, "duplicate"},
 	} {
 		claim(d.glyph, d.label)
 	}
@@ -984,9 +988,13 @@ func TestLegendGlyphsAreUnique(t *testing.T) {
 		{Status: "ready", UnsettledKnown: true, Hidden: true},
 		{Status: "ready", UnsettledKnown: true, Relation: sessiontaskrelation.RelationQueued},
 		{Status: "ready", UnsettledKnown: true, Relation: sessiontaskrelation.RelationReferenced},
+		{Status: "ready", UnsettledKnown: true, Focused: true},
+		{Status: "ready", UnsettledKnown: true, DuplicateWork: true},
 	}
-	legend := buildLegend(rows)
+	legend := buildLegend(rows, 1000)
 	for _, want := range []string{
+		focusGlyph + " focus",
+		duplicateGlyph + " duplicate",
 		"✓ done", "⊗ blocked", "⏸ blocks",
 		unsettledGlyph + " unsettled",
 		notStartedGlyph + " not started",

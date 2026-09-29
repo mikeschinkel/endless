@@ -235,6 +235,7 @@ func TestRenderJSON_CarriesHiddenState(t *testing.T) {
 		return hiddenRows(), nil
 	}
 	annotateHidden = func(rows []monitor.SessionStatusRow, viewer int64) error { return nil }
+	stubOwnership(t, nil)
 	annotateRelation = func(rows []monitor.SessionStatusRow, viewer int64) error { return nil }
 
 	var b strings.Builder

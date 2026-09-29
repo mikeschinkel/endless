@@ -210,6 +210,20 @@ endless session task remove E-101      # a capture that shouldn't have happened
 
 `session status` tiers rows by relation. Decided work (`claimed` / `queued`, marked ⊕) leads among equally actionable rows; `referenced` rows (marked ·) sink below everything and render dimmed, so reads can never crowd out work. Relation never outranks actionability, though — a `queued` task parked in `later` still sits below the task you're actually working.
 
+### Focus, and a task on more than one board
+
+Your session's **focused** task is the one it last claimed, filed or updated (including `touch`) — what the conversation is on right now, which is often not the task you claimed. Queueing or reading a task does not move focus. `session status` / `session monitor` highlight it: the id in inverse video, and `◼︎` between the type letter and the id. Your claimed task never shows `◼︎` — when it has focus, the colour says so, and in plain text no `◼︎` anywhere means the same thing. `--json` carries `focus` on the frame and `focused` on each row. A focused task is shown even if you hid it.
+
+When the same task sits on several live sessions' boards, only its **owner** shows it — decided each time the board is drawn, never stored, so it corrects itself when a session ends:
+
+1. The live session that filed it.
+2. Otherwise, the only live session that updated it.
+3. Otherwise (two or more live updaters) nobody owns it, and it stays on each board with the duplicate mark.
+
+Updating a task never takes it from the session that filed it. The task's claiming session is left out: working the task you claimed is the expected case, and it already shows as ⟳ doing on other boards. Dead sessions own nothing. Your claimed task, its parent and its spawner are never hidden this way.
+
+The **duplicate** mark — `◫`, and the id bright white on black — warns that another session may already have done real work on the task. It appears on both boards when a task is focused in one session and owned by another, and on every board when ownership is ambiguous. Stop and decide which session keeps it. `--json` carries `duplicate_work` and `owned_elsewhere` on every row, including rows the table omits.
+
 ## Interactive, user-run session commands
 
 The `session` group also carries commands a human runs interactively — session navigation, the live-watch dashboard, history / search, and hide / unhide. These aren't part of an agent's working flow; they're documented in `endless guide appendix-a`, which you read only to point a user at one.

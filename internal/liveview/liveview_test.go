@@ -62,3 +62,31 @@ func TestCollapse(t *testing.T) {
 		t.Fatalf("Collapse = %q, want %q", got, " a b c ")
 	}
 }
+
+// TestFrameDisplayRows pins E-2188's pane-fit input: a line that wraps takes
+// as many screen rows as it spans, escapes take no columns, and an unknown
+// width falls back to counting lines.
+func TestFrameDisplayRows(t *testing.T) {
+	tests := []struct {
+		name  string
+		frame string
+		width int
+		want  int
+	}{
+		{"empty frame", "", 80, 0},
+		{"short lines", "abc\ndef\n", 80, 2},
+		{"exactly the width is one row", strings.Repeat("x", 10) + "\n", 10, 1},
+		{"one over wraps to two", strings.Repeat("x", 11) + "\n", 10, 2},
+		{"wide glyphs measured by display width", strings.Repeat("◆", 11) + "\n", 10, 2},
+		{"escapes take no columns", "\x1b[2m" + strings.Repeat("x", 10) + "\x1b[0m\n", 10, 1},
+		{"empty line is one row", "\nabc\n", 10, 2},
+		{"unknown width counts lines", strings.Repeat("x", 50) + "\n", 0, 1},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := FrameDisplayRows(tt.frame, tt.width); got != tt.want {
+				t.Errorf("FrameDisplayRows = %d, want %d", got, tt.want)
+			}
+		})
+	}
+}

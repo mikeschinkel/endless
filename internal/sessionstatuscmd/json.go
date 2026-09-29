@@ -69,15 +69,28 @@ type jsonRow struct {
 	ReplacedBy []string `json:"replaced_by"`
 	// Duplicates is emitted on the same terms, for the same reason (E-1185).
 	Duplicates []string `json:"duplicates"`
+	// Focused, DuplicateWork and OwnedElsewhere are E-2188's focus and
+	// ownership verdicts for the frame's `viewer_session`. The table leaves the
+	// claimed task's focus to colour alone; here it is always stated. A row
+	// owned elsewhere is omitted from the table and emitted here, flagged, on
+	// the same data-not-a-rendering rule `hidden` follows.
+	Focused        bool `json:"focused"`
+	DuplicateWork  bool `json:"duplicate_work"`
+	OwnedElsewhere bool `json:"owned_elsewhere"`
 }
 
 // jsonFrame wraps the rows with the ids they were resolved against, so a
 // consumer can tell WHOSE view this is — which matters precisely because hidden
 // is per (session, task). Without `viewer_session` a `hidden: true` would be an
 // unattributed claim.
+//
+// `focus` is the viewer's focused task as "E-NNN" (E-2188), or "" when it has
+// none or it is not among the rows — the frame-level answer to "what is this
+// session on right now?", so a consumer need not scan for `focused`.
 type jsonFrame struct {
 	Focal         int64     `json:"focal"`
 	ViewerSession int64     `json:"viewer_session"`
+	Focus         string    `json:"focus"`
 	Rows          []jsonRow `json:"rows"`
 }
 
@@ -98,6 +111,9 @@ func renderJSON(w io.Writer, a anchor, all bool) error {
 	// desync it from the table — the one thing this function's contract promises
 	// it will not do.
 	if err := annotateRelation(rows, a.emittingSession); err != nil {
+		return err
+	}
+	if err := annotateOwnership(rows, a.emittingSession, a.focal); err != nil {
 		return err
 	}
 	sortRows(rows)
@@ -141,7 +157,13 @@ func renderJSON(w io.Writer, a anchor, all bool) error {
 			BlocksN:        r.BlocksN,
 			ReplacedBy:     replaced,
 			Duplicates:     duplicates,
+			Focused:        r.Focused,
+			DuplicateWork:  r.DuplicateWork,
+			OwnedElsewhere: r.OwnedElsewhere,
 		})
+		if r.Focused {
+			out.Focus = "E-" + strconv.FormatInt(r.ID, 10)
+		}
 	}
 
 	enc := json.NewEncoder(w)

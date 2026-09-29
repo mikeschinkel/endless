@@ -86,9 +86,19 @@ type SessionStatusRow struct {
 	// session_tasks row by design. Rank() puts it last, which is where an
 	// unclassified row belongs. AnnotateSessionStatusRelation fills this for one
 	// viewer; unannotated rows stay 0 so every existing caller is unaffected.
-	Relation   sessiontaskrelation.Relation
-	BlockedByN int
-	BlocksN    int
+	Relation sessiontaskrelation.Relation
+	// Focused, DuplicateWork and OwnedElsewhere are E-2188's focus and
+	// ownership annotations, filled by AnnotateSessionStatusOwnership for one
+	// viewer (see session_ownership.go). Focused: this is the viewer's
+	// focus_task_id. DuplicateWork: another live session may already be working
+	// it — the task is ambiguously owned, or focused on one board and owned by
+	// another. OwnedElsewhere: another live session owns it and the viewer is not
+	// focused on it, so the table omits it. Unannotated rows stay false.
+	Focused        bool
+	DuplicateWork  bool
+	OwnedElsewhere bool
+	BlockedByN     int
+	BlocksN        int
 	// ReplacedBy holds the ids of the tasks that supersede this one. `old
 	// replaced_by new` is stored active-voice as (source=new, target=old,
 	// dep_type='replaces'), so these are the source_ids of the 'replaces' rows

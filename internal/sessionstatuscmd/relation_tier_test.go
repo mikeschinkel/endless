@@ -194,6 +194,7 @@ func TestRenderJSON_CarriesRelation(t *testing.T) {
 			{ID: 3, Title: "child", Status: "ready", Phase: "now", TypeSlug: "todo"},
 		}, nil
 	}
+	stubOwnership(t, nil)
 	annotateHidden = func(rows []monitor.SessionStatusRow, viewer int64) error { return nil }
 	annotateRelation = func(rows []monitor.SessionStatusRow, viewer int64) error {
 		rows[0].Relation = sessiontaskrelation.RelationReferenced
