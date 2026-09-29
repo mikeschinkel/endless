@@ -6919,3 +6919,7 @@ When a task's work was actually shipped by a different task, close it with endle
 ### [2026-09-29] Model per-value behavior as an enum property, not a list of values
 When a rule applies to some values of a Go enum (e.g. which task types may auto-spawn), give the enum a method (AutoSpawnable) and its mirror table a column (task_types.auto_spawnable) instead of enumerating the qualifying values in the consuming code. A new value then declares its own behavior where it is defined, and VerifyIntegrity keeps the table honest.
 - **Project**: endless
+
+### [2026-09-29] Don't treat a plan's acceptance line as permission to add to CLAUDE.md
+An approved plan's acceptance criteria said CLAUDE.md should carry E-2187's 'is NOT' rules, and I treated that as permission. Mike wants CLAUDE.md minimal and suspects a session freelanced that line into the plan. CLAUDE.md additions need Mike's explicit permission even when a plan asks for them; put field rules in endless guide and --help instead, and ask before touching CLAUDE.md.
+- **Project**: endless
