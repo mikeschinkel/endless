@@ -34,9 +34,6 @@ stateDiagram-v2
     submitted --> unplanned: user sends back — the plan is not sufficient
     revisit --> submitted: agent re-submits
 
-    %% Planning exemption — a tier-1 task skips planning
-    unplanned --> ready: system advances a tier-1 task
-
     %% Re-plan — a material plan edit on an approved task drops its approval
     ready --> submitted: system resets on a material plan edit
 

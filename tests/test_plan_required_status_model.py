@@ -6,8 +6,8 @@ claimed or spawned, so no description ever is, and the status went with the
 judgment.
 
 Covered here:
-  - `task add` files `unplanned`, or `submitted` with a plan; `--tier 1` and an
-    explicit `--status` still win.
+  - `task add` files `unplanned`, or `submitted` with a plan; an explicit
+    `--status` still wins.
   - `untriaged` is not a status: it is refused, not stored.
   - A description edit never changes status, from any status.
   - A material plan edit on a `ready` task drops its approval (→ `submitted`),
@@ -56,25 +56,12 @@ def test_add_with_a_plan_lands_submitted(seeded_project_at_cwd):
     assert _status_of(item_id) == "submitted"
 
 
-def test_add_tier_1_still_lands_ready(seeded_project_at_cwd):
-    item_id = task_cmd.add_item(
-        title="Add a quick thing", description="short", tier=1
-    )
-    assert _status_of(item_id) == "ready"
-
-
 @pytest.mark.parametrize("status", ["unplanned", "ready", "submitted", "revisit"])
 def test_add_explicit_status_wins(status, seeded_project_at_cwd):
     item_id = task_cmd.add_item(
         title="Add a thing", description="short", status=status
     )
     assert _status_of(item_id) == status
-
-
-def test_setting_tier_1_later_advances_unplanned_to_ready(seeded_project_at_cwd):
-    item_id = task_cmd.add_item(title="Add a thing", description="short")
-    task_cmd.update_plan(item_id=item_id, tier=1)
-    assert _status_of(item_id) == "ready"
 
 
 # --- untriaged is gone ------------------------------------------------------
