@@ -1,0 +1,1 @@
+Describes a removed design (worktree_sandbox opt-in, sandbox bind, bin-sandbox wrappers, env block). The current sandbox is documented in endless guide orchestration, 'The worktree's sandbox'.
