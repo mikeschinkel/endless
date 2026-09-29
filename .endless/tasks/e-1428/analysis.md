@@ -1,0 +1,1 @@
+Fix the helper reference to esu, hide the sandbox path (add 'endless worktree sandbox' to retrieve it on demand), adopt an aligned-label format, and apply the same discipline to task spawn/release output.
