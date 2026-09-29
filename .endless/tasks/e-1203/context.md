@@ -1,0 +1,1 @@
+Worktree-level lock (E-971, E-1195) prevents two sessions in the same worktree but not two sessions creating two different worktrees for the same task — produces parallel branches that conflict at merge time.
