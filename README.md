@@ -114,13 +114,14 @@ endless task spawn --help
 
 ## Task lifecycle
 
-Every task moves through a small set of statuses. New tasks start `untriaged`; triage
-routes each one to `unplanned` (it still needs a plan) or straight to `submitted` (its
-description is already a sufficient spec). That routing is automatic — filing a task
-triages it in the background, and a periodic sweep drains anything missed — and it can
-always be overridden by hand. An agent also reaches `submitted` by attaching a plan.
-From there a human runs `endless task approve` to reach `ready` — so `ready` provably
-means *approved to implement*, not merely *planned*.
+Every task moves through a small set of statuses. A task filed without a plan starts
+`unplanned`; one filed with a plan starts `submitted`, and attaching a plan later moves
+an `unplanned` task there too. From there a human runs `endless task approve` to reach
+`ready` — so `ready` provably means *approved to implement*, not merely *planned*.
+
+A plan is required before work starts: `endless task claim` and `endless task spawn`
+refuse a task with no plan, or with open questions still waiting on a person. Filing
+stays cheap — a task with no plan simply parks until someone plans it.
 
 <!-- BEGIN canonical:docs/status-lifecycle.mmd — edit the canonical file, then re-sync; do not hand-edit here -->
 ```mermaid
@@ -151,28 +152,23 @@ means *approved to implement*, not merely *planned*.
 %%
 %% BEGIN generated: rendered from internal/taskstatus/transitions.go
 stateDiagram-v2
-    [*] --> untriaged
-
-    %% Triage — the description is judged, and routed
-    untriaged --> unplanned: agent triages — needs a plan
-    untriaged --> submitted: agent triages — description is a sufficient spec
+    [*] --> unplanned
+    [*] --> submitted
 
     %% Planning and approval — the two-step gate that makes `ready` mean approved
-    unplanned --> submitted: agent submits — plan attached, or description sufficient
+    unplanned --> submitted: agent submits — plan attached
     submitted --> ready: user approves
-    submitted --> unplanned: user sends back — the spec is not sufficient
+    submitted --> unplanned: user sends back — the plan is not sufficient
     revisit --> submitted: agent re-submits
 
-    %% Re-spec — a material description edit invalidates triage and approval
-    unplanned --> untriaged: system resets on a description re-spec
-    submitted --> untriaged: system resets on a description re-spec
-    ready --> untriaged: system resets on a description re-spec
-    revisit --> untriaged: system resets on a description re-spec
-    ready --> submitted: system resets on a description re-spec that attaches a plan
+    %% Planning exemption — a tier-1 task skips planning
+    unplanned --> ready: system advances a tier-1 task
+
+    %% Re-plan — a material plan edit on an approved task drops its approval
+    ready --> submitted: system resets on a material plan edit
 
     %% Claiming — `task claim` promotes any of these in place
     ready --> underway: session claims
-    untriaged --> underway: session claims
     unplanned --> underway: session claims
     revisit --> underway: session claims
 
@@ -191,7 +187,6 @@ stateDiagram-v2
     ready --> completed: agent delivers the findings as an outcome (epic)
 
     %% Reopening — the work is not settled after all
-    untriaged --> revisit: agent reopens — needs re-evaluation
     unplanned --> revisit: agent reopens — needs re-evaluation
     submitted --> revisit: agent reopens — needs re-evaluation
     ready --> revisit: agent reopens — needs re-evaluation
@@ -203,7 +198,6 @@ stateDiagram-v2
     completed --> revisit: user reopens — shipped work found wrong
 
     %% Declining — an active decision not to do (or not to keep) the work
-    untriaged --> declined: user declines
     unplanned --> declined: user declines
     submitted --> declined: user declines
     ready --> declined: user declines
@@ -216,7 +210,6 @@ stateDiagram-v2
     completed --> declined: user declines — the shipped work is not being kept
 
     %% Obsoleting — no longer needed, and nothing replaced it
-    untriaged --> obsolete: user retires — it no longer needs doing
     unplanned --> obsolete: user retires — it no longer needs doing
     submitted --> obsolete: user retires — it no longer needs doing
     ready --> obsolete: user retires — it no longer needs doing
@@ -229,7 +222,6 @@ stateDiagram-v2
     completed --> obsolete: user retires — the shipped work is no longer in use
 
     %% Superseding — something else took the work over
-    untriaged --> superseded: user supersedes — another task took it over
     unplanned --> superseded: user supersedes — another task took it over
     submitted --> superseded: user supersedes — another task took it over
     ready --> superseded: user supersedes — another task took it over
@@ -237,9 +229,12 @@ stateDiagram-v2
     revisit --> superseded: user supersedes — another task took it over
 
     %% Reversal — reconsidering an abandonment decision
-    declined --> untriaged: user reconsiders
-    obsolete --> untriaged: user reconsiders
-    superseded --> untriaged: user reconsiders
+    declined --> unplanned: user reconsiders
+    obsolete --> unplanned: user reconsiders
+    superseded --> unplanned: user reconsiders
+    declined --> submitted: user reconsiders a task that has a plan
+    obsolete --> submitted: user reconsiders a task that has a plan
+    superseded --> submitted: user reconsiders a task that has a plan
 
     %% Terminal — the work is over, one way or another
     confirmed --> [*]

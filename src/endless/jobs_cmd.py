@@ -150,9 +150,8 @@ def errors_record(code: str, summary: str, source: str, detail: str,
                   fingerprint: str) -> None:
     """Record a real catalog fault (E-1859).
 
-    The bridge `endless triage run` needs: it executes detached, where a failure
-    has nowhere to go, and the fault store is the surface a user actually
-    watches. Distinct from `raise`, which only emits the synthetic test codes.
+    Python's bridge to the fault store, which is the surface a user actually
+    watches: Python cannot write it directly. Distinct from `raise`, which only emits the synthetic test codes.
     """
     args = ["record", "--code", code, "--summary", summary]
     if source:

@@ -40,6 +40,8 @@ def project_with_task(seeded_project_at_cwd):
         (proj_id, title, title),
     )
     task_id = db.query("SELECT id FROM tasks WHERE title = ?", (title,))[0]["id"]
+    # E-1993: a task needs a plan before it can be claimed or spawned.
+    db.execute("INSERT INTO task_content (task_id, name, content) VALUES (?, 'plan', '# Plan')", (task_id,))
     return {"project_root": repo, "task_id": task_id, "title": title}
 
 
@@ -49,7 +51,7 @@ def test_claim_refuses_settled_status_and_names_the_reopen_route(project_with_ta
     No flag clears this gate any more. The refusal has to name a command that
     works FROM THE STATUS THAT PRODUCED IT, and that is two different commands:
     shipped work reopens to `revisit`, while `declined`/`obsolete` never
-    shipped and the lifecycle reverses those to `untriaged` instead — it has no
+    shipped and the lifecycle reverses those to `unplanned` instead — it has no
     edge from either to `revisit` at all.
     """
     from endless.task_cmd import claim_item
@@ -61,8 +63,8 @@ def test_claim_refuses_settled_status_and_names_the_reopen_route(project_with_ta
         "confirmed": "revisit",
         "assumed": "revisit",
         "completed": "revisit",
-        "declined": "untriaged",
-        "obsolete": "untriaged",
+        "declined": "unplanned",
+        "obsolete": "unplanned",
     }
     for status, target in routes.items():
         db.execute("UPDATE tasks SET status = ? WHERE id = ?", (status, tid))
@@ -88,7 +90,7 @@ def test_claim_reopen_route_then_claim_actually_works(project_with_task):
     from endless.task_cmd import claim_item, update_plan
 
     tid = project_with_task["task_id"]
-    for settled, target in (("confirmed", "revisit"), ("declined", "untriaged")):
+    for settled, target in (("confirmed", "revisit"), ("declined", "unplanned")):
         db.execute("UPDATE tasks SET status = ? WHERE id = ?", (settled, tid))
         update_plan(tid, status=target)
         claim_item(tid, unattended=True)
@@ -375,6 +377,8 @@ def test_claim_branch_is_the_id_whatever_the_title(seeded_project_at_cwd):
         (proj_id, "The to from", "filler"),
     )
     tid = db.query("SELECT id FROM tasks WHERE title = ?", ("The to from",))[0]["id"]
+    # E-1993: a task needs a plan before it can be claimed or spawned.
+    db.execute("INSERT INTO task_content (task_id, name, content) VALUES (?, 'plan', '# Plan')", (tid,))
 
     claim_item(tid, unattended=True)
 

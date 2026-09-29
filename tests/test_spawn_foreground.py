@@ -27,6 +27,8 @@ def _seed_project_and_task(task_id: int, title: str = "Deliver spawn") -> None:
         "INSERT INTO tasks (id, project_id, title, status) VALUES (?, ?, ?, ?)",
         (task_id, pid, title, "underway"),
     )
+    # E-1993: a task needs a plan before it can be spawned.
+    db.execute("INSERT INTO task_content (task_id, name, content) VALUES (?, 'plan', '# Plan')", (task_id,))
 
 
 @pytest.fixture
@@ -38,6 +40,9 @@ def fg_env(monkeypatch):
     monkeypatch.setattr(task_cmd, "_claude_binary", lambda: "claude")
     monkeypatch.setattr(task_cmd, "_check_task_ownership",
                         lambda *a, **k: None)
+    # subprocess.run is captured below, so the open-questions read (a Go
+    # call) cannot answer; this task has none.
+    monkeypatch.setattr(task_cmd, "_open_questions", lambda item_id: [])
     monkeypatch.setattr(task_cmd, "_resolve_project", lambda *a, **k: (None, "p"))
     monkeypatch.setattr(task_cmd, "_perform_claim_work",
                         lambda **k: (Path("/wt/e-1705"), True))

@@ -1630,7 +1630,7 @@ def session_goto(target_ref, resume, revisit, no_revisit, new_transcript):
 @click.option(
     # E-1918 renamed this to --dry-run once it worked on every path: it is no
     # longer printing a *recovery* decision, it is declining to act, which is
-    # what --dry-run already means elsewhere in this CLI (`triage run`). The old
+    # what --dry-run already means elsewhere in this CLI. The old
     # spelling keeps working for muscle memory and E-1801's verify script;
     # hidden so only one name is advertised.
     "--print-decision", is_flag=True, hidden=True,
@@ -2189,6 +2189,9 @@ def task_list(project, show_all, status, phase, complexity, risk, parent_id, rel
 @click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
 @click.option("--no-description", is_flag=True,
               help="Hide description")
+@click.option("--context", "show_context", is_flag=True,
+              help="Show the context field — why the task exists (shown by "
+                   "default, directly after the description)")
 @click.option("--analysis", "show_analysis", is_flag=True,
               help="Show analysis field")
 @retired_option("--text", "--plan", is_flag=True)
@@ -2204,7 +2207,7 @@ def task_list(project, show_all, status, phase, complexity, risk, parent_id, rel
 @click.option("--notes", "show_notes", is_flag=True,
               help="Show the full notes field")
 @click.option("--all-fields", "all_fields", is_flag=True,
-              help="Show every content section (description, analysis, plan, "
+              help="Show every content section (description, context, analysis, plan, "
                    "outcome, reason, notes, children)")
 @click.option("--brief", "brief", is_flag=False, flag_value=str(BRIEF_CHARS),
               default=None, type=BRIEF_LEN, metavar="[N]",
@@ -2218,13 +2221,13 @@ def task_list(project, show_all, status, phase, complexity, risk, parent_id, rel
               help="Page colorized output through less (wheel-scrollable)")
 @click.option("--no-color", is_flag=True,
               help="Disable ANSI color even on a TTY")
-def task_show(item_ids, no_description, show_analysis, show_plan_field,
+def task_show(item_ids, no_description, show_context, show_analysis, show_plan_field,
               show_children, show_outcome, show_reason, show_notes, all_fields,
               brief, agent, as_json, paged, no_color):
     """Show detail for one or more tasks."""
     from endless.task_cmd import detail_item
     show_content = _shown_content(
-        all_fields, analysis=show_analysis, plan=show_plan_field,
+        all_fields, context=show_context, analysis=show_analysis, plan=show_plan_field,
         outcome=show_outcome, reason=show_reason, notes=show_notes)
     if all_fields:
         show_children = True
@@ -2241,11 +2244,15 @@ def _shown_content(all_fields: bool, **flags: bool) -> frozenset[str]:
     Each content name has a display flag spelled with its own token (`--plan`,
     `--reason`), and `--all-fields` shows every name the vocabulary declares —
     including one added after these flags were written.
+
+    `context` is always shown (E-1993): it is why the task exists, and it
+    renders directly after the description as the description's other half.
+    Its `--context` flag is accepted for symmetry with every other name.
     """
     if all_fields:
         from endless import content_names
         return frozenset(content_names.slugs())
-    return frozenset(name for name, on in flags.items() if on)
+    return frozenset({"context"} | {name for name, on in flags.items() if on})
 
 
 task_cmd.add_command(task_show, name="detail")
@@ -2795,7 +2802,7 @@ def _guard_content_rules(content, name, allow_paths, whole_value_checked=False):
 # trail claiming it was intended. Clearing is instead an explicit, field-named
 # act (`--clear <field>`, below) that a failed pipeline cannot reach by accident.
 
-CLEARABLE_CONTENT_FIELDS = ("description", "plan", "analysis", "outcome", "reason", "notes")
+CLEARABLE_CONTENT_FIELDS = ("description", "context", "plan", "analysis", "outcome", "reason", "notes")
 
 
 def _describe_empty_file(content):
@@ -2895,6 +2902,11 @@ def _apply_clear_flags(clear_fields, resolved):
               help="Full implementation plan (inline)")
 @click.option("--plan-file", default=None,
               help="Load the full implementation plan from a file")
+@click.option("--context", "context_text", default=None,
+              help="Context (inline) — why the task exists: how things work "
+                   "today, what prompted it, the evidence. Never how.")
+@click.option("--context-file", default=None,
+              help="Load the context content from a file")
 @click.option("--analysis", "analysis_text", default=None,
               help="Analysis content (inline)")
 @click.option("--analysis-file", default=None,
@@ -2913,7 +2925,7 @@ def _apply_clear_flags(clear_fields, resolved):
               help="Task type (default: todo)")
 @click.option("--status", default=None,
               type=click.Choice(TASK_STATUSES),
-              help="Initial status (default: untriaged)")
+              help="Initial status (default: unplanned, or submitted with a plan)")
 @click.option("--complexity", default=None, type=ratings.CHOICES,
               help="Complexity rating: how much human-AI interaction nailing down the "
                    "specifics takes (low/medium/high; none clears)")
@@ -2947,7 +2959,7 @@ def _apply_clear_flags(clear_fields, resolved):
 @click.option("--allow-path", "allow_paths", multiple=True,
               help="Regex matching an absolute path to permit in inline content "
                    "(repeatable; escape hatch for the path gate).")
-def task_add(title, description, description_file, plan_text, plan_file, analysis_text, analysis_file, phase, project, parent, after, task_type, status, complexity, risk, force,
+def task_add(title, description, description_file, plan_text, plan_file, context_text, context_file, analysis_text, analysis_file, phase, project, parent, after, task_type, status, complexity, risk, force,
              justification,
              blocks_ids, blocked_by_ids, relates_to_ids, implements_ids,
              cleans_up_ids, cleaned_up_by_ids, duplicates_ids, replaces_ids,
@@ -2956,8 +2968,10 @@ def task_add(title, description, description_file, plan_text, plan_file, analysi
     from endless.task_cmd import add_item, link_tasks, print_add_hints
     description = _resolve_content_flag(description, description_file, "description", allow_paths)
     plan_text = _resolve_content_flag(plan_text, plan_file, "plan", allow_paths)
+    context_text = _resolve_content_flag(context_text, context_file, "context", allow_paths)
     analysis_text = _resolve_content_flag(analysis_text, analysis_file, "analysis", allow_paths)
-    new_id = add_item(title, description=description, plan=plan_text, analysis=analysis_text,
+    new_id = add_item(title, description=description, plan=plan_text,
+                      context=context_text, analysis=analysis_text,
                       phase=phase, project_name=project, after=after, parent_id=parent,
                       task_type=task_type, status=status, complexity=complexity,
                       risk=risk, force=force,
@@ -3013,6 +3027,11 @@ def task_add(title, description, description_file, plan_text, plan_file, analysi
 @click.option("--type", "task_type", default=None,
               type=click.Choice(["todo", "bugfix", "research", "epic", "brainstorm"]),
               help="Task type")
+@click.option("--context", "context_text", default=None,
+              help="Context (inline) — why the task exists: how things work "
+                   "today, what prompted it, the evidence. Never how.")
+@click.option("--context-file", default=None,
+              help="Load the context content from a file")
 @click.option("--analysis", "analysis_text", default=None,
               help="Analysis content (inline)")
 @click.option("--analysis-file", default=None,
@@ -3059,7 +3078,7 @@ def task_add(title, description, description_file, plan_text, plan_file, analysi
                    "the relation only; use `task replace <old> --by <new>` to also "
                    "close the replaced task.")
 def task_update(item_ids, status, title, description, description_file, plan_text, plan_file, parent, phase, complexity, risk,
-                task_type, analysis_text, analysis_file, force, outcome, outcome_file, reason, reason_file,
+                task_type, context_text, context_file, analysis_text, analysis_file, force, outcome, outcome_file, reason, reason_file,
                 notes_text, notes_file, justification, allow_paths,
                 keep_status, clear_fields, duplicates_ids, replaces_ids):
     """Update fields on one or more tasks."""
@@ -3067,6 +3086,7 @@ def task_update(item_ids, status, title, description, description_file, plan_tex
     resolved = _apply_clear_flags(clear_fields, {
         "description": _resolve_content_flag(description, description_file, "description", allow_paths, clearable=True),
         "plan": _resolve_content_flag(plan_text, plan_file, "plan", allow_paths, clearable=True),
+        "context": _resolve_content_flag(context_text, context_file, "context", allow_paths, clearable=True),
         "analysis": _resolve_content_flag(analysis_text, analysis_file, "analysis", allow_paths, clearable=True),
         "outcome": _resolve_content_flag(outcome, outcome_file, "outcome", allow_paths, clearable=True),
         "reason": _resolve_content_flag(reason, reason_file, "reason", allow_paths, clearable=True),
@@ -3074,6 +3094,7 @@ def task_update(item_ids, status, title, description, description_file, plan_tex
     })
     description = resolved["description"]
     plan_text = resolved["plan"]
+    context_text = resolved["context"]
     analysis_text = resolved["analysis"]
     outcome = resolved["outcome"]
     reason = resolved["reason"]
@@ -3084,7 +3105,7 @@ def task_update(item_ids, status, title, description, description_file, plan_tex
     # flags given are relations.
     edits_a_field = any(v is not None for v in (
         status, title, description, plan_text, parent, phase, complexity, risk, task_type,
-        analysis_text, outcome, reason, notes_text, justification,
+        context_text, analysis_text, outcome, reason, notes_text, justification,
     ))
     relations_only = not edits_a_field and (duplicates_ids or replaces_ids)
     for item_id in item_ids:
@@ -3094,7 +3115,7 @@ def task_update(item_ids, status, title, description, description_file, plan_tex
                         parent_id=parent,
                         phase=phase, complexity=complexity, risk=risk,
                         task_type=task_type,
-                        analysis=analysis_text,
+                        context=context_text, analysis=analysis_text,
                         outcome=outcome, force=force,
                         justification=justification, keep_status=keep_status,
                         reason=reason, notes=notes_text)
@@ -3284,7 +3305,7 @@ def task_decline(item_ids, reason):
 @click.option("--risk", default=None, type=ratings.CHOICES,
               help="Proposed risk rating (low/medium/high)")
 def task_submit(item_ids, complexity, risk):
-    """Submit one or more tasks (untriaged/unplanned/revisit → submitted).
+    """Submit one or more tasks (unplanned/revisit → submitted; needs a plan).
 
     Agent-set signal that a task is spec-complete and awaiting human
     approval — either a plan was attached or the description is a sufficient
@@ -3922,7 +3943,7 @@ def epic_cmd():
               help="Insert after this task ID")
 @click.option("--status", default=None,
               type=click.Choice(TASK_STATUSES),
-              help="Initial status (default: untriaged)")
+              help="Initial status (default: unplanned, or submitted with a plan)")
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
 @click.option("--blocks", "blocks_ids", type=TASK_ID, multiple=True,
@@ -4015,6 +4036,9 @@ def epic_list(project, show_all, status, phase, parent_id, sort,
 @click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
 @click.option("--no-description", is_flag=True,
               help="Hide description")
+@click.option("--context", "show_context", is_flag=True,
+              help="Show the context field — why the task exists (shown by "
+                   "default, directly after the description)")
 @click.option("--analysis", "show_analysis", is_flag=True,
               help="Show analysis field")
 @retired_option("--text", "--plan", is_flag=True)
@@ -4030,17 +4054,17 @@ def epic_list(project, show_all, status, phase, parent_id, sort,
 @click.option("--notes", "show_notes", is_flag=True,
               help="Show the full notes field")
 @click.option("--all-fields", "all_fields", is_flag=True,
-              help="Show every content section (description, analysis, plan, "
+              help="Show every content section (description, context, analysis, plan, "
                    "outcome, reason, notes, children)")
 @output_options()
-def epic_show(item_ids, no_description, show_analysis, show_plan_field,
+def epic_show(item_ids, no_description, show_context, show_analysis, show_plan_field,
               no_children, show_outcome, show_reason, show_notes, all_fields,
               agent, as_json):
     """Show detail for one or more epics (children shown by default)."""
     from endless.epic_cmd import show_epic
     show_children = not no_children or all_fields
     show_content = _shown_content(
-        all_fields, analysis=show_analysis, plan=show_plan_field,
+        all_fields, context=show_context, analysis=show_analysis, plan=show_plan_field,
         outcome=show_outcome, reason=show_reason, notes=show_notes)
     for item_id in item_ids:
         show_epic(item_id, show_description=not no_description,
@@ -4067,6 +4091,11 @@ def epic_show(item_ids, no_description, show_analysis, show_plan_field,
 @click.option("--phase", default=None,
               type=click.Choice(["urgent", "now", "next", "later", "maybe"]),
               help="Phase: urgent, now, next, later, maybe")
+@click.option("--context", "context_text", default=None,
+              help="Context (inline) — why the task exists: how things work "
+                   "today, what prompted it, the evidence. Never how.")
+@click.option("--context-file", default=None,
+              help="Load the context content from a file")
 @click.option("--analysis", "analysis_text", default=None,
               help="Analysis content (inline)")
 @click.option("--analysis-file", default=None,
@@ -4096,8 +4125,8 @@ def epic_show(item_ids, no_description, show_analysis, show_plan_field,
                    "description or any content field. Conflicts with the same "
                    "field's --<field>/--<field>-file.")
 def epic_update(item_ids, status, title, description, description_file, plan_text,
-                plan_file, parent, phase, analysis_text, analysis_file,
-                force, outcome, outcome_file, reason, reason_file, notes_text,
+                plan_file, parent, phase, context_text, context_file,
+                analysis_text, analysis_file, force, outcome, outcome_file, reason, reason_file, notes_text,
                 notes_file, allow_paths, clear_fields):
     """Update one or more epics (promotes type to epic).
 
@@ -4108,6 +4137,7 @@ def epic_update(item_ids, status, title, description, description_file, plan_tex
     resolved = _apply_clear_flags(clear_fields, {
         "description": _resolve_content_flag(description, description_file, "description", allow_paths, clearable=True),
         "plan": _resolve_content_flag(plan_text, plan_file, "plan", allow_paths, clearable=True),
+        "context": _resolve_content_flag(context_text, context_file, "context", allow_paths, clearable=True),
         "analysis": _resolve_content_flag(analysis_text, analysis_file, "analysis", allow_paths, clearable=True),
         "outcome": _resolve_content_flag(outcome, outcome_file, "outcome", allow_paths, clearable=True),
         "reason": _resolve_content_flag(reason, reason_file, "reason", allow_paths, clearable=True),
@@ -4120,7 +4150,8 @@ def epic_update(item_ids, status, title, description, description_file, plan_tex
     for item_id in item_ids:
         update_epic(item_id, status=status, title=title,
                     description=description, plan=plan_text, parent_id=parent,
-                    phase=phase, analysis=analysis_text,
+                    phase=phase, context=resolved["context"],
+                    analysis=analysis_text,
                     outcome=outcome, force=force,
                     reason=resolved["reason"], notes=resolved["notes"])
 
@@ -4334,52 +4365,6 @@ def jobs_retry(name):
     impl(name)
 
 
-@main.group("triage")
-def triage_cmd():
-    """Route untriaged tasks by judging description sufficiency."""
-    pass
-
-
-@triage_cmd.command("run")
-@click.option("--task", "task_ref", default=None,
-              help="Triage exactly this task (E-N), ignoring the queue")
-@click.option("--limit", type=int, default=None,
-              help="Max tasks to triage in one sweep "
-                   "(default: 10; every task is a model call)")
-@click.option("--project", default=None,
-              help="Registered project name to sweep (default: the project cwd is in)")
-@click.option("--all-projects", is_flag=True,
-              help="Sweep every project — what the background job does")
-@click.option("--dry-run", is_flag=True,
-              help="Print the decision and rationale; write nothing")
-def triage_run(task_ref, limit, project, all_projects, dry_run):
-    """Decide, for each untriaged task, whether its description is a sufficient
-    spec (-> submitted) or design work is needed first (-> unplanned).
-
-    Fail-open by design: a model timeout, a missing `claude`, or an
-    unparseable reply leaves the task `untriaged` for the next sweep and exits
-    zero. The worst outcome is the status quo — you route it by hand with
-    `endless task submit`, which stays the permanent override.
-
-    A task that stopped being `untriaged` between selection and the write is
-    never overwritten, so a human's call always beats the triager's.
-    """
-    from endless import triage
-    from endless.task_cmd import parse_task_id
-
-    if project and all_projects:
-        raise click.ClickException(
-            "--project and --all-projects are mutually exclusive."
-        )
-    triage.run(
-        task_id=parse_task_id(task_ref) if task_ref else None,
-        limit=limit if limit is not None else triage.DEFAULT_BATCH_LIMIT,
-        project=project,
-        all_projects=all_projects,
-        dry_run=dry_run,
-    )
-
-
 @main.group("errors")
 def errors_cmd():
     """Inspect and clear recorded errors."""
@@ -4467,15 +4452,15 @@ def errors_clear(ids, project, all_projects, log):
 @errors_cmd.command("record", hidden=True)
 @click.option("--code", required=True, help="Catalog code ID, e.g. ERR-0008 or WARN-0009")
 @click.option("--summary", required=True, help="Short text shown in lists and the fault row")
-@click.option("--source", default="", help="Subsystem raising it, e.g. triage:inline")
+@click.option("--source", default="", help="Subsystem raising it, e.g. job:minimizer")
 @click.option("--detail", default="", help="Long capture; goes to the detail log")
 @click.option("--fingerprint", default="", help="Grouping key (defaults to the summary)")
 def errors_record(code, summary, source, detail, fingerprint):
     """Record a real catalog fault.
 
-    Hidden because it is an internal bridge, not a verb a person needs: the
-    detached `endless triage run` child uses it to put a failed triage on the
-    session-status fault row, since Python cannot write the fault store directly.
+    Hidden because it is an internal bridge, not a verb a person needs: it is
+    how Python code puts a failure on the session-status fault row, since
+    Python cannot write the fault store directly.
     Shipped rather than Go-only so it is reachable from the CLI a user
     actually types.
     """

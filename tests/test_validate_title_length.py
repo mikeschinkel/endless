@@ -42,10 +42,11 @@ def test_validate_title_length_message_names_shape():
     with pytest.raises(click.ClickException) as exc:
         task_cmd.validate_title(long)
     msg = exc.value.message
-    # Sanity-check that the guidance is actually surfaced — not just the count.
-    assert "Shape:" in msg
-    assert "<verb>" in msg
-    assert "Symptom" in msg
+    # Sanity-check that the guidance is actually surfaced — not just the count:
+    # what a title is NOT, and an example (E-1993, from E-2187's survey).
+    assert "It is NOT" in msg
+    assert "the how" in msg and "the why" in msg
+    assert "before:" in msg and "after:" in msg
 
 
 # CLI integration: matches tests/test_validate_description.py shape.

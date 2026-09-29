@@ -32,11 +32,21 @@ func TestEveryEndpointIsInTheVocabulary(t *testing.T) {
 	}
 }
 
+// entrySeen is the reachability walk's starting set: every status a task can be
+// filed at.
+func entrySeen() map[taskstatus.Status]bool {
+	seen := map[taskstatus.Status]bool{}
+	for _, s := range taskstatus.EntryStatuses {
+		seen[s] = true
+	}
+	return seen
+}
+
 // TestEveryStatusIsReachableFromEntry walks the table forward from the entry
 // status. A status nothing can reach is a status a task can only be put into by
 // hand — which is the shape of the defect this whole task exists to close.
 func TestEveryStatusIsReachableFromEntry(t *testing.T) {
-	seen := map[taskstatus.Status]bool{taskstatus.EntryStatus: true}
+	seen := entrySeen()
 	for changed := true; changed; {
 		changed = false
 		for _, tr := range taskstatus.Transitions() {
@@ -48,8 +58,8 @@ func TestEveryStatusIsReachableFromEntry(t *testing.T) {
 	}
 	for _, s := range taskstatus.Get(taskstatus.All) {
 		if !seen[s] {
-			t.Errorf("status %q is unreachable from %q — nothing can put a task into it",
-				s, taskstatus.EntryStatus)
+			t.Errorf("status %q is unreachable from %v — nothing can put a task into it",
+				s, taskstatus.EntryStatuses)
 		}
 	}
 }
@@ -77,7 +87,7 @@ func TestEveryNonTerminalStatusHasAWayOut(t *testing.T) {
 // every terminal-bearing lane could reach no end state at all.
 func TestEveryTypeCanFinish(t *testing.T) {
 	for _, tt := range tasktype.All() {
-		seen := map[taskstatus.Status]bool{taskstatus.EntryStatus: true}
+		seen := entrySeen()
 		for changed := true; changed; {
 			changed = false
 			for _, tr := range taskstatus.Transitions() {
@@ -383,8 +393,10 @@ func TestRenderMermaidDrawsEveryEdge(t *testing.T) {
 // from the vocabulary rather than the table and so have no row to lose.
 func TestRenderMermaidDrawsEntryAndTerminals(t *testing.T) {
 	out := taskstatus.RenderMermaid()
-	if !strings.Contains(out, "[*] --> "+taskstatus.EntryStatus) {
-		t.Errorf("the rendered diagram has no entry edge into %q", taskstatus.EntryStatus)
+	for _, s := range taskstatus.EntryStatuses {
+		if !strings.Contains(out, "[*] --> "+s) {
+			t.Errorf("the rendered diagram has no entry edge into %q", s)
+		}
 	}
 	for _, s := range taskstatus.Get(taskstatus.Terminal) {
 		if !strings.Contains(out, s+" --> [*]") {

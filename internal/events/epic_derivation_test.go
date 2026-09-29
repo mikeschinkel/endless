@@ -105,16 +105,9 @@ func TestDeriveRule_Table(t *testing.T) {
 		{"unplanned + terminal", []string{"unplanned", "obsolete"}, "unplanned"},
 		{"underway wins over ready", []string{"ready", "underway", "confirmed"}, "underway"},
 		{"declined+obsolete are terminal", []string{"declined", "obsolete"}, "completed"},
-		// E-1845: `untriaged` is the lowest rung — every rung above it wins, but
-		// it must derive on its own rather than leaving the epic unchanged.
-		// Since `untriaged` is now the default status, "epic whose children are
-		// all freshly filed" is the common case, not an edge one.
-		{"all untriaged", []string{"untriaged", "untriaged"}, "untriaged"},
-		{"unplanned wins over untriaged", []string{"untriaged", "unplanned"}, "unplanned"},
-		{"submitted wins over untriaged", []string{"untriaged", "submitted"}, "submitted"},
-		{"ready wins over untriaged", []string{"untriaged", "ready"}, "ready"},
-		{"underway wins over untriaged", []string{"untriaged", "underway"}, "underway"},
-		{"untriaged + terminal", []string{"untriaged", "confirmed"}, "untriaged"},
+		// E-1993 removed `untriaged`; `unplanned` is the lowest rung again, and
+		// the one an epic of freshly filed children derives.
+		{"submitted wins over unplanned", []string{"unplanned", "submitted"}, "submitted"},
 	}
 
 	for _, tc := range cases {

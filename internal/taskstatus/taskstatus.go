@@ -11,8 +11,8 @@
 //
 // The failure mode that motivated this is OMISSION, not typos. E-1648 added
 // `submitted` and updated four of six whole-vocabulary sites. E-1845 added
-// `untriaged` and had to hand-edit every site in all four shapes with nothing
-// to catch a miss. The fix is structural rather than a lint rule: every
+// `untriaged` (removed again by E-1993) and had to hand-edit every site in all
+// four shapes with nothing to catch a miss. The fix is structural rather than a lint rule: every
 // grouping is a row in the ONE `groups` map below, so a status cannot be added
 // without reading each grouping and deciding whether it belongs. The partition
 // invariants in the test file turn the decisions that MUST be made into build
@@ -59,7 +59,6 @@ type Status = string
 // proposed writing the rule down and was rejected because it needs no
 // decision; what it needed was the data cleaned up, which it now is.
 const (
-	Untriaged  Status = "untriaged"
 	Unplanned  Status = "unplanned"
 	Submitted  Status = "submitted"
 	Ready      Status = "ready"
@@ -99,7 +98,7 @@ const (
 	//
 	// Deliberately not a slice of NotActionable, though every member is in it:
 	// NotActionable answers "may `task next` offer this?", which is also true of
-	// `underway` (someone else has it) and `untriaged` (nobody has looked). This
+	// `underway` (someone else has it). This
 	// group answers a narrower question — "is the ball in the user's court?" —
 	// and that is the whole basis on which `project status` decides a row is
 	// worth a line.
@@ -128,9 +127,13 @@ const (
 	// — the part that must change when a status is added — lives here.
 	DerivationPrecedence
 
-	// DescriptionResetFrom are the pre-work statuses from which a material
-	// description edit resets a task to `untriaged`. `underway` is deliberately
-	// excluded so an edit cannot yank work out from under a live session.
+	// DescriptionResetFrom is RETIRED (E-1993) and deliberately empty. It named
+	// the statuses from which a material description edit reset a task to
+	// `untriaged`; a description edit no longer moves status at all. The slug
+	// stays resolvable because a client older than E-1993 reads it at import
+	// time — the global install asks a worktree's newer endless-go — and an
+	// unknown group is fatal there, where an empty one means "never reset",
+	// which is exactly today's rule.
 	DescriptionResetFrom
 
 	// PreJudgment means "nobody has decided this task is spec-complete yet" —
@@ -242,32 +245,32 @@ const (
 // are written in lifecycle order for readability only.
 var groups = map[Group][]Status{
 	All: {
-		Untriaged, Unplanned, Submitted, Ready, Underway,
+		Unplanned, Submitted, Ready, Underway,
 		Unverified, Unreviewed, Confirmed, Assumed, Completed,
 		Revisit, Declined, Obsolete, Superseded,
 	},
 	Actionable:    {Unplanned, Ready, Revisit},
-	NotActionable: {Untriaged, Submitted, Underway, Unverified, Unreviewed, Confirmed, Assumed, Completed, Declined, Obsolete, Superseded},
+	NotActionable: {Submitted, Underway, Unverified, Unreviewed, Confirmed, Assumed, Completed, Declined, Obsolete, Superseded},
 	Active:        {Underway, Unverified, Unreviewed},
 	AwaitsUser:    {Unverified, Unreviewed, Submitted},
-	ClaimPromotes: {Untriaged, Unplanned, Ready, Revisit},
-	Open:          {Untriaged, Unplanned, Submitted, Ready, Underway},
+	ClaimPromotes: {Unplanned, Ready, Revisit},
+	Open:          {Unplanned, Submitted, Ready, Underway},
 	ChildrenStateOrder: {
-		Untriaged, Unplanned, Submitted, Ready, Underway, Revisit, Unverified, Unreviewed,
+		Unplanned, Submitted, Ready, Underway, Revisit, Unverified, Unreviewed,
 	},
-	DerivationPrecedence: {Underway, Ready, Submitted, Unplanned, Untriaged},
-	DescriptionResetFrom: {Untriaged, Unplanned, Submitted, Ready, Revisit},
-	PreJudgment:          {Untriaged, Unplanned},
+	DerivationPrecedence: {Underway, Ready, Submitted, Unplanned},
+	DescriptionResetFrom: {},
+	PreJudgment:          {Unplanned},
 	ReopenRefused:        {Declined, Obsolete, Superseded},
 	Reopenable:           {Confirmed, Assumed, Completed},
 	ReviewTrack:          {Unreviewed},
-	SessionPending:       {Untriaged, Unplanned, Submitted, Ready, Underway, Revisit},
+	SessionPending:       {Unplanned, Submitted, Ready, Underway, Revisit},
 	SetsCompletedAt:      {Confirmed, Completed},
 	Settled:              {Unverified, Unreviewed, Confirmed, Assumed, Completed, Declined, Obsolete, Superseded},
 	Shipped:              {Unverified, Unreviewed, Confirmed, Assumed, Completed},
 	ShippedTerminal:      {Confirmed, Assumed, Completed},
 	StickyOverride:       {Revisit, Declined, Obsolete, Superseded},
-	SubmittableFrom:      {Untriaged, Unplanned, Revisit},
+	SubmittableFrom:      {Unplanned, Revisit},
 	Terminal:             {Confirmed, Assumed, Completed, Declined, Obsolete, Superseded},
 	VerificationTerminal: {Confirmed, Assumed},
 	VerificationTrack:    {Unverified, Confirmed, Assumed},
@@ -307,7 +310,6 @@ var groupSlugs = map[Group]string{
 
 // labels is the human display string per status, mirroring tasktype.Label().
 var labels = map[Status]string{
-	Untriaged:  "Untriaged",
 	Unplanned:  "Unplanned",
 	Submitted:  "Submitted",
 	Ready:      "Ready",
@@ -340,7 +342,6 @@ var labels = map[Status]string{
 // yet ticked. The two gates are siblings — one asks "does it work", the other
 // "has the owner read it" — and the glyphs say so at a glance (E-2016).
 var glyphs = map[Status]string{
-	Untriaged:  "◌",
 	Unplanned:  "○",
 	Submitted:  "⚑",
 	Ready:      "●",
@@ -382,7 +383,7 @@ func Has(g Group, s Status) bool {
 	return false
 }
 
-// SQLList renders g for a SQL IN/NOT IN clause: `'untriaged','unplanned'`.
+// SQLList renders g for a SQL IN/NOT IN clause: `'unplanned','submitted'`.
 //
 // This is the highest-value accessor in the package. A status list inside a SQL
 // string literal is invisible to every tool — no compiler, no linter, no search

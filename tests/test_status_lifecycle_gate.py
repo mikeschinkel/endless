@@ -19,7 +19,7 @@ import pytest
 from endless import db, task_cmd
 
 
-def _add_task(title: str, status: str = "untriaged", task_type: str = "todo") -> int:
+def _add_task(title: str, status: str = "unplanned", task_type: str = "todo") -> int:
     cur = db.execute(
         "INSERT INTO tasks (project_id, title, status, type_id, phase, created_at) "
         "VALUES (1, ?, ?, (SELECT id FROM task_types WHERE slug = ?), 'now', "
@@ -61,9 +61,9 @@ def test_the_refusal_names_the_reachable_statuses(seeded_project_at_cwd):
 
 
 def test_a_legal_edge_still_lands(seeded_project_at_cwd):
-    tid = _add_task("Add a thing to route properly", status="untriaged")
-    task_cmd.update_plan(item_id=tid, status="unplanned")
-    assert _status(tid) == "unplanned"
+    tid = _add_task("Add a thing to route properly", status="unplanned")
+    task_cmd.update_plan(item_id=tid, status="revisit")
+    assert _status(tid) == "revisit"
 
 
 def test_the_documented_path_runs_unimpeded(seeded_project_at_cwd):
@@ -73,8 +73,9 @@ def test_the_documented_path_runs_unimpeded(seeded_project_at_cwd):
     and this process carries no claiming session. That half is covered in
     internal/events/status_transition_test.go, which can seed one.
     """
-    tid = _add_task("Add a thing and walk it", status="untriaged")
-    for status in ("unplanned", "submitted", "ready", "underway"):
+    tid = _add_task("Add a thing and walk it", status="unplanned")
+    task_cmd.update_plan(item_id=tid, plan="# Plan\n", keep_status=True)
+    for status in ("submitted", "ready", "underway"):
         # E-1813: submitting and approving carry both ratings.
         rated = (
             {"complexity": "low", "risk": "low"} if status == "submitted" else {}

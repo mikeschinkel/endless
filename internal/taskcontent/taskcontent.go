@@ -30,12 +30,15 @@ import (
 type Name int
 
 // The constants are declared in DISPLAY order, and All returns them that way:
-// `task show` renders a task's content sections in this order. Analysis
+// `task show` renders a task's content sections in this order. Context comes
+// first because it is background — why the task exists, how things work today,
+// the evidence — and renders directly after the description (E-1993). Analysis
 // precedes Plan because it is the pre-plan design content (E-999); Outcome is
 // the deliverable and Reason why the task ended, so they follow the work they
 // describe.
 const (
-	Analysis Name = iota + 1
+	Context Name = iota + 1
+	Analysis
 	Plan
 	Outcome
 	Reason
@@ -43,11 +46,12 @@ const (
 )
 
 // all is the canonical set in display order.
-var all = []Name{Analysis, Plan, Outcome, Reason, Notes}
+var all = []Name{Context, Analysis, Plan, Outcome, Reason, Notes}
 
 // slugs is the stored token per kind: task_content.name, the CLI flag, and the
 // mirror file stem.
 var slugs = map[Name]string{
+	Context:  "context",
 	Analysis: "analysis",
 	Plan:     "plan",
 	Outcome:  "outcome",
@@ -58,6 +62,7 @@ var slugs = map[Name]string{
 // labels is the human display string per kind — the heading a task's section
 // renders under.
 var labels = map[Name]string{
+	Context:  "Context",
 	Analysis: "Analysis",
 	Plan:     "Plan",
 	Outcome:  "Outcome",

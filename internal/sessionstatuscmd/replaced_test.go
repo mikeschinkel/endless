@@ -22,7 +22,7 @@ func TestReplacedByNote_TerminalGate(t *testing.T) {
 			t.Errorf("status %q: replacedByNote = %q, want the id", s, got)
 		}
 	}
-	open := []string{"untriaged", "unplanned", "submitted", "ready", "underway",
+	open := []string{"unplanned", "submitted", "ready", "underway",
 		"unverified", "blocked", "revisit"}
 	for _, s := range open {
 		r := monitor.SessionStatusRow{Status: s, ReplacedBy: []int64{1953}}

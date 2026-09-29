@@ -189,13 +189,13 @@ func TestExecute_PlanAttachYieldsToExplicitStatus(t *testing.T) {
 
 	if _, err := events.Execute(planFieldsEvent(t, 905, map[string]any{
 		"plan":   "# Plan\n\nreal body\n",
-		"status": "untriaged",
+		"status": "revisit",
 	}), nil); err != nil {
 		t.Fatalf("Execute plan attach with status: %v", err)
 	}
 
-	if got := statusOf(t, db, 905); got != "untriaged" {
-		t.Errorf("status = %q, want the explicitly requested untriaged", got)
+	if got := statusOf(t, db, 905); got != "revisit" {
+		t.Errorf("status = %q, want the explicitly requested revisit", got)
 	}
 }
 

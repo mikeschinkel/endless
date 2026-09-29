@@ -163,12 +163,9 @@ func deriveOneEpic(db dbQuerier, emit DerivedEmitter, epicID int64) error {
 //	ready      a child is approved to work
 //	submitted  a child is spec-complete pending approval: more advanced than
 //	           unplanned, not yet approved-to-work
-//	unplanned  a child still needs design work
-//	untriaged  E-1845 — the lowest rung. A child nobody has looked at yet keeps
-//	           the epic honest about having unrouted work under it. Without this
-//	           rung an epic whose only children are freshly filed would match
-//	           nothing and be left unchanged — and since `untriaged` is the
-//	           default status, that would be the common path, not an edge case.
+//	unplanned  a child still needs design work — the lowest rung, and the one
+//	           an epic whose children are all freshly filed derives. (E-1845's
+//	           `untriaged` rung sat below it until E-1993 removed the status.)
 //
 // Previously the same ladder was a switch of five hand-ordered bools; the
 // category-4 miss it invites is exactly what E-1845 nearly shipped.

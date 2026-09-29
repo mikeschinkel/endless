@@ -222,31 +222,19 @@ var (
 			"check `endless sql \"select 1\"`.",
 	}
 
-	// ErrCodeTriageFailed covers a triage attempt that could not produce a
-	// verdict (E-1859): the model call timed out, `claude` was missing, the
-	// process exited non-zero, or the reply did not parse.
-	//
-	// Warning rather than error: triage is fail-open by design, so the task
-	// simply stays `untriaged` and the sweep retries — nothing is lost or
-	// corrupted. It is recorded at all because the inline path runs DETACHED,
-	// where a crash and a considered no-verdict are otherwise
-	// indistinguishable and neither is written anywhere. Repeats collapse into
-	// one incident with an occurrence count, so a machine with no `claude`
-	// installed raises one warning, not one per filing.
-	//
-	// 0009, not 0008: E-1898 took 0008 for the status-line code while this
-	// branch was in flight, and a spent number is never reused.
+	// ErrCodeTriageFailed covered a triage attempt that could not produce a
+	// verdict (E-1859). RETIRED by E-1993, which removed the description triage
+	// outright: nothing raises it any more. It stays in the catalog because a
+	// spent number is never reused, and because incidents recorded before the
+	// removal still carry the code and must keep resolving to an entry.
 	ErrCodeTriageFailed = Code{
 		ID:       "WARN-0009",
 		Slug:     "triage-failed",
 		Severity: SeverityWarning,
-		Title:    "Triage could not reach a verdict and left the task untriaged",
-		Remedy: "Check that `claude` is on PATH and answering — the incident's " +
-			"detail log carries the failing invocation. If triage is not " +
-			"wanted on this machine, set `ENDLESS_NO_TRIAGE=1` to stop the " +
-			"automatic path, or route by hand with `endless task submit <id>` " +
-			"/ `endless task update <id> --status unplanned`. Dismiss with " +
-			"`endless errors clear <id>`.",
+		Title:    "Triage could not reach a verdict (retired: triage no longer exists)",
+		Remedy: "Nothing to fix: the description triage was removed (E-1993) and " +
+			"nothing raises this code any more. An incident still carrying it " +
+			"predates the removal — dismiss it with `endless errors clear <id>`.",
 	}
 
 	// ErrCodeWorktreeProbeFailed covers a git probe behind the ◆ unsettled

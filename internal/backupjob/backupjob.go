@@ -16,8 +16,8 @@
 //
 // # Why Go and not a subprocess
 //
-// The other two jobs (internal/triagejob, internal/minimizerjob) shell out to
-// the Python CLI because their work is a model call, and model invocation is
+// internal/minimizerjob shells out to the Python CLI because its work is a
+// model call, and model invocation is
 // Python under E-1486's boundary. Nothing here calls a model: the backup is
 // SQLite's VACUUM INTO and the retention sweep is a directory listing, both
 // already in this binary. A subprocess would buy a fork and lose the context

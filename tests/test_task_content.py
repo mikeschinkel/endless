@@ -43,7 +43,7 @@ def _update(*args: str):
 
 
 def test_the_vocabulary_comes_from_go_in_display_order():
-    assert content_names.slugs() == ("analysis", "plan", "outcome", "reason", "notes")
+    assert content_names.slugs() == ("context", "analysis", "plan", "outcome", "reason", "notes")
     assert content_names.label("reason") == "Reason"
 
 

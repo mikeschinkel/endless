@@ -69,8 +69,8 @@ const (
 	ActorUser Actor = iota
 
 	// ActorAgent is a Claude session acting on its own judgment about a task —
-	// triaging, submitting, believing work done. Distinct from ActorSession,
-	// which is about holding the task, not judging it.
+	// submitting, believing work done. Distinct from ActorSession, which is
+	// about holding the task, not judging it.
 	ActorAgent
 
 	// ActorSession is the session that HOLDS the task, moving its own work
@@ -79,8 +79,8 @@ const (
 	ActorSession
 
 	// ActorSystem is Endless itself, transitioning a task as a consequence of
-	// some other edit — the description-re-spec reset. No human or agent
-	// names these statuses; they are inferred.
+	// some other edit — the plan-edit reset. No human or agent names these
+	// statuses; they are inferred.
 	ActorSystem
 )
 
@@ -169,10 +169,16 @@ type transitionGroup struct {
 	Transitions []Transition
 }
 
-// EntryStatus is where a newly filed task starts, and the target of the
-// diagram's `[*] -->` edge. `task add` writes it directly, so it is not a
-// transition.
-const EntryStatus = Untriaged
+// EntryStatuses are where a newly filed task starts, and the targets of the
+// diagram's `[*] -->` edges. `task add` writes one directly, so they are not
+// transitions: `unplanned` for a task filed without a plan, `submitted` for one
+// filed with a plan attached (E-1993).
+//
+// There is no triage step between filing and these any more. `untriaged` held
+// a task until something judged whether its description was a sufficient spec;
+// with a plan required to spawn, no description ever is, so neither the
+// judgment nor the status survives.
+var EntryStatuses = []Status{Unplanned, Submitted}
 
 // transitionGroups is the table. Ordered by hand to read well, NOT
 // alphabetically: a Go map's iteration order is randomized and the generated
@@ -180,41 +186,27 @@ const EntryStatus = Untriaged
 // slice is the smallest thing that meets it.
 var transitionGroups = []transitionGroup{
 	{
-		Name: "Triage — the description is judged, and routed",
-		Transitions: []Transition{
-			{From: Untriaged, To: Unplanned, Actor: ActorAgent, Label: "triages — needs a plan"},
-			{From: Untriaged, To: Submitted, Actor: ActorAgent, Label: "triages — description is a sufficient spec"},
-		},
-	},
-	{
 		Name: "Planning and approval — the two-step gate that makes `ready` mean approved",
 		Transitions: []Transition{
-			{From: Unplanned, To: Submitted, Actor: ActorAgent, Label: "submits — plan attached, or description sufficient"},
+			{From: Unplanned, To: Submitted, Actor: ActorAgent, Label: "submits — plan attached"},
 			{From: Submitted, To: Ready, Actor: ActorUser, Label: "approves"},
-			{From: Submitted, To: Unplanned, Actor: ActorUser, Label: "sends back — the spec is not sufficient"},
+			{From: Submitted, To: Unplanned, Actor: ActorUser, Label: "sends back — the plan is not sufficient"},
 			{From: Revisit, To: Submitted, Actor: ActorAgent, Label: "re-submits"},
 		},
 	},
 	{
-		Name: "Re-spec — a material description edit invalidates triage and approval",
+		// The plan is what was approved, so changing it materially takes the
+		// approval back (E-1993). A description edit never moves status: the
+		// description describes the task, it is not the spec.
+		Name: "Re-plan — a material plan edit on an approved task drops its approval",
 		Transitions: []Transition{
-			{From: Unplanned, To: Untriaged, Actor: ActorSystem, Label: "resets on a description re-spec"},
-			{From: Submitted, To: Untriaged, Actor: ActorSystem, Label: "resets on a description re-spec"},
-			{From: Ready, To: Untriaged, Actor: ActorSystem, Label: "resets on a description re-spec"},
-			{From: Revisit, To: Untriaged, Actor: ActorSystem, Label: "resets on a description re-spec"},
-			// A re-spec that ATTACHES a plan answers the triage question the
-			// reset would have asked, so the pair lands `submitted` instead of
-			// bouncing to `untriaged` with a full plan attached. It still costs
-			// an approved task its approval — approval was granted against the
-			// old description.
-			{From: Ready, To: Submitted, Actor: ActorSystem, Label: "resets on a description re-spec that attaches a plan"},
+			{From: Ready, To: Submitted, Actor: ActorSystem, Label: "resets on a material plan edit"},
 		},
 	},
 	{
 		Name: "Claiming — `task claim` promotes any of these in place",
 		Transitions: []Transition{
 			{From: Ready, To: Underway, Actor: ActorSession, Label: "claims"},
-			{From: Untriaged, To: Underway, Actor: ActorSession, Label: "claims"},
 			{From: Unplanned, To: Underway, Actor: ActorSession, Label: "claims"},
 			{From: Revisit, To: Underway, Actor: ActorSession, Label: "claims"},
 		},
@@ -255,7 +247,6 @@ var transitionGroups = []transitionGroup{
 	{
 		Name: "Reopening — the work is not settled after all",
 		Transitions: []Transition{
-			{From: Untriaged, To: Revisit, Actor: ActorAgent, Label: "reopens — needs re-evaluation"},
 			{From: Unplanned, To: Revisit, Actor: ActorAgent, Label: "reopens — needs re-evaluation"},
 			{From: Submitted, To: Revisit, Actor: ActorAgent, Label: "reopens — needs re-evaluation"},
 			{From: Ready, To: Revisit, Actor: ActorAgent, Label: "reopens — needs re-evaluation"},
@@ -274,7 +265,6 @@ var transitionGroups = []transitionGroup{
 		// legitimately make. Honesty over tidiness — see the authoring rule.
 		Name: "Declining — an active decision not to do (or not to keep) the work",
 		Transitions: []Transition{
-			{From: Untriaged, To: Declined, Actor: ActorUser, Label: "declines"},
 			{From: Unplanned, To: Declined, Actor: ActorUser, Label: "declines"},
 			{From: Submitted, To: Declined, Actor: ActorUser, Label: "declines"},
 			{From: Ready, To: Declined, Actor: ActorUser, Label: "declines"},
@@ -316,7 +306,6 @@ var transitionGroups = []transitionGroup{
 		// which is where `task show` reads the `Landed:` line from.
 		Name: "Obsoleting — no longer needed, and nothing replaced it",
 		Transitions: []Transition{
-			{From: Untriaged, To: Obsolete, Actor: ActorUser, Label: "retires — it no longer needs doing"},
 			{From: Unplanned, To: Obsolete, Actor: ActorUser, Label: "retires — it no longer needs doing"},
 			{From: Submitted, To: Obsolete, Actor: ActorUser, Label: "retires — it no longer needs doing"},
 			{From: Ready, To: Obsolete, Actor: ActorUser, Label: "retires — it no longer needs doing"},
@@ -353,7 +342,6 @@ var transitionGroups = []transitionGroup{
 		// converging is the merge's business.
 		Name: "Superseding — something else took the work over",
 		Transitions: []Transition{
-			{From: Untriaged, To: Superseded, Actor: ActorUser, Label: "supersedes — another task took it over"},
 			{From: Unplanned, To: Superseded, Actor: ActorUser, Label: "supersedes — another task took it over"},
 			{From: Submitted, To: Superseded, Actor: ActorUser, Label: "supersedes — another task took it over"},
 			{From: Ready, To: Superseded, Actor: ActorUser, Label: "supersedes — another task took it over"},
@@ -365,13 +353,18 @@ var transitionGroups = []transitionGroup{
 		// The three abandonment states carry an explicit decision, so reversing
 		// one has to be an explicit act — never a side effect of a reopen or a
 		// resume, which is what taskstatus.ReopenRefused exists to say. All
-		// land back at the entry status rather than teleporting to `ready`: a
-		// reconsidered task gets re-triaged like any other.
+		// land back at an entry status rather than teleporting to `ready`: a
+		// reconsidered task is exactly a task filed again — `unplanned`, or
+		// `submitted` when it already carries a plan, which still needs
+		// approving before anyone may work it.
 		Name: "Reversal — reconsidering an abandonment decision",
 		Transitions: []Transition{
-			{From: Declined, To: Untriaged, Actor: ActorUser, Label: "reconsiders"},
-			{From: Obsolete, To: Untriaged, Actor: ActorUser, Label: "reconsiders"},
-			{From: Superseded, To: Untriaged, Actor: ActorUser, Label: "reconsiders"},
+			{From: Declined, To: Unplanned, Actor: ActorUser, Label: "reconsiders"},
+			{From: Obsolete, To: Unplanned, Actor: ActorUser, Label: "reconsiders"},
+			{From: Superseded, To: Unplanned, Actor: ActorUser, Label: "reconsiders"},
+			{From: Declined, To: Submitted, Actor: ActorUser, Label: "reconsiders a task that has a plan"},
+			{From: Obsolete, To: Submitted, Actor: ActorUser, Label: "reconsiders a task that has a plan"},
+			{From: Superseded, To: Submitted, Actor: ActorUser, Label: "reconsiders a task that has a plan"},
 		},
 	},
 }
@@ -462,7 +455,9 @@ const mermaidIndent = "    "
 func RenderMermaid() string {
 	var b strings.Builder
 	b.WriteString("stateDiagram-v2\n")
-	b.WriteString(mermaidIndent + "[*] --> " + EntryStatus + "\n")
+	for _, s := range EntryStatuses {
+		b.WriteString(mermaidIndent + "[*] --> " + s + "\n")
+	}
 
 	for _, g := range transitionGroups {
 		b.WriteString("\n")

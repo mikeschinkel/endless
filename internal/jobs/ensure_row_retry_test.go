@@ -39,12 +39,12 @@ func TestIsBusy_RecognizesSQLiteContention(t *testing.T) {
 func TestEnsureRowWithRetry_SucceedsOnTheFirstUncontendedAttempt(t *testing.T) {
 	db := newTestDB(t)
 
-	if err := ensureRowWithRetry(db, "triage-sufficiency"); err != nil {
+	if err := ensureRowWithRetry(db, "example-job"); err != nil {
 		t.Fatalf("ensureRowWithRetry: %v", err)
 	}
 
 	var count int
-	if err := db.QueryRow("SELECT count(*) FROM jobs WHERE name = ?", "triage-sufficiency").Scan(&count); err != nil {
+	if err := db.QueryRow("SELECT count(*) FROM jobs WHERE name = ?", "example-job").Scan(&count); err != nil {
 		t.Fatalf("count jobs row: %v", err)
 	}
 	if count != 1 {
@@ -56,13 +56,13 @@ func TestEnsureRowWithRetry_IsIdempotent(t *testing.T) {
 	db := newTestDB(t)
 
 	for i := 0; i < 3; i++ {
-		if err := ensureRowWithRetry(db, "triage-sufficiency"); err != nil {
+		if err := ensureRowWithRetry(db, "example-job"); err != nil {
 			t.Fatalf("attempt %d: %v", i, err)
 		}
 	}
 
 	var count int
-	if err := db.QueryRow("SELECT count(*) FROM jobs WHERE name = ?", "triage-sufficiency").Scan(&count); err != nil {
+	if err := db.QueryRow("SELECT count(*) FROM jobs WHERE name = ?", "example-job").Scan(&count); err != nil {
 		t.Fatalf("count jobs row: %v", err)
 	}
 	if count != 1 {
@@ -80,7 +80,7 @@ func TestEnsureRowWithRetry_GivesUpPromptlyOnANonBusyError(t *testing.T) {
 	// A missing table is not contention — retrying it would only delay the fault
 	// the user actually needs to see.
 	start := time.Now()
-	err := ensureRowWithRetry(db, "triage-sufficiency")
+	err := ensureRowWithRetry(db, "example-job")
 	elapsed := time.Since(start)
 
 	if err == nil {

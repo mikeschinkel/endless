@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mikeschinkel/endless/internal/kairos"
 	"github.com/mikeschinkel/endless/internal/rating"
@@ -206,10 +207,13 @@ func replayTaskCreated(db *sql.DB, evt *Event, result *ProjectResult) error {
 		return err
 	}
 
+	// A task filed at the retired `untriaged` lands where E-1993 put it.
+	status := currentStatus(p.Status, strings.TrimSpace(p.PlanText()) != "")
+
 	_, err = db.Exec(
 		`INSERT INTO tasks (id, project_id, phase, title, description, status, type_id, sort_order, parent_id, complexity_id, risk_id, created_at, updated_at)
 		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-		taskID, projectID, p.Phase, p.Title, p.Description, p.Status, typeID,
+		taskID, projectID, p.Phase, p.Title, p.Description, status, typeID,
 		sortOrder, p.ParentID, complexityID, riskID, ts, ts,
 	)
 	if err != nil {
@@ -275,6 +279,7 @@ func replayTaskStatusChanged(db *sql.DB, evt *Event, result *ProjectResult) erro
 	}
 
 	taskID := evt.Entity.ID
+	p.NewStatus = currentStatus(p.NewStatus, taskHasPlan(db, taskID, nil))
 
 	var completedAt *string
 	if taskstatus.Has(taskstatus.SetsCompletedAt, p.NewStatus) {
@@ -358,6 +363,10 @@ func replayTaskFieldsUpdated(db *sql.DB, evt *Event, result *ProjectResult) erro
 	}
 
 	taskID := evt.Entity.ID
+
+	if s, ok := p.Fields["status"].(string); ok && s == legacyUntriaged {
+		p.Fields["status"] = currentStatus(s, taskHasPlan(db, taskID, p.Fields))
+	}
 
 	var setClauses []string
 	var args []any

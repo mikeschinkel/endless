@@ -9,7 +9,7 @@ sources; both belong to no task.
 | In `e-<id>/`                                  | Whose          | Written by                     |
 |-----------------------------------------------|----------------|--------------------------------|
 | `verify.toml`, `verify.sh`                    | the task's     | you, on the task branch        |
-| `plan.md`, `analysis.md`, `outcome.md`, `reason.md`, `notes.md` | the database's | `endless task update`, on main |
+| `context.md`, `plan.md`, `analysis.md`, `outcome.md`, `reason.md`, `notes.md` | the database's | `endless task update`, on main |
 
 Those `.md` files are **document mirrors**: each is a projection of one piece
 of the task's content in the database, and is named after it. The database is
@@ -21,6 +21,7 @@ database stale and is overwritten without warning by the `doc-mirrors` sweep,
 which rewrites any mirror whose bytes differ from the database. Write the
 content under `.endless/tmp/` and load it with the flag named after it:
 
+    endless task update E-<id> --context-file .endless/tmp/<file>.md
     endless task update E-<id> --plan-file .endless/tmp/<file>.md
     endless task update E-<id> --analysis-file .endless/tmp/<file>.md
     endless task update E-<id> --outcome-file .endless/tmp/<file>.md

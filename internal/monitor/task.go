@@ -20,9 +20,7 @@ type Task struct {
 }
 
 // GetActiveTasks returns the open (non-terminal, non-blocked) items for a
-// project — everything from freshly filed through in-flight. E-1845 added
-// `untriaged`, which is where every new task now lands; omitting it would have
-// made newly filed work invisible to every caller of this function.
+// project — everything from freshly filed through in-flight.
 func GetActiveTasks(projectID int64) ([]Task, error) {
 	db, err := DB()
 	if err != nil {

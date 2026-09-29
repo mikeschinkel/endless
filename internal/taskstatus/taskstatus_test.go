@@ -220,7 +220,7 @@ func TestGlyphsAreDistinct(t *testing.T) {
 
 func TestGetReturnsMembersInGroupOrder(t *testing.T) {
 	got := taskstatus.Get(taskstatus.DerivationPrecedence)
-	want := []string{"underway", "ready", "submitted", "unplanned", "untriaged"}
+	want := []string{"underway", "ready", "submitted", "unplanned"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Get(DerivationPrecedence) = %v, want %v", got, want)
 	}
@@ -258,7 +258,7 @@ func TestHas(t *testing.T) {
 		s     string
 		want  bool
 	}{
-		{taskstatus.SubmittableFrom, taskstatus.Untriaged, true},
+		{taskstatus.SubmittableFrom, taskstatus.Unplanned, true},
 		{taskstatus.SubmittableFrom, taskstatus.Ready, false},
 		{taskstatus.Terminal, taskstatus.Unverified, false},
 		{taskstatus.Shipped, taskstatus.Unverified, true},
@@ -274,8 +274,8 @@ func TestHas(t *testing.T) {
 }
 
 func TestSQLListQuotesAndJoins(t *testing.T) {
-	if got, want := taskstatus.SQLList(taskstatus.PreJudgment), "'untriaged','unplanned'"; got != want {
-		t.Errorf("SQLList(PreJudgment) = %q, want %q", got, want)
+	if got, want := taskstatus.SQLList(taskstatus.SubmittableFrom), "'unplanned','revisit'"; got != want {
+		t.Errorf("SQLList(SubmittableFrom) = %q, want %q", got, want)
 	}
 	if got := taskstatus.SQLList(taskstatus.Group(9999)); got != "" {
 		t.Errorf("SQLList(bogus) = %q, want empty", got)
@@ -301,8 +301,8 @@ func TestRank(t *testing.T) {
 	if got, want := taskstatus.Rank(taskstatus.DerivationPrecedence, taskstatus.Underway), 0; got != want {
 		t.Errorf("Rank(DerivationPrecedence, underway) = %d, want %d", got, want)
 	}
-	if got, want := taskstatus.Rank(taskstatus.DerivationPrecedence, taskstatus.Untriaged), 4; got != want {
-		t.Errorf("Rank(DerivationPrecedence, untriaged) = %d, want %d", got, want)
+	if got, want := taskstatus.Rank(taskstatus.DerivationPrecedence, taskstatus.Unplanned), 3; got != want {
+		t.Errorf("Rank(DerivationPrecedence, unplanned) = %d, want %d", got, want)
 	}
 	if got := taskstatus.Rank(taskstatus.DerivationPrecedence, taskstatus.Confirmed); got != taskstatus.NoRank {
 		t.Errorf("Rank(DerivationPrecedence, confirmed) = %d, want NoRank", got)
@@ -330,7 +330,7 @@ func TestValidate(t *testing.T) {
 	}
 	// The message must name the vocabulary — an agent that guessed wrong should
 	// learn the whole set in one round trip.
-	if !strings.Contains(err.Error(), "untriaged") {
+	if !strings.Contains(err.Error(), "unplanned") {
 		t.Errorf("Validate error does not list the vocabulary: %v", err)
 	}
 }
@@ -375,27 +375,27 @@ func TestParseGroupRejectsUnknown(t *testing.T) {
 func TestGroupMembershipIsPinned(t *testing.T) {
 	want := map[string][]string{
 		"abandoned":              {"declined", "obsolete", "superseded"},
-		"all":                    {"untriaged", "unplanned", "submitted", "ready", "underway", "unverified", "unreviewed", "confirmed", "assumed", "completed", "revisit", "declined", "obsolete", "superseded"},
+		"all":                    {"unplanned", "submitted", "ready", "underway", "unverified", "unreviewed", "confirmed", "assumed", "completed", "revisit", "declined", "obsolete", "superseded"},
 		"actionable":             {"unplanned", "ready", "revisit"},
-		"not-actionable":         {"untriaged", "submitted", "underway", "unverified", "unreviewed", "confirmed", "assumed", "completed", "declined", "obsolete", "superseded"},
+		"not-actionable":         {"submitted", "underway", "unverified", "unreviewed", "confirmed", "assumed", "completed", "declined", "obsolete", "superseded"},
 		"active":                 {"underway", "unverified", "unreviewed"},
 		"awaits-user":            {"unverified", "unreviewed", "submitted"},
-		"claim-promotes":         {"untriaged", "unplanned", "ready", "revisit"},
-		"open":                   {"untriaged", "unplanned", "submitted", "ready", "underway"},
-		"children-state-order":   {"untriaged", "unplanned", "submitted", "ready", "underway", "revisit", "unverified", "unreviewed"},
-		"derivation-precedence":  {"underway", "ready", "submitted", "unplanned", "untriaged"},
-		"description-reset-from": {"untriaged", "unplanned", "submitted", "ready", "revisit"},
-		"pre-judgment":           {"untriaged", "unplanned"},
+		"claim-promotes":         {"unplanned", "ready", "revisit"},
+		"open":                   {"unplanned", "submitted", "ready", "underway"},
+		"children-state-order":   {"unplanned", "submitted", "ready", "underway", "revisit", "unverified", "unreviewed"},
+		"derivation-precedence":  {"underway", "ready", "submitted", "unplanned"},
+		"description-reset-from": {}, // retired by E-1993; empty on purpose
+		"pre-judgment":           {"unplanned"},
 		"reopen-refused":         {"declined", "obsolete", "superseded"},
 		"reopenable":             {"confirmed", "assumed", "completed"},
 		"review-track":           {"unreviewed"},
-		"session-pending":        {"untriaged", "unplanned", "submitted", "ready", "underway", "revisit"},
+		"session-pending":        {"unplanned", "submitted", "ready", "underway", "revisit"},
 		"sets-completed-at":      {"confirmed", "completed"},
 		"settled":                {"unverified", "unreviewed", "confirmed", "assumed", "completed", "declined", "obsolete", "superseded"},
 		"shipped":                {"unverified", "unreviewed", "confirmed", "assumed", "completed"},
 		"shipped-terminal":       {"confirmed", "assumed", "completed"},
 		"sticky-override":        {"revisit", "declined", "obsolete", "superseded"},
-		"submittable-from":       {"untriaged", "unplanned", "revisit"},
+		"submittable-from":       {"unplanned", "revisit"},
 		"terminal":               {"confirmed", "assumed", "completed", "declined", "obsolete", "superseded"},
 		"verification-terminal":  {"confirmed", "assumed"},
 		"verification-track":     {"unverified", "confirmed", "assumed"},

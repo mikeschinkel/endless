@@ -348,28 +348,18 @@ the database itself and check `endless sql "select 1"`.
 
 ## WARN-0009 — triage-failed
 
-**Severity:** warning · **Raised by:** `endless triage run` (E-1859)
+**Severity:** warning · **Raised by:** nothing — retired by E-1993
 
 Triage could not reach a verdict for a task, so the task was left `untriaged`.
-Causes: the model call timed out, `claude` was not found on PATH, the process
-exited non-zero, or the reply did not begin with `SUBMITTED:` or `UNPLANNED:`.
+The description triage that raised it, and the `untriaged` status it guarded,
+were removed by E-1993: a task needs a plan before it can be claimed or
+spawned, so no description is ever judged a sufficient spec. The code stays in
+the catalog because a number is never reused, and because incidents recorded
+before the removal still carry it.
 
-Nothing is lost or corrupted — triage is fail-open, the task keeps its
-`untriaged` status, and the background sweep retries it. The warning exists
-because the file-time triage path runs DETACHED: without it, a child that
-crashed and a child that considered the description and declined to route look
-identical, and neither is recorded anywhere.
-
-The source names which path failed — `triage:inline` for the child `task add`
-spawns, `triage:sweep` for the background job. Repeats collapse into a single
-incident with an occurrence count, so a machine with no `claude` installed
-raises one warning rather than one per filing.
-
-**What to do.** Check that `claude` is on PATH and answering — the incident's
-detail log carries the failing invocation. If triage is not wanted on this
-machine, set `ENDLESS_NO_TRIAGE=1` to stop the automatic path, or route by hand
-with `endless task submit <id>` / `endless task update <id> --status unplanned`.
-Dismiss with `endless errors clear <id>`.
+**What to do.** Nothing to fix: the description triage was removed (E-1993) and
+nothing raises this code any more. An incident still carrying it predates the
+removal — dismiss it with `endless errors clear <id>`.
 
 ## ERR-0010 — worktree-probe-failed
 

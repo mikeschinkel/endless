@@ -385,9 +385,9 @@ func now() string {
 // task is spec-complete yet" — the states from which attaching a plan is what
 // makes it spec-complete, so the plan-attach auto-move to `submitted` applies.
 //
-// `untriaged` (E-1845) is the status `task add` now defaults to; `unplanned` is
-// where triage sends a task that needs design work. Attaching a plan answers the
-// open question in both cases, so both promote. Every other status either
+// That is `unplanned`, where `task add` files a task with no plan (E-1993).
+// Attaching a plan answers its open question, so it promotes. Every other
+// status either
 // already carries a judgment (submitted/ready and beyond) or is a deliberate
 // decision (declined/obsolete) that a plan attachment must not silently undo.
 //
@@ -445,11 +445,11 @@ func execTaskCreated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 	// (spec-complete, awaiting human approval — NOT `ready`, which now means
 	// human-approved). Mirrors task.fields_updated when --plan is supplied.
 	// Only fires from a pre-judgment status — an explicit override (any
-	// non-default status) is preserved. E-1845 added `untriaged`, which is now the default `task add`
-	// lands on; without it, `task add --plan-file plan.md` would file a fully
-	// planned task as untriaged and strand it there.
+	// non-default status) is preserved.
 	plan := p.PlanText()
-	status := p.Status
+	// A client older than E-1993 still files at `untriaged`; it lands where a
+	// rebuild of the same event would put it.
+	status := currentStatus(p.Status, strings.TrimSpace(plan) != "")
 	if isPreJudgmentStatus(status) && strings.TrimSpace(plan) != "" {
 		status = "submitted"
 	}

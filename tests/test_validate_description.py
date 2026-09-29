@@ -153,12 +153,13 @@ def test_task_update_rejects_oversized_description(isolated_env, monkeypatch):
     monkeypatch.setattr("endless.event_bridge.emit_event", _noop_emit)
 
     runner = CliRunner()
-    long = "a" * 1025
+    long = "a" * (task_cmd.DESCRIPTION_MAX_LENGTH + 1)
     result = runner.invoke(main, [
         "task", "update", "1", "--description", long,
     ])
     assert result.exit_code != 0
-    assert "1024" in result.output
+    assert str(task_cmd.DESCRIPTION_MAX_LENGTH) in result.output
+    assert "--context" in result.output
 
 
 def test_task_update_rejects_newline_in_description(isolated_env, monkeypatch):

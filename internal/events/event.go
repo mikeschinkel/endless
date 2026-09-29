@@ -165,6 +165,9 @@ const (
 	// carries no session (nothing to attribute to); the deciding model and its
 	// one-line rationale ride in the payload as provenance, which is a separate
 	// concern from attribution.
+	//
+	// Nothing emits it since E-1993 removed the triager. It stays valid because
+	// the ledger is immutable and its historical events carry it.
 	ActorTriager ActorKind = "triager"
 )
 
@@ -457,7 +460,7 @@ var validActorKinds = map[ActorKind]bool{
 	ActorHook:    true,
 	ActorSystem:  true,
 	ActorWeb:     true,
-	ActorTriager: true, // E-1859
+	ActorTriager: true, // E-1859; historical only since E-1993
 }
 
 // Validate checks that the event envelope is well-formed.

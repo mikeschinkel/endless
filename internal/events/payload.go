@@ -31,6 +31,7 @@ type TaskCreatedPayload struct {
 	// more; `omitempty` keeps it out of every payload this struct marshals.
 	LegacyText string `json:"text,omitempty"`
 
+	Context  string `json:"context,omitempty"`
 	Analysis string `json:"analysis,omitempty"`
 	Notes    string `json:"notes,omitempty"`
 	Phase    string `json:"phase"`

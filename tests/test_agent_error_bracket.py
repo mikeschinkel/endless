@@ -117,8 +117,9 @@ def test_the_verdict_carries_what_would_have_stopped_the_failure(project_row, as
     assert f"title {len(LONG_TITLE)}>{task_cmd.TITLE_MAX_LENGTH} chars" in verdict
     # The command that produced it, so the line survives out of context.
     assert "task add" in verdict
-    # Where the overflow goes, not merely "shorten".
-    assert "--analysis" in verdict and "--plan" in verdict
+    # Where the overflow goes, not merely "shorten" (E-1993: the how and the why
+    # have named homes).
+    assert "--analysis" in verdict and "--context" in verdict
     # Whether anything changed.
     assert task_cmd.NOTHING_CREATED in verdict
 
@@ -157,7 +158,7 @@ def test_human_refusal_is_not_bracketed(project_row, monkeypatch):
     lines = out.rstrip("\n").split("\n")
     assert lines[0] == ""
     assert lines[1] == f"Error: Title is {len(LONG_TITLE)} characters; max is {task_cmd.TITLE_MAX_LENGTH}."
-    assert out.count("Consider using this template:") == 1
+    assert out.count("A title is recognizable, not descriptive") == 1
 
 
 def test_agent_view_renders_the_bracket_for_a_human(project_row, monkeypatch):
@@ -189,8 +190,8 @@ def test_title_and_description_are_named_in_one_verdict(project_row, as_agent):
             f"{task_cmd.DESCRIPTION_MAX_LENGTH} chars") in verdict
     assert lines[0] == lines[-1]
     # One refusal, not two: both guidance blocks, one verdict at each end.
-    assert "Consider using this template:" in result.output
-    assert "not a dissertation" in result.output
+    assert "A title is recognizable, not descriptive" in result.output
+    assert "A description is WHAT the task is" in result.output
 
 
 def test_a_multiline_and_oversized_description_reports_both(project_row):

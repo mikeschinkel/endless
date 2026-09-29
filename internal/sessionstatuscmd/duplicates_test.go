@@ -20,7 +20,7 @@ func TestDuplicatesNote_TerminalGate(t *testing.T) {
 			t.Errorf("status %q: duplicatesNote = %q, want the id", s, got)
 		}
 	}
-	open := []string{"untriaged", "unplanned", "submitted", "ready", "underway",
+	open := []string{"unplanned", "submitted", "ready", "underway",
 		"unverified", "blocked", "revisit"}
 	for _, s := range open {
 		r := monitor.SessionStatusRow{Status: s, Duplicates: []int64{1086}}

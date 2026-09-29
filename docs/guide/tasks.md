@@ -6,28 +6,84 @@ Everything about manipulating the task tree: what each field is for, the full co
 
 ## Task fields
 
-Every task has multiple body fields. Knowing which to use prevents long descriptions that should have been plans, and short plans that should have been descriptions.
+Every task has one short name, one short description, and a set of long-form content slots. Each slot has one job, and putting text in the wrong one is the commonest way a task stops being readable.
 
 | Field         | Length         | Purpose                                                                                          | How to set                                         |
 |---------------|----------------|--------------------------------------------------------------------------------------------------|----------------------------------------------------|
-| `title`       | One line       | The task name. Verb-first (see Verbs below).                                                     | Positional arg on `task add`; `--title` on update. |
-| `description` | < 200 words    | Brief pitch — *what* and *why* in a paragraph or two. Shown by default in `task list` / `task show`. | `--description` (inline) / `--description-file <path>` on `task add` / `task update`. |
-| `plan`        | Long-form      | Full implementation plan: approach, the files and functions it touches, verification steps. Name files and functions, never line numbers — see **No time-frozen specifics** below. Shown with `task show --plan`. **On a research task, `plan` instead holds the research *request* — see the Research-task field model below.** | `--plan` (inline) / `--plan-file <path>` on `task add` / `task update`. |
-| `analysis`    | Long-form      | Supporting research / exploration content that is *not* a proper plan — comparisons, findings, evidence gathered before the plan is written. Shown with `task show --analysis`. | `--analysis` (inline) / `--analysis-file <path>` on `task update`. |
-| `notes`       | Freeform       | Catch-all for content that doesn't fit elsewhere. Use sparingly. `--justification` composes its `## Justification` heading in here. Shown with `task show --notes`. | `--notes` (inline) / `--notes-file <path>` on `task update`. |
+| `title`       | ≤ 60 chars     | The task name: WHAT, recognizable rather than descriptive. Verb-first (see Verbs below). | Positional arg on `task add`; `--title` on update. |
+| `description` | ≤ 256 chars, one line | WHAT the task is — for a bug, the defect in one sentence. Shown by default in `task list` / `task show`. It describes the task; it is never a spec. | `--description` (inline) / `--description-file <path>` on `task add` / `task update`. |
+| `context`     | Long-form      | Why the task exists: how things work today, what prompted the task, and the evidence for it (logs, counts, repro). Never how the work will be done. Rendered by default, directly after the description. | `--context` (inline) / `--context-file <path>` on `task add` / `task update`. |
+| `analysis`    | Long-form      | Design and investigation toward a plan: the how, rationale and rejected alternatives, scope, acceptance ideas, open design questions. Shown with `task show --analysis`. | `--analysis` (inline) / `--analysis-file <path>` on `task add` / `task update`. |
+| `plan`        | Long-form      | The approved work: approach, the files and functions it touches, verification steps. **Required before a task can be claimed or spawned.** Name files and functions, never line numbers — see **No time-frozen specifics** below. Shown with `task show --plan`. **On a research task, `plan` instead holds the research *request* — see the Research-task field model below.** | `--plan` (inline) / `--plan-file <path>` on `task add` / `task update`. |
+| `notes`       | Freeform       | Catch-all: history, progress, dated updates, who said what. Use sparingly. `--justification` composes its `## Justification` heading in here. Shown with `task show --notes`. | `--notes` (inline) / `--notes-file <path>` on `task update`. |
 | `outcome`     | Short to long  | The result — the deliverable. **Required** when completing a `research`/`brainstorm` task (the outcome IS the deliverable). Optional on `confirm`/`assume`. Shown with `task show --outcome`. | `--outcome` (inline) / `--outcome-file <path>` on `task confirm` / `task assume` / `task update`. |
 | `reason`      | Short          | Why the task ended. **Required** on every abandonment — `declined`, `obsolete` and `superseded` alike — given with that command; one already stored does not count. Kept apart from `outcome` so abandoning findings work never overwrites the findings. Shown with `task show --reason`. | `--reason` (inline) / `--reason-file <path>` on `task update` / `task decline`; `--outcome` given *with* an abandonment status, and on `task replace`, is stored as the reason. |
 
-`plan`, `analysis`, `outcome`, `reason` and `notes` are **content**: each is one row per task in the database under that name, and the name is also the CLI flag, the `task show` heading and the mirror file (`.endless/tasks/e-NNNN/<name>.md`). `title` and `description` are columns on the task itself.
+`context`, `analysis`, `plan`, `outcome`, `reason` and `notes` are **content**: each is one row per task in the database under that name, and the name is also the CLI flag, the `task show` heading and the mirror file (`.endless/tasks/e-NNNN/<name>.md`). `title` and `description` are columns on the task itself.
+
+**The limits are enforced on write.** `task add` and `task update` refuse a title over 60 characters, a description over 256 characters or containing a newline, and a task, decision or session id (`E-NNN`, `ED-NNN`, `ES-NNN`) in either — and the refusal names where the text belongs instead. A limit applies to the field being written: an update that does not touch an older, longer title or description is not refused, and nothing is ever truncated. Ids are fine in every content slot.
+
+### What a title is NOT
+
+- **Not the how.** Drop the mechanism: "via…", "by…", "using…", "proposed at X and ratified at Y".
+  - before: *Replace tasks.tier with complexity and risk rating axes proposed at submit and ratified at approve*
+  - after: *Replace tasks.tier with complexity and risk rating*
+- **Not the why.** No "so that…", "to avoid…", "instead of…" clause.
+  - before: *Close the land window where the migrated DB meets the stale installed binary*
+  - after: *Close land's window between migrated DB and stale binary*
+- **Not a table of contents.** No colon, dash or parenthetical followed by a list of sub-parts.
+  - before: *Rework the errors surface: list vs show, project attribution, width, and remedies*
+  - after: *Rework the errors surface*
+  - before: *Build Endless's per-task verification-suite system: language-agnostic, triple-runnable*
+  - after: *Build per-task verification-suite system*
+- **Not a task or decision id.** Name the other thing in words, and put the relationship in a task link.
+- **No qualifier that does not distinguish.** Keep "in hookcmd's claude-skip suite" when a sibling title would otherwise collide; drop "when run from a self-dev session" when it is detail.
+  - before: *Fix worktree land writing task.landed to the sandbox DB when run from a self-dev session*
+  - after: *Fix worktree land writing to sandbox DB from self-dev shell*
+- **Not over 60 characters.**
+
+### What a description is NOT
+
+A description is the blurb on a page that lists tasks: WHAT the task is, in at most 256 characters. For a bug, it is the defect in one sentence ("X does Y when it should do Z").
+
+- **Not the how.** Mechanism, files, tables, flags and steps go in `analysis` (design) or `plan` (approved work).
+  - before: *Replace tasks.tier with two rating axes per ED-138/ED-139: nullable FK columns to seeded complexity_levels and risk_levels tables (low=1, medium=3, high=5; 2 and 4 unseeded), Go int-const enums with String()/Parse(), agent-proposed at submit and user-ratified at approve. Ratings do not move status. Tier is removed rather than kept — …*
+  - after: *Replace tasks.tier with two rating axes to be agent-proposed at submit and user-ratified at approve. The two axes will be complexity and risk and both will use rating values of 'low', 'medium' and 'high'.*
+- **Not the world as it is today, the backstory, or the evidence.** How the system behaves now, the incident that prompted the task, logs, counts and repro all go in `context`.
+  - before: *The errors surface has seven problems, found while reading two real incidents. 'show' lists rather than showing one item, … The default listing omits the project, so 'errors show' printed 'no errors' inside one project while the status line reported one error and one warning from another … (six more sentences)*
+  - after: *Rework endless errors and its status-line notification: a real single-error show, project attribution, compact severity icons, consistent codes, remedies per error, and rename 'badge' to 'notification row'.*
+- **Not why this approach.** Alternatives, tradeoffs and "rather than kept because…" go in `analysis`.
+- **Not a task or decision id.** Say what the other thing is in words, and make the relationship a task link. "Informs the caps task" cannot be read without opening that task.
+  - before: *… fail on main as of a01840e: … Surfaced during E-119 verification via 'go test ./...'.*
+  - after: *Two tests in internal/hookcmd/claude_skip_test.go fail on main: TestShouldSkipForWorktreeAt_WorktreeBinaryMissing and TestShouldSkipForWorktreeAt_SelfIsGlobal.*
+- **Not a pointer.** Never "See --analysis", "Plan attached" or "Details in the plan". Every field already renders under its own heading.
+- **Not history.** Progress, "already landed", dated updates, who said what when, completion reports and lessons go in `notes` (or `outcome`/`reason` where they record the end).
+- **Not two tasks.** If the WHAT needs "Separately, …", file a second task.
+
+Ids stay fine in every other slot. Text moved out of a description keeps its ids verbatim.
 
 ### Distinctions in practice
 
 - **Loading a field from a file.** Every long-form field has a `--<field>-file <path>` twin. It refuses an empty or whitespace-only file rather than blanking what's there — see [An empty `--<field>-file` is refused](#an-empty---field-file-is-refused) below.
-- **Description vs plan.** Description is a pitch — max 1024 character — readable in 30 seconds, fits in a list view. The plan is what you'd hand to an engineer. If you're writing four paragraphs into `--description`, stop — put it in a plan file and load with `--plan-file` (`--plan` stores its argument verbatim as inline content; pass a path to `--plan-file` to load a file).
+- **Description vs plan.** The description says what the task is; the plan says how it will be done, and is what you'd hand to an engineer. A description is never a sufficient spec — a task cannot be claimed or spawned without a plan (see [Plans and open questions gate spawning](#plans-and-open-questions-gate-spawning)). If you're writing more than a sentence or two into `--description`, stop: it belongs in `--context`, `--analysis` or `--plan-file` (`--plan` stores its argument verbatim as inline content; pass a path to `--plan-file` to load a file).
+- **Context vs analysis.** Context is the problem: what is true today and why that is worth changing. Analysis is the solution taking shape: how, and why this way. A stranger reads context to see that the WHAT is worth doing, without reading the plan.
 - **Plan vs handoff.** The plan is for humans and for the spawned session, which `endless task spawn` directs it to read. The session's *opening input* (the handoff) is generated from a template at spawn time, not stored on the task; see `endless guide orchestration`.
 - **Analysis vs plan.** Analysis is supporting evidence gathered *before a plan is written on a do-task* — comparisons, findings, raw material. The plan is the actionable part. A deliverable-shaped task (an audit, or a `research`-type task) puts its *result* in `outcome`, not `plan` or `analysis`; for research tasks specifically, see the Research-task field model below.
-- **No time-frozen specifics.** No durable field — description, analysis, plan, outcome, or a decision body — may carry a byte count, a file size, a line number, a `file.ext:NNN` citation, a match count, or a sha of something that still moves. They have near-zero historical value and go stale the moment anything else lands, which leaves a later session unable to tell whether to trust them. Cite a durable identifier instead — a function, handler, command or symbol name — or better, state the SEARCH that finds the sites rather than the sites themselves. This is enforced on write, on both the inline flag and its `--<field>-file` twin, and there is no escape flag.
+- **No time-frozen specifics.** No durable field — description, context, analysis, plan, outcome, or a decision body — may carry a byte count, a file size, a line number, a `file.ext:NNN` citation, a match count, or a sha of something that still moves. They have near-zero historical value and go stale the moment anything else lands, which leaves a later session unable to tell whether to trust them. Cite a durable identifier instead — a function, handler, command or symbol name — or better, state the SEARCH that finds the sites rather than the sites themselves. This is enforced on write, on both the inline flag and its `--<field>-file` twin, and there is no escape flag.
 - **Outcome.** Single field for "how this task ended." Required where the *why* must be captured at the moment of the decision: completing a `research`/`brainstorm` task (the outcome IS the deliverable) and abandoning one — `declined`, `obsolete` and `superseded`, none of which record the reason anywhere else. Optional on `confirm`/`assume`, where "we tested it and it worked" rarely needs prose. `task decline` uses `--reason` as the CLI flag (stored as outcome internally).
+
+### Plans and open questions gate spawning
+
+Filing is cheap: a task may be filed with no plan, and that is legitimate — you should not plan work you are not doing, in an area you may not know. Such a task simply parks at `unplanned`.
+
+What a task needs is a plan **before anyone starts it**. `task claim` and `task spawn` refuse a task that:
+
+- has **no `plan`**, or
+- has **any open question** (see [Open questions](#open-questions) below).
+
+The refusal says how to proceed: write the plan, attach it (`task update <id> --plan-file <path>`, which moves the task to `submitted`), and have it approved (`task approve <id>`); answer or close each open question. There is no grandfathering — an older task meets the gate exactly as a new one does, which is how it finds out it needs a plan.
+
+**"Plan drafted, N questions open" is a complete, filed state, not a failure.** When you plan a task and hit questions only your user can answer, do not decide them to make the plan look finished. Attach the plan you have, ask the questions with `endless question ask <id> "…"`, and stop. The task is parked until they are answered, `task show` says so prominently, and the questions are recorded durably instead of scrolling away in chat. Filing is the way to ask, not the opposite of asking. A question you can put to a live user in the conversation, ask there instead: rows are for when nobody is there to answer.
 
 ---
 
@@ -370,7 +426,9 @@ endless task update <id> --plan-file <path> --keep-status   # edit, infer nothin
 endless task update <id> --clear analysis            # empty a field, on purpose
 ```
 
-Attaching a non-empty plan (`--plan`) to a `unplanned` task moves it to `submitted` (spec-complete, awaiting approval — **not** `ready`, which now means human-approved). Applies on both `task add` and `task update`. An explicit `--status` in the same call always wins. When the description alone is a sufficient spec (no plan), run `task submit <id>` to reach `submitted` directly. A human then runs `task approve <id>` to promote `submitted → ready`.
+Attaching a non-empty plan (`--plan`) to an `unplanned` task moves it to `submitted` (spec-complete, awaiting approval — **not** `ready`, which means human-approved). Applies on both `task add` and `task update`. An explicit `--status` in the same call always wins. `task submit <id>` reaches `submitted` explicitly — for a plan attached with `--keep-status`, or a `revisit` task being re-submitted — and refuses a task with no plan. A human then runs `task approve <id>` to promote `submitted → ready`.
+
+**A description edit never changes status.** The description describes the task; the plan is the spec.
 
 ### `--keep-status`: edit the content, infer nothing
 
@@ -378,8 +436,8 @@ Attaching a non-empty plan (`--plan`) to a `unplanned` task moves it to `submitt
 
 | The edit | Infers |
 |---|---|
-| non-empty `--plan` on an `untriaged`/`unplanned` task | → `submitted` (plan attached = spec-complete) |
-| a material `--description` change on a pre-work task | → `untriaged` (the spec every later judgment was made against changed) |
+| non-empty `--plan` on an `unplanned` task | → `submitted` (plan attached = spec-complete) |
+| a material `--plan` change on a `ready` task | → `submitted` (what was approved changed; it needs approving again) |
 
 A rating edit infers nothing: `--complexity`/`--risk` never move status. (The
 retired `--tier 1` used to advance a pre-work task to `ready`; see
@@ -393,7 +451,7 @@ retired `--tier 1` used to advance a pre-work task to `ready`; see
 
 ### An empty `--<field>-file` is refused
 
-`--description-file`, `--plan-file`, `--analysis-file` and `--outcome-file` write whatever the file holds. When the file comes back empty — a failed extraction, a `sed` that matched nothing — that used to replace the existing content with nothing and print a normal success line. It happened to a 3.5KB analysis, and the content survived only because the session still had it in context.
+`--description-file`, `--context-file`, `--plan-file`, `--analysis-file` and `--outcome-file` write whatever the file holds. When the file comes back empty — a failed extraction, a `sed` that matched nothing — that used to replace the existing content with nothing and print a normal success line. It happened to a 3.5KB analysis, and the content survived only because the session still had it in context.
 
 **Zero bytes is never a legitimate value for these fields**, so an empty *or whitespace-only* file is refused. The error names the path, so you can find the step that produced it:
 
@@ -524,9 +582,7 @@ ratified. `task update --status submitted` and `--status ready` meet the same
 gates, since they are the same acts under another verb.
 
 Two routes reach `submitted` without `task submit`, and neither is refused for
-missing ratings. The triager proposes both when it routes a task to `submitted`,
-for any axis not already set; a missing or malformed rating in its reply costs
-the rating, never the routing. Attaching a plan promotes a task too, and prints
+missing ratings. Attaching a plan promotes a task to `submitted` too, and prints
 the exact `task update` flags for whatever is still unrated. Either way, approve
 is the backstop.
 
@@ -538,58 +594,6 @@ unrated), and `task list --sort complexity|risk` puts unrated last.
 They replaced `tier`, which was the same judgment under another name. Tier
 values were dropped rather than mapped, because a mapped value would read as a
 rating someone had ratified.
-
----
-
-## Triage (`untriaged` → `submitted` | `unplanned`)
-
-Every new task is filed `untriaged` — nobody has looked at it. Triage moves it
-one hop by answering one question: **is this description already a sufficient
-spec?** Sufficient → `submitted` (awaiting the human's `approve`), with a
-proposed complexity and risk rating for any axis not already set; not
-sufficient → `unplanned` (design work first).
-
-This is automatic. `endless task add` spawns the triage of that one task
-detached, so an interactive filing is usually routed within seconds, and a
-background sweep re-checks the whole queue every 15 minutes as the backstop.
-
-```bash
-endless triage run                                   # sweep this project's untriaged queue
-endless triage run --task E-123                      # just this one
-endless triage run --all-projects                    # every project (what the job does)
-endless triage run --dry-run                         # print the calls, write nothing
-```
-
-Three properties are worth knowing when you are working alongside it:
-
-- **It judges only what is written down.** The call sees the description, the
-  parent, the sibling titles, and any linked decisions — never the transcript
-  of the session that filed the task. That is deliberate: a description that
-  only makes sense to whoever was in the room is not a sufficient spec, and
-  triage is the thing that says so. Write the description for a stranger.
-- **It fails open.** A model timeout, a missing `claude`, or an unparseable
-  reply leaves the task `untriaged` and exits zero. Nothing is ever
-  mis-transitioned because the model was unreachable.
-- **You always win.** `endless task submit <id>` and
-  `endless task update <id> --status unplanned` remain the override, and a task
-  you route by hand is never overwritten by an in-flight triage call. Use them
-  freely when you disagree with a call.
-
-Attribution is queryable: a triage transition is recorded with
-`actor.kind = triager`, and its payload carries the deciding model and the
-model's one-line rationale.
-
-Two levers. The wording lives in a template, so you can tune it without
-touching product source — the render order is
-`<project>/.endless/templates/triage/sufficiency.md.local.tmpl` (yours, never
-committed) → `…/sufficiency.md.tmpl` (committed) → the shipped default. The
-model is `models.triage` in `<project>/.endless/config.json` or your user
-`config.json`, defaulting to `sonnet`. (`models.verb_check` resolves the same
-way and drives the title verb check; it defaults to `haiku`.)
-
-Set `ENDLESS_NO_TRIAGE=1` to suppress the automatic file-time path for one
-process — what a test suite or a bulk import wants. An explicit
-`endless triage run` still runs.
 
 ---
 
@@ -897,6 +901,9 @@ endless question supersede EQ-<n>... --reason "..."   # rolled into a later seri
 - **The plan stays authoritative.** An answer is not in force until you fold it
   into the plan (`task update --plan-file`). Then supersede the questions it
   settled, so the old series stops reading as live.
+- **An open question parks the task.** While any question is `open`, `task
+  claim` and `task spawn` refuse the task and `task show` renders it `Parked:`
+  with the questions listed. Answer or close each one to release it.
 
 ---
 

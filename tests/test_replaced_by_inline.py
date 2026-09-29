@@ -92,7 +92,7 @@ def test_note_renders_for_every_terminal_status(status):
 
 
 @pytest.mark.parametrize(
-    "status", ["untriaged", "unplanned", "submitted", "ready", "underway",
+    "status", ["unplanned", "submitted", "ready", "underway",
                "unverified", "revisit"]
 )
 def test_note_is_silent_for_a_non_terminal_status(status):
@@ -217,7 +217,7 @@ def test_update_to_obsolete_is_allowed_on_shipped_work(
 
 @pytest.mark.parametrize(
     "open_status",
-    ["untriaged", "unplanned", "submitted", "ready", "underway", "revisit"],
+    ["unplanned", "submitted", "ready", "underway", "revisit"],
 )
 def test_update_to_obsolete_is_allowed_on_unshipped_work(
     seeded_project_at_cwd, open_status

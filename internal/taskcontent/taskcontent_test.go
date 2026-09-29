@@ -59,7 +59,7 @@ func TestString_IsTheCapitalizedSlug(t *testing.T) {
 // Display order is part of the contract: `task show` renders sections in it.
 func TestAll_IsDisplayOrder(t *testing.T) {
 	got := strings.Join(taskcontent.Slugs(), ",")
-	if want := "analysis,plan,outcome,reason,notes"; got != want {
+	if want := "context,analysis,plan,outcome,reason,notes"; got != want {
 		t.Errorf("Slugs() = %s, want %s", got, want)
 	}
 }

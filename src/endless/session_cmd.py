@@ -232,7 +232,7 @@ def _require_claude() -> str:
 # E-1801: `session resume --reopen` transitions the task's status as a function
 # of its current status. Done tasks (confirmed/assumed/completed) flip to
 # `revisit` — reopening resumes re-evaluation. Still-active (underway/
-# unverified) and still-open (untriaged/unplanned/submitted/ready/revisit)
+# unverified) and still-open (unplanned/submitted/ready/revisit)
 # tasks keep their status; the worktree is just restored under them.
 #
 # E-1968 gave this set a second job: it is also the set on which `session goto

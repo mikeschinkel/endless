@@ -52,7 +52,7 @@
 //
 // The two are not the same function waiting to be merged. Endless injects
 // XDG_CONFIG_HOME to route a child process at a worktree's sandbox
-// (sandboxcmd.Sandbox.Env, triagejob, minimizerjob), so escaping that injection
+// (sandboxcmd.Sandbox.Env, minimizerjob), so escaping that injection
 // is the whole meaning of asking for main. E-1964 deleted `sandbox bind` — the
 // PERSISTENT injection written into a settings file — but the per-invocation
 // one remains, by design, and so does this distinction.

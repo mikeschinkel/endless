@@ -1,14 +1,60 @@
 package monitor
 
 import (
+	"database/sql"
 	"testing"
+
+	_ "modernc.org/sqlite"
+
+	"github.com/mikeschinkel/endless/internal/schema"
 )
 
+// questionsTestDB opens an in-memory DB with the schema applied and two
+// projects, so the project filter and the database-wide read are both
+// exercisable.
+func questionsTestDB(t *testing.T) *sql.DB {
+	t.Helper()
+	db, err := sql.Open("sqlite", ":memory:")
+	if err != nil {
+		t.Fatalf("open db: %v", err)
+	}
+	t.Cleanup(func() { db.Close() })
+	if err = schema.Migrate(db); err != nil {
+		t.Fatalf("apply schema: %v", err)
+	}
+	if _, err = db.Exec(
+		`INSERT INTO projects (id, name, path) VALUES
+		   (1, 'alpha', '/tmp/alpha'),
+		   (2, 'beta',  '/tmp/beta')`,
+	); err != nil {
+		t.Fatalf("seed projects: %v", err)
+	}
+	return db
+}
+
+// seedQuestionsTask inserts one task.
+func seedQuestionsTask(
+	t *testing.T,
+	db *sql.DB,
+	id, projectID int64,
+	title, status, createdAt string,
+	parent *int64,
+) {
+	t.Helper()
+	if _, err := db.Exec(
+		`INSERT INTO tasks (id, project_id, title, status, created_at, parent_id)
+		 VALUES (?, ?, ?, ?, ?, ?)`,
+		id, projectID, title, status, createdAt, parent,
+	); err != nil {
+		t.Fatalf("seed task E-%d: %v", id, err)
+	}
+}
+
 func TestTaskQuestions_FiltersAndOrder(t *testing.T) {
-	db := triageTestDB(t)
-	seedTriageTask(t, db, 10, 1, "alpha task", "ready", "2026-08-01T00:00:00", nil)
-	seedTriageTask(t, db, 11, 2, "beta task", "ready", "2026-08-01T00:00:00", nil)
-	seedTriageTask(t, db, 12, 1, "removed task", "ready", "2026-08-01T00:00:00", nil)
+	db := questionsTestDB(t)
+	seedQuestionsTask(t, db, 10, 1, "alpha task", "ready", "2026-08-01T00:00:00", nil)
+	seedQuestionsTask(t, db, 11, 2, "beta task", "ready", "2026-08-01T00:00:00", nil)
+	seedQuestionsTask(t, db, 12, 1, "removed task", "ready", "2026-08-01T00:00:00", nil)
 	if _, err := db.Exec(`UPDATE tasks SET removed = 1 WHERE id = 12`); err != nil {
 		t.Fatalf("remove: %v", err)
 	}

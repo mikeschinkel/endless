@@ -639,7 +639,7 @@ below — it still works for one release, warning as it goes.
 Foreground flow:
 
 1. Validates tmux is running (fails otherwise).
-2. Refuses if the task is in a done-ish status (`unverified`/`confirmed`/`declined`/`obsolete`/`assumed`/`completed`), or if another live session already owns the task. There is no flag that clears the status half: on the reopenable subset (`assumed`/`confirmed`/`completed`) the refusal routes to `session goto <id> --resume --revisit`, because a second session on settled work is rarely what you want, and otherwise it names the reopen-then-spawn route — `task update <id> --status revisit` (or `untriaged`, from `declined`/`obsolete`), then an ordinary spawn.
+2. Refuses if the task is in a done-ish status (`unverified`/`confirmed`/`declined`/`obsolete`/`assumed`/`completed`), or if another live session already owns the task. There is no flag that clears the status half: on the reopenable subset (`assumed`/`confirmed`/`completed`) the refusal routes to `session goto <id> --resume --revisit`, because a second session on settled work is rarely what you want, and otherwise it names the reopen-then-spawn route — `task update <id> --status revisit` (or `unplanned`, from `declined`/`obsolete`), then an ordinary spawn. A task with no plan, or with open questions, is refused as well — see **Plans and open questions gate spawning** in `endless guide tasks`.
 2. Refuses if **any** session ever claimed the task — live or long since ended. Ownership is read off `sessions.task_id`, which is write-once, so the record survives the claiming session's death. The refusal names that session and routes to `endless session goto <id> --resume`; with several claimants it names the most recent and lists the rest. There is **no** override, and none to reach for — `--force` is deprecated (see below) and never governed this — because a claim cannot be released. To work a task a prior session claimed, resume that session — starting a second one throws away the reasoning that only exists there.
 3. **Pre-claims the task**: flips status to `underway` (emitting `task.status_changed`) and creates the per-task worktree at `.endless/worktrees/e-<id>/`.
 4. Renders the handoff from the template and writes it to a temp file.
@@ -773,7 +773,7 @@ Both halves are now named separately:
   flag on an unrelated verb:
 
   ```bash
-  endless task update <id> --status revisit    # or --status untriaged, from declined/obsolete
+  endless task update <id> --status revisit    # or --status unplanned, from declined/obsolete
   endless task claim <id>                      # or: endless task spawn <id>
   ```
 

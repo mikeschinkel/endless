@@ -136,6 +136,7 @@ func writeTaskContent(db dbQuerier, taskID any, writes []contentWrite) error {
 func (p TaskCreatedPayload) createdContent() []contentWrite {
 	var out []contentWrite
 	for _, w := range []contentWrite{
+		{taskcontent.Context, p.Context},
 		{taskcontent.Analysis, p.Analysis},
 		{taskcontent.Plan, p.PlanText()},
 		{taskcontent.Notes, p.Notes},

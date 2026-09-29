@@ -3,10 +3,11 @@
 `task update` infers a status change from what you edited, in three places:
 
   1. non-empty `--plan` on a pre-judgment task      -> `submitted`  (E-1266/E-1648)
-  2. a material `--description` edit on pre-work    -> `untriaged`  (E-1845)
+  2. a material `--plan` edit on a `ready` task     -> `submitted`  (E-1993)
   3. `--tier 1` on a pre-judgment task              -> `ready`   (removed, E-1813)
 
-Leg 2 was already guarded by the flag. Leg 1 leaked: the promotion lives in the
+Leg 2 was guarded by the flag from the start (it replaced E-1845's
+description-edit reset, which was too). Leg 1 leaked: the promotion lives in the
 Go executor, and the flag had no way to cross the Python-to-executor boundary —
 so appending a line to an `unplanned` task's plan silently promoted it, which is
 how E-1671 lost a deliberately-unapproved status. Leg 3 was never guarded
@@ -20,7 +21,7 @@ true about it.
 
 The flag now means exactly what its name says: the status you see is the status
 you keep. Its siblings — the no-op-on-identical-rewrite guard and the
-"explicit --status wins" rule — are covered in test_untriaged_status.py and
+"explicit --status wins" rule — are covered in test_plan_required_status_model.py and
 test_plan_auto_promote.py; what is asserted here is the flag itself.
 """
 
@@ -71,7 +72,7 @@ def _row(item_id: int) -> dict:
 
 # --- leg 1: the plan-attach promotion (the gap E-1913 closes) ----------------
 
-@pytest.mark.parametrize("start", ["untriaged", "unplanned"])
+@pytest.mark.parametrize("start", ["unplanned"])
 def test_keep_status_suppresses_the_plan_attach_promotion(
     start, seeded_project_at_cwd
 ):
@@ -87,7 +88,7 @@ def test_keep_status_suppresses_the_plan_attach_promotion(
     assert row["plan"] == "# plan\nbody\n", "the plan must still be written"
 
 
-@pytest.mark.parametrize("start", ["untriaged", "unplanned"])
+@pytest.mark.parametrize("start", ["unplanned"])
 def test_without_the_flag_the_promotion_still_fires(start, seeded_project_at_cwd):
     """The promotion is correct default behavior — suppressing it is opt-in."""
     item_id = task_cmd.add_item(
@@ -115,13 +116,13 @@ def test_keep_status_holds_an_append_to_an_existing_plan(seeded_project_at_cwd):
     assert "## Finding" in row["plan"]
 
 
-# --- leg 2: the description-edit reset (E-1845, already guarded) -------------
+# --- leg 2: the plan-edit reset on an approved task (E-1993) -----------------
 
-def test_keep_status_suppresses_the_description_reset(seeded_project_at_cwd):
-    item_id = task_cmd.add_item(title="Add a thing", description="original")
+def test_keep_status_suppresses_the_plan_reset(seeded_project_at_cwd):
+    item_id = task_cmd.add_item(title="Add a thing", description="short", plan="# plan\n")
     _approve(item_id)
 
-    task_cmd.update_plan(item_id=item_id, description="Original.", keep_status=True)
+    task_cmd.update_plan(item_id=item_id, plan="# Plan.\n", keep_status=True)
 
     assert _status_of(item_id) == "ready"
 
@@ -204,11 +205,11 @@ def test_keep_status_on_a_done_task_does_not_restamp_completed_at(
 
 # --- leg 3, retired: a rating infers no status (E-1813) ----------------------
 
-@pytest.mark.parametrize("start", ["untriaged", "unplanned"])
+@pytest.mark.parametrize("start", ["unplanned"])
 @pytest.mark.parametrize("keep_status", [False, True])
 def test_a_rating_edit_infers_no_status(start, keep_status, seeded_project_at_cwd):
     """Tier 1 advanced a pre-work task to `ready`. Its replacement must not:
-    status routing is triage plus approve, never a rating value."""
+    status routing is the plan plus approve, never a rating value."""
     item_id = task_cmd.add_item(
         title="Add a thing", description="short", status=start
     )
@@ -230,7 +231,7 @@ def test_status_together_with_keep_status_is_refused(seeded_project_at_cwd):
         task_cmd.update_plan(item_id=item_id, status="ready", keep_status=True)
 
     assert "contradict" in str(exc.value)
-    assert _status_of(item_id) == "untriaged", "the refusal changes nothing"
+    assert _status_of(item_id) == "unplanned", "the refusal changes nothing"
 
 
 def test_the_refusal_precedes_every_other_effect(seeded_project_at_cwd):
@@ -264,7 +265,7 @@ def test_keep_status_still_writes_every_other_field(seeded_project_at_cwd):
     assert rows[0]["description"] == "a materially different spec"
     assert rows[0]["plan"] == "# plan\n"
     assert rows[0]["phase"] == "later"
-    assert rows[0]["status"] == "untriaged"
+    assert rows[0]["status"] == "unplanned"
 
 
 def test_keep_status_does_not_report_a_status_change(capsys, seeded_project_at_cwd):

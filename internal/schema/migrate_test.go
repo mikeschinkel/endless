@@ -430,3 +430,44 @@ func TestMigrate_RatingsReplaceTier(t *testing.T) {
 		t.Errorf("rating notice = %s, want %s", changes, want)
 	}
 }
+
+// TestMigrate_RetiresUntriaged drives 00009 (E-1993) over a database still
+// carrying the retired status and the triage sweep's state: an `untriaged` row
+// lands `submitted` when it has a plan and `unplanned` otherwise, no other row
+// moves, and the triage claim table and job row are gone.
+func TestMigrate_RetiresUntriaged(t *testing.T) {
+	db := buildDB(t, func(db *sql.DB) error { return schema.MigrateUpTo(db, 8) })
+
+	mustExec(t, db, `INSERT INTO projects (id, name, path) VALUES (1, 'p', '/p')`)
+	mustExec(t, db, `INSERT INTO tasks (id, project_id, title, status) VALUES
+		(1, 1, 'no plan', 'untriaged'),
+		(2, 1, 'planned', 'untriaged'),
+		(3, 1, 'blank plan', 'untriaged'),
+		(4, 1, 'ready', 'ready')`)
+	mustExec(t, db, `INSERT INTO task_content (task_id, name, content) VALUES
+		(2, 'plan', '# a plan'), (3, 'plan', '   ')`)
+	mustExec(t, db, `CREATE TABLE IF NOT EXISTS triage_claims (
+		task_id INTEGER PRIMARY KEY, owner TEXT NOT NULL,
+		claimed_at TEXT NOT NULL, expires_at TEXT NOT NULL)`)
+	mustExec(t, db, `INSERT INTO jobs (name, next_due_at) VALUES
+		('triage-sufficiency', '2026-01-01'), ('backup', '2026-01-01')`)
+
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	for id, want := range map[int]string{1: "unplanned", 2: "submitted", 3: "unplanned", 4: "ready"} {
+		var got string
+		if err := db.QueryRow(`SELECT status FROM tasks WHERE id = ?`, id).Scan(&got); err != nil {
+			t.Fatalf("E-%d: %v", id, err)
+		}
+		if got != want {
+			t.Errorf("E-%d status = %q, want %q", id, got, want)
+		}
+	}
+	if exists, _ := tableExists(db, "triage_claims"); exists {
+		t.Error("triage_claims survived the migration")
+	}
+	assertCount(t, db, "jobs WHERE name = 'triage-sufficiency'", 0)
+	assertCount(t, db, "jobs WHERE name = 'backup'", 1)
+}

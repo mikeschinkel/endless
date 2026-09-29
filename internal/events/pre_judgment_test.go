@@ -10,9 +10,7 @@ import "testing"
 func TestIsPreJudgmentStatus(t *testing.T) {
 	cases := map[string]bool{
 		// Attaching a plan is what answers the open question, so it promotes.
-		// `untriaged` is the status `task add` defaults to (E-1845); without it
-		// `task add --plan-file plan.md` would file a fully planned task as untriaged.
-		"untriaged": true,
+		// `unplanned` is where `task add` files a task with no plan (E-1993).
 		"unplanned": true,
 
 		// Already carries a judgment — a plan attachment must not re-decide it.
@@ -33,6 +31,9 @@ func TestIsPreJudgmentStatus(t *testing.T) {
 		"declined": false,
 		"obsolete": false,
 		"blocked":  false,
+
+		// Removed by E-1993; not a status, so never pre-judgment.
+		"untriaged": false,
 	}
 	for status, want := range cases {
 		t.Run(status, func(t *testing.T) {

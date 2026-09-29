@@ -475,14 +475,6 @@ def test_the_guard_is_called_from_exactly_the_expected_front_doors():
     assert callers == {"update_plan", "replace_task", "decline_item"}, callers
 
 
-def test_triage_can_never_reach_an_abandonment_status():
-    """triage.apply takes its status from the model's verdict, so what bounds it
-    is the vocabulary it parses against."""
-    from endless import triage
-
-    assert _ABANDONMENT.isdisjoint({d.lower() for d in triage._DECISIONS})
-
-
 def test_session_cmd_only_ever_emits_pinned_non_abandonment_statuses():
     """session_cmd routes through one helper taking `new_status` as a parameter;
     what bounds it is the call sites, so those are what this reads."""

@@ -84,7 +84,6 @@ import (
 	_ "github.com/mikeschinkel/endless/internal/backupjob"
 	_ "github.com/mikeschinkel/endless/internal/docsweep"
 	_ "github.com/mikeschinkel/endless/internal/minimizerjob"
-	_ "github.com/mikeschinkel/endless/internal/triagejob"
 	_ "github.com/mikeschinkel/endless/internal/unlandedjob"
 	"github.com/mikeschinkel/endless/internal/verifycmd"
 )

@@ -311,7 +311,7 @@ func TestTransitionLegalityStillAppliesToAPerson(t *testing.T) {
 // the shape that let a parent cycle through `task update --parent`.
 func TestPlanAttachPromotionPassesTheGuard(t *testing.T) {
 	db := newDerivationDB(t)
-	seedTask(t, db, 100, nil, int(tasktype.TaskTypeTask), taskstatus.Untriaged)
+	seedTask(t, db, 100, nil, int(tasktype.TaskTypeTask), taskstatus.Unplanned)
 
 	evt := fieldsUpdate(t, 100, map[string]any{"text": "# a plan"}, Actor{
 		Kind: ActorCLI, ID: "tester", SessionID: "", Harness: harnessed,
@@ -351,11 +351,11 @@ func TestKeepStatusPinIsANoOpWrite(t *testing.T) {
 // the ordinary workflow is worse than no guard.
 func TestTheHappyPathRunsUnimpeded(t *testing.T) {
 	db := newDerivationDB(t)
-	seedTask(t, db, 120, nil, int(tasktype.TaskTypeTask), taskstatus.Untriaged)
+	seedTask(t, db, 120, nil, int(tasktype.TaskTypeTask), taskstatus.Unplanned)
 	seedHolderSession(t, db, 906, 120)
 
 	for _, status := range []string{
-		taskstatus.Unplanned, taskstatus.Submitted, taskstatus.Ready,
+		taskstatus.Submitted, taskstatus.Ready,
 		taskstatus.Underway, taskstatus.Unverified, taskstatus.Confirmed,
 	} {
 		if _, err := execTaskFieldsUpdated(db, statusUpdate(t, 120, status, "906"), nil); err != nil {
@@ -373,7 +373,7 @@ func TestTheHappyPathRunsUnimpeded(t *testing.T) {
 // step longer than it was.
 func TestFindingsPathRunsUnimpeded(t *testing.T) {
 	db := newDerivationDB(t)
-	seedTask(t, db, 130, nil, int(tasktype.TaskTypeResearch), taskstatus.Untriaged)
+	seedTask(t, db, 130, nil, int(tasktype.TaskTypeResearch), taskstatus.Unplanned)
 	seedHolderSession(t, db, 907, 130)
 
 	for _, status := range []string{
@@ -391,7 +391,7 @@ func TestFindingsPathRunsUnimpeded(t *testing.T) {
 // research outcome `completed` is refused, and told where to go instead.
 func TestFindingsPathCannotSkipTheReviewGate(t *testing.T) {
 	db := newDerivationDB(t)
-	seedTask(t, db, 131, nil, int(tasktype.TaskTypeResearch), taskstatus.Untriaged)
+	seedTask(t, db, 131, nil, int(tasktype.TaskTypeResearch), taskstatus.Unplanned)
 	seedHolderSession(t, db, 908, 131)
 
 	for _, status := range []string{

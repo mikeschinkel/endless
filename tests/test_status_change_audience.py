@@ -46,9 +46,10 @@ def _status_of(item_id: int) -> str:
 
 def _ready_task() -> int:
     """A `ready` task, built as a human so no gate is open during setup."""
-    item_id = task_cmd.add_item(title="Add a thing", description="original")
-    task_cmd.update_plan(item_id=item_id, status="submitted",
-                         complexity="low", risk="low")
+    item_id = task_cmd.add_item(title="Add a thing", description="original",
+                                plan="# plan\noriginal\n")
+    task_cmd.update_plan(item_id=item_id, complexity="low", risk="low",
+                         keep_status=True)
     task_cmd.update_plan(item_id=item_id, status="ready")
     return item_id
 
@@ -62,13 +63,13 @@ def test_an_agent_is_not_told_about_a_status_it_did_not_ask_for(
     capsys.readouterr()
     _as_agent(monkeypatch)
 
-    task_cmd.update_plan(item_id=item_id, description="a materially different spec")
+    task_cmd.update_plan(item_id=item_id, plan="# plan\na materially different plan\n")
 
     out = capsys.readouterr().out
-    assert "Description:" in out, "the field it DID ask for still renders"
+    assert "Plan:" in out, "the field it DID ask for still renders"
     assert "Status:" not in out, out
-    assert "re-triage" not in out, "the advisory is human-only"
-    assert _status_of(item_id) == "untriaged", "the reset still happened"
+    assert "approval was granted" not in out, "the advisory is human-only"
+    assert _status_of(item_id) == "submitted", "the reset still happened"
 
 
 def test_a_human_still_sees_the_status_line_and_the_advisory(
@@ -77,12 +78,12 @@ def test_a_human_still_sees_the_status_line_and_the_advisory(
     item_id = _ready_task()
     capsys.readouterr()
 
-    task_cmd.update_plan(item_id=item_id, description="a materially different spec")
+    task_cmd.update_plan(item_id=item_id, plan="# plan\na materially different plan\n")
 
     out = capsys.readouterr().out
     assert "Status:" in out, out
-    assert "re-triage" in out, out
-    assert _status_of(item_id) == "untriaged"
+    assert "approval was granted" in out, out
+    assert _status_of(item_id) == "submitted"
 
 
 def test_an_agent_still_sees_a_status_it_named(

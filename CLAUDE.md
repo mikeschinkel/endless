@@ -23,9 +23,9 @@ Rules only — no rationale, no history, no mechanism. Workflow belongs in
 - Go (`internal/`, `cmd/endless-go`) owns database access: writes go through
   the event pipeline (`endless-go event emit`).
 - Python (`src/endless/`) owns the Click CLI, the logic, and the rendering.
-- Python still reads SQLite directly in six files. That is temporary — all
+- Python still reads SQLite directly in five files. That is temporary — all
   database access moves to Go as soon as possible. Do not add SQLite to Python;
-  do not add a seventh file.
+  do not add a sixth file.
 
 ## Build
 

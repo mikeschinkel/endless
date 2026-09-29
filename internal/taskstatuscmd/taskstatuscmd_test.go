@@ -118,15 +118,15 @@ func TestSQLListEmitsQuotedCommaList(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("sql-list pre-judgment exited %d: %s", code, stderr)
 	}
-	if got, want := strings.TrimSpace(stdout), "'untriaged','unplanned'"; got != want {
+	if got, want := strings.TrimSpace(stdout), "'unplanned'"; got != want {
 		t.Errorf("sql-list pre-judgment = %q, want %q", got, want)
 	}
 }
 
 func TestRankEmitsIndexAndSentinel(t *testing.T) {
-	stdout, _, code := run(t, "rank", "derivation-precedence", "untriaged")
-	if code != 0 || strings.TrimSpace(stdout) != "4" {
-		t.Errorf("rank derivation-precedence untriaged = %q (exit %d), want \"4\"", stdout, code)
+	stdout, _, code := run(t, "rank", "derivation-precedence", "unplanned")
+	if code != 0 || strings.TrimSpace(stdout) != "3" {
+		t.Errorf("rank derivation-precedence unplanned = %q (exit %d), want \"3\"", stdout, code)
 	}
 	stdout, _, code = run(t, "rank", "derivation-precedence", "confirmed")
 	if code != 0 || strings.TrimSpace(stdout) != "-1" {

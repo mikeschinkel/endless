@@ -3,8 +3,8 @@ task to `submitted` (spec-complete, awaiting human approval — NOT `ready`, whi
 now means human-approved). Applies on both `task add` and `task update`. An
 explicit --status in the same call always wins.
 
-E-1845 made `untriaged` the default `task add` status and added it alongside
-`unplanned` as a promotion source, so the auto-move is exercised from both.
+`unplanned` is the default `task add` status and the only promotion source
+(E-1993 removed `untriaged`, which was the other).
 """
 
 import pytest
@@ -33,12 +33,12 @@ def test_add_with_plan_promotes_to_submitted(tmp_path, seeded_project_at_cwd):
     assert _status_of(item_id) == "submitted"
 
 
-def test_add_without_plan_stays_untriaged(seeded_project_at_cwd):
+def test_add_without_plan_stays_unplanned(seeded_project_at_cwd):
     item_id = task_cmd.add_item(
         title="Add a thing",
         description="short",
     )
-    assert _status_of(item_id) == "untriaged"
+    assert _status_of(item_id) == "unplanned"
 
 
 def test_add_with_empty_plan_file_does_not_promote(tmp_path, seeded_project_at_cwd):
@@ -51,7 +51,7 @@ def test_add_with_empty_plan_file_does_not_promote(tmp_path, seeded_project_at_c
         description="short",
         plan=plan.read_text(),
     )
-    assert _status_of(item_id) == "untriaged"
+    assert _status_of(item_id) == "unplanned"
 
 
 def test_add_with_plan_and_explicit_status_preserves_caller_status(tmp_path, seeded_project_at_cwd):
@@ -70,11 +70,11 @@ def test_add_with_plan_and_explicit_status_preserves_caller_status(tmp_path, see
 
 # --- task update ------------------------------------------------------------
 
-@pytest.mark.parametrize("start", ["untriaged", "unplanned"])
+@pytest.mark.parametrize("start", ["unplanned"])
 def test_update_with_plan_on_pre_judgment_promotes_to_submitted(
     start, tmp_path, seeded_project_at_cwd
 ):
-    """Both pre-judgment statuses promote — E-1845 added `untriaged`."""
+    """The pre-judgment status promotes."""
     item_id = task_cmd.add_item(
         title="Add a thing",
         description="short",
@@ -89,7 +89,9 @@ def test_update_with_plan_on_pre_judgment_promotes_to_submitted(
     assert _status_of(item_id) == "submitted"
 
 
-def test_update_with_plan_on_ready_task_no_change(tmp_path, seeded_project_at_cwd):
+def test_update_with_plan_on_ready_task_drops_approval(tmp_path, seeded_project_at_cwd):
+    """E-1993: what is approved is the plan, so a ready task whose plan
+    changes — here, from none to one — goes back to `submitted`."""
     item_id = task_cmd.add_item(
         title="Add a thing",
         description="short",
@@ -101,7 +103,7 @@ def test_update_with_plan_on_ready_task_no_change(tmp_path, seeded_project_at_cw
     plan.write_text("# plan")
     task_cmd.update_plan(item_id=item_id, plan=plan.read_text())
 
-    assert _status_of(item_id) == "ready"
+    assert _status_of(item_id) == "submitted"
 
 
 def test_update_with_plan_plus_explicit_status_caller_wins(tmp_path, seeded_project_at_cwd):
@@ -109,7 +111,7 @@ def test_update_with_plan_plus_explicit_status_caller_wins(tmp_path, seeded_proj
         title="Add a thing",
         description="short",
     )
-    assert _status_of(item_id) == "untriaged"
+    assert _status_of(item_id) == "unplanned"
 
     # `unplanned` rather than `ready`: E-1813 removed the tier-1 edge that made
     # `ready` reachable from `untriaged`, and the caller-wins rule is about the
@@ -126,13 +128,13 @@ def test_update_with_empty_plan_does_not_promote(tmp_path, seeded_project_at_cwd
         title="Add a thing",
         description="short",
     )
-    assert _status_of(item_id) == "untriaged"
+    assert _status_of(item_id) == "unplanned"
 
     plan = tmp_path / "empty.md"
     plan.write_text("   \n")
     task_cmd.update_plan(item_id=item_id, plan=plan.read_text())
 
-    assert _status_of(item_id) == "untriaged"
+    assert _status_of(item_id) == "unplanned"
 
 
 # --- E-1813: the promotion nudges for ratings -------------------------------

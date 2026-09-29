@@ -119,7 +119,7 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  clear --log                       dismiss only what is waiting in the log")
 	fmt.Fprintln(w, "  codes                             print the documented error catalog")
 	fmt.Fprintln(w, "  record --code ID --summary T [--source S] [--detail D]")
-	fmt.Fprintln(w, "                                   record a real catalog fault (internal; used by `endless triage run`)")
+	fmt.Fprintln(w, "                                   record a real catalog fault (internal; the Python CLI's bridge to the fault store)")
 	fmt.Fprintln(w, "  raise [--severity S] [--summary T] [--repeat N]")
 	fmt.Fprintln(w, "                                    record a SYNTHETIC fault, to see this surface work")
 	fmt.Fprintln(w, "")
@@ -1159,8 +1159,8 @@ func clearedBy() string {
 }
 
 // runRecord records a REAL catalog fault. It is the bridge the Python CLI needs:
-// `endless triage run` executes detached, where a failure has nowhere to go, and
-// the fault store is the surface a user actually watches (the `session status` /
+// Python cannot write the fault store directly, and the fault store is the
+// surface a user actually watches (the `session status` /
 // `session monitor` fault row). Distinct from `raise`, which only ever emits the two
 // synthetic test codes and says so in its detail text.
 //
@@ -1170,7 +1170,7 @@ func runRecord(args []string) {
 	fs := flag.NewFlagSet("record", flag.ExitOnError)
 	codeID := fs.String("code", "", "catalog code ID, e.g. ERR-0008 or WARN-0009")
 	summary := fs.String("summary", "", "short summary shown in lists and the fault row")
-	source := fs.String("source", "", "subsystem raising it, e.g. triage:inline")
+	source := fs.String("source", "", "subsystem raising it, e.g. job:minimizer")
 	detail := fs.String("detail", "", "long capture; goes to the detail log, never the DB")
 	fingerprint := fs.String("fingerprint", "", "grouping key (defaults to the summary)")
 	if err := fs.Parse(args); err != nil {
@@ -1189,7 +1189,7 @@ func runRecord(args []string) {
 
 	if !faults.Bound() {
 		// Not an error: a caller with no fault store bound (a test DB, a
-		// sandbox) still has a working triager. Say so and exit clean rather
+		// sandbox) still did its own work. Say so and exit clean rather
 		// than failing the caller for a diagnostic side effect.
 		fmt.Fprintln(os.Stderr, "endless-go errors: record: the fault store is not bound; nothing recorded")
 		return

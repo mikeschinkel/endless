@@ -67,28 +67,23 @@ When implementation is verified **and your user has told you to land it** — ne
 %%
 %% BEGIN generated: rendered from internal/taskstatus/transitions.go
 stateDiagram-v2
-    [*] --> untriaged
-
-    %% Triage — the description is judged, and routed
-    untriaged --> unplanned: agent triages — needs a plan
-    untriaged --> submitted: agent triages — description is a sufficient spec
+    [*] --> unplanned
+    [*] --> submitted
 
     %% Planning and approval — the two-step gate that makes `ready` mean approved
-    unplanned --> submitted: agent submits — plan attached, or description sufficient
+    unplanned --> submitted: agent submits — plan attached
     submitted --> ready: user approves
-    submitted --> unplanned: user sends back — the spec is not sufficient
+    submitted --> unplanned: user sends back — the plan is not sufficient
     revisit --> submitted: agent re-submits
 
-    %% Re-spec — a material description edit invalidates triage and approval
-    unplanned --> untriaged: system resets on a description re-spec
-    submitted --> untriaged: system resets on a description re-spec
-    ready --> untriaged: system resets on a description re-spec
-    revisit --> untriaged: system resets on a description re-spec
-    ready --> submitted: system resets on a description re-spec that attaches a plan
+    %% Planning exemption — a tier-1 task skips planning
+    unplanned --> ready: system advances a tier-1 task
+
+    %% Re-plan — a material plan edit on an approved task drops its approval
+    ready --> submitted: system resets on a material plan edit
 
     %% Claiming — `task claim` promotes any of these in place
     ready --> underway: session claims
-    untriaged --> underway: session claims
     unplanned --> underway: session claims
     revisit --> underway: session claims
 
@@ -107,7 +102,6 @@ stateDiagram-v2
     ready --> completed: agent delivers the findings as an outcome (epic)
 
     %% Reopening — the work is not settled after all
-    untriaged --> revisit: agent reopens — needs re-evaluation
     unplanned --> revisit: agent reopens — needs re-evaluation
     submitted --> revisit: agent reopens — needs re-evaluation
     ready --> revisit: agent reopens — needs re-evaluation
@@ -119,7 +113,6 @@ stateDiagram-v2
     completed --> revisit: user reopens — shipped work found wrong
 
     %% Declining — an active decision not to do (or not to keep) the work
-    untriaged --> declined: user declines
     unplanned --> declined: user declines
     submitted --> declined: user declines
     ready --> declined: user declines
@@ -132,7 +125,6 @@ stateDiagram-v2
     completed --> declined: user declines — the shipped work is not being kept
 
     %% Obsoleting — no longer needed, and nothing replaced it
-    untriaged --> obsolete: user retires — it no longer needs doing
     unplanned --> obsolete: user retires — it no longer needs doing
     submitted --> obsolete: user retires — it no longer needs doing
     ready --> obsolete: user retires — it no longer needs doing
@@ -145,7 +137,6 @@ stateDiagram-v2
     completed --> obsolete: user retires — the shipped work is no longer in use
 
     %% Superseding — something else took the work over
-    untriaged --> superseded: user supersedes — another task took it over
     unplanned --> superseded: user supersedes — another task took it over
     submitted --> superseded: user supersedes — another task took it over
     ready --> superseded: user supersedes — another task took it over
@@ -153,9 +144,12 @@ stateDiagram-v2
     revisit --> superseded: user supersedes — another task took it over
 
     %% Reversal — reconsidering an abandonment decision
-    declined --> untriaged: user reconsiders
-    obsolete --> untriaged: user reconsiders
-    superseded --> untriaged: user reconsiders
+    declined --> unplanned: user reconsiders
+    obsolete --> unplanned: user reconsiders
+    superseded --> unplanned: user reconsiders
+    declined --> submitted: user reconsiders a task that has a plan
+    obsolete --> submitted: user reconsiders a task that has a plan
+    superseded --> submitted: user reconsiders a task that has a plan
 
     %% Terminal — the work is over, one way or another
     confirmed --> [*]
@@ -170,9 +164,8 @@ stateDiagram-v2
 
 | Status        | Meaning                                                                                                       |
 |---------------|---------------------------------------------------------------------------------------------------------------|
-| `untriaged`   | Filed but not yet looked at — the state every new task starts in. Triage decides whether the description is already a sufficient spec (→ `submitted`) or design work is needed first (→ `unplanned`). Not actionable: `task next` omits it, and `session status` renders it `◌ triage`, never "needs a plan". |
-| `unplanned`  | Not yet planned — needs design work. Attach a plan with `task update <id> --plan-file <path>` (moves the task to `submitted`), or run `task submit <id>` when the description alone is a sufficient spec. |
-| `submitted`   | Spec-complete, awaiting approval — the agent has attached a plan or judged the description sufficient. A human runs `task approve <id>` to reach `ready`. |
+| `unplanned`  | Not yet planned — where every task filed without a plan starts. Not claimable or spawnable until it has a plan: attach one with `task update <id> --plan-file <path>` (moves the task to `submitted`). |
+| `submitted`   | Planned, awaiting approval — where a task filed with a plan starts, and where attaching one moves an `unplanned` task. A human runs `task approve <id>` to reach `ready`. |
 | `ready`       | Approved to implement. `ready` provably means human-approved, so background sessions may pick up only `ready` work. |
 | `underway` | A session has claimed the task and is working on it. Set automatically by `task claim`.                        |
 | `unverified`      | Implementation done, awaiting verification. **Still blocks dependents.**                                       |
@@ -187,11 +180,11 @@ stateDiagram-v2
 
 The agent sets `submitted` (via `task submit`, or by attaching a plan); a human sets `ready` (via `task approve`) — the two-step gate that makes `ready` mean "approved," not merely "planned." Submitting also proposes the task's two ratings — **complexity** and **risk**, each `low`/`medium`/`high` — and approving ratifies them: `task submit` and `task approve` are both refused while either is unrated, and take `--complexity`/`--risk` to set them. Ratings never move status. See **Ratings** in `endless guide tasks`.
 
-`task add` files new tasks as `untriaged` unless you pass an explicit `--status`. Routing is automatic: `task add` triages the new task in the background, and a periodic sweep drains anything it missed (`endless triage run`). It judges the persisted description, parent, siblings and linked decisions — never the filing session's transcript — and it fails open, leaving a task `untriaged` rather than guessing. Route by hand whenever you disagree or want it now: `task submit <id>` when the description is already a sufficient spec, or `task update <id> --status unplanned` when it needs design work first. Attaching a plan with `--plan` moves an `untriaged` task to `submitted` in one step, exactly as it does from `unplanned`. See `endless guide tasks`.
+`task add` files a new task as `unplanned`, or `submitted` when it is filed with a plan, unless you pass an explicit `--status`. Filing without a plan is legitimate — the task simply parks. What a task needs is a plan **before anyone starts it**: `task claim` and `task spawn` refuse a task with no plan, and a task with any open question (`endless question ask`), and the refusal names the way forward. See `endless guide tasks`.
 
-**A material description edit sends a task back to `untriaged`.** The description IS the spec that triage and approval were judged against, so rewriting it invalidates that judgment. The reset fires only from the pre-work statuses — `untriaged`, `unplanned`, `submitted`, `ready`, `revisit` — and never from `underway` (so an edit cannot yank work out from under a live session), `unverified`, or any terminal status. Two escape hatches: an identical rewrite is a no-op, and `--keep-status` suppresses the reset for a typo- or formatting-only edit.
+**A description edit never changes status.** The description says what the task is; the plan is the spec. **A material plan edit on a `ready` task returns it to `submitted`**, because what was approved changed. An identical or whitespace-only rewrite is a no-op, and `--keep-status` suppresses the reset for a typo- or formatting-only edit. From `underway` on, a plan edit records what the work became and infers nothing.
 
-**`--keep-status` holds the status across every auto-transition.** `task update` infers a status change from what you edited in two places — attaching a plan promotes a pre-work task to `submitted`, and a material description edit resets it to `untriaged`. A complexity/risk rating edit infers nothing. `--keep-status` suppresses both: the status you see is the status you keep. Use it when the edit is not a re-spec — a typo fix, or appending to a plan on a task deliberately parked at an unapproved status. It cannot be combined with `--status` (the call is refused): naming a status is already the explicit way to say what it should be, and it beats every inference on its own. Editing the plan text of a task that already shipped infers nothing at all: recording what shipped is not reopening it, and reopening stays the explicit `--status revisit`. See `endless guide tasks`.
+**`--keep-status` holds the status across every auto-transition.** `task update` infers a status change from what you edited in two places — attaching a plan promotes an `unplanned` task to `submitted`, and a material plan edit returns a `ready` task to `submitted`. A complexity/risk rating edit infers nothing. `--keep-status` suppresses both: the status you see is the status you keep. Use it when the edit is not a re-spec — a typo fix, or appending to a plan on a task deliberately parked at an unapproved status. It cannot be combined with `--status` (the call is refused): naming a status is already the explicit way to say what it should be, and it beats every inference on its own. Editing the plan text of a task that already shipped infers nothing at all: recording what shipped is not reopening it, and reopening stays the explicit `--status revisit`. See `endless guide tasks`.
 
 Use `assumed` (not `unverified`) when the only way to test the work is by using it in a downstream task — set `--outcome` explaining what was done and how confidence was established.
 
@@ -301,7 +294,6 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `task unsettled` | orchestration | Why a worktree hasn't settled — modified (commit or discard) vs unlanded (land). |
 | `tmux` | reference | Tmux status-line and popup integration. |
 | `touch` | sessions | Putting a task in this session's scope without editing it; the session_tasks relation ladder. |
-| `triage` | tasks | Automatic routing of `untriaged` tasks by description sufficiency — the sweep, the file-time path, and the manual override. |
 | `verb` | tasks | Verbs: the registered actions that can begin a task title. |
 | `worktree` | orchestration | Per-task git worktrees: getting in, landing, abandoning, inspecting. |
 

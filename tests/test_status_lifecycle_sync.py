@@ -59,8 +59,8 @@ def test_canonical_diagram_admits_reopening_landed_work():
     The CLI has always accepted confirmed/assumed/completed → revisit; the
     diagram did not draw it, which is what made reopening your own landed work
     read as unsupported. `declined`/`obsolete` deliberately gain no edge to
-    `revisit` — reversing an abandonment decision re-enters at `untriaged`
-    instead (E-2018), so a reconsidered task is re-triaged like any other.
+    `revisit` — reversing an abandonment decision re-enters at `unplanned` (or
+    `submitted` when it has a plan) instead, like a task filed again (E-1993).
     """
     canon = lifecycle_map.CANONICAL.read_text()
     for status in ("confirmed", "assumed", "completed"):

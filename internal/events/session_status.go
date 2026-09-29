@@ -269,7 +269,7 @@ func renderSessionStatusMarkdown(p *SessionStatusRecordedPayload) string {
 //
 // Status → disposition mapping:
 //   - resolved:   confirmed, assumed, completed, obsolete, declined
-//   - pending:    untriaged, unplanned, submitted, ready, underway, revisit
+//   - pending:    unplanned, submitted, ready, underway, revisit
 //   - unverified: unverified
 //   - unreviewed: unreviewed
 //

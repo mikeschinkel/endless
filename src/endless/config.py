@@ -100,8 +100,6 @@ def save_config(cfg: dict):
 INTERNAL_MODEL_DEFAULTS: dict[str, str] = {
     # E-1264: is the first word of a task title an actionable verb?
     "verb_check": "haiku",
-    # E-1859: is a task's description already a sufficient spec?
-    "triage": "sonnet",
 }
 
 

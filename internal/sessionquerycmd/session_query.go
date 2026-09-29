@@ -13,7 +13,6 @@ import (
 	"io"
 	"os"
 	"strings"
-	"time"
 
 	"github.com/mikeschinkel/endless/internal/dbprovenance"
 	"github.com/mikeschinkel/endless/internal/docmirror"
@@ -110,26 +109,6 @@ func Run(args []string) {
 			fmt.Fprintln(os.Stderr, err)
 			os.Exit(1)
 		}
-	case "untriaged-tasks":
-		if err := runUntriagedTasks(args[1:]); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-	case "triage-context":
-		if err := runTriageContext(args[1:]); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-	case "triage-claim":
-		if err := runTriageClaim(args[1:]); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
-	case "triage-release":
-		if err := runTriageRelease(args[1:]); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
-		}
 	case "resume-target":
 		if err := runResumeTarget(args[1:]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -176,14 +155,6 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "  task-report --id <task-id>        JSON {task_id, status, type, landed, successors[]} of a task's computed report facts (E-1771)")
 	fmt.Fprintln(os.Stderr, "  task-questions [--id <task-id>] [--project <name>] [--all]   JSON array of open (or --all) task questions")
 	fmt.Fprintln(os.Stderr, "  question-target (--task <id> | --question <id>)   JSON {task_id, project[, status]} a question command acts on")
-	fmt.Fprintln(os.Stderr, "  untriaged-tasks [--project <name>] [--limit N]")
-	fmt.Fprintln(os.Stderr, "                                    JSON array [{id, project, title}] of the triage queue, oldest first (E-1859)")
-	fmt.Fprintln(os.Stderr, "  triage-context --id <task-id>     JSON {task_id, project, title, description, type, phase, status, has_plan,")
-	fmt.Fprintln(os.Stderr, "                                    parent, siblings[], decisions[]} — the persisted artifacts triage may judge (E-1859)")
-	fmt.Fprintln(os.Stderr, "  triage-claim --id <task-id> --ttl-seconds N [--owner <id>]")
-	fmt.Fprintln(os.Stderr, "                                    take the per-task triage claim; prints 1 if won, 0 if another holds it (E-1859)")
-	fmt.Fprintln(os.Stderr, "  triage-release --id <task-id> [--owner <id>]")
-	fmt.Fprintln(os.Stderr, "                                    drop this owner's triage claim (E-1859)")
 	fmt.Fprintln(os.Stderr, "  relay-checkpoint --session-id <id> [--draft-file <path>] [--task-id <id>]")
 	fmt.Fprintln(os.Stderr, "                                    record the minimized report text (read from STDIN) the session")
 	fmt.Fprintln(os.Stderr, "                                    owes as its final message; the Stop gate enforces it (E-1901/E-1953).")
@@ -390,33 +361,6 @@ func runTaskReport(args []string) error {
 	return dbprovenance.Encode(os.Stdout, facts)
 }
 
-// defaultUntriagedLimit caps a triage sweep that names no limit. It exists so
-// a caller that forgets --limit cannot walk an unbounded backlog: every task
-// selected here becomes a model call downstream.
-const defaultUntriagedLimit = 10
-
-// runUntriagedTasks prints the triage queue (E-1859) as JSON — tasks in
-// `untriaged`, oldest first, capped by --limit. No --project means every
-// project: the background sweep runs from the job runner, which has a database
-// but no cwd, so database-wide is the only scope it can express. A human running
-// `endless triage run` inside a project passes --project.
-func runUntriagedTasks(args []string) error {
-	fs := flag.NewFlagSet("untriaged-tasks", flag.ContinueOnError)
-	project := fs.String("project", "", "registered project name (default: every project)")
-	limit := fs.Int("limit", defaultUntriagedLimit, "max tasks to return")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *limit <= 0 {
-		return fmt.Errorf("--limit must be positive")
-	}
-	tasks, err := monitor.UntriagedTasks(*project, *limit)
-	if err != nil {
-		return fmt.Errorf("read untriaged queue: %w", err)
-	}
-	return dbprovenance.Encode(os.Stdout, tasks)
-}
-
 // runTaskQuestions prints task_questions rows (E-2176) as JSON — open ones only
 // unless --all. With neither --id nor --project it is every open question in
 // the database, which is the feed an attention surface reads.
@@ -451,82 +395,6 @@ func runQuestionTarget(args []string) error {
 		return err
 	}
 	return dbprovenance.Encode(os.Stdout, tgt)
-}
-
-// runTriageContext prints one task's triage context (E-1859) as JSON: the
-// persisted artifacts the sufficiency prompt is allowed to judge — description,
-// parent, sibling titles, linked decisions. The filing session's transcript is
-// deliberately absent; triage judges what is written down, not what was said.
-func runTriageContext(args []string) error {
-	fs := flag.NewFlagSet("triage-context", flag.ContinueOnError)
-	id := fs.Int64("id", 0, "task id")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *id == 0 {
-		return fmt.Errorf("--id is required")
-	}
-	ctx, err := monitor.BuildTriageContext(*id)
-	if err != nil {
-		return fmt.Errorf("build triage context for E-%d: %w", *id, err)
-	}
-	return dbprovenance.Encode(os.Stdout, ctx)
-}
-
-// runTriageClaim takes the per-task triage claim (E-1859) and prints "1" when
-// this process won it, "0" when another holds a live claim. Zero is an ordinary
-// outcome, not an error, so the exit status stays 0 either way — the caller
-// branches on the printed value.
-//
-// The claim exists so the inline file-time path and the background sweep cannot
-// both pay for the same task's model call; see internal/monitor/triage_claims.go.
-func runTriageClaim(args []string) error {
-	fs := flag.NewFlagSet("triage-claim", flag.ContinueOnError)
-	id := fs.Int64("id", 0, "task id")
-	owner := fs.String("owner", "", "claimant identity (default: this process)")
-	ttl := fs.Int("ttl-seconds", 0, "claim lifetime; must exceed the worst-case model call")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *id == 0 {
-		return fmt.Errorf("--id is required")
-	}
-	if *ttl <= 0 {
-		return fmt.Errorf("--ttl-seconds must be positive")
-	}
-	who := *owner
-	if who == "" {
-		who = monitor.TriageClaimOwner()
-	}
-	claimed, err := monitor.ClaimTriage(*id, who, time.Duration(*ttl)*time.Second)
-	if err != nil {
-		return fmt.Errorf("claim triage for E-%d: %w", *id, err)
-	}
-	if claimed {
-		fmt.Println("1")
-		return nil
-	}
-	fmt.Println("0")
-	return nil
-}
-
-// runTriageRelease drops this owner's triage claim (E-1859). Releasing a claim
-// that already lapsed and was taken by someone else is a no-op, not a steal.
-func runTriageRelease(args []string) error {
-	fs := flag.NewFlagSet("triage-release", flag.ContinueOnError)
-	id := fs.Int64("id", 0, "task id")
-	owner := fs.String("owner", "", "claimant identity (default: this process)")
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	if *id == 0 {
-		return fmt.Errorf("--id is required")
-	}
-	who := *owner
-	if who == "" {
-		who = monitor.TriageClaimOwner()
-	}
-	return monitor.ReleaseTriage(*id, who)
 }
 
 // runResumeTarget prints the JSON a `session resume` needs to relaunch a lost

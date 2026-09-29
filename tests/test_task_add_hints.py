@@ -26,7 +26,7 @@ def _insert_session(pk: int, project_id: int) -> None:
     )
 
 
-def _insert_task(pk: int, project_id: int, *, status: str = "untriaged",
+def _insert_task(pk: int, project_id: int, *, status: str = "unplanned",
                  title: str = "a task") -> None:
     db.execute(
         "INSERT INTO tasks (id, project_id, title, status) VALUES (?, ?, ?, ?)",
@@ -139,7 +139,7 @@ def test_recently_landed_fires_once_per_cleans_up_target(project, capsys):
 def test_backlog_pressure_counts_open_tasks(project, capsys):
     from endless.task_cmd import print_add_hints
 
-    _insert_task(2100, project, status="untriaged")
+    _insert_task(2100, project, status="unplanned")
     _insert_task(2101, project, status="unplanned")
     _insert_task(2102, project, status="confirmed")   # not open
     _insert_task(2103, project, status="underway")    # not open
@@ -147,17 +147,17 @@ def test_backlog_pressure_counts_open_tasks(project, capsys):
     print_add_hints(2100, ())
 
     out = capsys.readouterr().out
-    assert "test now carries 2 open tasks (untriaged/unplanned)" in out
+    assert "test now carries 2 open tasks (unplanned)" in out
 
 
 def test_backlog_pressure_singular_for_one_open_task(project, capsys):
     from endless.task_cmd import print_add_hints
 
-    _insert_task(2110, project, status="untriaged")
+    _insert_task(2110, project, status="unplanned")
 
     print_add_hints(2110, ())
 
-    assert "carries 1 open task (untriaged/unplanned)" in capsys.readouterr().out
+    assert "carries 1 open task (unplanned)" in capsys.readouterr().out
 
 
 def test_backlog_pressure_scoped_to_the_tasks_own_project(project, capsys):
@@ -168,8 +168,8 @@ def test_backlog_pressure_scoped_to_the_tasks_own_project(project, capsys):
         "VALUES (900, 'other', '/tmp/other-proj', 'active', datetime('now'), "
         "datetime('now'))"
     )
-    _insert_task(2120, project, status="untriaged")
-    _insert_task(2121, 900, status="untriaged")
+    _insert_task(2120, project, status="unplanned")
+    _insert_task(2121, 900, status="unplanned")
     _insert_task(2122, 900, status="unplanned")
 
     print_add_hints(2120, ())
@@ -258,7 +258,7 @@ def test_hints_never_raise_without_a_session(project, capsys):
     rather than erroring; the backlog count still applies."""
     from endless import task_cmd
 
-    _insert_task(2310, project, status="untriaged")
+    _insert_task(2310, project, status="unplanned")
 
     with patch.object(task_cmd, "_current_endless_session_id", return_value=None):
         task_cmd.print_add_hints(2310, (2310,))
@@ -288,7 +288,7 @@ def test_task_add_still_succeeds_when_a_hint_blows_up(project):
 def test_task_add_prints_hints_through_the_cli(project):
     from endless.cli import main
 
-    _insert_task(2400, project, status="untriaged")
+    _insert_task(2400, project, status="unplanned")
 
     result = CliRunner().invoke(main, ["task", "add", "Fix the gadget"])
 

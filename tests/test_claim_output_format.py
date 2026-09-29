@@ -56,6 +56,8 @@ def project_with_task(seeded_project_at_cwd):
     task_id = db.query(
         "SELECT id FROM tasks WHERE title = ?", (title,)
     )[0]["id"]
+    # E-1993: a task needs a plan before it can be claimed or spawned.
+    db.execute("INSERT INTO task_content (task_id, name, content) VALUES (?, 'plan', '# Plan')", (task_id,))
     return {"project_root": repo, "task_id": task_id, "title": title}
 
 

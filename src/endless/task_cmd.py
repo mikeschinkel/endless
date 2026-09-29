@@ -255,8 +255,19 @@ def _check_verb_via_haiku(word: str) -> tuple[bool, str | None]:
     return True, definition
 
 
-TITLE_MAX_LENGTH = 100
-DESCRIPTION_MAX_LENGTH = 1024
+# E-1993: a title is recognizable, not descriptive; a description says WHAT the
+# task is and nothing else. E-2187 rewrote every task in the corpus within these
+# caps (titles p95 59, descriptions p95 202), so they are attainable, not
+# aspirational. Decisions keep their own, longer description cap.
+TITLE_MAX_LENGTH = 60
+DESCRIPTION_MAX_LENGTH = 256
+DECISION_DESCRIPTION_MAX_LENGTH = 1024
+
+# A task, decision or session id cited in a title or description (E-1993). The
+# text is read without opening anything else, and "informs E-1993's caps" cannot
+# be; the relationship belongs in a task link. Ids stay allowed in every
+# content row (context, analysis, plan, notes, outcome, reason).
+_CITED_ID = re.compile(r"(?<![A-Za-z0-9-])(?:E|ED|ES)-\d+\b")
 
 # The no-change half of a verdict line (E-2097). A refusal that never says
 # whether it partially applied leaves the caller to find out by reading the
@@ -268,10 +279,30 @@ NOTHING_CREATED = "Nothing was created."
 NOTHING_CHANGED = "Nothing was changed."
 NOTHING_WRITTEN = "Nothing was written."
 
-# One remedy for the whole long-form family — title over length, description
-# over length, description with a newline. All three are the same mistake
-# (long-form content in a short field) with the same fix, so they collapse to
-# a single clause however many of them fired.
+# Where text that does not belong in a title or description goes instead
+# (E-1993, per E-2187's survey). The error message is the teaching surface, so
+# each remedy names destinations, not only the limit.
+_TITLE_REMEDY = (
+    f"A title names WHAT in at most {TITLE_MAX_LENGTH} characters: drop the how "
+    "(\"via…\", \"by…\"), the why (\"so that…\", \"to avoid…\") and any "
+    "colon, dash or parenthetical list of sub-parts; put the how in --analysis "
+    "and why the task exists in --context."
+)
+_DESCRIPTION_REMEDY = (
+    f"A description is WHAT the task is, in at most {DESCRIPTION_MAX_LENGTH} "
+    "characters and one line. Why the task exists, how things work today and the "
+    "evidence go in --context; the how, design, rationale, scope and open "
+    "questions go in --analysis (or --plan once the work is approved); "
+    "relationships go in a task link, never an id in the text."
+)
+_CITED_ID_REMEDY = (
+    "Name the other task or decision in words and record the relationship as a "
+    "task link (--blocks, --blocked-by, --relates-to, --implements, --cleans-up, "
+    "--duplicates, --replaces). Ids are fine in --context, --analysis, --plan and "
+    "--notes."
+)
+# Decisions keep the older wording: their description is not under E-1993's
+# field model.
 _LONG_FORM_REMEDY = (
     "Long-form goes in --analysis (rationale) or --plan (the plan); "
     "the title names WHAT and the description is a 2-3 sentence blurb."
@@ -317,32 +348,29 @@ def _title_problems(title: str, force: bool) -> list[_Refusal]:
         # and the verb check costs a model call to say so.
         return [_Refusal(
             verdict=f"title {len(title)}>{TITLE_MAX_LENGTH} chars",
-            remedy=_LONG_FORM_REMEDY,
+            remedy=_TITLE_REMEDY,
             blank_before=True,
             guidance=(
                 f"Title is {len(title)} characters; max is {TITLE_MAX_LENGTH}.\n"
                 f"\n"
-                f"If it does not fit in {TITLE_MAX_LENGTH} chars, the title is usually naming HOW instead\n"
-                f"of WHAT. Long-form belongs elsewhere: analysis in --analysis, design/plan in\n"
-                f"--plan, a brief blurb in --description — not the title.\n"
+                f"A title is recognizable, not descriptive: it names WHAT. It is NOT\n"
+                f"  - the how: drop \"via…\", \"by…\", \"using…\" — mechanism goes in --analysis;\n"
+                f"  - the why: drop \"so that…\", \"to avoid…\" — why the task exists goes in --context;\n"
+                f"  - a table of contents: no colon, dash or parenthetical listing sub-parts;\n"
+                f"  - a task or decision id: name it in words and add a task link;\n"
+                f"  - a qualifier that does not distinguish it from a sibling title.\n"
                 f"\n"
-                f"Consider using this template:\n"
-                f"\n"
-                f"    Shape: <verb> <subject>'s <symptom> on/when <trigger> [via <mechanism>]\n"
-                f"    Subject   = user-facing name (e.g. 'just land'), not internal symbol\n"
-                f"    Symptom   = what the user observes breaking (e.g. 'recording failure'),\n"
-                f"                not the implementation cause\n"
-                f"    Trigger   = when the symptom shows up (e.g. 'on self-modifying branches')\n"
-                f"    Mechanism = optional; the flag/verb that fixes it (e.g. 'via --no-record').\n"
-                f"                Include only when it sharpens understanding.\n"
+                f"  before: Replace tasks.tier with complexity and risk rating axes proposed at submit and ratified at approve\n"
+                f"  after:  Replace tasks.tier with complexity and risk rating\n"
             ),
         )]
 
+    problems = _cited_id_problems("title", title)
     first_word = title.split()[0].lower() if title.strip() else ""
     from endless import matchers
     verbs = matchers.get_verbs()
     if first_word in verbs or force:
-        return []
+        return problems
 
     # E-1264: ask claude haiku whether the first word is a verb. If YES,
     # auto-register it and let the title pass. This removes the agent's
@@ -360,7 +388,7 @@ def _title_problems(title: str, force: bool) -> list[_Refusal]:
                 click.style("•", fg="cyan")
                 + f" Auto-registered verb '{first_word}': {definition}"
             )
-            return []
+            return problems
 
     register_cmd = (
         f"endless verb add '{first_word}' --definition \"<short definition>\""
@@ -384,7 +412,7 @@ def _title_problems(title: str, force: bool) -> list[_Refusal]:
             f"Title must start with an actionable verb. '{first_word}' is not registered.\n"
             f"  Register it (if it really is a verb): {register_cmd}"
         )
-    return [_Refusal(
+    return problems + [_Refusal(
         verdict=f"title's first word '{first_word}' is not a registered verb",
         remedy=(f"Register a real verb with: {register_cmd} — otherwise rewrite "
                 f"the title; never register a non-verb to get past this."),
@@ -392,39 +420,86 @@ def _title_problems(title: str, force: bool) -> list[_Refusal]:
     )]
 
 
-def _description_problems(description: str | None) -> list[_Refusal]:
+def _cited_id_problems(field: str, text: str) -> list[_Refusal]:
+    """A task, decision or session id cited in a title or description (E-1993)."""
+    ids = list(dict.fromkeys(_CITED_ID.findall(text)))
+    if not ids:
+        return []
+    cited = ", ".join(ids)
+    return [_Refusal(
+        verdict=f"{field} cites {cited}",
+        remedy=_CITED_ID_REMEDY,
+        guidance=(
+            f"The {field} cites {cited}. A {field} is read on its own, in lists,\n"
+            f"  without opening anything else, so an id in it says nothing.\n"
+            f"  {_CITED_ID_REMEDY}"
+        ),
+    )]
+
+
+def _description_problems(
+    description: str | None,
+    max_length: int = DESCRIPTION_MAX_LENGTH,
+    for_task: bool = True,
+) -> list[_Refusal]:
     """Everything wrong with a description, collected (E-2097).
 
-    Reject descriptions longer than DESCRIPTION_MAX_LENGTH or with embedded
-    newlines. Per E-1058 / E-1073: description is a 2-3 sentence blurb, not
-    long-form. Empty or None is allowed here; required-ness is E-963's concern.
+    Reject descriptions longer than `max_length` or with embedded newlines, and
+    — for a task (E-1993) — any cited task, decision or session id. A task
+    description says WHAT the task is; everything else has a named home, and
+    the refusal says which. Decisions pass `for_task=False` and their own cap:
+    their description is not under the task field model. Empty or None is
+    allowed here; required-ness is E-963's concern.
 
-    Both problems are reported together. They used to be sequential raises, so
+    Every problem is reported together. They used to be sequential raises, so
     a description that was long AND multi-line cost two round trips to learn.
     """
     if not description:
         return []
+    remedy = _DESCRIPTION_REMEDY if for_task else _LONG_FORM_REMEDY
     problems: list[_Refusal] = []
-    if len(description) > DESCRIPTION_MAX_LENGTH:
-        problems.append(_Refusal(
-            verdict=f"description {len(description)}>{DESCRIPTION_MAX_LENGTH} chars",
-            remedy=_LONG_FORM_REMEDY,
-            guidance=(
-                f"Description is {len(description)} characters; max is {DESCRIPTION_MAX_LENGTH}.\n"
+    if len(description) > max_length:
+        if for_task:
+            guidance = (
+                f"Description is {len(description)} characters; max is {max_length}.\n"
+                f"  A description is WHAT the task is — for a bug, the defect in one\n"
+                f"  sentence. It is NOT:\n"
+                f"  - the how (mechanism, files, flags, steps): --analysis, or --plan\n"
+                f"    once the work is approved;\n"
+                f"  - the world as it is today, the backstory or the evidence: --context;\n"
+                f"  - why this approach (alternatives, tradeoffs): --analysis;\n"
+                f"  - a pointer (\"see the analysis\", \"plan attached\"): drop it;\n"
+                f"  - history (progress, dated updates, who said what): --notes;\n"
+                f"  - a task or decision id: name it in words; the relationship is a\n"
+                f"    task link (--blocks, --relates-to, …);\n"
+                f"  - two tasks: if it needs \"Separately, …\", file a second task."
+            )
+        else:
+            guidance = (
+                f"Description is {len(description)} characters; max is {max_length}.\n"
                 f"  Description is a 2-3 sentence blurb, not a dissertation. Long-form context\n"
                 f"  belongs in a dedicated field: analysis in --analysis, plans/verification in --plan."
-            ),
+            )
+        problems.append(_Refusal(
+            verdict=f"description {len(description)}>{max_length} chars",
+            remedy=remedy,
+            guidance=guidance,
         ))
     if "\n" in description or "\r" in description:
         problems.append(_Refusal(
             verdict="description contains a newline; it must be one line",
-            remedy=_LONG_FORM_REMEDY,
+            remedy=remedy,
             guidance=(
                 "Description must be a single line; embedded newlines are not allowed.\n"
-                "  Description is a brief blurb. Long-form context belongs in a dedicated field:\n"
-                "  analysis in --analysis, plans/verification in --plan."
+                + ("  Long-form text belongs in --context (why the task exists) or\n"
+                   "  --analysis (how): a description is WHAT the task is."
+                   if for_task else
+                   "  Description is a brief blurb. Long-form context belongs in a dedicated field:\n"
+                   "  analysis in --analysis, plans/verification in --plan.")
             ),
         ))
+    if for_task:
+        problems.extend(_cited_id_problems("description", description))
     return problems
 
 
@@ -487,8 +562,13 @@ def validate_title(title: str, force: bool = False):
 
 
 def validate_description(description: str | None):
-    """Validate a description on its own. See `_description_problems`."""
-    _refuse(_description_problems(description), NOTHING_WRITTEN)
+    """Validate a DECISION's description. See `_description_problems`.
+
+    Decisions are the only caller: a task description is validated with its
+    title by `validate_fields`, under the task field model (E-1993)."""
+    _refuse(_description_problems(
+        description, max_length=DECISION_DESCRIPTION_MAX_LENGTH, for_task=False,
+    ), NOTHING_WRITTEN)
 
 
 def task_id_display(item_id: int) -> str:
@@ -962,10 +1042,6 @@ def next_tasks(
     """Show top actionable leaf tasks, ranked by priority."""
 
     cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
-    # E-1845: `untriaged` is excluded — a task nobody has looked at yet is not
-    # actionable work, and offering it here would present it as a ready-to-pick-
-    # up item. It surfaces in `session status` (as ◌ triage) instead, which is
-    # where the routing decision belongs.
     where = (
         f"WHERE t.status NOT IN ({statuses.sql_list('not-actionable')}) "
         # E-2161: childless is judged on the EFFECTIVE tree — the one the user
@@ -2260,6 +2336,7 @@ def add_item(
     description: str | None = None,
     plan: str | None = None,
     analysis: str | None = None,
+    context: str | None = None,
     phase: str = "now",
     project_name: str | None = None,
     after: int | None = None,
@@ -2283,11 +2360,12 @@ def add_item(
                     action=NOTHING_CREATED)
     _reject_maybe_with_parent(phase, parent_id)
     _, proj_name = _resolve_project(project_name)
-    # E-1845: a new task is `untriaged` — filed, not yet looked at. Triage
-    # decides whether the description is already a sufficient spec (→ submitted)
-    # or design work is needed first (→ unplanned). E-1813 removed the tier-1
-    # exemption that filed straight to `ready`: a rating does not move status.
-    status = status or "untriaged"
+    # E-1993: a new task is `unplanned`; the executor promotes it to
+    # `submitted` when it is filed with a plan. There is no triage step: with a
+    # plan required to spawn, no description is a sufficient spec to judge.
+    # E-1813 removed the tier-1 exemption that filed straight to `ready`: a
+    # rating does not move status.
+    status = status or "unplanned"
 
     # E-1577/E-1579: research/epic tasks cannot be created in
     # 'unverified'/'assumed'/'confirmed'.
@@ -2314,6 +2392,8 @@ def add_item(
     }
     if plan_content is not None:
         payload["plan"] = plan_content
+    if context is not None:
+        payload["context"] = context
     if analysis is not None:
         payload["analysis"] = analysis
     if notes_value is not None:
@@ -2341,22 +2421,12 @@ def add_item(
     )
     if plan_content is not None:
         _mirror_task_doc(item_id, "plan", plan_content)
+    if context is not None and context.strip():
+        _mirror_task_doc(item_id, "context", context)
     if analysis is not None and analysis.strip():
         _mirror_task_doc(item_id, "analysis", analysis)
     if notes_value is not None and notes_value.strip():
         _mirror_task_doc(item_id, "notes", notes_value)
-
-    # E-1859: triage at file time, detached. A synchronous model call here
-    # would add seconds to EVERY filing, interactive ones included, so this is
-    # a latency optimization only — the background sweep is the correctness
-    # guarantee. If the child never starts or dies, the task simply stays
-    # `untriaged` and the sweep picks it up.
-    #
-    # Gated on the RESOLVED status, not on the absence of --status: an explicit
-    # --status is a routing decision already made, so triage has nothing to do.
-    if status == "untriaged":
-        from endless import triage
-        triage.spawn_detached(item_id)
 
     return item_id
 
@@ -3425,12 +3495,6 @@ def decline_item(item_id: int, reason: str):
 
 
 # Statuses a task may be `submit`ted from: pre-approval design states.
-#
-# E-1845: `untriaged` is included so the new default status is not a dead end.
-# E-1859 made the routing automatic, and `task submit` stays exactly as
-# important: it is the permanent human override for a triage call you disagree
-# with, and the route that still works when the triager is unreachable (it
-# fails open, leaving the task here). Never scaffolding to remove.
 _SUBMITTABLE_FROM = statuses.get("submittable-from")
 
 
@@ -3500,11 +3564,12 @@ def submit_item(item_id: int, complexity: str | None = None,
                 risk: str | None = None):
     """Mark a task as `submitted` — spec-complete, awaiting human approval.
 
-    Agent-set. Reachable two ways, both landing here: the agent attached a
-    plan (a `plan` content row — the plan-attach auto-move handles that in
-    the executor) OR the agent judges the description a sufficient spec (no
-    plan, this verb). Plan-vs-no-plan is carried by the plan row, not by
-    status. A human then runs `endless task approve` to reach `ready`.
+    Agent-set, and only on a task that has a plan (E-1993): what gets
+    approved is the plan, and a description is never a sufficient spec. Usually
+    unnecessary — attaching a plan moves a task here by itself (the executor's
+    plan-attach promotion); this is for a plan attached with --keep-status, or
+    a `revisit` task being re-submitted. A human then runs `endless task
+    approve` to reach `ready`.
 
     E-1813: submitting is where the agent PROPOSES both ratings (ED-1538), so
     it is refused while either is unset — from the flags here or already on
@@ -3537,6 +3602,13 @@ def submit_item(item_id: int, complexity: str | None = None,
             f"Cannot submit a task in status '{current}'; submit applies to "
             f"{' or '.join(_SUBMITTABLE_FROM)} tasks (spec-complete, awaiting "
             "approval)."
+        )
+    if not (db.task_content(item_id).get("plan") or "").strip():
+        raise click.ClickException(
+            f"Cannot submit {task_id_display(item_id)}: it has no plan. What is "
+            f"approved is the plan; a description only says what the task is.\n"
+            f"  Attach one — it moves the task to submitted by itself:\n"
+            f"      endless task update {task_id_display(item_id)} --plan-file <path>"
         )
     _refuse_unrated(
         item_id, "submit", effective,
@@ -4181,11 +4253,11 @@ def _settled_reopen_route(item_id: int, current_status: str) -> str:
         `completed`) reopens to `revisit` — "needs re-evaluation before it can
         proceed", which is exactly what reopening means.
       - `declined`/`obsolete` never shipped; the lifecycle reverses them to
-        `untriaged` ("user reconsiders"), and has no edge to `revisit` at all.
+        `unplanned` ("user reconsiders"), and has no edge to `revisit` at all.
 
     Both land in `claim-promotes`, so the ordinary claim that follows works.
     """
-    target = "revisit" if statuses.has("shipped", current_status) else "untriaged"
+    target = "revisit" if statuses.has("shipped", current_status) else "unplanned"
     return f"endless task update E-{item_id} --status {target}"
 
 
@@ -4330,20 +4402,6 @@ def _check_prior_claim(item_id: int, current_status: str) -> None:
     raise click.ClickException("\n".join(lines))
 
 
-# E-1845: statuses from which a material description edit resets a task to
-# `untriaged`. These are exactly the pre-work states — no implementation has
-# started, so re-deciding what the task IS costs nothing but a second look.
-#
-# `ready` is deliberately included: approval was granted against the OLD
-# description, so a rewrite should require re-approval rather than silently
-# inherit it. `underway` is deliberately EXCLUDED: a live session is mid-flight
-# and a description tweak must not yank the task out from under it. So are
-# `unverified` and every terminal status, where re-triage means nothing.
-_DESCRIPTION_RESET_FROM: frozenset[str] = frozenset(
-    statuses.get("description-reset-from")
-)
-
-
 # The statuses that mean "nobody has decided this task is spec-complete yet" —
 # the ones from which attaching a plan promotes to `submitted`. The promotion
 # itself lives in the Go executor; this reads the same group the executor's
@@ -4475,9 +4533,9 @@ def create_claimed_task_for_session(
 
     The container `session resume` mints for a session that never claimed a task
     (E-1918). Created straight at `underway` and bound in one step, skipping
-    triage and the approve gate deliberately: a human ran `session resume`, so
-    the approval that gate exists to capture already happened interactively —
-    and triage could not judge a placeholder title anyway.
+    the plan gate and the approve gate deliberately: a human ran `session
+    resume`, so the approval those gates exist to capture already happened
+    interactively.
 
     `force=True` on the add is about the title, not the gates: the title is a
     fixed placeholder that does not open with a registered verb, and letting it
@@ -4502,6 +4560,74 @@ def create_claimed_task_for_session(
         project_root=project_root,
     )
     return item_id, wt_path
+
+
+def _open_questions(item_id: int) -> list[dict]:
+    """The task's `open` questions (E-2176), oldest first, read through Go."""
+    from endless import provenance, question_cmd
+    return provenance.rows_of(question_cmd._go(["task-questions", "--id", str(item_id)]))
+
+
+def _open_questions_for_show(item_id: int) -> list[dict]:
+    """`_open_questions` for a read-only render: a read that cannot answer
+    (an endless-go too old to know the verb) shows nothing rather than failing
+    the whole `task show`. The claim gate reads `_open_questions` directly and
+    stays fail-closed."""
+    try:
+        return _open_questions(item_id)
+    except click.ClickException:
+        return []
+
+
+def _require_spawnable(item_id: int, verb: str) -> None:
+    """Refuse to claim or spawn a task that has no plan or has open questions.
+
+    E-1993. Filing stays cheap — a task may be filed with no plan and with
+    questions nobody can answer yet — but a session works from a plan, and a
+    task waiting on an answer is waiting on a person. So both park the task
+    here, at the moment someone tries to start it, rather than at filing.
+
+    There is no grandfathering: an old task meets this exactly as a new one
+    does, and the refusal is how it finds out it needs a plan. That is why the
+    message is the route forward, not only the refusal.
+    """
+    tid = task_id_display(item_id)
+    problems: list[str] = []
+    plan = (db.task_content(item_id).get("plan") or "").strip()
+    if not plan:
+        problems.append(
+            f"{tid} has no plan. A session works from the plan; the description\n"
+            f"  only says what the task is. Write the plan, attach it, and have it\n"
+            f"  approved:\n"
+            f"      endless task update {tid} --plan-file <path>   (→ submitted)\n"
+            f"      endless task approve {tid}                     (the user)\n"
+            f"  A question the plan cannot settle without the user is not a reason\n"
+            f"  to guess: ask it, and the task parks until it is answered:\n"
+            f"      endless question ask {tid} \"<question>\""
+        )
+    questions = _open_questions(item_id)
+    if questions:
+        from endless.question_cmd import question_id_display
+        n = len(questions)
+        lines = [
+            f"{tid} is parked on {n} open question{'s' if n != 1 else ''}. "
+            f"Each one is waiting on a person:"
+        ]
+        for q in questions:
+            lines.append(f"      {question_id_display(q['id'])}  {q['question']}")
+        lines.append(
+            "  Answer each (endless question answer EQ-<n> \"<answer>\" --by user),\n"
+            "  or withdraw, reject or supersede it with --reason; fold the answers\n"
+            "  into the plan."
+        )
+        problems.append("\n".join(lines))
+    if not problems:
+        return
+    raise click.ClickException(
+        f"Cannot {verb} {tid}: it is not ready to be worked.\n"
+        + "\n".join(f"  {p}" if i == 0 else f"\n  {p}" for i, p in enumerate(problems))
+        + f"\n  Then {verb} it again."
+    )
 
 
 def claim_item(item_id: int, unattended: bool = False, force: bool = False):
@@ -4630,6 +4756,10 @@ def claim_item(item_id: int, unattended: bool = False, force: bool = False):
             bound_session=target_session,
         )
         return
+
+    # E-1993: after the re-claim branch above, deliberately — the owning
+    # session picking its own task back up is not starting it.
+    _require_spawnable(item_id, "claim")
 
     wt_path, _created = _perform_claim_work(
         item_id=item_id,
@@ -5062,6 +5192,7 @@ def update_plan(
     force: bool = False,
     justification: str | None = None,
     keep_status: bool = False,
+    context: str | None = None,
     reason: str | None = None,
     notes: str | None = None,
 ):
@@ -5178,6 +5309,19 @@ def update_plan(
         # task does not count (E-1531, Mike's ruling). Every closing move is a
         # decision of its own, and says why of its own.
         _require_reason_for_abandonment(status, reason)
+        # E-1993: `submitted` means "planned, awaiting approval" by every route
+        # to it — `task submit`, the plan-attach promotion, and this one — so it
+        # needs a plan, already stored or arriving in this same update.
+        if status == "submitted" and not (
+            (plan if plan is not None else row[0]["plan"] or "").strip()
+        ):
+            raise click.ClickException(
+                f"Cannot set {task_id_display(item_id)} to submitted: it has no "
+                f"plan. What is approved is the plan; a description only says "
+                f"what the task is.\n"
+                f"  Attach one — it moves the task to submitted by itself:\n"
+                f"      endless task update {task_id_display(item_id)} --plan-file <path>"
+            )
 
     # Reject a maybe-phase task gaining (or keeping) a parent. Only evaluate
     # when this update touches phase or parent_id — an unrelated edit must not
@@ -5215,42 +5359,34 @@ def update_plan(
     # Reopening keeps its explicit spelling, `--status revisit`, and stays the
     # user's to make. The edges are untouched; only the inference is gone.
 
-    # E-1845: a material description edit resets a pre-work task to `untriaged`.
-    # The description IS the spec that triage (untriaged → unplanned/submitted)
-    # and approval (submitted → ready) were judged against, so rewriting it
-    # invalidates those judgments — the task has to be looked at again. Guards
-    # (they were shared with the auto-revisit E-2120 removed above):
-    #   - only a REAL change (an identical re-write is a no-op),
+    # E-1993: a material plan edit on an approved task drops its approval. The
+    # plan is what `task approve` approved, so once it changes the task goes
+    # back to `submitted` to be approved again. Guards:
+    #   - only a MATERIAL change: an identical re-write, or one differing only
+    #     in leading/trailing whitespace, is not one,
     #   - an explicit --status in the same update wins (intent), as does
     #     --keep-status (typo/formatting-only edit),
-    #   - only from the pre-work statuses in _DESCRIPTION_RESET_FROM. `ready` IS
-    #     included: approval was granted against the old description. `underway`
-    #     is deliberately excluded so a description tweak cannot yank work out
-    #     from under a live session; so are unverified and every terminal status,
-    #     where re-triage would be meaningless.
-    description_changed = (
-        description is not None
-        and description != (row[0]["description"] or "")
+    #   - only from `ready`. Every earlier status has no approval to lose, and
+    #     from `underway` on the plan edit records what the work became — the
+    #     discovery rules in `docs/guide/tasks.md` REQUIRE a session to record
+    #     grown scope there, and yanking approval from under it would punish
+    #     exactly that.
+    #
+    # A description edit never changes status. It used to reset a pre-work task
+    # to `untriaged` (E-1845), because the description was the spec triage and
+    # approval were judged against. It is not the spec any more — the plan is —
+    # so that reset is gone rather than retargeted.
+    plan_attached = plan is not None and plan.strip() != ""
+    plan_changed = (
+        plan is not None
+        and plan.strip() != (row[0]["plan"] or "").strip()
     )
-    auto_untriage = (
+    auto_unapprove = (
         not keep_status
         and status is None
-        and description_changed
-        and row[0]["status"] in _DESCRIPTION_RESET_FROM
+        and plan_changed
+        and row[0]["status"] == "ready"
     )
-    # Composing the reset with the plan-attach promotion. Attaching a non-empty
-    # plan in the SAME call answers the triage question the reset would have
-    # asked, so the pair lands on `submitted` rather than bouncing to
-    # `untriaged` with a full plan attached — which would read as "nobody has
-    # looked at this" about a task that was just re-spec'd and planned.
-    #
-    # This has to be resolved here, not left to the executor's plan-attach
-    # auto-move: that move only fires when the update does not set status
-    # explicitly, and the reset does set it. Note the reset still costs a `ready`
-    # task its approval — correct, since approval was granted against the OLD
-    # description; it lands `submitted`, awaiting re-approval.
-    plan_attached = plan is not None and plan.strip() != ""
-    untriage_target = "submitted" if plan_attached else "untriaged"
 
     # E-1913: `--keep-status` holds the status across EVERY auto-transition, not
     # only the one guarded above. The plan-attach promotion (a pre-judgment task
@@ -5284,8 +5420,8 @@ def update_plan(
 
     if status is not None:
         _add("status", status)
-    elif auto_untriage:
-        _add("status", untriage_target)
+    elif auto_unapprove:
+        _add("status", "submitted")
     elif keep_status_pin:
         # Deliberately not _add(): this writes back the status the row already
         # has, purely to make the executor stand down. Nothing changed, so
@@ -5309,8 +5445,8 @@ def update_plan(
         _add("parent_id", parent_id if parent_id > 0 else None)
 
     # E-1813: a rating is a field edit and nothing more. The tier-1 advance to
-    # `ready` that stood here is gone on purpose — status routing is triage plus
-    # approve, never a rating value.
+    # `ready` that stood here is gone on purpose — status routing is the plan
+    # and approve, never a rating value.
     for axis, value in (("complexity", complexity), ("risk", risk)):
         value = ratings.normalize(value)
         if value is not None:
@@ -5364,6 +5500,11 @@ def update_plan(
         if new_notes.strip():
             _mirror_task_doc(item_id, "notes", new_notes)
 
+    if context is not None:
+        _add("context", context)
+        if context.strip():
+            _mirror_task_doc(item_id, "context", context)
+
     if analysis is not None:
         _add("analysis", analysis)
         if analysis.strip():
@@ -5384,8 +5525,8 @@ def update_plan(
     )
 
     # E-2120: audience-gate the status render. An agent is shown the fields it
-    # ASKED to change; a status entry it did not ask for — the E-1845
-    # description-edit reset, the plan-attach promotion — is a completed, correct
+    # ASKED to change; a status entry it did not ask for — the E-1993
+    # plan-edit reset, the plan-attach promotion — is a completed, correct
     # transition it can do nothing about, and every one of them got relayed to
     # the user as if it were news, spending the scarcest resource in the loop.
     # Rewording that output was tried (E-1859) and did not take: the stimulus is
@@ -5413,33 +5554,15 @@ def update_plan(
     header_title = fields.get("title", row[0]["title"]) or row[0]["description"]
     _emit_field_changes(item_id, header_title, rendered)
 
-    # E-1845: the field render above already shows `Status: <old> ->
-    # untriaged`; this names WHY and the escape hatch. Human-only (E-2120):
-    # an agent is shown the fields it asked to change and nothing else.
-    if auto_untriage and not agent_reading:
-        because = (
-            "re-spec'd and re-planned in one call"
-            if plan_attached
-            else "the description is the spec that triage and approval were "
-                 "judged against"
+    # E-1993: the field render above already shows `Status: ready ->
+    # submitted`; this names WHY and the escape hatch. Human-only (E-2120): an
+    # agent is shown the fields it asked to change and nothing else.
+    if auto_unapprove and not agent_reading:
+        click.echo(
+            f"{task_id_display(item_id)} → submitted (the plan changed, and "
+            f"approval was granted against the old one). Pass --keep-status on "
+            f"a typo- or formatting-only edit to keep it approved."
         )
-        # E-1859 (reopened): the offer here is about COST, not about whether the
-        # transition was right. The previous wording ended "pass --keep-status
-        # to suppress", which read as an undo offered after the fact and invited
-        # agents to relay a completed, correct transition to the user as a
-        # decision to accept — observed four times in one session. `--keep-status`
-        # is a spend control: every re-triage is a model call, and a filer who
-        # already knows the edit was cosmetic should skip paying for one.
-        if untriage_target == "untriaged":
-            click.echo(
-                f"{task_id_display(item_id)} → untriaged; re-triage will run "
-                f"(one model call). Pass --keep-status on a typo- or "
-                f"formatting-only edit to skip it."
-            )
-        else:
-            click.echo(
-                f"{task_id_display(item_id)} → {untriage_target} ({because})."
-            )
 
     # E-1813: a task promoted to `submitted` by attaching a plan was not
     # submitted through `task submit`, which is the route that demands ratings.
@@ -5447,7 +5570,7 @@ def update_plan(
     # approve will refuse the task until someone does. Shown to agents too:
     # unlike the status render above, this names something they can act on.
     promoted = (
-        (auto_untriage and untriage_target == "submitted")
+        auto_unapprove
         or (
             status is None and not keep_status and plan_attached
             and row[0]["status"] in _PRE_JUDGMENT_STATUSES
@@ -5960,6 +6083,9 @@ def detail_item(
     # children are structure, so every render advertises how many there are and
     # of what kind, whether or not --children was passed to list them.
     children_by_type = _children_by_type(item_id)
+    # Open questions park a task (E-1993): it cannot be claimed or spawned
+    # until each is answered or closed, so every render says so up front.
+    open_questions = _open_questions_for_show(item_id)
 
     if as_json:
         import json
@@ -6041,6 +6167,12 @@ def detail_item(
             # "childless" rather than an absent key leaving it unsaid.
             "children_count": sum(children_by_type.values()),
             "children_by_type": children_by_type,
+            # E-1993: always present, so [] says "not parked on questions".
+            "open_questions": [
+                {"id": f"EQ-{q['id']}", "series": q["series"],
+                 "question": q["question"]}
+                for q in open_questions
+            ],
             # E-1929: the row is retained after `task remove`, so a consumer must
             # be able to tell a removed task from a live one. Always present, so
             # the absence of the key never reads as "live".
@@ -6099,6 +6231,9 @@ def detail_item(
         )
         click.echo(f"type={item['type']} phase={item['phase']} "
                     f"status={item['status']}{rb_str}{dup_str}{rating_str}")
+        if open_questions:
+            click.echo(f"open_questions={len(open_questions)} "
+                       f"(parked: not claimable or spawnable until answered)")
         if item["parent_id"]:
             click.echo(f"parent=E-{item['parent_id']}")
         links = _flatten_relations(item_id)
@@ -6143,6 +6278,10 @@ def detail_item(
         if (show_description or brief is not None) and item["description"] \
                 and item["description"] != item["title"]:
             click.echo(f"\n## Description\n{brief_text(item['description'], brief)}")
+        if open_questions:
+            click.echo("\n## Open questions")
+            for q in open_questions:
+                click.echo(f"EQ-{q['id']} {q['question']}")
         for slug in content_slugs:
             if slug in show_content and item[slug]:
                 click.echo(f"\n## {content_names.label(slug)}\n{brief_text(item[slug], brief)}")
@@ -6199,6 +6338,7 @@ def detail_item(
                 creator=creator,
                 brief=brief,
                 children_by_type=children_by_type,
+                open_questions=open_questions,
             )
     finally:
         if pager is not None:
@@ -6221,6 +6361,7 @@ def _render_detail_human(
     creator: dict | None,
     brief: int | None = None,
     children_by_type: dict[str, int] | None = None,
+    open_questions: list[dict] | None = None,
 ):
     """Emit the human-readable `task show` detail to the current stdout. Split
     from detail_item so the whole render can run under a color/pager proxy
@@ -6285,6 +6426,14 @@ def _render_detail_human(
         f"{label('Status:')} {val(item['status'])}"
         + click.style(status_note, dim=True)
     )
+    if open_questions:
+        n = len(open_questions)
+        click.echo(
+            f"{label('Parked:')} "
+            + click.style(f"{n} open question{'s' if n != 1 else ''} — not "
+                          f"claimable or spawnable until answered",
+                          fg="yellow", bold=True)
+        )
     # Always rendered, `unrated` included (E-1813): tier's line appeared only
     # when set, which made it invisible for ~98% of tasks.
     click.echo(
@@ -6336,6 +6485,18 @@ def _render_detail_human(
         click.echo(click.style("— Description —", fg="cyan"))
         _echo_field_body(brief_text(item["description"], brief), color)
 
+    # Context is the description's other half — why the task exists — so it
+    # renders directly after it, ahead of the structure below (E-1993).
+    _echo_large_section(content_names.label("context"), brief_text(item["context"], brief),
+                        "context" in show_content, color)
+
+    if open_questions:
+        from endless.question_cmd import question_id_display
+        click.echo()
+        click.echo(click.style("— Open questions —", fg="yellow"))
+        for q in open_questions:
+            click.echo(f"{question_id_display(q['id']):<8} {q['question']}")
+
     # Children occupy slot 2 — the position Analysis would take if it rendered —
     # whether or not any of the four surrounding sections actually render
     # (E-2126). Structure first: the flag-gated long prose goes last, where it
@@ -6355,6 +6516,8 @@ def _render_detail_human(
             click.echo("(none)")
 
     for slug in content_names.slugs():
+        if slug == "context":
+            continue  # rendered after the description, above
         _echo_large_section(content_names.label(slug), brief_text(item[slug], brief),
                             slug in show_content, color)
 
@@ -6729,6 +6892,9 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     # matters: the live check above owns the "someone is working this right now"
     # case and says so more specifically, so it runs first.
     _check_prior_claim(item_id, current_status)
+
+    # E-1993: a task with no plan, or with open questions, is not spawnable.
+    _require_spawnable(item_id, "spawn")
 
     # Pre-claim: emit status_changed, create worktree. No session binding
     # yet — Claude hasn't started. SessionStart's @endless_spawned_by
