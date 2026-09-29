@@ -6935,3 +6935,7 @@ Inside a worktree, the global endless (main's Python) prefers the worktree's bin
 ### [2026-09-29] New content slots are hidden by default like the rest
 I made the new 'context' content name render by default in task show because the E-1993 plan said so. Mike does not want it shown without --context or --all-fields. A new content slot follows the existing convention (collapsed to a char-count placeholder, shown by its flag) unless Mike says otherwise at review — question a plan line that breaks a convention before implementing it.
 - **Project**: endless
+
+### [2026-09-29] Descriptions lead with what the task does, not why or when
+Mike rejected rewritten descriptions that led with context (the missing thing, the current behavior, the incident), led with 'when/on X' before the what, named specific hooks or tables, or used undefined jargon like 'pivot gate'. Leading with context makes a task about 3x harder to understand. A description starts with the title's verb and says what will be implemented, high-level; 'when' comes after 'what'; context goes in --context, specifics (hook names, tables) in --analysis or --plan.
+- **Project**: endless
