@@ -18,13 +18,13 @@
 
 ## Which task a window is (Mike)
 
-The window name is authoritative. Match it to the worktree directory: the
-pane's restored working directory, as tmux-resurrect puts it back. When they
-agree, resume that task and rewrite the window's `@endless_*` options as
-needed; tmux-resurrect does not restore them, and stale ones are the suspected
-cause of the wrong-task resumes. When the window name DIFFERS from the
-worktree's task id, do not resume. Write the error into that window's pane and
-continue with the other windows.
+The worktree directory is authoritative, consistent with the rest of Endless:
+the kept pane's working directory, as tmux-resurrect puts it back. The window
+name must agree with it. When they agree, resume that task and rewrite the
+window's `@endless_*` options as needed; tmux-resurrect does not restore them,
+and stale ones are the suspected cause of the wrong-task resumes. When the
+window name DIFFERS from the worktree's task id, do not resume. Write the
+error into that window's pane and continue with the other windows.
 
 Fixing the single-window wrong-task bug is part of this task: `--all` fails
 wherever `resume` resolves the wrong task, so it isn't done until that's fixed.
