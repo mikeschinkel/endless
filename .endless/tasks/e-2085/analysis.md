@@ -36,3 +36,7 @@ the investigation.
 3. Restore E-1361 as a consequence of the fix, not as a hand-written row.
 
 Do not restore E-1279 or E-1293.
+
+## From the description
+
+Find the cause, audit for other entities lost the same way, and restore E-1361 as a consequence of the fix.
