@@ -15,6 +15,7 @@ package liveview
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"os"
 	"os/signal"
@@ -108,6 +109,9 @@ type LoopConfig struct {
 	// exiting the process, which is what a one-frame-per-2s view can do about a
 	// query that has started failing.
 	Fatal func(error)
+	// Tick overrides Interval. Zero — every real dashboard — means Interval; a
+	// test drives the loop faster.
+	Tick time.Duration
 }
 
 // Loop redraws cfg.Render every Interval until SIGINT/SIGTERM, repainting only
@@ -119,6 +123,11 @@ type LoopConfig struct {
 // view knows its row count, whatever built the layout cannot, so the pane sizes
 // itself instead of being guessed at creation. Best-effort and silent: outside
 // tmux, or when tmux refuses (a single-pane window), the view is unchanged.
+//
+// It also watches the binary it was started from, and re-execs in place when an
+// install replaces it (E-2193; see restart.go). A replacement that cannot start
+// leaves this process rendering, with job firing stopped and a notice line
+// appended to the frame.
 func Loop(cfg LoopConfig) {
 	out := cfg.Out
 	if out == nil {
@@ -137,7 +146,11 @@ func Loop(cfg LoopConfig) {
 	defer signal.Stop(sigs)
 
 	io.WriteString(out, "\x1b[2J\x1b[H") // clear screen, cursor home
-	ticker := time.NewTicker(Interval)
+	tick := cfg.Tick
+	if tick <= 0 {
+		tick = Interval
+	}
+	ticker := time.NewTicker(tick)
 	defer ticker.Stop()
 
 	// The job-runner trigger (E-698). Each refresh fires the fire-once runner,
@@ -149,8 +162,8 @@ func Loop(cfg LoopConfig) {
 	// monitors is not this guard's job — the runner's DB lease arbitrates that,
 	// so at most one process runs any given due job.
 	var jobsInFlight atomic.Bool
-	fireJobs := func() {
-		if !cfg.FireJobs || jobsInFlight.Swap(true) {
+	fireJobs := func(allowed bool) {
+		if !allowed || !cfg.FireJobs || jobsInFlight.Swap(true) {
 			return
 		}
 		go func() {
@@ -160,16 +173,38 @@ func Loop(cfg LoopConfig) {
 	}
 
 	prev, fitted := "", 0
+
+	// The binary watch (E-2193). Before an exec the cursor comes back and the
+	// signal relay stops, so the new image starts from a terminal and a signal
+	// disposition that look like a fresh launch; it clears and redraws itself.
+	// If the exec does not happen, both are taken again.
+	watch := newRestarter(
+		func() {
+			signal.Stop(sigs)
+			io.WriteString(out, "\x1b[?25h")
+		},
+		func() {
+			signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+			io.WriteString(out, "\x1b[?25l")
+			prev = "" // force a full repaint over whatever the attempt left
+		},
+	)
+
 	for {
 		var b strings.Builder
 
-		fireJobs()
+		// Checked BEFORE jobs fire: on the tick that decides to exec, nothing
+		// is fired — and once a restart has failed, nothing ever is again.
+		fireJobs(watch.tick(jobsInFlight.Load()))
 		cols := DetectCols(cfg.ColsOverride, cfg.FallbackCols)
 		rows, err := cfg.Render(&b, cols, cfg.Color)
 		if err != nil {
 			restore()
 			fatal(err)
 			return
+		}
+		if notice := watch.Notice(); notice != "" {
+			fmt.Fprintln(&b, Strong("⚠ "+notice, cfg.Color))
 		}
 		if frame := b.String(); frame != prev {
 			// Resize BEFORE painting so the frame lands in a pane already the

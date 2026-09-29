@@ -465,6 +465,34 @@ var (
 			"applies, so a run of them against a single operation is a sign " +
 			"that operation has earned a code of its own.",
 	}
+	// ErrCodeMonitorRestartFailed covers a live view — `session monitor`,
+	// `project monitor` — whose binary was replaced by an install, but which
+	// could not restart onto the replacement (E-2193): the new binary failed
+	// its `--help` probe, or the exec itself failed.
+	//
+	// Warning rather than error: the view keeps rendering with the old binary,
+	// so nothing the user is looking at has broken. What it gives up is job
+	// firing, for the rest of that process's life, because a stale binary must
+	// never again run a job the new install may have retired — which is how
+	// E-1993's removed triage job kept raising WARN-0001 from monitors started
+	// before the land.
+	//
+	// Fingerprinted on the replacement's resolved path, so every monitor that
+	// trips over one bad install raises a single incident.
+	ErrCodeMonitorRestartFailed = Code{
+		ID:       "WARN-0019",
+		Slug:     "monitor-restart-failed",
+		Severity: SeverityWarning,
+		Title:    "A monitor could not restart onto its replaced binary",
+		Remedy: "Read the detail (`endless errors show <n> --detail`); it names " +
+			"the stage that failed — `probe` (the new binary could not even " +
+			"print its usage) or `exec` — and the error. Fix or rebuild the " +
+			"install; a monitor retries on its own whenever the binary changes " +
+			"again, so a good build usually clears it without a restart. A " +
+			"monitor that still shows the notice has stopped firing background " +
+			"jobs: quit it and start it again. Dismiss with `endless errors " +
+			"clear <id>`.",
+	}
 )
 
 // catalog indexes every registered Code by ID. Built once at init from the
@@ -488,6 +516,7 @@ var catalog = buildCatalog(
 	ErrCodeHookReadFailed,
 	ErrCodeHookPayloadUnreadable,
 	ErrCodeHookFailed,
+	ErrCodeMonitorRestartFailed,
 )
 
 // buildCatalog indexes codes by ID. It panics on a duplicate ID: a collision is

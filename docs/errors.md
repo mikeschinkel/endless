@@ -606,3 +606,31 @@ carries the full error text, the hook event, the session and the binary that
 ran, and the error text names the operation that failed. This code is the one
 raised when no more specific hook code applies, so a run of them against a
 single operation is a sign that operation has earned a code of its own.
+
+## WARN-0019 — monitor-restart-failed
+
+**Severity:** warning · **Raised by:** `session monitor` and `project monitor`
+(E-2193)
+
+A live monitor runs for days, and it keeps running the binary it started with.
+So each one watches the file it was launched from: when an install replaces that
+file and the replacement has held still for two ticks, the monitor runs the new
+binary with `--help` as a probe and then re-execs it in place — same pane, same
+process. This incident says that restart did not happen: the probe failed or
+timed out, or the exec itself returned an error.
+
+Warning rather than error, because the monitor keeps rendering with the old
+binary. What it gives up is background jobs: from that moment until the process
+ends it fires none, because a stale binary must never again run a job the new
+install may have retired. The frame says so on its last line. Other monitors that
+restarted cleanly keep firing jobs as usual.
+
+Fingerprinted on the replacement's resolved path, so one bad install raises one
+incident however many monitors tripped over it.
+
+**What to do.** Read the detail (`endless errors show <n> --detail`); it names
+the stage that failed — `probe` (the new binary could not even print its usage)
+or `exec` — and the error. Fix or rebuild the install; a monitor retries on its
+own whenever the binary changes again, so a good build usually clears it without
+a restart. A monitor that still shows the notice has stopped firing background
+jobs: quit it and start it again. Dismiss with `endless errors clear <id>`.

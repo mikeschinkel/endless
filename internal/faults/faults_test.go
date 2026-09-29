@@ -589,6 +589,7 @@ func TestCatalog_NumbersAreNeverReused(t *testing.T) {
 		"0016": "hook-read-failed",
 		"0017": "hook-payload-unreadable",
 		"0018": "hook-failed",
+		"0019": "monitor-restart-failed",
 	}
 
 	for _, code := range faults.Codes() {
