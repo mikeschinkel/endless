@@ -1,0 +1,1 @@
+Handled other ways: decision records in task content, and guidance in the guides and handoffs.
