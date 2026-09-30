@@ -52,3 +52,9 @@ diverge.
 
 Nothing here is implemented. E-1915's reconcile repair covers `task_deps` and
 `decision_relations` only.
+
+## From the description
+
+E-1915's answer (refuse the removal, make the operator unlink) does not transfer: there is no unlink for a session touch.
+
+Needs one design call, shared by all four: does a row that outlives its task stay attached to a freed id?
