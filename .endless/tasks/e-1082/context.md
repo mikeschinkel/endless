@@ -1,0 +1,1 @@
+Concrete examples observed: 'task show E-787' renders 'blocks=E-1020' but actual relation is E-787 blocked_by E-1020 (storage: source=E-1020, target=E-787, dep_type=blocks). 'task show E-995' renders 'replaced_by=E-993' but actual relation is E-995 replaces E-993 (E-993 is the declined task; E-995 supersedes it). Both are inverted.
