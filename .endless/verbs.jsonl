@@ -309,3 +309,4 @@
 {"value": "retest", "definition": "to test again", "category": ["action"]}
 {"value": "ignore", "definition": "to deliberately disregard", "category": ["action"]}
 {"value": "seed", "definition": "to populate with initial data", "category": ["action"]}
+{"value": "turn", "definition": "to change state or direction", "category": ["action"]}
