@@ -47,3 +47,11 @@ When any of:
 - A real incident shows main was dirtied by something Claude Code didn't catch.
 - Endless has non-Claude users.
 - A user requests it.
+
+## From the description
+
+Deferred because none of those are current pain points.
+
+Challenges to design through: distribution, composability with existing hooks, cross-platform Windows hostility, --no-verify bypass, worktree handling.
+
+Likely-approach sketch and revisit triggers in the analysis field.
