@@ -15,7 +15,7 @@ bug: the research handoff template instructs `endless task update … --outcome 
   `--xxx-file` carries a **file path**. Applies to: **text, analysis, outcome, description**.
 - **justification** and **reason** stay **inline-only** (typically short) — a deliberate
   partial-consistency exception, not an oversight.
-- **Remove the `@file` magic** on `--analysis` (E-1329, cli.py:1305-1310); `--analysis-file`
+- **Remove the `@file` magic** on `--analysis` (E-1329, cli.py); `--analysis-file`
   replaces it. One mechanism, no magic. (No auto-detect of path-vs-inline — brittleness
   outweighs convenience.)
 - **Hard cutover**, no alias / migration window (pre-1.0, move-fast, no-legacy).
@@ -32,3 +32,11 @@ docs, tests) must become `--text-file <path>`.
 - E-1554 (adds `--notes`): should follow this convention when it lands.
 - Independent of the field-separation design (E-999); applies to whichever flag names survive.
 - Origin: E-989 finalization.
+
+## From the description
+
+Apply uniformly across all endless commands.
+
+Endless is pre-1.0 and 'move fast' applies; recommend hard cutover in one shot rather than a migration window.
+
+Verification, surface area, and decisions on auto-detect are in the analysis field.
