@@ -61,5 +61,6 @@ spelled out in E-2062's plan. Cause (1) of the build side — the projector
 skipping session events — is shared with E-1041, which absorbed E-1035 for the
 same reason; settle who owns `ensureSession` before building.
 
+## From the description
 
-
+Which tables belong in the copy-back is for the implementor to settle with the user.
