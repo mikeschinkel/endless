@@ -1,0 +1,1 @@
+Today there is no concise way to see what a session is, what task it's bound to, where its worktree lives, when it started, and how many messages it has. session list is global and noisy; session history dumps messages.
