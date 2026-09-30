@@ -52,3 +52,9 @@ discharged by E-2122. The destructive-recovery half is still this task's.
 
 E-2122 is pending land at the time of this note; if it has not landed, the
 description above is of `task/2122-report-what-git-actually-said-when`.
+
+## From the description
+
+Classification is deterministic even though resolution is not,
+
+so replace guessing with evidence: stop offering candidates, persist the conflict state before the rebase aborts, and add `endless worktree diagnose [E-NNNN]` that classifies (already-landed, auto-file-only, orphaned ledger base, symbol supersession, semantic overlap) and prescribes ONLY what it can prove. Also make `worktree land --dry-run` rehearse the rebase on a throwaway branch — same machinery, and today it cannot preview the failure it exists to preview.
