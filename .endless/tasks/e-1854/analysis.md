@@ -6,3 +6,7 @@ Surfaced while rewriting README.md (E-1832): the README dropped its human-facing
 
 Pinned wording (inject verbatim, as the lead line of the first-injection context, before the task list):
 New to this project? Run `endless guide` to learn the Endless workflow.
+
+## From the description
+
+Add a one-shot "Run endless guide to learn the workflow" line to the first-time SessionStart context injection so every agent learns the workflow regardless of its project CLAUDE.md.
