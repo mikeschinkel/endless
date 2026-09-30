@@ -71,3 +71,9 @@ goes too, or gets re-keyed onto something that still exists.
 Whether to delete the ephemeral path or keep it deliberately. If deleted, the
 `endless-sandbox` → `endless-go sandbox` string fix shrinks to the files that
 survive.
+
+## From the description
+
+Decide whether to delete the ephemeral path or keep it deliberately,
+
+then fix the strings in whatever survives.
