@@ -64,9 +64,18 @@ checkout still shows as `endless-NN`, because nothing there knows a task. That
 is the separate discoverability question — Endless records no cwd for a session
 and creates no process row for a non-tmux one — and it is not this task.
 
+## Grown scope: the shell-side claim launch
+
+`_launch_claude_for_claim` (E-2106) — `task claim` from a plain shell starting
+Claude through the same `spawn-window` seam — had the identical gap: no
+`--name`, so it too landed as `e-NNNN-xx`. It now passes the same name. Both
+paths read it from one helper, `claude_session_name()`, beside
+`tmux_window_name()`, so they cannot drift apart.
+
 ## Acceptance
 
 - `endless task spawn E-NNNN` produces a session listed as `e-NNNN`.
 - `endless task spawn E-NNNN --name foo` still produces `foo`.
 - `session goto --resume` is unaffected.
 - `just test` passes, with a test covering the defaulted and explicit cases.
+- A shell-side `endless task claim E-NNNN` launches a session named `e-NNNN`.
