@@ -1,0 +1,1 @@
+Fix needs an escape hatch: either auto-skip when the rebuild would be a no-op (introspect target shape), or distinguish 'fresh DB created this version' from 'existing DB needs operator approval to rebuild'.
