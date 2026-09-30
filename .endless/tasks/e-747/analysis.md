@@ -1,0 +1,1 @@
+--project still works for explicit project selection.
