@@ -755,6 +755,20 @@ Verbose on purpose. Each flag says exactly what was overridden, so a run that
 needed only one does not silently waive the other, and neither of the two new
 ones touches `--force`.
 
+**Every window at once.** After a crash, you do not go window by window:
+
+```bash
+endless session resume --tmux-session NAME [--dry-run]   # or --all-tmux-sessions
+```
+
+Each window whose name is a task id (`E-NNNN`, optionally `*`-marked) is reduced
+to one pane at a shell prompt, preferring the one already in the task's
+worktree, and `cd <project root> && endless session resume E-NNNN --rebind` is
+typed into it (`--review` added when the worktree was dropped after landing). A
+window already running Claude, or not named for a task, is skipped. Failures
+print in that window's pane, where you will look, and the summary where you ran
+the command lists what was dispatched and what was skipped. Focus does not move.
+
 **Why not just `session goto <ref> --resume`?** That was the standing
 workaround, and it opens a NEW window — abandoning the restored one along with
 the layout and scrollback the restore just recovered. `--no-sibling-panes` takes

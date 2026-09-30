@@ -1112,6 +1112,63 @@ def resume_session(
     os.execvp(claude, argv)
 
 
+def resume_tmux_windows(
+    ref: str | None,
+    tmux_session: str | None,
+    all_tmux_sessions: bool,
+    dry_run: bool = False,
+    other_flags: dict[str, bool] | None = None,
+) -> None:
+    """`session resume --tmux-session NAME | --all-tmux-sessions` (E-2196).
+
+    A passthrough to `endless-go resume-windows`, which owns the whole sweep:
+    enumerating windows, the live-session check, choosing and clearing panes,
+    and typing `session resume E-NNNN --rebind` into each kept pane. Only the
+    argument rules live here, as Click usage errors.
+
+    Refused under `--db sandbox`: the typed commands change into each task's
+    project root and run against that project's REAL database, so a sweep
+    that decided from a sandbox would act on sessions it never looked at.
+    """
+    import shutil
+    import subprocess
+
+    from endless import config
+
+    if tmux_session is not None and all_tmux_sessions:
+        raise click.UsageError(
+            "--tmux-session and --all-tmux-sessions are mutually exclusive.")
+    if ref is not None:
+        raise click.UsageError(
+            f"REF ({ref}) resumes one session in this pane; --tmux-session / "
+            f"--all-tmux-sessions resume every task window. Give one or the other.")
+    if tmux_session == "":
+        raise click.UsageError("--tmux-session needs a tmux session name.")
+    extra = [flag for flag, on in (other_flags or {}).items() if on]
+    if extra:
+        raise click.UsageError(
+            f"{', '.join(extra)} applies to a single REF, not to "
+            f"--tmux-session / --all-tmux-sessions.")
+    config.require_db_context()
+    if config.db_context_is_sandbox():
+        raise click.ClickException(
+            "--tmux-session / --all-tmux-sessions act on real tmux windows and "
+            "resume real sessions, so they do not run against a sandbox "
+            "database. Re-run with --db main.")
+
+    go_bin = shutil.which("endless-go")
+    if not go_bin:
+        raise click.ClickException("endless-go binary not found on PATH.")
+    argv = [go_bin, *config.go_db_context_args(), "resume-windows"]
+    argv += (["--tmux-session", tmux_session] if tmux_session is not None
+             else ["--all-tmux-sessions"])
+    if dry_run:
+        argv.append("--dry-run")
+    code = subprocess.run(argv).returncode
+    if code != 0:
+        sys.exit(code)
+
+
 def show_history(
     session_value: str | None,
     show_tools: str | None = None,

@@ -98,3 +98,44 @@ func TestListLiveSessions_KeepsPanelessSessions(t *testing.T) {
 		t.Errorf("liveness = %q, want %q", got[0].Liveness, LivenessUnbound)
 	}
 }
+
+// TestListLiveSessions_PaneIDScopedToThisServer is the E-2196 regression. After
+// a tmux crash, the restored server reissues pane ids the dead server had used.
+// A session from before the crash stays listed (its server is unreachable, so
+// `unknown`), but its bare "%45" must not be reported as a PaneID: Python
+// matches PaneID against $TMUX_PANE by string, and the restored "%45" is a
+// different pane — reporting it made `session resume E-2135` in that pane
+// refuse as "working E-2105", the old session's task.
+func TestListLiveSessions_PaneIDScopedToThisServer(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "acme", "/tmp/acme")
+	defer SetTestTmuxObservation("new-srv", map[string]string{
+		"%45": "zsh", "%1": "2.1.220",
+	})()
+
+	seedLivenessSession(t, db, "sess-pre-crash", mustSeedPane(t, db, "old-srv", "%45"))
+	seedLivenessSession(t, db, "sess-current", mustSeedPane(t, db, "new-srv", "%1"))
+
+	got, err := ListLiveSessions(1)
+	if err != nil {
+		t.Fatalf("ListLiveSessions: %v", err)
+	}
+	byID := map[string]LiveSession{}
+	for _, s := range got {
+		byID[s.SessionID] = s
+	}
+	old, ok := byID["sess-pre-crash"]
+	if !ok {
+		t.Fatal("pre-crash session dropped — an unreachable server must not free its tasks")
+	}
+	if old.PaneID != nil {
+		t.Errorf("pre-crash PaneID = %q, want nil (it names a pane on a dead server)", *old.PaneID)
+	}
+	if old.Process != "%45" {
+		t.Errorf("pre-crash Process = %q, want the raw address kept", old.Process)
+	}
+	cur, ok := byID["sess-current"]
+	if !ok || cur.PaneID == nil || *cur.PaneID != "%1" {
+		t.Errorf("current-server session PaneID = %v, want %%1", cur.PaneID)
+	}
+}

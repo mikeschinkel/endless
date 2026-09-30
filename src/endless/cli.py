@@ -1652,7 +1652,17 @@ def session_goto(target_ref, resume, revisit, no_revisit, new_transcript):
 
 
 @session_cmd.command("resume")
-@click.argument("ref")
+@click.argument("ref", required=False)
+@click.option(
+    "--tmux-session", "tmux_session", metavar="NAME", default=None,
+    help="Instead of REF, resume EVERY window of tmux session NAME that is "
+         "named for a task (E-NNNN, optionally `*`-marked): after a tmux "
+         "crash, one command brings back each window's Claude session.",
+)
+@click.option(
+    "--all-tmux-sessions", "all_tmux_sessions", is_flag=True,
+    help="Like --tmux-session, for the windows of every tmux session.",
+)
 @click.option(
     "--review", is_flag=False, flag_value=".landed", default=None,
     metavar="[REF]",
@@ -1701,9 +1711,11 @@ def session_goto(target_ref, resume, revisit, no_revisit, new_transcript):
          "and lay the window out over them. For a window a tmux crash restored "
          "full of dead shells — not one whose panes you arranged.",
 )
-def session_resume(ref, review, reopen, dry_run, print_decision, force,
-                   new_transcript, rebind, no_sibling_panes):
-    """Relaunch a lost Claude session in the CURRENT tmux pane.
+def session_resume(ref, tmux_session, all_tmux_sessions, review, reopen,
+                   dry_run, print_decision, force, new_transcript, rebind,
+                   no_sibling_panes):
+    """Relaunch a lost Claude session in the CURRENT tmux pane — or, with
+    --tmux-session NAME / --all-tmux-sessions, in every restored task window.
 
     REF is a task id (E-NNNN, as shown on the tmux tab), a session id
     (ES-NNNN, or a bare integer), or a Claude UUID prefix. A task id resolves
@@ -1737,7 +1749,35 @@ def session_resume(ref, review, reopen, dry_run, print_decision, force,
     A target whose Claude transcript file is gone is refused before anything is
     launched — the file may still be recoverable from a backup, and that window
     closes quietly. --new-transcript is the deliberate give-up route.
+
+    To recover a whole restored tmux session at once:
+
+        endless session resume --tmux-session NAME [--dry-run]
+
+    Each window named for a task is reduced to one pane at a shell prompt (the
+    one in the task's worktree when there is one) and `session resume E-NNNN
+    --rebind` is typed into it, so any failure prints in that window. Windows
+    already running Claude, or not named for a task, are skipped. A task whose
+    worktree was dropped after landing is resumed with --review. Focus stays
+    where you ran the command; a summary lists what was done.
     """
+    if tmux_session is not None or all_tmux_sessions:
+        from endless.session_cmd import resume_tmux_windows
+        resume_tmux_windows(
+            ref, tmux_session, all_tmux_sessions,
+            dry_run=dry_run or print_decision,
+            other_flags={
+                "--review": review is not None, "--reopen": reopen is not None,
+                "--force": force, "--new-transcript": new_transcript,
+                "--rebind": rebind, "--no-sibling-panes": no_sibling_panes,
+            },
+        )
+        return
+    if ref is None:
+        raise click.UsageError(
+            "give REF, or --tmux-session NAME / --all-tmux-sessions to resume "
+            "every task window of a tmux session."
+        )
     from endless.session_cmd import resume_session
     resume_session(ref, review=review, reopen=reopen,
                    dry_run=dry_run or print_decision, force=force,

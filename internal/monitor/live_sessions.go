@@ -7,9 +7,22 @@ import (
 
 // LiveSession is the row shape returned by ListLiveSessions, intended for
 // JSON serialization to Python callers. PaneID is set to Process when
-// Process looks like a tmux pane id ("%<digits>"), else nil — so the
-// Python side can distinguish tmux from non-tmux sessions without
-// re-parsing the process string.
+// Process is a tmux pane id ("%<digits>") bound on the tmux server THIS
+// process reaches, else nil — so the Python side can distinguish tmux from
+// non-tmux sessions without re-parsing the process string, and can compare
+// PaneID with $TMUX_PANE or hand it to a tmux command without asking which
+// server it belongs to.
+//
+// The server scoping is E-2196. A pane id is only unique per server: a tmux
+// restart reissues "%45" to an unrelated pane, and a session from before the
+// crash (liveness `unknown` — its server is gone, not observed) stays listed
+// as an owner. Reporting its bare "%45" let every Python caller that matched
+// pane ids by string treat the restored pane as that old session's — which is
+// how `session resume E-2135`, typed into a restored window, refused with
+// "This pane is working E-2105". GetLiveSessionByProcess and
+// ProcessIDsForPanes already scope by server for exactly this reason; this
+// is the same rule at the row Python reads. Process still carries the raw
+// address, and the row itself is kept: ownership is unaffected.
 type LiveSession struct {
 	SessionID        string  `json:"session_id"`
 	EndlessSessionID int64   `json:"endless_session_id"`
@@ -61,7 +74,7 @@ func ListLiveSessions(projectID int64) ([]LiveSession, error) {
 		`SELECT s.session_id, s.id, COALESCE(s.project_id, 0), s.platform, s.state,
 		        s.task_id, COALESCE(p.address, ''),
 		        COALESCE(s.started_at, ''), COALESCE(s.last_activity, ''),
-		        sl.liveness
+		        sl.liveness, COALESCE(p.server_uuid, '')
 		 FROM sessions s
 		 LEFT JOIN processes p ON p.id = s.process_id
 		 JOIN session_liveness sl ON sl.session_id = s.id
@@ -75,17 +88,22 @@ func ListLiveSessions(projectID int64) ([]LiveSession, error) {
 	}
 	defer rows.Close()
 
+	// An unidentifiable server (no tmux, or none reachable) yields "", which
+	// no binding matches: an unscoped pane id is exactly what must not leak.
+	here, _ := TmuxServerUUID()
+
 	out := []LiveSession{}
 	for rows.Next() {
 		var s LiveSession
+		var server string
 		if err := rows.Scan(
 			&s.SessionID, &s.EndlessSessionID, &s.ProjectID, &s.Platform, &s.State,
 			&s.TaskID, &s.Process, &s.StartedAt, &s.LastActivity,
-			&s.Liveness,
+			&s.Liveness, &server,
 		); err != nil {
 			return nil, fmt.Errorf("scan live session: %w", err)
 		}
-		if strings.HasPrefix(s.Process, "%") {
+		if strings.HasPrefix(s.Process, "%") && here != "" && server == here {
 			p := s.Process
 			s.PaneID = &p
 		}

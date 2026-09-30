@@ -66,6 +66,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/outputstylecmd"
 	"github.com/mikeschinkel/endless/internal/projectstatuscmd"
+	"github.com/mikeschinkel/endless/internal/resumewindowscmd"
 	"github.com/mikeschinkel/endless/internal/sandboxcmd"
 	"github.com/mikeschinkel/endless/internal/sessionmonitorcmd"
 	"github.com/mikeschinkel/endless/internal/sessionquerycmd"
@@ -212,6 +213,8 @@ func main() {
 		tmuxcmd.Run(rest)
 	case "session-query":
 		sessionquerycmd.Run(rest)
+	case "resume-windows":
+		resumewindowscmd.Run(rest)
 	case "worktree":
 		worktreecmd.Run(rest)
 	case "session-status":
@@ -298,6 +301,7 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  sandbox        run|enter|init|reset|list|prune|destroy|claude-settings-repair")
 	fmt.Fprintln(w, "  tmux           apply|status-line|active-id|show-menu")
 	fmt.Fprintln(w, "  session-query  list-live|task-plan|resume-target")
+	fmt.Fprintln(w, "  resume-windows --tmux-session NAME|--all-tmux-sessions [--dry-run]  (resume every restored task window)")
 	fmt.Fprintln(w, "  worktree       in-use  (is this worktree still in use?)")
 	fmt.Fprintln(w, "  session-status render the per-session status view (--monitor loops it)")
 	fmt.Fprintln(w, "  session-monitor restart  (respawn every session-monitor pane in place)")
