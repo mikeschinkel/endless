@@ -1,0 +1,1 @@
+_resolve_session_id_with_prompt's Layer 1 short-circuit (task_cmd.py) reads the env var and returns it immediately, bypassing the test-mocked pane data — so every test returns the env id instead of its expected candidate, and the verb-wording tests get KeyError because click.prompt is never invoked.
