@@ -1,0 +1,1 @@
+pytest's isolated_env fixture uses monkeypatch.setattr to override Python module attributes — works for in-process tests, useless for tests that subprocess to Go binaries. E-787 hand-rolled a fix in conftest.py: monkeypatch.setenv('XDG_CONFIG_HOME', ...) plus PATH override so subprocess invocations see the isolated env.
