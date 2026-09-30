@@ -1,0 +1,1 @@
+From a bare (non-Claude) tmux pane inside a self-dev worktree, 'endless' (Python) and bare 'endless-go' silently run MAIN's code, so worktree changes cannot be exercised without PYTHONPATH=src or ./bin/endless-go, and new worktree flags error with 'No such option' until landed.
