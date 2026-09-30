@@ -1,0 +1,1 @@
+An optional overrides file from E-1771 that nobody can use and that does not work: its main entry, minimize, is the entire 5307-character instruction on one escaped JSON line, and per E-2041 task report never reads it anyway.
