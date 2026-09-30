@@ -1,0 +1,1 @@
+Every other agent-settable status can ride along with a description edit in one call; submitted cannot, so routing a task to submitted after editing its description takes a second command (task submit). That asymmetry is a direct cause of agents leaving edited tasks sitting in untriaged: the one-call path exists for 'needs a plan' but not for 'description is sufficient'.
