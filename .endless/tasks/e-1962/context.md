@@ -1,0 +1,1 @@
+The E-1953 report channel is injected into, and enforced against, every Claude Code session on a registered project with report_gate on — including sessions in the Claude Code Desktop app, where the `endless task report` contract is not currently wanted.
