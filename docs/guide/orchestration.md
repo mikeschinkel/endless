@@ -528,7 +528,7 @@ This adds the following functions:
 | `esu`    | "Endless session use." Resolves a Claude session (active one by default, or `<id>` if given) and (a) cd's to its worktree and (b) exports `ENDLESS_SESSION_ID`. Subsequent endless commands then route through that worktree's source. | After `task claim`, run `esu` to drop into the worktree fully bound. |
 | `esp`    | "Endless session project." cd's to the project root (main checkout) of the active or given session.                                   | When you need to do something in `main` (e.g. inspect `git log` or pull) and want to come back. |
 | `esf`    | "Endless session forget." Unsets `ENDLESS_SESSION_ID` in the current shell. The session keeps running; only the shell's pointer is cleared. | When you're done coordinating one session and want a fresh shell. |
-| `esm`    | "Endless session monitor." Live dashboard — re-renders `session status` every 2s until Ctrl-C. Passes through `--all` / `--tree`.        | Watching a spawned session work without polling by hand.  |
+| `esm`    | "Endless session monitor." Live dashboard — re-renders `session status` every 2s until Ctrl-C. Passes through `--all` / `--tree`. `endless session monitor --restart` respawns every one in the tmux session onto the installed binary. | Watching a spawned session work without polling by hand.  |
 | `eeh`    | "Endless errors here." Runs `errors list`: the recorded errors for the project you are in, plus how to dismiss them. Takes `--detail` / `--all`, and `--all-projects` to cover the machine the way the `session status` fault row counts. | The fault row says `Run eeh` — this is what it means.    |
 
 `esm` and `eeh` are read-only views and need no session binding.

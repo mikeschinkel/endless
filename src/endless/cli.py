@@ -1409,7 +1409,17 @@ def session_status(show_all, tree, show_hidden, only_hidden, as_json):
               help="Render this session's hidden task rows too, marked ⊘")
 @click.option("--only-hidden", is_flag=True,
               help="Render ONLY this session's hidden task rows")
-def session_monitor(show_all, tree, show_hidden, only_hidden):
+@click.option("--restart", is_flag=True,
+              help="Respawn every session-monitor pane in this tmux session in "
+                   "place, onto the installed binary")
+@click.option("--tmux-session", default=None, metavar="NAME",
+              help="With --restart: the tmux session to restart monitors in")
+@click.option("--all-tmux-sessions", is_flag=True,
+              help="With --restart: restart monitors in every tmux session")
+@click.option("--dry-run", is_flag=True,
+              help="With --restart: list the panes it would restart, change nothing")
+def session_monitor(show_all, tree, show_hidden, only_hidden, restart,
+                    tmux_session, all_tmux_sessions, dry_run):
     """Live dashboard: repeatedly render `session status` until interrupted.
 
     The top-like pane you keep open all day. Loops the same view `session
@@ -1420,8 +1430,32 @@ def session_monitor(show_all, tree, show_hidden, only_hidden):
 
     Per-session task hiding applies here identically, footer included — the
     '… N hidden' line survives the redraw loop like any other part of the frame.
+
+    --restart finds the panes running a session monitor — each monitor tags its
+    own pane while it runs — and respawns each one in place as a plain `endless
+    session monitor` on the installed binary. It covers the current tmux
+    session; --tmux-session NAME or --all-tmux-sessions widen it. A tag whose
+    monitor is no longer running is cleared and its pane left alone, so a shell
+    that once ran the monitor is never killed.
     """
     from endless.session_cmd import session_status_resolve
+    if not restart:
+        for flag, given in (("--tmux-session", tmux_session is not None),
+                            ("--all-tmux-sessions", all_tmux_sessions),
+                            ("--dry-run", dry_run)):
+            if given:
+                raise click.UsageError(f"{flag} only applies with --restart.")
+    else:
+        for flag, given in (("--all", show_all), ("--tree", tree),
+                            ("--show-hidden", show_hidden),
+                            ("--only-hidden", only_hidden)):
+            if given:
+                raise click.UsageError(f"{flag} does not apply with --restart.")
+        from endless.session_cmd import session_monitor_restart
+        session_monitor_restart(tmux_session=tmux_session,
+                                all_tmux_sessions=all_tmux_sessions,
+                                dry_run=dry_run)
+        return
     session_status_resolve(show_all=show_all, tree=tree, monitor=True,
                            show_hidden=show_hidden, only_hidden=only_hidden)
 

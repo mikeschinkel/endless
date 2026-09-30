@@ -28,6 +28,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/liveview"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/sessionmonitorcmd"
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
@@ -563,7 +564,16 @@ func monitorFrame(tracker *anchorTracker, w io.Writer, all bool, cols int, color
 // (E-1892), so a monitor started before its session registers — which is the
 // common case under `task spawn`'s layout — recovers instead of showing the
 // claim/bind hint forever.
+//
+// It tags its pane for the duration (E-2194), so `session monitor --restart`
+// can find it, and clears the tag on every clean exit — a signal, or a render
+// fatal — so a pane that goes back to its shell is no longer a monitor pane. A
+// re-exec onto a new install (E-2193) runs no exit path; the new image tags the
+// pane again with the same UPID, since a re-exec keeps pid and start time.
 func monitorLoop(tracker *anchorTracker, all bool, colsOverride int, color bool, hm hiddenMode) {
+	pane := os.Getenv("TMUX_PANE")
+	untag := sessionmonitorcmd.Tag(pane)
+	defer untag()
 	liveview.Loop(liveview.LoopConfig{
 		Render: func(w io.Writer, cols int, color bool) (int, error) {
 			return monitorFrame(tracker, w, all, cols, color, hm)
@@ -573,9 +583,11 @@ func monitorLoop(tracker *anchorTracker, all bool, colsOverride int, color bool,
 		Color:        color,
 		// process is the session's process handle — a tmux pane id today. The
 		// view fits this pane to its own frame on every repaint (E-1851).
-		Pane:     os.Getenv("TMUX_PANE"),
+		Pane:     pane,
 		FireJobs: true,
 		Fatal: func(err error) {
+			// die exits the process, so the deferred untag would never run.
+			untag()
 			// Same reasoning as the one-shot path: the notice is the only part
 			// of a frame a dead database still allows (E-1887).
 			die(err, colsOverride, color)

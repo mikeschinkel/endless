@@ -148,15 +148,15 @@ func TestSelectPaneArgs(t *testing.T) {
 // whether or not the CLI resolves on PATH (the binary element varies; the verb
 // pair does not).
 func TestMonitorCommand(t *testing.T) {
-	got := monitorCommand()
+	got := MonitorCommand()
 	if len(got) != 3 {
-		t.Fatalf("monitorCommand() = %q, want 3 elements", got)
+		t.Fatalf("MonitorCommand() = %q, want 3 elements", got)
 	}
 	if got[1] != "session" || got[2] != "monitor" {
-		t.Fatalf("monitorCommand() verbs = %q, want [session monitor]", got[1:])
+		t.Fatalf("MonitorCommand() verbs = %q, want [session monitor]", got[1:])
 	}
 	if got[0] != "endless" && filepath.Base(got[0]) != "endless" {
-		t.Fatalf("monitorCommand() binary = %q, want endless (bare or resolved)", got[0])
+		t.Fatalf("MonitorCommand() binary = %q, want endless (bare or resolved)", got[0])
 	}
 }
 

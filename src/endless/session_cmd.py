@@ -1246,6 +1246,42 @@ def show_history(
         rowcap.echo_footer(hidden)
 
 
+def session_monitor_restart(
+    tmux_session: str | None = None,
+    all_tmux_sessions: bool = False,
+    dry_run: bool = False,
+) -> None:
+    """Respawn session-monitor panes in place (E-2194).
+
+    Thin pass-through to `endless-go session-monitor restart`, which finds the
+    panes each monitor tagged, respawns the live ones and clears stale tags. The
+    scope rules (current session by default, a usage error outside tmux) live
+    there, so Python only forwards the flags.
+    """
+    import shutil
+    import subprocess
+
+    if tmux_session is not None and all_tmux_sessions:
+        raise click.UsageError(
+            "--tmux-session and --all-tmux-sessions are mutually exclusive."
+        )
+
+    go_bin = shutil.which("endless-go")
+    if not go_bin:
+        raise click.ClickException("endless-go binary not found on PATH.")
+
+    args = [go_bin, "session-monitor", "restart"]
+    if tmux_session is not None:
+        args += ["--tmux-session", tmux_session]
+    if all_tmux_sessions:
+        args.append("--all-tmux-sessions")
+    if dry_run:
+        args.append("--dry-run")
+    result = subprocess.run(args)
+    if result.returncode != 0:
+        raise SystemExit(result.returncode)
+
+
 def session_status_resolve(
     show_all: bool = False,
     tree: bool = False,

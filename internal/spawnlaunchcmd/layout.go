@@ -74,7 +74,7 @@ func buildLayoutAround(anchor, cwd string) {
 		return
 	}
 
-	if _, err = tmuxRunOut(splitWindowArgs(shellPane, false, true, paneDir, 0, monitorCommand())...); err != nil {
+	if _, err = tmuxRunOut(splitWindowArgs(shellPane, false, true, paneDir, 0, MonitorCommand())...); err != nil {
 		fmt.Fprintf(os.Stderr, "layout: monitor pane: %v\n", err)
 		// Fall through: a 2-pane window still wants focus back on the anchor.
 	}
@@ -84,12 +84,15 @@ func buildLayoutAround(anchor, cwd string) {
 	}
 }
 
-// monitorCommand is the argv run in the layout's monitor pane. `endless session
+// MonitorCommand is the argv run in the layout's monitor pane. `endless session
 // monitor` is the verb a user would type; it is resolved to an absolute path
 // when possible so the pane doesn't depend on tmux's PATH matching the
 // spawner's, and left bare (letting tmux's execvp report the failure in-pane)
 // when the CLI isn't on PATH at all.
-func monitorCommand() []string {
+//
+// Exported because `session monitor --restart` respawns a monitor pane with the
+// same argv (E-2194): a restarted pane and a spawned one must not drift.
+func MonitorCommand() []string {
 	bin, err := exec.LookPath("endless")
 	if err != nil {
 		bin = "endless"

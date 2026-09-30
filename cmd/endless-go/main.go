@@ -67,6 +67,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/outputstylecmd"
 	"github.com/mikeschinkel/endless/internal/projectstatuscmd"
 	"github.com/mikeschinkel/endless/internal/sandboxcmd"
+	"github.com/mikeschinkel/endless/internal/sessionmonitorcmd"
 	"github.com/mikeschinkel/endless/internal/sessionquerycmd"
 	"github.com/mikeschinkel/endless/internal/sessionstatecmd"
 	"github.com/mikeschinkel/endless/internal/sessionstatuscmd"
@@ -215,6 +216,8 @@ func main() {
 		worktreecmd.Run(rest)
 	case "session-status":
 		sessionstatuscmd.Run(rest)
+	case "session-monitor":
+		sessionmonitorcmd.Run(rest)
 	case "project-status", "project-window":
 		projectstatuscmd.Run(sub, rest)
 	case "spawn-window", "spawn-layout", "spawn-launch":
@@ -297,6 +300,7 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  session-query  list-live|task-plan|resume-target")
 	fmt.Fprintln(w, "  worktree       in-use  (is this worktree still in use?)")
 	fmt.Fprintln(w, "  session-status render the per-session status view (--monitor loops it)")
+	fmt.Fprintln(w, "  session-monitor restart  (respawn every session-monitor pane in place)")
 	fmt.Fprintln(w, "  project-status render the project status view (--monitor loops it)")
 	fmt.Fprintln(w, "  project-window create the two-pane tmux session behind project monitor --tmux")
 	fmt.Fprintln(w, "  spawn-window   create the tmux window that launches Claude on a task")

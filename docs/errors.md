@@ -633,4 +633,6 @@ the stage that failed — `probe` (the new binary could not even print its usage
 or `exec` — and the error. Fix or rebuild the install; a monitor retries on its
 own whenever the binary changes again, so a good build usually clears it without
 a restart. A monitor that still shows the notice has stopped firing background
-jobs: quit it and start it again. Dismiss with `endless errors clear <id>`.
+jobs: restart it — `endless session monitor --restart` does every session
+monitor in the tmux session at once; a project monitor is quit and started again
+by hand. Dismiss with `endless errors clear <id>`.
