@@ -8,3 +8,9 @@ Options:
 3. Document a manual symlink convention until E-971 automates worktree setup.
 
 Likely (1) baked into E-971's worktree-creation hook. Until then, manual symlink works.
+
+## From the description
+
+Likely fix: a worktree-bootstrap symlink baked into E-971's worktree-creation hook.
+
+Options analysis is in the analysis field.
