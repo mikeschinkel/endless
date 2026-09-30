@@ -1,0 +1,1 @@
+task assume shipped with the assumed status.
