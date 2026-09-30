@@ -76,3 +76,11 @@ fail on replay.
 override is removed. What `--tree` should ultimately become — whether it needs
 blocks and relations to earn its keep — is a separate product question Mike has
 deferred.
+
+## From the description
+
+Remove the command, the five project_next tables, the Go event handlers and executor branches, and the Python reads.
+
+the ordering override goes and --tree stays, rendering DAG-derived order only.
+
+One part is not a straight deletion — the db-ledger may hold events for all three, so the projector's handling must be decided explicitly rather than left to choke on replay.
