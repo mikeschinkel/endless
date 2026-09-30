@@ -1,0 +1,1 @@
+Builds on the endless-go launch seam introduced when spawn moved to CLI-arg prompt delivery: that change put the in-window launch behind endless-go, but Python still triggers window creation and passes tmux-specific params.
