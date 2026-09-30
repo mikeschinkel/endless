@@ -1,0 +1,1 @@
+Replace it with what the window actually is and why the ordering still cannot change (E-1941 moved apply-change after the ff-merge; it cannot move later because _record_landing runs the same binary against the real DB).
