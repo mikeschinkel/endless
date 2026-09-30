@@ -32,3 +32,11 @@ Consequence for the decision this task is blocked on: the Justfile-is-the-dev-on
 -layer escape hatch got narrower when E-1941 moved work inward. Isolating the
 whole post-merge tail — not just the recording — is what the fix has to do,
 whether it is done by the recipe or inside the command.
+
+## From the description
+
+Fix: add --no-record flag to 'endless worktree land' (inverse of E-1479's --record-only); update the just land recipe to call 'endless worktree land --no-record E-N' then 'endless worktree land --record-only E-N'.
+
+The second invocation is a fresh Python process — consistent imports.
+
+Bare 'endless worktree land' (no Justfile) still has the bug along that path; a separate maybe task tracks whether to address it.
