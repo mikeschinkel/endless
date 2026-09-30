@@ -1,0 +1,1 @@
+The two guide pages contradict each other; orchestration.md is the wrong one. Found while adding the ask-before-landing rule to that same section (E-1872), filed rather than fixed inline to keep that diff to the five documented conventions.
