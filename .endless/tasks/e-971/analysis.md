@@ -1,0 +1,3 @@
+Two flavors: per-session worktrees (auto-created on session start, removed on session end) and dedicated task worktrees (for plan-bearing tasks; persist across sessions). Rust-style ownership: at most one owner at a time, transferable via .endless/worktree.lock (atomic O_EXCL claim, stale via kill -0, released on SessionEnd). Main = sacred clean integration target; 'endless worktree land' refuses dirty main. Behavioral gate: UserPromptSubmit hook injects active-task system reminder (Layer 1) plus deterministic phrase match against E-970's pivot kind (Layer 2); PIVOT word as deliberate user override; gate clearance via task add or task start (CLI verb required, not chat ack).
+
+Plan: .endless/plans/E-971.md.
