@@ -129,3 +129,7 @@ runner's per-run assignment is not, and they are not the same thing. If
 XDG_CONFIG_HOME is later deprecated as the config locator outright, the guard's
 reachability test needs rewriting against whatever replaces it — which ED-1583
 (proposed) states as the standing rule.
+
+## From the description
+
+Contents are the project's business, filled by its own post-worktree-create hook — endless creates an empty dir and seeds nothing. Path resolution is composition behind a single resolver function, with a project-level override for trees that cannot take extra files. `self_dev` is removed from sandbox provisioning and retained only for endless's own DB routing; the `XDG_CONFIG_HOME` injection and `sandbox bind` are deleted. 126 existing sandboxes migrate by rename.
