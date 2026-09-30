@@ -1,0 +1,1 @@
+We'd likely need to re-introduce the DB-token mechanism discussed and rejected during E-1552: a pending_spawn row with a random token + carrier env var, with each harness's session-start hook writing the binding by looking up the token.
