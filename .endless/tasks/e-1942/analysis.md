@@ -49,3 +49,7 @@ What finally worked, none of it discoverable:
 - Related: E-1941 covers the land-flow ordering that creates the need for a
   restore in the first place. This task is the recovery tool; that one is the
   prevention. They are independent — the tool is worth having regardless.
+
+## From the description
+
+that defaults to the newest backup, REPORTS open connections by pid/command rather than killing them silently, keeps the pre-restore file aside, and afterwards re-establishes WAL and runs `PRAGMA integrity_check` failing loudly on anything but 'ok'. A dry-run mode printing holders and journal mode is what you actually want mid-incident.
