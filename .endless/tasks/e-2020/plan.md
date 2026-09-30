@@ -1,3 +1,94 @@
+# Amendment (2026-09-30, Mike) — a worktree build never opens the main database
+
+This section OVERRIDES the increments below wherever they disagree.
+
+## The rule
+
+A binary built inside a task worktree (`candidateBuild()`: its executable path
+contains `/.endless/worktrees/`) never opens the MAIN database
+(`$HOME/.config/endless/endless.db`, i.e. `dbcontext.MainDBPath()`). The
+installed binary talks to main; a worktree binary talks to its sandbox. `--db`
+stays mandatory in a self-dev worktree so the agent still has to choose — and
+the Python CLI already routes by it: `config.resolved_worktree_endless_go()`
+hands `--db sandbox` to the worktree's binary and `--db main` to the installed
+one.
+
+"Main" is `$HOME`-relative on purpose: the verify runner's temp HOME makes its
+throwaway database "main", which is what lets E-2020's own suite exercise the
+refusal. Of the 27 existing suites that use `--db main`, all belong to terminal
+tasks; landed tasks' suites are not maintained, so none are updated.
+
+Why this replaces the Seed question: `VerifyIntegrity` fail-closes on EXTRA
+mirror rows, so a candidate reseeding main with a branch-only enum value would
+fail-close the installed binary machine-wide (E-1659 again). With candidates
+off main, nobody but the installed binary ever seeds, migrates or gates main,
+and there is no ownership branch left in `monitor.DB()`.
+
+## What the connect does now
+
+1. Worktree build + main DB → refuse, before opening. (Replaces "behind +
+   candidate refuses"; the refusal no longer depends on version.)
+2. Otherwise read the DB version and the binary's latest:
+   - behind → back up (monitor.BackupDB), then migrate forward. A worktree
+     build on its own sandbox is in this lane too: it owns that database.
+   - equal → nothing to apply.
+   - ahead → halt.
+3. Seed and the five enum integrity gates run on every connect that was not
+   refused or halted. No schema-passive branch.
+
+The decision is a pure function (`connectAction`) with a table test in
+`internal/monitor`.
+
+Faults for a refused/halted connect: the fault store is bound to
+`monitor.DB()`, which is the thing refusing. For the HALT case the connection
+is kept for the fault writer alone (`errors` is machine-local observation, not
+ledger), so the land window's hook faults dedupe into one incident. For the
+worktree-on-main refusal nothing opens main, so the fault goes to the
+unindexed JSONL in the process's own log dir.
+
+## The land, reordered
+
+Step 6 (`task.landed`) used to run the worktree's `endless-go` against main
+(E-1664). Under the rule it is refused, so the land now:
+
+- backs up with the installed binary (it never went through the connect);
+- Step 5.5 migrates with `endless-migrate up` (unchanged, E-2192);
+- NEW Step 5.6: rebuilds the main checkout's `endless-go` (`just go` in the
+  main checkout, self_dev only), so the installed binary is current;
+- Step 6 records with the installed binary.
+
+That also shrinks the land window to the duration of one `go build`, and the
+post-land steps (warm cache, reap) stop meeting a DB ahead of their binary.
+The justfile's pre-land worktree rebuild (E-1709) loses its only consumer and
+is removed; Python's Step 4.2 post-rebase rebuild stays as the "does the
+rebased branch compile" check before main advances.
+
+## `endless db upgrade`
+
+Per the E-2188 message: opens the database FILE directly, never
+`monitor.DB()`. Back up, `schema.MigrateContext` (goose Up, then Seed), report
+from/to. Implemented as `endless-go event upgrade`, sharing the open/up code
+with `endless-migrate up` via a small package, because `endless-migrate` is
+not built or installed outside a self_dev land. Refuses from a worktree build
+against main (the same predicate as connect).
+
+## Other consequences folded in
+
+- `jobs` suppression (`InSelfDevWorktree() && PinnedToRealDB()`) becomes the
+  same worktree-build-on-main predicate; `PinnedToRealDB`,
+  `pinnedToForeignRealDB`, `foreignRealDB` are deleted.
+- ED-1596 already retired per-task hook delegation, so `e-2157`'s leftover
+  pinned hook simply meets the refusal (silent + fault).
+
+## Verification changes
+
+- (1) becomes: behind → apply, equal → current, ahead → halt, worktree build +
+  main → refuse at every version; worktree build + other DB behind → apply.
+- (2) is about the refused path: a worktree binary aimed at a behind main
+  leaves `sqlite_master` byte-identical.
+- (7) `db upgrade` refuses from a worktree build against main.
+- (10) becomes: Step 6 records with the rebuilt installed binary.
+
 # Plan
 
 E-2019 changed how the schema is defined. This changes when it may be applied,
@@ -310,3 +401,6 @@ own tests, where it will keep being run.
 
 
 
+
+
+# db: main
