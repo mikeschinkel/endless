@@ -1,0 +1,1 @@
+Add the creating session (and its active task) to the `Created:` line, and add a `Touched by:` section listing every session that touched the task, laid out like the existing `This task:` relations block so it reads as a peer. Each entry should carry enough identity (session id + its active task) to feed `session goto` directly.
