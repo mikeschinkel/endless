@@ -1,0 +1,1 @@
+Mutations outside the task and decision domains never reach the ledger, so the projection cannot rebuild the tables that hold them and `rebuild-db` restores only tasks, decisions and decision_relations.
