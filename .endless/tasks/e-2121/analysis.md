@@ -47,3 +47,7 @@ Replaces keep-last-60-by-count, which is a count where it should be an age:
 That is roughly 106 files at steady state. Retention must be evaluated by
 timestamp tier, not list position, so a burst of migrations can no longer evict
 the older tiers — the failure mode the current rotation has today.
+
+## From the description
+
+Register a backup job in the internal/jobs registry the way triagejob and minimizerjob do, so session monitor fires it on a schedule, and replace the keep-last-60-by-count rotation with tiered retention: hourly for 24 hours, then daily for 30 days, then weekly for a year.
