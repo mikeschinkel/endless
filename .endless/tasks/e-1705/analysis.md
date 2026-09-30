@@ -61,3 +61,13 @@ that a positional prompt starts an interactive session, but they do NOT document
 whether the positional first turn fires the `UserPromptSubmit` hook. Endless
 relies on that hook. The dogfood step treats this as a hard gate: if it does not
 fire, stop and report rather than work around it.
+
+## From the description
+
+(1) Stop delivering the initial prompt with tmux send-keys/paste; launch Claude as the tmux window's command with the handoff as its positional prompt argument, via a new endless-go launcher subcommand that is the multiplexer seam (sets @endless_* window options before exec, so no readiness sleep and no SessionStart race).
+
+(2) Because a positional prompt leaves no interactive turn to type the plan slash-command into, drop the forced plan-mode injection and the vestigial --no-plan flag; default spawned sessions to --permission-mode auto (also plumb --permission-mode/--model/--name pass-throughs).
+
+Removes every send-keys call from spawn (including --attach).
+
+Full tmux-driver decoupling remains a separate, not-yet-filed refactor.
