@@ -91,3 +91,7 @@ Keep it one implementation, not three:
   exact table the not-on-main report reads. The fix is to let the reaper accept
   "settled with nothing to land" alongside "landed", same TTL, same live-session
   refusal.
+
+## From the description
+
+Switch the probe that unsettled and the session-status marker share to a patch-id comparison.
