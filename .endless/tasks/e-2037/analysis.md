@@ -10,8 +10,8 @@ agent-facing comments, and the user-facing `--db` refusal.
 
 31 sites in live code, docs and templates. Two are user-facing:
 
-    src/endless/config.py:328   "  --db main     the real ledger — managing the project"
-    src/endless/cli.py:302      "--db main (the real ledger) or --db sandbox (this worktree's test DB). "
+    src/endless/config.py   "  --db main     the real ledger — managing the project"
+    src/endless/cli.py      "--db main (the real ledger) or --db sandbox (this worktree's test DB). "
 
 The rest are comments, docstrings and two guide pages. `internal/monitor/db.go`
 carries the most, and is where the term does the most damage — it is the file
@@ -37,3 +37,7 @@ The user-facing strings deserve Mike's eye rather than a mechanical
 substitution: the refusal text is the first thing an agent hits when it gets the
 flag wrong, and it is currently the clearest statement in the product of what
 the two databases are for.
+
+## From the description
+
+the 80 in tests/tasks/*-verify.sh are deliberately out of scope, being spent pre-land gates.
