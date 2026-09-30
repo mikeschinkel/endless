@@ -23,4 +23,6 @@ internal/schemachange/executable_test.go asserts `go list -deps ./cmd/endless-mi
 
 schema.sql must survive this task. It is still the readable artifact, and E-2021 is what turns it into a generated one; deleting it here leaves it deleted and unreplaced. Deleting only its _schema_version declaration is correct and sufficient.
 
+## From the description
 
+Covers internal/schema/changes/ and its runner, the _schema_version table, the apply-change surface in Go and Python, db.py's dead legacy migrator, and reworking worktree land's apply step from per-change-file to a goose 'up'.
