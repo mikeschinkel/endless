@@ -1,0 +1,1 @@
+endless task spawn generates a handoff and passes it to the Claude session it opens, but a session started any other way — or one whose harness instance was re-minted by a clear — never receives that text and has no known way to ask for it.
