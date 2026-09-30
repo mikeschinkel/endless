@@ -305,3 +305,4 @@
 {"value": "attribute", "definition": "to credit to a source", "category": ["action"]}
 {"value": "ask", "definition": "to request an answer from someone", "category": ["investigation"]}
 {"value": "bundle", "definition": "to package together", "category": ["action"]}
+{"value": "rescope", "definition": "to change the scope of", "category": ["action"]}
