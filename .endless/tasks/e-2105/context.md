@@ -1,0 +1,1 @@
+Session state (working, idle, needs_input, ended) is spelled as string literals across ~70 non-test sites in Go, Python and SQL, with no owning package — the defect E-1891 fixed for task status, unfixed here.
