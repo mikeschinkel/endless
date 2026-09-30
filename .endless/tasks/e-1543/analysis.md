@@ -1,0 +1,1 @@
+status check (block if current is verify with prompt to set a different status first); children check (existing children remain attached with shifted semantics); no verb check (per §3, type=epic implies may-completed without verb gate). Audit code that filters on type assuming type=task; most queries either pass --type explicitly or don't filter.
