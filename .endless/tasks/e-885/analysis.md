@@ -1,0 +1,1 @@
+Decision: hide entirely (vs. filter to verify/blocked) because needs-attention is expanded by default, making the summary redundant. Trade-off: loses 'at a glance' value if multiple attention-needing children exist; revisit if needs-attention becomes collapsed by default.
