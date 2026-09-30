@@ -1,0 +1,1 @@
+Today tmux is hard-wired: window creation, window-option plumbing, session launch/attach, and pane->session/task resolution all shell out to tmux directly from both the Go binaries and the Python CLI.
