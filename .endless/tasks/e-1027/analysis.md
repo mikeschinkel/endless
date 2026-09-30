@@ -26,3 +26,9 @@ Out of scope:
 - Cleaning up worktree_path when a task ends (covered by SessionEnd removing the whole companion file).
 
 Origin: E-1014 landing surfaced that worktree_path is dead today. Without this, session use's activation lands at cwd, which for sessions started outside a worktree is the wrong place.
+
+## From the description
+
+Recommendation: writer-side hook update on task-start (option A) — single source of truth, all readers benefit, small hook change. Worktree naming convention: '.endless/worktrees/e-<task_id>*'.
+
+Verification matrix in the analysis field.
