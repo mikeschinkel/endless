@@ -20,3 +20,9 @@ Consequence for this task: if the direction rules ever want more than the record
 - schema.Seed(db) applies the enum mirrors and is called on every Migrate. It is deliberately NOT a migration: it preserves E-1659's self-heal. When this task stops applying schema on connect, decide explicitly whether Seed keeps running — the enum gates in monitor.DB() depend on it.
 - Migrate also turns on foreign key enforcement for the connection, because schema.sql's leading PRAGMA used to do that as a side effect of being exec'd. Keep that property if Migrate stops being called on connect: something else has to own it.
 - 00001_baseline.sql is the only migration allowed to be idempotent (every statement carries IF NOT EXISTS). A later migration must not copy that.
+
+## From the description
+
+DB behind an installed binary auto-applies forward; DB behind a candidate binary refuses, since a candidate may never migrate the real ledger; DB ahead of any binary halts. endless db upgrade is the explicit path, taking a backup first so a bad release rolls back by restore (E-1942). Three things fold in. (1) Refusal is per-surface: the Claude hook fires on every event, so erroring loudly turns one mismatch into machine-wide noise -- follow E-1962's silent no-op plus a recorded fault, while interactive surfaces refuse loudly.
+
+(2) The land window, assigned here by E-1972: the seconds where the DB is migrated and the installed binary is not, which last time printed fifty near-identical errors after a SUCCESSFUL land. (3) db.py's _incomplete_schema_hint points at a change file -- deferred to E-2158, which deletes its subject.
