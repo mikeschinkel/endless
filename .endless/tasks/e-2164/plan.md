@@ -136,13 +136,22 @@ Two tasks with no blocking relation can still be unsafe to run at once when they
 edit the same files — E-2159 and E-2161 both rewrite parts of the task CLI, with
 no relation between them.
 
-- **Derived, never declared.** The source is each task's own worktree: the paths
-  changed against its base branch, plus uncommitted changes. A declared list of
-  files would be a guess made at plan time and would rot; the worktree already
-  knows. Tasks with no worktree contribute nothing and simply have no `<>` line.
-- A pair earns `<>` when their changed-path sets intersect AND neither blocks nor
+- **Two sources: detected and declared** (declared added 2026-09-30, Mike;
+  it supersedes the earlier "derived, never declared" rule).
+  - **Detected** — each task's own worktree: the paths changed against its
+    base branch, plus uncommitted changes. Tasks with no worktree contribute
+    nothing to detection.
+  - **Declared** — a stored `conflicts_with` relation (below). Detection cannot
+    see the case that matters most for planning: two tasks whose plans are
+    known to touch the same files BEFORE either has a worktree. E-2020 and
+    E-2158 are the live example — both plans name the same file, neither has
+    code yet, and the constraint could only live in E-2020's plan prose.
+    Declaring the CONFLICT is not the rotting file list the old rule rejected:
+    it names the pair and the reason, not the paths.
+- A pair earns `<>` when they conflict by EITHER source AND neither blocks nor
   precedes the other — if either arrow already relates them, the ordering line
-  says it.
+  says it. Both sources render identically; `--json` says which one (or both)
+  produced each conflict.
 - **Never shell out to git on the render path.** `session status` runs in the
   monitor's refresh loop; a `git diff` per worktree per refresh is not
   acceptable. Follow the unlanded-verdict cache pattern in `internal/monitor`:
@@ -150,6 +159,27 @@ no relation between them.
   plus a dirty marker, and have the renderer read only the cache. A missing or
   stale entry means no `<>` for that task — the graph degrades to ordering only,
   which is still correct.
+
+## The declared conflict relation
+
+- Stored type `conflicts_with`, **symmetric**: one stored row, shown on both
+  tasks, with no inverse view name (unlike `precedes`/`preceded_by`). Accepted
+  by `task link`, flag `--conflicts-with` on `task add`, removable with
+  `task unlink`. Added to the relation table in `task_cmd` beside `precedes`.
+- Named for the consequence (do not run these concurrently), not the mechanism
+  (they edit the same files), because that is what the reader acts on.
+- Label in `task show`: **"Conflicts with"**, sorted with `precedes` below the
+  blocking rows.
+- Advisory, like `precedes`: it does not block, does not gate spawnability,
+  and `task next` still offers both tasks. It is a warning rendered as `<>`.
+- A `blocks` or `precedes` edge between the same pair wins the render, exactly
+  as for a detected conflict; the stored `conflicts_with` row stays, since
+  ordering does not make the overlap go away.
+- Guide row: record it when two plans are known to touch the same files and
+  neither must precede the other; once both have worktrees, detection sees the
+  overlap too, and the declared row may be removed or kept.
+- First use, when this lands: `E-2020 conflicts_with E-2158`, replacing the prose
+  constraint in E-2020's plan.
 
 ## Where it renders
 
@@ -192,6 +222,10 @@ first real use.
   the case that is invisible if conflicts do not qualify a task for inclusion.
 - Two tasks whose worktrees touch a common path render `<>`; adding a blocking
   relation between them replaces the `<>` with an ordering line.
+- Two tasks with NO worktrees and a declared `conflicts_with` render `<>`; the
+  relation shows as "Conflicts with" on BOTH tasks from one stored row; it does
+  not stop `task next` offering either; `--json` marks the conflict declared,
+  detected, or both.
 - Three tasks that mutually conflict render as ONE set line, not three pairwise
   lines; a chain-shaped conflict graph (A-B, B-C, no A-C) renders as two pairwise
   lines and never as a set or a chain.
