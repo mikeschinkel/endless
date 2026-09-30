@@ -1,0 +1,1 @@
+Hit on E-1920: `decision show` selected a column added by an unapplied schema change, and the message claimed the whole DB was uninitialized while `decision list` (not selecting that column) worked fine in the same second.
