@@ -22,3 +22,11 @@ clean up, one rested on a false premise, and one was requested.
 The agent's behavior was not a misreading of its instructions. The handoff
 template told it to file discoveries and explicitly forbade fixing them inline.
 That line is deliverable A of this task.
+
+## From the description
+
+Fix the handoff wording, add the missing edges, broaden revisit's definition, and add a 'Fix a bug in your own landed work' guide pattern covering worktree reuse.
+
+Scope extension (E-1845 session): the handoff line must also carry a 'could this reasonably be done in the current session?' test and a 'do these share a root cause?' test — it currently makes filing the default AND forbids inline fixes.
+
+See analysis.
