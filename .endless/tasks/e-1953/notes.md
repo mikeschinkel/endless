@@ -1,0 +1,1 @@
+Subsumes the four render defects in E-1952's seed, which are symptoms of the agent routing content into prose instead of the block. Design synthesized in E-1952's outcome; see --analysis for the build shape.
