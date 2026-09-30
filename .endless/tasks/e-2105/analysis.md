@@ -87,3 +87,13 @@ languages rather than about how many values exist.
    E-2091's fifth state is rejected by `--state`'s Click choice and renders as
    the unknown glyph — the exact missed-site incident this pattern exists to
    prevent, and it would defeat the point of doing this task first.
+
+## From the description
+
+Build internal/sessionstate as its counterpart: members, labels, glyphs, five curated groups (All, Live, MayWrite, AwaitsHuman, DisplayOrder), SQLList, and a transition table naming which code writes each state.
+
+Expose it as 'endless-go session-state' and convert Python to a thin pass-through holding none of the vocabulary.
+
+Pure refactor: no state is added and behaviour is byte-identical.
+
+Also deletes the obsolete duplicate CREATE TABLE sessions in db.py, whose banned CHECK constraint is a fifth vocabulary site.
