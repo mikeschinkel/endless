@@ -1,0 +1,1 @@
+Members: excise drift_detection + orphaned suggestions (E-1711); the cwd-outside-worktree gate to verify (E-1586, assumed); the residual claimed-session-writes-to-main-via-absolute-path gap (revived E-1703); and the unclaimed-edit case (E-1346, to re-validate against default-enforce — likely already covered).
