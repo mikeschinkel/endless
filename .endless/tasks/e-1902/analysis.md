@@ -89,9 +89,9 @@ therefore the correct place to apply exclusions.
 ## Sandbox leak — two independent defects
 
 1. `internal/monitor/reap_worktrees.go` contains **zero** occurrences of
-   "sandbox". `Sandbox.Destroy()` is called only from `sandboxcmd/run.go:50`
+   "sandbox". `Sandbox.Destroy()` is called only from `sandboxcmd/run.go`
    (ephemeral teardown) and the manual `endless-sandbox destroy` CLI.
-2. `internal/sandboxcmd/list.go:83` `classify()` returns `stateInUse` for any
+2. `internal/sandboxcmd/list.go` `classify()` returns `stateInUse` for any
    sandbox whose mode is `keep` or `persistent` — **unconditionally**, with no
    worktree-existence or PID check. All 267 sandboxes report `persistent` /
    `in-use`, and `prune` only removes `stateOrphaned`, so `sandbox prune` is
@@ -105,3 +105,7 @@ The repo currently has **no** `runtime.GOOS` usage and no `_darwin.go` files —
 no precedent for platform-conditional behavior. Anything built on `tmutil` or
 `.metadata_never_index` would be the first, and needs an explicit no-op path on
 other platforms rather than an assumed-macOS shell-out.
+
+## From the description
+
+Scope: the snapshot mechanism, an 'endless wip' command family (list/show/restore/diff/drop) so users never touch raw plumbing, a retention job on the existing jobs registry that session monitor already polls, and macOS TM/Spotlight exclusions in post-worktree-create.sh.
