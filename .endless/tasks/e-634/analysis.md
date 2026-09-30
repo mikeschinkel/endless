@@ -1,0 +1,1 @@
+Options: remove it, require --reason flag, make it time-limited with nag to plan link, or have the hook inject context telling the session to ask the user which plan item to work on instead of defaulting to chat.
