@@ -3,3 +3,9 @@ Obsoleted 2026-09-20. The verb's entire mechanism was 'regenerates the companion
 Never shipped (status was `submitted`), so obsolete is legal here rather than the `replaced_by` relation the guide requires for work that already landed.
 
 NOT obsolete because something else covers it: the recovery need it was filed for — a live session whose window identity is wrong — is real and is now the subject of the tmux-crash recovery discussion on E-1983. What died is this task's mechanism, not the problem class.
+
+## From the description
+
+Bypasses the precondition by fixing its upstream cause (missing companion), not by skipping the check.
+
+Refuses when CLAUDECODE is not set or TMUX_PANE is unset — the verb's premise is 'recover an alive Claude session'.
