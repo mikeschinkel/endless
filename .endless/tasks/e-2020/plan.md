@@ -146,6 +146,17 @@ The explicit path, and the only one in a self_dev checkout.
   migration executable, given its `up` subcommand by E-2192), which every
   self_dev land now runs; this command is for the installed binary catching up
   after one.
+- **It must work when the normal connect is refusing.** It is the recovery
+  command, so it cannot depend on the path it recovers. If the version check
+  refuses, or an enum integrity gate fail-closes (for example a seed drift after
+  Increment 2 goes wrong), every command that connects through `monitor.DB()`
+  fails — `endless-go event migrate` included, since it IS that connect. So
+  `db upgrade` opens the database FILE directly, the way `endless-migrate up`
+  (E-2192) does: back up, run `schema.MigrateContext` (goose Up, then `Seed`),
+  report from/to versions. No version gate, no integrity gate, no
+  schema-passive branch on its path. Reusing `endless-migrate up` underneath is
+  the obvious way to get that; the candidate refusal above still applies to
+  whichever binary it runs. (Added 2026-09-30, Mike.)
 
 ## Increment 5 — remove what this makes unnecessary
 
@@ -282,6 +293,10 @@ own tests, where it will keep being run.
 6. `endless db upgrade` takes a backup before applying, and the backup restores
    to the pre-upgrade schema.
 7. `endless db upgrade` refuses from a candidate binary.
+7a. `endless db upgrade` recovers a database the normal connect refuses: with an
+    enum mirror row deliberately drifted so `monitor.DB()` fail-closes (and a
+    plain command fails), `db upgrade` succeeds, reseeds, and the next plain
+    command works.
 8. Schema-passive is gone: `pinnedToForeignRealDB` and `foreignRealDB` no longer
    exist, and the enum integrity gates still run on every owned connect.
 9. No message THIS TASK ADDS names a change file or `endless db apply-change`:
