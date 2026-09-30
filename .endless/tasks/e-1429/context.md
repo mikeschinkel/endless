@@ -1,0 +1,1 @@
+endless CLI from inside a self-dev worktree routes to real DB or per-worktree sandbox implicitly based on inherited XDG_CONFIG_HOME — silent and mistake-prone (test 'endless task add' landed in real ledger as E-1425, 2026-05-19).
