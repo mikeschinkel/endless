@@ -15,3 +15,9 @@ Recommendation pending: depends on whether go-pkgs is intended to stay co-develo
 Verification (whichever option lands): from .endless/worktrees/<id>, 'just build' and 'go test ./...' both succeed without the manual symlink.
 
 Out of scope: the symlink itself is fine for now. This task is about replacing it.
+
+## From the description
+
+Decide a durable answer: keep the symlink, switch to go.work, vendor go-pkgs, or publish module versions. Recommendation depends on whether go-pkgs stays co-developed or stabilizes as published deps.
+
+Options analysis is in the analysis field.
