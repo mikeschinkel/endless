@@ -15,3 +15,9 @@ Verification:
 - 'just install' is the single command for refreshing the local toolchain.
 
 Origin: E-990 landing exposed the gap.
+
+## From the description
+
+Two routes: (1) editable install via 'uv tool install --editable .' or 'uv pip install -e .' — cleanest if uv supports it, (2) add --reinstall to 'just install'.
+
+Recommend #1; fall back to #2.
