@@ -1,0 +1,1 @@
+Add an Analysis section to task show plus an --all-fields flag so handoffs can request complete task content without listing each field, and fix the validator help text that wrongly steers long-form analysis to --text.
