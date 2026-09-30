@@ -1,0 +1,1 @@
+Subsumes the dropped file_changes table and the documents-table hash tracking, and absorbs the Vigil concept (debounced file-watching + auto-commit) into Endless rather than building it as a separate tool.
