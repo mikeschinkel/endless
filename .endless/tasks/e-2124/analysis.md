@@ -5,3 +5,7 @@ E-1428 ('Rework endless task claim output') has four deliverables. A — fix the
 So: E-1428 keeps the command-OUTPUT work. This task is the guide PROSE, and it is the tail of E-1180 rather than of E-1428 — E-1180 proposed the helper, the guide documented the proposal, and obsoleting E-1180 is what makes the documentation wrong.
 
 Related closures, for anyone reading the eswt trail: E-1180 obsolete (we will not ship it), E-1254 obsolete (its subject, claim's eswt line, was deleted by E-2106).
+
+## From the description
+
+Find every site with: grep -rn eswt docs/.
