@@ -33,3 +33,7 @@ hermetic fixture already exists in-tree and can be the model.
   beats relying on the reader to notice the directory changed.
 - An audit of which scripts touch live state, and whether those should be made
   hermetic on the same pass or tracked separately.
+
+## From the description
+
+The rule is that a session runs its OWN task's script and no other; the layout works against it, because any glob over tests/ sweeps them in.
