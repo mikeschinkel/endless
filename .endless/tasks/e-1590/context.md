@@ -1,0 +1,1 @@
+so endless's own sandbox always takes the skip branch and the materialize+auto-commit (consumer) path can't be exercised by running endless commands in-sandbox. Today it's covered only by Go tests and by targeting a registered non-self_dev project via 'template render --project <name>'.
