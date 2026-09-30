@@ -125,3 +125,11 @@ reinforce that guard.
 
 `CwdChanged` fires after the directory has already changed and cannot block, so
 it does not replace the cwd gate, which refuses at PreToolUse.
+
+## From the description
+
+Install the event AND handle it: installing alone leaves the session 'working' with a freshly refreshed last_activity, which is worse.
+
+Idle the session, parse the transcript, and record the error type as a fault.
+
+No new session state.
