@@ -18,3 +18,13 @@ Verification:
 - Web task-detail page renders plan content.
 
 Origin: E-989 finalization revealed text-as-plan overloading.
+
+## From the description
+
+Surface area: schema migration, CLI flags on task add/update/show (--text -> --plan), the '## Text' heading, hook comments, and web templates.
+
+Decide alias-vs-hard-break in the parent design task.
+
+Verification: task show still renders the plan section, web task-detail renders, and existing scripts either continue via alias or fail loudly.
+
+Out-of-scope items in the analysis field.
