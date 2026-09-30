@@ -24,3 +24,11 @@ Add new:
 Then add 'replace github.com/mikeschinkel/go-gitutil => ../go-pkgs/go-gitutil' to endless's go.mod.
 
 Mike-side followup (NOT in this task; he'll do later): update gomion to import from go-pkgs/go-gitutil instead of in-tree. Until then, two copies coexist.
+
+## From the description
+
+Source: ~/Projects/gomion/gommod/gitutils/. External deps already at ~/Projects/go-pkgs/. After extraction, add the replace directive to endless's go.mod.
+
+Mike will later update gomion to import from go-pkgs/go-gitutil; until then two copies coexist.
+
+Existing functionality and new APIs are in the analysis field.
