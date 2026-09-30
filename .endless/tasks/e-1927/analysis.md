@@ -44,3 +44,7 @@ Options, not a decision:
 
 Note the last option means this is *partially* mitigated today — the window is
 "between the re-import and the next reconcile", not forever.
+
+## From the description
+
+Whether E-1915's refuse-and-unlink answer suits a bulk import refresh is the open question.
