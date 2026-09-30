@@ -1307,6 +1307,14 @@ const (
 // status added to the vocabulary forces this decision rather than silently
 // defaulting to a blank.
 //
+// An epic is the exception, and the decision is not by its own status (E-2198).
+// Its status is derived from its children and its own branch is normally empty,
+// so it would wear ⊙ however much its children had landed. For an epic row the
+// data layer rolls ◆ and ~ up from its descendants' worktrees and the ⊙/space
+// split from their statuses (monitor.AnnotateSessionStatusUnsettled), and
+// HasShippedWork reads the rolled-up answer. This function still only reads
+// fields off the row.
+//
 // One accepted mis-signal: a task that lands mid-flight and keeps working stays
 // `underway`, so it wears ⊙ despite real landed work. It is still true that
 // nothing is outstanding. The legend therefore labels ⊙ by what it MEANS —
@@ -1326,7 +1334,7 @@ func unsettledMark(r monitor.SessionStatusRow) string {
 		return undeterminedGlyph
 	case r.Unsettled:
 		return unsettledGlyph
-	case !taskstatus.Has(taskstatus.Shipped, r.Status):
+	case !r.HasShippedWork():
 		return notStartedGlyph
 	default:
 		return " "

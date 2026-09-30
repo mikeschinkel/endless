@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/faults"
+	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
 
 // DefaultWorktreeTTL is the fallback grace period applied when a project's
@@ -431,11 +432,117 @@ func realHasLiveProcessInDir(dir string) (bool, error) {
 // two seconds and this ran `git range-diff` once per row per tick — measured at
 // 584ms for a single row — which is load this function must never carry again.
 func AnnotateSessionStatusUnsettled(ctx context.Context, rows []SessionStatusRow) {
+	verdicts := make(map[int64]UnsettledDetail, len(rows))
 	for i := range rows {
-		d := TaskWorktreeUnsettledDetail(ctx, rows[i].ProjectID, rows[i].ID)
+		d := taskUnsettledVerdict(ctx, rows[i].ProjectID, rows[i].ID)
+		verdicts[rows[i].ID] = d
 		rows[i].Unsettled = d.Unsettled()
 		rows[i].UnsettledKnown = d.UnsettledKnown()
 	}
+	for i := range rows {
+		if rows[i].TypeSlug == "epic" {
+			annotateEpicWorkProduct(ctx, &rows[i], verdicts)
+		}
+	}
+}
+
+// taskUnsettledVerdict is the per-task verdict both passes read. Held as a var
+// so tests can decide a task's verdict without building a worktree for it.
+var taskUnsettledVerdict = TaskWorktreeUnsettledDetail
+
+// epicDescendant is one live task under an epic, as annotateEpicWorkProduct
+// reads it.
+type epicDescendant struct {
+	id        int64
+	projectID int64
+	status    string
+	isEpic    bool
+}
+
+// annotateEpicWorkProduct rolls an epic row's unsettled column up from its
+// descendants (E-2198). An epic's work product is its children's: its status is
+// derived from theirs and its own branch is normally empty, so the verdict on
+// the epic alone says nothing about the work it represents.
+//
+//   - any descendant (or the epic's own worktree) unsettled → ◆
+//   - else any verdict not yet determined → ~
+//   - else any non-epic descendant Shipped → blank
+//   - else → ⊙
+//
+// ◆ outranks ~ here though ~ outranks it on a single row. On a single row an
+// unknown verdict means the Unsettled flag was never filled in; across a set, a
+// descendant KNOWN to be unsettled is an answer about the epic whatever its
+// siblings' state.
+//
+// Descendants, not just children: a child epic's own work product is its
+// children's too, so stopping one level down would leave a parent of epics
+// wearing ⊙ for the reason this exists to fix. Child epics count toward ◆/~
+// through their own worktrees but never toward Shipped — `completed` on an epic
+// is derived, and a sub-epic of declined children derives it too.
+//
+// The walk climbs task_tree.effective_parent_id, the same edge epic status
+// derivation reads (internal/events/epic_derivation.go), so the two agree on
+// what a child is. It runs for epic rows only, which keeps E-2107's rule that no
+// DB read joins the per-row hot path of an ordinary row. A descendant already
+// rendered reuses the verdict the first pass computed.
+//
+// Best-effort like the pass above: a failed read leaves the epic's own verdict
+// in place rather than failing the view.
+func annotateEpicWorkProduct(ctx context.Context, r *SessionStatusRow, verdicts map[int64]UnsettledDetail) {
+	descendants, err := epicDescendants(r.ID)
+	if err != nil {
+		return
+	}
+	unsettled := r.Unsettled
+	known := r.UnsettledKnown
+	for _, c := range descendants {
+		d, ok := verdicts[c.id]
+		if !ok {
+			d = taskUnsettledVerdict(ctx, c.projectID, c.id)
+			verdicts[c.id] = d
+		}
+		unsettled = unsettled || d.Unsettled()
+		known = known && d.UnsettledKnown()
+		if !c.isEpic && taskstatus.Has(taskstatus.Shipped, c.status) {
+			r.DescendantShipped = true
+		}
+	}
+	r.Unsettled = unsettled
+	r.UnsettledKnown = known || unsettled
+}
+
+// epicDescendants returns every live task under epicID, at any depth. The depth
+// cap matches the task_tree view's own, so a malformed cycle terminates.
+func epicDescendants(epicID int64) ([]epicDescendant, error) {
+	db, err := DB()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.Query(`
+		WITH RECURSIVE sub(id, depth) AS (
+			SELECT id, 1 FROM task_tree WHERE effective_parent_id = ?
+			UNION
+			SELECT t.id, s.depth + 1
+			FROM task_tree t JOIN sub s ON t.effective_parent_id = s.id
+			WHERE s.depth < 32
+		)
+		SELECT DISTINCT t.id, t.project_id, t.status, COALESCE(tt.slug = 'epic', 0)
+		FROM sub s
+		JOIN tasks t ON t.id = s.id
+		LEFT JOIN task_types tt ON tt.id = t.type_id`, epicID)
+	if err != nil {
+		return nil, fmt.Errorf("read descendants of epic E-%d: %w", epicID, err)
+	}
+	defer rows.Close()
+	var out []epicDescendant
+	for rows.Next() {
+		var c epicDescendant
+		if err := rows.Scan(&c.id, &c.projectID, &c.status, &c.isEpic); err != nil {
+			return nil, fmt.Errorf("scan descendant of epic E-%d: %w", epicID, err)
+		}
+		out = append(out, c)
+	}
+	return out, rows.Err()
 }
 
 // recordReapDefaultBranchFault reports the resolver failure that makes a

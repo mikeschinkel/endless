@@ -64,6 +64,12 @@ type SessionStatusRow struct {
 	// worktree has nothing to land, and a DIRTY worktree is known to be unsettled
 	// from `git status` alone, which stays live. See UnsettledDetail.UnsettledKnown.
 	UnsettledKnown bool
+	// DescendantShipped is true when an EPIC row has at least one non-epic
+	// descendant in taskstatus.Shipped (E-2198). An epic's status is derived from
+	// its children and its own branch is normally empty, so neither says whether
+	// the epic has produced work — its descendants do. Filled with Unsettled by
+	// AnnotateSessionStatusUnsettled, and only for epic rows; see HasShippedWork.
+	DescendantShipped bool
 	// Hidden / HiddenAt are the VIEWING session's per-session suppression of this
 	// task (E-1914): a session_hidden_tasks row for (viewer, task). Like Unsettled
 	// they are NOT part of the row query — the row set is viewer-agnostic, and
@@ -118,6 +124,18 @@ type SessionStatusRow struct {
 	// target=keeper) and it is the dupe that gets closed, so these are the
 	// target_ids of rows pointing AWAY from this task.
 	Duplicates []int64
+}
+
+// HasShippedWork reports whether the row's task has produced work product that
+// reached the verification gate or passed it — the ⊙/space split of the
+// unsettled column (E-2107). For an ordinary task that is its own status. For an
+// epic it is its descendants' (E-2198): an epic never ships by doing its own
+// work, so reading its own status would wear ⊙ however much its children landed.
+func (r SessionStatusRow) HasShippedWork() bool {
+	if r.TypeSlug == "epic" {
+		return r.DescendantShipped
+	}
+	return taskstatus.Has(taskstatus.Shipped, r.Status)
 }
 
 // replacedByExpr is the `enr`-CTE column that collects a task's replacements as

@@ -289,6 +289,8 @@ It is narrower than that rule alone suggests. A task with **no worktree** is kno
 
 **⊙** does not distinguish "nobody has picked this up" from "a session is sitting on it and has produced nothing" — deliberately. They are the same fact about the work, and the action icon and status already tell them apart. It is decided by status rather than by landing history: a task that has not reached the verification gate has not shipped anything. One consequence worth knowing: a task that lands mid-flight and keeps working stays `underway`, so it wears ⊙ despite real landed work. It is still true that nothing is outstanding there.
 
+An **epic** row is the exception: its column reads its descendants, not itself. An epic's status is derived from its children and its own branch is normally empty, so neither says whether it has produced anything. So for an epic, ◆ means any descendant's worktree (or its own) is unsettled, **~** means one of them is not yet determined, blank means at least one non-epic descendant has shipped, and ⊙ means none has. Each descendant still holding a worktree costs one extra verdict per tick while the epic is on screen.
+
 **◆** is a union of two sub-states which need **opposite fixes**, so the marker alone doesn't tell you what to do:
 
 | Sub-state    | Meaning                                | Fix                        |

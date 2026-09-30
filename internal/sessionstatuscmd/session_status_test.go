@@ -260,6 +260,42 @@ func TestUnsettledMark(t *testing.T) {
 	}
 }
 
+// TestUnsettledMarkOnEpicRows pins E-2198: an epic's ⊙/space split is read from
+// its descendants (DescendantShipped, filled by the data layer), never from its
+// own derived status — which is why E-1991 wore ⊙ with five children landed.
+// The legend is derived by calling unsettledMark, so it must follow the column.
+func TestUnsettledMarkOnEpicRows(t *testing.T) {
+	epic := func(status string, shipped, unsettled, known bool) monitor.SessionStatusRow {
+		return monitor.SessionStatusRow{Status: status, TypeSlug: "epic",
+			DescendantShipped: shipped, Unsettled: unsettled, UnsettledKnown: known}
+	}
+	cases := []struct {
+		name string
+		row  monitor.SessionStatusRow
+		want string
+	}{
+		{"children shipped, nothing outstanding", epic("submitted", true, false, true), " "},
+		{"any child unsettled", epic("underway", true, true, true), "◆"},
+		{"no child shipped", epic("underway", false, false, true), "⊙"},
+		{"children's verdicts not yet known", epic("underway", true, false, false), "~"},
+		{"an epic's own completed status is not shipped work", epic("completed", false, false, true), "⊙"},
+		{"a todo still reads its own status", monitor.SessionStatusRow{Status: "underway", TypeSlug: "todo",
+			DescendantShipped: true, UnsettledKnown: true}, "⊙"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := unsettledMark(c.row); got != c.want {
+				t.Errorf("unsettledMark = %q, want %q", got, c.want)
+			}
+		})
+	}
+
+	legend := buildLegend([]monitor.SessionStatusRow{epic("submitted", true, false, true)}, 1000)
+	if strings.Contains(legend, "not started") {
+		t.Errorf("legend %q documents ⊙ for an epic whose column is blank", legend)
+	}
+}
+
 // TestUnsettledMarkGlyphWidths pins every state of the column at one terminal
 // column, the same invariant TestHiddenGlyphWidth and TestRelationGlyphWidths
 // enforce for their own slots. This one is load-bearing for the WHOLE table:
