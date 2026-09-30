@@ -1,0 +1,1 @@
+Opening endless project monitor in its own window requires remembering a flag on a subcommand (--tmux), the bare verb does something else (renders in the current pane), and with the flag it switch-clients the caller, replacing a live tmux session's windows with the monitor.
