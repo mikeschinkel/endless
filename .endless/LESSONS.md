@@ -6959,3 +6959,11 @@ In the bulk title rewrite I gave subagents a list of example verbs, a checker th
 ### [2026-09-30] Don't report a landed task's verify suite as a leftover
 A verify suite is valid only up to its task's land. After the land it is not maintained, so a landed suite that no longer passes is not a leftover, a caveat or anything worth mentioning. Don't list it in whats-left or handoff replies.
 - **Project**: endless
+
+### [2026-09-30] A plan with options is a menu, not a plan
+I wrote E-2197's plan with three options for the real fix and told Mike I was leaving the choice to whoever implements it. He has told me repeatedly not to do this. A plan that offers options is not a plan — it is a menu, and it hands the decision back to him at the worst moment, when the implementing session is already spawned and waiting.
+
+The rule: a plan states one approach. Before writing it, resolve every open question by asking Mike. Do not defer a decision to the implementing session, do not present alternatives with a recommendation and call that settled, and do not label a fork 'an implementation call' to avoid making it. If I find myself writing 'pick one while implementing' or listing options in rough order of cost, I have stopped planning.
+
+This compounds an earlier lesson about open questions: a question with a recommendation attached is a decision I already made and handed back. Options in a plan are the same failure in a different shape. Ask, get the answer, then write one approach.
+- **Project**: endless
