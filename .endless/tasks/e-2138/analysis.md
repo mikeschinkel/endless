@@ -105,3 +105,11 @@ in use during the drain, so it was correctly skipped — the migration must eith
 re-drain it first or disable rename detection for that rebase
 (`-X no-renames`). Do not let git guess: the guess puts one task's content in
 another task's directory.
+
+## From the description
+
+Decisions are not task-scoped and stay put.
+
+Beyond tidiness this removes an allowlist that has already gone stale once: E-1881 must enumerate the directories holding task content, its description named plans/analyses/db-ledger, and the real set had moved on within six weeks.
+
+Afterwards it is one glob, .endless/tasks/e-*/*.md, that no new content type can invalidate.
