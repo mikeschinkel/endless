@@ -56,3 +56,11 @@ container, agent-view detail output, caller detection — fixes the observed
 failure of sessions skipping analyses, and lands as E-2136. The shape of a list
 part will be much clearer once the container exists and one real emitter has
 been written against it. Filing a spec for it now would be guessing.
+
+## From the description
+
+TOON's tabular form declares field names once and emits a row per record, which is a structural reduction under any tokenizer and the reason to consider it here rather than for detail-shaped output.
+
+Not settled, hence a brainstorm: TOON's published savings are benchmarked on GPT-style tokenizers and the consumer is Claude; one list format may not fit a transcript, a path list and a derived board equally; and a list may end up as a part inside an Agent Folio stream rather than standalone output, which changes the question.
+
+Carries one hard requirement — session status encodes row ownership in a glyph and nowhere else, so any agent view must render it explicitly.
