@@ -1,0 +1,1 @@
+Close the gap left by the cwd-based gates (E-971, E-1586): a claimed session sitting correctly in its worktree can still Write/Edit the main checkout via an absolute path, because no gate validates the write TARGET.
