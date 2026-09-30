@@ -1,0 +1,3 @@
+tests/tasks/e-1648-verify.sh was dead: its fixture called 'endless register', which was renamed to 'endless project register', so every run exited 2 at setup without running a single check. It also carried an assertion invalidated by E-1765 (it asserted classify() maps submitted into the actDo case alongside ready; E-1765 gave submitted its own actReview).
+
+Both were fixed in E-1845 because that task's own rename touched the script, but nothing would have caught either — these scripts are run by hand, so a renamed command or a superseded invariant rots invisibly until someone happens to re-run it.
