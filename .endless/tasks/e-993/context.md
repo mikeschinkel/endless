@@ -1,0 +1,1 @@
+During E-969 verification I cleared a task's text field via raw SQL because the CLI provides no path to clear it (only --text <file>; no clear flag); the bypass violated the events-authoritative architecture (E-808) and produced a DB-vs-log desync that 'rebuild-db' would silently reverse.
