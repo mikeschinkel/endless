@@ -1,0 +1,1 @@
+Per decision E-1071: --clone copies the user's DB plus per-project state (.endless/events/, .endless/plans/, etc.) into the sandbox, and rewrites projects.path rows so events written in the sandbox land in sandboxed locations rather than real project dirs. Cost: ~200-500MB and ~500ms-2s typical.
