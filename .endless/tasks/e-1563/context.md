@@ -1,0 +1,1 @@
+Production INSERT at internal/events/project_next.go still names project_next_items; 4 test queries in internal/events/project_next_test.go (lines 95, 128, 168, 207) also still use the old name. Three TestExecProjectNextRevised_* tests fail with 'no such table: project_next_items' on any DB built from current schema.sql.
