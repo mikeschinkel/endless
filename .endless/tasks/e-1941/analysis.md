@@ -109,4 +109,6 @@ E-1898 itself, which is fixed and re-verified. `endless task show -p` pinning a
 DB connection for the life of its pager is a real but separate nuisance; file it
 on its own if it bites again.
 
+## From the description
 
+Fix: refuse the land when the branch is behind main, rehearse the merge on a throwaway branch, fast-forward main to that result, and apply schema changes AFTER the merge so a failed apply is merely a retry.
