@@ -1,0 +1,1 @@
+Epic E-1785 derives 'unplanned' though all seven children are 'assumed'/'submitted' (zero unplanned); deriveTargetStatus (internal/events/epic_derivation.go) returns 'submitted' on anySubmitted for that set, so the stored value is stale —
