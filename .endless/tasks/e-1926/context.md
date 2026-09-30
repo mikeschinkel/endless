@@ -1,0 +1,1 @@
+session_tasks, session_hidden_tasks, session_notices and project_next_tasks/_pending all key on a task id with no FK, by design ('the row must outlive its task'), and all resurrect against an unrelated task when the id is reused —
