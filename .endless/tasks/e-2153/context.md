@@ -1,0 +1,1 @@
+I coined "attention board" for what Endless calls `project status` (snapshot) and `project monitor` (live loop), and used it as if it were the product's name — it reached ~20 sites across three landed tasks, including the user-facing `endless-go --help` line "render the project attention board".
