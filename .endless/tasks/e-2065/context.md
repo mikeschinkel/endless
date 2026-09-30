@@ -1,0 +1,1 @@
+So a rebuild silently leaves landing history and every blocking relation at whatever the live database happened to hold, defeating E-807's stated criterion that the same events yield the same state on any machine.
