@@ -1,0 +1,1 @@
+Open questions: detection signal (file edit + no task referenced? trigger phrases? heuristics?); intervention mode (auto-create task, prompt Claude, block exit?); false-positive cost (don't make trivial fixes ceremonial); interaction with E-886 decision capture.
