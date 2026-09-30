@@ -2,7 +2,7 @@
 
 Implements ED-1587. Three pieces, in order:
 
-1. **Construction.** `src/endless/worktree_cmd.py:1546` and `:1653` build
+1. **Construction.** `src/endless/worktree_cmd.py` and `:1653` build
    `f"task/{task_id}-{slug}"`. Both become `f"task/{task_id}"`. Whatever
    computes the slug for this purpose goes with them if nothing else uses it.
 
@@ -41,3 +41,7 @@ Implements ED-1587. Three pieces, in order:
 ## Out of scope
 
 A configurable branch pattern. ED-1587 rejects it explicitly and says why.
+
+## From the description
+
+Covers the two construction sites in worktree_cmd.py, renaming the ~139 existing local-only slug branches, and retiring task_landings.branch — which takes E-1719's NULL-branch carve-out and E-2087's git-fallback-for-the-branch-name with it.
