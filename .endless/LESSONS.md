@@ -6991,3 +6991,7 @@ Do not tell Mike that a submitted task must be approved (task approve) before it
 ### [2026-09-30] Resolve apparent plan conflicts toward the plan's design intent, or ask — never silently pick the reading that undoes it
 In E-2164 I read one verification bullet ('a task with two blockers shows both, on two lines') as universal and removed leading | groups, re-inflating the line count the plan was designed to minimize. The bullet described a non-groupable example; the notation rules allowed the grouping. When a verification line seems to contradict the plan's stated design goal, re-read it against the design (it is usually describing a specific example), and if it still conflicts, ask Mike before choosing — don't silently take the reading that unravels planned work.
 - **Project**: endless
+
+### [2026-09-30] A worktree's unsettled verdict is not cache-only
+TaskWorktreeUnsettledDetail, which fills the ◆ column, runs a live git status --porcelain and a git rev-parse HEAD on every worktree on every call. Only the unlanded-commit comparison is cached. So any plan that adds verdict lookups for more tasks (children, descendants, related rows) adds live git probes per worktree per monitor tick, whatever the plan says about 'the same cache'. Measure the cost before accepting it (E-2198).
+- **Project**: endless
