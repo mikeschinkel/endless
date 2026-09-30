@@ -206,3 +206,29 @@ func TestRun_ScopeFlags(t *testing.T) {
 		}
 	}
 }
+
+// TestInSession_GroupedSessions: `active` and `active-6` are a session group
+// sharing every window. list-windows -a lists each window under both, and the
+// window must be found by either name — found under neither was the bug.
+func TestInSession_GroupedSessions(t *testing.T) {
+	wout := "@1\tactive\t1\tE-1\n@2\tactive\t2\tE-2\n@1\tactive-6\t1\tE-1\n@2\tactive-6\t2\tE-2\n@3\tpaused\t0\tcat\n"
+	pout := "@1\t%1\tzsh\t/p\n@2\t%2\tzsh\t/p\n@3\t%3\tzsh\t/p\n"
+	all := parseWindows(wout, pout)
+	if len(all) != 3 {
+		t.Fatalf("got %d windows, want 3 (grouped windows once each)", len(all))
+	}
+	for _, name := range []string{"active", "active-6"} {
+		got := inSession(all, name)
+		if len(got) != 2 {
+			t.Errorf("inSession(%q) = %d windows, want 2", name, len(got))
+		}
+		for _, w := range got {
+			if w.Session != name {
+				t.Errorf("inSession(%q) reports window %s under %q", name, w.ID, w.Session)
+			}
+		}
+	}
+	if got := inSession(all, "paused"); len(got) != 1 {
+		t.Errorf("inSession(paused) = %d, want 1", len(got))
+	}
+}

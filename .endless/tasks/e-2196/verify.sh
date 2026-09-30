@@ -235,6 +235,14 @@ assert_eq "no pane was closed" "${BEFORE}" \
 sleep 0.5
 assert_eq "nothing was typed" "" "$(cat "${LOG}")"
 
+# A second client attached to a session makes a GROUPED twin (`active` and
+# `active-6` on the machine this was built on): same windows, second name.
+# Either name must reach them.
+tmux -S "${SOCK}" new-session -d -t r -s r-6 || setup_error "could not group r-6 with r"
+OUT6="$(sweep --tmux-session r-6 --dry-run)"
+assert_contains "the grouped twin's name finds the same windows" \
+    "E-4001     r-6:1        would resume in ${W1_WT}" "${OUT6}"
+
 # ── 5. the sweep ───────────────────────────────────────────────────────────
 section "5. --tmux-session r"
 

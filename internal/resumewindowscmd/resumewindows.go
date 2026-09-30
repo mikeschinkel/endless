@@ -107,10 +107,15 @@ type pane struct {
 
 type window struct {
 	ID      string // @N — unique per server; a linked window is listed once
-	Session string
-	Index   string
-	Name    string
-	Panes   []pane
+	Session string // the first session tmux lists it under, for the summary
+	// Sessions is every session the window belongs to. Grouped sessions
+	// (`active` and the unattached twin a second client makes, `active-6`)
+	// share all their windows, and a linked window sits in several sessions;
+	// --tmux-session must find it under any of those names.
+	Sessions []string
+	Index    string
+	Name     string
+	Panes    []pane
 }
 
 func (w window) label() string {
@@ -306,9 +311,9 @@ var tmuxOut = func(args ...string) (string, error) {
 }
 
 // listWindows reads every window on the server with its panes, in the order
-// tmux lists them. A window linked into several sessions is kept once, under
-// the first session that lists it — killing its panes twice would fail the
-// second time, and it is one window.
+// tmux lists them. A window in several sessions — grouped or linked — is kept
+// once, remembering every session it is in: killing its panes twice would fail
+// the second time, and it is one window.
 func listWindows() ([]window, error) {
 	wout, err := tmuxOut("list-windows", "-a", "-F",
 		"#{window_id}\t#{session_name}\t#{window_index}\t#{window_name}")
@@ -334,11 +339,14 @@ func parseWindows(wout, pout string) []window {
 		if len(f) < 4 {
 			continue
 		}
-		if _, seen := index[f[0]]; seen {
+		if i, seen := index[f[0]]; seen {
+			windows[i].Sessions = append(windows[i].Sessions, f[1])
 			continue
 		}
 		index[f[0]] = len(windows)
-		windows = append(windows, window{ID: f[0], Session: f[1], Index: f[2], Name: f[3]})
+		windows = append(windows, window{
+			ID: f[0], Session: f[1], Sessions: []string{f[1]}, Index: f[2], Name: f[3],
+		})
 	}
 	seen := map[string]bool{}
 	for _, line := range lines(pout) {
@@ -370,8 +378,12 @@ func lines(s string) []string {
 func inSession(windows []window, name string) []window {
 	var out []window
 	for _, w := range windows {
-		if w.Session == name {
-			out = append(out, w)
+		for _, s := range w.Sessions {
+			if s == name {
+				w.Session = name // report it under the name that was asked for
+				out = append(out, w)
+				break
+			}
 		}
 	}
 	return out
