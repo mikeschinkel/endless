@@ -1,0 +1,1 @@
+Route it through the unified _current_endless_session_id resolver (incl. the E-1585 window-option tier) and pass the resolved eid to Go via the reserved --session-id override, so it's testable in a worktree and works for sibling shells.
