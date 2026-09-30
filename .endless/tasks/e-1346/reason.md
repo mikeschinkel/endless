@@ -1,0 +1,1 @@
+Fully covered: the declaration gate (tracking mode defaults to enforce) refuses writes from an unclaimed session, and the claimed-session cwd gate refuses edits outside the worktree.
