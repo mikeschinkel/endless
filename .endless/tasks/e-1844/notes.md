@@ -1,0 +1,1 @@
+Completion derives from its children (the untriaged status wiring E-1845 and the triager job E-1859); the opt-out E-1847 is a related maybe. Rides the E-698 fire-once runner; orthogonal to auto-spawn (E-1812), which shares only that runner.
