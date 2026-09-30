@@ -6995,3 +6995,7 @@ In E-2164 I read one verification bullet ('a task with two blockers shows both, 
 ### [2026-09-30] A worktree's unsettled verdict is not cache-only
 TaskWorktreeUnsettledDetail, which fills the ◆ column, runs a live git status --porcelain and a git rev-parse HEAD on every worktree on every call. Only the unlanded-commit comparison is cached. So any plan that adds verdict lookups for more tasks (children, descendants, related rows) adds live git probes per worktree per monitor tick, whatever the plan says about 'the same cache'. Measure the cost before accepting it (E-2198).
 - **Project**: endless
+
+### [2026-09-30] A verify suite that drives a Claude hook must set CLAUDE_CODE_ENTRYPOINT=cli
+The hook's agent gate (E-1962) exits silently before touching the database unless CLAUDE_CODE_ENTRYPOINT=cli. An agent's own shell runs inside Claude Code and has it; Mike's terminal does not. So a suite that pipes a payload into 'endless-go hook claude' passes for the agent and fails for Mike, and its 'hook is silent' assertions pass vacuously. Set CLAUDE_CODE_ENTRYPOINT=cli on the hook invocation, and re-run the suite with the Claude variables unset (env -u CLAUDE_CODE_ENTRYPOINT -u CLAUDECODE ...) before handing it over. (E-2020)
+- **Project**: endless
