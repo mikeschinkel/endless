@@ -50,3 +50,7 @@ that creates is deliberate: it is what makes clearing a thing that gets done. If
 that proves unworkable in practice the answer is a better clearing affordance —
 clear-by-code, clear-all-warnings — not a timer that decides on the user's behalf
 which failures were unimportant.
+
+## From the description
+
+It still had one thing to say, that it happened, and whether that matters is the user's call; clearing is one command.
