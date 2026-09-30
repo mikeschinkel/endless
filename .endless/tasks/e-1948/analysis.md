@@ -1,0 +1,1 @@
+Fix all three: accept submitted in --status (task submit stays as the standalone verb), reword the transition message to lead with DECIDE YOURSELF and name the background sweep as a worst-case fallback, and drop the automation mechanics from CLAUDE.md — agents need the duty, not the machinery.
