@@ -6,3 +6,9 @@ Sibling to E-852 (which shipped narrow blocks/blocked-by support). Broader scope
 5. Expand or sibling-rename endless task deps: either show all relations or add endless task relations <id>; both with --type <type> filter
 6. Reverse lookups: endless task list --related-to <id> [--rel-type <type>]; endless decision list --about <task-id>
 Schema accepts any dep_type string (CHECK constraints removed), so no migration needed. Implementation order: settle vocabulary first (blocked on E-958), then ship at-creation flags + show-all-relations together (highest impact), then primitive + reverse lookups.
+
+## From the description
+
+Schema accepts any dep_type so no migration is needed;
+
+Punch list and ordering rationale are in the analysis field.
