@@ -32,3 +32,7 @@ data.sql exists in the repo (~114KB on 2026-04-30, last updated 2026-04-21 — 9
 - If 'rebuild-db' becomes painfully slow.
 - If events log grows past some threshold (e.g., 100MB, or rebuild > 30s).
 - If a fresh-clone workflow needs faster bootstrap than full replay.
+
+## From the description
+
+Confirm that before planning it; if (A) is settled, what remains is only the growth bound, which is a smaller question than the one filed.
