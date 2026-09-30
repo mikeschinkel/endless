@@ -1,0 +1,1 @@
+Subcommands: create (internal), destroy, list, prune, run, enter. Provisions ~/.cache/endless/sandboxes/<name>/ with .sandbox-meta.json (created_at, mode, creator_pid, name). Uses Go 1.24's os.OpenRoot(sandbox_dir) for kernel-level write barrier — out-of-root operations return EACCES. Crash-resistant cleanup: defer + signal handler on EXIT/INT/TERM.
