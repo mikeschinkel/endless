@@ -6967,3 +6967,7 @@ The rule: a plan states one approach. Before writing it, resolve every open ques
 
 This compounds an earlier lesson about open questions: a question with a recommendation attached is a decision I already made and handed back. Options in a plan are the same failure in a different shape. Ask, get the answer, then write one approach.
 - **Project**: endless
+
+### [2026-09-30] A verify suite must not inherit the launching Claude session's env
+Verify suites run from Mike's plain terminal, not a Claude pane. Before handing off, run the suite with every CLAUDE* variable unset (env -u ...) as well as from the session; a hook-driving suite passed for me only because it inherited CLAUDE_CODE_ENTRYPOINT=cli. Make suites hermetic: clear inherited CLAUDE*/ENDLESS* vars and set exactly what the path under test needs.
+- **Project**: endless
