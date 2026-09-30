@@ -1,0 +1,1 @@
+Examples: (1) Hook uses '_ = monitor.SomeFunc()' discarding errors, (2) channel_cmd.py uses capture_output=True suppressing tmux errors, (3) endless-channel ran for hours with a missing SQLite driver import — every DB call failed silently, never registered its port.
