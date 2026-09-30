@@ -1,0 +1,1 @@
+Today the E-1401 attribution gate in event_bridge.emit_event() refuses task.add from a plain shell with no resolvable session, and --force does not bypass it (the gate fires before --force is consulted).
