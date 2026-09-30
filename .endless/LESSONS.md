@@ -6983,3 +6983,7 @@ E-940's verify.sh passed from my Claude Code session and failed with 'temp datab
 ### [2026-09-30] Check old-transcript evidence against the current guide before recommending
 On E-940 I recommended exempting ~/.cache/endless/sandboxes from the write gate because a replay of old session transcripts showed writes there. Per-worktree sandboxes moved to <worktree>/.endless/sandbox/ (the 'The worktree's sandbox' section of endless guide orchestration), so they are already inside the worktree; the recommendation was built on history, not the current design. Evidence from old transcripts must be checked against the current guide before it becomes a recommendation.
 - **Project**: endless
+
+### [2026-09-30] Spawning does not require approving the task first
+Do not tell Mike that a submitted task must be approved (task approve) before it can be spawned. It does not; spawn works on it directly. The guide's lifecycle diagram (no submitted->underway claim edge; 'ready provably means human-approved') and code comments ('the claim gate refuses a submitted task') say otherwise, which is what keeps misleading sessions. Hand him the spawn command alone.
+- **Project**: endless
