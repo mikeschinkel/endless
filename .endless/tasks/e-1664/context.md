@@ -1,0 +1,1 @@
+but binary selection is still a fragile property of the Justfile recipe: each endless-go shellout must individually be pointed at the worktree binary via PATH, and the next one added can silently forget again.
