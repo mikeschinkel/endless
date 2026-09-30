@@ -1,0 +1,1 @@
+Downstream of E-1337's root cause but worth focused diagnosis once E-1337 lands — confirms whether E-1337's archive-and-reap fixes this too, or whether a separate SessionStart-on-reincarnate gap remains.
