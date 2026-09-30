@@ -103,3 +103,7 @@ different axis on the surfaces that have it — WHICH ROWS to consider, not HOW
 MANY to render: `task list --all` includes terminal statuses, `task unsettled
 --all` surveys every worktree rather than one. Overloading it to also mean "no
 cap" would collide on exactly the commands that need both at once.
+
+## From the description
+
+Which commands need it is for the implementor to determine and confirm with the user.
