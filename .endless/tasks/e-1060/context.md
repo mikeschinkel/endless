@@ -1,0 +1,1 @@
+41 tasks have non-null analysis fields and descriptions that violate the new policy (length > 1024 or embedded newlines), reflecting the prior practice of using description as a long-form analysis dump.
