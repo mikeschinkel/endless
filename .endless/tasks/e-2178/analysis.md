@@ -55,3 +55,11 @@ passes or they are nothing.
 Closed middles first — they are mechanical and shrink the list by eight with no
 judgment calls. Then E-800 (ready, so it is about to be touched anyway), then
 E-1486, then E-799, which is the largest and the most unplanned.
+
+## From the description
+
+Two different jobs: an open middle node needs its content placed before its children reparent, while an already-closed one is pure bookkeeping.
+
+The inventory and the order to work it are in the analysis.
+
+Deliberately deferred; re-measure before starting, since closing a row removes it from the list.
