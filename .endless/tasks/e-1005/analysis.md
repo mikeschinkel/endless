@@ -17,3 +17,9 @@ Resolution options:
 - Document and use an alias that always reinstalls editable
 
 Cost: this issue cost ~30 minutes of wasted debugging during E-970 testing.
+
+## From the description
+
+Suspected cause: another session running 'uv tool install' without -e.
+
+Investigation steps and resolution options are in the analysis field.
