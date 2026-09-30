@@ -1,0 +1,1 @@
+Measured 2026-08-06: 84,303 of 180,117 files under .endless/worktrees (47%) are derived — .venv 67k, __pycache__ 15.6k, bin at ~90% of bytes — all backed up to a network Time Machine share and Spotlight-indexed, with fseventsd burning ~20% of a core continuously.
