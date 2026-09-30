@@ -1,0 +1,1 @@
+Export writes project-scoped data (projects, plans, notes, deps) to .endless/data.sql with schema version header. Import restores from that file. Requires: schema version tracking (pre-v1.0 SemVer), migration system (evaluate migration tools vs hand-rolled), breaking vs non-breaking change distinction.
