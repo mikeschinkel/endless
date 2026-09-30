@@ -1,0 +1,1 @@
+Monitor's tests target unexported DB-injecting helpers (touchSessionDB et al.) because monitor.DB() is a sync.Once singleton with no test reset, so public wrappers are untested and monitor.TaskText has zero coverage.
