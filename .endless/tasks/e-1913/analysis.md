@@ -11,7 +11,7 @@ guards two of them and cannot reach the third.
   pre-work task resets it to `untriaged`/`submitted`. Also opens with
   `not keep_status`.
 
-**Unguarded (Go, `internal/events/executor.go:579-594`, `execTaskFieldsUpdated`):**
+**Unguarded (Go, `internal/events/executor.go`, `execTaskFieldsUpdated`):**
 
 ```go
 if textVal, hasText := p.Fields["text"]; hasText {
@@ -28,7 +28,7 @@ if textVal, hasText := p.Fields["text"]; hasText {
 Its only suppression is `!statusSet` — "caller wins" when status is explicit.
 `--keep-status` is never serialized into the event, and
 `TaskFieldsUpdatedPayload` is just `Fields map[string]any`, so there is no field
-in which the intent could travel. The Python comment at task_cmd.py:4031 even
+in which the intent could travel. The Python comment at task_cmd.py even
 names this split ("left to the executor's plan-attach auto-move: that move only
 fires when the update does not set status explicitly") without noticing that
 `--keep-status` therefore cannot influence it.
@@ -67,3 +67,7 @@ upcasting pipeline is the natural place to introduce it.
 Found during E-1906 while folding the E-1907 finding into E-1671's text. The
 append promoted E-1671 `unplanned` -> `submitted` despite `--keep-status`, and
 the status was restored manually.
+
+## From the description
+
+Make the flag hold the status across all three auto-transitions, and correct its help text, which today describes only the done-task case.
