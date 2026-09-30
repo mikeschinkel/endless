@@ -58,3 +58,7 @@ Separately, a monitor whose cwd is a self_dev worktree reads the sandbox DB,
 whose session rows carry no `active_task_id` — verified: the e-1851 sandbox has
 1 session row, 0 with a task. That is E-698's documented cost (E-1883).
 E-1851 works around it by starting the monitor pane in the project dir.
+
+## From the description
+
+Fix: re-resolve each tick while focal == 0, stopping once resolved.
