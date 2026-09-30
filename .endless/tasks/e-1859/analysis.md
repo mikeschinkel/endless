@@ -65,3 +65,7 @@ recorded anywhere.
 tasks, from worktrees, with `--db main`. So the suppressed path is the normal
 path, and the 15-minute sweep is the effective triage latency for nearly every
 task filed.
+
+## From the description
+
+For each untriaged task it assembles the persisted-artifact context (description + parent + sibling titles + linked decisions — deliberately NOT the filing session's context) and calls a model via the shared run_internal_claude helper with a config-resolved model (standardize the config key so verb auto-registration and this job resolve their model the same way; do not hardcode 'claude -p'; see E-1849 for making the harness itself pluggable). It then sets status to submitted or unplanned and emits the transition as an event with triager attribution. Runs as belt (inline at file time) and suspenders (background sweep over the untriaged queue).
