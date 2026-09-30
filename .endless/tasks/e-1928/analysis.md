@@ -29,3 +29,7 @@ The fix is to capture `desc_count` BEFORE the emit, next to the existing
 `child_count` read. E-1915 already computes exactly this id set before the emit
 (`_removal_id_set(item_id, cascade)`), so the descendant count is
 `len(_removal_id_set(item_id, True)) - 1` and no second query is needed.
+
+## From the description
+
+Fix is to count before the emit — E-1915's _removal_id_set() already computes that id set.
