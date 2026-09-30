@@ -95,3 +95,7 @@ This is the hard case the task must reckon with.
    LLM-judge pass? Turn 3 shows even a careful agent, asked to self-correct,
    produced fresh ceremony — which argues the check cannot be purely the agent's
    own judgment (it "errs toward self-covering", per E-1758's framing).
+
+## From the description
+
+Filed as brainstorm because the mechanism needs discussion before it is actionable: where/how a 'final handoff' is intercepted (unlike a git commit it is not a discrete artifact), whether pattern-matching is viable without excessive false positives, and whether this belongs as a hook, a verb-check-style check, or plain guidance.
