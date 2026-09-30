@@ -1,0 +1,1 @@
+Per-record judgment: 8 plan rows reclassify to epic or research case-by-case; 16 chore rows reclassify mechanically to task; 49 bug rows audit each (many like E-872 are feature gaps mislabeled as bug).
