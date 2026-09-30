@@ -1,0 +1,1 @@
+The documents table is DROPPED in migration v2, so 'endless docs' (docs_cmd.py) errors or returns empty on any migrated DB, and the command is already marked 'temporarily disabled' in its own help text.
