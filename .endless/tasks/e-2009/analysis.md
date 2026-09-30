@@ -32,3 +32,9 @@ PRODUCT: this is not self-dev-only. Every Endless user gets per-task worktrees
 under `.endless/worktrees/`, and every one has `.endless/` tracked in git, so any
 user running `project scan` over a directory holding a tracked project gets one
 phantom project per open task.
+
+## From the description
+
+Wanted: a disallow list consulted by BOTH the CLI register path and the Go auto-register path, refusing $HOME, the filesystem root, anything outside $HOME, the temp dir (and whatever it is a symlink for — resolve before testing), and a per-GOOS set of home subdirectories that hold projects but are not projects: Projects, Documents, Downloads and the like. The list must be extensible from config, since one user's container directory is another's layout.
+
+Soft-deleting projects is NOT in scope here — that is E-2010.
