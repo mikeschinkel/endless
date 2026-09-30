@@ -23,3 +23,7 @@ Scope note. The DATABASE half is self-dev-only: apply_db_choice refuses --db out
 == THE INCIDENT ==
 
 A session working E-2105 ran 'endless-go session-query list-live --project-root <main checkout>' from its worktree. --project-root named the main checkout; the binary silently answered from the worktree sandbox, returning 2 rows where main holds 59. The session reported it to the owner as a probable product defect, having also unset XDG_CONFIG_HOME in the belief that this was what selected the sandbox. It then ran the same command against two different binaries, got identical output, and read the agreement as corroboration -- a sound control for 'did my change alter this?' and none at all for 'is this number right?'. The refusal that would have ended this at the first command was already written and already unreachable.
+
+## From the description
+
+Fix both: require dbContextFromFlag (already tracked, never consulted) so only a per-invocation flag authorises opening the DB, and make every read state the database and project it answered from.
