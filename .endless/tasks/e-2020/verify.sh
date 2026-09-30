@@ -178,9 +178,14 @@ section "C3. The hook is silent on a mismatch, with exactly one fault (R3)"
 
 fresh_home r3
 push_ahead
+# CLAUDE_CODE_ENTRYPOINT=cli is what Claude Code sets for its hooks. Without it
+# the hook's agent gate (E-1962) exits silently BEFORE touching the database, so
+# the silence assertions below would pass without the connect ever running — which
+# is what happened when this suite was first run from a plain terminal.
 hook() {
     printf '%s' '{"hook_event_name":"PostToolUse","session_id":"s-e2020","cwd":"'"${TMP}"'","tool_name":"Bash","tool_input":{"command":"ls"}}' \
-        | (cd "${TMP}" && HOME="${H}" XDG_CONFIG_HOME= "${INST}" hook claude >"${TMP}/hook.out" 2>"${TMP}/hook.err")
+        | (cd "${TMP}" && HOME="${H}" XDG_CONFIG_HOME= CLAUDE_CODE_ENTRYPOINT=cli \
+            "${INST}" hook claude >"${TMP}/hook.out" 2>"${TMP}/hook.err")
 }
 hook
 assert_eq "the hook exits 0" "0" "$?"
