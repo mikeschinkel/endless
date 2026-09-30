@@ -21,3 +21,7 @@ Checked 2026-09-16. sqlc reads a goose migration directory natively (schema: <mi
 - sqlc parses migration files in LEXICOGRAPHIC order, which diverges from goose's numeric order unless filenames are zero-padded. 00001_baseline.sql already is; keep the padding.
 - sqlc can only read SQL migrations. A goose GO migration is invisible to it, so any DDL expressed in Go silently disappears from the schema sqlc models. Keep DDL in .sql migrations and put data work in a separate step.
 - sqlc gained virtual-table/FTS5 support in 1.31.0 with known rough edges (the fts5 token is case-sensitive — this schema spells it lowercase, which is the working case — and the implicit rowid is not modeled). session_messages_fts is the one object most likely to need attention if sqlc is adopted.
+
+## From the description
+
+If generation proves impractical, the fallback is deleting schema.sql rather than keeping a hand-maintained copy -- a stale snapshot presented as the schema is worse than none.
