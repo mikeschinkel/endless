@@ -1,0 +1,1 @@
+existing candidates include E-1671 and E-1674 (event upcasting so old events replay into the current schema), E-1728 (projector failing task_landings inserts), E-1716 (committed test-fixture ledger events), E-1883 (DB scoping so a rebuild is project-safe), and executor/projector parity testing in general. Relate or reparent those once the shape is agreed.
