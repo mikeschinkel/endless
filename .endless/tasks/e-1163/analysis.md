@@ -1,0 +1,1 @@
+Possible approaches to investigate: (a) symmetric extensions/forget.sh that authors maintain alongside use.sh; (b) protocol where use.sh emits a sentinel line listing what it set, captured by esu and replayed by esf; (c) snapshot env before/after esu and diff at esf time. Each has trade-offs.
