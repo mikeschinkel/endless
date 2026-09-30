@@ -33,3 +33,11 @@ rather than a recipe that re-fixes the symptom.
 
 Self_dev only (ED-1571): no other project has a per-worktree install or a
 land, so none of this mechanism exists there.
+
+## From the description
+
+Resolve the machine-level CONFIG recipes from main's justfile as post-worktree-create.sh already does, leaving `build` on the branch because a worktree exists to build candidate code.
+
+Then delete the one-time claude-settings-sweep recipe E-2166 added, once `endless worktree sync --apply` has delivered the fixed recipe to live branches.
+
+Self_dev only (ED-1571).
