@@ -291,3 +291,4 @@
 {"value": "save", "definition": "to store for later retrieval", "category": ["action"]}
 {"value": "redefine", "definition": "to define again or differently", "category": ["action"]}
 {"value": "retry", "definition": "to attempt again after a failure", "category": ["action"]}
+{"value": "log", "definition": "to record in a log", "category": ["action"]}
