@@ -1,0 +1,1 @@
+So a hand-written instruction has had no effect since the first time the background job promoted one, and nothing says so — while denylist, judge and generate overrides in the same file still work. report_prompts.py's own docstring promises the opposite.
