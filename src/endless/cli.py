@@ -1368,13 +1368,15 @@ def session_history(session_id, show_tools, timestamps, limit, sort_order, as_js
               help="Include done-work (terminal-status) rows")
 @click.option("--tree", is_flag=True,
               help="Render do/plan tasks as an IDs-only implementation-order tree")
+@click.option("--graph", is_flag=True,
+              help="Render only the ordering graph (legend above)")
 @click.option("--show-hidden", is_flag=True,
               help="Render this session's hidden task rows too, marked ⊘")
 @click.option("--only-hidden", is_flag=True,
               help="Render ONLY this session's hidden task rows")
 @output_options(agent=False,
                 json_help="Emit the rows as JSON (every row carries its hidden state)")
-def session_status(show_all, tree, show_hidden, only_hidden, as_json):
+def session_status(show_all, tree, graph, show_hidden, only_hidden, as_json):
     """Show the current session's status — a one-shot snapshot.
 
     Resolves the focal task for the current tmux window (live session's active
@@ -1393,9 +1395,22 @@ def session_status(show_all, tree, show_hidden, only_hidden, as_json):
     them marked ⊘; --only-hidden renders the hidden set alone, which is how you
     find ids to unhide. Hiding is per-session and display-only: no other
     session's view changes, and nothing about the task does.
+
+    \b
+    Under the table, the ordering graph: which of these tasks to do before
+    which. --graph renders it alone; --json carries it as a `graph` object.
+      E-1 => E-2        E-1 blocks E-2: E-2 cannot start until E-1 is done
+      E-1 -> E-2        E-1 should precede E-2 (advisory; never blocks)
+      E-1 => E-2 | E-3  E-2 and E-3 both stand in that relation ('|' binds
+                        tighter than either arrow)
+      E-1 <> E-2        must not run at the same time (declared with
+                        conflicts_with, or both worktrees touch a file)
+      <> E-1 | E-2 | E-3  no two of these may run at the same time
+      dim id            already in flight, or a repeat of an id drawn above
+      cycle: E-1, E-2   the relations form a cycle — fix the data
     """
     from endless.session_cmd import session_status_resolve
-    session_status_resolve(show_all=show_all, tree=tree,
+    session_status_resolve(show_all=show_all, tree=tree, graph=graph,
                            show_hidden=show_hidden, only_hidden=only_hidden,
                            as_json=as_json)
 
@@ -1405,6 +1420,8 @@ def session_status(show_all, tree, show_hidden, only_hidden, as_json):
               help="Include done-work (terminal-status) rows")
 @click.option("--tree", is_flag=True,
               help="Render do/plan tasks as an IDs-only implementation-order tree")
+@click.option("--graph", is_flag=True,
+              help="Render only the ordering graph, once (see `session status --help`)")
 @click.option("--show-hidden", is_flag=True,
               help="Render this session's hidden task rows too, marked ⊘")
 @click.option("--only-hidden", is_flag=True,
@@ -1418,7 +1435,7 @@ def session_status(show_all, tree, show_hidden, only_hidden, as_json):
               help="With --restart: restart monitors in every tmux session")
 @click.option("--dry-run", is_flag=True,
               help="With --restart: list the panes it would restart, change nothing")
-def session_monitor(show_all, tree, show_hidden, only_hidden, restart,
+def session_monitor(show_all, tree, graph, show_hidden, only_hidden, restart,
                     tmux_session, all_tmux_sessions, dry_run):
     """Live dashboard: repeatedly render `session status` until interrupted.
 
@@ -1447,6 +1464,7 @@ def session_monitor(show_all, tree, show_hidden, only_hidden, restart,
                 raise click.UsageError(f"{flag} only applies with --restart.")
     else:
         for flag, given in (("--all", show_all), ("--tree", tree),
+                            ("--graph", graph),
                             ("--show-hidden", show_hidden),
                             ("--only-hidden", only_hidden)):
             if given:
@@ -1456,7 +1474,8 @@ def session_monitor(show_all, tree, show_hidden, only_hidden, restart,
                                 all_tmux_sessions=all_tmux_sessions,
                                 dry_run=dry_run)
         return
-    session_status_resolve(show_all=show_all, tree=tree, monitor=True,
+    session_status_resolve(show_all=show_all, tree=tree, graph=graph,
+                           monitor=True,
                            show_hidden=show_hidden, only_hidden=only_hidden)
 
 
@@ -3022,6 +3041,15 @@ def _apply_clear_flags(clear_fields, resolved):
               help="Task ID(s) this new task blocks (repeatable)")
 @click.option("--blocked-by", "blocked_by_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) that block this new task (repeatable)")
+@click.option("--precedes", "precedes_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) this new task should be done before — advisory "
+                   "order only, never blocks (repeatable)")
+@click.option("--preceded-by", "preceded_by_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) that should be done before this new task — "
+                   "advisory order only, never blocks (repeatable)")
+@click.option("--conflicts-with", "conflicts_with_ids", type=TASK_ID, multiple=True,
+              help="Task ID(s) that must not run concurrently with this new task "
+                   "(they touch the same files) — advisory, never blocks (repeatable)")
 @click.option("--relates-to", "relates_to_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) related to this new task (repeatable)")
 @click.option("--implements", "implements_ids", type=TASK_ID, multiple=True,
@@ -3042,7 +3070,8 @@ def _apply_clear_flags(clear_fields, resolved):
                    "(repeatable; escape hatch for the path gate).")
 def task_add(title, description, description_file, plan_text, plan_file, context_text, context_file, analysis_text, analysis_file, phase, project, parent, after, task_type, status, complexity, risk, force,
              justification,
-             blocks_ids, blocked_by_ids, relates_to_ids, implements_ids,
+             blocks_ids, blocked_by_ids, precedes_ids, preceded_by_ids,
+             conflicts_with_ids, relates_to_ids, implements_ids,
              cleans_up_ids, cleaned_up_by_ids, duplicates_ids, replaces_ids,
              allow_paths):
     """Add a task.
@@ -3070,6 +3099,12 @@ def task_add(title, description, description_file, plan_text, plan_file, context
         link_tasks(new_id, tid, "blocks")
     for tid in blocked_by_ids:
         link_tasks(new_id, tid, "blocked_by")
+    for tid in precedes_ids:
+        link_tasks(new_id, tid, "precedes")
+    for tid in preceded_by_ids:
+        link_tasks(new_id, tid, "preceded_by")
+    for tid in conflicts_with_ids:
+        link_tasks(new_id, tid, "conflicts_with")
     for tid in relates_to_ids:
         link_tasks(new_id, tid, "relates_to")
     for tid in implements_ids:
@@ -3672,7 +3707,8 @@ def task_reopen(item_id):
               help="Target ID (E-NN for a task, ED-NN for a decision)")
 @click.option("--type", "dep_type", required=True,
               help="Relation type — legal set depends on target kind "
-                   "(task→task: blocks, blocked_by, implements, implemented_by, "
+                   "(task→task: blocks, blocked_by, precedes, preceded_by, "
+                   "conflicts_with, implements, implemented_by, "
                    "replaces, replaced_by, duplicates, duplicated_by, "
                    "documents, documented_by, "
                    "cleans_up, cleaned_up_by, relates_to; "

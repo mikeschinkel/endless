@@ -1344,6 +1344,7 @@ def session_status_resolve(
     tree: bool = False,
     monitor: bool = False,
     show_hidden: bool = False,
+    graph: bool = False,
     only_hidden: bool = False,
     as_json: bool = False,
 ) -> None:
@@ -1386,6 +1387,8 @@ def session_status_resolve(
         args.append("--all")
     if tree:
         args.append("--tree")
+    if graph:
+        args.append("--graph")
     if monitor:
         args.append("--monitor")
     if show_hidden:

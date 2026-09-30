@@ -31,10 +31,12 @@ PARENT_NONE = 0
 
 
 # Task relation vocabulary (E-957/E-958; informs dropped per E-1003;
-# documents added per E-1007; duplicates added per E-1185).
+# documents added per E-1007; duplicates added per E-1185; precedes and
+# conflicts_with added per E-2164).
 # display_name -> (stored_dep_type, swap_source_target)
 # Stored types are active voice (source is the actor): blocks, implements,
-# replaces, duplicates, documents, cleans_up, reverses, modifies, relates_to.
+# replaces, duplicates, documents, cleans_up, reverses, modifies, relates_to,
+# precedes, conflicts_with.
 # Inverse views (blocked_by, implemented_by, etc.) resolve to the same stored
 # row queried with source/target swapped. The reverses/modifies pair (E-1156)
 # are decision-to-decision relations; the others are task-to-task or task-
@@ -56,20 +58,34 @@ CANONICAL_DEP_TYPES: dict[str, tuple[str, bool]] = {
     "reversed_by":     ("reverses",   True),
     "modifies":        ("modifies",   False),  # source modifies target (decision↔decision; target partially still in effect)
     "modified_by":     ("modifies",   True),
+    "precedes":        ("precedes",   False),  # source should be done before target — advisory, never blocks
+    "preceded_by":     ("precedes",   True),
+    "conflicts_with":  ("conflicts_with", False),  # symmetric — must not run concurrently; advisory, never blocks
     "relates_to":      ("relates_to", False),  # symmetric
 }
 
-# The 9 canonical stored types (the values in CANONICAL_DEP_TYPES, deduplicated).
+# Stored types whose one row reads the same from either end. They have no
+# inverse view name, so a lookup, a duplicate check or an unlink must try both
+# storage orders rather than the one the caller happened to name.
+SYMMETRIC_DEP_TYPES = ("relates_to", "conflicts_with")
+
+# The 11 canonical stored types (the values in CANONICAL_DEP_TYPES, deduplicated).
 STORED_DEP_TYPES = (
     "blocks", "implements", "replaces", "duplicates", "documents",
     "cleans_up", "reverses", "modifies", "relates_to",
+    "precedes", "conflicts_with",
 )
 
 # Display order for `task show` — actionability descending; symmetric last.
 # `duplicates` sits with `replaces`: both say "this one is not the task to do,
-# that one is", and reading them adjacently is how you tell them apart.
+# that one is", and reading them adjacently is how you tell them apart. The
+# advisory ordering pair and conflicts_with sit directly below the blocking
+# rows (E-2164): they answer the same question — what to do before what — only
+# without the force of a block.
 RELATION_DISPLAY_ORDER = (
     "blocked_by", "blocks",
+    "preceded_by", "precedes",
+    "conflicts_with",
     "implements", "implemented_by",
     "replaces",   "replaced_by",
     "duplicates", "duplicated_by",
@@ -84,6 +100,9 @@ RELATION_DISPLAY_ORDER = (
 RELATION_LABELS = {
     "blocked_by":     "Blocked by",
     "blocks":         "Blocks",
+    "precedes":       "Should precede",
+    "preceded_by":    "Should follow",
+    "conflicts_with": "Conflicts with",
     "implements":     "Implements",
     "implemented_by": "Implemented by",
     "replaces":       "Replaces",
@@ -7333,11 +7352,11 @@ def link_tasks(source_id: int, target_id: int, dep_type: str):
     # case here where we still hold the user's display dep_type and E-NNN
     # formatting, and raise the readable message. (The constraint still guards
     # the rare TOCTOU race.)
-    if db.exists(
-        "SELECT 1 FROM task_deps WHERE source_type = 'task' AND source_id = ? "
-        "AND target_type = 'task' AND target_id = ? AND dep_type = ?",
-        (src, tgt, stored),
-    ):
+    #
+    # A symmetric relation is one fact whichever end names it, so the reverse
+    # storage order is a duplicate too — otherwise `A conflicts_with B` then
+    # `B conflicts_with A` would store two rows for one conflict.
+    if _dep_row(src, tgt, stored) is not None:
         raise click.ClickException(
             f"{task_id_display(source_id)} is already linked to {task_id_display(target_id)} as '{dep_type}'."
         )
@@ -7364,6 +7383,27 @@ def link_tasks(source_id: int, target_id: int, dep_type: str):
     )
 
 
+def _dep_row(src: int, tgt: int, stored: str) -> tuple[int, int] | None:
+    """Return the storage order of the task→task `stored` row between src and
+    tgt, or None when there is none.
+
+    Directional types match (src, tgt) only. A symmetric type (E-2164) is one
+    fact whichever end names it, so it matches either order and reports the
+    one actually stored.
+    """
+    orders = [(src, tgt)]
+    if stored in SYMMETRIC_DEP_TYPES:
+        orders.append((tgt, src))
+    for a, b in orders:
+        if db.exists(
+            "SELECT 1 FROM task_deps WHERE source_type = 'task' AND source_id = ? "
+            "AND target_type = 'task' AND target_id = ? AND dep_type = ?",
+            (a, b, stored),
+        ):
+            return a, b
+    return None
+
+
 def unlink_tasks(source_id: int, target_id: int, dep_type: str | None = None):
     """Remove a typed relationship between two tasks.
 
@@ -7383,14 +7423,14 @@ def unlink_tasks(source_id: int, target_id: int, dep_type: str | None = None):
         # Friendly no-match pre-check: the Go executor errors loudly if no row
         # matches, but with a low-level message. Raise the readable one here
         # while we still hold the user's E-NNN formatting.
-        if not db.exists(
-            "SELECT 1 FROM task_deps WHERE source_type = 'task' AND source_id = ? "
-            "AND target_type = 'task' AND target_id = ? AND dep_type = ?",
-            (src, tgt, stored),
-        ):
+        found = _dep_row(src, tgt, stored)
+        if found is None:
             raise click.ClickException(
                 f"No '{dep_type}' relation: {task_id_display(source_id)} → {task_id_display(target_id)}"
             )
+        # A symmetric row may be stored in the other order; delete the one
+        # that exists rather than the one the caller happened to name.
+        src, tgt = found
         # The Go executor owns the delete and records the 'revisited' touch for
         # both endpoints.
         from endless.event_bridge import emit_event
@@ -7456,9 +7496,8 @@ def _relation_display_name_from(row, perspective_id: int) -> str:
     """Pick the display name for a stored row from `perspective_id`'s point of view."""
     stored = row["dep_type"]
     # Symmetric: same name regardless of perspective
-    for name, (st, swap) in CANONICAL_DEP_TYPES.items():
-        if st == stored and not swap and st == "relates_to":
-            return name
+    if stored in SYMMETRIC_DEP_TYPES:
+        return stored
     # Asymmetric: pick swap=True when perspective is the target, swap=False when source
     want_swap = (row["target_id"] == perspective_id)
     for name, (st, swap) in CANONICAL_DEP_TYPES.items():
@@ -7597,7 +7636,12 @@ def get_all_relations(item_id: int) -> dict[str, list]:
         # Pick display name: swap=True when item is the target, swap=False when item is source
         want_swap = not is_source
         display = None
+        if row["dep_type"] in SYMMETRIC_DEP_TYPES:
+            # One stored row, the same name from either end (E-2164).
+            display = row["dep_type"]
         for name, (stored, swap) in CANONICAL_DEP_TYPES.items():
+            if display is not None:
+                break
             if stored == row["dep_type"] and swap == want_swap:
                 display = name
                 break
@@ -8034,7 +8078,15 @@ def _related_task_ids(item_id: int, rel_type: str | None = None) -> list[int]:
         stored, swap = CANONICAL_DEP_TYPES[rel_type]
         # When swap=False, item_id should be the source side (we want the targets).
         # When swap=True, item_id should be the target side (we want the sources).
-        if swap:
+        # A symmetric type has no side: either end is item_id (E-2164).
+        if stored in SYMMETRIC_DEP_TYPES:
+            rows = db.query(
+                "SELECT source_id, target_id FROM task_deps "
+                "WHERE source_type = 'task' AND target_type = 'task' "
+                "AND (source_id = ? OR target_id = ?) AND dep_type = ?",
+                (item_id, item_id, stored),
+            )
+        elif swap:
             rows = db.query(
                 "SELECT source_id, target_id FROM task_deps "
                 "WHERE source_type = 'task' AND target_type = 'task' "

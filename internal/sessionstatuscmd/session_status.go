@@ -193,6 +193,7 @@ func Run(args []string) {
 	showHidden := fs.Bool("show-hidden", false, "render this session's hidden task rows too, marked "+hiddenGlyph)
 	onlyHidden := fs.Bool("only-hidden", false, "render ONLY this session's hidden task rows (the discovery path for unhiding)")
 	asJSON := fs.Bool("json", false, "emit the row set as JSON instead of the table; every row carries its hidden state")
+	graphOnly := fs.Bool("graph", false, "render only the ordering graph (=> blocks, -> should precede, | same relation, <> must not run concurrently)")
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
 	}
@@ -296,6 +297,21 @@ func Run(args []string) {
 			os.Exit(1)
 		}
 		if err := renderJSON(os.Stdout, a, *all); err != nil {
+			fmt.Fprintln(os.Stderr, "session-status:", err)
+			os.Exit(1)
+		}
+		return
+	}
+
+	// --graph is the ordering graph alone: a single frame, like --tree, and it
+	// wins over --monitor for the same reason.
+	if *graphOnly {
+		a, err := nextAnchor()
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "session-status:", err)
+			os.Exit(1)
+		}
+		if err := renderGraphOnly(os.Stdout, a, *all, detectCols(*cols), colorEnabled()); err != nil {
 			fmt.Fprintln(os.Stderr, "session-status:", err)
 			os.Exit(1)
 		}
@@ -519,8 +535,39 @@ func renderSnapshot(w io.Writer, a anchor, all bool, cols int, color bool, hm hi
 	if err := annotateOwnership(rows, a.emittingSession, a.focal); err != nil {
 		return 0, err
 	}
-	renderTo(w, rows, a.focal, a.hint, cols, color, hm)
+	graph, err := gatherGraph(rows)
+	if err != nil {
+		return 0, err
+	}
+	renderFrame(w, rows, a.focal, a.hint, cols, color, hm, graph)
 	return len(rows), nil
+}
+
+// renderGraphOnly is `--graph`: the ordering graph alone, for the same session
+// and the same rows the table would draw it under. Unlike the inline graph it
+// says so when there is nothing to draw, because here the graph is the whole
+// answer and an empty screen would read as a failure.
+func renderGraphOnly(w io.Writer, a anchor, all bool, cols int, color bool) error {
+	rows, err := gatherRows(a.focal, a.parentSession, a.emittingSession, all)
+	if err != nil {
+		return err
+	}
+	if err = annotateHidden(rows, a.emittingSession); err != nil {
+		return err
+	}
+	if err = annotateOwnership(rows, a.emittingSession, a.focal); err != nil {
+		return err
+	}
+	graph, err := gatherGraph(rows)
+	if err != nil {
+		return err
+	}
+	if graph.empty() {
+		fmt.Fprintln(w, dim("  no ordering relations among this session's tasks", color))
+		return nil
+	}
+	renderGraph(w, graph, cols, color)
+	return nil
 }
 
 // annotateHidden is the per-session hide source, seamed as a package var (like
@@ -628,6 +675,13 @@ func eraseEachLineToEOL(frame string) string { return liveview.EraseEachLineToEO
 var worktreeAnomalies = monitor.WorktreeAnomalies
 
 func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskHint string, cols int, color bool, hm hiddenMode) {
+	renderFrame(w, rows, focal, noTaskHint, cols, color, hm, orderGraph{})
+}
+
+// renderFrame is renderTo with the ordering graph (E-2164), which it draws
+// after the hidden-rows footer and before the fault row. renderTo is the
+// graph-less form every table-only caller keeps using.
+func renderFrame(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskHint string, cols int, color bool, hm hiddenMode, graph orderGraph) {
 	// Gate on rows, not focal: a session with no claimed goal (focal == 0) still
 	// has surfaced/revisited rows to render (E-1802). Only the truly-empty case —
 	// no goal AND no session work — falls through to the claim/bind (or register-
@@ -758,6 +812,11 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 	if hiddenN > 0 {
 		fmt.Fprintln(w, dim(hiddenFooter(hiddenN), color))
 	}
+
+	// The ordering graph (E-2164) annotates the row set too — which of these
+	// to do before which — so it sits with the footer, above the machine-level
+	// fault row. Empty means nothing is written: no header, no blank line.
+	renderGraph(w, graph, cols, color)
 
 	// Uncleared faults are appended last so they read as an annotation on the
 	// view rather than competing with the task rows for attention (E-698).

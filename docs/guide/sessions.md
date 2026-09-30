@@ -163,6 +163,35 @@ Three read-only commands for self-orientation and for coordinating with sibling 
 - **`endless session show [ref]`** — details for one session (yours by default; pass an endless integer id or Claude UUID prefix for another). Reach for it when you're coordinating and need to inspect a specific sibling or child session.
 - **`endless session list`** — recent sessions in the current project: one row per session with its id, a one-column state glyph (legend below the table), the task it's active on, its message count, and that task's title. The roster view for finding a sibling / child session's id to `show`. `--all-projects` widens it to every project (and adds a Project column); `--project <name>` picks another from anywhere. Sessions that never claimed a task have nothing to fill those last two columns, so they are omitted until you pass `--all` — they remain addressable by id throughout.
 
+### The ordering graph: what to do before what
+
+Below the task rows (after any `… N hidden` footer, before the fault row), `session status` and `session monitor` draw which of your session's tasks block or should precede which — so choosing the next task does not mean opening each one. `--graph` renders the graph alone; `--json` carries it as a `graph` object (nodes with their `in_flight` / `on_list` flags, edges, conflicts with their `source`, cycles, and the lines exactly as drawn), so read that rather than parsing the text.
+
+```
+E-101 => E-102 => E-103 => E-104
+E-105 => E-106 | E-103
+E-107 => E-106
+E-108 -> E-109
+<> E-110 | E-111 | E-112
+E-113 <> E-114
+```
+
+| Notation | Reads |
+|---|---|
+| `A => B` | A **blocks** B: B cannot start until A is done. |
+| `A -> B` | A **should precede** B (the `precedes` relation). Advisory; nothing is blocked. |
+| `A => B \| C` | B and C both stand in that relation. `\|` binds tighter than either arrow, so `A => B \| C => D` reads `A => (B \| C) => D`; a group only ever claims what is true of every member. |
+| `A <> B` | A and B **must not run at the same time**. Symmetric, and never chained: `A <> B` and `B <> C` do not mean `A <> C`. |
+| `<> A \| B \| C` | A mutual-exclusion set: no two of these may run at the same time. |
+| dim id | Already in flight (a session is on it), or a repeat of an id drawn on an earlier line. |
+| `cycle: A, B` | The relations form a cycle. That is a data error to fix, never silently dropped. |
+
+Which tasks appear: your session's rows, minus your own task, the spawning task, the parent row, anything in flight or owned by another session, hidden rows, phase `later`, and anything finished — then **plus** every open task that blocks one of those, even when that blocker is `later` or in flight, because it is the reason its dependent is not available. `unverified` and `unreviewed` blockers still block and appear; finished ones impose no order and do not. A task appears only when it has an edge of some kind; a session with none draws nothing — no header, no blank line.
+
+Line order is derived, never authored: a topological order over both arrows, ties broken by the longest chain leading on, then lowest id — so the first line leads with the task to start on.
+
+`<>` has two sources, drawn the same way (`--json` says which): a declared `conflicts_with` relation, and **detection** — two open tasks whose worktrees change a common path (committed on the branch or uncommitted). Detection reads a cache the `worktree-paths` background job keeps; the status view never runs git for it, so a cold or stale cache just means no detected `<>` for that task until the job's next pass (about a minute). Paths Endless itself writes — the ledger, `verbs.jsonl`, `LESSONS.md`, the task and decision mirrors under `.endless/tasks/` and `.endless/decisions/` — do not count. A pair already related by `=>` or `->` gets the arrow instead of `<>`.
+
 ### Quieting a noisy status view
 
 A long-running session accumulates task rows it no longer cares about. `endless session hide --task <id>` (repeatable) drops them from **your** `session status` / `session monitor` view:

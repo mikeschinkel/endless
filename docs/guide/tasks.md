@@ -286,6 +286,8 @@ endless task add "Title here" --plan-file /path/to/plan.md --status ready
 endless task add "Title here" --type bugfix          # todo|bugfix|research|epic|brainstorm
 endless task add "Title here" --complexity low --risk medium   # ratings: low|medium|high
 endless task add "Title here" --blocked-by E-100     # also: --blocks, --relates-to,
+                                                     # --precedes, --preceded-by,
+                                                     # --conflicts-with,
                                                      # --implements, --cleans-up,
                                                      # --cleaned-up-by, --duplicates,
                                                      # --replaces (all repeatable)
@@ -928,6 +930,8 @@ endless task unlink <a> --to <b> --type implements
 | Type            | Use when                                                                                                                  |
 |-----------------|---------------------------------------------------------------------------------------------------------------------------|
 | `blocks`        | A's work cannot start (or cannot land) until B is done. Strict ordering. Use `task block` rather than `task link --type blocks` — it's the same thing with a friendlier surface. |
+| `precedes` / `preceded_by` | A should be done before B, but B is not blocked: landing B first breaks nothing, it only wastes work or touches code A then deletes. **Advisory only** — it does not block, does not gate spawnability, `task next` still offers B, and a background session may still pick up a task whose `preceded_by` has not landed. `task show` labels it "Should precede" / "Should follow", and `session status` draws it as `A -> B`. Record it sparingly and for a durable reason (wasted work, deleted code), not as general opinion; when either task changes materially, reconsider its ordering edges. |
+| `conflicts_with` | A and B must not run at the same time — their plans touch the same files — and neither must precede the other. **Symmetric**: one stored row, shown as "Conflicts with" on both tasks, with no inverse name. **Advisory only**, like `precedes`: it does not block, and `task next` still offers both. `session status` draws it as `A <> B`. Record it when two plans are known to overlap before either has a worktree; once both have worktrees `session status` detects the overlap on its own, and the declared row may be removed or kept. A `blocks` or `precedes` edge between the same pair wins the drawing. |
 | `relates_to`    | A and B share context but neither blocks the other. The weakest typed link. Reach for it when nothing more specific fits. |
 | `implements`    | A is the implementation of a plan, idea, or decision recorded in B. Common pattern: B is type=`plan` or type=`decision`, A is the work. |
 | `cleans_up` / `cleaned_up_by` | A handles a loose end discovered while working on B. **This is the canonical "follow-up" link** — use it for follow-up tasks filed mid-stream. (We considered `follows_up` and rejected it in favor of `cleans_up` to keep the vocabulary tight.) |
@@ -938,6 +942,8 @@ endless task unlink <a> --to <b> --type implements
 **Quick decision tree:**
 
 - *"B has to be done before A can land"* → `blocks`.
+- *"Do B first — doing A first wastes work — but A could start"* → `precedes` (B precedes A).
+- *"A and B edit the same files; don't run them together"* → `conflicts_with`.
 - *"I noticed an issue while doing B; here's a separate task A to fix it"* → `cleans_up`.
 - *"A is the work and B is the spec/decision behind it"* → `implements` (or `documents` if B is a decision).
 - *"A and B are the same task filed twice"* → `duplicates`.

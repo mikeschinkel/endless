@@ -92,6 +92,9 @@ type jsonFrame struct {
 	ViewerSession int64     `json:"viewer_session"`
 	Focus         string    `json:"focus"`
 	Rows          []jsonRow `json:"rows"`
+	// Graph is the ordering graph (E-2164) the table draws under its rows, as
+	// structure. Always present; an empty graph has empty arrays.
+	Graph jsonGraph `json:"graph"`
 }
 
 // renderJSON gathers the anchored row set, annotates it exactly as the table
@@ -117,6 +120,10 @@ func renderJSON(w io.Writer, a anchor, all bool) error {
 		return err
 	}
 	sortRows(rows)
+	graph, err := gatherGraph(rows)
+	if err != nil {
+		return err
+	}
 
 	// Non-nil so an empty result marshals as [] rather than null — a consumer
 	// iterating the rows should not have to special-case "no work".
@@ -124,6 +131,7 @@ func renderJSON(w io.Writer, a anchor, all bool) error {
 		Focal:         a.focal,
 		ViewerSession: a.emittingSession,
 		Rows:          make([]jsonRow, 0, len(rows)),
+		Graph:         graph.toJSON(),
 	}
 	for _, r := range rows {
 		replaced := make([]string, 0, len(r.ReplacedBy))
