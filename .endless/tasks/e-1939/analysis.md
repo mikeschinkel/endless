@@ -36,3 +36,11 @@ Deliberately out of scope: anything about a future web UI. When a web surface
 is wanted again it will be preceded by research into whether Endless should
 host it at all or whether a different tool should, with Endless integrating.
 Do not file follow-on work for that here.
+
+## From the description
+
+It is a proof-of-concept that will not be evolved: web work was deliberately halted to focus on the harder database, hooks, and workflow problems, and every task targeting it has been obsoleted. Keeping it costs a whole build toolchain (templ generation, tailwind CSS, templUI) and dependency surface that nothing else in Endless needs.
+
+Scope covers the internal/web package tree, internal/servecmd and its only caller, the Go and Python serve commands, the justfile recipes and their invocations from the aggregate build, the web-only Go module requirements, and the tracked generated artifacts.
+
+Out of scope: anything about a future web UI.
