@@ -1,0 +1,1 @@
+PROCESS LESSON: Claude initially substituted hiding for filtering (Mike's actual ask) without discussion. Mike's objection was process, not outcome — when Claude believes a different approach is better, Claude must explain trade-offs and let Mike choose, not silently substitute. Required form: 'I think X is better because Y — what do you think?' not '[ships X]'.
