@@ -29,3 +29,11 @@ daemon is being chosen, and that should be a later explicit decision.
 Out of scope, named in E-1815 and not filed: collapsible tree view, jumping to a
 session in another terminal from this window, auto-verify/auto-land, stall
 detection.
+
+## From the description
+
+`project status` is the static render, `project monitor` the live one, same relation as the existing session pair.
+
+One piece of work, not two.
+
+Runs in its own dedicated two-pane tmux session and is what fires the E-698 runner, making it the on/off switch for auto-spawn.
