@@ -918,6 +918,13 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 	// other tool that defaults to cwd are covered, not just file writes.
 	enforceClaimedCwd(projectID, payload)
 
+	// E-940: a Bash command may not write where a Write/Edit to the same path
+	// would be refused. After enforceClaimedCwd, so a drifted cwd gets the `/cd`
+	// redirect rather than a target refusal. Independent of tracking_mode.
+	if payload.ToolName == "Bash" {
+		blockBashWriteTargetsIfApplicable(projectID, payload)
+	}
+
 	// E-1542: pause-on-revisit gate. Intercepts a session whose claimed task
 	// descends from an epic in status='revisit'. Placed BEFORE the write-tool
 	// early-return so it fires for all tool kinds (Read/Bash/Grep too), and runs
@@ -930,18 +937,12 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 		return nil
 	}
 
-	// E-1202/E-2137: refuse a direct Write/Edit of a task document mirror
-	// (.endless/tasks/e-NNNN/{plan,outcome,analysis}.md) in main OR a worktree.
-	// Placed before the worktree gate so a mirror write in main gets the
-	// mirror-specific redirect to `endless task update` rather than the generic
-	// "edits in main" refusal. Independent of tracking_mode.
-	blockDocMirrorWriteIfApplicable(payload)
-
-	// E-1916 Arm 1: refuse an edit of a landed, foreign task's verification
-	// suite. Placed beside the plan-file gate for the same reason it is — both
-	// name a specific path that must not be hand-edited, and both want their
-	// own refusal to arrive ahead of the worktree gate's generic one.
-	blockLandedSuiteEditIfApplicable(payload)
+	// E-940: the write-target decision (write_target.go), in one call — a task
+	// document mirror (E-1202/E-2137), a landed foreign suite (E-1916 Arm 1),
+	// and a target outside the session's claimed worktree (E-1703). Placed
+	// before the worktree gate so each gets its own refusal rather than the
+	// generic "edits in main" one. Independent of tracking_mode.
+	enforceWriteTarget(projectID, payload)
 
 	// E-1983: the other half of the cwd invariant. enforceClaimedCwd (above,
 	// all-tools) returns early on an UNBOUND session, so a session sitting IN a
@@ -1278,19 +1279,6 @@ func handleExitPlanMode(projectID int64, payload claudePayload) error {
 	))
 }
 
-// gitCommitRe matches `git commit` in ONE command of a Bash call (see
-// splitCommands), capturing the path of an optional `git -C <path>`. The prefix
-// may not cross a quote, which is cmdPos's rule applied per command: it admits
-// `GIT_EDITOR=true git commit` and refuses `echo "git commit"`. Excludes
-// `git commit-tree` (the trailing boundary requires whitespace or end).
-var gitCommitRe = regexp.MustCompile(`^[^'"]*\bgit\s+(?:-C\s+(` + shellWord + `)\s+)?commit(?:\s|$)`)
-
-// cdRe matches a command that is exactly `cd [path]`, capturing the path.
-var cdRe = regexp.MustCompile(`^\s*cd(?:\s+(` + shellWord + `))?\s*$`)
-
-// shellWord is one shell word: single-quoted, double-quoted, or bare.
-const shellWord = `'[^']*'|"[^"]*"|[^\s'";&|]+`
-
 // The recognizer for a DB-owned document mirror lives in internal/docmirror —
 // the one place the path convention is spelled. This gate was E-1202's, written
 // when the only mirror was `.endless/plans/E-NNN.md`; E-2137 consolidated all
@@ -1477,86 +1465,23 @@ func commitRunsOnMain(cmd, cwd string) bool {
 }
 
 // commitDir returns the directory the first `git commit` in cmd runs in, and
-// whether cmd commits at all. It starts at cwd, applies each `cd` that runs
-// before the commit, in order, then the commit's own `git -C <path>`. Relative
-// paths resolve against the directory reached so far; `~` expands.
+// whether cmd commits at all. The directory comes from walkCommands — cwd, then
+// each `cd` before the commit, in order — and then the commit's own
+// `git -C <path>`. Relative paths resolve against the directory reached so far;
+// `~` expands.
 //
-// Heredoc bodies are stripped first, and each command is matched on its own, so
-// a commit named in a quoted argument or a heredoc is not a commit.
-//
-// A `cd` made in an EARLIER Bash call is not in this command's text, and need
-// not be: the payload's cwd follows the shell's persisted directory (observed
-// 2026-09-26 — after `cd internal` in one call, the next call's recorded cwd was
-// `<worktree>/internal`).
-func commitDir(cmd, cwd string) (string, bool) {
-	dir := cwd
-	for _, c := range splitCommands(stripHeredocs(cmd)) {
-		if m := gitCommitRe.FindStringSubmatch(c); m != nil {
-			if m[1] != "" {
-				dir = resolveDir(dir, unquoteWord(m[1]))
-			}
-			return dir, true
+// Heredoc bodies are stripped and each command is lexed on its own, so a commit
+// named in a quoted argument or a heredoc is not a commit.
+func commitDir(cmd, cwd string) (dir string, found bool) {
+	walkCommands(cmd, cwd, func(d string, argv []shellToken, _ []shellRedir) {
+		if found || len(argv) == 0 || filepath.Base(argv[0].val) != "git" {
+			return
 		}
-		if m := cdRe.FindStringSubmatch(c); m != nil {
-			target := unquoteWord(m[1])
-			switch target {
-			case "-":
-				// The previous directory is not knowable from here; keep ours.
-			case "":
-				dir = resolveDir(dir, "~")
-			default:
-				dir = resolveDir(dir, target)
-			}
+		if sub, gdir, _, _ := gitSubcommand(d, argv[1:]); sub == "commit" {
+			dir, found = gdir, true
 		}
-	}
-	return "", false
-}
-
-// splitCommands splits a Bash command at its unquoted command separators —
-// `;`, `&`, `|` and newline — dropping empty pieces, so `a && b` yields a and b.
-// Quotes and backslash escapes are honored so a separator inside a commit
-// message does not split it.
-func splitCommands(cmd string) []string {
-	var (
-		out   []string
-		cur   strings.Builder
-		quote rune
-		esc   bool
-	)
-	flush := func() {
-		if s := strings.TrimSpace(cur.String()); s != "" {
-			out = append(out, s)
-		}
-		cur.Reset()
-	}
-	for _, r := range cmd {
-		switch {
-		case esc:
-			esc = false
-		case r == '\\' && quote != '\'':
-			esc = true
-		case quote != 0:
-			if r == quote {
-				quote = 0
-			}
-		case r == '\'' || r == '"':
-			quote = r
-		case r == ';' || r == '&' || r == '|' || r == '\n':
-			flush()
-			continue
-		}
-		cur.WriteRune(r)
-	}
-	flush()
-	return out
-}
-
-// unquoteWord strips one layer of matching single or double quotes.
-func unquoteWord(w string) string {
-	if len(w) >= 2 && (w[0] == '\'' || w[0] == '"') && w[len(w)-1] == w[0] {
-		return w[1 : len(w)-1]
-	}
-	return w
+	})
+	return dir, found
 }
 
 // resolveDir resolves p against base, expanding a leading `~`. A relative p
@@ -1607,31 +1532,12 @@ Bypass (NOT recommended):
   git commit --no-verify`)
 }
 
-// blockDocMirrorWriteIfApplicable refuses any Write/Edit/NotebookEdit whose
-// target is a task document mirror — `.endless/tasks/e-NNNN/{plan,outcome,
-// analysis}.md`, or a legacy `.endless/{plans,outcomes,analyses}/E-NNNN.md` a
-// tree has not been swept into the new layout yet. Mirror content lives in the
-// `tasks` row (the source of truth); the .md file is written and committed on
-// main for you so humans can read it on GitHub. A direct tool-write leaves the
-// database stale and is overwritten without warning by the next sweep. The CLI
-// writer (`endless task update --plan-file`) is a subprocess the hook never
-// sees, so the intended route is unaffected. Independent of tracking_mode, like
-// the worktree and commit-on-main gates.
-//
-// Decision mirrors are deliberately NOT gated here, matching E-1202's scope:
-// this fires on the paths an agent actually reaches for while working a task.
-func blockDocMirrorWriteIfApplicable(payload claudePayload) {
-	path := extractFilePath(payload.ToolName, payload.ToolInput)
-	if path == "" {
-		return
-	}
-	if !docmirror.TaskDocRe.MatchString(path) && !docmirror.LegacyTaskDocRe.MatchString(path) {
-		return
-	}
-	blockToolUse(docMirrorBlockMessage())
-}
-
-// docMirrorBlockMessage is the refusal blockDocMirrorWriteIfApplicable prints.
+// docMirrorBlockMessage is the refusal writeTargetDecision gives for a task
+// document mirror — `.endless/tasks/e-NNNN/<stem>.md`, or a legacy
+// `.endless/{plans,outcomes,analyses}/E-NNNN.md`. Mirror content lives in the
+// `tasks` row; a direct write leaves the database stale and is overwritten by
+// the next sweep. The CLI writer (`endless task update --plan-file`) is a
+// subprocess the hook never sees, so the intended route is unaffected.
 // The stems and the --<name>-file flags are read from docmirror.TaskKinds, the
 // list the recognizer itself is built from, so the message names exactly the
 // files the gate refuses — a new content kind shows up here with no edit.
@@ -2125,30 +2031,15 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 // is consulted only to *avoid* redirecting into a worktree another live session
 // owns.
 func enforceClaimedCwd(projectID int64, payload claudePayload) {
-	session, _ := monitor.GetActiveSession(payload.SessionID)
-	if session == nil || session.TaskID == nil {
-		return
-	}
-	status, _ := monitor.GetTaskStatus(*session.TaskID)
-	if status == "" || monitor.IsTerminalTaskStatus(status) {
-		// Not actively worked (e.g. display-only bind of a done task) — ignore.
-		return
-	}
-	worktreePath, _ := monitor.WorktreePathForTask(projectID, *session.TaskID)
+	taskID, worktreePath := sessionOwnedWorktree(projectID, payload)
 	if worktreePath == "" {
-		// No worktree to anchor cwd to (e.g. a not-yet-claimed task).
-		return
-	}
-	if lock, err := monitor.ReadWorktreeLock(worktreePath); err == nil && lock != nil &&
-		lock.SessionID != payload.SessionID && !monitor.IsWorktreeLockStale(lock) {
-		// A different live session owns this worktree — don't redirect into it.
 		return
 	}
 	if pathWithin(worktreePath, payload.CWD) {
 		// cwd is already the worktree (or a descendant) — invariant holds.
 		return
 	}
-	blockToolUse(cdRedirect(*session.TaskID, worktreePath, payload.CWD))
+	blockToolUse(cdRedirect(taskID, worktreePath, payload.CWD))
 }
 
 // unboundWorktreeApplies reports whether the unbound-in-a-worktree gate has
@@ -2298,8 +2189,9 @@ func cdRedirect(taskID int64, worktreePath, cwd string) string {
 			"Move Claude's working directory into the worktree so edits and shell "+
 			"commands default to it, not main:\n\n"+
 			"  /cd %s\n\n"+
-			"After /cd every tool defaults to the worktree; you can still reach "+
-			"another directory by passing an explicit absolute path.",
+			"After /cd every tool defaults to the worktree. An explicit absolute "+
+			"path still reaches another directory for reads; writes — Write/Edit "+
+			"and shell commands alike — must stay inside the worktree.",
 		tildePath(cwd), taskID, tildePath(worktreePath), worktreePath)
 }
 

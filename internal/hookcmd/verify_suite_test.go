@@ -416,7 +416,7 @@ func TestLandedSuiteDecisions(t *testing.T) {
 		seedLandings(t, 101)
 		stubSessionTask(t, 1916)
 		for _, tool := range []string{"Write", "Edit", "NotebookEdit"} {
-			msg, block := landedSuiteEditDecision(write(tool, ".endless/tasks/e-101/verify.sh"))
+			msg, block := writeToolDecision(0, write(tool, ".endless/tasks/e-101/verify.sh"))
 			if !block {
 				t.Errorf("%s of a landed foreign suite was allowed", tool)
 				continue
@@ -436,7 +436,7 @@ func TestLandedSuiteDecisions(t *testing.T) {
 			".endless/tasks/e-1916/verify.sh",      // this session's own
 			"internal/monitor/verify_ownership.go", // a durable test's subject
 		} {
-			if _, block := landedSuiteEditDecision(write("Edit", path)); block {
+			if _, block := writeToolDecision(0, write("Edit", path)); block {
 				t.Errorf("an edit of %s was refused", path)
 			}
 		}
@@ -469,7 +469,7 @@ func TestLandedSuiteDecisions(t *testing.T) {
 		if _, block := landedSuiteRunDecision(bad); block {
 			t.Error("refused a payload it could not read")
 		}
-		if _, block := landedSuiteEditDecision(bad); block {
+		if _, block := writeToolDecision(0, bad); block {
 			t.Error("refused a payload it could not read")
 		}
 	})

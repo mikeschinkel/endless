@@ -137,14 +137,6 @@ func firstSubmatchID(re *regexp.Regexp, s string) int64 {
 	return id
 }
 
-// blockLandedSuiteEditIfApplicable is Arm 1: refuse a Write/Edit/NotebookEdit
-// anywhere inside a landed, foreign task's suite directory.
-func blockLandedSuiteEditIfApplicable(payload claudePayload) {
-	if msg, block := landedSuiteEditDecision(payload); block {
-		blockToolUse(msg)
-	}
-}
-
 // blockLandedSuiteRunIfApplicable is Arm 2: refuse a Bash call that directly
 // executes a landed, foreign task's suite script.
 func blockLandedSuiteRunIfApplicable(payload claudePayload) {
@@ -153,18 +145,15 @@ func blockLandedSuiteRunIfApplicable(payload claudePayload) {
 	}
 }
 
-// landedSuiteEditDecision and landedSuiteRunDecision are the side-effect-free
-// cores of the two arms, split out for the same reason revisitGateDecision is:
-// blockToolUse ends the process, so a test can reach everything ABOVE it or
-// nothing at all. Keeping the whole decision — payload in, refusal out — on this
-// side of the exit means the plumbing each arm does to get to the predicate
-// (which field of which tool input, and what a malformed one means) is tested
-// too, and not just the predicate it eventually reaches.
-func landedSuiteEditDecision(payload claudePayload) (msg string, block bool) {
-	return landedSuiteDecision(payload, landedSuiteEdit,
-		suiteTaskFromPath(extractFilePath(payload.ToolName, payload.ToolInput)))
-}
-
+// Arm 1 (edit) is one of the checks in writeTargetDecision (write_target.go),
+// so a Write/Edit and a recognized Bash write reach it the same way.
+//
+// landedSuiteRunDecision is Arm 2's side-effect-free core, split out for the
+// same reason revisitGateDecision is: blockToolUse ends the process, so a test
+// can reach everything ABOVE it or nothing at all. Keeping the whole decision —
+// payload in, refusal out — on this side of the exit means the plumbing to the
+// predicate (which field of which tool input, and what a malformed one means)
+// is tested too, and not just the predicate it eventually reaches.
 func landedSuiteRunDecision(payload claudePayload) (msg string, block bool) {
 	var input toolInputBash
 	// A tool input that will not parse is not a run: the harness hands this

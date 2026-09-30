@@ -124,6 +124,33 @@ cd "$(endless worktree for-task <id>)"
 
 Or via shell helpers (next section).
 
+### Writes stay inside your worktree
+
+Once you hold a claimed task whose worktree exists, a Claude hook refuses any
+write whose **target** is outside that worktree — a Write/Edit by absolute path
+into main, and a shell command that would write there (`sed -i`, `> file`,
+`tee`, `mv`/`cp`/`rm`, `gofmt -w`, …). Both are judged by the same rule, and a
+shell refusal carries the same message a Write to that path gets. Reads are
+never refused.
+
+Always writable, wherever you are: temp dirs (`/tmp`, `$TMPDIR`, your
+scratchpad), device files (`/dev/null`, …), `~/.claude`, and Endless's config
+directory. Nothing else outside the worktree is, and there is no per-write
+override.
+
+Shell commands are recognized heuristically: redirects and the common
+file-writing verbs are. What cannot be resolved to a concrete path is allowed
+without comment — a target behind a variable (`> "$OUT"`), interpreters
+(`python -c`, `node -e`, `awk`), scripts and build tools (`./x.sh`, `make`,
+`just`), and `xargs`. The hook catches mistakes; it is not a sandbox. `endless`
+commands are never judged — their writes to main (the ledger, mirrors) are by
+design.
+
+Git commands that rewrite a working tree (`restore`, `checkout`,
+`reset --hard`, `stash pop`, `clean`, `apply`, `pull`, …) count as writes to
+the repository they run in. That rule is on trial; a project turns it off with
+`"checks": {"bash_git_writes": false}` in `.endless/config.json`.
+
 ### Choosing the database (`--db`)
 
 When endless develops endless, a self-dev worktree (a `.endless/worktrees/e-NNN`

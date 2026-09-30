@@ -130,12 +130,18 @@ apply:
 | `task_required`       | `true`  |
 | `decision_checkpoint` | `false` |
 | `session_audit`       | `false` |
+| `bash_git_writes`     | `true`  |
 | (any other name)      | `true`  |
 
 The `task_required` default is `true` for backwards compatibility with
 the original PreToolUse session-required block. Other defined-but-default-
 off keys ship disabled so deploying the binary does not change behavior
 until a user opts in.
+
+`bash_git_writes` (E-940) makes the PreToolUse write-target gate treat git
+commands that rewrite a working tree (`restore`, `checkout`, `reset --hard`,
+`stash pop`, `clean`, `apply`, `pull`, …) as writes to that working tree. It is
+on trial; set it `false` to turn that recognition off with no rebuild.
 
 Unknown keys default to `true` so that future checks introduced by client
 code (without a corresponding default) fail open rather than silently
