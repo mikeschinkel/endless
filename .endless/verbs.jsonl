@@ -307,3 +307,4 @@
 {"value": "bundle", "definition": "to package together", "category": ["action"]}
 {"value": "rescope", "definition": "to change the scope of", "category": ["action"]}
 {"value": "retest", "definition": "to test again", "category": ["action"]}
+{"value": "ignore", "definition": "to deliberately disregard", "category": ["action"]}
