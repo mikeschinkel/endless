@@ -30,3 +30,9 @@ report_question   (report_id FK, text, answer?, type[text|integer|real|boolean|c
   rows) maps 1:1 from the fact struct E-1771 already builds; no serialization
   step is needed — E-1771 reads facts into the struct, this task writes the
   struct to rows.
+
+## From the description
+
+Store normalized relational rows (a report row plus child rows: notes, questions, task refs), NOT one opaque blob, so tooling can query individual facts.
+
+Decide the table shape, what to capture, and how tooling queries it.
