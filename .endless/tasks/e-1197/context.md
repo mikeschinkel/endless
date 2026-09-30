@@ -1,0 +1,1 @@
+The 'events' directory naming caused near-data-loss during E-1170's land: those JSONL files are the Endless DB write-ahead record (replay-source for DB rebuild), but their name reads as 'logs' so they were treated as discardable.
