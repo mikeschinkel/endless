@@ -65,3 +65,7 @@ determines the rules:
 
 Auto-selecting agent output when an agent invokes a command, plus the
 counterpart flag that forces the human view. Its own task, after E-1504.
+
+## From the description
+
+Only the stable Python implementation is needed: Go's JSON is internal plumbing consumed by Python, not read by an agent, so TOON's in-development Go implementation blocks nothing.
