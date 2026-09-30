@@ -303,3 +303,4 @@
 {"value": "clarify", "definition": "to make clearer", "category": ["action"]}
 {"value": "pin", "definition": "to fix in place", "category": ["action"]}
 {"value": "attribute", "definition": "to credit to a source", "category": ["action"]}
+{"value": "ask", "definition": "to request an answer from someone", "category": ["investigation"]}
