@@ -1,0 +1,1 @@
+TestShouldSkipForWorktreeAt_WorktreeBinaryMissing expects a WARN log mentioning 'does not exist' and 'just build' but log is empty; TestShouldSkipForWorktreeAt_SelfIsGlobal expects shouldSkipForWorktreeAt to return true with 'deferring to' in the log but gets no skip.
