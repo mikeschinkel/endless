@@ -45,3 +45,9 @@ Also worth checking: whether a worktree branched before E-1891 can still run
 the status registry, because `cli.py` imports the registry at module level ahead
 of the re-exec that would route around it. A worktree that cannot run the CLI
 cannot easily be landed by its own session.
+
+## From the description
+
+A few may genuinely belong UNDER E-1063; treat that as the smaller, secondary finding.
+
+Deliver a proposed blocker list, a proposed landing order, and any proposed re-parents, each entry with a one-line reason, for Mike to approve before anything is moved or landed.
