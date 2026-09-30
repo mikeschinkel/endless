@@ -1,0 +1,1 @@
+{"v":1,"ts":"5ZX8BQNFZDG19ZK","kind":"task.fields_updated","project":"endless","entity":{"type":"task","id":"777"},"actor":{"kind":"cli","id":"mikeschinkel@m4macmini.local","session_id":"1253","harness":"claude_cli"},"payload":{"fields":{"description":"Fix the database export recipe to use the renamed task_deps table.","context":"Causes 'no such table' error on export.\n"}}}
