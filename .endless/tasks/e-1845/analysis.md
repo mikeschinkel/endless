@@ -1,0 +1,1 @@
+task add defaults new tasks here unless a status is given explicitly; a material description edit resets a pre-work task to untriaged. Transitions: untriaged -> unplanned or untriaged -> submitted (set by triage). session status renders it as its own action (untriaged, never 'needs a plan'); task next omits it as not-actionable.
