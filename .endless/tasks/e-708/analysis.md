@@ -1,0 +1,1 @@
+Need: (a) structured error logging to stderr or ~/.config/endless/hook.log for all Go binaries, (b) surface all DB/network failures to the user, (c) audit all '_ =' assignments in hook and channel code for errors that should be logged.
