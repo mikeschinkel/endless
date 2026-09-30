@@ -297,3 +297,4 @@
 {"value": "warn", "definition": "to alert about a problem or risk", "category": ["action"]}
 {"value": "preserve", "definition": "to keep intact", "category": ["action"]}
 {"value": "sort", "definition": "to arrange in order", "category": ["action"]}
+{"value": "spawn", "definition": "to start a new process or session", "category": ["action"]}
