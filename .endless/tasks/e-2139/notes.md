@@ -1,0 +1,1 @@
+E-1936 is the brainstorm deciding HOW sessions and jobs should message each other; this is a concrete consumer that gives that design a requirement to satisfy, and should follow whatever it concludes rather than inventing a second channel.
