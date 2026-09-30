@@ -1,0 +1,1 @@
+tests/test_task_claim_worktree.py::test_claim_binds_sibling_claude_session proves it: it calls the attended claim path and opens real tmux windows, each launching a Claude Code trust prompt, in the operator's live session during `just test`.
