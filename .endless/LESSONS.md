@@ -6975,3 +6975,7 @@ Verify suites run from Mike's plain terminal, not a Claude pane. Before handing 
 ### [2026-09-30] Grouped tmux sessions list the same windows under several names
 tmux list-panes -a / list-windows -a list each window once per session in a group (e.g. 'active' and its unattached twin 'active-6'). Don't name a user's tmux session from that output; check list-sessions for session_group/session_attached, and ask or use the attached name.
 - **Project**: endless
+
+### [2026-09-30] A verify suite that drives the hook must not inherit Claude Code's env
+E-940's verify.sh passed from my Claude Code session and failed with 'temp database was not created' when Mike ran just verify from a terminal. The hook acts only for a supported harness (internal/agentenv, detected from CLAUDE_CODE_ENTRYPOINT=cli); my Bash tool inherited that variable, a terminal does not, so the priming hook call was a silent no-op. A suite driving endless-go hook claude must set CLAUDE_CODE_ENTRYPOINT=cli on its own hook calls, and before handoff I must run it with the harness env removed: env -u CLAUDE_CODE_ENTRYPOINT -u CLAUDECODE endless --db sandbox task verify E-NNN.
+- **Project**: endless
