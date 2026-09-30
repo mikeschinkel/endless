@@ -20,3 +20,9 @@ E-1542 landings among its fixtures — and 6 needing a call (node abcd's five
 E-1628 landings, node b745's one session status). Node-id excision is unsafe:
 node 3b27 is a confirmed collision between a 2026-06 writer and sandbox e-1853,
 created 2026-08-06.
+
+## From the description
+
+the ledger is the DB's write-ahead log, so mis-editing corrupts the DB:
+
+identify the sandbox-node segments/lines, remove them, then re-derive + validate.
