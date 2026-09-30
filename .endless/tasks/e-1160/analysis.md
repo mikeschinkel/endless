@@ -1,0 +1,1 @@
+Catch sqlite3.OperationalError at the db.query boundary and re-raise as a friendly message naming the resolved DB path, the resolution mechanism (env var vs cwd-walk), and the recovery (cd elsewhere, unset ENDLESS_*, or run init).
