@@ -34,3 +34,7 @@ E-1671 → E-1659 → E-1658 → E-1536. None of it surfaces in this session eve
 though E-1536 (a direct dependent of the focal E-1533) IS shown — because the
 view never walks upstream. That gap — losing sight of the real front of the
 line — is what this task closes.
+
+## From the description
+
+Children stay one-hop (fan-out risk); blockers walk the full chain (narrower).
