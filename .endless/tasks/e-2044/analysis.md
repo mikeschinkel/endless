@@ -65,4 +65,6 @@ E-2041 asks that a hand-written `minimize` line be honoured. If this file is
 removed, that task is answered by removal rather than by implementation, and
 should be superseded rather than worked.
 
+## From the description
 
+— E-1975 already stores instructions there, so what is missing is a way to write one in and pin it, not a JSONL layer.
