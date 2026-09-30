@@ -2,14 +2,14 @@
 
 ## Command
 
-`endless session resume --tmux-session[=<name>]` (no REF) resumes every
-window in a tmux session: bare, the current session; `=<name>`, a named one.
-`--all-tmux-sessions` does every tmux session. `--dry-run` prints, per window,
-what it would do and does nothing.
-
-The value must be attached with `=`, as `--review` takes its value: a bare
-`--tmux-session NAME` cannot be told apart from REF. REF together with either
-scope flag is a usage error.
+`endless session resume --tmux-session NAME` (or `--tmux-session=NAME`), with
+no REF, resumes every window in the named tmux session. `--all-tmux-sessions`
+does every tmux session. There is no default session: this is a rare,
+deliberate recovery command, and a required name keeps `--tmux-session` an
+ordinary option that always takes a value (as on `session monitor --restart`).
+REF together with either scope flag is a usage error, and so are both scope
+flags together. `--dry-run` prints, per window, what it would do and does
+nothing.
 
 ## Per window
 
@@ -48,7 +48,7 @@ status.
 status, which is the crash-recovery behavior wanted.
 
 **Failures** in one window print in that window's pane, from resume itself,
-and the run continues with the next window. The summary, where `--all` ran,
+and the run continues with the next window. The summary, printed where the command ran,
 lists windows resumed, skipped (and why) and dispatched-but-unconfirmed.
 
 ## The single-window wrong-task bug
@@ -57,7 +57,7 @@ In some windows `session resume <task>` resolves a different task than the
 one named, and `session goto <task> --resume` is needed instead. No pattern
 is known yet. First step: reproduce it, against a window restored from a
 crash, recording the window's `@endless_*` options, the pane's cwd and what
-`--dry-run` resolves. Fix it in resume itself, so `--all` (which only types
+`--dry-run` resolves. Fix it in resume itself, so `--tmux-session` (which only types
 `session resume` into panes) inherits the fix. Suspect first:
 `_require_window_claim` and `_current_pane_task` reading stale `@endless_*`
 options from a restored window.
@@ -78,12 +78,11 @@ passthrough. The wrong-task fix goes wherever the bug is.
   stub `endless` on PATH that records its argv: build windows shaped like a
   restore (3 panes; one in the worktree, others in the main checkout or
   another worktree; a single-pane main-checkout window; a non-task name; a
-  window with a live session pane), run `--tmux-session`, assert which panes
+  window with a live session pane), run `--tmux-session <test-session>`, assert which panes
   were killed and what was typed where.
 - The wrong-task fix gets a regression test reproducing the case found.
 
 ## Acceptance
 
-- After a tmux crash and restore, one `endless session resume --tmux-session`
-  in `active` brings back every task window's Claude session and monitor
+- After a tmux crash and restore, one `endless session resume --tmux-session active` brings back every task window's Claude session and monitor
   layout, with no window touched by hand.
