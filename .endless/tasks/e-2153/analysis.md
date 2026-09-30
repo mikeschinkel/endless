@@ -205,3 +205,9 @@ camelCase class `[a-z0-9_]Board` folds to `[a-z0-9_]board` and matches the
 "hboard" inside "dashboard" — a boundary silently destroyed by the flag meant
 to make the check more thorough. The sweeps now run case-sensitive and carry
 their casing in the pattern.
+
+## From the description
+
+It names nothing a reader can point at, and it collapses two distinct surfaces into one term so every sentence using it is ambiguous about which.
+
+Landed verify suites and the plan/analysis mirrors are out of scope: they record what was true when their tasks landed.
