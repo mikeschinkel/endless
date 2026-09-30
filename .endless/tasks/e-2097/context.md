@@ -1,0 +1,1 @@
+Measured on task add/update: five refusals across two verbs, one answered by shaving 34 characters off a title without ever reading the 107>100 the error stated twice, and one by writing a junk value to a live record to probe the validator.
