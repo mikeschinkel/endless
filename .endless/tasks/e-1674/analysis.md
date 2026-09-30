@@ -1,0 +1,1 @@
+build the structural destination first (schema.sql + internal/schema/changes), then replay project-scope events through the transform pipeline into it, swapping only project-scope tables and leaving live machine-user tables untouched.
