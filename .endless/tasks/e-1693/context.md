@@ -1,0 +1,1 @@
+Root cause: E-1541 epic-derivation legitimately derives 'ready' for an epic with ready children, and classify() maps ready->SPAWN with no landed check; the row query never selects the task_landings join.
