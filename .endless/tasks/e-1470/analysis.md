@@ -1,0 +1,1 @@
+Fix: scrub TMUX_PANE or set an internal marker in the claude -p env so endless-hook skips session registration+collision for headless calls; also harden the collision rule to confirm the prior pane occupant is actually stale before ending it.
