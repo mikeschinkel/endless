@@ -28,3 +28,11 @@ Second observation for the same part: the message recommends --description-file
 for a DESCRIPTION. Descriptions are single-line and capped at 1024 characters,
 so that advice cannot help — and following it produced a second refusal
 ("Description must be a single line") on the next attempt.
+
+## From the description
+
+It must block only genuine absolute paths (a leading slash followed by a path), not relative tokens, notation, or a lone slash.
+
+Mike flags this may be a bigger issue needing discussion before implementing.
+
+lead with --allow-path (currently last) and stop recommending --description-file for descriptions (which are short inline metadata); keep the flag, just don't promote it in this message.
