@@ -1,0 +1,1 @@
+Hook matches `sqlite3 .*\.endless/.*` in Bash command strings, refuses with message: 'The Endless DB lives at ~/.config/endless/endless.db. Use `endless sql "<query>"` instead — it resolves the path safely and is read-only by default.'
