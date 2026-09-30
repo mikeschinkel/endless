@@ -1,0 +1,1 @@
+Driver: decisions and tasks have different lifecycles (decide-then-confirm versus plan-then-implement-then-verify-then-complete) and surfacing them mixed in the same list creates noise during routine task triage.
