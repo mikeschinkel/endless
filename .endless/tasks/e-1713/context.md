@@ -1,0 +1,3 @@
+canAmend (in internal/events/commit.go) coalesces ledger commits by git-amending main's tip, and refuses when the tip is reachable from origin/* (don't rewrite pushed history) — but that guard checks only REMOTE refs, not LOCAL refs based on the same commit.
+
+After `worktree land` rebases a worktree branch onto main's tip, the next ledger event amends that tip in place, orphaning the SHA the worktree is based on; taskWorktreeDirty (in internal/monitor/reap_worktrees.go) then falsely reports the worktree '1 ahead'/dirty and re-landing never clears it (wasted session time on E-1542; no data loss — entries are on main).
