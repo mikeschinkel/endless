@@ -95,3 +95,7 @@ work, with `obsolete` additionally allowed — or does supersession stop being a
 status question entirely? The two are not exclusive; E-1956's instinct that the
 supersession fact must not be lost is still right, and `task_landings` already
 preserves the fact that it shipped independently of status.
+
+## From the description
+
+Mike, 2026-09-15: that is backwards -- `declined` is an active decision not to DO something and belongs to work never done; `obsolete` means no longer in use or superseded and applies to both.
