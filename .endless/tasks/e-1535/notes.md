@@ -1,0 +1,1 @@
+Phase=maybe per Mike (2026-06-05): adopt only if the gap is felt, and still undecided as of 2026-08-25. Originally worded as adding a `verify` status; that name was deprecated in favour of `unverified`, so the name is NOT part of this proposal —
