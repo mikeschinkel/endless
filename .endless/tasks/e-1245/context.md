@@ -1,0 +1,1 @@
+`GetActiveTaskForPane` falls back from pane-specific to session-scoped lookup when the focused pane has no Endless session — so with multiple Claude sessions in different windows, every window resolves to the most-recently-active task across the whole tmux session.
