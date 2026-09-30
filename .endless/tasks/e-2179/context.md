@@ -1,0 +1,1 @@
+endless task chat predates endless session and task spawn, which now handle every session, and no longer does anything useful: a conversation never writes, so no gate needs a chat mode, and its CLI half inserts a session row that is not the running Claude session.
