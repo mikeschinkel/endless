@@ -97,3 +97,9 @@ installs Endless and then opens Claude Code Desktop on any project. Reason about
 both modes: Endless managing tasks for another project (the real ledger, one
 installed binary) is the mode the report came from; state what the fix does in
 `self_dev` too.
+
+## From the description
+
+On an unsupported harness Endless must be inert;
+
+the emission path is not yet identified (the wording is the Python CLI's, and the Go hook was verified silent).
