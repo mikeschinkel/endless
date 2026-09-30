@@ -1,0 +1,1 @@
+Parent plan to enforce task and decision recording through Claude Code hooks. It was driven by docs/TASK_RECORDING_PROMPT.md, which found that code changes kept going unrecorded as tasks, and decisions made in chat kept going unrecorded as decisions, despite text reminders in CLAUDE.md and memory.
