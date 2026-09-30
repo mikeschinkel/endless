@@ -1,0 +1,1 @@
+The verdict is not merely noisy, it is inverted: a permanent red light on a settled worktree trains the operator to ignore the one signal that must be trusted, and `task unsettled` then advises `worktree land`, which is the wrong and potentially destructive action.
