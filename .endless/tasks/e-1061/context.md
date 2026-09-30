@@ -1,0 +1,1 @@
+Per discussion (Mike, 2026-05-01) on E-1056: when a user manually edits .endless/config.json AND an AI session runs 'endless phrase add', both changes get bundled in the next 'endless worktree land' auto-commit, losing the user's manual-edit attribution.
