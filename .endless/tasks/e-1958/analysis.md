@@ -32,12 +32,12 @@ Relevant because E-1957 (`blocked_by` this task) needs somewhere to persist git
 conflict evidence when a land fails, and the existing fault subsystem is the
 nearest existing home:
 
-- the `errors` table (`internal/schema/schema.sql:882`) has no `project_id`
+- the `errors` table (`internal/schema/schema.sql`) has no `project_id`
   column — columns are id, code, severity, source, fingerprint, summary,
   occurrences, first_seen_at, last_seen_at, cleared_at, cleared_by
 - the JSONL `Detail` struct (`internal/faults/detaillog.go`) has no project
   field
-- `monitor.ConfigDir()` (`internal/monitor/db.go:61`) returns `dbContextDir`
+- `monitor.ConfigDir()` (`internal/monitor/db.go`) returns `dbContextDir`
   when set, else `$XDG_CONFIG_HOME/endless`. A land pins `--db main`, which sets
   `dbContextDir` to the real config dir, so the detail log is one shared
   location for every project: `~/.config/endless/log/`
@@ -54,3 +54,9 @@ not this task's to fix, and this task does not depend on it.
 Neither the `errors` table nor the JSONL detail log has any retention sweep.
 `appendDetail` does `MkdirAll` plus append with no rotation; only manual
 `endless errors clear` exists. Deliberately left for when it is needed.
+
+## From the description
+
+What is genuinely Endless-specific is only the `endless.db` routing (downstream worktree tasks must still land in the real ledger as real audit data, not a throwaway copy).
+
+So the two concerns are conflated and need separating: per-worktree scratch/config storage should be universal, while sandbox DB routing stays opt-in via self_dev.
