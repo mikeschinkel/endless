@@ -9,3 +9,7 @@ RAISED IMPORTANCE. Under ED-1567 and ED-1570 the running binary determines which
 Alternative approaches carried over from E-1039: (a) prepend ./bin to PATH in shell-init when in a worktree, (b) per-worktree install to alternative paths. The chosen approach remains the cwd self-re-exec above.
 
 GOVERNED BY E-1972 (2026-08-21). E-1972 is the correct policy going forward and this task is subordinate to it. E-1704 as originally specified self-re-execs INTO the worktree candidate; E-1972 inverts that -- always invoke main's known-good binary, delegating to the worktree's only when that binary is VERIFIED COMPATIBLE -- because a stale pinned binary aborts before SessionStart and the window runs untracked (measured: 135 worktrees, 89 pinned to their own binary, all 103 existing worktree binaries older than main's). Do not implement the self-re-exec direction until E-1972 settles. ED-1570 supplies the compatibility test E-1972 needs: verified compatible means the binary's schema version matches the database's exactly.
+
+## From the description
+
+Approach is a gated, loop-guarded pre-parse self-re-exec reusing the existing worktree-path predicates;
