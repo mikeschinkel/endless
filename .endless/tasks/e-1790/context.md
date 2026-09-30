@@ -1,0 +1,1 @@
+Motivated by the verify system: a verify run resets the worktree's canonical sandbox to a known state at run start (E-1608), and snapshotting lets the agent optionally preserve and later restore the pre-verify sandbox state instead of maintaining a second sandbox.
