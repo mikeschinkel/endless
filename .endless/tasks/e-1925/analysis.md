@@ -93,3 +93,7 @@ planning time between:
 
 The first is the safer default. Either way this must not silently re-establish the
 Summary column E-1914 removed.
+
+## From the description
+
+shell out to 'claude -p' (haiku or sonnet) over the session transcript and print a recap, cached in a new sessions column with TTL-or-clear-on-next-turn invalidation so a later call reflects the current transcript. Hard requirement: the headless call must scrub TMUX_PANE or set the hook-skip marker, or it re-opens E-1470 (the headless call false-ended the CALLING session).
