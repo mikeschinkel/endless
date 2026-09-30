@@ -54,3 +54,9 @@ Whether `ready` is reached by the normal approve step or whether a docs task
 auto-advances from `submitted`. Auto-advancing removes the last human touch
 entirely, which is either the point or a step too far — decide it with Mike, not
 by inference.
+
+## From the description
+
+Classification is per-task and deliberately not keyed on file type: a docs task may touch Go, as E-2144 does, since the guide's status table is generated from a Go transition table.
+
+It must still refuse to auto-land when the change trips a sync gate (lifecycle-check, guide-check, the Python sync suites) or when code changed and no verify suite covers it.
