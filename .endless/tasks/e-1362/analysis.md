@@ -1,0 +1,1 @@
+Switch the target (resolved via 'git rev-parse --git-common-dir', NOT ProjectPath), add a sweep at task claim that moves pending/ entries into e-NNN/, and remove the now-dead IsSandboxActive() gating.
