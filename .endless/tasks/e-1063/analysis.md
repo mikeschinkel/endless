@@ -15,3 +15,11 @@ away: Go already embeds `schema.sql`, the migrations and the templates with
 `go:embed`, and the ported `guide` should embed the guide the same way. Worth an
 explicit check when `guide` and the status vocabulary move, plus a test that the
 built artifact — not the source tree — can render the guide.
+
+## From the description
+
+Settled: the end state is ONE binary named endless, and no transitional second command set is needed — every name the two surfaces share today is a Python shim in front of the Go implementation, so merging deletes the shim rather than reconciling a conflict.
+
+Settled: once the port starts, no new Python work lands in the files being ported (task_cmd, cli, worktree_cmd, session_cmd); anything still open at that point is re-filed against the Go implementation rather than carrying a patch with nowhere to land.
+
+Still open: whether internal plumbing (event, hook, sandbox, template, markdown) stays visible in help once the binary is user-facing.
