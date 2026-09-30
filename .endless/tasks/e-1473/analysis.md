@@ -1,0 +1,1 @@
+The original build-recipe half of this task (`just go` building only a subset of binaries) is DROPPED: E-1367's consolidation into a single endless-go binary subsumes it (one build target can't omit a subset).
