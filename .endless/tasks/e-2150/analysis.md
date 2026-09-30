@@ -67,3 +67,13 @@ Decide also what `duplicates` does under the same rule, and whether
 The precedence predates it (E-1956 era). E-2144 touched the obsolete/superseded
 WORDING inside these branches and added the `superseded` branch, but never the
 ordering. Filed so the use-case is not lost, per Mike 2026-09-15.
+
+## From the description
+
+The relation-first rule exists for shipped work, where it is right: a `confirmed` task carries no warning of its own, so without it a superseded-but-shipped task would read as current.
+
+But it over-applies to `declined`/`obsolete`/`superseded`, which are already non-authoritative AND each name a distinct reason for the closure.
+
+Likely fix: when the status is itself an explicit decision, lead with it and still name the successor.
+
+Check `for_decision` for the same shape.
