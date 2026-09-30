@@ -58,3 +58,7 @@ End-to-end against a live Claude session. My own session (eid 477) was bound to 
 - **E-1431** filed during planning: "Design and ship Endless session archive subsystem." Status `needs_plan`, inputs in `docs/private/endless-tmux-archive-research.md`. Not a cleans-up of E-1426; surfaced when archived sessions came up as a distinct concern the companion-file retirement does not address.
 
 Holding at `verify` until you confirm.
+
+## From the description
+
+Maintenance cost of stabilizing companion files is greater than the one-time migration cost.
