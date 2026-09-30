@@ -1,0 +1,1 @@
+Currently they're untracked but a future session running 'git add -A' or similar wildcard add would inadvertently stage them onto whatever branch is checked out in the worktree, then merging that branch to main would pollute main with worktree-specific JSON.
