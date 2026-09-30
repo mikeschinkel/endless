@@ -1,4 +1,4 @@
-The CLI's TaskIDType (src/endless/cli.py:10) accepts both 'E-1027' and '1027'. The hook's regex matchers in DEFAULT_MATCHERS (src/endless/matchers.py:75,79) only match bare digits — 'endless\\s+task\\s+start\\s+(\\d+)'. So 'endless task start E-1027' typed in a Bash tool is silently a no-op for the session-state side effect: StartWorkSession never fires, sessions.active_task_id stays NULL.
+The CLI's TaskIDType (src/endless/cli.py) accepts both 'E-1027' and '1027'. The hook's regex matchers in DEFAULT_MATCHERS (src/endless/matchers.py:75,79) only match bare digits — 'endless\\s+task\\s+start\\s+(\\d+)'. So 'endless task start E-1027' typed in a Bash tool is silently a no-op for the session-state side effect: StartWorkSession never fires, sessions.active_task_id stays NULL.
 
 Discovered while verifying E-1027 (companion worktree_path population): my own session showed active_task_id=NULL despite running 'endless task start E-1027' earlier. Root cause traced to the regex.
 
@@ -19,3 +19,7 @@ Verification:
 Out of scope: any other CLI/hook gap where E- prefix is silently dropped. File separately if found.
 
 Origin: E-1027 verification revealed the gap.
+
+## From the description
+
+Fix: relax both regexes to accept an optional [Ee]- prefix; capture group still extracts only digits. Two places: DEFAULT_MATCHERS and existing machine configs (decide migration vs manual edit).
