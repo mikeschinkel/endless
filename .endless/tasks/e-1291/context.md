@@ -1,0 +1,1 @@
+Today, an end-user 'claude' session started directly inside an endless worktree only claims the filesystem lock (handleWorktreeAdoption in cmd/endless-hook/claude.go); the task-session binding is not auto-set.
