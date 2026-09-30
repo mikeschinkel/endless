@@ -88,3 +88,11 @@ invisible in `task show` for ~98% of tasks (E-1233 fixes the render guard).
 
 `src/endless/models.py` carries an unrelated `tier: int = 5` on the
 project-discovery model. Same word, different concept — do not conflate.
+
+## From the description
+
+nullable FK columns to seeded complexity_levels and risk_levels tables (low=1, medium=3, high=5; 2 and 4 unseeded), Go int-const enums with String()/Parse(), agent-proposed at submit and user-ratified at approve.
+
+Ratings do not move status.
+
+Tier is removed rather than kept — it is the same judgment under another name, ~2% populated, and carries no behavior complexity cannot absorb.
