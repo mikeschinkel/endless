@@ -53,3 +53,9 @@ A `just land` failed on a rebase conflict; the agent resolved it, re-verified
 green, and ran `task report`. The report emitted "nothing to report", so the
 relayed message carried three --json notes but omitted the actionable fact that
 the branch was resolved and re-landable. The user had to ask for it explicitly.
+
+## From the description
+
+Reining in agent verbosity is explicitly NOT the goal:
+
+the agent answers organically, then appends an Endless-computed curated block after a machine-detectable separator — the verbose half carries context, the appended half carries the guarantee. Four parts: (1) park E-1901's verbatim-relay Stop gate behind a code-level kill switch at its call site, NOT in settings.json, and rewrite E-1803's PostToolUse nudge, which still says relay-verbatim-add-nothing; (2) change `task report` from a replace-my-message steer to an append-this-block steer, still emitting `Nothing to report.` when the block is empty, so a swallowed block is detectable; (3) stop duplicating `session status` — drop `Children:` from the report and the matching directive from the epic handoff template, which together produced a children list containing two non-children; (4) drop the `status != 'confirmed'` filter hiding confirmed children from `task show --children`.
