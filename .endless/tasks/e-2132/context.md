@@ -1,0 +1,1 @@
+Both halves are one omission: monitor.guardWorktreeDBContext already refuses to open the DB inside a self-dev worktree with no explicit context, and already names the remedy, but dbContextExplicit() is 'dbContextDir != "" || dbPathOverride != ""' and main.go calls SelfDetectWorktreeSandbox() for every subcommand, so CWD satisfies a gate whose own comment says only a flag counts.
