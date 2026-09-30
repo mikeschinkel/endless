@@ -36,3 +36,9 @@ holds.
 Confirm the db-ledger projector replays a removal as a retained `removed=1` row.
 If it ever replayed removal as a real delete, a rebuild would re-free the id and
 reuse would return on a path nobody would think to test.
+
+## From the description
+
+Junction rows whose surrogate PK nobody holds stay hard deletes.
+
+The bulk of the work is the read-path audit: queries that today drop dangling references via inner join start matching the retained row, so every read must filter on removed or a removed entity leaks into a listing.
