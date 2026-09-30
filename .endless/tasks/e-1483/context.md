@@ -1,0 +1,1 @@
+active_task_id is the only session-task pointer today; claim and bind overwrite it, so a session that pivots to a follow-up loses its origin task from the tmux status bar and any cold-return orientation.
