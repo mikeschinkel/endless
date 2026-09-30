@@ -1,0 +1,1 @@
+Symptom observed 2026-05-16 during E-1322 verification: after 'endless worktree land 1322' deleted the worktree dir, the original Claude session (uuid 6b597af6...) was marked state=ended in sessions table (correct — SessionEnd hook fired in response to cwd deletion).
