@@ -1,0 +1,1 @@
+With no claimed task, `endless session status` prints only the 'no active task' hint and hides the session's work entirely — even though `task add` and task touches already record surfaced/revisited rows in session_tasks.
