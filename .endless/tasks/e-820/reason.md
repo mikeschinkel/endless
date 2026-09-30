@@ -1,0 +1,1 @@
+Endless will not run alongside or mirror Beads; pluggable backends target JIRA, GitHub Issues and Notion instead (E-800).
