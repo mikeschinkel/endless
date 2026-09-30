@@ -60,3 +60,9 @@ E-1803 describes.
 Whether this is one line added to each existing template plus a guide section,
 or a shared fragment the templates include (they already share `_close.tmpl`).
 The fragment approach avoids seven copies drifting.
+
+## From the description
+
+Applies especially to tasks OTHER than the session's own, where the window title supplies no answer.
+
+Deliver via the handoff templates (internal/templatecmd/templates/handoff/*.tmpl), endless guide, and/or E-1803's PostToolUse additionalContext nudge.
