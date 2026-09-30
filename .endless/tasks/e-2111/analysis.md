@@ -140,3 +140,7 @@ Three consequences for the directions above:
 Per-worktree cost is confirmed in the range this analysis reports: e-1972 is
 7 branch commits against the 648 main gained since its fork, and its
 range-diff measures 0.9s. 128 worktrees are on disk.
+
+## From the description
+
+— caching keyed on branch/base tip OIDs, taking the reaper off the hook path, a cheaper exact algorithm, or fixing the landing-recording gap underneath.
