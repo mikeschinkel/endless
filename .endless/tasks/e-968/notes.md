@@ -1,0 +1,1 @@
+Decomposes into W1 (E-969) plan-file stability, W2 (E-970) phrases table, W3 (E-971) worktrees + gate, plus supporting bug fixes E-972 (project resolution from worktree) and infra (E-975/E-976 gitignore).
