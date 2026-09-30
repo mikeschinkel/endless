@@ -1,0 +1,1 @@
+Source: src/endless/task_cmd.py. The fields dict already holds the values; iterate fields.items() and render key=value pairs. Truncate long blobs (text, prompt) to a short preview or just show '<set>' / '<cleared>'. Handle None as 'cleared' or '∅' for parent_id/tier clears.
