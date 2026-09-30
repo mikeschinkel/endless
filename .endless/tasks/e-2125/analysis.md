@@ -52,3 +52,7 @@ downstream user. Both halves are needed:
 Surfaced during E-1957, which ran the project-wide pytest suite as a regression
 step. Diagnosis by the session in worktree e-2106, which traced the tmp_path
 name back to the test and identified the two candidate call sites.
+
+## From the description
+
+Both halves need fixing — a test-only fix leaves the product defect intact.
