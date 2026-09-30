@@ -162,7 +162,7 @@ const Hint = "Run eeh"
 // machine-level failure has no other view to be reported on.
 //
 // It NEVER fails the render. Any error reading the fault store — a missing table
-// on a schema-passive connection, a locked DB — is swallowed and the row is
+// on a connection the schema rules refused, a locked DB — is swallowed and the row is
 // simply omitted. A diagnostics surface must not be able to take down the view
 // it is annotating.
 func Render(w io.Writer, cols int, color bool, scope faults.ProjectScope) {

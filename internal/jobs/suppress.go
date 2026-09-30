@@ -13,20 +13,17 @@ const noJobsEnv = "ENDLESS_NO_JOBS"
 // Suppressed reports whether this process must not execute jobs, with a reason
 // for `jobs list` to display.
 //
-// The one state that matters is a self_dev WORKTREE pinned to a real database.
-// That combination means candidate, unreviewed job code is pointed at the
-// developer's actual database — exactly the pollution the per-worktree
-// sandbox (E-1281) exists to prevent — and, because E-1818 opens a pinned real
-// DB schema-passive, at a database that will not even have the runner's tables.
+// The one state that matters is a binary built inside a task worktree whose
+// database context is the main database: candidate, unreviewed job code pointed
+// at the developer's actual database — exactly the pollution the per-worktree
+// sandbox (E-1281) exists to prevent. Since ED-1601 monitor.DB() refuses that
+// pairing outright, so a runner that tried would only fail; this reports it as
+// the reason instead of as a scheduling fault.
 //
-// The cwd test is the right one for the callers that exist. Suppressed() is
-// reached only from RunDue — the liveview/status-line tick and `endless jobs
-// run` — and from `endless jobs list`; a process triggering jobs from inside a
-// worktree is exactly the case this is about. A Claude hook never reaches here
-// at all, so E-2166 pointing hooks at the installed binary changes nothing for
-// this guard. An earlier revision of this comment claimed E-2166 had made the
-// test broader than its rationale; that was wrong, and named a caller that does
-// not exist.
+// It asks what the EXECUTABLE is, not where cwd is. Until E-2020 the test was
+// "cwd in a self-dev worktree and pinned to a real DB", a proxy for "candidate
+// code" that also suppressed the INSTALLED binary's monitor in a worktree pane
+// — installed code, which may run jobs against main like any other.
 //
 // This guard lives on the TRIGGER rather than on the DB context. E-698
 // originally implemented it by making session-status skip its main pin inside a
@@ -36,10 +33,6 @@ const noJobsEnv = "ENDLESS_NO_JOBS"
 // Suppressing the runner achieves the same protection and costs nothing visible,
 // because a suppressed runner with an empty registry does exactly what an
 // unsuppressed one does — nothing.
-//
-// Note the asymmetry this deliberately preserves: from the MAIN checkout the
-// monitor is also pinned, but InSelfDevWorktree is false there, so jobs run
-// normally. Pinning alone is not the hazard; pinning CANDIDATE code is.
 func Suppressed() (suppressed bool) {
 	suppressed, _ = suppressedWithReason()
 	return suppressed
@@ -58,10 +51,10 @@ func suppressedWithReason() (suppressed bool, reason string) {
 		reason = noJobsEnv + " is set"
 		goto end
 	}
-	if monitor.InSelfDevWorktree() && monitor.PinnedToRealDB() {
+	if monitor.WorktreeBuildOnMainDB() {
 		suppressed = true
-		reason = "self-dev worktree pinned to a real database " +
-			"(candidate code must not write the main database; " +
+		reason = "worktree-built binary aimed at the main database " +
+			"(a worktree build never opens main, ED-1601; " +
 			"pass --db sandbox to run jobs against this worktree's sandbox)"
 		goto end
 	}

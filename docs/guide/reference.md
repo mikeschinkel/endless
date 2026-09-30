@@ -184,6 +184,32 @@ Every code's cause and remedy is documented in `docs/errors.md`.
 
 ---
 
+## Schema versions and `endless db upgrade`
+
+The database records the schema version it is at, and every `endless-go`
+carries the newest version it knows. Opening the database compares the two:
+
+- **Database behind the binary**: the binary backs the database up, then
+  migrates it forward. This is how a new release upgrades an existing database.
+- **Database ahead of the binary**: refused. An older binary may not write a
+  newer database. Upgrade endless, or `endless db restore` the backup taken
+  before the upgrade to go back.
+- **Equal**: nothing to apply.
+
+Hooks, the tmux status line and background jobs render a refusal silently and
+record it as one ERR-0020 incident (`endless errors list`); an interactive
+command prints it.
+
+`endless db upgrade` is the explicit path: it backs up, migrates forward, and
+reseeds the enum mirror tables, reporting the versions either side. It opens the
+database file directly, so it still works when every other command is refusing
+the database.
+
+In a self-dev project a binary built inside a task worktree never opens the main
+database: `--db main` runs the installed binary, `--db sandbox` the worktree's.
+
+---
+
 ## Restoring the database from a backup
 
 Backups run **hourly**, on the background job runner above (`db-backup`), so the

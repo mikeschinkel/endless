@@ -465,8 +465,8 @@ func TestSuppressed_FalseByDefault(t *testing.T) {
 	// has been suppressed everywhere and the trigger is silently dead — the exact
 	// failure mode that is invisible because a suppressed runner and an empty
 	// registry look identical.
-	if monitor.InSelfDevWorktree() && monitor.PinnedToRealDB() {
-		t.Skip("running inside a self-dev worktree pinned to a real DB; suppression is correct here")
+	if monitor.WorktreeBuildOnMainDB() {
+		t.Skip("running as a worktree build aimed at the main DB; suppression is correct here")
 	}
 	if Suppressed() {
 		t.Errorf("Suppressed() = true unexpectedly: %s", SuppressionReason())

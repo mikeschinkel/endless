@@ -51,8 +51,8 @@ const BaselineVersion int64 = 1
 // all come through here, so none of them can build a database the others would
 // not recognise.
 //
-// It is safe to call on every connect, which is what monitor.DB() does — E-2019
-// changed where the schema comes from, not when it is applied. Against a
+// Since E-2020 the connect no longer calls it on every open: monitor.DB()
+// compares versions and calls it only when the database is behind. Against a
 // database already at the latest version the whole call is two reads and the
 // seed upserts.
 func Migrate(db *sql.DB) error {
@@ -70,6 +70,24 @@ func MigrateContext(ctx context.Context, db *sql.DB) error {
 	}
 	if _, err = provider.Up(ctx); err != nil {
 		return fmt.Errorf("applying migrations: %w", err)
+	}
+	return Seed(db)
+}
+
+// MigrateToContext brings db up to exactly version and reconciles the enum
+// mirrors — Migrate, stopped short. It exists to build a database that is
+// BEHIND the binary on purpose, which is the condition E-2020's connect rules
+// act on and so the one their tests have to be able to construct.
+func MigrateToContext(ctx context.Context, db *sql.DB, version int64) error {
+	provider, err := newProvider(db)
+	if err != nil {
+		return err
+	}
+	if err = enforceForeignKeys(ctx, db); err != nil {
+		return err
+	}
+	if _, err = provider.UpTo(ctx, version); err != nil {
+		return fmt.Errorf("applying migrations up to %d: %w", version, err)
 	}
 	return Seed(db)
 }

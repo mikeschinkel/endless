@@ -149,6 +149,12 @@ def _patch_land(monkeypatch, main, worktree, *, self_dev=True):
     monkeypatch.setattr(
         worktree_cmd, "_rebuild_worktree_binary", lambda wt, canon: None
     )
+    # E-2020: Step 5.6 rebuilds the main checkout's endless-go with `just go`;
+    # a throwaway repo has no justfile. Its ordering is pinned in
+    # test_worktree_land_record_binary.py.
+    monkeypatch.setattr(
+        worktree_cmd, "_rebuild_main_binary", lambda root, canon, base: None
+    )
     # Step 4.6 (ED-1571) shells out to `just migrate-bin` and then looks for the
     # binary it built; same treatment, same reason.
     monkeypatch.setattr(
@@ -335,9 +341,10 @@ def test_apply_runs_after_merge_and_before_record(landable, monkeypatch):
     assert main_at_apply["sha"] == feat_tip
     by_name = dict(calls)
     assert by_name["apply"].endswith(CHANGE)
-    # The pinned worktree binary still reaches the backup (E-1664's invariant,
-    # and the half of it ED-1571 left alone).
-    assert by_name["backup"] == "/bin/echo"
+    # E-2020 reversed this: the backup is no longer pinned to the worktree's
+    # binary (ED-1601 keeps worktree builds off main). It resolves the installed
+    # one from PATH — a VACUUM INTO needs no particular build.
+    assert by_name["backup"] is None
 
 
 def test_no_schema_changes_still_backs_up_and_migrates_up(landable, monkeypatch):

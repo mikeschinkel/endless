@@ -590,6 +590,7 @@ func TestCatalog_NumbersAreNeverReused(t *testing.T) {
 		"0017": "hook-payload-unreadable",
 		"0018": "hook-failed",
 		"0019": "monitor-restart-failed",
+		"0020": "schema-version-refused",
 	}
 
 	for _, code := range faults.Codes() {

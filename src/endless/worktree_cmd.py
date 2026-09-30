@@ -2429,41 +2429,74 @@ def provision_worktree_sandbox(worktree_path: Path) -> Path:
 
 
 def _resolve_land_endless_go(worktree_path: Path, project_root: Path) -> str | None:
-    """The endless-go binary a land's task.landed emit must use, or None.
+    """The endless-go a self_dev land records its landing with, or None.
 
-    For a self_dev project (E-1664), a land applies this branch's schema change
-    before recording the landing, so the only binary whose embedded schema/enums
-    match the just-written rows is the worktree's own build — never the
-    not-yet-refreshed global. Binary selection here is therefore an INVARIANT of
-    the land, not a choice: return <worktree>/bin/endless-go. If that build is
-    absent, fail loudly (an unbuilt self_dev worktree is a bug to surface, not
-    mask by sliding to the stale global — E-1662); a missing build silently
-    standing in is the exact skew that produced the original failure.
+    Since ED-1601 that is the MAIN checkout's `bin/endless-go` — the installed
+    binary — and never the worktree's. A worktree build never opens the main
+    database, so the E-1664 arrangement (record with the worktree's binary,
+    because only it matched the rows the land just migrated) is refused outright
+    now. Step 5.6 rebuilds this binary from the just-advanced main instead, so by
+    Step 6 it is built from exactly main + this branch and matches the database
+    Step 5.5 migrated.
 
-    ED-1571 took the APPLYING away from this binary and left the RECORDING with
-    it, and the split is the point. Applying is forbidden to a candidate build
-    (ED-1567), so a separate migration-only executable does it — see
-    `_resolve_land_migrate_bin`. Recording is a DATA write, which a candidate
-    build has always been allowed to make against the real database (E-1450), and
-    it is the write whose enum constants must agree with the rows the migration
-    just inserted. So this half of E-1664 survives unchanged: the worktree's
-    endless-go records the landing, against a ledger something else migrated.
+    Resolved BEFORE the ff-merge so a land that cannot rebuild it — no `just` on
+    PATH — aborts while main and the database are untouched.
 
-    Returns None for a non-self_dev project, where the global is correct and no
-    worktree binary exists (downstream users never build endless-go).
+    Returns None for a non-self_dev project, where the global is correct and
+    nothing is built (downstream users never build endless-go).
     """
     from endless import config
 
     if not config.project_is_self_dev(project_root):
         return None
-    wt_bin = worktree_path / "bin" / "endless-go"
-    if not wt_bin.is_file() or not os.access(wt_bin, os.X_OK):
+    if shutil.which("just") is None:
+        canonical = _task_id_from_worktree_path(worktree_path) or str(worktree_path)
         raise click.ClickException(
-            f"The self-dev worktree's endless-go binary is missing or not "
-            f"executable:\n\n    {_display_path(wt_bin)}\n\n"
-            f"Build it before landing: run `just build` in the worktree."
+            f"cannot land {canonical}: `just` is not on PATH, so the main "
+            f"checkout's endless-go cannot be rebuilt after the merge. The land "
+            f"records itself with that binary, and it has to match the database "
+            f"the land migrates."
         )
-    return str(wt_bin)
+    return str(project_root / "bin" / "endless-go")
+
+
+def _rebuild_main_binary(main_root: Path, canonical: str, base_branch: str) -> None:
+    """Rebuild the main checkout's endless-go — the installed binary — from the
+    just-advanced main (Step 5.6, E-2020).
+
+    Runs AFTER Step 5.5 migrates the database and BEFORE Step 6 records the
+    landing with this binary. Between the migration and this rebuild the
+    installed binary is older than the database and every hook on the machine
+    meets a database ahead of it: refused silently, one fault (ERR-0020). This
+    step is what closes that window, and it now closes in one `go build` rather
+    than at the justfile's closing `just build`, after the land's post-steps
+    (cache warm, reap) have already run on the stale binary.
+
+    Not before 5.5: a rebuilt binary meeting a still-behind database would
+    migrate it on its next connect, racing the land's own backup-then-migrate.
+
+    A failure is post-merge — main advanced, the database migrated — and is
+    reported as re-runnable: re-running the land rebuilds and records.
+    """
+    from endless import config
+    if not config.project_is_self_dev(main_root):
+        return
+    result = subprocess.run(
+        ["just", "go"], cwd=str(main_root), capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise click.ClickException(
+            f"Landed {canonical} into {base_branch} and migrated the database, "
+            f"but rebuilding the installed endless-go failed:\n\n"
+            f"{(result.stderr or result.stdout).strip()}\n\n"
+            f"The landing is not recorded yet. Fix the build and re-run "
+            f"`just land {canonical}`: the ff-merge and the migration are "
+            f"idempotent, so the re-run rebuilds and records."
+        )
+    click.echo(
+        click.style("•", fg="cyan")
+        + " Rebuilt the installed endless-go from the advanced main"
+    )
 
 
 def _rebuild_worktree_binary(worktree_path: Path, canonical: str) -> None:
@@ -2481,9 +2514,12 @@ def _rebuild_worktree_binary(worktree_path: Path, canonical: str) -> None:
 
     Answer the real question instead. Step 4 has just rebased this branch onto
     base, so the worktree's SOURCE is current by definition. Rebuilding here makes
-    the BINARY current by construction, and there is nothing left to check: the
-    binary that Step 5.5 and Step 6 point at the real DB is built from exactly
-    main + this branch.
+    the BINARY current by construction.
+
+    Since ED-1601 no step points this binary at the real DB — Step 6 records
+    with the installed binary, rebuilt at Step 5.6 — so what this still buys is
+    the compile check: a rebased branch that does not build aborts here, while
+    base and the database are untouched.
 
     Note this adds no rebase. Step 4's rebase is pre-existing; the plan's
     "refuse, do not auto-rebase" ruled out the JUSTFILE rebasing ahead of the
@@ -2503,8 +2539,8 @@ def _rebuild_worktree_binary(worktree_path: Path, canonical: str) -> None:
         raise click.ClickException(
             f"cannot land {canonical}: `just` is not on PATH, so the worktree's "
             f"endless-go cannot be rebuilt after the rebase onto base. That "
-            f"rebuild is what guarantees the binary about to touch the real "
-            f"database matches the code being landed."
+            f"rebuild is what proves the rebased branch compiles before main "
+            f"advances."
         )
     result = subprocess.run(
         ["just", "go"], cwd=str(worktree_path), capture_output=True, text=True,
@@ -2648,8 +2684,8 @@ def _migrate_up(migrate_bin: str) -> dict:
     `_migrate_change` does; see there.
 
     Without this a branch's goose migration reached the real ledger only when an
-    installed binary next connected, so the worktree's endless-go that records
-    the landing could meet a database missing its own new column. E-2188 was
+    installed binary next connected, so the binary that records the landing
+    could meet a database missing its own new column. E-2188 was
     that: `no such column: focus_task_id`, main advanced, landing unrecorded.
     """
     return _run_migrate(migrate_bin, ["up"], "migrate up")
@@ -2804,7 +2840,6 @@ def _apply_branch_schema_changes(
     worktree_path: Path,
     canonical: str,
     base_branch: str,
-    endless_go_bin: str | None,
     migrate_bin: str | None,
     schema_order: str = SCHEMA_ORDER_MIGRATIONS_FIRST,
 ) -> None:
@@ -2825,10 +2860,11 @@ def _apply_branch_schema_changes(
     has the code and the DB merely lags, which `endless db apply-change` fixes on
     a re-run (it is idempotent, gated by _schema_version).
 
-    It cannot move later still: `_record_landing` runs this same binary against
-    the real DB, and for a branch adding a mirrored-enum value that binary
-    carries a constant the DB lacks until these changes land — E-1664's failure
-    inverted. Between the ff-merge and the record is the only correct place.
+    It cannot move later still: `_record_landing` runs the rebuilt installed
+    binary against the real DB, and for a branch adding a mirrored-enum value
+    that binary carries a constant the DB lacks until these changes land —
+    E-1664's failure inverted. Between the ff-merge and the record is the only
+    correct place.
 
     The backup is retained from the Justfile original: a change set can be
     several files, so one can apply and the next fail, leaving a partial
@@ -2842,9 +2878,11 @@ def _apply_branch_schema_changes(
     `migrate_bin`: the migration-only executable, built from this same branch a
     step ago, which carries the change set and no application at all.
 
-    The BACKUP still runs on the worktree's endless-go, and deliberately. It is a
-    VACUUM INTO of the file — monitor.BackupDB opens the database itself and never
-    goes through the application's connect, so it has no schema expectation to
+    The BACKUP runs on the PATH-resolved installed endless-go, not pinned: the
+    main checkout's own build does not exist yet in a fresh checkout — Step 5.6
+    creates it — and nothing about a backup needs a particular one. It is a VACUUM
+    INTO of the file — monitor.BackupDB opens the database itself and never goes
+    through the application's connect, so it has no schema expectation to
     disappoint and no gate to fall foul of. Moving it would buy nothing and give
     the migration executable a second job.
     """
@@ -2865,7 +2903,7 @@ def _apply_branch_schema_changes(
         click.style("•", fg="cyan") + " Backing up DB before migrating"
     )
     try:
-        backup_db(endless_go_bin=endless_go_bin)
+        backup_db()
     except Exception as e:
         detail = e.message if isinstance(e, click.ClickException) else str(e)
         raise _post_merge_failure("the pre-apply database backup", detail)
@@ -3255,8 +3293,8 @@ def land_worktree(
          'Endless: auto-record session activity'.
       4. Rebase the worktree branch onto main (in the worktree).
       4.2 Rebuild the worktree's endless-go from the now-current source,
-         self_dev only (E-1941), so the binary Steps 5.5/6 point at the real DB
-         provably matches what is being landed.
+         self_dev only (E-1941): the rebased branch must compile before main
+         advances.
       4.5 List the schema changes this branch adds (while main and the branch
          still differ — after Step 5 the diff is empty).
       5. ff-merge from main.
@@ -3264,6 +3302,9 @@ def land_worktree(
          changes, self_dev only (E-1941), in land.toml's order. AFTER the
          merge, so a failure leaves the DB lagging landed code (a re-run fixes
          it) rather than migrated ahead of code that never landed.
+      5.6 Rebuild the installed (main checkout's) endless-go, self_dev only
+         (E-2020): a worktree build never opens main (ED-1601), so Step 6
+         records with the installed binary, which must match the database.
       6. Emit task.landed event. Worktree dir and branch stay; a
          separate reaper sweep removes them after worktree_ttl.
 
@@ -3529,11 +3570,10 @@ def land_worktree(
             raise click.ClickException(msg)
 
         # Step 4.2 (E-1941): the branch is now rebased onto base, so the
-        # worktree's source is current — rebuild endless-go from it. This is what
-        # makes the binary that Steps 5.5 and 6 point at the real DB provably
-        # match the code being landed, and it replaces the behind-base refusal
-        # that shipped first (see _rebuild_worktree_binary). Before Step 5, so a
-        # broken build aborts with base and the DB untouched.
+        # worktree's source is current — rebuild endless-go from it, which proves
+        # the rebased branch compiles. Before Step 5, so a broken build aborts
+        # with base and the DB untouched. (No step points this binary at the real
+        # DB any more; see _rebuild_worktree_binary.)
         _rebuild_worktree_binary(worktree_path, canonical)
 
         # Step 4.5 (E-1941): list this branch's schema changes while base and the
@@ -3585,15 +3625,15 @@ def land_worktree(
         # HAS advanced. Before the merge this was the irreversible case (DB
         # migrated, code not landed, no installed binary able to read it);
         # after it, a failure merely leaves the DB lagging code that is already
-        # on main, which a re-run fixes. Must precede Step 6, which runs the
-        # worktree's endless-go against the real DB and needs the rows these
-        # changes write (E-1664 inverted).
+        # on main, which a re-run fixes. Must precede Steps 5.6 and 6: the
+        # installed binary is rebuilt from main at 5.6 and records the landing at
+        # 6, and it needs the rows these changes write (E-1664 inverted).
         #
         # ED-1571: the applier is the migration executable built at Step 4.6,
-        # NOT the endless-go Step 6 uses. A candidate binary may not migrate the
-        # real ledger (ED-1567) and a self_dev land has only candidates, so the
-        # two steps now run two different programs against one database — one
-        # that carries migrations and no schema expectation, then one whose
+        # NOT the endless-go Step 6 uses. A worktree build may not open the real
+        # ledger at all (ED-1601), so the two steps run two different programs
+        # against one database — one that carries migrations and no schema
+        # expectation, then the installed binary, rebuilt at Step 5.6, whose
         # embedded schema matches what the first just wrote.
         #
         # self_dev only: `internal/schema/changes/` is endless's OWN schema, so a
@@ -3609,8 +3649,13 @@ def land_worktree(
         if config.project_is_self_dev(main_root):
             _apply_branch_schema_changes(
                 schema_changes, worktree_path, canonical, base_branch,
-                endless_go_bin, migrate_bin, schema_order,
+                migrate_bin, schema_order,
             )
+
+        # Step 5.6 (E-2020, ED-1601): rebuild the installed endless-go from the
+        # advanced main, so Step 6 records with a binary that matches the
+        # database Step 5.5 just migrated. A worktree build may not open main.
+        _rebuild_main_binary(main_root, canonical, base_branch)
 
         # Step 6 (E-1337): record the landing in task_landings via the
         # events bridge. Worktree directory and branch stay in place; a

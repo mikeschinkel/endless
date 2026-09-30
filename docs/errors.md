@@ -260,9 +260,9 @@ stopped being explicable that way. Errors that are *not* contention — a missin
 table, a disk failure — are raised immediately without retrying.
 
 **What to do.** Check that the database is reachable and that the schema is
-current. A binary pinned onto a database it does not own opens schema-passive
-(E-1818) and will not have created the `jobs` table; that is the expected cause
-if you are running a worktree build against the main database.
+current. A schema version mismatch is raised as ERR-0020 rather than here, and a
+worktree build is refused the main database outright (ED-1601), so neither is
+the cause of this code.
 
 ## WARN-0005 — job-stuck-lease
 
@@ -341,10 +341,11 @@ therefore covers the schema, enum-integrity, and DB-context gates behind
 `monitor.DB()`, not a genuinely unopenable database.
 
 **What to do.** Read the detail (`endless errors show <n> --detail`); it
-carries the underlying error and the pane id. A schema or enum-integrity failure
-means the binary and the database disagree — usually a worktree build against
-the main DB (E-1818). If the bar is blank with *no* incident recorded, suspect
-the database itself and check `endless sql "select 1"`.
+carries the underlying error and the pane id. An enum-integrity failure means the
+binary and the database disagree about an enum mirror; `endless db upgrade`
+reseeds it. A schema version mismatch is raised as ERR-0020 instead. If the bar
+is blank with *no* incident recorded, suspect the database itself and check
+`endless sql "select 1"`.
 
 ## WARN-0009 — triage-failed
 
@@ -636,3 +637,33 @@ a restart. A monitor that still shows the notice has stopped firing background
 jobs: restart it — `endless session monitor --restart` does every session
 monitor in the tmux session at once; a project monitor is quit and started again
 by hand. Dismiss with `endless errors clear <id>`.
+
+## ERR-0020 — schema-version-refused
+
+**Severity:** error · **Raised by:** the Claude hook, the tmux status line and
+the background job runner (E-2020)
+
+A connect no longer brings the database up to date as a matter of course. It
+compares the database's schema version with the newest one the binary carries:
+a database BEHIND an installed binary is backed up and migrated forward, a
+database AHEAD of any binary is refused, and a binary built inside a task
+worktree never opens the main database at all (ED-1601). This incident is one of
+those refusals, met by a surface that fires constantly for nobody.
+
+Those surfaces stay silent — the hook exits 0 with no output, the status line
+renders its placeholder — because printing an error per event is how the
+2026-08-10 land produced fifty identical lines after it had succeeded. The
+refusal is recorded here instead, fingerprinted on its summary, which carries the
+kind of refusal and both versions and nothing per-event: every hook on the
+machine during one land window is one incident with a rising count. An
+interactive `endless` command meeting the same refusal prints it.
+
+**What to do.** Read the summary: it names which of three cases this is.
+`database is at schema vN, endless-go carries vM` means the binary is older than
+the database — upgrade endless (in a self-dev checkout, `just build` in the main
+checkout); during a land the condition ends when the land rebuilds the binary.
+`migrating the database ... did not complete` means a forward migration failed —
+run `endless db upgrade`, which backs up first. `a worktree-built endless-go
+refused the main database` means something ran a worktree's binary against main;
+use the installed binary. Dismiss with `endless errors clear <id>` once the cause
+is gone.

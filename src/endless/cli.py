@@ -5079,6 +5079,39 @@ def db_backup():
                    err=True)
 
 
+@db_cmd.command("upgrade")
+def db_upgrade():
+    """Back up the database, then bring it to this endless's schema version.
+
+    The explicit upgrade path, and the recovery one: it opens the database file
+    directly, so it works when every other command is refusing the database —
+    a version this binary does not match, or enum mirror rows drifted far enough
+    to fail the integrity checks. It reseeds those mirrors as it goes.
+
+    Refuses a database AHEAD of this endless (upgrade endless instead, or
+    `endless db restore` to go back), and refuses to run a worktree-built
+    binary against the main database. The backup comes first because restoring
+    it is the only way back from a bad release.
+    """
+    # Always-main by default, like `db backup`: the database an installed
+    # binary catches up is the main one. An explicit --db still wins.
+    from endless import config
+    config.default_db_to_main()
+    from endless.event_bridge import upgrade_db
+    result = upgrade_db()
+
+    backup = result.get("backup")
+    if backup:
+        verb = "Existing backup" if result.get("backup_skipped") else "Backed up to"
+        click.echo(f"{verb}: {config.tilde(backup)}")
+    frm, to = result.get("from"), result.get("to")
+    if result.get("status") == "migrated":
+        click.echo(f"Upgraded the database from schema version {frm} to {to}.")
+    else:
+        click.echo(f"The database is already at schema version {to}; "
+                   f"enum mirrors reseeded.")
+
+
 @db_cmd.command("restore")
 @click.argument("backup", required=False)
 @click.option("--dry-run", is_flag=True,

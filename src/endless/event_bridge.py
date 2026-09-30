@@ -298,14 +298,39 @@ def init_schema(endless_go_bin: str | None = None) -> dict:
     return json.loads(result.stdout.strip())
 
 
+def upgrade_db() -> dict:
+    """Shell out to `endless-go event upgrade`: back up, migrate forward, reseed.
+
+    The recovery path (E-2020). The Go side opens the database FILE rather than
+    through the application's connect, so it works while every ordinary command
+    is refusing the database — a version mismatch, or an enum mirror drifted far
+    enough to fail-close the gates. It still refuses a worktree-built binary
+    aimed at the main database (ED-1601), and under `--db main` this resolves
+    the installed binary anyway.
+
+    Returns {"status", "from", "to", "db", "backup", "backup_skipped"}. Raises
+    click.ClickException on failure.
+    """
+    config.require_db_context()  # E-1429
+    event_bin = _resolve_endless_go()
+    result = subprocess.run(
+        [event_bin, *config.go_db_context_args(), "event", "upgrade"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        msg = result.stderr.strip() or "upgrade failed"
+        raise click.ClickException(f"database upgrade failed: {msg}")
+    return json.loads(result.stdout.strip())
+
+
 def backup_db(endless_go_bin: str | None = None) -> dict:
     """Shell out to `endless-go event backup` (VACUUM INTO a timestamped copy).
 
     Raises click.ClickException on failure (binary missing or non-zero exit).
 
-    endless_go_bin pins the binary; see apply_change. A land backs up with the
-    same build it is about to apply changes with, so the snapshot and the
-    migration cannot come from two different schema baselines.
+    endless_go_bin pins the binary; see apply_change. A backup is a VACUUM INTO
+    of the file and never goes through the application's connect, so which
+    build takes it does not matter to the snapshot.
     """
     config.require_db_context()  # E-1429
     event_bin = _resolve_endless_go(override=endless_go_bin)

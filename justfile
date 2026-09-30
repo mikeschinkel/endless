@@ -185,45 +185,13 @@ land task_id="":
     # froze machine-wide and recovery needed a hand-rolled restore. Applying
     # after main advances inverts that: the DB merely lags landed code, which a
     # re-run fixes.
-    wt="$main_root/.endless/worktrees/e-${tid#[Ee]-}"
-    if [ -d "$wt" ]; then
-        # E-1709: rebuild the worktree's endless-go up-front, BEFORE the
-        # apply-change and record-landing steps below consume it. Both steps
-        # run the worktree binary against the REAL DB, and endless-go asserts
-        # tasktype.VerifyIntegrity on connect. A worktree rebased onto a newer
-        # main (new schema/enum, e.g. the brainstorm task_type) but not rebuilt
-        # would land with a STALE binary whose embedded enums no longer match
-        # the real DB's task_types rows, failing the integrity check and
-        # blocking the land (the E-1664 guard only checks the binary is
-        # PRESENT, not CURRENT). Unconditional because the skew fires even
-        # when THIS branch adds no schema change, as long as main's DB moved
-        # ahead of the worktree binary.
-        #
-        # E-1941: the behind-base refusal lives in `endless worktree land`, NOT
-        # here. A duplicate pre-check once lived at this point and had to be
-        # fixed twice for the same bug (it counted ledger auto-commits, which
-        # land on main constantly and cannot affect a binary, so it refused
-        # nearly every land). It also pre-empted the Python refusal, whose
-        # message is the useful one — it names the rewritten-history case and
-        # E-1943. One rule, one home. The cost is a wasted `just go` on the rare
-        # genuine refusal, which is cheaper than a second copy of the rule.
-        echo "→ Rebuilding worktree endless-go before land (just go)"
-        ( cd "$wt" && just go )
-        go_rc=$?
-        if [ "${go_rc}" -ne 0 ]; then
-            echo "just land: worktree build failed; aborting before main" >&2
-            echo "  advances (nothing has been merged or migrated)." >&2
-            exit "${go_rc}"
-        fi
-    fi
-    # E-1664: binary selection for the land's schema-apply and record-landing
-    # steps is enforced inside `endless worktree land` itself — for a self_dev
-    # land it always uses the worktree's endless-go (whose embedded schema/enums
-    # match the rows it is applying), and fails loudly if that build is missing.
-    # No PATH-prepend needed here (this supersedes E-1660's per-call PATH hack,
-    # which silently fell back to the stale global when unbuilt). The up-front
-    # `just go` above guarantees that build is not just present but CURRENT, so
-    # the guard's present-check is satisfied by a fresh binary (E-1709).
+    # Binary selection is enforced inside `endless worktree land` itself. It
+    # rebuilds the worktree's endless-go after the rebase (a compile check), and
+    # since E-2020 records the landing with the INSTALLED binary, rebuilt from
+    # the advanced main right after the migration — a worktree build never opens
+    # the main database (ED-1601). The pre-land worktree rebuild that stood here
+    # (E-1709) fed the E-1664 arrangement that recorded with the worktree binary;
+    # it has no consumer now, and was a build of pre-rebase source besides.
     #
     # E-1941: MAIN ADVANCING is what obliges a rebuild — not the land's exit
     # code. The land can advance main and still fail afterwards (a schema apply

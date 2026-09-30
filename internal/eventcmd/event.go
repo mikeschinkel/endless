@@ -27,7 +27,7 @@ import (
 func Run(args []string) {
 	if len(args) < 1 {
 		fmt.Fprintf(os.Stderr, "Usage: endless-go event <command> [flags]\n")
-		fmt.Fprintf(os.Stderr, "Commands: emit, validate-db, rebuild-db, migrate, apply-change, backup, reap-worktrees, commit-doc\n")
+		fmt.Fprintf(os.Stderr, "Commands: emit, validate-db, rebuild-db, migrate, upgrade, apply-change, backup, reap-worktrees, commit-doc\n")
 		os.Exit(1)
 	}
 
@@ -42,6 +42,8 @@ func Run(args []string) {
 		runRebuildDB(args[1:])
 	case "migrate":
 		runMigrate()
+	case "upgrade":
+		runUpgrade()
 	case "apply-change":
 		runApplyChange(args[1:])
 	case "backup":
@@ -646,9 +648,9 @@ func runReapWorktrees(args []string) {
 // (internal/schema/changes/<name>.{sql,go}) and records it in _schema_version.
 //
 // This is the INSTALLED binary's path, and outside self_dev the only one: it
-// opens through monitor.DB(), the application's connect, which applies
-// schema.sql, seeds the enum mirrors and runs the fail-closed integrity gates
-// before a change is applied at all.
+// opens through monitor.DB(), the application's connect, which checks the
+// schema version (E-2020), seeds the enum mirrors and runs the fail-closed
+// integrity gates before a change is applied at all.
 //
 // In self_dev at land time it is NOT the path. ED-1567 forbids a candidate
 // binary migrating the real ledger and a self_dev land only ever has one
@@ -694,23 +696,19 @@ func runApplyChange(args []string) {
 // retention failure rides out as a warning instead, and the Python CLI prints
 // it, because a directory that has stopped being pruned is worth saying out loud
 // exactly once rather than never (E-2121).
-// runMigrate brings the database at the resolved DB context up to the latest
-// schema version, creating it if it does not exist.
+// runMigrate creates the database at the resolved DB context if it does not
+// exist, and reports the version it is at.
 //
 // It exists so the Python CLI can build a database without owning a migration
 // runner. db.py used to read internal/schema/schema.sql off disk and
 // executescript() it, which meant two programs applied the schema by two
-// mechanisms and only one of them could be told about a new migration — and
-// which only worked at all when endless was installed from a source checkout,
-// since the file it reached for is not shipped. This is the same shell-out
-// shape `apply-change` and `backup` already use.
+// mechanisms and only one of them could be told about a new migration.
 //
-// The work itself is monitor.DB(): the connect IS the migration (E-2019), so
-// this verb opens the database and reports where it ended up rather than
-// running anything of its own. That keeps one definition of what connecting
-// means, gates included — the E-1818 schema-passive check still refuses to let
-// a candidate binary migrate a real ledger it was merely pinned onto, and this
-// verb inherits that refusal instead of routing around it.
+// The work itself is monitor.DB(), so this verb inherits the connect's rules
+// (E-2020) rather than routing around them: a fresh file is behind and is built
+// forward, a database behind this binary is backed up and migrated, one ahead
+// of it is refused, and a worktree build never opens main. The explicit,
+// gate-free path is runUpgrade.
 func runMigrate() {
 	db, err := monitor.DB()
 	if err != nil {
@@ -732,6 +730,57 @@ func runMigrate() {
 		"db":      monitor.DBPath(),
 		"version": version,
 		"latest":  latest,
+	})
+	fmt.Println(string(b))
+}
+
+// runUpgrade is `endless db upgrade` (E-2020): back the database up, bring it
+// to this binary's latest version, reseed the enum mirrors, and report the
+// versions either side.
+//
+// It is the RECOVERY command, so it must not depend on the path it recovers.
+// monitor.DB() refuses a database at the wrong version and fail-closes one whose
+// enum mirrors have drifted; every command that connects through it fails then,
+// `event migrate` included, since that verb IS the connect. So this opens the
+// database FILE (schema.OpenExisting), the way `endless-migrate up` does, and
+// runs the same schema.Up. What it keeps of the connect is only the question of
+// WHICH database: the E-1429 worktree gate and ED-1601's refusal of a worktree
+// build aimed at main (monitor.UpgradeTarget).
+//
+// The backup comes first and is not optional: a binary may not write a database
+// ahead of it (ED-1570), so restoring this backup is the only way back from a
+// bad release.
+func runUpgrade() {
+	fail := func(err error) {
+		fmt.Fprintf(os.Stderr, "endless-go event upgrade: %v\n", err)
+		os.Exit(1)
+	}
+
+	path, err := monitor.UpgradeTarget()
+	if err != nil {
+		fail(err)
+	}
+	backup, err := monitor.BackupDB()
+	if err != nil && backup.Path == "" {
+		fail(fmt.Errorf("backing up before upgrading: %w", err))
+	}
+	db, err := schema.OpenExisting(dt.Filepath(path))
+	if err != nil {
+		fail(err)
+	}
+	defer db.Close()
+
+	res, err := schema.Up(context.Background(), db)
+	if err != nil {
+		fail(fmt.Errorf("upgrading %s (backup at %s): %w", path, backup.Path, err))
+	}
+	b, _ := json.Marshal(map[string]any{
+		"status":         res.Status,
+		"from":           res.From,
+		"to":             res.To,
+		"db":             path,
+		"backup":         backup.Path,
+		"backup_skipped": backup.Skipped,
 	})
 	fmt.Println(string(b))
 }

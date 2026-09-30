@@ -84,6 +84,12 @@ func RunDue(ctx context.Context) (result Result) {
 
 	db, err = monitor.DB()
 	if err != nil {
+		// E-2020: a schema refusal is the shared "connect" incident, not a
+		// scheduling fault — the remedy is the binary or the database, not
+		// the runner.
+		if monitor.RecordSchemaRefusal("jobs", err) {
+			goto end
+		}
 		faults.Record(faults.Fault{
 			Code:        faults.ErrCodeJobScheduling,
 			Source:      "jobs",

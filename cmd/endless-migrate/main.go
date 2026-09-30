@@ -72,15 +72,12 @@ import (
 	"github.com/mikeschinkel/endless/internal/schemachange"
 )
 
-// upResult is the JSON document `up` prints on stdout: the version the
-// database was at, the version it is at now, and the file. Status is
-// "migrated" when the version moved and "current" when there was nothing to do,
-// so a caller can tell the two without comparing numbers.
+// upResult is the JSON document `up` prints on stdout: schema.UpResult — the
+// version the database was at, the version it is at now, and "migrated" or
+// "current" — plus the file.
 type upResult struct {
-	Status string      `json:"status"`
-	From   int64       `json:"from"`
-	To     int64       `json:"to"`
-	DB     dt.Filepath `json:"db"`
+	schema.UpResult
+	DB dt.Filepath `json:"db"`
 }
 
 // result is the JSON document an apply prints on stdout. It is
@@ -212,13 +209,13 @@ end:
 
 // runUp brings exactly one database to the newest migration this binary embeds.
 //
-// It is schema.MigrateContext — goose Up, then the enum-mirror seeds — and
-// nothing of its own, so the database `up` leaves is the one any other opener
-// would have left. Against a database already at the latest version it changes
-// no version and reports "current".
+// It is schema.Up — goose Up, then the enum-mirror seeds — and nothing of its
+// own, so the database `up` leaves is the one any other opener would have left.
+// `endless db upgrade` (E-2020) runs the same call from endless-go. Against a
+// database already at the latest version it changes no version and reports
+// "current".
 func runUp(args []string, dir dt.DirPath) (res upResult, err error) {
 	var db *sql.DB
-	ctx := context.Background()
 
 	if len(args) != 0 {
 		err = errUsage("up takes no arguments")
@@ -231,122 +228,26 @@ func runUp(args []string, dir dt.DirPath) (res upResult, err error) {
 	}
 	defer closeDB(db)
 
-	res.From, err = schema.DBVersion(ctx, db)
-	if err != nil {
-		goto end
-	}
-	err = schema.MigrateContext(ctx, db)
-	if err != nil {
-		goto end
-	}
-	res.To, err = schema.DBVersion(ctx, db)
-	if err != nil {
-		goto end
-	}
-	res.Status = "current"
-	if res.To != res.From {
-		res.Status = "migrated"
-	}
+	res.UpResult, err = schema.Up(context.Background(), db)
 
 end:
 	return res, err
 }
 
-// openTarget resolves dir to its database file and opens it, refusing a
-// relative path and a file that does not exist. Both subcommands come through
-// here, so neither can migrate a database the other would have refused.
+// openTarget resolves dir to its database file and opens it through
+// schema.OpenExisting, which refuses a relative path and a file that does not
+// exist. Both subcommands come through here, so neither can migrate a database
+// the other would have refused.
+//
+// OpenExisting opens the FILE: no schema application, no enum seed, no
+// integrity gate, no worktree-build check, no sandbox routing. That is the line
+// that separates this executable from `endless-go event apply-change`, which
+// opens through internal/monitor and brings the application's whole connect
+// with it.
 func openTarget(dir dt.DirPath) (db *sql.DB, path dt.Filepath, err error) {
-	var exists bool
-
 	path = dt.FilepathJoin(dir, dbcontext.DBFileName)
-
-	// An absolute database or nothing. dbcontext resolves a RELATIVE path when
-	// no home directory and no XDG_CONFIG_HOME can be found, and a relative one
-	// would be created under whatever directory this happened to be invoked
-	// from — a fresh, empty database that migrates flawlessly and is not the
-	// ledger anyone meant. Refusing is the only honest answer.
-	if !path.IsAbs() {
-		err = fmt.Errorf(
-			"refusing to migrate a database at a relative path: %s\n"+
-				"Neither %s main, nor %s, nor XDG_CONFIG_HOME, nor a home "+
-				"directory resolved, so there is no way to know which ledger "+
-				"was meant.",
-			path, dbcontext.DBFlag, dbcontext.DBDirFlag)
-		goto end
-	}
-
-	// The database must already exist. sql.Open would create one, and a
-	// migration that CREATES its target has migrated nothing — it has
-	// manufactured an empty file and reported success. A land reaches here only
-	// after backing the real ledger up, so a missing file means the path is
-	// wrong, not that the ledger is new.
-	exists, err = path.Exists()
-	if err != nil {
-		err = fmt.Errorf("checking for the database at %s: %w", path, err)
-		goto end
-	}
-	if !exists {
-		err = fmt.Errorf("no database at %s", path)
-		goto end
-	}
-
-	db, err = openDB(path)
-
-end:
+	db, err = schema.OpenExisting(path)
 	return db, path, err
-}
-
-// openDB opens the database file directly: no schema application, no enum seed,
-// no integrity gate, no ownership or candidate check, no sandbox routing.
-//
-// This is the line that separates this executable from `endless-go event
-// apply-change`, which opens through internal/monitor and therefore brings the
-// application's whole connect with it. Everything omitted here is something that
-// would make this tool's behaviour depend on the schema it is about to change.
-//
-// The three PRAGMAs are kept because they configure the CONNECTION rather than
-// the schema, and internal/monitor sets exactly these three. A change file must
-// be applied under the same connection settings whichever program applies it —
-// foreign_keys above all, since a change that rewrites a table relies on
-// enforcement being where it has always been.
-func openDB(dbPath dt.Filepath) (db *sql.DB, err error) {
-	var pragma string
-
-	db, err = sql.Open("sqlite", string(dbPath))
-	if err != nil {
-		err = fmt.Errorf("opening %s: %w", dbPath, err)
-		goto end
-	}
-
-	// sql.Open is lazy, so nothing above has touched the file yet.
-	err = db.Ping()
-	if err != nil {
-		err = fmt.Errorf("connecting to %s: %w", dbPath, err)
-		goto end
-	}
-
-	// SQLite is single-writer; one connection is what makes BEGIN IMMEDIATE
-	// mean what it says through Go's connection pool.
-	db.SetMaxOpenConns(1)
-
-	for _, pragma = range []string{
-		"PRAGMA journal_mode=WAL",
-		"PRAGMA busy_timeout=5000",
-		"PRAGMA foreign_keys=ON",
-	} {
-		_, err = db.Exec(pragma)
-		if err != nil {
-			err = fmt.Errorf("%s on %s: %w", pragma, dbPath, err)
-			goto end
-		}
-	}
-
-end:
-	if err != nil && db != nil {
-		closeDB(db)
-		db = nil
-	}
-	return db, err
 }
 
 // closeDB reports a close failure on stderr rather than swallowing it. It cannot

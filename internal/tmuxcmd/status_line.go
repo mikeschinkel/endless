@@ -63,6 +63,13 @@ func runStatusLine(args []string) {
 		// Fingerprint on the error text, not the pane: the pane id would split
 		// one project-wide outage into a dozen incidents, which is the same
 		// noise problem in a different costume.
+		//
+		// A schema refusal (E-2020) goes to ERR-0020 instead, under the one
+		// "connect" incident every silent surface shares.
+		if monitor.RecordSchemaRefusal("tmux:status-line", err) {
+			fmt.Print(placeholder())
+			return
+		}
 		faults.Record(faults.Fault{
 			Code:        faults.ErrCodeStatusLineUnavailable,
 			Source:      "tmux:status-line",

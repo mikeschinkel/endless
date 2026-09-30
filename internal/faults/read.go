@@ -107,8 +107,8 @@ type Overview struct {
 // scope.
 //
 // Callers on a render path must treat any error as "show no fault row" rather than
-// as a failure: a missing table (a binary pinned schema-passive onto a DB it
-// does not own) or a locked DB must never take down the view.
+// as a failure: a missing table (a connection opened on a database at another
+// schema version, E-2020) or a locked DB must never take down the view.
 //
 // A caller that applies its own display policy should call List and Summarize
 // instead, so the aggregate is computed over the incidents it actually intends

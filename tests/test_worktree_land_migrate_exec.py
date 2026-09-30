@@ -166,6 +166,12 @@ def _patch_land(monkeypatch, main, worktree, *, self_dev=True):
     monkeypatch.setattr(
         worktree_cmd, "_rebuild_worktree_binary", lambda wt, canon: None
     )
+    # E-2020: Step 5.6 rebuilds the main checkout's endless-go with `just go`;
+    # a throwaway repo has no justfile. Its ordering is pinned in
+    # test_worktree_land_record_binary.py.
+    monkeypatch.setattr(
+        worktree_cmd, "_rebuild_main_binary", lambda root, canon, base: None
+    )
     monkeypatch.setattr(
         "endless.event_bridge.backup_db", lambda endless_go_bin=None: {}
     )

@@ -27,6 +27,8 @@ import (
 	"os"
 
 	_ "modernc.org/sqlite"
+
+	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
 func Run(args []string) {
@@ -50,6 +52,20 @@ func Run(args []string) {
 	}
 
 	if err != nil {
+		// E-2020: a schema refusal — a database ahead of this binary, a forward
+		// migration that failed, a worktree build aimed at main — is a silent
+		// no-op plus ONE recorded fault, and nothing else: no log line (its
+		// writer includes stderr), no halt, exit 0, empty stdout, which is how a
+		// hook says "no action". E-1962's reasoning transfers unchanged: a hook
+		// that errored here would surface as a Claude Code hook failure on every
+		// event on every session, turning one mismatch — every land's window, at
+		// minimum — into a stream of identical errors for the user to chase.
+		// The fault is fingerprinted on the mismatch, so fifty events are one
+		// incident with a count of fifty.
+		if monitor.RecordSchemaRefusal("hook:"+args[0], err) {
+			return
+		}
+
 		// The log writer includes stderr, so this line IS the error the agent
 		// or the user reads; haltNotice below only adds the instruction.
 		log.Printf("%s: %v", args[0], err)

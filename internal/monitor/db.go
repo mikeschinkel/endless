@@ -19,7 +19,6 @@ import (
 	"github.com/mikeschinkel/endless/internal/gatekind"
 	"github.com/mikeschinkel/endless/internal/processkind"
 	"github.com/mikeschinkel/endless/internal/rating"
-	"github.com/mikeschinkel/endless/internal/schema"
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 	"github.com/mikeschinkel/endless/internal/tasktype"
 )
@@ -341,86 +340,21 @@ func DBOpened() bool { return dbOpened }
 // for it besides. A pin is not a resolution.
 func DBContextPinned() bool { return dbPathOverride != "" }
 
-// pinnedToForeignRealDB reports whether this process has been pinned onto the
-// real database at ~/.config/endless via ForceRealDB() (the Claude hook) or
-// PinMainDB() (`endless-go tmux`) — the automatic entry points that
-// redirect a sandbox/worktree-context binary's DATA writes onto the main database
-// (E-1450/E-1700). The pin is signalled by dbPathOverride != "".
-//
-// Invariant (E-1818): only a database's OWNING binary applies the schema (the
-// migration set plus the enum seeds, E-2019) and the enum integrity gates to it.
-// A candidate (self-dev worktree) binary pinned here for session-state writes
-// opens the real DB schema-passive: it uses the deployed schema as-is and never
-// mutates structure or seed rows, and never runs the fail-close enum integrity
-// checks against a schema it does not own. Otherwise an unlanded binary could
-// migrate — or, via a destructive migration, corrupt — a real DB it does not own
-// the instant a hook fires, before any land, review, or explicit action (the
-// E-1659 incident).
-//
-// The gate is DB-path only: it does not fire for the deployed global binary or
-// a self-detected sandbox open of a DB the binary owns (dbPathOverride == ""),
-// nor for an explicit --db/--db-dir open (which sets dbContextDir, not
-// dbPathOverride) — so land-time `endless db apply-change` still migrates.
-func pinnedToForeignRealDB() bool {
-	exe, err := os.Executable()
-	if err != nil {
-		exe = ""
-	}
-	return foreignRealDB(dbPathOverride, resolvedPath(exe), DBPath(), realDBPath())
-}
-
-// foreignRealDB is the decision itself, pure so it can be proven without a
-// process, a home directory, or a database.
-//
-// override != "" is E-1818's original case: ForceRealDB / PinMainDB moved this
-// process onto the main database, so it does not own the schema.
-//
-// The second clause is E-1975's. An explicit DB flag is trusted to ROUTE
-// this process (E-1429: a per-invocation flag beats the env), but routing and
-// OWNERSHIP are different questions, and conflating them punched a hole through
-// E-1818's invariant. `endless --db main <anything>` threads
-// --db main to every endless-go shellout; run from a worktree
-// that is the WORKTREE's binary — unlanded code — and because the explicit flag
-// left override empty this returned false, so monitor.DB() applied the branch's
-// own schema to the user's real database. A branch that adds a table created it
-// in the main database the first time an agent ran a routine command, days before
-// the branch landed and whether or not it ever did.
-//
-// Ownership is decided by what the executable IS, not by how it was pointed: a
-// binary built inside a task worktree may write DATA to the main database
-// (session and pane state is real-world activity, per E-1450) and may never
-// migrate, reseed or fail-close it. The deployed binary is not a candidate, so
-// it still creates the schema after the branch lands — the table appears one
-// land later, which is exactly when it should.
-//
-// realPath == "" means the home directory could not be resolved. That falls
-// back to the override answer rather than guessing, because a wrong guess in
-// the permissive direction is the bug this exists to stop and a wrong guess in
-// the strict direction would leave a fresh install with no schema.
-func foreignRealDB(override, exePath, dbPath, realPath string) bool {
-	if override != "" {
-		return true
-	}
-	if realPath == "" || dbPath != realPath {
-		return false
-	}
-	return strings.Contains(exePath, worktreePathMarker)
-}
-
 // candidateBuild reports whether this executable was built inside a task
 // worktree, i.e. whether it is unlanded code.
 //
 // Keyed on the EXECUTABLE's path rather than cwd. cwd answers "where is the
 // user working", which is a different question and the wrong one: the global
-// binary invoked from inside a worktree is still the deployed build and owns
-// the schema, while the worktree's binary invoked from anywhere does not.
+// binary invoked from inside a worktree is still the installed build and may
+// open main, while the worktree's binary invoked from anywhere may not
+// (ED-1601).
 func candidateBuild() bool {
-	exe, err := os.Executable()
-	if err != nil {
-		return false
-	}
-	return strings.Contains(resolvedPath(exe), worktreePathMarker)
+	return strings.Contains(executablePath(), worktreePathMarker)
 }
+
+// osExecutable is os.Executable, a variable so a test can play a worktree build
+// without being one.
+var osExecutable = os.Executable
 
 // realDBPath is the deployed installation's database, independent of any routing
 // in force. It hardcodes the same location PinMainDB does, so "the main database"
@@ -433,15 +367,29 @@ func realDBPath() string {
 	return string(path)
 }
 
-// PinnedToRealDB reports whether this process has been pinned onto a fixed real
-// database (PinMainDB / ForceRealDB), overriding any sandbox routing.
+// WorktreeBuildOnMainDB reports whether this process is a binary built inside a
+// task worktree whose database context resolves to the MAIN database — the one
+// pairing ED-1601 forbids, and which DB() therefore refuses before opening.
 //
-// Exported for the E-698 job runner, which must not execute jobs when a
-// self_dev worktree's candidate build is pointed at the developer's main
-// database. Combined with InSelfDevWorktree it names exactly that state; on its
-// own it is true for ordinary pinned surfaces (hook, tmux) in the main
-// checkout too, where running jobs is correct.
-func PinnedToRealDB() bool { return pinnedToForeignRealDB() }
+// Exported for the E-698 job runner, which reports the same state as its reason
+// for not running rather than failing on the refused connect.
+func WorktreeBuildOnMainDB() bool {
+	return refusesMainDB(candidateBuild(), isMainDB(DBPath()))
+}
+
+// isMainDB reports whether path is the main database, comparing resolved forms
+// so a symlinked config directory or an unclean --db-dir cannot slip past.
+//
+// "Main" is dbcontext.MainDBPath(), which follows $HOME: under the verify
+// runner's temp HOME the throwaway database IS main, which is what lets a suite
+// exercise the refusal at all.
+func isMainDB(path string) bool {
+	main := realDBPath()
+	if main == "" || path == "" {
+		return false
+	}
+	return resolvedPath(filepath.Clean(path)) == resolvedPath(filepath.Clean(main))
+}
 
 // worktreePathMarker is the path segment that identifies an endless-managed
 // task worktree: <project-root>/.endless/worktrees/e-NNN.
@@ -759,12 +707,29 @@ func sandboxMissingError(worktree, sandbox string) error {
 }
 
 // DB returns a connection to the Endless SQLite database.
+//
+// The connect does four things, in order, and the order is load-bearing:
+//
+//  1. The E-1429 worktree gate: inside a self-dev worktree, refuse unless a
+//     flag (or the hook/tmux pin) said which database.
+//  2. ED-1601: a binary built inside a task worktree never opens the main
+//     database. Checked BEFORE the file is opened, so a refused binary cannot
+//     have touched it — and outside every other branch, so it holds for the
+//     hook's pinned path as much as for an explicit --db main.
+//  3. The schema direction rule (E-2020, ED-1570): behind → back up and apply
+//     forward; ahead → halt; equal → nothing to apply. See reconcileSchema.
+//  4. Seed the enum mirrors and run the fail-closed integrity gates, on every
+//     connect that got this far.
 func DB() (*sql.DB, error) {
 	if err := guardWorktreeDBContext(); err != nil {
 		return nil, err
 	}
 	dbOnce.Do(func() {
 		path := DBPath()
+		if refusesMainDB(candidateBuild(), isMainDB(path)) {
+			dbErr = worktreeBuildRefusal(path)
+			return
+		}
 		dbConn, dbErr = sql.Open("sqlite", path)
 		if dbErr != nil {
 			dbErr = fmt.Errorf("opening database %s: %w", path, dbErr)
@@ -787,83 +752,64 @@ func DB() (*sql.DB, error) {
 		if _, err := dbConn.Exec("PRAGMA busy_timeout=5000"); err != nil {
 			log.Printf("endless-monitor: PRAGMA busy_timeout=5000: %v", err)
 		}
+		// Foreign key enforcement is owned HERE now. schema.Migrate turns it on
+		// too, but a connect no longer migrates, so this pragma is what keeps
+		// every FK the schema declares armed on the ordinary path.
 		if _, err := dbConn.Exec("PRAGMA foreign_keys=ON"); err != nil {
 			log.Printf("endless-monitor: PRAGMA foreign_keys=ON: %v", err)
 		}
-		// E-1818: when pinned onto a real DB this binary does not own
-		// (ForceRealDB / PinMainDB), open schema-passive — skip the schema.SQL
-		// exec and every enum integrity gate below. An unlanded worktree binary
-		// must not migrate, reseed, or fail-close a real DB the deployed binary
-		// owns; only DATA writes (session/pane state) reach it. See
-		// pinnedToForeignRealDB() for the full invariant. The per-connection
-		// PRAGMAs above stay on both paths — they configure the connection, they
-		// do not mutate schema.
-		if !pinnedToForeignRealDB() {
-			// E-2019: the schema comes from the embedded goose migration set, not
-			// from schema.sql. WHEN it is applied has not changed — still every
-			// connect — only where it comes from; E-2020 is what replaces this
-			// with version verification. A database built before versioning
-			// existed is stamped at the baseline rather than replayed onto, so
-			// this is a no-op against the real ledger. Destructive, one-off
-			// changes are still applied separately at land time via
-			// `endless db apply-change`, not here.
-			if err := schema.Migrate(dbConn); err != nil {
-				dbErr = fmt.Errorf("applying schema to %s: %w", path, err)
+		if err := reconcileSchema(dbConn, path); err != nil {
+			dbErr = err
+			if errors.Is(err, ErrSchemaRefused) {
+				faultConn = dbConn
+			}
+			dbConn = nil
+			return
+		}
+		// E-1538: enum/table integrity check. task_types is seeded by
+		// seeds.sql on every connection; if a row is missing or drifted from
+		// the Go TaskType enum we fail closed, since downstream INSERTs would
+		// either violate the FK or write an id that has no enum constant.
+		if hasTable(dbConn, "task_types") {
+			if err := tasktype.VerifyIntegrity(dbConn); err != nil {
+				dbErr = fmt.Errorf("task_types integrity check on %s: %w", path, err)
 				dbConn = nil
 				return
 			}
-			// E-1538: enum/table integrity check. task_types is seeded by
-			// seeds.sql on every connection; if a row is missing or drifted from
-			// the Go TaskType enum we fail closed, since downstream INSERTs would
-			// either violate the FK or write an id that has no enum constant.
-			// Skipped on populated DBs that have not yet had the E-1538 migration
-			// applied (the table will not exist; the migration creates it).
-			if hasTable(dbConn, "task_types") {
-				if err := tasktype.VerifyIntegrity(dbConn); err != nil {
-					dbErr = fmt.Errorf("task_types integrity check on %s: %w", path, err)
-					dbConn = nil
-					return
-				}
+		}
+		// E-1898: same fail-closed contract for the process_kinds enum mirror.
+		if hasTable(dbConn, "process_kinds") {
+			if err := processkind.VerifyIntegrity(dbConn); err != nil {
+				dbErr = fmt.Errorf("process_kinds integrity check on %s: %w", path, err)
+				dbConn = nil
+				return
 			}
-			// E-1898: same fail-closed contract for the process_kinds enum mirror.
-			// Skipped on populated DBs that have not yet had the E-1898 migration
-			// applied (the table will not exist; the migration creates it).
-			if hasTable(dbConn, "process_kinds") {
-				if err := processkind.VerifyIntegrity(dbConn); err != nil {
-					dbErr = fmt.Errorf("process_kinds integrity check on %s: %w", path, err)
-					dbConn = nil
-					return
-				}
+		}
+		// E-1542: same fail-closed contract for the gate_kinds enum mirror.
+		if hasTable(dbConn, "gate_kinds") {
+			if err := gatekind.VerifyIntegrity(dbConn); err != nil {
+				dbErr = fmt.Errorf("gate_kinds integrity check on %s: %w", path, err)
+				dbConn = nil
+				return
 			}
-			// E-1542: same fail-closed contract for the gate_kinds enum mirror.
-			// Skipped on populated DBs that have not yet had the E-1542 migration
-			// applied (the table will not exist; the migration creates it).
-			if hasTable(dbConn, "gate_kinds") {
-				if err := gatekind.VerifyIntegrity(dbConn); err != nil {
-					dbErr = fmt.Errorf("gate_kinds integrity check on %s: %w", path, err)
-					dbConn = nil
-					return
-				}
+		}
+		// E-1462: same fail-closed contract for the session_task_relations enum
+		// mirror.
+		if hasTable(dbConn, "session_task_relations") {
+			if err := sessiontaskrelation.VerifyIntegrity(dbConn); err != nil {
+				dbErr = fmt.Errorf("session_task_relations integrity check on %s: %w", path, err)
+				dbConn = nil
+				return
 			}
-			// E-1462: same fail-closed contract for the session_task_relations enum
-			// mirror. Skipped on populated DBs that have not yet had the E-1462
-			// migration applied (the table will not exist; the migration creates it).
-			if hasTable(dbConn, "session_task_relations") {
-				if err := sessiontaskrelation.VerifyIntegrity(dbConn); err != nil {
-					dbErr = fmt.Errorf("session_task_relations integrity check on %s: %w", path, err)
-					dbConn = nil
-					return
-				}
-			}
-			// E-1813: same fail-closed contract for the complexity_levels and
-			// risk_levels rating mirrors. Both are created by the same
-			// migration, so one probe covers the pair.
-			if hasTable(dbConn, "complexity_levels") {
-				if err := rating.VerifyIntegrity(dbConn); err != nil {
-					dbErr = fmt.Errorf("rating levels integrity check on %s: %w", path, err)
-					dbConn = nil
-					return
-				}
+		}
+		// E-1813: same fail-closed contract for the complexity_levels and
+		// risk_levels rating mirrors. Both are created by the same
+		// migration, so one probe covers the pair.
+		if hasTable(dbConn, "complexity_levels") {
+			if err := rating.VerifyIntegrity(dbConn); err != nil {
+				dbErr = fmt.Errorf("rating levels integrity check on %s: %w", path, err)
+				dbConn = nil
+				return
 			}
 		}
 	})

@@ -148,10 +148,9 @@ var (
 		Severity: SeverityWarning,
 		Title:    "A background job's schedule could not be read or written",
 		Remedy: "Check that the database is reachable and that the schema is " +
-			"current. A binary pinned onto a database it does not own opens " +
-			"schema-passive (E-1818) and will not have created the `jobs` " +
-			"table; that is the expected cause if you are running a worktree " +
-			"build against the main database.",
+			"current. A schema version mismatch is raised as ERR-0020 rather " +
+			"than here, and a worktree build is refused the main database " +
+			"outright (ED-1601), so neither is the cause of this code.",
 	}
 
 	// ErrCodeJobStuckLease covers a job re-claimed while a previous owner may
@@ -215,9 +214,10 @@ var (
 		Severity: SeverityError,
 		Title:    "The tmux status line could not resolve its pane",
 		Remedy: "Read the detail (`endless errors show <n> --detail`); it carries " +
-			"the underlying error and the pane id. A schema or enum-integrity " +
-			"failure means the binary and the database disagree — usually a " +
-			"worktree build against the main DB (E-1818). If the bar is blank " +
+			"the underlying error and the pane id. An enum-integrity failure " +
+			"means the binary and the database disagree about an enum mirror; " +
+			"`endless db upgrade` reseeds it. A schema version mismatch is " +
+			"raised as ERR-0020 instead. If the bar is blank " +
 			"with *no* incident recorded, suspect the database itself and " +
 			"check `endless sql \"select 1\"`.",
 	}
@@ -495,6 +495,34 @@ var (
 			"quit and started again by hand. Dismiss with `endless errors " +
 			"clear <id>`.",
 	}
+
+	// ErrCodeSchemaVersionRefused covers monitor.DB() refusing a database on
+	// schema grounds (E-2020): a worktree-built binary aimed at the main
+	// database (ED-1601), a database AHEAD of the binary (ED-1570), or a forward
+	// migration that did not complete.
+	//
+	// Raised by the surfaces that render that refusal SILENTLY — the Claude hook,
+	// the tmux status line, the background jobs — because they fire on every
+	// event for nobody, and an error per event is the fifty-identical-lines
+	// experience of the 2026-08-10 land. Fingerprinted on the refusal's summary,
+	// which carries the kind and both versions and nothing per-event, so the
+	// whole machine's worth of hooks during one land window is ONE incident.
+	ErrCodeSchemaVersionRefused = Code{
+		ID:       "ERR-0020",
+		Slug:     "schema-version-refused",
+		Severity: SeverityError,
+		Title:    "endless-go refused the database's schema version",
+		Remedy: "Read the summary: it names which of three cases this is. " +
+			"`database is at schema vN, endless-go carries vM` means the binary " +
+			"is older than the database — upgrade endless (in a self-dev " +
+			"checkout, `just build` in the main checkout); during a land the " +
+			"condition ends when the land rebuilds the binary. `migrating the " +
+			"database ... did not complete` means a forward migration failed — " +
+			"run `endless db upgrade`, which backs up first. `a worktree-built " +
+			"endless-go refused the main database` means something ran a " +
+			"worktree's binary against main; use the installed binary. Dismiss " +
+			"with `endless errors clear <id>` once the cause is gone.",
+	}
 )
 
 // catalog indexes every registered Code by ID. Built once at init from the
@@ -519,6 +547,7 @@ var catalog = buildCatalog(
 	ErrCodeHookPayloadUnreadable,
 	ErrCodeHookFailed,
 	ErrCodeMonitorRestartFailed,
+	ErrCodeSchemaVersionRefused,
 )
 
 // buildCatalog indexes codes by ID. It panics on a duplicate ID: a collision is

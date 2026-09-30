@@ -189,7 +189,12 @@ func main() {
 	// fault raised in a self-dev worktree lands in that worktree's sandbox rather
 	// than the main database. All three funcs are stored, not called, so this
 	// costs nothing in a process that never records a fault.
-	faults.Bind(monitor.DB, func() string {
+	//
+	// monitor.FaultDB rather than monitor.DB (E-2020): when the connect refuses a
+	// database on schema grounds after opening it — a database ahead of this
+	// binary, every hook's situation during a land — the fault writer still gets
+	// that connection, so the refusal lands as one deduplicated incident.
+	faults.Bind(monitor.FaultDB, func() string {
 		return filepath.Join(monitor.ConfigDir(), "log")
 	}, resolveFaultProject)
 
