@@ -86,3 +86,28 @@ passthrough. The wrong-task fix goes wherever the bug is.
 
 - After a tmux crash and restore, one `endless session resume --tmux-session active` brings back every task window's Claude session and monitor
   layout, with no window touched by hand.
+
+## As built (2026-09-30)
+
+- **Wrong-task bug, reproduced and fixed at the root.** After a crash tmux
+  reissues pane ids, and `list-live` kept reporting a pre-crash session's bare
+  `%N` (its server is gone, so liveness `unknown`, still listed as an owner).
+  Python matched that against `$TMUX_PANE`, so a restored pane "was working" the
+  old session's task: `session resume` refused and pointed to `goto --resume`.
+  On the live server 17 restored panes collided this way (e.g. window E-2135,
+  `%45` → ES-1173 / E-2105). Fix: `monitor.ListLiveSessions` reports `pane_id`
+  only for bindings on the tmux server this process reaches; the row stays
+  listed. One Go change fixes every Python pane-id comparison. With it gone,
+  there is no case where `resume` fails but `goto --resume` succeeds, so there
+  is no goto fallback (Mike: use goto only if it can work where resume fails).
+- **Typed line** (Mike's choice): `cd '<project root>' && endless session resume
+  E-NNNN --rebind [--review]`. A pane restored inside a self-dev worktree would
+  otherwise be refused for want of `--db`, and `--db main` is refused in
+  non-self-dev projects.
+- **Unresolvable task** (Mike): still dispatched, so resume's error shows in
+  that window; the summary names the error too.
+- The window running the command is skipped. `--tmux-session` /
+  `--all-tmux-sessions` are refused under a sandbox DB context and with any
+  single-REF flag. Focus never moves.
+- Go: `internal/resumewindowscmd` (`endless-go resume-windows`). Python:
+  options on `session resume`, passthrough `resume_tmux_windows`.
