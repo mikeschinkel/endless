@@ -299,13 +299,10 @@ and every stale worktree. As of 2026-09-30 all of them have landed.
 - **E-2019 has LANDED** (2026-09-17), and deliberately left this task its hooks:
   goose drives the connect path, `DBVersion`/`LatestVersion` exist, and the
   block to replace is commented as belonging to E-2020.
-- **E-2158 touches the same file and should not run concurrently with this.**
-  It deletes the change-file mechanism; this task leaves `_incomplete_schema_hint`
-  alone precisely so the two do not collide. That is E-2164's `<>` case —
-  two tasks whose worktrees touch the same paths — and no relation expresses it
-  today; `precedes`/`preceded_by` and the `<>` marker both arrive with E-2164.
-  Until then the constraint lives here, in prose, deliberately rather than as a
-  `relates_to` standing in for a relation that does not exist yet.
+- **E-2158 touches the same file and must not run concurrently with this** —
+  recorded as `E-2020 conflicts_with E-2158` (E-2164). It deletes the
+  change-file mechanism; this task leaves `_incomplete_schema_hint` alone
+  precisely so the two do not collide.
 
   If E-2158 lands first, re-read the `_incomplete_schema_hint` bullet above:
   the deferral becomes moot because its subject is already gone.
