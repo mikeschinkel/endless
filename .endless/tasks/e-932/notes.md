@@ -1,0 +1,1 @@
+Added --all flag to show decisions across all projects (adds Project column), --sort flag (id/created/title, default id DESC), and multi-project support to list_decisions() in task_cmd.py and decision list CLI command. Default sort changed from created_at DESC to id DESC for stable ordering.
