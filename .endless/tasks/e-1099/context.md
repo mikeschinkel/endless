@@ -1,0 +1,1 @@
+Beyond plan files, Claude routinely writes other uppercase-named markdown (README.md, CLAUDE.md, AGENTS.md, CHANGELOG.md, CONTRIBUTING.md, etc.). Some are project-canonical and authors want them written cleanly; others are agent-introduced noise that should be flagged or blocked.
