@@ -11,3 +11,7 @@ to E-1486, the port epic, being port work rather than event-sourcing work.
 
 What remains here is the design-stage work: E-806, E-809, E-810, E-813, E-814,
 E-816, E-817, plus E-910 and E-914.
+
+## From the description
+
+Per-project .endless/events.jsonl + global changelog repo, with SQLite as rebuildable projection. 5-stage migration.
