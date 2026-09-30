@@ -74,8 +74,13 @@ assert_contains "C4: the ⊙/blank split asks the row, which knows it is an epic
 assert_not_contains "C4: ...and no longer reads the row's own status directly" \
     "taskstatus.Has(taskstatus.Shipped, r.Status)" "${MARK_BODY}"
 assert_not_contains "C4: the renderer runs no query" "DB()" "${MARK_BODY}"
-assert_contains "C4: the legend still derives its entry by calling unsettledMark" \
-    "switch unsettledMark(r) {" "$(cat "${RENDER}")"
+# The legend reads column 4 through columnFourMark (E-2188), which falls
+# through to unsettledMark — so both links are asserted.
+assert_contains "C4: the legend derives its entry from the function that draws the column" \
+    "switch columnFourMark(r) {" "$(cat "${RENDER}")"
+assert_contains "C4: ...which falls through to unsettledMark" \
+    "return unsettledMark(r)" \
+    "$(awk '/^func columnFourMark\(/{f=1} f{print} f && /^}$/{exit}' "${RENDER}")"
 assert_contains "C2: descendants are walked along effective_parent_id" \
     "effective_parent_id" "$(cat internal/monitor/reap_worktrees.go)"
 assert_contains "the guide documents the epic rule" \
