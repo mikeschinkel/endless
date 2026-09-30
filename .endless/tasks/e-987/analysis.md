@@ -1,0 +1,1 @@
+Options range from auto-commit on every append, to gitignoring the log, to a narrower 'landable cleanliness' definition, to moving the log out of the working tree, to batched commits via a daemon. Full options analysis is in the analysis field.
