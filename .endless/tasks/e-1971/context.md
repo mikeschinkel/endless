@@ -1,0 +1,1 @@
+Every event emit runs git add plus git commit --amend on the project's main checkout, because E-1309 routes all ledger commits there — making that one repo a shared write point for every concurrent worktree session, the triage sweep, and any foreground command.
