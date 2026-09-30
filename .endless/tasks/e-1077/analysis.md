@@ -2,7 +2,7 @@
 
 Added 2026-08-21 from ES-1127 (E-1696), which hit this live.
 
-`_reap_stale_worktrees` (src/endless/worktree_cmd.py:947) resolves its binary
+`_reap_stale_worktrees` (src/endless/worktree_cmd.py) resolves its binary
 with `shutil.which("endless-go")` — one of the "other shutil.which sites" this
 task's description names for E-1039's refactor. It is worth calling out
 specifically because it is the one where the stale-global choice is GUARANTEED
@@ -40,7 +40,7 @@ least equipped to dismiss it.
 
 Bolting an `endless_go_bin` parameter onto `_reap_stale_worktrees` would work —
 `endless_go_bin` is already in scope at the call site (computed at
-worktree_cmd.py:2241, reap at :2461) and the other three callers
+worktree_cmd.py, reap at :2461) and the other three callers
 (two post-claim paths in task_cmd.py, plus `endless worktree reap`) legitimately
 want the global. But that is a hand-rolled exception at precisely one of the
 sites this helper exists to make uniform, and E-1039 would then have to unpick
@@ -64,3 +64,7 @@ Under E-2020 (E-1944 decision 3) a binary opening a DB ahead of it HALTS, for
 any binary, permanently. So this failure is not something to suppress — it is
 the designed guard working. The only real fix is never invoking a stale binary
 in that window, which is binary selection, which is this task.
+
+## From the description
+
+Detects worktree-local bin/, falls back to PATH first match.
