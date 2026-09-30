@@ -296,3 +296,4 @@
 {"value": "mark", "definition": "to flag or label something", "category": ["action"]}
 {"value": "warn", "definition": "to alert about a problem or risk", "category": ["action"]}
 {"value": "preserve", "definition": "to keep intact", "category": ["action"]}
+{"value": "sort", "definition": "to arrange in order", "category": ["action"]}
