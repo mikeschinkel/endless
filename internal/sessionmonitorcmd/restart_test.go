@@ -89,6 +89,17 @@ func TestParsePanesDropsUntagged(t *testing.T) {
 	}
 }
 
+// Grouped sessions list a shared pane once per session; it must be restarted
+// once, or the second respawn kills the monitor the first one started.
+func TestParsePanesDedupesGroupedSessions(t *testing.T) {
+	out := "%2\tactive:1.2\t/b\t10@20\n%2\tactive-6:1.2\t/b\t10@20"
+	got := parsePanes(out)
+	want := []taggedPane{{id: "%2", where: "active:1.2", dir: "/b", tag: "10@20"}}
+	if !slices.Equal(got, want) {
+		t.Fatalf("parsePanes = %+v, want %+v", got, want)
+	}
+}
+
 // TestRestartSequence drives restart against a fake tmux: the live monitor is
 // respawned with the spawn argv, the stale and unreadable tags are cleared and
 // never respawned, and the untagged shell is never touched.

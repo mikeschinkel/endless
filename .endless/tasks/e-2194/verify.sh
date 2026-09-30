@@ -17,7 +17,9 @@
 #      - `--restart` puts a NEW monitor in the SAME pane, tagged;
 #      - a monitor quit cleanly (Ctrl-C at a shell prompt) leaves no tag;
 #      - a monitor killed with SIGKILL leaves a stale tag, which `--restart`
-#        clears while leaving the shell in that pane alone.
+#        clears while leaving the shell in that pane alone;
+#      - a pane shared by grouped sessions is restarted once, not once per
+#        session (a second respawn would kill the monitor the first started).
 #
 # B's argv and decision rules are mirrored into
 # internal/sessionmonitorcmd/*_test.go (including a private-server tag test),
@@ -93,6 +95,9 @@ tm -f /dev/null new-session -d -s act -x 160 -y 50 \
     -- /bin/bash --noprofile --norc \
     || setup_error "cannot start a private tmux server"
 tm new-session -d -s other -e "PATH=${PATH}" -e "HOME=${HOME}"
+# A session grouped with `act` shares its windows, so list-panes -a reports
+# each of act's panes twice.
+tm new-session -d -s act-g -t act
 SHELL_PANE=$(tm display-message -p -t act '#{pane_id}')
 MON_PANE=$(tm split-window -t "${SHELL_PANE}" -P -F '#{pane_id}' -- endless session monitor)
 OTHER_PANE=$(tm split-window -t other -P -F '#{pane_id}' -- endless session monitor)
@@ -155,5 +160,6 @@ assert_contains "naming the dead process" "process ${KILLED} is gone" "${out}"
 assert_eq "the stale tag is cleared" "" "$(tag_of "${SHELL_PANE}")"
 assert_eq "the shell in that pane was not respawned" "${SHELL_PID}" "$(tm display-message -p -t "${SHELL_PANE}" '#{pane_pid}')"
 assert_contains "--all-tmux-sessions reaches the other session's monitor" "restarted ${OTHER_PANE}" "${out}"
+assert_eq "a pane shared by grouped sessions is restarted once" "1" "$(grep -c "restarted ${MON_PANE} " <<<"${out}")"
 
 summary

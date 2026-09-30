@@ -133,12 +133,19 @@ type taggedPane struct {
 
 // parsePanes returns the tagged panes in list-panes output; untagged panes are
 // not monitors and are dropped here.
+//
+// Each pane appears once. Grouped tmux sessions (`new-session -t`) share their
+// windows, so `list-panes -a` reports a shared pane once per session in the
+// group. Respawning it once per listing would kill the monitor the first
+// respawn just started; the first listing wins.
 func parsePanes(out string) (panes []taggedPane) {
+	seen := map[string]bool{}
 	for line := range strings.SplitSeq(out, "\n") {
 		f := strings.SplitN(line, "\t", 4)
-		if len(f) != 4 || f[3] == "" {
+		if len(f) != 4 || f[3] == "" || seen[f[0]] {
 			continue
 		}
+		seen[f[0]] = true
 		panes = append(panes, taggedPane{id: f[0], where: f[1], dir: f[2], tag: f[3]})
 	}
 	return panes
