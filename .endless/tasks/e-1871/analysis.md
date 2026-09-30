@@ -57,7 +57,7 @@ a genuinely unhandled status would now be invisible in the noise.
 
 ## Adjacent (same change, trivial)
 
-internal/monitor/session_status.go:36 still documents `Landed` as routing "a landed
+internal/monitor/session_status.go still documents `Landed` as routing "a landed
 non-terminal task to the catch-all ⁇ bucket". That has been wrong since E-1750 split ⁇ into
 ⏚ landed + ⁇ unknown; classify() returns `actLanded`. Fix the comment while in here.
 
@@ -68,3 +68,7 @@ and deliberately fenced out of it — E-1707 changed only dim/bold, never classi
 No test covers this: `TestClassify` has no terminal-status case, and `TestBuildLegend`'s
 terminal case sets `IsFocal`, so it exits classify() at the first decoration and never
 reaches the switch.
+
+## From the description
+
+See the analysis for the reproduction, the classification decisions the fix needs, and an adjacent stale comment to fix with it.
