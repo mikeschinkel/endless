@@ -226,3 +226,9 @@ proposal was: let sentiment reading label corpus rows, so the optimizer has data
 but never let it be the answer key the agreement number is computed from.
 
 Given Q1, that restriction now looks wrong. Reconsider before building.
+
+## From the description
+
+A `!` shell call does not help (tested: the agent still replies), and a skill cannot help either, since 'run this and say nothing' is a guideline and this project's thesis is that guidelines lose to gates.
+
+Needs the CLI (free-form critique, optional span reference, silent on success, LOUD on any rejection), and a slash-command front door for users who will not use a terminal, accepting that it comments.
