@@ -24,3 +24,7 @@ endless-managed commits) cover GIT currency — whether a worktree's commits can
 brought current. Neither covers TASK-STATUS currency, which is what this is.
 Whatever mechanism this brainstorm lands on should check whether it can lean on
 those two for the git-side signal rather than re-deriving it.
+
+## From the description
+
+The question is the mechanism, not the verdicts: ad-hoc script, a new CLI verb, a background job, an agent pass that pre-classifies for human ratification, or something else.
