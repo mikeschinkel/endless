@@ -293,3 +293,4 @@
 {"value": "retry", "definition": "to attempt again after a failure", "category": ["action"]}
 {"value": "log", "definition": "to record in a log", "category": ["action"]}
 {"value": "separate", "definition": "to split apart into distinct parts", "category": ["action"]}
+{"value": "mark", "definition": "to flag or label something", "category": ["action"]}
