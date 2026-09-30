@@ -26,3 +26,9 @@ projects, each driving many AI-agent sessions.
 in structured, skimmable form and don't make the human re-review what the tool
 already computed. This is a core Endless philosophy and deserves a prominent place
 in the narrative.
+
+## From the description
+
+Distinct from ROADMAP.md and README; deliberately not under the ROADMAP epic.
+
+Sources: Mike's Key Tenets, the single-dev->multi-dev arc, and the lower-review-burden philosophy given headline billing.
