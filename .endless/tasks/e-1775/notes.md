@@ -1,0 +1,1 @@
+E-1746's plan deliberately let code fences and tables overflow rather than being mangled, to avoid glamour-style prose reflow — but the result is that table pipe rows are emitted as raw un-aligned lines rather than rendered as aligned columns.
