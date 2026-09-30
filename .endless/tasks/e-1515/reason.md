@@ -1,0 +1,7 @@
+Dissolved by the port to Go rather than worth fixing in Python. The failure needs a running process to load source lazily after mutating the source it loads from; a compiled Go land has no import cache and cannot reproduce it, so the port removes the failure mode instead of repairing it. Fixing it now would mean either putting self-hosting plumbing into product code — for a hazard no downstream project can reach, since the landed branch must contain the Python the landing process imports — or wrapping the single canonical path in the Justfile, and both get deleted by the port.
+
+Measured 2026-09-30 before deciding: 760 landings on record and no code-bearing task missing a landing row since May 2026, so this costs no landing records. Documented twice in five months (2026-05-29 landing E-1510, 2026-08-20 landing E-2011), and both were recovered by re-running the land. The interim cost until the port is therefore an occasional confusing ImportError needing one re-run.
+
+The unquantified residual is the silent variant: a module imported for the first time after the merge reading an already-cached module's changed constant, which raises nothing and would leave no trace. Never observed. Accepted knowingly rather than overlooked.
+
+E-1516 was folded in here as the same bug before this decision; E-2013 was a third copy, declined in August. If the port stalls or the loud failure starts recurring often enough to matter, reopen rather than filing a fourth.
