@@ -5,3 +5,9 @@ Why build our own allocator, not import lipgloss/table: (a) it bakes in both fla
 Panning: less 668 pans horizontally on-demand via arrow keys (man: RIGHTARROW '...acts as though -S were in effect' while scrolled), so we need NOT launch with -S (which would break the prose no-reflow-but-soft-wrap design). less slides raw text (half-screen default step), not column-snapping like a TUI grid, so it's gentler than teagrid — but we still cap column width (maxColFraction ~0.65W, hard cap W-minCol) so >=2 columns stay visible and panning reads as sliding.
 
 Constants (minColDivisor 2.5, maxHeaderRows 3, targetMaxRows 6, maxColFraction 0.65) have no closed-form optimum — they are balanced empirically via the eyeball-tuning harness in the plan.
+
+## From the description
+
+Fix the renderer to detect table blocks and render them with aligned columns (padded cells, separator row drawn) while preserving the no-reflow behavior for prose.
+
+Verify via 'endless task show <id> -p' on a task whose text contains a table.
