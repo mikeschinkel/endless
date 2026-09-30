@@ -524,8 +524,13 @@ dev-sandbox-init:
     fi
     "$sandbox_bin" sandbox init --mode worktree
 
-# Run Python tests
-test:
+# Run Python tests.
+#
+# Depends on `build` (E-2197): the suite shells out to bin/endless-go, so
+# without it a stale binary decides the result instead of the source. The Go
+# build is incremental, so an unchanged tree costs almost nothing. test-go needs
+# no such prerequisite — `go test` compiles from source.
+test: build
     uv run pytest tests/ -v
 
 # Run a task's verification suite while developing Endless — the self_dev

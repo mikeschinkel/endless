@@ -93,19 +93,20 @@ func ValidateStatusActor(db dbQuerier, taskID int64, to taskstatus.Status, actor
 	}
 
 	if actor.SessionID != "" {
+		// An unreadable sessions row is not evidence of a mistake, and
+		// referential integrity is not this validator's job — the same stance
+		// ValidateNoParentCycle takes on an unreadable ancestor. So it skips
+		// the held-task rule, but only that rule: the never-claimed rule below
+		// does not depend on this session, and returning here let any session
+		// id without a row set an unclaimed task to `unverified` (E-2197).
 		held, err := sessionHeldTask(db, actor.SessionID)
-		if err != nil {
-			// An unreadable sessions row is not evidence of a mistake, and
-			// referential integrity is not this validator's job — the same
-			// stance ValidateNoParentCycle takes on an unreadable ancestor.
-			return nil
-		}
-		if held == nil {
+		switch {
+		case err != nil:
+		case held == nil:
 			return fmt.Errorf(
 				"events: session %s has not claimed any task, so it may not set task %d to %q; claim it first (endless task claim E-%d)",
 				actor.SessionID, taskID, to, taskID)
-		}
-		if *held != taskID {
+		case *held != taskID:
 			return fmt.Errorf(
 				"events: session %s holds task %d, so it may not set task %d to %q; a session owns one task for its lifetime — spawn a session on E-%d instead (endless task spawn E-%d)",
 				actor.SessionID, *held, taskID, to, taskID, taskID)

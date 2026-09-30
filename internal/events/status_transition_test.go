@@ -250,6 +250,35 @@ func TestUnverifiedRequiresTheTaskToHaveBeenClaimed(t *testing.T) {
 	}
 }
 
+// TestUnreadableSessionStillRequiresTheTaskToHaveBeenClaimed pins E-2197. A
+// session id with no sessions row skips the held-task rule, but must not skip
+// the never-claimed rule with it — that early return is what let the Python
+// report-reminder fixtures move a never-claimed task to `unverified`.
+func TestUnreadableSessionStillRequiresTheTaskToHaveBeenClaimed(t *testing.T) {
+	db := newDerivationDB(t)
+	seedTask(t, db, 65, nil, int(tasktype.TaskTypeTask), taskstatus.Underway)
+
+	_, err := execTaskFieldsUpdated(db, statusUpdate(t, 65, taskstatus.Unverified, "999"), nil)
+	if err == nil {
+		t.Fatal("`unverified` landed on a never-claimed task because the session row was missing")
+	}
+	if !strings.Contains(err.Error(), "never been claimed") {
+		t.Errorf("refusal does not say why: %v", err)
+	}
+}
+
+// TestUnreadableSessionOnAClaimedTaskIsNotRefused pins the other half: the
+// missing row alone is still not evidence of a mistake.
+func TestUnreadableSessionOnAClaimedTaskIsNotRefused(t *testing.T) {
+	db := newDerivationDB(t)
+	seedTask(t, db, 66, nil, int(tasktype.TaskTypeTask), taskstatus.Underway)
+	seedHolderSession(t, db, 906, 66)
+
+	if _, err := execTaskFieldsUpdated(db, statusUpdate(t, 66, taskstatus.Unverified, "999"), nil); err != nil {
+		t.Fatalf("a claimed task was refused over an unreadable session row: %v", err)
+	}
+}
+
 // TestStatusesOutsideTheWorkLaneAreNotActorChecked pins the rule's scope. Only
 // `underway` and `unverified` assert something about who did the work; the
 // others are judgments anyone may record.

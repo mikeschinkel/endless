@@ -51,7 +51,16 @@ def _add_task(title: str, status: str = "underway", type_id: int = 1) -> int:
         "VALUES (1, ?, ?, ?, 'now', datetime('now'))",
         (title, status, type_id),
     )
-    return cur.lastrowid
+    task_id = cur.lastrowid
+    # An underway task was claimed by someone: record that the session these
+    # tests act as (conftest's stubbed id) holds it. Without the row, moving it
+    # to `unverified` is E-2018's never-claimed refusal (E-2197).
+    db.execute(
+        "INSERT INTO sessions (id, session_id, project_id, state, task_id, started_at) "
+        "VALUES (?, ?, 1, 'ended', ?, '2026-08-01T00:00:00')",
+        (task_cmd._current_endless_session_id(), f"uuid-report-reminder-{task_id}", task_id),
+    )
+    return task_id
 
 
 def _fired(capsys) -> bool:
