@@ -5,3 +5,11 @@ E-1450's "all hook-fired writes go to the real DB" rule is correct for productio
 Implement E-1450 as designed. The current edge-case carve-outs in the prompt (test-fixture detection, sandbox-init bypass) are stand-ins, not a full solution. When hook testing against the sandbox becomes a felt need, **E-1458** ("Allow opt-in hook routing to sandbox DB for self_dev testing") addresses it properly — an opt-in mechanism (env var, per-event marker, or wrapper) that bypasses the IsSandboxActive() override at the hook entry.
 
 Until E-1458 lands, hook tests must either inject DB handles explicitly or accept that hook events leak to the real DB.
+
+## From the description
+
+Fix: ALL hook-fired writes (session registration, event emission, task-status transitions) target the real DB regardless of sandbox routing,
+
+because these reflect real-world activity not test fixture data.
+
+Rare edge cases can be carved out individually.
