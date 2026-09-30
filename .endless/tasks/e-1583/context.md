@@ -1,0 +1,1 @@
+Audit 2026-06-15 (E-1546 planning) found the guide references the --decision flag (which no longer exists) in index.md (Common patterns), tasks.md (lines around 87, 124, 179 in the relation-type table), decisions.md (lines 33-43 in the 'Inline --decision is the preferred form' section), and sessions.md (line 14). Also stale --type lists.
