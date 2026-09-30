@@ -64,3 +64,7 @@ populated ones and proceeds on a partial record. This is the machine-facing
 instance of the failure that produced the `--text` to `--all-fields` sweep: the
 design content of a task sitting behind a flag the reader did not know to pass.
 There the reader was a human who could at least see the placeholder.
+
+## From the description
+
+Fix: --json returns full bodies by default, and a new --brief[=N] opts into a light payload by truncating to 256 chars with an ellipsis rather than omitting, so a populated field is always a string and null means only 'empty'.
