@@ -37,3 +37,11 @@ since superseded with `homeRelative()`. 25 of them are unsettled for that reason
 alone. Reconcile should recognise an uncommitted change whose effect main
 already contains and offer to discard it — the manual answer here, as in the
 E-1537 land that surfaced this task, was `reset --hard main`.
+
+## From the description
+
+Classifies each unlanded commit by files touched: (a) endless-managed metadata (.endless/plans, .endless/analyses, .endless/db-ledger) that match or are superseded on main → safe to drop, (b) endless-managed metadata with genuinely unique branch content → preserve with clear per-file explanation, (c) any non-endless-managed file → bail out (real work that needs land, not reconcile).
+
+Output should tell the operator exactly what would happen before doing anything destructive.
+
+Invocable standalone as 'endless worktree reconcile <id>' or as a --reconcile fallback flag on 'endless worktree land'.
