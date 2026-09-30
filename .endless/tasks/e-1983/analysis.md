@@ -424,3 +424,7 @@ newest row and discards the rest would destroy the history and keep the husk.
 - Never keep the newest row. Keep the one the conversation is attached to.
 - Fold nothing in silently: 25 of 45 need a judgment call, so the repair prints
   what it decided per task and is re-runnable.
+
+## From the description
+
+What remains to decide is what the gate compares and what it does on a mismatch, plus the escape hatch every version of this needs.
