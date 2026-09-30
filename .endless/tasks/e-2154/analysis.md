@@ -1,0 +1,1 @@
+Explore what an entry is, where it lives, how an agent meets it without eating context, whether it is descriptive or enforced, what approval means mechanically, and how it stays distinct from the guide, LESSONS and decisions.
