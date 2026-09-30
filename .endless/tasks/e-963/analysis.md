@@ -1,0 +1,3 @@
+(1) endless task add: reject when neither --description nor --text is provided; if --text is given and --description is not, auto-derive description from the first non-blank, non-heading line of the text file. (2) endless decision add: same rule, but decisions usually have no --text, so practically --description becomes required. (3) endless task update: do not touch description when updating other fields; require explicit confirmation when clearing. (4) Display fallback in task show / decision show: when description is NULL, render an excerpt of text or '(no description, see text)' rather than blank.
+
+No schema change.
