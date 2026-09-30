@@ -1,0 +1,1 @@
+Origin: 2026-05-03 discussion under E-1134's verb-storage thread; concrete example is the post-ship cleanup pattern (e.g. retyping E-1140/E-1141 prose-typed links) that currently has nowhere clean to live.
