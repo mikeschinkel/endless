@@ -1,0 +1,1 @@
+Children cover the storage + events foundation (E-1378), the Python CLI + web refit (E-1507), the task_deps -> task_relations rename that the decision split makes coherent (E-1389), and the team-decisioning state model that extends the new lifecycle (E-1383).
