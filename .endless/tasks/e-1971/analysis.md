@@ -32,3 +32,7 @@ other ledger commits.
 
 Secondary: the raw git text reaches the user, and the advice it gives — remove
 the lock file manually — is wrong for this case and dangerous as a habit.
+
+## From the description
+
+Fix in the Go commit path: retry lock acquisition with backoff, or coalesce appends so one commit covers a burst instead of one commit per event.
