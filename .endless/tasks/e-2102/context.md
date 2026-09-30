@@ -1,0 +1,1 @@
+`task spawn` builds `<project>_<one-or-two-words>[E-NNNN]`, spending a narrow tab on words the user already knows; `session goto --resume` passes no -n at all, so tmux falls back to the command and every resumed window reads `claude`.
