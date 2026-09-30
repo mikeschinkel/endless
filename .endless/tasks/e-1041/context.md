@@ -1,0 +1,3 @@
+rebuild-db replay logs three classes of warnings: (a) task.created/task.landed FK failures where the parent or task doesn't exist in the projection - pre-E-808 tasks were inserted via raw SQL and have no task.created event to replay; (b) UNIQUE failures where the ledger has two task.created events for the same ID - root cause is PreAllocateTaskID using SELECT MAX(id)+1, which reuses the deleted task's ID when it was the highest; (c) UNIQUE failures where committed test/e2e fixture ledgers reuse real task ids 1..~150 (~36 of 47 committed segment files, per the E-1710 audit) - scrubbing those is E-1716, preventing new pollution is E-1665.
+
+FK discovered during E-787 Phase 5; UNIQUE+ID-reuse confirmed during E-1507 verification; fixture-reuse found in the E-1710 audit.
