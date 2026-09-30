@@ -1,0 +1,1 @@
+the 2026-08-14 research brief is now tracked at docs/arch-2026-08-14-cross-session-messaging.md (it was under docs/private, excluded via .git/info/exclude and so absent from every worktree and every other clone).
