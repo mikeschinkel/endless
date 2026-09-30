@@ -1,0 +1,1 @@
+Valid values become ('task', 'project') only. Uses recreate-table pattern. Guard: check sqlite_master SQL for 'plan'. First UPDATE any existing rows with source_type/target_type='plan' to 'task'. Update inline CREATE TABLE in both db.go and db.py. Files: sql/schema.sql, internal/monitor/db.go, src/endless/db.py.
