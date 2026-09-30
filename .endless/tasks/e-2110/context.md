@@ -1,0 +1,1 @@
+Endless assumes Claude and tmux so foundationally that the agent-less path is barely designed: claim --unattended claims a task and leaves sessions.task_id unset, so the work has no session record and no route back.
