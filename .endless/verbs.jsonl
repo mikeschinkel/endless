@@ -311,3 +311,4 @@
 {"value": "seed", "definition": "to populate with initial data", "category": ["action"]}
 {"value": "turn", "definition": "to change state or direction", "category": ["action"]}
 {"value": "tell", "definition": "to inform", "category": ["action"]}
+{"value": "repeat", "definition": "to do again", "category": ["action"]}
