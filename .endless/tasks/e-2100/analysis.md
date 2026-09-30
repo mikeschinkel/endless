@@ -9,3 +9,9 @@ Do not weaken the existing refusals. The reaper already declines a worktree with
 a live session in it, and that stays. "Settled" here means the same thing
 `task unsettled` means — no uncommitted changes, and nothing on the branch that
 main does not already have — not merely "the task looks finished".
+
+## From the description
+
+Recording a landing to make them reap is the wrong lever: it writes a falsehood into the exact table E-2095's not-on-main report reads.
+
+Fix it in the reaper instead: treat settled-with-nothing-to-land as reclaimable alongside landed, same TTL, same live-session refusal.
