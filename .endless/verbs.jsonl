@@ -298,3 +298,4 @@
 {"value": "preserve", "definition": "to keep intact", "category": ["action"]}
 {"value": "sort", "definition": "to arrange in order", "category": ["action"]}
 {"value": "spawn", "definition": "to start a new process or session", "category": ["action"]}
+{"value": "toggle", "definition": "to switch between two states", "category": ["action"]}
