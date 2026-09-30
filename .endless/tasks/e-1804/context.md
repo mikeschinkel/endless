@@ -1,0 +1,1 @@
+Filing one task took four attempts and three rejections: title gates fire late, one at a time (length, then verb), are undocumented in --help, and the verb error leaks internal 'registration' jargon plus a gameable bypass.
