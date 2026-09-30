@@ -129,3 +129,9 @@ and should not hunt for code that is not there:
 This is the cost of anchoring to code at all, and it is why the anchor is a file
 plus a symbol rather than a line: a rename leaves a row findable, where a line
 number would leave it silently wrong.
+
+## From the description
+
+A path rewritten to satisfy a validation rule changes nothing and is narration; a refusal that blocks the work or needs a decision must be reported.
+
+The mechanism is decided -- audience-aware rendering through the existing agent output mode, so the directive reaches the agent and never the human -- so the audit classifies sites and notes any refusal that has no agent rendering yet, then files a todo to apply it.
