@@ -11,3 +11,9 @@ Arguments for deprecating:
 Decision deferred. File output of session use experience over weeks; revisit when there's signal either way.
 
 Origin: E-1014 landing. Mike pushed back on the 'will deprecate' framing — keep cd until there's evidence it's friction, not before.
+
+## From the description
+
+Open question, not a committed deprecation.
+
+Arguments for and against keeping both are in the analysis field.
