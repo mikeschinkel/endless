@@ -72,3 +72,7 @@ The flat file was never gated. That is a gap, not a deliberate exemption — it
 predates the gate and nothing about a lesson makes a session ref safe to commit.
 Whatever choke point E-2007 routes lesson writes through should be covered from
 the start, rather than gated later once the rows exist.
+
+## From the description
+
+Add a gate at the same inline-content choke point the path gate already uses, refusing on write with an escape hatch for the legitimate case (runtime CLI output that names a session).
