@@ -29,3 +29,7 @@ Build an 'endless worktree land --resolve-auto' flag that automates the v1 proce
 
 - If we hit this conflict more than 2-3 times in real use.
 - If the documented recovery feels unsafe to type from a hot-key state.
+
+## From the description
+
+v2: 'land --resolve-auto' flag, gated on real recurrence.
