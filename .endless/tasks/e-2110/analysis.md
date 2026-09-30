@@ -30,3 +30,11 @@ the flag collapses rather than being renamed.
 So the ordering is: settle whether an agent-less claim mints a session; then see
 how many of these two flags survive; then name what is left. Renaming first
 would be churn, which is the same reason the rename does not lead this task.
+
+## From the description
+
+If a session record is the spine, then what is absent in that case is an AGENT, not a session — which argues the flag should be --no-agent and should still mint a session, and raises the question of what a non-Claude session row holds and how it starts and ends.
+
+Expect a follow-up research task.
+
+The --unattended rename rides along rather than landing first, since renaming a flag before deciding whether the concept survives is churn.
