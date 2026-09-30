@@ -1,0 +1,1 @@
+Update 'decision add --about' to default to relates_to instead. Update E-958's vocabulary text. Update tests/test_relations.py to remove informs assertions. Reinstall via 'uv tool install --reinstall .'
