@@ -1,0 +1,1 @@
+A /bg'd Claude session runs under the Claude daemon with no $TMUX_PANE and a new session id, so endless can't map it to the viewing pane or carry its task/epic across — the status row blanks and never recovers.
