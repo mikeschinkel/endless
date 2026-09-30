@@ -1,0 +1,1 @@
+The transition labels are the source of truth; the guide's status table and docs/status-lifecycle.mmd are both generated from them, so the fix is one edit to the Go table, one to the table gloss, and a regenerate.
