@@ -1,0 +1,3 @@
+ED-1073 already forbids time-frozen specifics — byte counts, file sizes, line numbers, sha hashes — and says to cite file or function names instead so the reader re-locates at pickup. It is violated routinely because nothing enforces it and two things undercut it: ED-1073's own text scopes the rule to the analysis field, so a literal reading does not reach a plan in text, a description, or an outcome; and the tasks guide describes text as a full implementation plan 'including approach, file paths, verification steps', which invites the thing the decision forbids.
+
+Prompted by E-1929's plan, which cited line numbers throughout and goes stale as soon as anything else lands.
