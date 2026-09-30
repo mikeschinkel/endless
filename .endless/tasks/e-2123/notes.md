@@ -1,0 +1,1 @@
+The commit titled 'Change --text to --all-fields' changed 'endless task show <id> --text' to '--all-fields' in three places by hand, to stop spawned sessions reading only the plan and missing a populated --analysis.
