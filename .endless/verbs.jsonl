@@ -301,3 +301,4 @@
 {"value": "toggle", "definition": "to switch between two states", "category": ["action"]}
 {"value": "address", "definition": "to deal with", "category": ["action"]}
 {"value": "clarify", "definition": "to make clearer", "category": ["action"]}
+{"value": "pin", "definition": "to fix in place", "category": ["action"]}
