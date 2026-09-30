@@ -1,0 +1,1 @@
+Today we ship endless-event, endless-hook, endless-channel, endless-sandbox, endless-serve, endless-tmux as separate Go binaries — six install targets, six symlinks to refresh on every just-install, six entries to wrap in bin-sandbox/, six lookups when subprocesses spawn.
