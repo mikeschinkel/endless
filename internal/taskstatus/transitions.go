@@ -186,7 +186,10 @@ var EntryStatuses = []Status{Unplanned, Submitted}
 // slice is the smallest thing that meets it.
 var transitionGroups = []transitionGroup{
 	{
-		Name: "Planning and approval — the two-step gate that makes `ready` mean approved",
+		// Approval is a review RECORD, not a permission: spawn and claim accept
+		// `submitted` exactly as they accept `ready` (E-2200). What approving
+		// changes is what the board shows — ⚑ review becomes ▶ do.
+		Name: "Planning and review — approval records that the owner reviewed the plan",
 		Transitions: []Transition{
 			{From: Unplanned, To: Submitted, Actor: ActorAgent, Label: "submits — plan attached"},
 			{From: Submitted, To: Ready, Actor: ActorUser, Label: "approves"},
@@ -198,15 +201,19 @@ var transitionGroups = []transitionGroup{
 		// The plan is what was approved, so changing it materially takes the
 		// approval back (E-1993). A description edit never moves status: the
 		// description describes the task, it is not the spec.
-		Name: "Re-plan — a material plan edit on an approved task drops its approval",
+		Name: "Re-plan — a material plan edit on a reviewed task drops its approval",
 		Transitions: []Transition{
 			{From: Ready, To: Submitted, Actor: ActorSystem, Label: "resets on a material plan edit"},
 		},
 	},
 	{
-		Name: "Claiming — `task claim` promotes any of these in place",
+		// The plan and its open questions are the claim gate, not status
+		// (E-2200), so `submitted` claims as `ready` does. These edges and the
+		// ClaimPromotes group are the same fact; a test holds them equal.
+		Name: "Claiming — `task claim` and `task spawn` promote any of these in place",
 		Transitions: []Transition{
 			{From: Ready, To: Underway, Actor: ActorSession, Label: "claims"},
+			{From: Submitted, To: Underway, Actor: ActorSession, Label: "claims"},
 			{From: Unplanned, To: Underway, Actor: ActorSession, Label: "claims"},
 			{From: Revisit, To: Underway, Actor: ActorSession, Label: "claims"},
 		},
@@ -355,8 +362,8 @@ var transitionGroups = []transitionGroup{
 		// resume, which is what taskstatus.ReopenRefused exists to say. All
 		// land back at an entry status rather than teleporting to `ready`: a
 		// reconsidered task is exactly a task filed again — `unplanned`, or
-		// `submitted` when it already carries a plan, which still needs
-		// approving before anyone may work it.
+		// `submitted` when it already carries a plan, whose approval is gone
+		// with the decision that abandoned it.
 		Name: "Reversal — reconsidering an abandonment decision",
 		Transitions: []Transition{
 			{From: Declined, To: Unplanned, Actor: ActorUser, Label: "reconsiders"},

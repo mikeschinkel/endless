@@ -3602,14 +3602,14 @@ def _refuse_unrated(item_id: int, verb: str, effective: dict, why: str):
 
 def submit_item(item_id: int, complexity: str | None = None,
                 risk: str | None = None):
-    """Mark a task as `submitted` — spec-complete, awaiting human approval.
+    """Mark a task as `submitted` — spec-complete, awaiting the user's review.
 
     Agent-set, and only on a task that has a plan (E-1993): what gets
     approved is the plan, and a description is never a sufficient spec. Usually
     unnecessary — attaching a plan moves a task here by itself (the executor's
     plan-attach promotion); this is for a plan attached with --keep-status, or
-    a `revisit` task being re-submitted. A human then runs `endless task
-    approve` to reach `ready`.
+    a `revisit` task being re-submitted. A human may then run `endless task
+    approve` to reach `ready`; spawn and claim do not wait for it (E-2200).
 
     E-1813: submitting is where the agent PROPOSES both ratings (ED-1538), so
     it is refused while either is unset — from the flags here or already on
@@ -3677,7 +3677,11 @@ def submit_item(item_id: int, complexity: str | None = None,
 
 def approve_item(item_id: int, complexity: str | None = None,
                  risk: str | None = None):
-    """Approve a `submitted` task → `ready` (the human approval gate).
+    """Approve a `submitted` task → `ready` (a record of the user's review).
+
+    Approval gates nothing: `_require_spawnable` (plan, open questions) is the
+    whole spawn and claim gate, and it never reads status (E-2200). What
+    approving changes is the board, where ⚑ review becomes ▶ do.
 
     Approval being a human act stays a CONVENTION, not an enforced gate. It was
     enforced against `kind=background` sessions only, and E-2074 removed that
@@ -4574,9 +4578,8 @@ def create_claimed_task_for_session(
 
     The container `session resume` mints for a session that never claimed a task
     (E-1918). Created straight at `underway` and bound in one step, skipping
-    the plan gate and the approve gate deliberately: a human ran `session
-    resume`, so the approval those gates exist to capture already happened
-    interactively.
+    the plan gate deliberately: a human ran `session resume`, so the intent
+    that gate exists to capture was already expressed interactively.
 
     `force=True` on the add is about the title, not the gates: the title is a
     fixed placeholder that does not open with a registered verb, and letting it
@@ -4639,10 +4642,8 @@ def _require_spawnable(item_id: int, verb: str) -> None:
     if not plan:
         problems.append(
             f"{tid} has no plan. A session works from the plan; the description\n"
-            f"  only says what the task is. Write the plan, attach it, and have it\n"
-            f"  approved:\n"
+            f"  only says what the task is. Write the plan and attach it:\n"
             f"      endless task update {tid} --plan-file <path>   (→ submitted)\n"
-            f"      endless task approve {tid}                     (the user)\n"
             f"  A question the plan cannot settle without the user is not a reason\n"
             f"  to guess: ask it, and the task parks until it is answered:\n"
             f"      endless question ask {tid} \"<question>\""
@@ -4759,11 +4760,11 @@ def claim_item(item_id: int, unattended: bool = False, force: bool = False):
     if target_session is None and not (unattended or force):
         _require_tmux_for_claim(item_id)
 
-    # E-2074 removed the "a background session may only claim `ready` work"
-    # refusal that stood here. It gated on sessions.kind_id = background, and
-    # background agents are gone, so no session could ever trip it again. The
-    # rule it enforced — an unattended loop must not pick up work a human has
-    # not approved — has no unattended loop left to bind.
+    # Status is not a claim gate beyond the settled refusal above: a
+    # `submitted` task claims exactly as a `ready` one does (E-2200). Approval
+    # records a review; `_require_spawnable` below is the whole gate. E-2074
+    # removed the last status rule here, "a background session may only claim
+    # `ready` work", along with background agents.
 
     if _check_task_ownership(item_id, target_session):
         from endless.worktree_cmd import create_task_worktree, _project_root

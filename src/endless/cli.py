@@ -775,7 +775,7 @@ def info(name):
 @project_cmd.command("status")
 @click.argument("name", default=None, required=False)
 @click.option("--all", "show_all", is_flag=True,
-              help="Include `ready` tasks — spawnable work, a claim on capacity "
+              help="Include `ready` tasks — reviewed work, a claim on capacity "
                    "rather than attention")
 @output_options(agent=False,
                 json_help="Emit the rows as JSON, uncapped, each carrying its action")
@@ -805,7 +805,7 @@ def project_status(name, show_all, as_json, limit, no_limit):
 @project_cmd.command("monitor")
 @click.argument("name", default=None, required=False)
 @click.option("--all", "show_all", is_flag=True,
-              help="Include `ready` tasks — spawnable work, a claim on capacity "
+              help="Include `ready` tasks — reviewed work, a claim on capacity "
                    "rather than attention")
 @click.option("--tmux", "use_tmux", is_flag=True,
               help="Open the monitor in its own two-pane tmux session (the "
@@ -3401,9 +3401,9 @@ def task_decline(item_ids, reason):
 def task_submit(item_ids, complexity, risk):
     """Submit one or more tasks (unplanned/revisit → submitted; needs a plan).
 
-    Agent-set signal that a task is spec-complete and awaiting human
-    approval — either a plan was attached or the description is a sufficient
-    spec. A human then runs `endless task approve` to reach `ready`.
+    Agent-set signal that a task has a plan ready for the user's review. A
+    submitted task can already be claimed or spawned; a human may run
+    `endless task approve` to record the review and reach `ready`.
 
     Submitting proposes both ratings — complexity and risk — for the user to
     ratify at approve, so it is refused while either is unrated. Pass them
@@ -3423,8 +3423,9 @@ def task_submit(item_ids, complexity, risk):
 def task_approve(item_ids, complexity, risk):
     """Approve one or more submitted tasks (submitted → ready).
 
-    The human approval gate: `ready` provably means human-approved. Approving
-    also ratifies the task's complexity and risk ratings, so an unrated task is
+    Records that a human reviewed the plan. It does not unlock spawning:
+    `task spawn` and `task claim` accept a submitted task as they accept a
+    ready one. Approving also ratifies the task's complexity and risk ratings, so an unrated task is
     refused — supply or override either rating here.
     """
     from endless.task_cmd import approve_item

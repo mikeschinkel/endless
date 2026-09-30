@@ -70,7 +70,7 @@ const (
 	// listed so the frame is a complete picture of the project rather than a
 	// worry list with no context.
 	actDoing
-	// actReady: a `ready` task — spawnable. --all only: this is a claim on
+	// actReady: a `ready` task — reviewed, waiting to start. --all only: this is a claim on
 	// CAPACITY, not on attention, and there are enough of them to bury every rank
 	// above.
 	actReady
@@ -704,8 +704,8 @@ func legend(project string, groups []group) string {
 // that is the row E-1815 calls load-bearing, the one whose being missed makes
 // auto-spawn's attention cap unsafe, and a "loud" that is shared with three
 // other ranks is not loud. Dim marks the two ranks that need nothing from the
-// user: a session that is working, and (under --all) work that is merely
-// spawnable.
+// user: a session that is working, and (under --all) reviewed work that is
+// merely waiting to start.
 //
 // Intensity only, never color: the 30-47 ANSI range is remapped by the user's
 // theme, and a frame that renders as an unreadable block on someone else's

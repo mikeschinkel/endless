@@ -50,11 +50,14 @@ const (
 	actFrom
 	actDoing
 	actDo
-	// actReview: a `submitted` task — planned/spec-complete but awaiting the
-	// user's approval, so NOT spawnable (the claim gate refuses it). It gets its
-	// own ⚑ glyph and `review` label rather than folding into actDo (▶), whose
-	// glyph reads as "ready to spawn". Ranked right after actDo so it reads
-	// "here's what's spawnable, then here's what's one approval away". ⚑ (U+2691
+	// actReview: a `submitted` task — a plan waiting for the owner's review.
+	// Spawn and claim accept it exactly as they accept `ready` (E-2200: the
+	// plan and open questions are the whole gate); approval is an optional
+	// review record, and this glyph is where that record shows. It gets its own
+	// ⚑ glyph and `review` label rather than folding into actDo (▶), so the
+	// board separates "reviewed, ready to spawn" from "plan not yet reviewed".
+	// Ranked right after actDo so it reads "here's what's been reviewed, then
+	// here's what's one review away". ⚑ (U+2691
 	// BLACK FLAG) measures single-width (asserted in TestActionIcons) so it aligns
 	// in the width-aware table like every other icon.
 	actReview
@@ -1102,12 +1105,13 @@ func classify(r monitor.SessionStatusRow) action {
 	case "ready":
 		return actDo
 	case "submitted":
-		// `submitted` = planned/spec-complete, awaiting human approval. It has a
-		// spec already, so it is NOT `actPlan` (✎ plan) — that would mis-show a
-		// planned-but-unapproved task as "needs a plan". But it is also NOT
-		// `actDo` (▶): the claim gate refuses a submitted task, so rendering it as
-		// spawnable contradicts the gate. It routes to its own actReview (⚑),
-		// prompting the user to review/approve before it becomes actionable.
+		// `submitted` = a plan waiting for the owner's review. It has a plan
+		// already, so it is NOT `actPlan` (✎ plan) — that would mis-show a
+		// planned-but-unreviewed task as "needs a plan". It is spawnable (the
+		// plan and open questions are the whole spawn gate; E-2200), but it is
+		// NOT `actDo` (▶) either: ▶ is what approval earns, so the board shows
+		// which plans the owner has reviewed. It routes to its own actReview (⚑),
+		// prompting the owner to review it; `task approve` turns ⚑ into ▶.
 		return actReview
 	case "unplanned", "needs_plan", "revisit":
 		return actPlan

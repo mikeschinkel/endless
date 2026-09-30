@@ -76,7 +76,7 @@ func runStatus(args []string) {
 	fs.StringVar(&o.project, "project", "", "project name (default: the project enclosing the working directory)")
 	fs.Int64Var(&o.projectID, "project-id", 0, "explicit project id (headless: bypasses name/cwd resolution and reads the resolved DB context instead of pinning main; intended for tests)")
 	fs.BoolVar(&o.monitor, "monitor", false, "live dashboard: redraw every 2s until interrupted (Ctrl-C)")
-	fs.BoolVar(&o.all, "all", false, "include `ready` tasks — spawnable work, a claim on capacity rather than attention")
+	fs.BoolVar(&o.all, "all", false, "include `ready` tasks — reviewed work, a claim on capacity rather than attention")
 	// The default is duplicated in src/endless/project_status_cmd.py, which
 	// resolves the cap itself so `--limit`/`--no-limit` behave identically to
 	// every other Endless listing and then passes a RESOLVED number. So this

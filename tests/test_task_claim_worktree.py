@@ -453,3 +453,48 @@ def test_a_bound_sibling_session_is_pointed_at_not_launched_over(
     out = capsys.readouterr().out
     assert "ES-4242" in out
     assert "endless session goto ES-4242" in out
+
+
+def _as_submitted(tid):
+    db.execute("UPDATE tasks SET status = 'submitted' WHERE id = ?", (tid,))
+
+
+def test_claim_takes_a_submitted_task_without_approval(project_with_task):
+    """E-2200: the plan and open questions are the whole gate; approval is not."""
+    from endless.task_cmd import claim_item
+
+    tid = project_with_task["task_id"]
+    _as_submitted(tid)
+    claim_item(tid, unattended=True)
+    row = db.query("SELECT status FROM tasks WHERE id = ?", (tid,))[0]
+    assert row["status"] == "underway"
+
+
+def test_spawn_takes_a_submitted_task_without_approval(project_with_task, monkeypatch):
+    """E-2200: spawn passes every gate on a submitted task and claims it.
+
+    Stopped at the handoff render, the first step after the claim, so no tmux
+    window is launched.
+    """
+    import shutil
+    from endless import task_cmd
+
+    tid = project_with_task["task_id"]
+    _as_submitted(tid)
+    real_which = shutil.which
+    monkeypatch.setattr(shutil, "which",
+                        lambda name: "/usr/bin/tmux" if name == "tmux" else real_which(name))
+    monkeypatch.setenv("TMUX", "/tmp/tmux-sock,1,0")
+    monkeypatch.setattr(task_cmd, "_check_task_ownership", lambda *a, **k: None)
+
+    class Stop(Exception):
+        pass
+
+    def stop(*a, **k):
+        raise Stop
+
+    monkeypatch.setattr(task_cmd, "render_handoff", stop)
+    with pytest.raises(Stop):
+        task_cmd.spawn_plan(tid)
+    row = db.query("SELECT status FROM tasks WHERE id = ?", (tid,))[0]
+    assert row["status"] == "underway"

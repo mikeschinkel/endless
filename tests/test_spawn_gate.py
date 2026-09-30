@@ -27,8 +27,10 @@ def test_no_plan_is_refused_with_the_route_forward(seeded_project_at_cwd):
     msg = str(exc.value)
     assert "has no plan" in msg
     assert f"endless task update E-{item_id} --plan-file" in msg
-    assert f"endless task approve E-{item_id}" in msg
     assert "endless question ask" in msg
+    # E-2200: approval is not part of the gate, so the route forward must not
+    # send anyone to approve.
+    assert "approv" not in msg.lower()
 
 
 def test_a_planned_task_with_no_questions_passes(seeded_project_at_cwd):

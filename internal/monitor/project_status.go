@@ -33,7 +33,7 @@ import (
 //
 // Unlike SessionStatusRows this set is PROJECT-scoped, not focal-task-scoped,
 // and it is deliberately not a superset: `ready` arrives only under all=true,
-// because spawnable work claims capacity, not attention.
+// because reviewed work waiting to start claims capacity, not attention.
 
 // ProjectStatusRow is one row of what `endless project status` prints and
 // `endless project monitor` repaints. Every row carries a task, a session, or
@@ -187,7 +187,8 @@ func ProjectForCwd() (id int64, name string, err error) {
 func projectStatusTaskStatuses(all bool) string {
 	list := taskstatus.SQLList(taskstatus.AwaitsUser) + ",'" + string(taskstatus.Underway) + "'"
 	if all {
-		// `ready` is spawnable work: a claim on CAPACITY, not on attention. It
+		// `ready` is reviewed work waiting to start: a claim on CAPACITY, not on
+		// attention (`submitted` is spawnable too, but it awaits a review). It
 		// is off the default view for the same reason `session status` keeps
 		// terminal rows behind --all — including it by default would bury the
 		// rows that actually need a person under the ones that need a session.

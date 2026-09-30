@@ -90,7 +90,7 @@ func TestTerminalStatusNeverUnknown(t *testing.T) {
 // TestActionIcons pins the glyphs that other surfaces (and the legend) depend on,
 // notably the E-1750 split of the old ⁇ catch-all into ⏚ landed and ⁇ unknown,
 // the untouched ◷ orphan they must stay distinct from, and the E-1765 ⚑ review
-// (submitted, awaiting approval — not spawnable).
+// (submitted, a plan awaiting review — spawnable, but not yet reviewed).
 func TestActionIcons(t *testing.T) {
 	cases := map[action]string{
 		actReview:  "⚑",

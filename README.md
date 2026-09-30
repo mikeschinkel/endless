@@ -116,8 +116,9 @@ endless task spawn --help
 
 Every task moves through a small set of statuses. A task filed without a plan starts
 `unplanned`; one filed with a plan starts `submitted`, and attaching a plan later moves
-an `unplanned` task there too. From there a human runs `endless task approve` to reach
-`ready` — so `ready` provably means *approved to implement*, not merely *planned*.
+an `unplanned` task there too. From there a human may run `endless task approve` to
+reach `ready`, which records that they reviewed the plan. Approval is optional: it is
+not what spawn or claim check, so a `submitted` task can be spawned as it stands.
 
 A plan is required before work starts: `endless task claim` and `endless task spawn`
 refuse a task with no plan, or with open questions still waiting on a person. Filing
@@ -155,17 +156,18 @@ stateDiagram-v2
     [*] --> unplanned
     [*] --> submitted
 
-    %% Planning and approval — the two-step gate that makes `ready` mean approved
+    %% Planning and review — approval records that the owner reviewed the plan
     unplanned --> submitted: agent submits — plan attached
     submitted --> ready: user approves
     submitted --> unplanned: user sends back — the plan is not sufficient
     revisit --> submitted: agent re-submits
 
-    %% Re-plan — a material plan edit on an approved task drops its approval
+    %% Re-plan — a material plan edit on a reviewed task drops its approval
     ready --> submitted: system resets on a material plan edit
 
-    %% Claiming — `task claim` promotes any of these in place
+    %% Claiming — `task claim` and `task spawn` promote any of these in place
     ready --> underway: session claims
+    submitted --> underway: session claims
     unplanned --> underway: session claims
     revisit --> underway: session claims
 

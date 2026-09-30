@@ -177,6 +177,31 @@ func TestPlanAttachPromotionIsALegalEdge(t *testing.T) {
 	}
 }
 
+// TestClaimPromotesMatchesClaimEdges holds the ClaimPromotes group and the
+// table's `claims` edges to one fact (E-2200). They drifted once: spawn took
+// `submitted` tasks while both said it could not, and sessions told the owner
+// to approve before spawning.
+func TestClaimPromotesMatchesClaimEdges(t *testing.T) {
+	var edges []taskstatus.Status
+	for _, tr := range taskstatus.Transitions() {
+		if tr.To == taskstatus.Underway && tr.Actor == taskstatus.ActorSession && tr.Label == "claims" {
+			edges = append(edges, tr.From)
+		}
+	}
+	group := taskstatus.Get(taskstatus.ClaimPromotes)
+	if len(edges) != len(group) {
+		t.Fatalf("claims edges from %v, ClaimPromotes %v", edges, group)
+	}
+	for _, s := range edges {
+		if !taskstatus.Has(taskstatus.ClaimPromotes, s) {
+			t.Errorf("%s -> underway is a claims edge but not in ClaimPromotes", s)
+		}
+	}
+	if !taskstatus.Has(taskstatus.ClaimPromotes, taskstatus.Submitted) {
+		t.Error("submitted is not in ClaimPromotes, but spawn and claim accept it")
+	}
+}
+
 // ---------------------------------------------------------------------------
 // TransitionAllowed
 // ---------------------------------------------------------------------------

@@ -104,10 +104,13 @@ const (
 	// worth a line.
 	AwaitsUser
 
-	// ClaimPromotes are the statuses `task claim` promotes to `underway` in
-	// place. Its complement is `submitted` and `underway` (which the claim gate
-	// refuses and the already-claimed case, respectively) plus Settled, which
-	// needs --force.
+	// ClaimPromotes are the statuses `task claim` and `task spawn` promote to
+	// `underway` in place. They are exactly the `claims` edges of the
+	// transition table (TestClaimPromotesMatchesClaimEdges). Status is not the
+	// spawn gate: `submitted` is here because the plan and its open questions
+	// are the whole gate (E-2200), and approval only records a review. Its
+	// complement is `underway` (the already-claimed case) plus Settled, which
+	// must be reopened first.
 	ClaimPromotes
 
 	// Open is the "there is still work here" set backing the per-project task
@@ -253,7 +256,7 @@ var groups = map[Group][]Status{
 	NotActionable: {Submitted, Underway, Unverified, Unreviewed, Confirmed, Assumed, Completed, Declined, Obsolete, Superseded},
 	Active:        {Underway, Unverified, Unreviewed},
 	AwaitsUser:    {Unverified, Unreviewed, Submitted},
-	ClaimPromotes: {Unplanned, Ready, Revisit},
+	ClaimPromotes: {Unplanned, Submitted, Ready, Revisit},
 	Open:          {Unplanned, Submitted, Ready, Underway},
 	ChildrenStateOrder: {
 		Unplanned, Submitted, Ready, Underway, Revisit, Unverified, Unreviewed,

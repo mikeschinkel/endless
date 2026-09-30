@@ -70,17 +70,18 @@ stateDiagram-v2
     [*] --> unplanned
     [*] --> submitted
 
-    %% Planning and approval — the two-step gate that makes `ready` mean approved
+    %% Planning and review — approval records that the owner reviewed the plan
     unplanned --> submitted: agent submits — plan attached
     submitted --> ready: user approves
     submitted --> unplanned: user sends back — the plan is not sufficient
     revisit --> submitted: agent re-submits
 
-    %% Re-plan — a material plan edit on an approved task drops its approval
+    %% Re-plan — a material plan edit on a reviewed task drops its approval
     ready --> submitted: system resets on a material plan edit
 
-    %% Claiming — `task claim` promotes any of these in place
+    %% Claiming — `task claim` and `task spawn` promote any of these in place
     ready --> underway: session claims
+    submitted --> underway: session claims
     unplanned --> underway: session claims
     revisit --> underway: session claims
 
@@ -162,8 +163,8 @@ stateDiagram-v2
 | Status        | Meaning                                                                                                       |
 |---------------|---------------------------------------------------------------------------------------------------------------|
 | `unplanned`  | Not yet planned — where every task filed without a plan starts. Not claimable or spawnable until it has a plan: attach one with `task update <id> --plan-file <path>` (moves the task to `submitted`). |
-| `submitted`   | Planned, awaiting approval — where a task filed with a plan starts, and where attaching one moves an `unplanned` task. A human runs `task approve <id>` to reach `ready`. |
-| `ready`       | Approved to implement. `ready` provably means human-approved, so background sessions may pick up only `ready` work. |
+| `submitted`   | Planned, not yet reviewed — where a task filed with a plan starts, and where attaching one moves an `unplanned` task. Claimable and spawnable as it stands. A human may run `task approve <id>` to reach `ready`. |
+| `ready`       | Planned and reviewed: a human approved the plan. Approval is a review record, not a permission — `task claim` and `task spawn` accept `submitted` exactly as they accept `ready`. |
 | `underway` | A session has claimed the task and is working on it. Set automatically by `task claim`.                        |
 | `unverified`      | Implementation done, awaiting verification. **Still blocks dependents.**                                       |
 | `unreviewed`  | Research/brainstorm outcome written, awaiting the owner's read — the review lane's counterpart to `unverified`. Those two types reach `completed` only through it, so a session cannot declare its own findings finished. **Still blocks dependents**, and more sharply than `unverified`: the deliverable is information other tasks consume. Refused on `todo`/`bugfix`, which are gated by `unverified` instead. |
@@ -175,9 +176,9 @@ stateDiagram-v2
 | `superseded`  | Another task took the work over. Set by `task replace <old> --by <new>`, which records the `replaced_by` relation and this status in one step — and refused without that relation, because `superseded` names a successor and needs one to name. Also requires a reason (`--outcome` on `task replace`, stored as the reason): the relation says WHAT took the work over, not WHY it was handed on, and a later reader needs both. An unshipped task only: work that already shipped keeps the terminal it earned, and the relation rides alongside it (`assumed (replaced by E-101)`). |
 | `obsolete`    | No longer needs doing — out of date, or superseded by something newer. Requires a reason (`--reason`), as every abandonment does. It covers work that was worth doing when it was filed and has since been overtaken, not only work that was never worth doing; the active decision *not* to do work that would still be worth doing is `declined`, a different fact. The axis is **whether anything replaced it**, not whether it shipped — shipped code being *deleted* is obsolete in the plainest sense, and the landing record keeps the fact that it shipped. When something DID take over, record that instead: `task replace <old> --by <new>`, which holds the status and adds a `replaced_by` relation. |
 
-The agent sets `submitted` (via `task submit`, or by attaching a plan); a human sets `ready` (via `task approve`) — the two-step gate that makes `ready` mean "approved," not merely "planned." Submitting also proposes the task's two ratings — **complexity** and **risk**, each `low`/`medium`/`high` — and approving ratifies them: `task submit` and `task approve` are both refused while either is unrated, and take `--complexity`/`--risk` to set them. Ratings never move status. See **Ratings** in `endless guide tasks`.
+The agent sets `submitted` (via `task submit`, or by attaching a plan); a human sets `ready` (via `task approve`) to record that they reviewed the plan. **Approval is optional and gates nothing:** spawn and claim check only the plan and open questions (below), so a `submitted` task can be spawned without approving it first. What approving changes is the board — `session status` shows `submitted` as ⚑ review and `ready` as ▶ do. Submitting also proposes the task's two ratings — **complexity** and **risk**, each `low`/`medium`/`high` — and approving ratifies them: `task submit` and `task approve` are both refused while either is unrated, and take `--complexity`/`--risk` to set them. Ratings never move status. See **Ratings** in `endless guide tasks`.
 
-`task add` files a new task as `unplanned`, or `submitted` when it is filed with a plan, unless you pass an explicit `--status`. Filing without a plan is legitimate — the task simply parks. What a task needs is a plan **before anyone starts it**: `task claim` and `task spawn` refuse a task with no plan, and a task with any open question (`endless question ask`), and the refusal names the way forward. See `endless guide tasks`.
+`task add` files a new task as `unplanned`, or `submitted` when it is filed with a plan, unless you pass an explicit `--status`. Filing without a plan is legitimate — the task simply parks. What a task needs is a plan **before anyone starts it**: `task claim` and `task spawn` refuse a task with no plan, and a task with any open question (`endless question ask`), and the refusal names the way forward. Those two are the whole gate — status is not part of it, beyond a settled task needing reopening first. See `endless guide tasks`.
 
 **A description edit never changes status.** The description says what the task is; the plan is the spec. **A material plan edit on a `ready` task returns it to `submitted`**, because what was approved changed. An identical or whitespace-only rewrite is a no-op, and `--keep-status` suppresses the reset for a typo- or formatting-only edit. From `underway` on, a plan edit records what the work became and infers nothing.
 

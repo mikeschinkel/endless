@@ -28,17 +28,18 @@ stateDiagram-v2
     [*] --> unplanned
     [*] --> submitted
 
-    %% Planning and approval — the two-step gate that makes `ready` mean approved
+    %% Planning and review — approval records that the owner reviewed the plan
     unplanned --> submitted: agent submits — plan attached
     submitted --> ready: user approves
     submitted --> unplanned: user sends back — the plan is not sufficient
     revisit --> submitted: agent re-submits
 
-    %% Re-plan — a material plan edit on an approved task drops its approval
+    %% Re-plan — a material plan edit on a reviewed task drops its approval
     ready --> submitted: system resets on a material plan edit
 
-    %% Claiming — `task claim` promotes any of these in place
+    %% Claiming — `task claim` and `task spawn` promote any of these in place
     ready --> underway: session claims
+    submitted --> underway: session claims
     unplanned --> underway: session claims
     revisit --> underway: session claims
 
