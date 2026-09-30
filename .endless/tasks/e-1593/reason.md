@@ -1,0 +1,1 @@
+Violates the invariant that a Claude session only ever has one Endless task.
