@@ -76,3 +76,7 @@ change it failed.
 Nothing macOS-specific in the fix, though the symptom is. Any platform whose
 temp root is symlinked hands the same trap to every downstream project's
 suites, and the runner is shipped surface.
+
+## From the description
+
+Fix: canonicalize the run dir in makeRunDir with filepath.EvalSymlinks. One line.
