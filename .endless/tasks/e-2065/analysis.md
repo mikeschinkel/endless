@@ -10,3 +10,9 @@ Split out of E-807 at confirmation (2026-08-25) rather than reopening it: the en
 Sequencing: this must land before `sessions.task_id` loses its ON DELETE SET NULL, and E-2062's guard should be deleted only once this is done. Both constraints are spelled out in E-2062's plan.
 
 Related but separately owned: E-910 (mutations that never reach the ledger at all), E-1041 (replay-side FK and UNIQUE failures), E-914 (a non-nuclear repair path).
+
+## From the description
+
+Copying them back is not a plain INSERT — see the analysis for the notice triggers, the cascade, and the machine-local session ids that make it surgery.
+
+Which tables belong in the copy-back, and what a table the projector does NOT build should mean, are for the implementor to settle with the user.
