@@ -78,3 +78,17 @@ step 2 removed.
 Rebase versus merge is E-1109's config preference. Rebase matches what
 `worktree land` already does; a merge is gentler but leaves a merge commit on
 every task branch.
+
+## From the description
+
+Step 1, the original scope: sync endless-auto commits touching only .endless/plans, .endless/analyses and .endless/db-ledger from each worktree branch up to main — never code or tests, which stay gated by the normal land workflow.
+
+That is what lets a long-lived worktree settle and become reclaimable, and it shrinks the concurrent-append window for ledger shards.
+
+Step 2, absorbed from E-2129: rebase the worktree onto main, moving the merge base forward and collapsing the range the exact unlanded probe pays for, since that cost scales with drift rather than with what the branch holds.
+
+The order is not optional — rebasing first hits the overlapping-metadata conflicts E-1882 resolves by hand.
+
+Step 2 touches only worktrees with no live session and no process holding cwd, via the WorktreeInUse predicate.
+
+Runs on E-698's fire-once runner.
