@@ -36,6 +36,23 @@ type SessionInfo struct {
 	StartedAt    string
 }
 
+// MarkSessionAutoSpawned records that the auto-spawn job opened this session's
+// window (E-1814). Written once, at SessionStart, for a session that has just
+// bound to the task its window was spawned for; the auto-spawn cap counts the
+// tasks whose claiming session carries the flag. Setting it again is a no-op.
+func MarkSessionAutoSpawned(sessionID string) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	if _, err = db.Exec(
+		`UPDATE sessions SET auto_spawned = 1 WHERE session_id = ?`, sessionID,
+	); err != nil {
+		return fmt.Errorf("marking session auto-spawned: %w", err)
+	}
+	return nil
+}
+
 // BindSessionToTask creates or updates a session row and points its
 // task_id at taskID. Does NOT change task status — the caller
 // (typically the Python claim_item via emitted events, or the spawn

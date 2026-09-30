@@ -101,7 +101,7 @@ After `apply`, your tmux session shows a second status row like `[E-NNNN] · <pr
 Endless runs background work through a **fire-once runner**: when invoked it executes any *due* jobs and exits. There is no daemon and no timer inside the runner — repetition lives in whatever triggers it. Today the session monitor fires it on each refresh; a long-running daemon will fire it on events later.
 
 ```bash
-endless jobs list             # registered jobs: cadence, next due, runs, failures
+endless jobs list             # registered jobs: cadence, next due, runs, failures, last note
 endless jobs run              # fire the runner once, now
 endless jobs retry <name>     # clear a job's backoff and make it due immediately
 ```
@@ -110,7 +110,21 @@ Many session monitors may fire the runner at the same moment. Exactly one of the
 
 A job that fails is rescheduled rather than abandoned. Jobs that declare a backoff cap push their next attempt exponentially further out as failures accumulate, so a persistently broken job decays toward that cap instead of retrying at full rate forever. Fixing the cause does not mean waiting the backoff out — `endless jobs retry <name>` makes it due again immediately.
 
-The runner itself knows nothing job-specific — jobs register themselves with it. Three do today: the description-sufficiency triage sweep, the minimizer's autoresearch tick, and the hourly database backup below.
+A job can end a run successfully without doing its work — nothing was due for it to act on. The **NOTE** column in `jobs list` says what the last run did and why; it is replaced every run, so it never describes an older one. A skip is not a failure and does not back off.
+
+The runner itself knows nothing job-specific — jobs register themselves with it. Today they are the auto-spawn selector below, the hourly database backup, the document-mirror sweep, the unlanded-branch cache, and the minimizer's autoresearch tick.
+
+### Auto-spawn
+
+The `auto-spawn` job starts a Claude session, unasked, on a task that is safe to work without an explicit spawn. It is **off until a project opts in**, in that project's own `.endless/config.json`:
+
+```json
+{ "auto_spawn": { "enabled": true, "cap": 3 } }
+```
+
+A task is picked only when it is `ready` (human-approved), rated **low** complexity and **low** risk, in phase `now` or `urgent`, of type `todo` or `bugfix`, unblocked, planned with no open question, and never claimed by any session. Each due run spawns **at most one** task — `urgent` before `now`, oldest first — so the interval is the rate limit. A project with `cap` auto-spawned tasks still underway or unverified gets nothing more until one settles.
+
+The window opens detached, so it never takes your focus, in the tmux session of the most recently active attached client. With no client attached the run skips, so auto-spawn pauses while you are away. Two user-level settings in `~/.config/endless/config.json` tune it: `auto_spawn.interval` (default `5m`) and `auto_spawn.target` (`active`, the default, or `monitor` for the session the runner is in). Auto-spawned sessions carry `*` after their id in `endless project status`. `endless jobs list` shows why the last run did or did not spawn — `no project has opted in`, `nothing eligible`, `every opted-in project is at its cap`, `no tmux client is attached`, or `spawned E-N`.
 
 ---
 

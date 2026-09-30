@@ -118,3 +118,53 @@ def test_foreground_spawn_window_named_for_the_task_alone(isolated_env, fg_env):
 
     cmd = [c for c in fg_env if "spawn-window" in c][0]
     assert cmd[cmd.index("--window-name") + 1] == "E-1705"
+
+
+def test_manual_spawn_passes_no_auto_flags(isolated_env, fg_env):
+    """E-1814: a person's spawn is unchanged — not detached, not marked, and
+    landing in the spawner's own session."""
+    _seed_project_and_task(1705)
+
+    spawn_plan(1705)
+
+    cmd = [c for c in fg_env if "spawn-window" in c][0]
+    assert "--auto" not in cmd
+    assert "--target-session" not in cmd
+
+
+def test_auto_spawn_threads_auto_and_target_session(isolated_env, fg_env):
+    """E-1814: the auto-spawn job's spawn reaches spawn-window as --auto (open
+    detached, mark the window) plus the session it resolved."""
+    _seed_project_and_task(1705)
+
+    spawn_plan(1705, auto=True, target_session="$4")
+
+    cmd = [c for c in fg_env if "spawn-window" in c][0]
+    assert "--auto" in cmd
+    assert cmd[cmd.index("--target-session") + 1] == "$4"
+    # No session asked for it, so none is named as its spawner — not even the
+    # one this process could resolve.
+    assert cmd[cmd.index("--spawned-by") + 1] == "auto-spawn"
+
+
+def test_named_target_session_does_not_require_being_in_tmux(
+        isolated_env, fg_env, monkeypatch):
+    """E-1814: the job may run where $TMUX is unset (`endless jobs run` from a
+    plain shell); a named target needs a reachable server, not a pane. Without
+    one, the old refusal still holds."""
+    _seed_project_and_task(1705)
+    monkeypatch.delenv("TMUX")
+
+    spawn_plan(1705, auto=True, target_session="$4")
+    assert [c for c in fg_env if "spawn-window" in c]
+
+    import click
+    with pytest.raises(click.ClickException, match="Not in a tmux session"):
+        spawn_plan(1705)
+
+
+def test_auto_flags_are_hidden():
+    from endless.cli import task_spawn
+    hidden = {opt for p in task_spawn.params if getattr(p, "hidden", False)
+              for opt in p.opts}
+    assert {"--auto", "--target-session"} <= hidden

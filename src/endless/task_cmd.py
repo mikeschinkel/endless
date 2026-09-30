@@ -6840,7 +6840,8 @@ def _claude_binary() -> str:
 def spawn_plan(item_id: int, project_name: str | None = None,
                worktree: str | None = None, force: bool = False,
                permission_mode: str = "auto", model: str | None = None,
-               name: str | None = None):
+               name: str | None = None, auto: bool = False,
+               target_session: str | None = None):
     """Spawn a new tmux window with Claude working on a task's prompt.
 
     Pre-claims the task (status flip + worktree creation) BEFORE launching
@@ -6866,16 +6867,24 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     nothing else — unlike claim's `--force`, which spelled a second decision as
     well — and it still does so for one release while warning. What replaces it
     is reopening the task explicitly; the refusal below names that route.
+
+    `auto` and `target_session` are the auto-spawn job's (E-1814), never a
+    person's. `auto` opens the window detached, so it does not take the user's
+    focus, and marks it so SessionStart flags the session auto-spawned.
+    `target_session` names the tmux session the window opens in; without it the
+    window lands in the spawner's own session (E-2125).
     """
     import shutil
     import subprocess
     import tempfile
 
     # tmux is the only delivery surface (E-2074 removed the headless path), so
-    # the requirement is unconditional.
+    # the requirement is unconditional. Being INSIDE tmux is required only when
+    # the spawner's own session is the target: a named target session needs a
+    # reachable server, not a pane.
     if not shutil.which("tmux"):
         raise click.ClickException("tmux is not installed")
-    if not os.environ.get("TMUX"):
+    if not target_session and not os.environ.get("TMUX"):
         raise click.ClickException(
             "Not in a tmux session. "
             "endless spawn requires tmux."
@@ -6983,7 +6992,16 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     # current Endless session id; fall back to a pid-prefixed value so
     # non-Claude spawners (CLI from a plain shell) still set a non-empty
     # marker that SessionStart can key off.
-    spawner_id = _current_endless_session_id() or f"pid-{os.getpid()}"
+    #
+    # An auto-spawn (E-1814) names itself instead of resolving a session: the
+    # job runs in a monitor pane, and resolution from there finds the Claude
+    # session sharing the monitor's window — which did not ask for this spawn.
+    # The marker is display-only (the "from" row), and a non-numeric value
+    # renders no parent, which is the truth: no session spawned it (E-1815).
+    if auto:
+        spawner_id = "auto-spawn"
+    else:
+        spawner_id = _current_endless_session_id() or f"pid-{os.getpid()}"
 
     window_name = tmux_window_name(item_id)
 
@@ -7028,6 +7046,10 @@ def spawn_plan(item_id: int, project_name: str | None = None,
         spawn_cmd += ["--model", model]
     if name:
         spawn_cmd += ["--name", name]
+    if auto:
+        spawn_cmd += ["--auto"]
+    if target_session:
+        spawn_cmd += ["--target-session", target_session]
     subprocess.run(spawn_cmd, check=True)
 
     # E-1428: the same aligned-label discipline `task claim` prints under, and

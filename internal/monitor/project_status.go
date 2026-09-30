@@ -68,6 +68,9 @@ type ProjectStatusRow struct {
 	// session has been in its current state, i.e. how long it has been holding
 	// something of yours.
 	SessionActivity string
+	// AutoSpawned is sessions.auto_spawned: the auto-spawn job opened this
+	// session's window (E-1814). Nobody asked for it, so the row says so.
+	AutoSpawned bool
 }
 
 // HasTask and HasSession report which halves a row carries.
@@ -286,7 +289,8 @@ func projectSessionRows(db *sql.DB, projectID int64) ([]ProjectStatusRow, error)
 		       COALESCE(t.status, ''),
 		       COALESCE(t.phase, ''),
 		       COALESCE(ty.slug, ''),
-		       COALESCE(t.updated_at, '')
+		       COALESCE(t.updated_at, ''),
+		       s.auto_spawned
 		  FROM sessions s
 		  JOIN session_liveness sl ON sl.session_id = s.id
 		  LEFT JOIN live_tasks t ON t.id = s.task_id
@@ -306,6 +310,7 @@ func projectSessionRows(db *sql.DB, projectID int64) ([]ProjectStatusRow, error)
 		if err = rows.Scan(
 			&r.SessionID, &r.SessionState, &r.SessionActivity,
 			&r.TaskID, &r.Title, &r.Status, &r.Phase, &r.TypeSlug, &r.TaskUpdated,
+			&r.AutoSpawned,
 		); err != nil {
 			return nil, fmt.Errorf("project status sessions: %w", err)
 		}

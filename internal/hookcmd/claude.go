@@ -17,6 +17,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/docmirror"
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/sessionstate"
+	"github.com/mikeschinkel/endless/internal/spawnlaunchcmd"
 )
 
 func init() {
@@ -1791,6 +1792,44 @@ func autoBindFromCwd(projectID int64, payload claudePayload) {
 		return
 	}
 	logSessionBind(payload.SessionID, snap, taskID, monitor.SessionLogCwdBind, "hookcmd.autoBindFromCwd")
+	markAutoSpawned(payload.SessionID, taskID)
+}
+
+// markAutoSpawned flags a just-bound session as auto-spawned when its window is
+// one the auto-spawn job opened (E-1814).
+//
+// The window option alone is NOT enough, and E-1983 is why: a window outlives
+// the session it was opened for, and nothing clears its options, so a later
+// session started in that window would inherit the marker and be counted
+// against a cap it has nothing to do with. The flag is therefore set only when
+// the window's @endless_task_id names the very task this session just bound to
+// from its cwd — the auto-spawned session itself, or its own resume in the same
+// worktree, which is the same auto-spawned work.
+func markAutoSpawned(sessionID string, boundTask int64) {
+	if !tmuxWindowAutoSpawned() || tmuxTaskID() != boundTask {
+		return
+	}
+	if err := monitor.MarkSessionAutoSpawned(sessionID); err != nil {
+		log.Printf("session %s: %v", sessionID, err)
+	}
+}
+
+// tmuxWindowAutoSpawned reports whether the current tmux window carries the
+// auto-spawn marker spawn-window sets. A package var so tests can stub the
+// tmux read, as tmuxTaskID is.
+var tmuxWindowAutoSpawned = func() bool {
+	pane := os.Getenv("TMUX_PANE")
+	if pane == "" {
+		return false
+	}
+	out, err := exec.Command(
+		"tmux", "display-message", "-p", "-t", pane,
+		"#{"+spawnlaunchcmd.AutoSpawnedOption+"}",
+	).Output()
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(string(out)) == "1"
 }
 
 // worktreeOwnedByLiveOther reports whether the worktree containing cwd holds a

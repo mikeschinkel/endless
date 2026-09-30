@@ -93,6 +93,17 @@ func (c *EndlessConfig) Merge(other cfgstore.RootConfig) cfgstore.RootConfig {
 		out.Tmux.SessionName = o.Tmux.SessionName
 	}
 
+	// AutoSpawn: Enabled and Cap are project-only and deliberately NOT
+	// inherited — see AutoSpawn. Interval and Target are CLI-only: inherit.
+	out.AutoSpawn.Enabled = c.AutoSpawn.Enabled
+	out.AutoSpawn.Cap = c.AutoSpawn.Cap
+	if out.AutoSpawn.Interval == "" {
+		out.AutoSpawn.Interval = o.AutoSpawn.Interval
+	}
+	if out.AutoSpawn.Target == "" {
+		out.AutoSpawn.Target = o.AutoSpawn.Target
+	}
+
 	return &out
 }
 

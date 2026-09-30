@@ -33,6 +33,8 @@ func runSpawnWindow(args []string) {
 		spawnedBy  = fs.String("spawned-by", "", "Spawner id for @endless_spawned_by")
 		windowName = fs.String("window-name", "", "tmux window name")
 		cwd        = fs.String("cwd", "", "Working directory for the window")
+		auto       = fs.Bool("auto", false, "Auto-spawned (E-1814): open detached and mark the window @endless_auto_spawned")
+		targetSess = fs.String("target-session", "", "tmux session id to open the window in, instead of the spawner's own")
 	)
 	if err := fs.Parse(args); err != nil {
 		os.Exit(2)
@@ -60,6 +62,7 @@ func runSpawnWindow(args []string) {
 		SpawnedBy:      *spawnedBy,
 		WindowName:     *windowName,
 		Cwd:            *cwd,
+		AutoSpawned:    *auto,
 	}
 
 	specPath, err := writeSpecFile(spec)
@@ -75,7 +78,11 @@ func runSpawnWindow(args []string) {
 
 	// Resolve the landing session BEFORE the window is asked for, so a spawn
 	// that cannot say where it belongs fails without having created anything.
-	target, err := spawnerSession()
+	//
+	// --target-session names it outright. The auto-spawn job passes one because
+	// it runs in a monitor's tmux session, and a window landing there — out of
+	// sight — is the failure E-1815 designed the target setting against.
+	target, err := resolveTarget(*targetSess)
 	if err != nil {
 		_ = os.Remove(specPath)
 		fail("spawn-window: %v", err)
@@ -88,7 +95,7 @@ func runSpawnWindow(args []string) {
 	// each hold a window called `E-1705`, and tmux answers with whichever one
 	// it considers current.
 	cmd := []string{self, "spawn-launch", "--spec", specPath}
-	claudePane, err := tmuxRunOut(newWindowArgs(target, *cwd, *windowName, cmd)...)
+	claudePane, err := tmuxRunOut(newWindowArgs(target, *cwd, *windowName, *auto, cmd)...)
 	if err != nil {
 		// The window was never created, so spawn-launch will not run to delete
 		// the spec file; remove it here.
@@ -106,6 +113,15 @@ func runSpawnWindow(args []string) {
 	// claude: runSpawnLaunch replaces that pane via syscall.Exec and so cannot
 	// orchestrate anything afterward.
 	buildLayoutAround(claudePane, *cwd)
+}
+
+// resolveTarget is the new-window target: the named session when one is given,
+// else the spawner's own (E-2125).
+func resolveTarget(explicit string) (string, error) {
+	if explicit != "" {
+		return sessionTarget(explicit), nil
+	}
+	return spawnerSession()
 }
 
 // projectDirFor resolves the directory the monitor and shell panes start in: the

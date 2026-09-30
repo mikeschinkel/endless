@@ -26,13 +26,14 @@ INSERT INTO process_kinds (id, slug, label) VALUES
     (2, 'pid',  'OS process')
 ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
 
-INSERT INTO task_types (id, slug, label) VALUES
-    (1, 'todo',       'Todo'),
-    (2, 'bugfix',     'Bugfix'),
-    (3, 'research',   'Research'),
-    (4, 'epic',       'Epic'),
-    (5, 'brainstorm', 'Brainstorm')
-ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
+INSERT INTO task_types (id, slug, label, auto_spawnable) VALUES
+    (1, 'todo',       'Todo',       1),
+    (2, 'bugfix',     'Bugfix',     1),
+    (3, 'research',   'Research',   0),
+    (4, 'epic',       'Epic',       0),
+    (5, 'brainstorm', 'Brainstorm', 0)
+ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label,
+    auto_spawnable = excluded.auto_spawnable;
 
 INSERT INTO gate_kinds (id, slug, label) VALUES
     (1, 'revisit', 'Revisit'),

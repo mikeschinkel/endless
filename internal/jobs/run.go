@@ -36,6 +36,7 @@ type Outcome struct {
 	Claimed bool          // false when another invocation won the race, or it was not due
 	Err     error         // non-nil when the job ran and failed
 	Elapsed time.Duration // wall time of Run; zero when not claimed
+	Note    string        // the job's account of the run (see Note); "" when none
 }
 
 // Result is the summary of one fire-once invocation.
@@ -155,6 +156,7 @@ func runOne(ctx context.Context, db *sql.DB, job Job) (outcome Outcome) {
 	var started time.Time
 	var captured *bytes.Buffer
 	var restoreLog func()
+	var note *noteBox
 
 	outcome.Name = job.Name()
 	schedule = job.Schedule()
@@ -187,16 +189,18 @@ func runOne(ctx context.Context, db *sql.DB, job Job) (outcome Outcome) {
 	// The lease TTL doubles as the job's deadline: a job may not outlive the
 	// claim that protects it from concurrent execution.
 	runCtx, cancel = context.WithTimeout(ctx, schedule.leaseTTL())
+	runCtx, note = withNote(runCtx)
 	captured, restoreLog = captureLog()
 	started = time.Now()
 
 	outcome.Err = runGuarded(runCtx, job)
 
 	outcome.Elapsed = time.Since(started)
+	outcome.Note = note.get()
 	restoreLog()
 	cancel()
 
-	complete(db, job, owner, failCount, outcome.Err, captured.String())
+	complete(db, job, owner, failCount, outcome.Err, outcome.Note, captured.String())
 
 end:
 	return outcome
@@ -348,10 +352,14 @@ end:
 // outran its TTL and another invocation re-claimed it, this update matches zero
 // rows. That is worth surfacing — it means the job's LeaseTTL is mistuned and
 // two invocations may have run it concurrently.
-func complete(db *sql.DB, job Job, owner string, priorFailCount int, runErr error, capturedLog string) {
+//
+// The job's note replaces the previous run's, and a run that recorded none
+// clears it: last_note describes the last run or nothing, never an older one.
+func complete(db *sql.DB, job Job, owner string, priorFailCount int, runErr error, note string, capturedLog string) {
 	var schedule Schedule
 	var failCount int
 	var lastError any
+	var lastNote any
 	var result sql.Result
 	var affected int64
 	var err error
@@ -361,6 +369,9 @@ func complete(db *sql.DB, job Job, owner string, priorFailCount int, runErr erro
 		failCount = priorFailCount + 1
 		lastError = runErr.Error()
 	}
+	if note != "" {
+		lastNote = note
+	}
 
 	result, err = db.Exec(
 		`UPDATE jobs
@@ -369,12 +380,13 @@ func complete(db *sql.DB, job Job, owner string, priorFailCount int, runErr erro
 		        last_run_at      = `+sqlNow+`,
 		        last_ok_at       = CASE WHEN ? THEN `+sqlNow+` ELSE last_ok_at END,
 		        last_error       = ?,
+		        last_note        = ?,
 		        run_count        = run_count + 1,
 		        fail_count       = ?,
 		        next_due_at      = `+sqlNowOffset+`,
 		        updated_at       = `+sqlNow+`
 		  WHERE name = ? AND lease_owner = ?`,
-		runErr == nil, lastError, failCount,
+		runErr == nil, lastError, lastNote, failCount,
 		secondsOffset(schedule.nextDelay(failCount)), job.Name(), owner,
 	)
 	if err != nil {

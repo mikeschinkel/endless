@@ -1,6 +1,8 @@
 package config
 
 import (
+	"errors"
+
 	"github.com/mikeschinkel/go-cfgstore"
 	"github.com/mikeschinkel/go-doterr"
 	"github.com/mikeschinkel/go-dt"
@@ -37,6 +39,43 @@ func Load(projectPath dt.DirPath) (cfg *EndlessConfig, err error) {
 			err,
 		)
 		goto end
+	}
+end:
+	return cfg, err
+}
+
+// LoadProject reads the PROJECT layer alone: <projectPath>/.endless/config.json,
+// with nothing inherited from the CLI layer. It is how project-only settings
+// are read — the ones that must never fall through to a user-level value, such
+// as AutoSpawn.Enabled.
+//
+// A project with no config file returns a zero config and no error: an absent
+// file sets nothing, which for every project-only setting means "off".
+func LoadProject(projectPath dt.DirPath) (cfg *EndlessConfig, err error) {
+	dp := cfgstore.DefaultDirsProvider()
+	dp.ProjectDirFunc = func() (dt.DirPath, error) {
+		return projectPath, nil
+	}
+	cfg, err = cfgstore.LoadConfig[EndlessConfig, *EndlessConfig](cfgstore.LoadConfigArgs{
+		ConfigSlug:   ConfigSlug,
+		ConfigFile:   ConfigFile,
+		DirsProvider: dp,
+		DirTypes:     []cfgstore.DirType{cfgstore.ProjectConfigDirType},
+	})
+	if errors.Is(err, cfgstore.ErrNotValidConfigDirsAvailable) {
+		cfg, err = &EndlessConfig{}, nil
+		goto end
+	}
+	if err != nil {
+		err = doterr.NewErr(
+			ErrFailedToLoadConfig,
+			doterr.StringKV("project_path", string(projectPath)),
+			err,
+		)
+		goto end
+	}
+	if cfg == nil {
+		cfg = &EndlessConfig{}
 	}
 end:
 	return cfg, err

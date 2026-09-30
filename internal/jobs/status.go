@@ -23,6 +23,7 @@ type Status struct {
 	LastRunAt  string
 	LastOkAt   string
 	LastError  string
+	LastNote   string
 	LeaseOwner string
 	RunCount   int64
 	FailCount  int64
@@ -136,14 +137,14 @@ end:
 func scheduleRows(db *sql.DB) (rows map[string]Status, err error) {
 	var result *sql.Rows
 	var status Status
-	var nextDue, lastRun, lastOk, lastErr, owner sql.NullString
+	var nextDue, lastRun, lastOk, lastErr, lastNote, owner sql.NullString
 	var closeErr error
 
 	rows = make(map[string]Status)
 
 	result, err = db.Query(
 		`SELECT name, next_due_at, last_run_at, last_ok_at, last_error,
-		        lease_owner, run_count, fail_count
+		        last_note, lease_owner, run_count, fail_count
 		   FROM jobs`,
 	)
 	if err != nil {
@@ -155,7 +156,7 @@ func scheduleRows(db *sql.DB) (rows map[string]Status, err error) {
 		status = Status{}
 		err = result.Scan(
 			&status.Name, &nextDue, &lastRun, &lastOk, &lastErr,
-			&owner, &status.RunCount, &status.FailCount,
+			&lastNote, &owner, &status.RunCount, &status.FailCount,
 		)
 		if err != nil {
 			err = doterr.NewErr(ErrJobs, ErrDatabase, err)
@@ -166,6 +167,7 @@ func scheduleRows(db *sql.DB) (rows map[string]Status, err error) {
 		status.LastRunAt = lastRun.String
 		status.LastOkAt = lastOk.String
 		status.LastError = lastErr.String
+		status.LastNote = lastNote.String
 		status.LeaseOwner = owner.String
 		rows[status.Name] = status
 	}

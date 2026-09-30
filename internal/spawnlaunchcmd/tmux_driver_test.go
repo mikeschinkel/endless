@@ -11,7 +11,7 @@ import (
 // -c <cwd>, -n <name>, the -P -F pane-id readback, then `--` and the window
 // command passed through literally.
 func TestNewWindowArgs_WithCwd(t *testing.T) {
-	got := newWindowArgs("$3:", "/wt/e-1705", "endless_deliver[E-1705]",
+	got := newWindowArgs("$3:", "/wt/e-1705", "endless_deliver[E-1705]", false,
 		[]string{"/bin/endless-go", "spawn-launch", "--spec", "/tmp/spec.json"})
 	want := []string{
 		"new-window", "-t", "$3:", "-c", "/wt/e-1705",
@@ -27,7 +27,7 @@ func TestNewWindowArgs_WithCwd(t *testing.T) {
 // inherits the caller's directory. The target does NOT drop with it: cwd is
 // optional, the landing session is not.
 func TestNewWindowArgs_NoCwdOmitsFlag(t *testing.T) {
-	got := newWindowArgs("$0:", "", "win", []string{"/bin/claude", "attach", "abcd1234"})
+	got := newWindowArgs("$0:", "", "win", false, []string{"/bin/claude", "attach", "abcd1234"})
 	want := []string{
 		"new-window", "-t", "$0:", "-n", "win", "-P", "-F", "#{pane_id}", "--",
 		"/bin/claude", "attach", "abcd1234",
@@ -56,7 +56,7 @@ func TestNewWindowArgs_AlwaysTargeted(t *testing.T) {
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := newWindowArgs(tc.target, tc.cwd, tc.win, tc.cmd)
+			got := newWindowArgs(tc.target, tc.cwd, tc.win, false, tc.cmd)
 			if len(got) < 3 || got[0] != "new-window" || got[1] != "-t" || got[2] != tc.target {
 				t.Fatalf("args = %q, want it to open with new-window -t %q", got, tc.target)
 			}
@@ -173,5 +173,66 @@ func TestWindowOptionCommands(t *testing.T) {
 	}
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("commands = %q, want %q", got, want)
+	}
+}
+
+// TestNewWindowArgs_DetachedOnlyWhenAuto pins E-1814's focus rule: an
+// auto-spawned window opens with -d so it never takes the user's focus, and a
+// manual spawn does not, because the person who asked is looking for it.
+func TestNewWindowArgs_DetachedOnlyWhenAuto(t *testing.T) {
+	cmd := []string{"/bin/endless-go", "spawn-launch", "--spec", "/tmp/s.json"}
+
+	auto := newWindowArgs("$3:", "/wt/e-9", "E-9", true, cmd)
+	want := []string{
+		"new-window", "-d", "-t", "$3:", "-c", "/wt/e-9",
+		"-n", "E-9", "-P", "-F", "#{pane_id}", "--",
+		"/bin/endless-go", "spawn-launch", "--spec", "/tmp/s.json",
+	}
+	if !reflect.DeepEqual(auto, want) {
+		t.Fatalf("auto args = %q, want %q", auto, want)
+	}
+
+	manual := newWindowArgs("$3:", "/wt/e-9", "E-9", false, cmd)
+	for _, a := range manual {
+		if a == "-d" {
+			t.Fatalf("manual spawn carries -d: %q", manual)
+		}
+	}
+}
+
+// TestResolveTarget_ExplicitSessionWins: --target-session names the session
+// outright, needs no $TMUX_PANE, and is rendered as a session target.
+func TestResolveTarget_ExplicitSessionWins(t *testing.T) {
+	t.Setenv("TMUX_PANE", "")
+	for _, in := range []string{"$7", "$7:"} {
+		got, err := resolveTarget(in)
+		if err != nil {
+			t.Fatalf("resolveTarget(%q): %v", in, err)
+		}
+		if got != "$7:" {
+			t.Errorf("resolveTarget(%q) = %q, want %q", in, got, "$7:")
+		}
+	}
+	// With no explicit session it is still the spawner's, which refuses
+	// without a pane rather than guessing (E-2125).
+	if _, err := resolveTarget(""); err == nil {
+		t.Error("resolveTarget(\"\") with no $TMUX_PANE: want an error")
+	}
+}
+
+// TestWindowOptionCommands_AutoSpawned: the auto-spawn marker is appended only
+// for an auto-spawned window, after the three every spawn sets.
+func TestWindowOptionCommands_AutoSpawned(t *testing.T) {
+	spec := LaunchSpec{SpawnedBy: "pid-1", TaskID: "9", ProjectID: "3", AutoSpawned: true}
+	got := windowOptionCommands("%42", spec)
+	if len(got) != 4 {
+		t.Fatalf("commands = %q, want 4", got)
+	}
+	want := []string{"set-option", "-w", "-t", "%42", AutoSpawnedOption, "1"}
+	if !reflect.DeepEqual(got[3], want) {
+		t.Fatalf("last command = %q, want %q", got[3], want)
+	}
+	if AutoSpawnedOption != "@endless_auto_spawned" {
+		t.Errorf("AutoSpawnedOption = %q", AutoSpawnedOption)
 	}
 }

@@ -69,6 +69,7 @@ These are not expected to appear in CLI files. Same safety-net pattern.
 | `tracking` | `string`          | Receiver wins when set to a non-empty string; empty string inherits from other.           |
 | `checks`   | `map[string]bool` | Per-key merge: for each key, receiver value wins if present; otherwise inherit from other. |
 | `tmux`     | `object`          | Merged PER FIELD, not wholesale — see `tmux` below.                                        |
+| `auto_spawn` | `object`        | Split by field — see `auto_spawn` below.                                                   |
 
 #### `tracking`
 
@@ -106,6 +107,28 @@ monitor in it. That is why this setting costs an ownership check — see
 
 Merged per field rather than wholesale, so a project that sets one tmux
 preference does not silently blank the others it inherits from the CLI layer.
+
+#### `auto_spawn`
+
+The auto-spawn job (E-1814) starts a Claude session, unasked, on a task rated
+low complexity and low risk. Its fields are split across the layers by who
+decides them, so this object is neither project-only nor global-only as a
+whole:
+
+| Field      | Layer        | Type     | Meaning |
+| ---------- | ------------ | -------- | ------- |
+| `enabled`  | project only | `bool`   | Opts this project in. Default `false`; also the kill switch. |
+| `cap`      | project only | `int`    | Most auto-spawned tasks outstanding (underway or unverified) at once. Default `3`. |
+| `interval` | CLI only     | `string` | Job cadence, a Go duration. Default `5m`. At most one task is spawned per interval. |
+| `target`   | CLI only     | `string` | tmux session the window opens in: `active` (default — the session of the most recently active attached client) or `monitor` (the session the job runs in). |
+
+`enabled` and `cap` are **never inherited** from the CLI layer: a user-level
+`enabled: true` does not opt any project in. They are read from the project
+file alone (`config.LoadProject`), and a project with no file is off.
+
+```json
+{ "auto_spawn": { "enabled": true, "cap": 2 } }
+```
 
 #### `checks`
 

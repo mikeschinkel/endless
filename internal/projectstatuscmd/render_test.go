@@ -451,3 +451,44 @@ func TestColorizeIsIntensityOnly(t *testing.T) {
 		t.Errorf("the waiting rank is not bold — the one rank E-1815 calls load-bearing")
 	}
 }
+
+// TestAutoSpawnedSessionIsMarked (E-1814): a session the auto-spawn job started
+// carries the mark on its id, the legend names it, and the column still aligns.
+// A frame with no auto-spawned session says nothing about it.
+func TestAutoSpawnedSessionIsMarked(t *testing.T) {
+	auto := sessionRow(1234, "working", time.Minute, 77)
+	auto.AutoSpawned = true
+	manual := sessionRow(99, "working", time.Minute, 78)
+
+	var b strings.Builder
+	render(&b, "demo", []monitor.ProjectStatusRow{auto, manual}, 10, 0, 120, false, now, faults.AllProjects)
+	lines := strings.Split(b.String(), "\n")
+	if !strings.Contains(lines[0], autoSpawnedGlyph+" auto-spawned") {
+		t.Errorf("legend omits the auto-spawned mark: %q", lines[0])
+	}
+	var autoLine, manualLine string
+	for _, l := range lines {
+		switch {
+		case strings.Contains(l, "ES-1234"):
+			autoLine = l
+		case strings.Contains(l, "ES-99"):
+			manualLine = l
+		}
+	}
+	if !strings.Contains(autoLine, "ES-1234"+autoSpawnedGlyph) {
+		t.Errorf("auto-spawned row not marked: %q", autoLine)
+	}
+	if strings.Contains(manualLine, "ES-99"+autoSpawnedGlyph) {
+		t.Errorf("a person's session is marked auto-spawned: %q", manualLine)
+	}
+	// Alignment: the title starts in the same column on both rows.
+	if strings.Index(autoLine, "held task") != strings.Index(manualLine, "held task") {
+		t.Errorf("rows misaligned:\n%q\n%q", autoLine, manualLine)
+	}
+
+	var plain strings.Builder
+	render(&plain, "demo", []monitor.ProjectStatusRow{manual}, 10, 0, 120, false, now, faults.AllProjects)
+	if strings.Contains(strings.SplitN(plain.String(), "\n", 2)[0], "auto-spawned") {
+		t.Errorf("legend names auto-spawned with no such row: %q", plain.String())
+	}
+}

@@ -3644,9 +3644,15 @@ def task_handoff(item_id):
 @click.option("--bg", is_flag=True, hidden=True)
 @click.option("--attach", is_flag=True, hidden=True)
 @click.option("--new-session", is_flag=True, hidden=True)
+# E-1814: the auto-spawn job's own flags, hidden because a person never passes
+# them. --auto opens the window detached and marks it auto-spawned;
+# --target-session names the tmux session it opens in, which the job resolves
+# because it runs in a monitor's session, not the one the user is looking at.
+@click.option("--auto", "auto", is_flag=True, hidden=True)
+@click.option("--target-session", "target_session", default=None, hidden=True)
 def task_spawn(item_id, project, permission_mode, model, session_name,
                worktree, force, reopen, print_decision, bg, attach,
-               new_session):
+               new_session, auto, target_session):
     """Spawn Claude working on a task in a new tmux window.
 
     Spawns launch Claude as the tmux window's command and deliver the
@@ -3680,7 +3686,7 @@ def task_spawn(item_id, project, permission_mode, model, session_name,
     spawn_plan(item_id, project_name=project,
                worktree=worktree, force=force,
                permission_mode=permission_mode, model=model,
-               name=session_name)
+               name=session_name, auto=auto, target_session=target_session)
 
 
 @task_cmd.command("reopen")

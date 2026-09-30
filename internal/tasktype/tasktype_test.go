@@ -92,7 +92,7 @@ func newSeededDB(t *testing.T) *sql.DB {
 		t.Fatalf("open db: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
-	if _, err := db.Exec(`CREATE TABLE task_types (id INTEGER PRIMARY KEY, slug TEXT UNIQUE NOT NULL, label TEXT NOT NULL)`); err != nil {
+	if _, err := db.Exec(`CREATE TABLE task_types (id INTEGER PRIMARY KEY, slug TEXT UNIQUE NOT NULL, label TEXT NOT NULL, auto_spawnable INTEGER NOT NULL DEFAULT 0)`); err != nil {
 		t.Fatalf("create table: %v", err)
 	}
 	return db
@@ -100,10 +100,10 @@ func newSeededDB(t *testing.T) *sql.DB {
 
 func seedAll(t *testing.T, db *sql.DB) {
 	t.Helper()
-	_, err := db.Exec(`INSERT INTO task_types (id, slug, label) VALUES
-		(1, 'todo', 'Todo'), (2, 'bugfix', 'Bugfix'),
-		(3, 'research', 'Research'), (4, 'epic', 'Epic'),
-		(5, 'brainstorm', 'Brainstorm')`)
+	_, err := db.Exec(`INSERT INTO task_types (id, slug, label, auto_spawnable) VALUES
+		(1, 'todo', 'Todo', 1), (2, 'bugfix', 'Bugfix', 1),
+		(3, 'research', 'Research', 0), (4, 'epic', 'Epic', 0),
+		(5, 'brainstorm', 'Brainstorm', 0)`)
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestVerifyIntegrity_OK(t *testing.T) {
 
 func TestVerifyIntegrity_MissingEnumRow(t *testing.T) {
 	db := newSeededDB(t)
-	if _, err := db.Exec(`INSERT INTO task_types VALUES (1, 'todo', 'Todo'), (2, 'bugfix', 'Bugfix'), (3, 'research', 'Research')`); err != nil {
+	if _, err := db.Exec(`INSERT INTO task_types (id, slug, label, auto_spawnable) VALUES (1, 'todo', 'Todo', 1), (2, 'bugfix', 'Bugfix', 1), (3, 'research', 'Research', 0)`); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	err := tasktype.VerifyIntegrity(db)
@@ -130,7 +130,7 @@ func TestVerifyIntegrity_MissingEnumRow(t *testing.T) {
 
 func TestVerifyIntegrity_SlugMismatch(t *testing.T) {
 	db := newSeededDB(t)
-	if _, err := db.Exec(`INSERT INTO task_types VALUES (1, 'tsk', 'Todo'), (2, 'bugfix', 'Bugfix'), (3, 'research', 'Research'), (4, 'epic', 'Epic')`); err != nil {
+	if _, err := db.Exec(`INSERT INTO task_types (id, slug, label) VALUES (1, 'tsk', 'Todo'), (2, 'bugfix', 'Bugfix'), (3, 'research', 'Research'), (4, 'epic', 'Epic')`); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	err := tasktype.VerifyIntegrity(db)
@@ -141,7 +141,7 @@ func TestVerifyIntegrity_SlugMismatch(t *testing.T) {
 
 func TestVerifyIntegrity_LabelMismatch(t *testing.T) {
 	db := newSeededDB(t)
-	if _, err := db.Exec(`INSERT INTO task_types VALUES (1, 'todo', 'Wrong'), (2, 'bugfix', 'Bugfix'), (3, 'research', 'Research'), (4, 'epic', 'Epic')`); err != nil {
+	if _, err := db.Exec(`INSERT INTO task_types (id, slug, label) VALUES (1, 'todo', 'Wrong'), (2, 'bugfix', 'Bugfix'), (3, 'research', 'Research'), (4, 'epic', 'Epic')`); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	err := tasktype.VerifyIntegrity(db)
@@ -153,11 +153,43 @@ func TestVerifyIntegrity_LabelMismatch(t *testing.T) {
 func TestVerifyIntegrity_UnknownTableRow(t *testing.T) {
 	db := newSeededDB(t)
 	seedAll(t, db)
-	if _, err := db.Exec(`INSERT INTO task_types VALUES (99, 'rogue', 'Rogue')`); err != nil {
+	if _, err := db.Exec(`INSERT INTO task_types (id, slug, label) VALUES (99, 'rogue', 'Rogue')`); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	err := tasktype.VerifyIntegrity(db)
 	if err == nil || !strings.Contains(err.Error(), "no matching enum constant") {
 		t.Errorf("expected unknown-row error, got %v", err)
+	}
+}
+
+// TestAutoSpawnable pins which types the auto-spawn job may start (E-1814):
+// implementation work only.
+func TestAutoSpawnable(t *testing.T) {
+	want := map[tasktype.TaskType]bool{
+		tasktype.TaskTypeTask:       true,
+		tasktype.TaskTypeBug:        true,
+		tasktype.TaskTypeResearch:   false,
+		tasktype.TaskTypeEpic:       false,
+		tasktype.TaskTypeBrainstorm: false,
+	}
+	for _, tt := range tasktype.All() {
+		if got := tt.AutoSpawnable(); got != want[tt] {
+			t.Errorf("%s.AutoSpawnable() = %t, want %t", tt, got, want[tt])
+		}
+	}
+}
+
+// TestVerifyIntegrity_AutoSpawnableMismatch is the drift gate: a table that
+// says research is auto-spawnable disagrees with the enum and fails closed, so
+// the selector's column can never quietly widen the candidate pool.
+func TestVerifyIntegrity_AutoSpawnableMismatch(t *testing.T) {
+	db := newSeededDB(t)
+	seedAll(t, db)
+	if _, err := db.Exec(`UPDATE task_types SET auto_spawnable = 1 WHERE slug = 'research'`); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	err := tasktype.VerifyIntegrity(db)
+	if err == nil || !strings.Contains(err.Error(), "auto_spawnable mismatch") {
+		t.Errorf("expected auto_spawnable-mismatch error, got %v", err)
 	}
 }

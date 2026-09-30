@@ -64,7 +64,57 @@ type EndlessConfig struct {
 	// setting one of its fields in a project must not blank the others
 	// inherited from the CLI layer.
 	Tmux Tmux `json:"tmux,omitzero"`
+
+	// AutoSpawn configures the auto-spawn job (E-1814). Its fields are split
+	// across the layers by who decides them: whether a project takes part is
+	// that project's decision, and the job's cadence is the user's, because one
+	// job serves every project. See AutoSpawn.
+	AutoSpawn AutoSpawn `json:"auto_spawn,omitzero"`
 }
+
+// AutoSpawn is the "auto_spawn" object.
+//
+// Enabled and Cap are PROJECT-ONLY and are never inherited from the CLI layer:
+// opting a project into sessions nobody asked for is a decision about that
+// project, and a user-level `enabled: true` silently opting in every project
+// is the failure the per-project switch exists to prevent. Read them with
+// LoadProject.
+//
+// Interval and Target are CLI-ONLY: there is one auto-spawn job for the whole
+// database, so a per-project cadence has nothing to attach to. Read them with
+// Load("").
+type AutoSpawn struct {
+	// Enabled opts the project in. Absent or false is off, which is also the
+	// kill switch.
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Cap is how many auto-spawned tasks may be outstanding (underway or
+	// unverified) in the project at once. Zero means DefaultAutoSpawnCap.
+	Cap int `json:"cap,omitempty"`
+
+	// Interval is the job's cadence as a Go duration ("5m"). Empty means
+	// DefaultAutoSpawnInterval. At most one task is spawned per interval.
+	Interval string `json:"interval,omitempty"`
+
+	// Target names the tmux session a spawned window opens in: "active" (the
+	// session of the most recently active attached client) or "monitor" (the
+	// session the job runs in). Empty means "active".
+	Target string `json:"target,omitempty"`
+}
+
+const (
+	// DefaultAutoSpawnCap is E-1815's initial cap on outstanding auto-spawned
+	// work per project.
+	DefaultAutoSpawnCap = 3
+
+	// DefaultAutoSpawnInterval is the job cadence when none is configured.
+	DefaultAutoSpawnInterval = "5m"
+
+	// AutoSpawnTargetActive and AutoSpawnTargetMonitor are the two Target
+	// values.
+	AutoSpawnTargetActive  = "active"
+	AutoSpawnTargetMonitor = "monitor"
+)
 
 // Tmux is the "tmux" object: how Endless names and shapes what it creates in
 // the multiplexer.

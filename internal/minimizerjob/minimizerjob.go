@@ -35,13 +35,11 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/jobs"
-	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
 // JobName keys this job's scheduling row. It must stay stable: changing it
@@ -132,7 +130,7 @@ func (job) Run(ctx context.Context) (err error) {
 		"minimizer", "run",
 		"--limit", strconv.Itoa(judgeLimit),
 	)
-	cmd.Env = childEnv()
+	cmd.Env = jobs.ChildEnv()
 	// A neutral working directory, deliberately. The Python CLI refuses to touch
 	// a database from inside a self-dev worktree without an explicit --db
 	// (E-1429), and the runner's cwd is whatever the trigger happened to be run
@@ -149,30 +147,6 @@ func (job) Run(ctx context.Context) (err error) {
 
 end:
 	return err
-}
-
-// childEnv is the parent environment with XDG_CONFIG_HOME repointed at the
-// runner's RESOLVED config directory, so the subprocess opens the database this
-// process is using rather than whatever the ambient environment names.
-//
-// The Python CLI takes --db main|sandbox, not a directory — there is no way
-// to hand it one — so the
-// environment is the whole mechanism. Endless's config dir is always
-// <XDG_CONFIG_HOME>/endless, so handing the child the PARENT of ConfigDir()
-// reproduces the resolution exactly, sandbox included. Without this, a self-dev
-// tick would tune the wrong database's minimizer.
-func childEnv() (env []string) {
-	const key = "XDG_CONFIG_HOME"
-	value := filepath.Dir(monitor.ConfigDir())
-
-	env = make([]string, 0, len(os.Environ())+1)
-	for _, kv := range os.Environ() {
-		if strings.HasPrefix(kv, key+"=") {
-			continue
-		}
-		env = append(env, kv)
-	}
-	return append(env, key+"="+value)
 }
 
 // tailLimit bounds how much subprocess output rides along in a fault. The

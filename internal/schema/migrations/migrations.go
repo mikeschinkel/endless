@@ -48,5 +48,6 @@ func Go() []*goose.Migration {
 		liftTaskContent(),
 		ratingsReplaceTier(),
 		addSessionFocusTask(),
+		addAutoSpawn(),
 	}
 }

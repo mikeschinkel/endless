@@ -83,6 +83,7 @@ import (
 	// init() adds itself to the jobs registry. This is the ONE place the
 	// registry is populated, so both triggers in this binary — `jobs run` and
 	// the session monitor's per-refresh RunDue — see the same set.
+	_ "github.com/mikeschinkel/endless/internal/autospawnjob"
 	_ "github.com/mikeschinkel/endless/internal/backupjob"
 	_ "github.com/mikeschinkel/endless/internal/docsweep"
 	_ "github.com/mikeschinkel/endless/internal/minimizerjob"

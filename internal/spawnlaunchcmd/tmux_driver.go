@@ -15,8 +15,13 @@ import (
 
 // newWindowArgs builds
 //
-//	tmux new-window -t <target> [-c <cwd>] -n <name> -P -F #{pane_id} -- <cmd...>
+//	tmux new-window [-d] -t <target> [-c <cwd>] -n <name> -P -F #{pane_id} -- <cmd...>
 //
+// detached adds `-d`, which creates the window without making it the current
+// window of its session. The auto-spawn job (E-1814) passes it so a session
+// nobody asked for never takes focus from the one the user is typing in; a
+// manual `task spawn` omits it, because the person who asked is looking for
+// the window.
 // target is REQUIRED and names the session the window is created in (E-2125).
 // Without it tmux picks the "current" session, which off a command line means
 // the most recently active one on the server — so a spawn asked for in one
@@ -33,8 +38,12 @@ import (
 // by name. A name lookup is the same unqualified-target bug one call later: two
 // sessions can each hold a window called `E-1705`, and `-t E-1705` would answer
 // with whichever the server considered current.
-func newWindowArgs(target, cwd, windowName string, cmd []string) []string {
-	args := []string{"new-window", "-t", target}
+func newWindowArgs(target, cwd, windowName string, detached bool, cmd []string) []string {
+	args := []string{"new-window"}
+	if detached {
+		args = append(args, "-d")
+	}
+	args = append(args, "-t", target)
 	if cwd != "" {
 		args = append(args, "-c", cwd)
 	}
@@ -46,6 +55,16 @@ func newWindowArgs(target, cwd, windowName string, cmd []string) []string {
 // resolves a pane to the id of the session holding it.
 func sessionIDArgs(pane string) []string {
 	return []string{"display-message", "-p", "-t", pane, "#{session_id}"}
+}
+
+// sessionTarget renders an explicit session id (`$3`) as a new-window target:
+// the id suffixed with `:`, so tmux reads it as "this session, next free index"
+// rather than as a window name. An id already carrying the suffix is kept.
+func sessionTarget(id string) string {
+	if strings.HasSuffix(id, ":") {
+		return id
+	}
+	return id + ":"
 }
 
 // spawnerSession returns the new-window target: the session that owns the pane
@@ -75,7 +94,7 @@ func spawnerSession() (string, error) {
 	if id == "" {
 		return "", fmt.Errorf("pane %s reported no session id", pane)
 	}
-	return id + ":", nil
+	return sessionTarget(id), nil
 }
 
 // setOptionArgs builds `tmux set-option -w -t <target> <key> <value>` for one
@@ -134,13 +153,26 @@ func selectPaneArgs(target string) []string {
 // windowOptionCommands returns the ordered set-option arg lists that publish the
 // @endless_* window options SessionStart reads to bind the spawned session to
 // its task. Kept pure so tests can assert the exact command list.
+//
+// @endless_auto_spawned is set only on an auto-spawned window (E-1814).
+// SessionStart reads it to mark the session it binds there as auto-spawned,
+// and only when the window's @endless_task_id agrees with the task the session
+// actually binds — see hookcmd.markAutoSpawned for why agreement is required.
 func windowOptionCommands(target string, spec LaunchSpec) [][]string {
-	return [][]string{
+	cmds := [][]string{
 		setOptionArgs(target, "@endless_spawned_by", spec.SpawnedBy),
 		setOptionArgs(target, "@endless_task_id", spec.TaskID),
 		setOptionArgs(target, "@endless_project_id", spec.ProjectID),
 	}
+	if spec.AutoSpawned {
+		cmds = append(cmds, setOptionArgs(target, AutoSpawnedOption, "1"))
+	}
+	return cmds
 }
+
+// AutoSpawnedOption is the window option marking a window the auto-spawn job
+// opened. Exported because SessionStart (internal/hookcmd) reads it back.
+const AutoSpawnedOption = "@endless_auto_spawned"
 
 // tmuxRun / tmuxRunOut are the indirection the layout builder calls through.
 // The argv builders above are pure and tested directly; the builder that

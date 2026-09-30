@@ -32,6 +32,9 @@ type LaunchSpec struct {
 	// WindowName / Cwd describe the tmux window to create.
 	WindowName string `json:"window_name"`
 	Cwd        string `json:"cwd"`
+	// AutoSpawned marks a window the auto-spawn job opened (E-1814); it becomes
+	// the @endless_auto_spawned window option.
+	AutoSpawned bool `json:"auto_spawned,omitempty"`
 }
 
 // writeSpecFile marshals spec to a fresh temp file and returns its path. The

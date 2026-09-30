@@ -75,9 +75,9 @@ func runList() {
 	}
 
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "NAME\tINTERVAL\tNEXT DUE\tLAST RUN\tRUNS\tFAILS\tSTATE")
+	fmt.Fprintln(tw, "NAME\tINTERVAL\tNEXT DUE\tLAST RUN\tRUNS\tFAILS\tSTATE\tNOTE")
 	for _, s := range statuses {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%d\t%s\n",
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%d\t%s\t%s\n",
 			s.Name,
 			interval(s),
 			nextDue(s),
@@ -85,6 +85,7 @@ func runList() {
 			s.RunCount,
 			s.FailCount,
 			state(s),
+			orDash(s.LastNote),
 		)
 	}
 	if err = tw.Flush(); err != nil {
@@ -142,6 +143,10 @@ func reportOutcome(outcome jobs.Outcome) {
 	}
 	if outcome.Err != nil {
 		fmt.Printf("%s: FAILED in %s: %v\n", outcome.Name, outcome.Elapsed.Round(time.Millisecond), outcome.Err)
+		return
+	}
+	if outcome.Note != "" {
+		fmt.Printf("%s: ok in %s: %s\n", outcome.Name, outcome.Elapsed.Round(time.Millisecond), outcome.Note)
 		return
 	}
 	fmt.Printf("%s: ok in %s\n", outcome.Name, outcome.Elapsed.Round(time.Millisecond))

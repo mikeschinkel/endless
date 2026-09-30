@@ -185,7 +185,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     last_user_prompt TEXT,
     report_bounces INTEGER NOT NULL DEFAULT 0,
     report_exempt INTEGER NOT NULL DEFAULT 0,
-    report_runs INTEGER NOT NULL DEFAULT 0, focus_task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL,
+    report_runs INTEGER NOT NULL DEFAULT 0, focus_task_id INTEGER REFERENCES tasks(id) ON DELETE SET NULL, auto_spawned INTEGER NOT NULL DEFAULT 0,
     UNIQUE (session_id),
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE SET NULL,
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE SET NULL,
@@ -199,6 +199,12 @@ CREATE TABLE IF NOT EXISTS sessions (
 -- upsertSessionTask repoints it. Display only; nothing gates on it. Declared on
 -- the report_runs line because that is where ALTER TABLE ADD COLUMN splices it
 -- (migration 00009), and TestMigrate_MatchesSchemaSQL compares the two texts.
+--
+-- sessions.auto_spawned (E-1814) is 1 on a session the auto-spawn job opened,
+-- set by SessionStart when it binds a session whose window carries
+-- @endless_auto_spawned. spawned_by stays NULL for these. The auto-spawn cap
+-- counts tasks whose claiming session has it. Declared on the same line for the
+-- same splice reason (migration 00011).
 
 -- sessions.task_id is write-once (ED-1560, enforced by E-1969): NULL -> one
 -- value, then never again. Not cleared, not repointed. A session owns exactly
@@ -270,19 +276,24 @@ END;
 -- change-file. This is safe only because E-1818 opens the real DB schema-passive
 -- when a candidate (worktree) binary is pinned to it, so an unlanded binary can
 -- never apply this reconcile to a DB it does not own.
+--
+-- auto_spawnable (E-1814) mirrors tasktype.TaskType.AutoSpawnable(): whether
+-- the auto-spawn job may pick a task of this type. Spelled on the closing line
+-- because that is where migration 00011's ALTER TABLE splices it.
 CREATE TABLE IF NOT EXISTS task_types (
     id    INTEGER PRIMARY KEY,
     slug  TEXT UNIQUE NOT NULL,
     label TEXT NOT NULL
-);
+, auto_spawnable INTEGER NOT NULL DEFAULT 0);
 
-INSERT INTO task_types (id, slug, label) VALUES
-    (1, 'todo',       'Todo'),
-    (2, 'bugfix',     'Bugfix'),
-    (3, 'research',   'Research'),
-    (4, 'epic',       'Epic'),
-    (5, 'brainstorm', 'Brainstorm')
-ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
+INSERT INTO task_types (id, slug, label, auto_spawnable) VALUES
+    (1, 'todo',       'Todo',       1),
+    (2, 'bugfix',     'Bugfix',     1),
+    (3, 'research',   'Research',   0),
+    (4, 'epic',       'Epic',       0),
+    (5, 'brainstorm', 'Brainstorm', 0)
+ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label,
+    auto_spawnable = excluded.auto_spawnable;
 
 -- Rating levels (E-1813, implementing ED-1538/ED-1539). SQL mirrors of the
 -- rating.Level Go enum, one table per axis so each tasks column has its own FK
@@ -1292,7 +1303,14 @@ CREATE TABLE IF NOT EXISTS jobs (
     fail_count       INTEGER NOT NULL DEFAULT 0,
     created_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     updated_at       TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
-);
+, last_note TEXT);
+
+-- last_note (E-1814) is why the last run did what it did — "nothing eligible",
+-- "no tmux client attached", "spawned E-N". Set by every run, cleared by the
+-- next; a job that records nothing leaves it NULL. A skip is not a failure, so
+-- last_error cannot carry it. Spelled on the closing line because that is where
+-- migration 00011's ALTER TABLE splices it into a table with no constraints,
+-- and TestMigrate_MatchesSchemaSQL compares the two texts.
 
 CREATE INDEX IF NOT EXISTS idx_jobs_due ON jobs(next_due_at);
 

@@ -31,6 +31,7 @@ type jsonRow struct {
 	SessionID       int64  `json:"session_id,omitempty"`
 	SessionState    string `json:"session_state,omitempty"`
 	SessionActivity string `json:"session_activity,omitempty"`
+	AutoSpawned     bool   `json:"auto_spawned,omitempty"`
 
 	// AgeSeconds is the row's own clock (see clock()) measured against now, or
 	// null when the timestamp could not be read. Included rather than left to the
@@ -66,6 +67,7 @@ func renderJSON(w io.Writer, project string, rows []monitor.ProjectStatusRow, no
 				SessionID:       r.SessionID,
 				SessionState:    r.SessionState,
 				SessionActivity: r.SessionActivity,
+				AutoSpawned:     r.AutoSpawned,
 			}
 			if t := parseTS(clock(r)); !t.IsZero() {
 				secs := int64(now.Sub(t).Seconds())

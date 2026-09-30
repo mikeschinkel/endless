@@ -60,6 +60,23 @@ func (t TaskType) Label() string {
 	}
 }
 
+// AutoSpawnable reports whether the auto-spawn job (E-1814) may start a task
+// of this type without anyone asking. Only implementation work qualifies: its
+// deliverable is behavior a person verifies afterwards. Research, brainstorm
+// and epic work deliver findings or coordination that a person steers while it
+// happens, so a session nobody asked for has nothing to hand back.
+//
+// Mirrored into task_types.auto_spawnable, which is what the selector filters
+// on; VerifyIntegrity fails closed if the two disagree.
+func (t TaskType) AutoSpawnable() bool {
+	switch t {
+	case TaskTypeTask, TaskTypeBug:
+		return true
+	default:
+		return false
+	}
+}
+
 // Parse converts a slug from CLI / external input to a TaskType. Returns an
 // error for unknown slugs.
 //
@@ -102,16 +119,18 @@ func All() []TaskType {
 
 // VerifyIntegrity asserts that the task_types SQL table matches the Go enum.
 // Runs once at startup (from monitor.DB() after schema.SQL applies). Returns
-// an error on any drift: an enum constant with no matching row, a slug or
-// label mismatch, or a task_types row whose id does not match any constant.
+// an error on any drift: an enum constant with no matching row, a slug, label
+// or auto_spawnable mismatch, or a task_types row whose id does not match any
+// constant.
 // Callers are expected to hard-fail the process.
 func VerifyIntegrity(db *sql.DB) error {
 	type row struct {
-		id    int
-		slug  string
-		label string
+		id            int
+		slug          string
+		label         string
+		autoSpawnable bool
 	}
-	rows, err := db.Query("SELECT id, slug, label FROM task_types")
+	rows, err := db.Query("SELECT id, slug, label, auto_spawnable FROM task_types")
 	if err != nil {
 		return fmt.Errorf("tasktype: query task_types: %w", err)
 	}
@@ -120,7 +139,7 @@ func VerifyIntegrity(db *sql.DB) error {
 	byID := make(map[int]row)
 	for rows.Next() {
 		var r row
-		if err := rows.Scan(&r.id, &r.slug, &r.label); err != nil {
+		if err := rows.Scan(&r.id, &r.slug, &r.label, &r.autoSpawnable); err != nil {
 			return fmt.Errorf("tasktype: scan task_types row: %w", err)
 		}
 		byID[r.id] = r
@@ -142,6 +161,10 @@ func VerifyIntegrity(db *sql.DB) error {
 		if r.label != tt.Label() {
 			return fmt.Errorf("tasktype: id=%d label mismatch: enum=%q, table=%q",
 				int(tt), tt.Label(), r.label)
+		}
+		if r.autoSpawnable != tt.AutoSpawnable() {
+			return fmt.Errorf("tasktype: id=%d auto_spawnable mismatch: enum=%t, table=%t",
+				int(tt), tt.AutoSpawnable(), r.autoSpawnable)
 		}
 		delete(byID, int(tt))
 	}

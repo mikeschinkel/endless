@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/mattn/go-runewidth"
 
@@ -623,7 +624,7 @@ func sessionColWidth(groups []group) int {
 			if !r.HasSession() {
 				continue
 			}
-			if n := len(sessionLabel(r)); n > w {
+			if n := utf8.RuneCountInString(sessionLabel(r)); n > w {
 				w = n
 			}
 		}
@@ -634,8 +635,19 @@ func sessionColWidth(groups []group) int {
 	return w + 1 // one trailing space
 }
 
+// autoSpawnedGlyph marks a session the auto-spawn job started (E-1814),
+// appended to the session id rather than given a column of its own: it
+// describes the session, and most frames will have no auto-spawned row to pay
+// a column for. ASCII on purpose — one column on every terminal — and not a
+// circular arrow, which would read as a near-twin of the ⟳ action glyph.
+const autoSpawnedGlyph = "*"
+
 func sessionLabel(r monitor.ProjectStatusRow) string {
-	return "ES-" + strconv.FormatInt(r.SessionID, 10)
+	label := "ES-" + strconv.FormatInt(r.SessionID, 10)
+	if r.AutoSpawned {
+		label += autoSpawnedGlyph
+	}
+	return label
 }
 
 func sessionField(r monitor.ProjectStatusRow, sw int) string {
@@ -693,9 +705,18 @@ func phaseChar(phase string) string {
 // In a pane sized to its frame every row is scarce, and an unlabelled frame is
 // ambiguous the moment a second one is open.
 func legend(project string, groups []group) string {
-	parts := make([]string, 0, len(groups))
+	parts := make([]string, 0, len(groups)+1)
+	auto := false
 	for _, g := range groups {
 		parts = append(parts, g.act.icon()+" "+g.act.label())
+		for _, r := range g.rows {
+			auto = auto || (r.HasSession() && r.AutoSpawned)
+		}
+	}
+	// Named only when a row carries it, like the action glyphs: a legend entry
+	// for a mark nowhere on screen is a line spent explaining nothing.
+	if auto {
+		parts = append(parts, autoSpawnedGlyph+" auto-spawned")
 	}
 	return project + " · " + strings.Join(parts, "  ")
 }
