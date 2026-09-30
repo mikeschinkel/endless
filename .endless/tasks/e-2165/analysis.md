@@ -47,3 +47,7 @@ would hit the same wall, which is why this is the stopgap and E-1562 is the fix.
     same time was a verb classified in the wrong category (`determine` as an
     action verb, discoverable only by hitting the refusal). Corrected by hand;
     owner's call that it is rare enough to keep handling that way.
+
+## From the description
+
+Add justification to --clear's accepted values, removing that section and leaving the rest of the prose intact.
