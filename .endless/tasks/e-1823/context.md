@@ -1,0 +1,1 @@
+E-1803's report-channel gate ('surface a computed fact the user can't derive XOR a genuine open decision, else nothing') assumes the surfaced fact is TRUE. The costliest agent outputs are confidently-wrong facts the user must track down to disprove -- worse than ceremony.
