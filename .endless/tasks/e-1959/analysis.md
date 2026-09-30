@@ -138,4 +138,6 @@ there were ~5 real triples in that span.
 - This repo ships `"report_gate": false`, so triples accumulate here only from
   voluntary use.
 
+## From the description
 
+Settle that first: if nobody would sit and review, most of this evaporates and what remains is whatever the promotion gate strictly requires — plausibly a non-interactive export, not a viewer.
