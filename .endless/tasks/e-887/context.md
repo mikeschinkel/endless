@@ -1,0 +1,1 @@
+Mike repeatedly has to remind Claude to record code changes as Endless tasks and decisions in a queryable place. This is a process leak: the assistant should not require user babysitting for recording.
