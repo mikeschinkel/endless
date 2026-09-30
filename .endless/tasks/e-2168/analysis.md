@@ -20,3 +20,9 @@ E-1983 covers a DIFFERENT window/task disagreement: a fresh session silently bin
 # Open: the wrong-task-id sighting is NOT explained
 
 Mike observes a restored window bound to a task 250-750 LOWER than its worktree's. Eliminated: ~/.tmux.conf (contains no `@endless` anything, so source-file writes nothing), Resurrect (saves none), and argument order in `_resume_decision` (all three call sites pass uuid, worktree, label, eid, task, project correctly). Suggestive but unproven: session ids top out at 1228 against task ids at 2167, so ANY place a session id lands in a task-id slot yields a value a few hundred lower — right direction, right magnitude. One real defect found while looking, possibly unrelated: `monitor.ResolveResumeTarget` (internal/monitor/resume.go) takes a bare number, tries it as a task, and on a miss SILENTLY reinterprets the same number as a session id. That can only fire for refs <= 1228 so it cannot explain a 2157 window, but it can for older worktrees, and it is silent either way. Needs a live failure to settle: capture `tmux show-options -w`, the pane cwd, and the sessions row before repairing.
+
+## From the description
+
+Two flags, one cause: `--rebind` (must-have) resumes into this window despite its `@endless_task_id` naming another task, rewriting the WINDOW option only — `sessions.task_id` is write-once and untouched; `--no-sibling-panes` (nice-to-have) resumes without `_require_lone_pane` refusing a window crowded with dead panes nobody arranged.
+
+Both read as `resume --rebind` once subcommands go top-level.
