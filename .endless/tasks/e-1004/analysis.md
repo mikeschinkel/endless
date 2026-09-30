@@ -10,3 +10,9 @@ Resolution rule (from the plan):
 Critical file: src/endless/task_cmd.py — _project_root_for_task() (added by E-969).
 
 Verification: from inside a worktree, run 'endless task update E-X --text <path>'. Confirm .endless/plans/E-X.md appears in the worktree's checkout, not main's.
+
+## From the description
+
+Resolution rule: detect cwd-in-worktree via 'git rev-parse --git-common-dir', return the worktree's root in that case. Critical file: src/endless/task_cmd.py.
+
+Verification matrix in the analysis field.
