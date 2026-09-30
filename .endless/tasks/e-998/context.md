@@ -1,0 +1,1 @@
+Today, exercising new hook code in a real Claude session requires temporarily repointing the global ~/.local/bin/endless-hook symlink at the worktree's binary, which puts every other live Claude session on the machine on the unverified build for the duration of the swap.
