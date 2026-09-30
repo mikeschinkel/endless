@@ -8,7 +8,7 @@ t.Setenv("XDG_CACHE_HOME", tmp)
 t.Setenv("HOME", tmp)          // <-- the problem
 ...
 build := exec.Command("go", "build", "-o", bin, "../../cmd/endless-go")
-build.CombinedOutput()          // livewriters_test.go:117 and :165
+build.CombinedOutput()          // livewriters_test.go and :165
 ```
 
 `go env GOCACHE` is derived from HOME on macOS:
@@ -31,7 +31,7 @@ one.
 
 The goroutine dump that made this look like a deadlock is just
 `CombinedOutput`'s pipe copy waiting on a compiler that has not finished:
-`livewriters_test.go:166` is the `go build` line, not the `destroy` invocation.
+`livewriters_test.go` is the `go build` line, not the `destroy` invocation.
 
 # Why the whole package blows its timeout
 
@@ -64,3 +64,7 @@ Five other files shell out to `go build` in tests
 `internal/templatecmd`, `internal/sessionquerycmd`, and `destroy_test.go`
 itself); none of them redirect HOME, so none are affected. This is a
 two-test defect, not a systemic one.
+
+## From the description
+
+destroy_test.go in the same package already shows the correct pattern: it passes HOME and XDG_CACHE_HOME only in the child process's cmd.Env and leaves the test process's own environment alone.
