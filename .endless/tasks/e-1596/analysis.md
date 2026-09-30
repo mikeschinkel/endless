@@ -159,3 +159,13 @@ prototype's lowercase `"no such option"` pattern silently false-negatives on fla
 checks (a "this option was removed" assertion that never actually matches) → the shared
 "option rejected" assertion helper must match the runner's real output case-accurately, or
 normalize case before comparing. Surfaced building `tests/tasks/e-1540-verify.sh`.
+
+## From the description
+
+Script is committed to version control, optionally reviewable by Mike before running, and ultimately part of repeatable testing.
+
+Long-term: subagents/Codex generate the scripts, adversarial agents review them for coverage.
+
+treat it as an example of shape/output to learn from, NOT a deliverable of this task.
+
+Pickup session should INTERVIEW Mike on framework shape (output format, assertion style, DB sandbox setup, runner integration with `just test`, naming/location, how the convention propagates into spawn templates / endless guide so future sessions produce one for every verify-handoff) BEFORE planning. DO NOT plan until the interview is complete.
