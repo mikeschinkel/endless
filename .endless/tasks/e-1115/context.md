@@ -1,0 +1,1 @@
+On 2026-05-02, 'eval "$(endless session use)"' from a tmux pane in the same window as the Claude Code pane reported 'No sibling Claude pane in this tmux window. Run `endless session list` to see all candidates project-wide.' The sibling Claude pane was demonstrably running in the same window.
