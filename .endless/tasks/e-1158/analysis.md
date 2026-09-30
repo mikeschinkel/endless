@@ -1,0 +1,1 @@
+Detect the worktree case (git rev-parse --git-common-dir or presence of .endless/worktrees/<name>/ ancestry) and either anchor to the main checkout's .endless/ or refuse with a clear error pointing at the fix.
