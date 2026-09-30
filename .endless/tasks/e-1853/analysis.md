@@ -14,3 +14,7 @@ A "stop and ask" message is insufficient: the agent can (and did) ignore it and 
 Fork A (auto-register the verb provisionally on a classifier error) is rejected: auto-admitting unreviewed verbs is exactly the agent-freelancing that validation exists to prevent. "Preserving the verb" is not a goal.
 
 Distinct from E-1837 (punctuation/dedup on the verb WRITE path); this is failure-handling on the CLASSIFY path.
+
+## From the description
+
+Replace the boolean check with a named-outcome result that distinguishes the failure modes, retries the transient ones, and offers reword only on a definitive NO. See analysis for the full outcome taxonomy and retry policy.
