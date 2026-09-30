@@ -6,9 +6,10 @@
 - A window already running Claude: skip it.
 - A window whose name is not a task id: skip it.
 - Which pane to keep: any, as long as it is at a shell prompt.
-- Scope: `--tmux-session` (the current tmux session), `--tmux-session=<name>`,
+- Scope: `--tmux-session NAME` (name required, no default) or
   `--all-tmux-sessions`. Chosen over `--all`, which on `session resume` could
-  read as "every Claude session".
+  read as "every Claude session". A required name keeps `--tmux-session` an
+  ordinary option: an optional value would need `=` to be told apart from REF.
 - Preview: `--dry-run`.
 - Settled tasks resume without changing status. This is crash recovery, and
   most sessions stay open after their task is done, to track tasks filed
