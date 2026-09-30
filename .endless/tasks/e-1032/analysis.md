@@ -1,0 +1,1 @@
+Must run in a quiet window with no parallel sessions: rename plan files, rewrite event log task references via translation pass, update display fields, regenerate cached cross-references, verify rebuild-db round-trips.
