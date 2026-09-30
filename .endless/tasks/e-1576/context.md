@@ -1,0 +1,1 @@
+Current 'Links:' section in 'endless task show' uses format 'E-NNNN (relation) [status]' where the parenthetical relation's subject is implicit and ambiguous (does 'E-1537 (blocks)' mean E-1537 blocks this task, or this task blocks E-1537?).
