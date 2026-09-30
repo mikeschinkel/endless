@@ -132,4 +132,6 @@ if §1 still emits `task.released` when the trigger lands, reopen begins failing
 at the DB. Removing the emission is therefore the only shape of §1 that works;
 `--force` would produce a flag whose success path aborts.
 
+## From the description
 
+Fix together: `--force` plus an unsuppressible announcement on reopen's release; `--force` on resume when the current pane holds a task; `--revisit`/`--no-revisit` on `session goto --resume`; retire `task spawn --reopen`; and rewrite spawn's done-ish refusal, which currently offers 'run task reopen first' as one of two routes — the one that dismantles the guard that produced the message.
