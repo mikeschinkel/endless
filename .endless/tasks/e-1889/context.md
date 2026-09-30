@@ -1,0 +1,1 @@
+Three doc sources cause it: the spawn handoff tells sessions to file discoveries as new tasks without distinguishing a bug in their own work; docs/status-lifecycle.mmd has no edge from assumed/confirmed back to revisit even though the CLI accepts that transition today; and both revisit framings are about replanning, never about shipped work that turned out wrong.
