@@ -292,3 +292,4 @@
 {"value": "redefine", "definition": "to define again or differently", "category": ["action"]}
 {"value": "retry", "definition": "to attempt again after a failure", "category": ["action"]}
 {"value": "log", "definition": "to record in a log", "category": ["action"]}
+{"value": "separate", "definition": "to split apart into distinct parts", "category": ["action"]}
