@@ -1,0 +1,1 @@
+Concrete instance: from a self-dev worktree, DB writes route to the sandbox by default, and the only escape is remembering the Python CLI --db main flag; the agent repeatedly assumed it had to be in the main checkout to write the real ledger.
