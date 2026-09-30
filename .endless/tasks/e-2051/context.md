@@ -1,0 +1,1 @@
+Lessons are currently appended and committed inside each session's worktree, so every correction re-dirties an already-landed branch and the session shows unsettled again — the loop that plagued E-1733's endgame.
