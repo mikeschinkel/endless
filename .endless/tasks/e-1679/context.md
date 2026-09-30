@@ -1,0 +1,1 @@
+Any project with a build system that writes tracked files (tailwind/output.css, templ, codegen, JS bundlers) dirties the worktree when 'worktree land' rebuilds post-merge, which blocks the land or forces recurring manual 'regenerate' commits (output.css hit this 3x in one week).
