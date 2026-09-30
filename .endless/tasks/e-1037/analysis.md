@@ -16,3 +16,11 @@ Verification:
 - Companion has no worktree_path → unchanged behavior.
 
 Origin: E-1015 verification revealed the gap. Manual workaround: send any prompt to current Claude to force a refresh. This task removes the foot-gun entirely.
+
+## From the description
+
+E-1033 (refresh-every-UserPromptSubmit) doesn't cover side panes that read between Claude's turns.
+
+Fix on the reader side: validate worktree_path with os.path.isdir() in _target_path; fall back to cwd silently if missing.
+
+One stat per read; companion stays as 'intent', reader treats it as a hint.
