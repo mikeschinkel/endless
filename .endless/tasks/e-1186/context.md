@@ -1,0 +1,1 @@
+E-971's plan recorded 'no create verb' as a locked decision, derived from a soft preference. The verify-worktree workflow (manual re-testing of completed tasks) doesn't fit either auto-creation trigger and surfaces the gap.
