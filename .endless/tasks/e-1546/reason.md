@@ -1,0 +1,1 @@
+The decision examples already use endless decision, no --type epic examples remain, and documenting endless epic is E-1545's scope.
