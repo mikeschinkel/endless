@@ -1,0 +1,1 @@
+E-987's land flow rebases the worktree onto main after auto-committing endless-managed files; in normal operation rebase is conflict-free, but corner cases (pre-E-972 worktrees with stale auto-file commits, hand-edits, future code paths writing auto-files from a worktree) will hit eventually.
