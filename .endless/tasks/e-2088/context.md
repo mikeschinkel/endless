@@ -1,0 +1,1 @@
+ED-1567 forbids a CANDIDATE binary from migrating the real ledger, but `_resolve_land_endless_go` hands a self_dev land the worktree's own binary — a candidate — and E-1664 made that an invariant, since it is the only binary whose embedded schema and enums match the rows the land just wrote.
