@@ -1,0 +1,1 @@
+Check for verify suites and guide sections that reference channels, and for tasks parked against the old surface (E-1489 port channel DB access to Go, E-1522 cover channelcmd MCP server via mcp-go test client, E-840 simplify channel connect) which become obsolete on removal.
