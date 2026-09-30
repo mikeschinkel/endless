@@ -35,3 +35,9 @@ already prints `touched_by=claimed ES-NNNN (E-NNNN) [working]`, so the data is
 present in the exact command the handoff path is told to run. The defect was in
 the handoff rules, not in what Endless reports, and it is fixed there. This task
 remains what its title says — who to message — and is deferrable.
+
+## From the description
+
+A standing roster in additionalContext is the wrong fix -- it bloats context and earns notice-blindness, and one session can spawn ten tasks.
+
+Transport-agnostic: this decides WHEN a session is told whom to reach, while E-1936 decides the transport it reaches them with.
