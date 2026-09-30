@@ -208,3 +208,9 @@ a decision matters most:
 Carrying decisions on tasks would inherit tasks' own content model, where
 `analysis` and `plan` already exist and already hold long-form. That is an
 argument FOR the move that this analysis did not previously make.
+
+## From the description
+
+Also settle the relation verb for a task bound by a decision — 'implements' is wrong, since a standing rule is never discharged by the task that first satisfies it — along with its inverse, and ensure a task can show the decisions that bind it.
+
+See analysis.
