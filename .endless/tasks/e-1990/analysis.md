@@ -16,3 +16,9 @@ be the first portability seam in the tree, and it should be verified on a real
 Linux box (a VM is available) rather than shipped from a macOS-only run.
 Writing a branch against an environment nobody sampled is exactly how E-1962
 shipped broken the first time.
+
+## From the description
+
+Fix is capability detection, not OS dispatch — if /proc exists, readlink /proc/<pid>/cwd and prefix-match; otherwise lsof as today.
+
+No external binary on Linux, and faster than lsof, whose +D walks the whole worktree tree.
