@@ -16,7 +16,7 @@ by this backfill:
    E-1..E-96, foreign node ids) — every `e-NNNN-verify.sh` doing `task add
    --db sandbox` has polluted the real ledger.
 3. `task_landings` can't be projected: the projector SKIPS session events
-   (projector.go:108) so its temp `sessions` table is empty — every landing
+   (projector.go) so its temp `sessions` table is empty — every landing
    with a session_id fails the session FK (E-1443, E-1719 itself, hundreds,
    all predating this work). Separately, ~38 of the backfilled tasks predate
    the event ledger (no `task.created` event, e.g. E-448) so their landings
@@ -62,3 +62,7 @@ decisions D-958/1007/1094/1175/1199/1361/1373; orphan E-783.
 Idempotent: dedups against task_landings each run, so re-running `--apply` emits
 only not-yet-recorded ids (verified: 10 emit, then 0). Node id = machine node
 (no ba15). Run from the MAIN checkout (refuses worktrees).
+
+## From the description
+
+Self-contained per plan: Phase 1 implements the minimal record-only slice (nullable task_landings.branch, endless-event --ts for historical landed_at, explicit-sha emit) which needs no Python->Go DB port; Phase 2 applies the backfill.
