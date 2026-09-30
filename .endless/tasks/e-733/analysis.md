@@ -1,0 +1,1 @@
+Store in DB (not just on-disk files) so they're queryable and linkable to tasks. Design: schema (decisions table with status, context, consequences), CLI commands (endless decision add/show/list), linking decisions to tasks that prompted them.
