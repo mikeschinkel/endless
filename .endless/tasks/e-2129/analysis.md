@@ -49,3 +49,7 @@ directory. This is not a tunable.
 - **E-1109** (`merge-vs-rebase` config preference) decides the mechanism. Rebase
   matches what `worktree land` already does; a merge is gentler but leaves merge
   commits on every task branch.
+
+## From the description
+
+Hard constraint: idle worktrees only, via the WorktreeInUse predicate the reaper shares with the other destructive path (E-1947).
