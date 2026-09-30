@@ -185,6 +185,8 @@ the ledger for provenance; see also E-1917's own third post-land defect, where
 `ENDLESS_SESSION_ID` conflates "route through this session" with "this agent made
 the change".
 
+## From the description
 
+The guard needs a durable record of who claimed a task, and `sessions.task_id` is now that record:
 
-
+That settles the basis this task was waiting on: the guard reads `sessions.task_id`, NOT `session_tasks`, which records INVOLVEMENT (goal/surfaced/revisited) rather than ownership. `session_tasks`' `relation_id` is still written once at first touch and never revised, so a session that files a task and later claims it reads `surfaced` forever — fixed here in the render rather than the schema.
