@@ -1,0 +1,1 @@
+Mike runs 50+ concurrent sessions across tmux windows: he submits a prompt, switches away, and returns to find the reply separated from his question by tool calls. A reply saying 'Both are submitted now' or 'Needs a plan' is then unreadable without scrolling back to find which task it means.
