@@ -6971,3 +6971,7 @@ This compounds an earlier lesson about open questions: a question with a recomme
 ### [2026-09-30] A verify suite must not inherit the launching Claude session's env
 Verify suites run from Mike's plain terminal, not a Claude pane. Before handing off, run the suite with every CLAUDE* variable unset (env -u ...) as well as from the session; a hook-driving suite passed for me only because it inherited CLAUDE_CODE_ENTRYPOINT=cli. Make suites hermetic: clear inherited CLAUDE*/ENDLESS* vars and set exactly what the path under test needs.
 - **Project**: endless
+
+### [2026-09-30] Grouped tmux sessions list the same windows under several names
+tmux list-panes -a / list-windows -a list each window once per session in a group (e.g. 'active' and its unattached twin 'active-6'). Don't name a user's tmux session from that output; check list-sessions for session_group/session_attached, and ask or use the attached name.
+- **Project**: endless
