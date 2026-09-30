@@ -35,3 +35,7 @@ Evidence — one turn of an E-1939 session took three calls to emit one block:
 Deliberately out of scope: the ceremony check's judgment criteria. They are
 working, and loosening them to reduce round-trips would trade a real quality
 gate for a cheap one.
+
+## From the description
+
+Filed as one task because all four share that root cause.
