@@ -1,0 +1,1 @@
+E-995 Phase 1 uses it inside 'sandbox run' to set PATH for the launched command. E-1039 will refactor event_bridge.emit_event and other shutil.which sites to use the same helper. Implements decision E-1067. See E-995 plan.
