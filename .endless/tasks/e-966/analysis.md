@@ -6,3 +6,9 @@ Decision (2026-04-28):
 - If parent grouping proves too sparse for sessions with many root-level tasks, file a follow-up task for AI-based grouping (e.g., apfel for cheap local clustering). Do not build it preemptively.
 
 Defaults to current session if no ID given.
+
+## From the description
+
+Defaults to the current session if no ID is given.
+
+v1 grouping is parent_id only; AI-based topical clustering is a future follow-up if parent grouping proves too sparse.
