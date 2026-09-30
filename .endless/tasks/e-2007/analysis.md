@@ -150,3 +150,7 @@ distinction, so today the only available gate is the blunt all-or-nothing one.
 5. **Interaction with `autoMemoryEnabled`.** If lessons replace memory for
    downstream projects, say what Endless recommends there — leaving both on
    means two competing stores.
+
+## From the description
+
+Three separable pieces, split deliberately so the immediate pain is fixable on its own without waiting for the redesign:
