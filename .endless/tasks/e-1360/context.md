@@ -1,0 +1,1 @@
+(1) the migrate() function docstring still describes 'fast-paths to CurrentSchemaVersion without re-running V1-V4 bodies' (~lines 178-182); (2) the CurrentSchemaVersion constant docstring still mentions 'fast-path post-V4 databases that pre-date the framework'.
