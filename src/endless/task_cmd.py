@@ -4130,6 +4130,9 @@ def _launch_claude_for_claim(
         # rather than the cwd fallback.
         "--spawned-by", str(_current_endless_session_id() or f"pid-{os.getpid()}"),
         "--window-name", window_name,
+        # Named for its task like a spawned session (E-2181), so it is
+        # addressable as `e-NNNN` without a listing.
+        "--name", claude_session_name(item_id),
         "--cwd", worktree,
     ], check=True)
     # Shaped like claim's other tails (E-1428): the sentence at two spaces,
@@ -7250,6 +7253,20 @@ def tmux_window_name(item_id: int) -> str:
     return task_id_display(item_id)
 
 
+def claude_session_name(item_id: int) -> str:
+    """The `claude --name` for a session Endless launches on a task (E-2181).
+
+    A session name is an address, not a label: ListAgents lists peers by it and
+    SendMessage addresses them by it. Left unnamed, Claude Code falls back to
+    the cwd's basename plus a two-character disambiguator (`e-1983-f2`), which
+    has to be read off a listing before anyone can address it. `e-NNNN` is the
+    worktree basename without that suffix, so a person or an agent can derive
+    it from the task id alone. Same argument `tmux_window_name` settled for
+    windows (E-2102): the task id, and nothing else.
+    """
+    return f"e-{item_id}"
+
+
 def _claude_binary() -> str:
     """Resolve the `claude` binary path, avoiding shell function wrappers.
 
@@ -7494,8 +7511,9 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     ]
     if model:
         spawn_cmd += ["--model", model]
-    if name:
-        spawn_cmd += ["--name", name]
+    # An explicit --name wins; otherwise the session is named for its task
+    # (E-2181), never left to Claude Code's cwd-plus-disambiguator default.
+    spawn_cmd += ["--name", name or claude_session_name(item_id)]
     if auto:
         spawn_cmd += ["--auto"]
     if target_session:

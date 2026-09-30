@@ -168,3 +168,30 @@ def test_auto_flags_are_hidden():
     hidden = {opt for p in task_spawn.params if getattr(p, "hidden", False)
               for opt in p.opts}
     assert {"--auto", "--target-session"} <= hidden
+
+
+def test_foreground_spawn_session_named_for_the_task_by_default(isolated_env, fg_env):
+    """E-2181: with no --name, the session is `e-NNNN` — the worktree basename
+    without the two-character disambiguator Claude Code appends to an unnamed
+    session. A session name is an address (ListAgents, SendMessage), so it
+    must be derivable from the task id alone. An auto-spawn (E-1814) goes
+    through the same default."""
+    _seed_project_and_task(1705)
+
+    for kwargs in ({}, {"auto": True, "target_session": "$4"}):
+        fg_env.clear()
+        spawn_plan(1705, **kwargs)
+
+        cmd = [c for c in fg_env if "spawn-window" in c][0]
+        assert cmd.count("--name") == 1, kwargs
+        assert cmd[cmd.index("--name") + 1] == "e-1705", kwargs
+
+
+def test_foreground_spawn_explicit_name_wins(isolated_env, fg_env):
+    _seed_project_and_task(1705)
+
+    spawn_plan(1705, name="foo")
+
+    cmd = [c for c in fg_env if "spawn-window" in c][0]
+    assert cmd.count("--name") == 1
+    assert cmd[cmd.index("--name") + 1] == "foo"

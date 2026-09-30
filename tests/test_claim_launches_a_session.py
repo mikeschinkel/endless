@@ -136,3 +136,11 @@ def test_no_tmux_is_refused_with_the_unattended_route(monkeypatch):
     msg = err.value.format_message()
     assert "no tmux" in msg
     assert "endless task claim E-77 --unattended" in msg
+
+
+def test_the_session_is_named_for_the_task(shell_in_tmux):
+    """E-2181: `claude --name e-NNNN`, not Claude Code's cwd-plus-suffix
+    default, so the session is addressable by name without a listing."""
+    task_cmd._launch_claude_for_claim(77, 3, "/wt/e-77")
+
+    assert _flag(shell_in_tmux[0], "--name") == "e-77"

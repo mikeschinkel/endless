@@ -3837,7 +3837,8 @@ def task_handoff(item_id):
               help="claude --model for the spawned session (optional). "
                    "Foreground spawns only.")
 @click.option("--name", "session_name", default=None,
-              help="claude --name for the spawned session (optional). "
+              help="claude --name for the spawned session. Defaults to "
+                   "e-NNNN, the task id. "
                    "Foreground spawns only.")
 @click.option("--worktree", default=None,
               help="cd to this path (e.g. a git worktree) before launching "
