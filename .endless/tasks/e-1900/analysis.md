@@ -41,3 +41,7 @@ processes the suite launches itself.
 - E-1898 is the product-side backstop (the reaper should refuse an implausible
   pane set instead of trusting an ambient `$TMUX`). This task is the authoring
   convention that keeps suites from tripping it in the first place.
+
+## From the description
+
+Add a short subsection to the guide's per-task verification suite section, pointing at tests/tasks/e-1851-verify.sh as the reference implementation.
