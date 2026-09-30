@@ -58,7 +58,7 @@ branch actually came from, which is what finally identified the cause.
 ## Root cause identified: `pull.rebase=true` blinds canAmend's guard (E-1941 session, 2026-08-11)
 
 The orphan is not produced by amending per se. `canAmend`
-(internal/events/commit.go:205-223) already refuses to amend a tip another ref
+(internal/events/commit.go) already refuses to amend a tip another ref
 can reach — precondition 2, "HEAD must not be reachable from any ref BESIDES the
 current branch." A worktree branch forked from main's ledger tip normally
 triggers that refusal and endless appends instead. The commit-shape lever this
@@ -91,7 +91,7 @@ is that endless support either setting.
 Consequences for the levers listed above:
 
 - **The union merge driver for ledger segments must be struck.** It would
-  corrupt the ledger. `Event` (internal/events/event.go:17-26) carries no unique
+  corrupt the ledger. `Event` (internal/events/event.go) carries no unique
   id, and neither `ReadAllEvents` nor the projector dedups; union merge's defining
   behavior is to keep both sides' lines in a conflicted region, manufacturing
   duplicate entries that replay double-applies. `verbs.jsonl` tolerates union only
@@ -150,3 +150,11 @@ What survived: the current land already has the rehearse-then-pointer-move shape
 (Step 4 rebases in the worktree with a clean abort; Step 5 is `merge --ff-only`,
 a pure pointer move), so E-1941's DB-ahead invariant needs only the apply
 reorder, not a new merge mechanism.
+
+## From the description
+
+Endless must work under either `pull.rebase` setting: rebase-style pull is mainstream, and a guard that silently degrades under it is a defect regardless of which setting this repo uses.
+
+Any SHA-reachability-based fix inherits the same blindness; the union-merge-driver option is struck (it would corrupt the ledger).
+
+Deliverable is a decision plus follow-on tasks.
