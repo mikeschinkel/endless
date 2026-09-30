@@ -7,3 +7,11 @@ Endless ships no default hook. Each project (or its AI assistant) writes the hoo
 Acceptance: (a) hook discovered at a documented predictable path, (b) executed with worktree path as argument and cwd, (c) hook failure is surfaced but non-fatal (worktree still created), (d) E-985's manual symlink replaceable by a documented hook script.
 
 Linked to E-985 (the Go-specific symptom that motivated this generalization).
+
+## From the description
+
+Generalize: every language/project will have its own worktree-bootstrap concerns (npm install, venv recreation, Rust target/ cleanup, etc.) that Endless cannot bake in.
+
+Endless ships no default; each project writes its own.
+
+Acceptance criteria in the analysis field.
