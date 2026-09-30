@@ -48,3 +48,9 @@ that E-698 schema drift was tested and disproven because a pre-E-698 binary
 renders correctly against the post-E-698 main DB. That remains true and is not
 contradicted — the drift that bit here was on the WRITE path, in a different
 binary (the worktree's), against a later pair of renames.
+
+## From the description
+
+The read half of this — faults.Record in runStatusLine — shipped inside E-1898 and is not in scope;
+
+a read-side recorder could not have caught this, because the read returned no error. It correctly found no session, because the write never happened.
