@@ -67,3 +67,25 @@ Give `just test-go` the same prerequisite if it has the same exposure.
 - `just test` builds before it runs, so it cannot exercise a stale
   `bin/endless-go`.
 - `just test` and `just test-go` pass.
+
+
+
+## Scope grown during implementation (Mike chose option B)
+
+The premise above did not reproduce: a fresh build of current source passed
+all 32 tests (and the full suite, 3772). The reason is in the guard itself.
+conftest stubs every emit's session id to 1, no sessions row 1 exists, and
+`ValidateStatusActor` treated the unreadable row as "return nil" — skipping the
+never-claimed rule along with the held-task rule. So any session id without a
+row could move a never-claimed task to `unverified`.
+
+- **Guard.** An unreadable session row now skips only the held-task rule; the
+  never-claimed rule still runs. Two Go tests pin both halves.
+- **Fixture.** With the guard fixed, the seven tests fail exactly as reported.
+  `_add_task` now records the claim by the session the tests act as
+  (conftest's stubbed id), not an auto-increment id that happens to be 1.
+- **Drift.** `just test` depends on `build`. `just test-go` does not need it —
+  `go test` compiles from source and no Go test runs bin/endless-go.
+
+What turned the finder's run red is still unexplained: no branch in any
+worktree has a guard without the early return.
