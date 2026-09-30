@@ -13,3 +13,9 @@ Verification:
 - Existing companion file's mtime does not change across prompts (no needless writes).
 
 Origin: E-990 verification revealed the gap. Manual workaround for the bootstrap session (writing the JSON by hand) is acceptable as one-off; this task makes the recovery automatic for all current and future deployments.
+
+## From the description
+
+Same pattern as the existing BackfillProcess: in the UserPromptSubmit hook handler, after BackfillProcess, stat the companion file; if missing, build the same record writeClaudeCompanion would build at SessionStart. Idempotent (only write when missing).
+
+Verification: delete a live session's companion and see it reappear on next prompt.
