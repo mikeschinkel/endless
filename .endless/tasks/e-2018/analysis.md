@@ -136,3 +136,7 @@ it rather than inventing a second arrangement.
 Note the asymmetry that makes this more than a copy: the parent guard needs only
 the tasks table, while transition legality needs the edge table this task's own
 plan proposes. So the hook is shared; the data behind it is not.
+
+## From the description
+
+Two checks are missing and both were available from data Endless already had: (1) transition legality — `unplanned` to `unverified` is not an edge in docs/status-lifecycle.mmd; (2) actor reality — a session may not set work-progress statuses (`underway`, `unverified`) on a task it does not hold, and `unverified` should require that some session actually claimed it.
