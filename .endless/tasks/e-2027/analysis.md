@@ -74,3 +74,7 @@ honest AND cheap: the blocker actually moves.
    E-1696 shipped dimming plus a hard sink, which E-1462's Extension offers as
    the alternative to collapsing; whether a `… N referenced` footer is also
    wanted is a question only real read volume can answer.
+
+## From the description
+
+Read capture is high-volume machine-user state that must never reach the committed ledger, so this declares its event kind machine-user scope and relies on E-1673's emit-time routing gate rather than carrying any routing of its own.
