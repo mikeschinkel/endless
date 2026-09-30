@@ -118,6 +118,13 @@ mechanism, only the assurance that the window is covered rather than assumed
 away. The fifty-identical-lines outcome is precisely what the dedup in assertion
 4 exists to prevent.
 
+Since E-2192 the window has a precise shape. Every self_dev land runs
+`endless-migrate up` at Step 5.5, after the ff-merge and before `task.landed`,
+so the database is at the landing branch's version from that moment. The
+installed binary stays one version behind until the land's closing `just build`
+refreshes it. Hooks firing in between meet a database AHEAD of their binary:
+halt, rendered silently with one deduplicated fault, per the rules above.
+
 One observation carried over from E-1972, counter-intuitive enough to be worth
 keeping: during that window the *landing worktree's* binary is the only one on
 the machine whose version matches the migrated database. A rule of "spawn the
@@ -135,8 +142,10 @@ The explicit path, and the only one in a self_dev checkout.
   IS the rollback mechanism for a bad release. `endless db restore` already
   exists.
 - Refuses when run from a candidate binary, for the same reason connect does.
-  In self_dev the sanctioned path at land is E-2088's migration executable; this
-  command is for the installed binary catching up after one.
+  In self_dev the sanctioned path at land is `endless-migrate up` (E-2088's
+  migration executable, given its `up` subcommand by E-2192), which every
+  self_dev land now runs; this command is for the installed binary catching up
+  after one.
 
 ## Increment 5 — remove what this makes unnecessary
 
@@ -178,7 +187,9 @@ the fact this epic is consolidating.
 
 # Sequencing
 
-This task is where stale binaries begin to halt, so it cannot land alone.
+This task is where binaries begin to refuse a database at the wrong version,
+so it cannot land ahead of the pieces that keep that from firing on every land
+and every stale worktree. As of 2026-09-30 all of them have landed.
 
 - **E-2088 has LANDED** (2026-09-16). `cmd/endless-migrate` exists, and
   `worktree land` already resolves and invokes it via `_resolve_land_migrate_bin`
@@ -196,40 +207,40 @@ This task is where stale binaries begin to halt, so it cannot land alone.
 
   If E-2158 lands first, re-read the `_incomplete_schema_hint` bullet above:
   the deferral becomes moot because its subject is already gone.
-- **E-1972 has LANDED (2026-09-21) — but as a DECISION, not a mechanism.** It is
-  a brainstorm; its deliverable is ED-1595 (accepted): hooks always invoke main's
-  binary, which spawns the worktree's only on an explicit per-task declaration
-  defaulting to main. **The mechanism implementing it is E-2166, which is
-  `unplanned`.** E-1972's completion therefore satisfied this task's blocker on
-  paper while leaving the protection it relied on unbuilt, so **E-2166 now
-  blocks this task directly** (recorded 2026-09-22). Landing before it ships a
-  guard the pinned binaries never execute — see the next bullet.
-- **Why that protection mattered, and NOT because stale binaries start halting.**
-  An earlier draft said they would. They do not: the version check lives in the
-  binary doing the connect, so a build that predates this task carries no check
-  and cannot halt. Measured 2026-09-20 — 134 of 142 worktrees carry their own
-  binary and 110 of those predate E-2019's land, so they hold no goose set at
-  all. Landing this task leaves every one of them doing exactly what it does
-  today: `pinnedToForeignRealDB()` sends it down the schema-passive path, which
-  skips `Migrate()` and all four `VerifyIntegrity` gates, and it writes data
-  against a schema that has moved under it. That is ED-1570's
-  permanently-incomplete case, and it is untouched by this task.
+- **E-1972 has LANDED (2026-09-21) as a DECISION, and E-2166 has LANDED
+  (2026-09-27) as its mechanism.** E-1972's deliverable is ED-1595 (accepted):
+  hooks invoke the installed binary, and a worktree's own binary only on an
+  explicit per-task declaration. E-2166 built that: worktree Claude hooks point
+  at the installed `endless-go`, for new worktrees and rewritten for existing
+  ones. Measured 2026-09-30: 1 of 133 worktrees (`e-2157`) still pins its own
+  binary in `.claude/settings.local.json`; every other worktree's hooks run the
+  installed binary.
 
-  So what this task achieves ALONE is narrower than it looks: the guard reaches
-  a session only once that worktree has rebuilt, and the worktrees most likely
-  to be dangerous are the ones least likely to have rebuilt. ED-1595's routing —
-  hooks running main's binary — is what puts the check in front of every session
-  rather than only freshly-built ones. Until E-2166 builds it, this is a guard
-  the binaries needing guarding do not execute. E-2166 carries the live
-  measurement (2026-09-21): 115 of 141 worktrees pin every Claude hook at their
-  own binary.
+  That is what makes this task's check reach the sessions it exists for. The
+  version check lives in the binary doing the connect, so it only protects a
+  session whose hooks run a binary carrying it. With hooks on the installed
+  binary, landing this task puts the check in front of every session on the
+  machine at the next `just build`, not only in freshly rebuilt worktrees. The
+  earlier worry (a guard the pinned, stale binaries never execute) is retired
+  with E-2166; the single remaining pin is whatever `e-2157` declared, and
+  behaves as any worktree binary does — its build predates this task and carries
+  no check.
 
-  The cost profile inverts the same way. Once Increment 5 removes schema-passive,
-  the halting population is not a one-time backlog to drain — it is every
-  worktree whose branch has not rebased past the newest migration, recurring
-  every time anyone lands one. Across 142 worktrees that is steady state, not a
-  migration cost paid once, and E-1972 is what keeps it from being a permanent
-  tax.
+  What stays true: a worktree binary run by hand (tests, `just verify`, a
+  worktree's `bin/endless-go` invoked directly) is a candidate, and against a
+  database behind it this task REFUSES rather than migrating. That is the
+  intended ED-1567 behaviour, not a regression.
+- **E-2192 has LANDED (2026-09-30), and this task now depends on it.** Under
+  this task, a candidate binary connecting to a database BEHIND it is refused.
+  The land's own `task.landed` emit (Step 6) runs the landing worktree's
+  candidate `endless-go`. Before E-2192 the land never applied goose migrations,
+  so that emit met a database one version behind: E-2188 failed on a missing
+  column, and under this task every land carrying a migration would instead be
+  REFUSED at Step 6, leaving main advanced and the landing unrecorded. E-2192
+  runs `endless-migrate up` at Step 5.5 on every self_dev land (and on the
+  recovery re-run), so by Step 6 the database and the candidate agree. Pin it:
+  the verification below includes a land carrying a migration that records its
+  landing under the new connect rules.
 
 # Verification
 
@@ -249,7 +260,8 @@ DO-NOT-EDIT header naming E-2020, uses `section` / `assert_eq` /
 Isolation comes from the runner's temp `HOME` and `XDG_CONFIG_HOME`, not from a
 flag. The hook still calls `PinMainDB` — that is the behaviour under test — but
 "main" resolves inside the temp home, so it lands on a throwaway database. Do
-not reach for `--config-dir` to arrange this; the runner already has.
+not reach for `--db-dir` (formerly `--config-dir`) to arrange this; the runner
+already has.
 
 Coverage that must outlive the land is mirrored into the durable Go suite:
 assertion 1 is the pure decision function and belongs in `internal/monitor`'s
@@ -272,7 +284,13 @@ own tests, where it will keep being run.
 7. `endless db upgrade` refuses from a candidate binary.
 8. Schema-passive is gone: `pinnedToForeignRealDB` and `foreignRealDB` no longer
    exist, and the enum integrity gates still run on every owned connect.
-9. No message anywhere names a change file or `endless db apply-change`.
+9. No message THIS TASK ADDS names a change file or `endless db apply-change`:
+   the version-mismatch messages point at `endless db upgrade`. The existing
+   change-file branch of `_incomplete_schema_hint` is deliberately left for
+   E-2158 (Increment 5), so assert on the new messages, not on the whole tree.
+10. A land carrying a goose migration records its landing under the new connect
+    rules: Step 5.5's `endless-migrate up` (E-2192) brings the database to the
+    candidate's version, so the Step 6 `task.landed` emit is not refused.
 
 
 
