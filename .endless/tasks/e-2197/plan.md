@@ -45,27 +45,25 @@ Verified: that alone takes the file to 32 passed, and the full suite green.
 
 ## The drift fix is the actual work
 
-Decide how `just test` should relate to the binary it exercises. The options, in
-rough order of cost:
+**`just test` gains `build` as a prerequisite.** The suite then cannot run
+against a binary older than the source that produced it.
 
-1. **`just test` depends on `just build`.** Simplest, and makes the suite always
-   test what the source says. Costs a build on every test run.
-2. **A staleness check that fails loudly.** Compare the built binary against the
-   source tree and refuse to run rather than silently testing yesterday's code.
-   Cheaper per run; one more thing to keep correct.
-3. **A single test that asserts the binary is current.** Smallest change, and it
-   turns a silent wrong answer into one named failure.
+That is the whole change. The Go build is incremental, so on a run where nothing
+changed the added cost is near zero, and on a run where something did change the
+build was required for the result to mean anything.
 
-Not settled here — pick one while implementing, and say why in the commit. What
-is settled is that the current behaviour, where the answer depends on when you
-last built, is not acceptable.
+Both alternatives were considered and rejected. A staleness check that refuses
+to run is cheaper per invocation, but it adds a mechanism that can itself be
+wrong, and mtime comparison carries edge cases a build does not. A single test
+asserting the binary is current is smaller still, but by the time it fires the
+other several thousand tests have already run against the stale binary — it
+reports the problem rather than preventing it.
 
-Worth checking whether the same exposure exists for `just test-go`, and whether
-a worktree's binary can be stale in ways the main checkout's cannot.
+Give `just test-go` the same prerequisite if it has the same exposure.
 
 ## Acceptance
 
 - `tests/test_report_reminder.py` passes against a freshly built binary.
-- `just test` either cannot run against a stale `bin/endless-go`, or fails
-  visibly and by name when it is stale.
+- `just test` builds before it runs, so it cannot exercise a stale
+  `bin/endless-go`.
 - `just test` and `just test-go` pass.
