@@ -199,4 +199,10 @@ re-drain it first or disable rename detection for that rebase
 (`-X no-renames`). Do not let git guess: the guess puts one task's content in
 another task's directory.
 
+## From the description
 
+Phase A writes the mirror to main at write time, stops materializing mirrors into worktrees, and drains the 123 commits off branches — which makes E-1881's step 1 unnecessary rather than automated.
+
+Phase B, absorbed from E-2138, then consolidates the files into .endless/tasks/e-nnnn/<type>.md, the directory that already holds each task's verify.sh, replacing a directory allowlist that has already gone stale once with a single glob.
+
+The order is not optional: git's directory-rename detection places a branch's new file inside another task's directory, so the drain must precede the rename.
