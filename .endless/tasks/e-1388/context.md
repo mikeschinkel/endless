@@ -1,0 +1,1 @@
+When a bug is found in a task that was recently marked verify/assumed/completed (like E-1322's post-land Kind-guard bug), today the choices are: (a) file a new task per finding, generating process theater; (b) silently append to the original task's outcome, losing the audit trail of when each finding surfaced.
