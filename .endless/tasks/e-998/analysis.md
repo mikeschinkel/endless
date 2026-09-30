@@ -15,3 +15,9 @@ Open design items:
 - Interaction with E-971's worktree subsystem: this should land as part of that workstream rather than a standalone command, if the timing aligns.
 
 Origin: E-989 verification round-trip. Filed because the symlink-swap workaround is unacceptable as a recurring pattern.
+
+## From the description
+
+Sessions outside the worktree are unaffected.
+
+Open design items and verification matrix are in the analysis field.
