@@ -219,3 +219,16 @@ def test_retired_pre_summarize_criteria_stay_gone():
         for phrase in ("Do NOT pre-summarize", "Do not pre-summarize",
                        "no pre-summarizing"):
             assert phrase not in text, f"{path.name} grew back {phrase!r}"
+
+
+@pytest.mark.parametrize("report_gate", [True, False], ids=["gate-on", "gate-off"])
+def test_land_toml_self_dev_settings_are_taught_only_to_self_dev(report_gate):
+    """E-2192. `[self_dev]` in land.toml does nothing on someone else's project,
+    so a reader there must not be taught it — and a self_dev reader must be."""
+    path = GUIDE_DIR / "orchestration.md"
+    on = _render(path, report_gate=report_gate, self_dev=True)
+    off = _render(path, report_gate=report_gate, self_dev=False)
+    assert "schema_order" in on
+    assert "schema_order" not in off
+    assert "[self_dev]" not in off
+    assert "land.toml" in off

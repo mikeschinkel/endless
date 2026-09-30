@@ -141,13 +141,8 @@ is a complete proof for that task at land time.
 
 `.endless/tasks/e-<id>/land.toml` is where a branch tells `endless worktree
 land` how it lands — task-owned like `verify.toml` and `verify.sh`, written and
-committed on the task branch, and read from the landing branch at land time.
-Keys live in tables, never at the top level; settings that only mean something
-to Endless landing itself live under `[self_dev]`:
-
-    [self_dev]
-    schema_order = "changes-first"   # default: "migrations-first"
-
-A missing file means the defaults. An unknown table or key, or a value the land
-does not accept, refuses the land before the merge and names the offender. See
-**Landing the work** in `endless guide orchestration`.
+committed on the task branch, and read from the landing branch at land time. It
+is optional: without one, the land uses its defaults. Settings live in tables,
+never at the top level, and a table or key the land does not understand refuses
+the land before the merge, naming it. Which settings apply to this project, if
+any, is in **Landing the work** in `endless guide orchestration`.

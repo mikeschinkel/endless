@@ -2704,7 +2704,7 @@ def _land_settings_path(worktree_path: Path, canonical: str) -> Path:
     )
 
 
-def _read_schema_order(worktree_path: Path, canonical: str) -> str:
+def _read_schema_order(worktree_path: Path, canonical: str, self_dev: bool) -> str:
     """The order a self_dev land applies its schema steps in (E-2192).
 
     Read from `.endless/tasks/e-<id>/land.toml` in the WORKTREE — the landing
@@ -2721,6 +2721,11 @@ def _read_schema_order(worktree_path: Path, canonical: str) -> str:
     the file and the offender. A typo in a landing instruction must not be
     silently ignored. Called before the ff-merge, so the refusal leaves base
     and the database untouched.
+
+    `[self_dev]` is known only on a self_dev project. Everywhere else no table
+    is: nothing in it would do anything there, so it is refused like any other
+    unknown table, and the refusal does not teach an Endless-only setting to a
+    project it cannot apply to.
     """
     path = _land_settings_path(worktree_path, canonical)
     if not path.is_file():
@@ -2738,23 +2743,25 @@ def _read_schema_order(worktree_path: Path, canonical: str) -> str:
     except (OSError, tomllib.TOMLDecodeError) as e:
         raise refuse(f"is not readable TOML: {e}")
 
-    known_tables = ", ".join(f"[{t}]" for t in _LAND_SETTINGS_KEYS)
+    known = {t: k for t, k in _LAND_SETTINGS_KEYS.items()
+             if t != "self_dev" or self_dev}
+    known_tables = (
+        "the known tables are: " + ", ".join(f"[{t}]" for t in known) + "."
+        if known else "no land settings apply to this project yet."
+    )
     for table, value in settings.items():
         if not isinstance(value, dict):
             raise refuse(
                 f"sets `{table}` at the top level. Settings live in tables; "
-                f"the known tables are: {known_tables}."
+                f"{known_tables}"
             )
-        if table not in _LAND_SETTINGS_KEYS:
-            raise refuse(
-                f"has an unknown table [{table}]. The known tables are: "
-                f"{known_tables}."
-            )
+        if table not in known:
+            raise refuse(f"has an unknown table [{table}]; {known_tables}")
         for key in value:
-            if key not in _LAND_SETTINGS_KEYS[table]:
+            if key not in known[table]:
                 raise refuse(
                     f"has an unknown key `{key}` in [{table}]. Known keys: "
-                    + ", ".join(sorted(_LAND_SETTINGS_KEYS[table])) + "."
+                    + ", ".join(sorted(known[table])) + "."
                 )
 
     order = settings.get("self_dev", {}).get(
@@ -3550,7 +3557,9 @@ def land_worktree(
         # compile its own migration tool must abort while base and the database
         # are untouched. The land.toml read is not self_dev-gated: a typo in a
         # landing instruction is refused on any project.
-        schema_order = _read_schema_order(worktree_path, canonical)
+        schema_order = _read_schema_order(
+            worktree_path, canonical, config.project_is_self_dev(main_root),
+        )
         migrate_bin = None
         if config.project_is_self_dev(main_root):
             _build_migration_executable(worktree_path, canonical)

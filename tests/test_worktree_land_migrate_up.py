@@ -230,24 +230,24 @@ def _write_land_toml(wt, body):
 
 
 def test_missing_land_toml_is_the_default(landable):
-    assert _read_schema_order(landable["worktree"], CANON) == \
+    assert _read_schema_order(landable["worktree"], CANON, True) == \
         SCHEMA_ORDER_MIGRATIONS_FIRST
 
 
 def test_land_toml_without_self_dev_is_the_default(landable):
     wt = landable["worktree"]
     _write_land_toml(wt, "[self_dev]\n")
-    assert _read_schema_order(wt, CANON) == SCHEMA_ORDER_MIGRATIONS_FIRST
+    assert _read_schema_order(wt, CANON, True) == SCHEMA_ORDER_MIGRATIONS_FIRST
     _write_land_toml(wt, "")
-    assert _read_schema_order(wt, CANON) == SCHEMA_ORDER_MIGRATIONS_FIRST
+    assert _read_schema_order(wt, CANON, True) == SCHEMA_ORDER_MIGRATIONS_FIRST
 
 
 def test_land_toml_names_both_orders(landable):
     wt = landable["worktree"]
     _write_land_toml(wt, '[self_dev]\nschema_order = "changes-first"\n')
-    assert _read_schema_order(wt, CANON) == SCHEMA_ORDER_CHANGES_FIRST
+    assert _read_schema_order(wt, CANON, True) == SCHEMA_ORDER_CHANGES_FIRST
     _write_land_toml(wt, '[self_dev]\nschema_order = "migrations-first"\n')
-    assert _read_schema_order(wt, CANON) == SCHEMA_ORDER_MIGRATIONS_FIRST
+    assert _read_schema_order(wt, CANON, True) == SCHEMA_ORDER_MIGRATIONS_FIRST
 
 
 @pytest.mark.parametrize("body, names", [
@@ -264,7 +264,7 @@ def test_land_toml_refusals_name_the_file_and_the_offender(landable, body, names
     wt = landable["worktree"]
     _write_land_toml(wt, body)
     with pytest.raises(click.ClickException) as ei:
-        _read_schema_order(wt, CANON)
+        _read_schema_order(wt, CANON, True)
     msg = ei.value.message
     assert "land.toml" in msg
     assert "Nothing has been merged or migrated" in msg
@@ -411,3 +411,45 @@ def test_migrate_up_surfaces_the_executables_own_error(tmp_path, monkeypatch):
     with pytest.raises(click.ClickException) as ei:
         _migrate_up(str(binary))
     assert "no database at /x.db" in ei.value.message
+
+
+# ---------------------------------------------------------------------------
+# 5. PRODUCT: land.toml on a project that is not self_dev
+# ---------------------------------------------------------------------------
+
+def test_no_land_toml_changes_nothing_outside_self_dev(landable):
+    assert _read_schema_order(landable["worktree"], CANON, False) == \
+        SCHEMA_ORDER_MIGRATIONS_FIRST
+
+
+@pytest.mark.parametrize("body", [
+    '[self_dev]\nschema_order = "changes-first"\n',
+    '[merge]\nstrategy = "squash"\n',
+    'schema_order = "changes-first"\n',
+], ids=["self-dev-table", "unknown-table", "top-level-key"])
+def test_outside_self_dev_no_table_is_known_and_none_is_advertised(landable, body):
+    """`[self_dev]` does nothing on someone else's project, so it is refused
+    there like any unknown table — and no refusal teaches it to them."""
+    wt = landable["worktree"]
+    _write_land_toml(wt, body)
+    with pytest.raises(click.ClickException) as ei:
+        _read_schema_order(wt, CANON, False)
+    msg = ei.value.message
+    assert "no land settings apply to this project yet" in msg
+    assert "the known tables are" not in msg
+
+
+def test_a_bad_land_toml_refuses_a_non_self_dev_land_before_the_merge(
+    landable, monkeypatch
+):
+    main, wt = landable["main"], landable["worktree"]
+    _commit_on_feat(wt, {LAND_TOML: '[merge]\nstrategy = "squash"\n'})
+    calls = []
+    _patch_land(monkeypatch, main, wt, calls, self_dev=False)
+    main_before = _head(main, "main")
+
+    with pytest.raises(click.ClickException):
+        land_worktree(CANON, dry_run=False)
+
+    assert calls == []
+    assert _head(main, "main") == main_before

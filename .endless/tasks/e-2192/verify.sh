@@ -23,6 +23,10 @@
 #       behind ONE backup, in the order the task's land.toml names; land.toml
 #       is refused before the merge when it holds anything unknown or invalid.
 #   C3  The recovery re-run runs `up` before retrying the record.
+#   C5  PRODUCT: land.toml is optional everywhere. Outside self_dev no table is
+#       known, [self_dev] is refused like any unknown table, and neither the
+#       refusal, the guide nor the scaffolded .endless/tasks/CLAUDE.md teaches
+#       an Endless-only setting to a project it cannot apply to.
 #   C4  END TO END: a real land (real git, real backup, real `up`, real
 #       candidate emit) against a main database held at 00008 — the E-2188
 #       shape — records the landing in one run. The same land with `up`
@@ -30,7 +34,8 @@
 #
 # Layers:
 #   A. Fail-fast: build, and this task's Go and Python tests.
-#   B. The claims by test name, so deleting one cannot pass by absence (C1-C3).
+#   B. The claims by test name, so deleting one cannot pass by absence
+#      (C1-C3, C5).
 #   C. End to end, control then fix (C4).
 source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
@@ -77,7 +82,7 @@ fi
 
 # ─── B. the claims, by name ─────────────────────────────────────────────────
 
-section "B. Each claim's test runs and passes (C1-C3)"
+section "B. Each claim's test runs and passes (C1-C3, C5)"
 
 go_contract() {
     local t="$1"
@@ -112,6 +117,17 @@ py_contract test_land_toml_is_read_from_the_landing_branch_not_main
 py_contract test_the_recovery_rerun_runs_up_before_recording
 py_contract test_up_failure_reports_main_advanced_and_does_not_record
 py_contract test_non_self_dev_land_runs_no_up
+py_contract test_no_land_toml_changes_nothing_outside_self_dev
+py_contract test_outside_self_dev_no_table_is_known_and_none_is_advertised
+py_contract test_a_bad_land_toml_refuses_a_non_self_dev_land_before_the_merge
+
+if out=$(uv run pytest -q "tests/test_guide_conditionals.py::test_land_toml_self_dev_settings_are_taught_only_to_self_dev" 2>&1) \
+        && [[ "${out}" == *passed* ]]; then
+    report_pass "guide: land.toml's [self_dev] settings are taught only to self_dev projects"
+else
+    report_fail "guide: land.toml's [self_dev] settings are taught only to self_dev projects" \
+        "passed" "$(printf '%s' "${out}" | tail -10)"
+fi
 
 # ─── C. end to end ──────────────────────────────────────────────────────────
 

@@ -1026,10 +1026,21 @@ def guide_conditions() -> dict[str, bool]:
     the wind-down nudge use. A fourth reading of the config would be a fourth
     thing to keep in step, and the told-iff-gated invariant only holds while
     every emitter agrees.
+
+    `self_dev` (E-2192) gates guidance that applies only to Endless developing
+    itself, such as `land.toml`'s `[self_dev]` table: every other project's
+    reader would be taught a setting that does nothing for them. Resolved from
+    the enclosing project, as the land resolves it (a worktree maps back to its
+    main checkout); False when cwd is in no project.
     """
+    from endless import config
     from endless.task_cmd import _report_gate_on
 
-    return {"report_gate": _report_gate_on()}
+    root = config.enclosing_project_root()
+    return {
+        "report_gate": _report_gate_on(),
+        "self_dev": root is not None and config.project_is_self_dev(root),
+    }
 
 
 def render_guide_file(path: Path) -> str:

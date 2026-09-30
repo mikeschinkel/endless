@@ -436,9 +436,15 @@ branch, rebases with the code it describes, shows up in the reviewed diff, and
 `land` reads it from the **worktree** (the landing branch) at the moment it
 lands, so the agent that wrote the change is the one who says how it lands.
 
-Keys always live in tables, never at the top level, so each later setting gets
-its own section. Settings that only mean something to Endless landing itself go
-under `[self_dev]`. Today there is exactly one:
+The file is optional, and a missing one means the defaults. Keys always live in
+tables, never at the top level, so each setting gets its own section. Anything
+`land` does not understand — an unknown table or key, a top-level key, a value
+it does not accept, unreadable TOML — **refuses the land before the merge**,
+naming the file and the offender: a typo in a landing instruction is never
+silently ignored. Fix the file on the branch, commit, and land again.
+{{if .self_dev}}
+This project is self_dev, so one table applies to it, `[self_dev]`, holding
+settings that only mean something to Endless landing itself:
 
 ```toml
 [self_dev]
@@ -452,13 +458,9 @@ applied. `up` runs on **every** self_dev land (a no-op when the database is
 current), so the binary that records the landing never meets a database missing
 its own migration — including on the re-run after "recording the landing
 failed". Migrations run first unless `schema_order` says `changes-first`.
-
-A missing file, or one with no `[self_dev]` table, means the defaults. Anything
-`land` does not understand — an unknown table or key, a top-level key, a value
-that is not one of the two orders, unreadable TOML — **refuses the land before
-the merge**, naming the file and the offender: a typo in a landing instruction
-is never silently ignored. Fix the file on the branch, commit, and land again.
-
+{{else}}
+No settings apply to this project yet, so there is nothing to put in one.
+{{end}}
 ### Abandoning a worktree
 
 ```bash
