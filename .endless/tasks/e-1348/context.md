@@ -1,0 +1,1 @@
+Currently the tab stuck on a stale task ID after the session moved off it — observed 2026-05-15: tmux tab said [E-1209] while session was working E-1347, causing the user to misidentify the active task.
