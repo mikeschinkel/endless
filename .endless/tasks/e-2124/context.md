@@ -1,0 +1,1 @@
+The guide still presents eswt as a shell helper: docs/guide/orchestration.md's shell-helpers table calls it '(Planned, not yet shipped.)', and docs/guide/index.md, docs/guide/help/_topics.md and docs/guide/help/shell-init.md list it beside esu as if a reader had it.
