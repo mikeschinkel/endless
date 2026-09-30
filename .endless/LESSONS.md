@@ -6987,3 +6987,7 @@ On E-940 I recommended exempting ~/.cache/endless/sandboxes from the write gate 
 ### [2026-09-30] Spawning does not require approving the task first
 Do not tell Mike that a submitted task must be approved (task approve) before it can be spawned. It does not; spawn works on it directly. The guide's lifecycle diagram (no submitted->underway claim edge; 'ready provably means human-approved') and code comments ('the claim gate refuses a submitted task') say otherwise, which is what keeps misleading sessions. Hand him the spawn command alone.
 - **Project**: endless
+
+### [2026-09-30] Resolve apparent plan conflicts toward the plan's design intent, or ask — never silently pick the reading that undoes it
+In E-2164 I read one verification bullet ('a task with two blockers shows both, on two lines') as universal and removed leading | groups, re-inflating the line count the plan was designed to minimize. The bullet described a non-groupable example; the notation rules allowed the grouping. When a verification line seems to contradict the plan's stated design goal, re-read it against the design (it is usually describing a specific example), and if it still conflicts, ask Mike before choosing — don't silently take the reading that unravels planned work.
+- **Project**: endless
