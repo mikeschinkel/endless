@@ -1,0 +1,1 @@
+Full design (invariant enforcement location, migration, exact status-bar divergence format, claim-when-goal-already-set behavior) to be resolved in this task's planning session per house rule that plans carry no open questions.
