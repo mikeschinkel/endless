@@ -1,0 +1,1 @@
+'endless task replace E-750 --by E-880' creates the relationship and sets E-750 to obsolete. task show displays 'Replaced by: E-880'. Requires adding 'replaces' to the dep_type CHECK constraint or removing the CHECK and validating in application code.
