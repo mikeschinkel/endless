@@ -1,0 +1,1 @@
+(c) The merge problem may dissolve entirely if E-1309's routing rule (commit ledger/verbs/snapshots to main regardless of caller cwd) also applies to verbs.jsonl — worktree branches would then never carry verbs.jsonl changes, so no merge surface remains.
