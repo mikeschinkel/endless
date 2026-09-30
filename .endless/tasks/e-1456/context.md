@@ -1,0 +1,1 @@
+The .endless/config.json key 'worktree_sandbox' (true when a project's worktrees should use per-worktree sandbox DBs) is accurate but obscures intent: this flag is ON for endless-developing-endless and OFF for the ~40 downstream projects that use endless as a tool.
