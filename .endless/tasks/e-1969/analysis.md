@@ -36,3 +36,11 @@ The name appears across both languages and in a second table:
 working under while `active_task_id` holds a child. Decide whether it renames
 too, or whether "active_" remains correct there because a session's epic and
 task are simultaneously active.
+
+## From the description
+
+A session holds at most one task, so the `active_` qualifier names a distinction that no longer exists — it dates from when a session might hold several tasks with one of them active. No external users yet, so there is no reason to keep the legacy name.
+
+Wider than one column: the name appears in the Go monitor SQL and struct fields, the Python session/task paths and tests, and `session_statuses` carries the same column, which should rename with it rather than leaving an inconsistent pair.
+
+Two things to decide explicitly: whether `user-machine.jsonl`'s `old_active_task_id`/`new_active_task_id` keys rename too (breaking readers of existing logs), and whether `sessions.active_epic_id` follows or keeps `active_` since a session's epic and task are simultaneously active.
