@@ -1,0 +1,1 @@
+Design brainstormed in E-1808; architecture in ED-1538 (computed eligibility from human-ratified complexity+risk, agent-proposed at submit, user-ratified at approve) and ED-1539 (two orthogonal axes, not one scalar).
