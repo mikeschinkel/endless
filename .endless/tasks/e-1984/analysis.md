@@ -30,7 +30,7 @@ with three roles:
 |---|---|---|
 | `user` | text | full; tool-result blocks explicitly SKIPPED |
 | `assistant` | text blocks joined | full; `thinking`/`signature` blocks skipped |
-| `tool_use` | `name + ": " + input` | **truncated to 500 chars** (`transcript.go:223`) |
+| `tool_use` | `name + ": " + input` | **truncated to 500 chars** (`transcript.go`) |
 
 Two deliberate losses worth re-examining:
 
@@ -98,3 +98,7 @@ minimize it is a separate, later question.
 - The **rune-safe truncation bugfix** — that fixes byte-slicing corruption in the
   truncation that exists today; it is correct regardless of whether this task
   later removes truncation entirely.
+
+## From the description
+
+Also in scope: compressing boilerplate that repeats verbatim (one skill prompt appears 149 times across 133 real sessions), which needs more than exact-match dedup since skills take arguments. Decide what we SHOULD be doing before implementing any of it.
