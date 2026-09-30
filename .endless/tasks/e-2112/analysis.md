@@ -34,3 +34,9 @@ print the replace refusal; `endless session resume Y` (Y != X) still refuses wit
 ## Encountered
 Hit live in session 6e7f46fb (the E-1644 worktree) on 2026-06-29 while trying to resume this
 very task after it was completed.
+
+## From the description
+
+Resume execs in place to avoid clobbering a different session, but self-resuming the pane current task clobbers nothing.
+
+Expected: same-task self-resume proceeds without --force.
