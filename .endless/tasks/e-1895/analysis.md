@@ -46,3 +46,9 @@ the recorder is available here with no new wiring.
   that writes nothing. `runStatusLine` is not among those 42.
 - E-698 is `assumed` and landed twice. It did not introduce the swallow, which
   predates it; at most its +78 lines of schema widened the window.
+
+## From the description
+
+Record a fault instead (dedupes while open, so a bar blanking every 2s across 14 panes raises one incident).
+
+Keep the bar output and the stderr silence exactly as they are; this is observability only.
