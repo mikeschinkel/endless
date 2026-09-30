@@ -310,3 +310,4 @@
 {"value": "ignore", "definition": "to deliberately disregard", "category": ["action"]}
 {"value": "seed", "definition": "to populate with initial data", "category": ["action"]}
 {"value": "turn", "definition": "to change state or direction", "category": ["action"]}
+{"value": "tell", "definition": "to inform", "category": ["action"]}
