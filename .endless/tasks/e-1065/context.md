@@ -1,0 +1,1 @@
+Eleven tasks violate the new description policy (length > 1024 or embedded newlines) but were outside E-1060's scope because their analysis field is empty. E-924 and E-963 exceed 1024 chars; E-1047, E-1048, E-1049, E-1050, E-1056, E-1057, E-1061, E-1062, E-1063 contain embedded newlines (the last three were added after the original count).
