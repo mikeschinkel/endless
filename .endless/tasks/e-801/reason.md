@@ -1,0 +1,1 @@
+Endless keeps content in the database rather than rendering it to files on disk (on-disk copies are only review mirrors), so generating markdown for external tools is no longer a direction.
