@@ -94,3 +94,7 @@ its item (1), recording a checkpoint per `task report` call, is delivered by
 E-1901 Part 2; its item (3), a record-only Stop hook designed to sidestep the
 blocking approach E-1803 rejected, is superseded outright — E-1901 un-rejects
 blocking. Only its item (2), the monitor surface, survives as part 5 here.
+
+## From the description
+
+review cost is per-task attention, not per-task size, so fewer tasks beats smaller ones.
