@@ -1,0 +1,1 @@
+what tiers exist and how a project declares them; which tiers should gate a land synchronously vs. run async/post-land; what 'green on main' means when the suite is not monolithic (per-tier baselines?); how tier cost affects when capture happens.
