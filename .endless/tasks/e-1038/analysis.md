@@ -25,3 +25,11 @@ Verification:
 Supersedes E-1037 (worktree_path validation alone is too narrow; the larger fix is the env minimization).
 
 Origin: E-1015 verification + Mike's design call: 'It will never fail for a stale value.'
+
+## From the description
+
+Only the integer id is canonical; the rest are derivable and snapshotting them invites the staleness E-1015 verification surfaced. Mike's call: minimal is right.
+
+Other consumers call 'endless session show <id> --json' for fresh data.
+
+Extension contract change: extensions parse JSON instead of reading env vars.
