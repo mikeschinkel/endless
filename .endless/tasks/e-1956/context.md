@@ -1,0 +1,1 @@
+`obsolete` reads as "never happened," so there is no way to see at a glance that shipped work was superseded — the fact lives in a `replaced_by` relation that status displays omit, which tempts users to mark shipped tasks obsolete and lose that history.
