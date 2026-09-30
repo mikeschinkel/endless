@@ -1,0 +1,1 @@
+ED-1560 makes it write-once, E-1968 removed every writer that cleared it (reopen, completion, `task chat`, and `task release`, now disabled), and E-1969 renamed it from `active_task_id` and enforced write-once with a trigger.
