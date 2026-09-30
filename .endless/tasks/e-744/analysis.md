@@ -1,0 +1,1 @@
+Uses recreate-table pattern for SQLite compatibility. Guard: hasColumn(sessions, working_dir). Remove working_dir from INSERT/UPDATE in StartWorkSession, StartChatSession, InitSession. Remove ended_at from EndSession. Files: sql/schema.sql, internal/monitor/db.go, src/endless/db.py, internal/monitor/session.go.
