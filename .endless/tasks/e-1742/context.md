@@ -1,0 +1,1 @@
+Known issue to fix: the Self-dev DB sandbox section says routing inside a Claude worktree session is transparent via the injected XDG_CONFIG_HOME — stale since the E-1429/E-1476 gate; verified 2026-07-05 that the Python CLI refuses ANY DB open (reads included) inside a self-dev worktree without an explicit --db, even with the sandbox XDG_CONFIG_HOME set.
