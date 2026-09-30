@@ -143,3 +143,31 @@ sent back to `revisit`. A project at its cap is skipped for that run.
   opted-in project with one eligible task spawns exactly once per due run,
   detached, into the resolved target, with the auto-spawned flag bound; an
   opted-out project and a project at its cap spawn nothing and say why.
+
+## 8. As built — scope that grew during implementation
+
+- **The spawn runs as the system, not a session.** `task spawn`'s pre-claim
+  emits its status event as a `cli` actor, which needs a session. From a
+  monitor pane, session resolution either refuses or finds the Claude session
+  sharing the monitor's window and credits the claim to it. The job passes the
+  global `--no-session` (actor `system`), and `task spawn --auto` records its
+  spawner as `auto-spawn` instead of resolving a session, so
+  `@endless_spawned_by` names no parent (E-1815's null spawner).
+- **`task spawn --target-session` does not require `$TMUX`.** A named target
+  needs a reachable server, not a pane, so `endless jobs run` from a plain
+  shell can spawn. Without a target the old refusal holds.
+- **Project-only settings are read from the project file alone**
+  (`config.LoadProject`), and `Merge` never inherits `enabled`/`cap`, so a
+  user-level `auto_spawn.enabled: true` opts nothing in.
+- **Provenance is guarded against stale windows** (E-1983): SessionStart sets
+  `sessions.auto_spawned` only when the window's `@endless_task_id` matches the
+  task the session just bound to from its cwd.
+- **The sandbox guard**: the job skips on a worktree sandbox database, whose
+  project rows point at real checkouts.
+- **Migration is 00011**, as is E-2189's; whichever lands second renumbers
+  (goose refuses a duplicate loudly).
+- The monitor marker is ASCII `*` after the session id in `project
+  status`/`project monitor` (named in the legend only when present); `session
+  status` has no session rows, so it has nothing to mark.
+- `docs/guide/reference.md`'s background-jobs list was stale (it named the
+  deleted triage sweep); refreshed while adding the auto-spawn section.
