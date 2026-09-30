@@ -37,3 +37,7 @@ cycle guard is a real defect; the clearing mechanism is present and discoverable
 E-2018 ("Enforce the documented status lifecycle on task update") is the same
 SHAPE of defect on a different column — `task update` bypassing a rule another
 path enforces. Worth a glance for a common factoring, not a merge.
+
+## From the description
+
+Lift the ancestor walk out of execTaskMoved into a shared validator and call it from both executors, exactly as ValidateMaybeParentless is already shared between them. The guard belongs in Go, where the write happens.
