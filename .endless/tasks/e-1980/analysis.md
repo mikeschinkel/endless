@@ -37,7 +37,7 @@ task must check them rather than assume:
 3. **Storage consistency.** If any writer stamps local while others stamp UTC,
    the DB already holds mixed-zone values and a display-boundary fix alone is
    insufficient — that would need a data audit, not just a formatter.
-4. **Relative-time helpers.** task_cmd.py:1302 computes a delta against
+4. **Relative-time helpers.** task_cmd.py computes a delta against
    `datetime.now(timezone.utc)`; anything doing "3h ago" arithmetic against a
    naive-parsed string is a second, independent failure mode.
 
@@ -51,3 +51,11 @@ abbreviation so displayed values are self-describing.
 PRODUCT: this is wrong for every user outside UTC, on every task, session, note
 and decision the tool displays — not a dev-machine quirk. A user in UTC+13 sees
 tomorrow's dates.
+
+## From the description
+
+Fix at the display boundary, not in storage: keep storing UTC, convert to the operator's zone when formatting,
+
+and decide whether to print the zone abbreviation so values are self-describing.
+
+The stored format carries no offset, so parsing must assume UTC explicitly rather than rely on naive-datetime defaults.
