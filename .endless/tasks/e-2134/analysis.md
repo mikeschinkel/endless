@@ -49,3 +49,7 @@ hold a task, may it write" is project. The end state is plausibly BOTH levels.
 This task scopes installation to the project and leaves the per-responsibility
 partition to follow the DB work. It deliberately does NOT block on that split —
 this is the easier of the two, and shipping it first does not constrain it.
+
+## From the description
+
+That forces a runtime bypass to exist and stay correct, when an unregistered hook simply cannot fire.
