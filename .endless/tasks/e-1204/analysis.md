@@ -19,7 +19,7 @@ content changed.
 
 Mechanism NOT identified. Ruled out: no git hooks (core.hooksPath default,
 .git/hooks empty); no land step writes the plan file (`land_worktree` never calls
-the materializer at `task_cmd.py:479`); orphan-drop was a no-op (companion
+the materializer at `task_cmd.py`); orphan-drop was a no-op (companion
 base_branch="main", neither branch commit amendable); the endless-hook only reads
 `~/.claude/plans`, never writes `.endless/plans`. That the exact path turning a
 DB/file divergence into transient worktree dirt could not be found is itself
@@ -31,3 +31,7 @@ at land time. Deterministic rules should make one copy the single source of trut
 (or have land explicitly detect/reconcile divergence) rather than leaving
 plan-storage state ambiguous. Related contested decision: 71 plan files are
 currently tracked on main vs. E-1202's proposal to forbid them in main.
+
+## From the description
+
+Together these turn the rules from memory-dependent to deterministic.
