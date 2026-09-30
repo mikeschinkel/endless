@@ -1,0 +1,3 @@
+Always creates a backup branch first (`--no-backup` to opt out):
+
+safety is the default, danger is the flag, and a branch ref costs 41 bytes. Deliberately NOT `--hard|--soft` — git's reset modes describe what happens to the index and working tree, but here the working tree is clean by definition and the only axis is whether an escape hatch is kept. Chosen as its own verb rather than `worktree reconcile --reset` because E-1882's classifier bails on any non-endless-managed file (169 differ in the motivating case), so shipping it as a reconcile flag would attach the fix to a command whose spec refuses to run it.
