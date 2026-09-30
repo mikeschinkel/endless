@@ -5,3 +5,7 @@ Motivating case: E-2048 (completed), a single-session consolidation review of th
 Parked at Mike's direction on 2026-08-24, phase 'maybe', immediately after filing: each task worked in this area has been growing complexity exponentially, and problems multiply out of tasks that never finish. Revisit only if the underlying pain recurs — and if it does, weigh finishing existing work before adding this surface.
 
 Deliberately NOT in scope: adversarially reviewing E-2048's specific outcome. That is separable, needs no new machinery, and coupling the two only delays acting on E-2048's question list.
+
+## From the description
+
+Deliverable is an assessment plus open questions, not an implementation.
