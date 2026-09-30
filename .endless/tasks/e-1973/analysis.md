@@ -1,0 +1,1 @@
+The appeal budget is enforcement state — it only means anything when a Stop gate is holding the turn — so where `report_gate` is false it refuses a command nothing is enforcing, on the basis of a counter nothing reads.
