@@ -202,3 +202,7 @@ checkout, while ES-879's is filed under the directory for the task's worktree â€
 even though `sessions.cwd` for ES-882 records the worktree. Whatever re-minted
 the instance appears not to have preserved the working directory the harness
 derives that path from. Worth confirming before the migration relies on `cwd`.
+
+## From the description
+
+Design, verified codebase facts and the one open decision are in --analysis.
