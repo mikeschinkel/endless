@@ -1,0 +1,1 @@
+Today config.apply_db_choice checks only the worktree path shape (no self_dev check), every downstream project's worktrees match it, and db.get_connection then silently mkdirs the sandbox path and creates a fresh empty endless.db in the cache.
