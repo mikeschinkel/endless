@@ -1,0 +1,1 @@
+Hook in src/endless/cli.py:main entry point. Reads ~/.cache/endless/sandboxes/, counts orphans (ephemerals whose creator_pid is dead). If >0, prints to stderr: warning with disable instructions. Default ON. Disabled via 'endless config set sandbox.startup_warning false'.
