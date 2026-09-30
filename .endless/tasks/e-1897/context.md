@@ -1,0 +1,1 @@
+(1) `go test ./...` writes into the real log dir — hook.log carried fixture entries mid-run on 2026-08-05 — corrupting the artifact you reach for when diagnosing a live incident; the DB is isolated, the log path is not.
