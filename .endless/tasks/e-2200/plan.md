@@ -25,9 +25,18 @@ not change what spawn allows.
 ## What `ready` and `task approve` mean after this
 
 `task approve` stays, as an OPTIONAL record that a human reviewed the plan.
-`ready` means "reviewed", not "permitted to start". Nothing gates on it. Every
-place that says approval is required to spawn or claim, or that only `ready` is
-spawnable, is rewritten to say this.
+`ready` means "reviewed", not "permitted to start". Nothing GATES on it: spawn
+and claim accept `submitted` exactly as they accept `ready`.
+
+It is not inert, though. It changes what the board SHOWS: `session status` /
+`session monitor` render `submitted` as `⚑ review` and `ready` as `▶ do`, so
+approving is how the owner turns "a plan waiting for my review" into "reviewed,
+ready to spawn" on the surface they pick work from. That display role is the
+reason approval is worth keeping, and the rewritten docs say so — approval is a
+review signal the board displays, not a permission spawn checks.
+
+Every place that says approval is required to spawn or claim, or that only
+`ready` is spawnable, is rewritten to say this.
 
 ## Changes
 
@@ -62,7 +71,8 @@ spawnable, is rewritten to say this.
    if live), and `internal/sessionstatuscmd`'s `actReview` comment ("the claim
    gate refuses a submitted task, so rendering it as spawnable contradicts the
    gate") — rewritten to the real reason ⚑ exists: a plan awaiting the owner's
-   review. The ⚑ glyph and `review` label stay.
+   review, which approval turns into ▶ do. The ⚑ glyph and `review` label stay,
+and the `ready → ▶ do` / `submitted → ⚑ review` mapping does not change.
 8. **Sweep.** `git grep` for "approv", "claim gate", "provably", "may pick up
    only", "spawnable", "awaiting approval" across docs, src and internal; fix
    any other sentence that makes approval a precondition of spawn or claim.
