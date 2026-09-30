@@ -1,0 +1,1 @@
+In a self_dev worktree the Claude hook silently runs main's endless-go build: claim/spawn auto-wires DB routing (sandbox bind's XDG env block) but not hook-code routing, so the session never dogfoods candidate hook/gate/session logic.
