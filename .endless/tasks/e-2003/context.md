@@ -1,0 +1,1 @@
+Sessions are user-machine state, deliberately not journaled to the ledger, so this smuggles machine-local identity into the shareable artifact; and since the ledger is immutable, a later scrub cleans the DB and mirror files but never the emitted events.
