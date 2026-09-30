@@ -1,8 +1,13 @@
-# The not-started mark rests on evidence, not on status
+# Session status stops calling landed tasks not started
+
+`endless session status` renders one column between the task-type letter and
+the id. It has four states, and the legend names them: `◆` work product still
+outstanding, `⊙` not started, blank work product all landed, `~` not yet
+determined. This task is about when `⊙` is shown.
 
 ## The bug
 
-`unsettledMark` decides the mark from one test on the row's own status:
+`unsettledMark` decides the glyph from one test on the row's own status:
 `!taskstatus.Has(taskstatus.Shipped, r.Status)`. A task that lands mid-flight
 and keeps working stays `underway`, which is not in `Shipped`, so it wears the
 not-started mark despite real landed code.
@@ -88,10 +93,11 @@ mis-signal this task removes. Rewrite it to state the new rule and why the
 evidence is now trustworthy, including the measurement above. Do not delete the
 E-2087 history; it explains why the obvious source was once wrong.
 
-Coordinate with E-2198, which is changing the same function to derive an epic's
-mark from its children. That change lands first and is orthogonal — it governs
-which ROWS consult children, this one governs what counts as evidence for a row
-that does its own work. Rebase on it rather than reverting it.
+E-2198 already landed a change to this same function, deriving an epic's glyph
+from its children. It is orthogonal and must be preserved: it governs which
+ROWS consult children, this task governs what counts as evidence for a row that
+does its own work. Read what it left before editing, and extend it rather than
+replacing the switch wholesale.
 
 ## Acceptance
 
