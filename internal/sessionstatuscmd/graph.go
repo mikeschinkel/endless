@@ -422,6 +422,7 @@ func chainLines(dag []graphEdge) []graphLine {
 		kind     graphEdgeKind
 	}
 	succ := map[graphEdgeKind]map[int64]map[int64]bool{edgeBlocks: {}, edgePrecedes: {}}
+	pred := map[graphEdgeKind]map[int64]map[int64]bool{edgeBlocks: {}, edgePrecedes: {}}
 	out := map[int64][]int64{}
 	indeg := map[int64]int{}
 	nodeSet := map[int64]bool{}
@@ -430,7 +431,11 @@ func chainLines(dag []graphEdge) []graphLine {
 		if succ[e.Kind][e.From] == nil {
 			succ[e.Kind][e.From] = map[int64]bool{}
 		}
+		if pred[e.Kind][e.To] == nil {
+			pred[e.Kind][e.To] = map[int64]bool{}
+		}
 		succ[e.Kind][e.From][e.To] = true
+		pred[e.Kind][e.To][e.From] = true
 		out[e.From] = append(out[e.From], e.To)
 		indeg[e.To]++
 		nodeSet[e.From], nodeSet[e.To] = true, true
@@ -492,6 +497,27 @@ func chainLines(dag []graphEdge) []graphLine {
 		}
 		return false
 	}
+	sameSet := func(a, b map[int64]bool) bool {
+		if len(a) != len(b) {
+			return false
+		}
+		for x := range a {
+			if !b[x] {
+				return false
+			}
+		}
+		return true
+	}
+	// twins stand in exactly the same relations to exactly the same tasks on
+	// both sides, so a leading `|` group of them claims nothing untrue.
+	twins := func(a, b int64) bool {
+		for _, k := range []graphEdgeKind{edgeBlocks, edgePrecedes} {
+			if !sameSet(succ[k][a], succ[k][b]) || !sameSet(pred[k][a], pred[k][b]) {
+				return false
+			}
+		}
+		return true
+	}
 	sortIDs := func(ids []int64) { sort.Slice(ids, func(i, j int) bool { return ids[i] < ids[j] }) }
 
 	var lines []graphLine
@@ -507,10 +533,16 @@ func chainLines(dag []graphEdge) []graphLine {
 		if !found {
 			break
 		}
-		// A line always starts from one task. Two tasks blocking the same one
-		// are two chains, and are drawn as two lines with the shared task's
-		// repeat dimmed, rather than folded into a leading `|` group.
+		// Tasks that are twins of the start share its line as a leading `|`
+		// group (`E-1 | E-2 => E-3`): one line instead of one per blocker.
+		// Blockers that differ anywhere get lines of their own.
 		cur := []int64{start}
+		for _, v := range topo {
+			if v != start && hasUncoveredOut(v) && twins(start, v) {
+				cur = append(cur, v)
+			}
+		}
+		sortIDs(cur)
 		line := graphLine{kind: lineChain, groups: [][]int64{cur}}
 		for {
 			var nextGroup []int64

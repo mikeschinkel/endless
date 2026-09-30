@@ -74,7 +74,7 @@ for t in TestGraph_PlanExample TestGraph_GroupNeverOverstates \
          TestGraph_NoEdgesRendersNothing TestGraph_ConflictOnlyTasksAppear \
          TestGraph_MutualConflictIsOneSetLine TestGraph_ChainShapedConflictIsPairs \
          TestGraph_CycleIsReportedNotTruncated TestGraph_RepeatsAndInFlightRenderDim \
-         TestGraph_TwoBlockersTwoLines \
+         TestGraph_TwinBlockersShareALine \
          TestGraph_WrapsAtArrowUnderFirstGroup TestGraph_ByteStableAcrossRenders \
          TestGraphSeeds_Exclusions TestGatherGraph_DetectedAndDeclaredConflicts \
          TestGatherGraph_OffListBlockerAndJSONParity TestRenderFrame_GraphAfterHiddenFooter; do
@@ -137,14 +137,13 @@ FRAME="$(board)"
 GRAPH="$(graph_lines "${FRAME}")"
 assert_eq "the graph renders under the rows, in derived order" \
 "E-112 -> E-113
-E-120 => E-110
-E-121 => E-110
+E-120 | E-121 => E-110
 <> E-130 | E-131 | E-132
 E-114 <> E-115" "${GRAPH}"
-assert_contains "an off-list blocker in phase later renders" "E-120 => E-110" "${GRAPH}"
-assert_contains "an unverified blocker still blocks and renders" "E-121 => E-110" "${GRAPH}"
-assert_contains "a task with two blockers shows both, one line each" \
-    $'E-120 => E-110\nE-121 => E-110' "${GRAPH}"
+assert_contains "an off-list blocker in phase later renders" "E-120" "${GRAPH}"
+assert_contains "an unverified blocker still blocks and renders" "E-121" "${GRAPH}"
+assert_contains "two blockers of one task share a line as a leading | group" \
+    "E-120 | E-121 => E-110" "${GRAPH}"
 assert_not_contains "a terminal blocker does not render" "E-122" "${GRAPH}"
 assert_not_contains "a task with no ordering edge never appears" "E-116" "${GRAPH}"
 assert_not_contains "relates_to is not an ordering relation" "E-117" "${GRAPH}"

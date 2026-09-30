@@ -93,10 +93,13 @@ func TestGraph_GroupNeverOverstates(t *testing.T) {
 	assertLines(t, g, "E-1 => E-2 | E-3", "E-2 => E-4")
 }
 
-// A task with two blockers shows both, one line each.
-func TestGraph_TwoBlockersTwoLines(t *testing.T) {
+// Two blockers that stand in identical relations share one line as a leading
+// group; two that differ get a line each, the shared task's repeat dimmed.
+func TestGraph_TwinBlockersShareALine(t *testing.T) {
 	g := newGB(1, 2, 3).blocks(1, 3).blocks(2, 3).build()
-	assertLines(t, g, "E-1 => E-3", "E-2 => E-3")
+	assertLines(t, g, "E-1 | E-2 => E-3")
+	g = newGB(1, 2, 3, 4).blocks(1, 3).blocks(2, 3).blocks(1, 4).build()
+	assertLines(t, g, "E-1 => E-3 | E-4", "E-2 => E-3")
 }
 
 func TestGraph_PrecedesRendersAdvisoryArrowAndOrdersFirst(t *testing.T) {
