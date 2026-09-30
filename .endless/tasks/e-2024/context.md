@@ -1,0 +1,1 @@
+task update decides four status transitions inline, and the two judgment-shaped ones do not actually judge: 'material description edit' is implemented as byte inequality against the old value. --keep-status is the manual patch for that gap, which is why it draws an inline decision on every edit.
