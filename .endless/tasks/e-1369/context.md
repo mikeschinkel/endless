@@ -1,0 +1,1 @@
+--force on 'endless task claim' is documented as 'manual work, no Claude assistance' — but Claude reads the error and reaches for --force anyway, because the error text presents it as the next step.
