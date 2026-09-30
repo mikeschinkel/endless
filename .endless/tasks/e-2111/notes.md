@@ -1,0 +1,1 @@
+E-2087 made 'does this branch hold work the base lacks?' exact via git range-diff, then had to be reverted on the worktree reaper because the reaper runs on PreToolUse/PostToolUse and a ~90s sweep stopped the product.
