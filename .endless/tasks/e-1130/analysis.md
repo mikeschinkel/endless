@@ -1,0 +1,1 @@
+Fix: at endless-hook startup, walk up cwd for .endless/worktree.json; if found and the worktree's bin/endless-hook exists and is a different inode than os.Args[0], log+exit 0 without doing work. Worktree binary handles the event alone.
