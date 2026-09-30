@@ -85,3 +85,7 @@ one question with no per-type mapping behind it.
 
 This sits with the deferred vocabulary policy above, not with the table: the
 table ships carrying today's names, and nothing here has to be answered first.
+
+## From the description
+
+Plan to design at pickup.
