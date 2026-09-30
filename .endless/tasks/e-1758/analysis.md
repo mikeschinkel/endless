@@ -1,0 +1,1 @@
+This moves the 'is clean worth saying?' judgment out of the agent (which errs toward self-covering) into a tool where empty output IS the representation of clean — the durable fix for this class of noise.
