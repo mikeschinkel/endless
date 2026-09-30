@@ -19,3 +19,9 @@ Verification:
 Out of scope:
 - Auto-cd on session start.
 - Cross-window tmux discovery (sibling = same tmux window only, for v1).
+
+## From the description
+
+Resolution rules: explicit endless-id, single tmux sibling auto-resolve, or error with companion-file list. A child process cannot change its parent's cwd, so the command prints the target path and the user wraps it in a shell function (escd). Reads .endless/sessions/claude-*.json (E-989), no DB hot path.
+
+Verification matrix is in the analysis field.
