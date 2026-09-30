@@ -10,3 +10,9 @@ If (1) holds: leave it, document the rationale in a comment so the next reader d
 If not: convert to fatal, matching InitSession / SetProcess / WriteCompanion (E-989).
 
 Out of scope: a sweep of every other 'log.Printf("...: %v", err)' site in the hook — file follow-ups if the audit finds more.
+
+## From the description
+
+If it qualifies, document the rationale in a comment; otherwise convert to fatal, matching InitSession / SetProcess / WriteCompanion.
+
+Out of scope: a sweep of every other log.Printf-on-err site in the hook.
