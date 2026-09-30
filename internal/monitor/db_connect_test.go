@@ -319,6 +319,33 @@ func TestDB_SeedAndGatesRunOnEveryConnect(t *testing.T) {
 		}
 	})
 
+	t.Run("a drifted gate_kinds row is reseeded too", func(t *testing.T) {
+		// E-2020: gate_kinds was INSERT OR IGNORE, so this drift used to
+		// fail-close every connect with nothing able to repair it.
+		path := filepath.Join(t.TempDir(), "endless.db")
+		buildAt(t, path, 0)
+		raw, err := sql.Open("sqlite", path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := raw.Exec("UPDATE gate_kinds SET slug='drifted', label='Drifted' WHERE id=1"); err != nil {
+			t.Fatal(err)
+		}
+		raw.Close()
+
+		db, err := openDBAtPath(t, path)
+		if err != nil {
+			t.Fatalf("a drifted gate_kinds row must self-heal, got: %v", err)
+		}
+		var slug string
+		if err := db.QueryRow("SELECT slug FROM gate_kinds WHERE id=1").Scan(&slug); err != nil {
+			t.Fatal(err)
+		}
+		if slug != "revisit" {
+			t.Errorf("gate_kinds id=1 slug = %q after connect, want %q", slug, "revisit")
+		}
+	})
+
 	t.Run("a rogue mirror row fail-closes", func(t *testing.T) {
 		path := filepath.Join(t.TempDir(), "endless.db")
 		buildAt(t, path, 0)

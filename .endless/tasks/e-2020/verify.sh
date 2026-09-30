@@ -254,11 +254,11 @@ assert_eq "main is still behind" "${PREV}" "$(version_of "${DB}")"
 section "C7a. db upgrade works while every ordinary connect is refusing (R4)"
 
 # An ahead database is refused by the connect AND by upgrade (nothing forward
-# to apply), so the refusing connect here is a fail-closed enum gate:
-# gate_kinds is seeded INSERT OR IGNORE, so a drifted row survives every
-# reseed and fail-closes every connect.
+# to apply), so the refusing connect here is a fail-closed enum gate: a rogue
+# gate_kinds row, which no reseed removes. (A drifted row no longer works for
+# this: E-2020 made gate_kinds an upsert, so every connect repairs it — C7b.)
 fresh_home r7a
-sqlite3 "${DB}" "UPDATE gate_kinds SET slug='drifted' WHERE id=1; UPDATE task_types SET label='Drifted' WHERE id=1;"
+sqlite3 "${DB}" "INSERT INTO gate_kinds (id, slug, label) VALUES (99, 'rogue', 'Rogue'); UPDATE task_types SET label='Drifted' WHERE id=1;"
 run_as "${INST}" --db main event migrate
 assert_eq "an ordinary command is refused by the gate" "1" "${RC}"
 assert_contains "…on the enum integrity check" "gate_kinds integrity check" "${ERR}"
@@ -267,6 +267,17 @@ assert_eq "db upgrade still runs to completion" "0" "${RC}"
 assert_contains "and reports the version it found" "already at schema version ${LATEST}" "${OUT}"
 assert_eq "it reseeded the mirrors it can reconcile" "Todo" \
     "$(sqlite3 "${DB}" 'SELECT label FROM task_types WHERE id=1')"
+
+section "C7b. A drifted gate_kinds row is repaired, not fail-closed (R2)"
+
+# gate_kinds was seeded INSERT OR IGNORE, so a drifted row fail-closed every
+# connect and neither a connect nor db upgrade could repair it.
+fresh_home r7b
+sqlite3 "${DB}" "UPDATE gate_kinds SET slug='drifted', label='Drifted' WHERE id=1"
+run_as "${INST}" --db main event migrate
+assert_eq "an ordinary command succeeds" "0" "${RC}"
+assert_eq "the row is reseeded" "revisit|Revisit" \
+    "$(sqlite3 "${DB}" "SELECT slug || '|' || label FROM gate_kinds WHERE id=1")"
 
 section "C8. Schema-passive is gone from the source (R2)"
 

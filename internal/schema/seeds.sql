@@ -12,9 +12,11 @@
 -- it. INSERT OR IGNORE could not do that; it would skip the existing id, leave
 -- the stale slug, and fail the gate closed.
 --
--- Statements are lifted verbatim from internal/schema/schema.sql, including
--- gate_kinds' INSERT OR IGNORE -- which deliberately does NOT reconcile, and is
--- left exactly as it was rather than quietly upgraded here.
+-- Statements were lifted verbatim from internal/schema/schema.sql. gate_kinds
+-- kept schema.sql's INSERT OR IGNORE until E-2020 made it an upsert like the
+-- others: IGNORE never reconciles, so a drifted gate_kinds row fail-closed every
+-- connect and nothing -- not a connect, not `endless db upgrade` -- could repair
+-- it.
 --
 -- Every statement must stay idempotent and safe to re-run against a populated
 -- production database. Nothing but enum mirrors belongs in this file.
@@ -32,9 +34,10 @@ INSERT INTO task_types (id, slug, label) VALUES
     (5, 'brainstorm', 'Brainstorm')
 ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
 
-INSERT OR IGNORE INTO gate_kinds (id, slug, label) VALUES
+INSERT INTO gate_kinds (id, slug, label) VALUES
     (1, 'revisit', 'Revisit'),
-    (2, 'relay', 'Relay');
+    (2, 'relay', 'Relay')
+ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
 
 INSERT INTO session_task_relations (id, slug, label) VALUES
     (1, 'claimed',    'Claimed'),
