@@ -1,0 +1,1 @@
+Umbrella for the schema-governance work E-1944 decided (ED-1566/1567/1570) after the 2026-08-10 outage, in which a candidate binary wrote a column the real ledger lacked and session tracking went down for 30 minutes.
