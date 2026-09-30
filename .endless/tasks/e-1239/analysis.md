@@ -1,0 +1,1 @@
+Proposed fix: have endless task start auto-create the companion when (a) the cwd is a registered git worktree under .endless/worktrees/, (b) no companion file exists, (c) the task ID being claimed has no other registered worktree.
