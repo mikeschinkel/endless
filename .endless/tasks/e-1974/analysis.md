@@ -67,3 +67,9 @@ Seed `live_processes` with the SAME address twice and assert `session_liveness`
 still yields exactly one row per session. It must bypass
 `SetTestTmuxObservation`'s map (which cannot express a duplicate) and insert
 directly, or the test reproduces the blind spot rather than closing it.
+
+## From the description
+
+Fix: give `live_processes` the same expression-based unique index the durable `processes_identity` already uses, insert with OR IGNORE, and do the same for `observed_servers`.
+
+Regression test must INSERT a duplicate address directly — `SetTestTmuxObservation` builds panes from a Go map and cannot express one, which is why no existing test caught this.
