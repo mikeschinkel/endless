@@ -1,0 +1,1 @@
+At land time, `endless worktree land` quietly commits any of endless's own files (ledger, verbs.jsonl, snapshots, config.json) that it finds uncommitted in the main checkout, and -- when the rebase conflicts -- it used to tell the user to run a `git checkout` that throws the branch's version of those files away unexamined.
