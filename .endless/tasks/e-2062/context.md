@@ -1,0 +1,1 @@
+`rebuild-db --confirm` aborts on any project with a session bound to a task, and that abort is load-bearing: with it removed, the same DELETE destroys task_landings, session_gates and — via a second cascade hop — report_judgments and report_labels, none of which the copy-back restores. It also nulls sessions.task_id, which ED-1560 forbids.
