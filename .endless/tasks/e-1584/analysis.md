@@ -56,3 +56,11 @@ Committed but parked at `later`: build it when the coordinator need bites and se
 status demonstrably can't cover it. The implementation plan is intentionally NOT written
 yet — author it at pickup. Was blocked by E-1540 (the `epic` command group), now satisfied
 (E-1540 assumed).
+
+## From the description
+
+Shows the epic's own state plus the COMPLETE child roster (every child, including not-started/blocked/session-less ones) with per-child phase, status, blocker indicator, and active-session indicator, plus a 'next actionable' hint (ready children, no open blockers). Built on the decoration layer 'session next' already computes in Go (reuse, don't re-derive).
+
+Explicitly does NOT reproduce session status's cross-session in-flight / parent-spawn neighborhood (that's session status's job at the keyboard), nor epic show's child descriptions/plan text.
+
+Unique value = explicit-id targeting + complete roster + actionability.
