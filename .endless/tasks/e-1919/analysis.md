@@ -80,3 +80,11 @@ this task needs: `//go:embed all:templates`, and a per-template lookup order of
 `.endless/templates/<name>.local.tmpl` (per-developer) -> `.endless/templates/<name>.tmpl`
 (committed, materialized from embed on first render) -> embedded fallback. Reuse the
 pattern rather than inventing a second one.
+
+## From the description
+
+Every mechanism E-1785 shipped sits in user-turn context (CLAUDE.md), an event-triggered nudge (E-1803), or a post-hoc gate (E-1901, parked); an output style occupies a fourth position none reach — injected into the system prompt and re-asserted every turn — which is the durability CLAUDE.md lacks.
+
+This does NOT replace or reverse E-1911: it improves only the ORGANIC half of E-1911's contract, while `task report` keeps producing the appended computed block that carries the guarantee. Scope is "b" per user direction: response shape plus the discharged-fact test and veracity rule that obsolete E-1876 never delivered.
+
+Because a style is a file on disk, new users must get one without hand-authoring it, via an embedded Go template wired into `project init` and/or the `setup` group.
