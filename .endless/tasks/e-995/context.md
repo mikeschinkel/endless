@@ -1,0 +1,1 @@
+Today there is no such pattern, which forces verification work to either touch live data and require cleanup (creating the temptation for raw-SQL bypass that produced the E-979 desync — see declined E-993) or to skip mutation testing entirely.
