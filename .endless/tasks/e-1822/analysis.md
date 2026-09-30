@@ -47,3 +47,7 @@ report). NOT settled -- E-1803 is unbuilt and its own analysis rates the
 mechanism a strong nudge, not a hard gate. Finalize only after E-1803 lands and
 the mechanism is proven; if E-1803 finds it weak or unworkable, redesign
 delivery here.
+
+## From the description
+
+Fix direction: on claim into a live session, inject the type-handoff mechanics into that session's context.
