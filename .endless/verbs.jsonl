@@ -288,3 +288,4 @@
 {"value": "question", "definition": "To ask someone for information or express doubt about something."}
 {"value": "start", "definition": "To begin or set something in motion."}
 {"value": "resume", "definition": "To continue or start again after an interruption."}
+{"value": "save", "definition": "to store for later retrieval", "category": ["action"]}
