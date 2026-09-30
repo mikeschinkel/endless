@@ -1,0 +1,1 @@
+Endless installs its hooks machine-wide in the user's Claude Code settings, so every session in every directory invokes endless-go on every hooked event — including projects that will never use Endless.
