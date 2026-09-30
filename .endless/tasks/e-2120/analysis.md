@@ -206,3 +206,9 @@ adds — flipped it `assumed → revisit`, and `revisit` cannot reach `assumed`
 again. The verification Mike had granted an hour earlier was destroyed by the
 act of documenting what shipped, and had to be walked back through
 `underway → unverified` for him to re-close by hand.
+
+## From the description
+
+restate the axis as cost and reviewer confusion, add the missing branch that ASKS the user whether to file with pros and cons, and require the fold-in branch to record grown scope on the task.
+
+keep all of it for a human, show an agent only the field changes it asked for, and stop a plan edit on a terminal status auto-flipping to revisit.
