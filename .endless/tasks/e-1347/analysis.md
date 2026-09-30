@@ -140,3 +140,7 @@ Confirm empirically that Claude Code merges `settings.local.json` over
 `settings.json` for the `hooks` and `env` keys specifically — E-998's plan
 asserted merge semantics without testing them, and this task should not repeat
 that. A throwaway project with both files and a trivial hook settles it.
+
+## From the description
+
+Fix: have sandbox bind run git update-index --skip-worktree on the file after writing, matching the claude-settings-init contract.
