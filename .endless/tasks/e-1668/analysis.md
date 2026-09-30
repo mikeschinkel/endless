@@ -29,3 +29,7 @@ Why stderr lost, from the agent's own account of the incident below: in that ses
 == THE INCIDENT THAT RE-FOUND THIS ==
 
 A session working E-2105 ran 'endless-go session-query list-live --project-root <main checkout>' from inside its worktree, using MAIN's binary — precisely the foreign-binary case this task was filed for. --project-root named the main checkout; the binary silently answered from the worktree sandbox, returning 2 rows where main holds 59. The session reported it to the owner as a probable product defect, having also unset XDG_CONFIG_HOME in the belief that this was what selected the sandbox. It then ran the same command against two different binaries, got identical output, and read the agreement as corroboration — a sound control for 'did my change alter this?' and none at all for 'is this number right?'. The refusal this task exists to restore would have ended it at the first command.
+
+## From the description
+
+endless-go gains --db main|sandbox and retires --config-dir, so one vocabulary serves both layers as the port moves to Go.
