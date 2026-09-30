@@ -1,0 +1,1 @@
+Cover the script's contract, what happens with no window system or no matching script, and whether the launcher belongs to project monitor or is shared with task spawn, which already opens tmux windows.
