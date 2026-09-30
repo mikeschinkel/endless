@@ -1,0 +1,3 @@
+Agents repeatedly narrate 'this sends it back through triage' after a description edit, treating the reset as a system outcome to route around rather than a routing call to make.
+
+Three things teach that. CLAUDE.md documents triage running automatically, which reads as exclusivity — the mechanism gives an agent nothing actionable and invites deferral. task update's transition message offers only --keep-status to suppress, never naming the decision. And task update --status rejects 'submitted', so the one-call path exists for 'needs a plan' but not for 'the description is sufficient', making the right answer the harder one to reach.
