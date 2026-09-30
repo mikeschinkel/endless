@@ -40,3 +40,9 @@ that commit instead of stacking a new one; the next `just land` rebase re-applie
 whole change onto a main that already had it -> CONFLICT in
 internal/sessionstatuscmd/session_status.go. Recovery was manual reset-to-main +
 re-apply-delta. Couples to E-1417 (the diagnosis half).
+
+## From the description
+
+via `git branch --merged main` when the branch survives, or the recorded landing when the branch was reaped too.
+
+Fall back to today's error only when the work is genuinely unaccounted for.
