@@ -42,7 +42,7 @@ Delete the deletion-only instruction (l.123-125) and the not-shorter instruction
    the spirit of `^\$([A-Z]+)` — but **do not lock in that pattern**; it was
    composed ad-hoc as a conceptual example, not as a specification. Synonym
    grouping is the judge's job. Must not fire on a label token legitimately
-   quoted inside a reply — same hazard `report_prompts.py:32-34` records for the
+   quoted inside a reply — same hazard `report_prompts.py` records for the
    denylist.
 
    **Consistency is leaned on, not enforced.** When a new token clusters near
@@ -286,3 +286,7 @@ It is simply the first thing that will become visible: keep-ratio by draft-size
 bucket, re-measured as the rewriting objective takes hold. The 2k+ bucket
 drifting down from 0.86 toward the 0.62 of smaller drafts is the cheapest early
 sign the loop is doing something. Watch it; do not steer by it.
+
+## From the description
+
+The user supplies ground truth in the flow of work via free-form span-scoped labels (ED-1555) and picks between paired A/B minimizations; an LLM judge scores every turn and is calibrated by blind prediction against those reactions. The optimizer generates variants — seeded from controlled-English grammars — and jointly tunes prompt text, a JSON fetch policy, and the bypass threshold, split by task type. Promotion is decided by paired replay over a frozen corpus with invariant vetoes, never by a weighted average or a rolling mean. Rides the existing job runner.
