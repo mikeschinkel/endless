@@ -1,0 +1,1 @@
+Discussed in a recent session that I cannot relocate; surfaced again 2026-06-05 during epic-type design — Mike flagged it as the better long-term shape for epic narrative storage and as the storage location for type=research justification text.
