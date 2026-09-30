@@ -1,0 +1,1 @@
+Full design lives in docs/private/endless-tmux-archive-research.md (Go binary 'endless-archive' invoked by Python, .endless/archive/<id>/ layout, claude --resume <uuid> restore pattern, no compression, schema versioning).
