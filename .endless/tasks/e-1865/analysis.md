@@ -7,7 +7,7 @@ Under `task` (4 chars) as requested, and it pairs with the existing `task landed
 
 ## The predicate already exists -- explain it, don't reimplement it
 
-`taskWorktreeDirty` (internal/monitor/reap_worktrees.go:334) is what drives the ◆:
+`taskWorktreeDirty` (internal/monitor/reap_worktrees.go) is what drives the ◆:
 
   1. `git -C <wt> status --porcelain` non-empty            -> modified
   2. else `git -C <wt> rev-list main..HEAD --count` > 0    -> unlanded
@@ -17,8 +17,8 @@ It considers neither remote state nor the `task_landings` rows. The new command
 must report these exact signals so the marker and its explanation cannot
 disagree. Build it as a diagnostic over that predicate, not a second copy.
 
-`AnnotateSessionStatusDirty` (reap_worktrees.go:316) is the fan-out; the reaper
-inverts the same two signals at reap_worktrees.go:188-207 ("never reap unsettled").
+`AnnotateSessionStatusDirty` (reap_worktrees.go) is the fan-out; the reaper
+inverts the same two signals at reap_worktrees.go ("never reap unsettled").
 
 ## Reuse
 
@@ -26,9 +26,9 @@ inverts the same two signals at reap_worktrees.go:188-207 ("never reap unsettled
   (`WorktreeAnomaliesAt`, line 91) already split user dirt from auto-managed via
   `AutoManagedStatusGlobs` (line 37). Read `.endless/plans/E-1758.md` before
   touching the anomaly core.
-- `src/endless/worktree_cmd.py:637` `_git_status_partition` -- returns
+- `src/endless/worktree_cmd.py` `_git_status_partition` -- returns
   (auto_commit_files, user_work_files); the Python mirror of the same split.
-- `src/endless/worktree_cmd.py:783` `_guard_dirty_worktree` -- land-time refusal
+- `src/endless/worktree_cmd.py` `_guard_dirty_worktree` -- land-time refusal
   with separate messages for auto-managed vs user dirt; same message shapes apply.
 
 ## Where the code goes
@@ -45,3 +45,9 @@ inverts the same two signals at reap_worktrees.go:188-207 ("never reap unsettled
 E-1825 ("Replace union-sense 'dirty' with 'unsettled'") is `unverified` and
 renames exactly these identifiers across exactly these files. Either sequence
 this after E-1825 lands or expect to touch the same symbols.
+
+## From the description
+
+bare form lists every task whose worktree is unsettled with a one-line reason each; with an ID, print the full breakdown (which files are modified, auto-managed vs user work; how many commits ahead of main and which). Support --llm and --json.
+
+Named `unsettled` not `unlanded` because ED-1540 defines unsettled as the union (modified OR unlanded), so `unlanded` would name only one sub-state.
