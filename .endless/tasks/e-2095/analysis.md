@@ -13,3 +13,7 @@ Five parts, one problem: the reader cannot see the facts that decide whether to 
 (5) Say it in the guide, next to (1)'s rendering: a task status answers "what did we decide about this work", never "where is the code".
 
 Scope note: parts 1, 2, 4 and 5 are implementable now. Part 3 is blocked on the recording change named in it; if that makes this task too large, split part 3 out rather than dropping the recording change.
+
+## From the description
+
+Details in --analysis.
