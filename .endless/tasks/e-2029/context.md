@@ -1,0 +1,1 @@
+The channel surface is dead: the commands no longer work, and the channels table is keyed on the same non-unique sessions.process string behind E-1898's incident, making it the last consumer of that old key.
