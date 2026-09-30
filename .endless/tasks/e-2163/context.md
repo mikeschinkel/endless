@@ -1,0 +1,1 @@
+Since E-2161 the rendered tree walks effective_parent_id (stepping over removed tasks) while `task remove --cascade` still walks the literal parent_id through live_tasks, so it stops at the first removed ancestor.
