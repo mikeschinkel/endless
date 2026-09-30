@@ -1,0 +1,1 @@
+There is no way to find out what a session was about. This bites when 'session list' shows a session with no active task (E-1914 made those visible) and you must decide whether it is worth resuming — E-1918 auto-creates a placeholder-titled task on resume precisely because the user cannot name it.
