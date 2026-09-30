@@ -6,3 +6,11 @@ Policy:
 - Hard cap (default 100MB, configurable): oldest-first eviction.
 
 CLI: 'endless plan snapshots prune [--days N] [--max-size MB] [--dry-run]'. Idempotent. Surface count and bytes freed. Triggered opportunistically (on 'endless plan snapshots' invocations) or via explicit prune call. No background daemon.
+
+## From the description
+
+Defaults: 30-day retention for unattached snapshots, 100MB hard cap with oldest-first eviction.
+
+Snapshots whose content was attached to a task are redundant after attach (provenance lives at the task's plan file).
+
+Idempotent; surfaces count and bytes freed.
