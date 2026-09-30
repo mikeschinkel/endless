@@ -1,0 +1,1 @@
+E-996 fixed endless's own go-pkgs problem with a 'just go-work-init' recipe — dev-only, dogfooding. Users of endless-the-product on other projects hit analogous needs (go.work, npm link, nvm, pip install -e, cargo patch) but have no equivalent.
