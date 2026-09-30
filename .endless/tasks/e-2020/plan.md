@@ -404,3 +404,14 @@ own tests, where it will keep being run.
 
 
 # db: main
+
+
+# db: main
+
+## Folded in (2026-09-30, Mike)
+
+- `gate_kinds` is reseeded with an upsert like the other mirrors. Its INSERT
+  OR IGNORE never reconciled, so a drifted row fail-closed every connect and
+  neither a connect nor `db upgrade` could repair it. Verification item 7a is
+  therefore demonstrated with a ROGUE row (which nothing removes) rather than a
+  drifted one: upgrade runs to completion while the connect is refused.
