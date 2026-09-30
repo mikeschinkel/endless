@@ -1,0 +1,1 @@
+E-1368's cwd self-detect satisfies the E-1429 gate, so the loud refusal that protected against running a non-worktree endless-go build (e.g. the global one) against a worktree's sandbox went silent — restore it.
