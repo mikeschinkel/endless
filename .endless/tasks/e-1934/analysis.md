@@ -69,3 +69,7 @@ The tasks guide still describes text as a full implementation plan "including
 approach, file paths, verification steps", which invites the thing ED-1073
 forbids, and says nothing about line numbers anywhere. Fix the wording to say
 file and function names.
+
+## From the description
+
+Three parts: extend the content gate that already refuses absolute paths in --description/--text so it also refuses file.ext:NNN and bare :NNN citations; widen ED-1073 to govern all durable content; and fix the guide's wording to say file and function names.
