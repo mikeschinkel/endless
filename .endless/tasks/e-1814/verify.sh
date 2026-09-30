@@ -91,7 +91,11 @@ LAUNCHED="${TMP}/claude-launched"
 # process here must open the same one.
 export XDG_CONFIG_HOME="${HOME}/.config"
 export XDG_CACHE_HOME="${TMP}/cache"
-unset TMUX TMUX_PANE ENDLESS_SESSION_ID ENDLESS_NO_JOBS 2>/dev/null || true
+unset TMUX TMUX_PANE ENDLESS_SESSION_ID ENDLESS_NO_JOBS ENDLESS_NO_HOOKS 2>/dev/null || true
+# Hermetic: whatever Claude session (or none) launched this suite must not
+# change what it proves. The hook gates on these (agentenv), so an inherited
+# set made section C pass from a Claude pane and fail from a plain terminal.
+for v in $(env | sed -n 's/^\(CLAUDE[A-Z_]*\)=.*/\1/p'); do unset "${v}"; done
 mkdir -p "${STUB}" "${REPO}" "${XDG_CONFIG_HOME}/endless" "${XDG_CACHE_HOME}"
 
 # The fake tmux. It never runs a window's command, so nothing inside a spawned
@@ -236,11 +240,14 @@ fi
 # ── C. SessionStart flags the session in that window ────────────────────────
 section "C. SessionStart marks the session bound in an auto-spawned window"
 
-# hook SESSION_UUID CWD — one real SessionStart through the built binary. Its
-# output lands in hook-<uuid>.log, which a failing assertion below quotes.
+# hook SESSION_UUID CWD — one real SessionStart through the built binary, with
+# the one variable Claude Code sets on every hook call (the hook is a silent
+# no-op without it). Its output lands in hook-<uuid>.log, which a failing
+# assertion below quotes.
 hook() {
     printf '{"session_id":"%s","cwd":"%s","hook_event_name":"SessionStart","source":"startup"}' "$1" "$2" \
-        | ( cd "$2" && TMUX="${TMP}/fake,1,0" TMUX_PANE="%4242" endless-go hook claude >"${TMP}/hook-$1.log" 2>&1 )
+        | ( cd "$2" && CLAUDE_CODE_ENTRYPOINT=cli TMUX="${TMP}/fake,1,0" TMUX_PANE="%4242" \
+              endless-go hook claude >"${TMP}/hook-$1.log" 2>&1 )
 }
 # assert_session LABEL UUID "TASK|FLAG" — quotes the hook's output on a miss.
 assert_session() {
