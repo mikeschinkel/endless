@@ -1,0 +1,1 @@
+Example: E-976 (verify, 'Add .endless/worktrees/ to .gitignore') implements E-975 (decision, 'Gitignore .endless/worktrees/'). The decision is the reusable rule; the verify task is the concrete evidence/implementation.
