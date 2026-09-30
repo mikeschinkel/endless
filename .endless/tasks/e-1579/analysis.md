@@ -1,0 +1,1 @@
+epic rejects verify (epics complete via auto-derivation per E-1541); research rejects verify (research ends in completed --outcome per ED-1502). Validator is a per-type lookup table living alongside the TaskType enum. --force overrides any rejection.
