@@ -53,3 +53,7 @@ is safe under today's behavior and was verified as such:
 - replay would skip it silently even if one did.
 
 The hazard above predates E-1906 and is independent of it.
+
+## From the description
+
+A retired kind needs somewhere to live so it is recognized-then-discarded rather than falling into that path.
