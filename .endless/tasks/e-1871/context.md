@@ -1,0 +1,1 @@
+Cause: classify() (internal/sessionstatuscmd/session_status.go) has no case for the five terminal statuses (confirmed/assumed/declined/obsolete/completed), so any terminal row that is not focal/parent/from/in-flight and has never landed falls through to default → actUnknown. declined and obsolete tasks never land by definition, so they are ALWAYS ⁇.
