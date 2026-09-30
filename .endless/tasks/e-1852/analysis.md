@@ -1,0 +1,1 @@
+This is expected to be involved: it must respect however the user already manages tools (Homebrew vs. asdf/mise vs. system packages vs. manual), so it should detect/defer to the user's package manager rather than impose one, and never install anything without explicit approval.
