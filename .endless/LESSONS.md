@@ -6951,3 +6951,7 @@ Endless's 'next' phase is being phased out. Do not file or move tasks into 'next
 ### [2026-09-29] Lead task descriptions with WHAT, using the title's verb
 A task description starts with the same leading verb as the title and states WHAT the task does. Do not open with context or the problem statement (e.g. 'The hook tells agents X; replace it...'). Context goes in --context, how goes in --plan.
 - **Project**: endless
+
+### [2026-09-29] Register a missing verb instead of steering around it
+In the bulk title rewrite I gave subagents a list of example verbs, a checker that rejected any unregistered verb without asking, and an instruction to 'pick a registered one' — so they replaced natural verbs (Save, Use, Check, Log, Warn…) with worse ones, and treated my example list as the registry. Verb registration exists only to make an agent stop and think whether the word is a verb; when it is, register it (endless verb add) and move on. Never tell an agent to route around registration, and never present an example list as the allowed set.
+- **Project**: endless
