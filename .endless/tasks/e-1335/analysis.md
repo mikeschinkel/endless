@@ -1,0 +1,1 @@
+Needs planning discussion: which rows are eligible (current task + parents? project? active sessions? recent siblings?), how the policy is expressed (CLI flags, config file, named profiles?), and the default.
