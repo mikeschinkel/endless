@@ -1,0 +1,1 @@
+E-1732 mapped ledger-target routing on 2026-08-27 and landed (d4a5ff0), but two of its nine sections expire with the Go port and say so in the outcome: section 1's table of non-ledger file writers, and section 3's Python half of DB-context resolution.
