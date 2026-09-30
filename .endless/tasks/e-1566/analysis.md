@@ -1,0 +1,1 @@
+Renderer selects by joining tasks.type_id to task_types.slug. Each variant frames the work appropriately: task (today's flow, verify end-state), bug (reproduce-first), research (findings-as-deliverable, completed end-state), epic (coordinator role, children-state-aware). Unknown/null type falls back to task.
