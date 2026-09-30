@@ -1,0 +1,1 @@
+A user runs Endless against their own project, where Endless's own E-/ES-/ED- ids mean nothing and point into a ledger they cannot read, yet 50 of them appear across 28 commands' --help output and 80 more across five docs/guide pages.
