@@ -1,0 +1,1 @@
+Options: (a) wrap sandbox runs with bind-mount or read-only overlay on prod paths so any write to them errors immediately, (b) explicit assertion at sandbox boundaries that prod paths weren't touched, (c) stat inode + checksum (not just mtime) to distinguish 'modified' from 'replaced'.
