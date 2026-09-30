@@ -5,3 +5,7 @@ Open question: location. Two candidates:
   - .git/info/endless/ — colocated with project git, discoverable, but couples to project repo
 
 This is the Vigil concept (debounced file-watching + auto-commit) absorbed into Endless rather than built as a separate tool.
+
+## From the description
+
+Open question on shadow location (~/.config/endless/repos/<project>/ vs .git/info/endless/) and full background are in the analysis field.
