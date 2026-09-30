@@ -9,7 +9,7 @@ of the 2026-08-05 incident that nulled live pane bindings project-wide.
 
 `channels` keys on that SAME string (`INSERT INTO channels (process, port, pid,
 created_at)`, `DELETE FROM channels WHERE process=?`, `SELECT port, pid FROM
-channels WHERE process=?` — internal/monitor/session.go:274-308). E-1898
+channels WHERE process=?` — internal/monitor/session.go). E-1898
 deliberately left it alone rather than migrate a surface believed dead, so
 after E-1898 lands `channels` is the last consumer of the old non-unique key.
 
@@ -51,3 +51,7 @@ is the empirical question.
 
 Implementation. The outcome is a decision plus a follow-on retirement or
 design task.
+
+## From the description
+
+Scope includes background workers, not just interactive sessions: triage jobs are intended to be able to communicate with sessions. Out of scope: the fate of the existing channel surface, which is dead and is being removed under its own task -- this brainstorm is about the replacement, not the retirement, and neither blocks the other.
