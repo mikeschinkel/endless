@@ -90,3 +90,7 @@ who would notice. Any guard designed against a human operator is testing the
 case that was never a problem. The refusal has to fire in the agent's process,
 which argues for the shared-helper guard in the scripts themselves (which runs
 whoever invokes it) over anything keyed on who is asking.
+
+## From the description
+
+That is prose, and prose is advisory to an agent that can rationalize it:
