@@ -1,0 +1,1 @@
+After E-1106 lands, the verb registry has two pre-existing gaps: (a) every existing verb lacks a definition (registered before --definition was required), and (b) any non-verbs registered via past agent rationalization are still polluting the gate.
