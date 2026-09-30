@@ -1,192 +1,108 @@
-# Read-through and primed sessions
+# Start task sessions early so they read in and wait
 
-The judged half of E-1991, and the piece that turns triage from a router into
-an evaluator. Absorbs E-1946 (type-aware routing). Depends on E-1531
-(`task_content`), E-2176 (`task_questions`), E-1993 (the gate), and E-1813
-(complexity and risk ratings).
+Strand 4 of the epic. Rewritten 2026-09-30: E-1993 landed and removed the
+mechanism this plan was built on, and four sibling tasks landed pieces it
+assumed it would build. What follows is what is actually left.
 
-**E-1813 is startable.** Its plan says "do not start until ED-1538/ED-1539 are
-ratified" — both went `accepted` on 2026-08-14 and nothing noticed.
+## The idea, unchanged
 
-## 1. Triage is a job with facets; name them
+A task's implementation session starts before the user needs it. It reads the
+plan and the code, records what it cannot answer, and then **stays live and
+waits**. When the user is ready they resume that same session, context already
+warm, with the questions already asked.
 
-"Triager" has been used for both the job and one facet of it, and that
-ambiguity is why this task exists as a separate piece of work. The job is
-`triage`. Its facets, provisionally:
-
-| facet | question | cost |
-|---|---|---|
-| shape check | is the title a title, the description a description, is there a plan? | cheap, mechanical |
-| read-through | where would an implementer stop? → open questions | expensive, the core |
-| the challenge | what did this plan decide without noticing it was deciding? | expensive, adversarial |
-| dispatch | who hears about it | cheap |
-
-**Settle the names as the first act of this task**, before building. They are
-provisional on purpose. In particular "read-through" was chosen when the facet
-was understood as *simulating* an implementer; §2 collapses that, so the name
-may no longer fit. Nothing is simulated — the session begins and stops.
-
-## 2. The read-through session IS the implementing session
-
-Rather than spawning a throwaway evaluator, triage spawns the **real
-implementation session**, with a handoff that ends: read the plan and the
-codebase, determine whether you could complete this task, write any open
-questions to the `questions` slot, then **stop and wait**.
-
-That session is **primed**: it has read in, recorded what it needs, and is
-holding. When the user is ready, they resume it — context already warm, no
-re-read.
-
-This collapses two problems at once. There is no evaluator-vs-implementer gap to
-calibrate, because they are the same session; a predicted "this plan is
+Two problems collapse at once. There is no evaluator-versus-implementer gap to
+calibrate, because they are the same session — a predicted "this plan is
 sufficient" and an actual one are the same judgment by the same context. And the
-open questions arrive **while the user's own context on that task is still
-warm**, which is the real scarce resource — not calendar time.
+questions arrive while the user's own context on that task is still warm, which
+is the scarce resource, not calendar time.
 
-The extra handoff clause applies only when **triage** spawned the session, never
-when the user did.
+## What changed under this plan
 
-`primed` needs to be a tracked, nameable session state. A primed session sitting
-idle is otherwise indistinguishable from a hung one.
+**Triage is gone.** E-1993 removed it outright — the triage job, its sweep, the
+`triage run` command, the `untriaged` status and the claim table. Every earlier
+version of this plan said "triage spawns the session." There is no triage. The
+trigger is new work, not a clause added to something existing.
 
-**Primed sessions stay alive.** They do not exit after the read-through. A live
-session can receive messages; an exited one cannot, and E-1995's dispute
-resolution runs over exactly that channel — so liveness is enabling
-infrastructure, not an artifact. The cost is real (a live process and pane per
-primed session; comfortable in the tens, painful in the low hundreds) and is
-accepted for now. If it bites, the graceful fix is live-by-default with
-least-recently-needed eviction and resume-from-transcript on demand: an evicted
-session loses reachability but not context. Do not build eviction now.
+E-1993 also landed three things this plan used to claim: an open question parks
+a task, no plan means not claimable or spawnable, and the approval reset fires
+on plan edits rather than description edits. Its no-plan refusal is the lazy
+migration hook the old §6 described — what this task owes is what that refusal
+leads to.
 
-## 3. Integrate with auto-spawn — one mechanism, two terminal instructions
+**Other siblings own more of it than they did.** Question storage is E-2176's
+and this task only writes rows. The complexity and risk ratings exist; this task
+only reads them. The session-state vocabulary exists, so `primed` is one more
+row in it rather than a new concept. The changed-since-you-read-it notice
+exists and only needs retargeting. The handoff renderer exists and needs one
+clause. Auto-spawn eligibility and the spawn path itself are E-1814's, ready and
+unstarted.
 
-E-1812/E-1814 already spawn tasks judged safe to run unattended, keyed on
-E-1813's complexity and risk ratings. Priming spawns everything else. These are
-not two systems:
+**Three sections of the old plan are retired.** Naming triage's facets is moot
+with triage gone. The durable triage report has nothing to report unless the
+priming run itself writes one — recast it as a record of each read-in, or drop
+it. Integrating with auto-spawn shrinks to reusing E-1814's spawn path with a
+different ending.
 
-> **Low complexity AND low risk AND phase in (`now`, `urgent`) run to
-> completion. Everything else pauses for input from the user.**
+## The work that is still this task's
 
-Same spawn plumbing, same read-through, eligibility chooses the terminal
-instruction. Consume E-1814's eligibility computation rather than
-reimplementing it.
+1. **The trigger.** On plan attach, and on E-1993's no-plan refusal, start that
+   task's session with a handoff that ends: read the plan and the code, write
+   what you cannot answer to the questions table, then stop and wait. The clause
+   applies only when the trigger spawned the session, never when the user did.
 
-**Phase is a required third condition, not a tiebreaker.** Complexity and risk
-answer "is this safe to run unattended"; they say nothing about "does the user
-want this done now." Without the phase condition, a `later` or `maybe` task that
-happens to be simple and low-risk would run itself — spending tokens and
-producing a branch to review for work that was explicitly deferred. `maybe` is
-worse still: it means *may or may not be done at all*, so auto-completing one
-decides a question the user reserved.
+2. **Plan drafting, behind a challenge call.** A planless task is where a
+   read-in is most useful, because it can draft rather than merely refuse. One
+   condition: a drafted plan passes an adversarial challenge before it reaches
+   `submitted`. Without it the same agent authors and executes with only the
+   user's approval between, which removes the separation this epic is built on —
+   and a self-authored plan is self-consistent, so a bad one is harder to catch.
+   The challenge is a one-shot headless model call: no window, no worktree, no
+   claim, no session row. With the triage job gone, it needs a new home; say
+   where in the implementation.
 
-E-1814 owns the eligibility computation and its description now carries this
-condition. ED-1538 defines eligibility as "computed from human-ratified
-complexity+risk" and arguably needs amending to name phase as well — flagged for
-the user, not assumed.
+3. **A queryable `primed` state, and the session stays alive.** A primed session
+   sitting idle is otherwise indistinguishable from a hung one. Liveness is not
+   an artifact: a live session can receive messages and an exited one cannot,
+   and E-1995's dispute resolution runs over exactly that channel. The cost is a
+   live process and pane per primed session — comfortable in the tens, painful
+   in the low hundreds — and is accepted for now. If it bites, the graceful fix
+   is live-by-default with least-recently-needed eviction and resume from
+   transcript. Do not build eviction now. The state display will need a third
+   case.
 
-Start conservative — a narrow run-to-completion band. Widening it later is a
-threshold change, not new machinery.
+4. **Resuming into a primed session, with a drift check.** Plan drift is not the
+   risk — the paused session is the thing that updates the plan, so nothing
+   rewrites it behind the session's back. Codebase drift is: between the read-in
+   and the resume, possibly weeks, the code moves while the session's
+   understanding does not. Re-check that what the plan cites still exists before
+   proceeding.
 
-## 4. Type-aware evaluation (absorbs E-1946)
+5. **Type-aware sufficiency.** A brainstorm's framing counts as enough; a todo's
+   does not. Absorbs the type-aware routing task.
 
-The sufficiency question is one sentence and it is the same for every task type:
+6. **Retarget the changed-since-you-read-it marker** from description to plan,
+   matching what E-1993 landed. Do not build a second notification path.
 
-> **Is this plan sufficient, without open questions, to allow this task to be
-> performed?**
+## Deliberately not here
 
-What counts as sufficient is type-dependent. For a brainstorm the plan is the
-framing to be explored, so "no implementation steps" can never mean "needs a
-plan first" — E-1946's bug. For research it is the request. For a do-task it is
-the approach. Same question, type-aware standard.
-
-Acceptance criteria (an `acceptance` row in E-1531's `task_content`) are an input here: the
-read-through cannot judge sufficiency without knowing what done looks like.
-
-## 5. Triage writes a durable report
-
-Every triage run writes a `triage_report` content row: the verdict, the
-rationale, the deciding model, and when. `task show` renders it.
-
-This is what makes a no-op routing visible — a task triaged and judged
-unspawnable currently looks identical to one never triaged, which caused a live
-misdiagnosis on 2026-08-08 (see E-1970, absorbed into E-1995's scope for the
-messaging half; the report itself lands here).
-
-## 6. Eager for new, lazy for grandfathered
-
-New tasks: read-through fires shortly after a plan is attached, while the filing
-session is still alive — which is what makes E-1995 possible at all.
-
-Grandfathered tasks: fired by E-1993's spawn gate, at the moment of need.
+Eviction. A second notification path. Anything that rebuilds question storage,
+the ratings, the state vocabulary or the spawn path — all four exist. The
+adversarial reviewer that asks "should this be built at all?" is a different
+question, though it may share the challenge model call.
 
 ## Acceptance
 
-- Facet names are settled and used consistently in code, docs, and output.
-- Triage spawns a real implementation session that reads in, records questions,
-  and holds in a queryable `primed` state.
-- A primed session is reachable by message while holding.
-- Resuming a primed task uses that session; it does not re-read from cold.
-- A low-complexity low-risk task runs to completion without pausing; anything
-  else pauses.
-- A brainstorm with a sufficient framing and no implementation steps is judged
-  spawnable (E-1946's regression).
-- Every triage run leaves a `triage_report` row and `task show` renders it.
-- A grandfathered task with no plan triggers a read-through on first spawn
-  attempt rather than a bare refusal.
-- `go build/vet/test ./...` and `just test` pass.
-
-## The plan is never changed underneath the session — resolved
-
-An earlier draft treated "the plan changed while the session was paused" as the
-main correctness risk. It is not a risk, because **the paused session is the
-thing that updates the plan.** The lifecycle:
-
-1. Session spawned immediately after filing; filing session still warm.
-2. It reads in, writes its questions to `task_questions`, pauses.
-3. A separate process notices open questions and gets the user's attention
-   (E-1996 covers that UI; E-1976 may be the same surface).
-4. The user answers.
-5. The session is pinged, reads the answers, **updates its own plan**, and waits.
-6. The user returns and the work proceeds.
-
-Nothing external rewrites the plan behind the session's back, so there is no
-stale plan to reconcile.
-
-E-1917 already landed the notification half of step 5 — it re-asserts a held
-task's current state in the per-prompt injection with a sticky
-"changed since you last read it" marker, suppressed when the session itself made
-the change. **Retarget that marker from description to plan**, matching E-1993
-§4. Do not build a second notification path.
-
-**The residual is codebase drift, not plan drift.** Between step 2 and step 6 —
-possibly weeks — the code moves while the session's understanding of it does
-not. Cheaply handled: at step 6, re-check whether what the plan cites still
-exists before proceeding. E-1934 (underway) reduces the exposure by keeping
-line numbers and other time-frozen specifics out of durable task content, so a
-plan cites names that survive drift.
-
-## The read-through may draft a plan, gated by the challenge facet — resolved
-
-A planless task is exactly where a read-through is most useful, since it can
-draft the plan rather than merely refuse. Drafting is allowed, with one
-condition: **a drafted plan must pass the challenge facet before it can reach
-`submitted`.**
-
-Without that condition the same agent authors and executes with only the user's
-approval in between, which removes the adversarial separation the epic is built
-on — and a self-authored plan is self-consistent, so a bad one is harder to
-catch, not easier. With it, the backlog still unblocks itself and the separation
-survives, at the cost of one extra model call per drafted plan.
-
-**The challenge facet is not a new kind of agent.** It is a one-shot headless
-model call inside the existing triage job — no tmux window, no worktree, no
-claim, no session row. The triage job already works this way today. The
-one-task-one-window-one-session invariant is untouched, and this is explicitly
-not the larger adversarial-agents effort, which is about agents as durable
-participants.
-
-## Open questions
-
-None.
-
-
+- Attaching a plan to a task starts that task's session, which reads in, writes
+  any open questions, and ends in `primed` without exiting.
+- The no-plan refusal offers the same path, and taking it drafts a plan that
+  reaches `submitted` only after the challenge call passes.
+- `primed` is queryable, survives the session going idle, and renders distinctly
+  from working and idle.
+- Resuming a primed session re-checks that what the plan cites still exists and
+  says so when it does not.
+- A brainstorm with framing and no plan is not refused as planless; a todo is.
+- The changed-since-you-read-it marker fires on plan edits, not description
+  edits, and stays suppressed when the session itself made the change.
+- A user-started session gets no stop-and-wait clause.
+- `just test` and `just test-go` pass.
