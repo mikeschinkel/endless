@@ -17,3 +17,7 @@ Verification:
 - From a sibling pane in tmux: 'endless session show' returns the Claude session in this tmux window.
 - Two Claude panes in window: errors with disambiguation list.
 - Explicit id always works regardless of context.
+
+## From the description
+
+Output: id, project, state, started_at, last_activity, message count, bound task, worktree path/branch/cleanliness, last summary. --json for scripting.
