@@ -1,0 +1,1 @@
+Pretty-printed JSON arrays end with ']' on a single line. When two branches (main + worktree) both append verbs, git's line-based 3-way merge conflicts on the trailing region even though the operation is purely additive (demonstrated landing E-1264).
