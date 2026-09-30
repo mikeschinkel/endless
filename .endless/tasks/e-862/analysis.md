@@ -1,0 +1,1 @@
+Automatic migrations: only ALTER TABLE ADD COLUMN, UPDATE, CREATE TABLE IF NOT EXISTS. Table rebuilds (CHECK changes, column drops) require explicit 'endless db migrate' with auto-backup of DB file first.
