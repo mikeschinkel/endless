@@ -306,3 +306,4 @@
 {"value": "ask", "definition": "to request an answer from someone", "category": ["investigation"]}
 {"value": "bundle", "definition": "to package together", "category": ["action"]}
 {"value": "rescope", "definition": "to change the scope of", "category": ["action"]}
+{"value": "retest", "definition": "to test again", "category": ["action"]}
