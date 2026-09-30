@@ -1,0 +1,1 @@
+Established rules from multiple iterations: gray-400 minimum text on dark backgrounds, labels must use distinct color (emerald/cyan) not gray, context-appropriate child status summaries (needs-attention section only shows verify/blocked counts).
