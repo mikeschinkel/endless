@@ -1,0 +1,1 @@
+E-1477/E-1576 replaced the sectioned layout with a flat, direction-explicit list shared with task show; further CLI output changes wait for a UI pass near feature-complete.
