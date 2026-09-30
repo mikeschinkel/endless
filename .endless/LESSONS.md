@@ -6955,3 +6955,7 @@ A task description starts with the same leading verb as the title and states WHA
 ### [2026-09-29] Register a missing verb instead of steering around it
 In the bulk title rewrite I gave subagents a list of example verbs, a checker that rejected any unregistered verb without asking, and an instruction to 'pick a registered one' — so they replaced natural verbs (Save, Use, Check, Log, Warn…) with worse ones, and treated my example list as the registry. Verb registration exists only to make an agent stop and think whether the word is a verb; when it is, register it (endless verb add) and move on. Never tell an agent to route around registration, and never present an example list as the allowed set.
 - **Project**: endless
+
+### [2026-09-30] Don't report a landed task's verify suite as a leftover
+A verify suite is valid only up to its task's land. After the land it is not maintained, so a landed suite that no longer passes is not a leftover, a caveat or anything worth mentioning. Don't list it in whats-left or handoff replies.
+- **Project**: endless
