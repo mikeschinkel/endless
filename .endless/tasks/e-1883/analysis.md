@@ -76,3 +76,7 @@ same corruption reappears under a per-project ledger.
 
 Reproduced by hand; the workaround is to run per-project from each project's
 directory (which is how the rest of that bulk operation was completed).
+
+## From the description
+
+Apparent direction is splitting into a machine DB plus one DB per project, but this is deliberately open — brainstorm options before locking anything in.
