@@ -1,0 +1,1 @@
+`worktree land` auto-commits only endless-managed files (verbs.jsonl, ledger entries), so a session that follows the guide literally reaches land with its actual changes uncommitted and land moves nothing.
