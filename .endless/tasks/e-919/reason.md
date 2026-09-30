@@ -1,0 +1,1 @@
+Decisions are now handled without fragile hooks.
