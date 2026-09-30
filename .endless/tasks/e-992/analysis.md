@@ -11,3 +11,11 @@ Verification:
 - Explicit arg path: unchanged from current behavior.
 
 Out of scope: redesigning the history output itself. This is purely about default resolution.
+
+## From the description
+
+Resolution mirrors session show (E-991): companion-file lookup with disambiguation in tmux.
+
+Out of scope: redesigning the history output itself; this task is purely about default resolution.
+
+Verification matrix in the analysis field.
