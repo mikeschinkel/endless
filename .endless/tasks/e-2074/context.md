@@ -1,0 +1,1 @@
+Background agents never became as reliable as tmux-hosted sessions; E-1695 routed the handoff template away from them on 2026-06-30 as a TEMPORARY measure and nothing reversed it in the two months since, so the code goes rather than keep being carried.
