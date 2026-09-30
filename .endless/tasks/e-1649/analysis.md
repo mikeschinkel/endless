@@ -1,0 +1,1 @@
+(P1) wrap 'claude attach' to call a new 'endless session bind --session <id> --process $TMUX_PANE' verb so the pane resolves to the bg session; (P2) on the bg child's SessionStart, find the parent via shared transcript message uuids in session_messages and inherit its active_task_id/active_epic_id.
