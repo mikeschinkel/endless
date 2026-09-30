@@ -82,3 +82,9 @@ handoff's "state the regression result in one line" instruction into a computed
 `report` fact (E-1778), so the handoff stops *asking* the agent to narrate a
 clean result. Removing the prompt that licenses the prose has no ceiling;
 nudging against it does.
+
+## From the description
+
+(2) ENFORCEMENT: add a PostToolUse hook matched to the task report Bash invocation that injects hookSpecificOutput.additionalContext telling the agent to relay the report output verbatim and add nothing — a contextual, compose-time, harness-authoritative nudge.
+
+Honest limit (see analysis): Claude Code can't make the tool output BE the agent's message, so this is the strongest in-harness lever short of a regenerate loop — a strong nudge, not a hard gate.
