@@ -1,0 +1,1 @@
+Soften to "highly discouraged when using endless", drop the stale "once E-971 ships" conditional (Layer F is shipped), correct the example branch convention from e-XXX-<slug> to task/NNN-<slug>, and replace jargon ("surfaces as a deliberate violation") with plain language.
