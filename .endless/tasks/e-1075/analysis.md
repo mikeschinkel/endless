@@ -1,0 +1,3 @@
+(1) NULL the analysis field on E-958, E-987, and E-993 — each has a plan file (.endless/plans/E-NNN.md) that fully documents the resolved design, so the analysis is redundant historical record. (2) Strip time-frozen specifics from E-979 (event-file byte counts), E-994 (cmd/endless-hook/claude.go line number), and E-1034 (line numbers in claude.go and several plan files) — keep file/function names, drop the numbers. Use raw SQL because the analysis column has no CLI surface yet (E-999 will fix that); same path Mike used to populate the column.
+
+Once landed, zero analysis fields remain in the buckets E-1064 flagged for refresh.
