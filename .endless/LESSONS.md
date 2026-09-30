@@ -6979,3 +6979,7 @@ tmux list-panes -a / list-windows -a list each window once per session in a grou
 ### [2026-09-30] A verify suite that drives the hook must not inherit Claude Code's env
 E-940's verify.sh passed from my Claude Code session and failed with 'temp database was not created' when Mike ran just verify from a terminal. The hook acts only for a supported harness (internal/agentenv, detected from CLAUDE_CODE_ENTRYPOINT=cli); my Bash tool inherited that variable, a terminal does not, so the priming hook call was a silent no-op. A suite driving endless-go hook claude must set CLAUDE_CODE_ENTRYPOINT=cli on its own hook calls, and before handoff I must run it with the harness env removed: env -u CLAUDE_CODE_ENTRYPOINT -u CLAUDECODE endless --db sandbox task verify E-NNN.
 - **Project**: endless
+
+### [2026-09-30] Check old-transcript evidence against the current guide before recommending
+On E-940 I recommended exempting ~/.cache/endless/sandboxes from the write gate because a replay of old session transcripts showed writes there. Per-worktree sandboxes moved to <worktree>/.endless/sandbox/ (the 'The worktree's sandbox' section of endless guide orchestration), so they are already inside the worktree; the recommendation was built on history, not the current design. Evidence from old transcripts must be checked against the current guide before it becomes a recommendation.
+- **Project**: endless
