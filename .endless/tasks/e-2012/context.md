@@ -1,0 +1,3 @@
+Both halves contradict Endless's CLAUDE.md: the file lives at .endless/LESSONS.md relative to the worktree root (.claude/ is the harness's directory; this is an Endless artifact), and E-2000 explicitly forbids appending to the main checkout's copy from a worktree — it is tracked, so it strands an uncommitted change in a checkout belonging to no branch and no task, the isolation break worktrees exist to prevent. The retired ~/.claude/LESSONS.md also still exists, so a session that obeys the command writes a lesson nobody reads. Discovered during E-2005: the command was invoked, contradicted CLAUDE.md, and CLAUDE.md was followed instead.
+
+The command file has a .bak dated 2026-08-20 03:17, so it was edited today and may simply predate the move.
