@@ -125,3 +125,9 @@ property H1 and H2 are both trying to remove; refusing is H2 proper. If H2 is
 chosen, this becomes its first follow-on task. If H1 is chosen instead, the
 convention-only ordering requirement still needs an answer, and this evidence
 is where that answer starts.
+
+## From the description
+
+Two hypotheses to evaluate: a migration-only executable built from the landing branch that does DDL and never DML; and replacing apply-on-connect with an explicit `endless db upgrade`, with ordinary connects verifying the schema version and refusing rather than silently fixing it.
+
+Deliverable is a decision plus follow-on tasks, not an implementation.
