@@ -1,0 +1,1 @@
+task link --to X --type relates_to already covers it; a per-type flag duplicates --type.
