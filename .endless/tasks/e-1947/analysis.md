@@ -10,8 +10,8 @@ drop should adopt both of its guards:
 
 | Guard | Location | Catches |
 |---|---|---|
-| Non-ended session row with `active_task_id` for the task | `reap_worktrees.go:206` | a bound Claude session whose cwd has moved out temporarily |
-| `hasLiveProcessInDir` (`lsof -d cwd +D`) | `reap_worktrees.go:237` | any process standing in the directory right now |
+| Non-ended session row with `active_task_id` for the task | `reap_worktrees.go` | a bound Claude session whose cwd has moved out temporarily |
+| `hasLiveProcessInDir` (`lsof -d cwd +D`) | `reap_worktrees.go` | any process standing in the directory right now |
 
 Either alone leaves a hole. The `lsof` probe misses a session that stepped out;
 the session-table probe misses a non-Claude process. Given the severity, take
@@ -39,3 +39,9 @@ E-1941, still moving through this code.
 Drop's docstring also promises an unlanded refusal the implementation never
 performs. E-1902 replaces that with warn-plus-snapshot-plus-proceed; leave it
 there.
+
+## From the description
+
+Drop must adopt BOTH guards reap already has, not just one: (a) reap_worktrees.go refuses when a non-ended session row has active_task_id for the task — catches a bound Claude session whose cwd moved; (b) reap_worktrees.go hasLiveProcessInDir refuses when any process holds cwd inside the dir — catches a session sitting in it.
+
+Scope is these two guards.
