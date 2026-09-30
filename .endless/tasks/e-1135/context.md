@@ -1,0 +1,1 @@
+Currently spawn cd's the new tmux window to the project's main checkout path before launching claude, so the spawned session reads main's .claude/settings.json at startup — defeating the worktree-aware hook override produced by 'just claude-settings-init'.
