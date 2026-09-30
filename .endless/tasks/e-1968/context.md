@@ -1,0 +1,1 @@
+`task reopen` releases a session's binding silently (its help says 'no session binding', which reads as 'does not create one'). `session resume` clobbers the current pane even when that pane holds live work. `session goto --resume` cannot express intent about a task needing revisit. And `task spawn --reopen` exists only because none of the navigation verbs could change status.
