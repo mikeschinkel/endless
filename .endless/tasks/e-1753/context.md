@@ -1,0 +1,1 @@
+Endless's project commands (register, unregister, rename, set, status, list, purge, discover, scan) landed as top-level commands before the CLI adopted command groups; every later family (task, decision, epic, session, worktree, verb, tmux) is namespaced.
