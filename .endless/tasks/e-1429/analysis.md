@@ -13,3 +13,11 @@ If renamed, the cascading renames already have tickets:
 - Config key rename `worktree_sandbox` → `self_dev`: filed as **E-1456** (rationale: the flag describes "this project is endless self-development", not "this project has worktree sandboxing", so `self_dev` more accurately captures intent). Status `needs_plan`.
 
 Internal vocabulary is not sacred — recommend the rename for clarity. Resolve before implementing E-1429's flag plumbing so the chosen name lands once.
+
+## From the description
+
+** REFINEMENT 2026-05-21: --db required ONLY when worktree_sandbox=true in project .endless/config.json (endless-developing-endless).
+
+Downstream projects (~40) never see --db, always route to real DB.
+
+Applies uniformly across all subcommands when sandbox active, not just management verbs — sandbox case includes testing. **
