@@ -530,3 +530,7 @@ scripted (`fix-endless-triggers.sh`: back up, drop, then PROVE a `sessions`
 write succeeds, then report any trigger the schema tree does not create). It
 found one pre-existing orphan, `focuses_updated_at`, which predates this
 incident and was left alone.
+
+## From the description
+
+Invert it: hooks always invoke main's known-good binary, which delegates to the worktree's only when that binary is verified compatible, so a stale or missing one becomes a warning from a working process instead of a dead session.
