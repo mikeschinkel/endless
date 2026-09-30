@@ -1,0 +1,1 @@
+The framework should make the one correct invocation explicit: own the NO_COLOR/--cols normalization inside the assert helpers (no separate misusable function), OR support functions through the guard (export -f + timeout bash -c), OR hard-error when an assert target isn't executable (type -t check).
