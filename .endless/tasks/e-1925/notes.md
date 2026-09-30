@@ -1,0 +1,1 @@
+Does not re-open E-1906, which removed an automatic background flag on the premise that one session maps to one task — the premise a task-less session violates. See --analysis for the full constraints.
