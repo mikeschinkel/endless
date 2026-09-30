@@ -1,0 +1,1 @@
+The exact unlanded probe's cost is dominated by computing patch-ids for every commit the base gained since a worktree's fork, and every worktree recomputes them against substantially the same base history — measured 584ms for e-1077 against 135 worktrees that share one main.
