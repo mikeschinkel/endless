@@ -402,3 +402,21 @@ synthetic PreToolUse payloads for a claimed session sitting in its worktree):
 - `echo "sed -i x <main>/f"` → allowed (mention, not invocation).
 - A Write to the same main path → blocked with the same body (equivalence).
 - `go test ./internal/hookcmd/ -run 'BashWrite|LexShell|WriteTargetDecision'` passes.
+
+## As built — scope folded in during implementation
+
+- `$HOME` / `~` are not expanded when the command itself assigns `HOME`
+  (`HOME=…`, `export HOME=…`); the word is then dynamic. Found by replaying
+  ~39k real Bash calls from session transcripts through the extractor: a
+  verify script's `mkdir -p "$HOME"` was judged against the real home.
+- `docs/research-2026-09-17-refusal-inventory.tsv`: the landed-suite edit row
+  re-anchored to `writeTargetDecision`; rows added for the doc-mirror,
+  containment and Bash refusals (`tests/test_refusal_inventory_anchors.py`).
+- `bash_git_writes` documented in `internal/config/README.md`'s defaults table.
+- `blockDocMirrorWriteIfApplicable`, `blockLandedSuiteEditIfApplicable` and
+  `landedSuiteEditDecision` removed — their checks live in
+  `writeTargetDecision`, reached by `writeToolDecision`; `splitCommands`,
+  `gitCommitRe`, `cdRe`, `unquoteWord` removed with `commitDir`'s move onto
+  `walkCommands`.
+- A target inside the project root is never exempt, even when the project
+  itself lives under a temp dir (tests, and anyone keeping a checkout in /tmp).
