@@ -19,3 +19,9 @@ Verification:
 - Existing companion-file tests still pass; the backfill behavior subsumes the new always-write behavior.
 
 Origin: E-1027/E-1028 verification surfaced that the hook can miss task-state events depending on Bash tool_input format. Rather than chase that intermittent miss, kill the entire drift class. Mike's question after I 'flagged' it: 'how will we know when it recurs?' — we won't; better to make recurrence harmless.
+
+## From the description
+
+Cost: one atomic JSON write per prompt, sub-millisecond. Benefit: companion at most one prompt out of date with the DB.
+
+Drift scenarios and verification matrix are in the analysis field.
