@@ -195,3 +195,9 @@ run "S7 rebase, append once, +5 guard"  rebase append 5
 run "S8 rebase, guard only, +5 guard"   rebase guard  5
 run "S9 rebase, append once, +20 guard" rebase append 20
 ```
+
+## From the description
+
+Add a content-level precondition: refuse to amend a ledger tip whose .endless/db-ledger tree any refs/heads/task/* tip holds byte-identically.
+
+keep the existing reachability test alongside it.
