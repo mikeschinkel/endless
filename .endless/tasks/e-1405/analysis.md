@@ -1,0 +1,1 @@
+Touches: phase enum (Python + Go), DB CHECK constraint if any, CLI --phase validation, --help text, default sort orders in 'task list' and 'task tree', any display logic that hardcodes the phase list.
