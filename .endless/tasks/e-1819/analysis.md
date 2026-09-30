@@ -1,0 +1,3 @@
+in src/endless/cli.py, mirroring the identical pair already on 'endless task update' (cli.py ~1632-1635) and the existing --text/--text-file options on 'task add'. Wire them through task_cmd.add_item so the analysis is persisted to the task's analysis field at creation time — the same field 'task update --analysis' sets. Follow the house convention (see [[reference_text_file_flag_convention]]): --analysis is inline, --analysis-file takes a path; error if both are supplied. Update the command help text.
+
+Verify: 'endless task add "X" --analysis-file <f>' then 'endless task show <id> --analysis' shows the content, and 'task add --analysis A --analysis-file f' errors; add a pytest in tests/ mirroring the existing task-update analysis test.
