@@ -100,3 +100,11 @@ So this task reveals the rows and fixes the writers, and deliberately does not
 retire the existing 34. They are surfaced to be dealt with, not migrated away in
 the dark. Once drained, `needs_input` has no writer and no rows, and means only
 what the declaration gate says it means.
+
+## From the description
+
+Install the hook, add a 'prompted' state to internal/sessionstate classified into all five groups (MayWrite included, so approving a prompt never leaves the session refused), route notification_type permission_prompt to it and idle_prompt to idle, and clear it on the session's next activity.
+
+Waiting on the user means the session paused for input, question or not, so AwaitsHuman becomes the one place that answers it.
+
+Also stops InitSession and the revive CASE from writing needs_input, and reveals those rows on the board instead of hiding them.
