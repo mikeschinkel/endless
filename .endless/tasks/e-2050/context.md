@@ -1,0 +1,1 @@
+That isolation was built piecemeal — E-1281 for the database, E-1729 for the ledger, nothing for the other files a command writes — so each new feature that writes something reintroduces the leak at a new call site.
