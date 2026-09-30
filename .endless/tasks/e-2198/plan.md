@@ -79,3 +79,13 @@ the added cost on a project with many epics before landing, and say what it was.
 - The legend still derives its entry by calling `unsettledMark`, so it cannot
   disagree with the column.
 - `just test` and `just test-go` pass.
+
+
+
+## As built — scope decided in-session
+
+- **Descendants, not just children.** The walk goes along `effective_parent_id` to any depth, so a parent of epics doesn't keep the same bug. Child epics count toward ◆/~ through their own worktrees, but never toward Shipped, because an epic's `completed` is derived.
+- **The epic's own worktree still counts** toward ◆/~.
+- **◆ outranks ~ across the set.** A descendant known to be unsettled answers for the epic whatever its siblings' state.
+- **Cost premise corrected.** The plan said the child verdict "comes from the same cache, so no new git probe." That's wrong: a verdict runs a live `git status --porcelain` plus a `git rev-parse` per worktree. Mike chose to keep the full verdict per descendant worktree, and rows already on screen are reused. Measured on E-1991, with 4 descendant worktrees: about 55ms → 250ms warm, at load average 22. The worst epic in this project has 5, and most have 0–1.
+- **Guide.** The unsettled-column section in docs/guide/orchestration.md documents the epic rule.
