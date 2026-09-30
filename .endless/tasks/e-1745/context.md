@@ -1,0 +1,1 @@
+'git worktree remove' fails with 'is not a working tree', the os.Remove fallback refuses the non-empty dir, its error is discarded, and the function returns reaped=true anyway — so the log lies and the dirs persist forever.
