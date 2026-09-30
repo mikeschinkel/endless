@@ -76,3 +76,7 @@ visibility (5).
 A cheap early win worth costing separately: a single `endless doctor`-style check
 that reports all four identities and whether each matches its source. That does
 not decide anything, but it makes the condition visible today.
+
+## From the description
+
+The approaches differ in kind -- warn, self-restart, refuse while stale, eliminate the identity, version-stamp -- and the right answer may differ per identity.
