@@ -1,0 +1,1 @@
+At handoff-render time for epic spawn, query SELECT status, count(*) FROM tasks WHERE parent_id = ? GROUP BY status, format as a state breakdown ('3 ready, 2 needs_plan, 1 in_progress, 4 terminal'), pass as a template var.
