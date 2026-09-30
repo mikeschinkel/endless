@@ -136,4 +136,14 @@ never migrate the real ledger. Implement ED-1570's exact agreement.
   as is the separate generator bug it documents.
 - **E-2020** owns what hooks do during the land window.
 
+## From the description
 
+Two pieces.
+
+(1) claude-settings-init stops writing an absolute worktree binary path and names the installed endless-go, so new worktrees are born correct.
+
+(2) A one-time sweep rewrites the 94 existing files, which cannot ride in as a commit: bin/ and settings.local.json are both gitignored, so neither a rebase nor 'worktree sync' can deliver it, and settings.local.json outranks project settings so a stale override wins over anything committed.
+
+Self_dev only.
+
+Durable form: a worktree's settings should name no binary path at all.
