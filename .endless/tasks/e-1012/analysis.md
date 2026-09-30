@@ -46,3 +46,9 @@ The W3 design (E-971) puts the behavioral gate (UserPromptSubmit Layer 1/2) and 
 ## Cross-platform note
 
 Hook binary is Go; builds for Windows/macOS/Linux. The git commands invoked ('git rev-parse --git-common-dir') are portable. No bash-specific logic.
+
+## From the description
+
+Layer: extend the existing Claude Code hook (cmd/endless-hook/claude.go) with a PreToolUse Bash rule that denies 'git commit' when cwd is main's working tree (allow worktrees and active merges). Returns deny via Claude Code hook response so the rejection appears in Claude's context.
+
+Acceptance criteria in the analysis field.
