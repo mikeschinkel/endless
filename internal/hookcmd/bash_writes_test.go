@@ -252,15 +252,25 @@ func newWriteFixture(t *testing.T) writeFixture {
 		other: filepath.Join(root, "proj", ".endless", "worktrees", "e-8"),
 		tmp:   filepath.Join(root, "scratch"),
 	}
-	for _, d := range []string{f.wt, f.other, f.tmp} {
+	admin := filepath.Join(f.main, ".git", "worktrees", "e-7")
+	for _, d := range []string{f.wt, f.other, f.tmp, admin} {
 		if err := os.MkdirAll(d, 0o755); err != nil {
 			t.Fatal(err)
 		}
+	}
+	// A linked worktree's `.git` file and its admin dir's `commondir`, as git
+	// writes them.
+	if err := os.WriteFile(filepath.Join(f.wt, ".git"), []byte("gitdir: "+admin+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(admin, "commondir"), []byte("../..\n"), 0o644); err != nil {
+		t.Fatal(err)
 	}
 	f.scope = writeScope{
 		taskID:      7,
 		worktree:    f.wt,
 		projectRoot: f.main,
+		gitDirs:     worktreeGitDirs(f.wt),
 		exempt:      []string{f.tmp, root}, // root is "the temp dir" the project lives in
 		landed: func(id int64) (string, bool) {
 			if id == 101 {
@@ -290,6 +300,10 @@ func TestWriteTargetDecision(t *testing.T) {
 		{"another task's worktree", f.scope, filepath.Join(f.other, "a.go"), true, "E-7"},
 		{"temp dir", f.scope, filepath.Join(f.tmp, "x"), false, ""},
 		{"temp dir holding the project is not an exemption for it", f.scope, filepath.Join(f.main, "x"), true, ""},
+		{"own git admin dir", f.scope, filepath.Join(f.main, ".git/worktrees/e-7/index.lock"), false, ""},
+		{"endless's git-side state", f.scope, filepath.Join(f.main, ".git/info/endless/unlanded/x"), false, ""},
+		{"another worktree's admin dir", f.scope, filepath.Join(f.main, ".git/worktrees/e-8/index.lock"), true, ""},
+		{"shared git config", f.scope, filepath.Join(f.main, ".git/config"), true, ""},
 		{"dev null", f.scope, "/dev/null", false, ""},
 		{"dev fd", f.scope, "/dev/fd/3", false, ""},
 		{"unrelated path", f.scope, "/etc/hosts", true, ""},

@@ -134,9 +134,12 @@ shell refusal carries the same message a Write to that path gets. Reads are
 never refused.
 
 Always writable, wherever you are: temp dirs (`/tmp`, `$TMPDIR`, your
-scratchpad), device files (`/dev/null`, …), `~/.claude`, and Endless's config
-directory. Nothing else outside the worktree is, and there is no per-write
-override.
+scratchpad), device files (`/dev/null`, …), `~/.claude`, Endless's config
+directory, and your worktree's own corner of the shared `.git` — its admin
+directory (`.git/worktrees/<name>/`, where a stale `index.lock` lives) and
+`.git/info/endless/`. The rest of `.git` (config, hooks, refs) is shared by
+every worktree and stays refused. Nothing else outside the worktree is
+writable, and there is no per-write override.
 
 Shell commands are recognized heuristically: redirects and the common
 file-writing verbs are. What cannot be resolved to a concrete path is allowed

@@ -35,6 +35,13 @@ type writeScope struct {
 	taskID   int64
 	worktree string
 
+	// gitDirs are the parts of the shared git directory that belong to this
+	// session's worktree: its own admin dir (`<common>/worktrees/<name>/`,
+	// where a stale index.lock lives) and Endless's git-side state
+	// (`<common>/info/endless/`). The rest of .git — config, hooks, refs —
+	// is shared by every worktree, and stays refused.
+	gitDirs []string
+
 	// projectRoot is the resolved main checkout. A target inside it is never
 	// exempt, even when the project itself lives under a temp dir.
 	projectRoot string
@@ -64,8 +71,38 @@ func newWriteScope(projectID int64, payload claudePayload) writeScope {
 	if wt != "" {
 		s.taskID = taskID
 		s.worktree = resolveExisting(wt)
+		s.gitDirs = worktreeGitDirs(s.worktree)
 	}
 	return s
+}
+
+// worktreeGitDirs returns the worktree's own admin dir and the common dir's
+// info/endless/, read from the worktree's `.git` file (`gitdir: <admin>`) and
+// the admin dir's `commondir` — file reads only, no git subprocess on every
+// tool call. A worktree whose `.git` is not a linked-worktree file yields none.
+func worktreeGitDirs(worktree string) []string {
+	data, err := os.ReadFile(filepath.Join(worktree, ".git"))
+	if err != nil {
+		return nil
+	}
+	line := strings.TrimSpace(string(data))
+	if !strings.HasPrefix(line, "gitdir:") {
+		return nil
+	}
+	admin := strings.TrimSpace(strings.TrimPrefix(line, "gitdir:"))
+	if !filepath.IsAbs(admin) {
+		admin = filepath.Join(worktree, admin)
+	}
+	admin = resolveExisting(filepath.Clean(admin))
+	common := filepath.Dir(filepath.Dir(admin))
+	if c, err := os.ReadFile(filepath.Join(admin, "commondir")); err == nil {
+		common = strings.TrimSpace(string(c))
+		if !filepath.IsAbs(common) {
+			common = filepath.Join(admin, common)
+		}
+		common = resolveExisting(filepath.Clean(common))
+	}
+	return []string{admin, filepath.Join(common, "info", "endless")}
 }
 
 // sessionOwnedWorktree returns the session's claimed task and that task's
@@ -138,8 +175,8 @@ func isDeviceFile(target string) bool {
 //
 //  1. a task document mirror — the database's file, never a session's;
 //  2. a landed, foreign task's verification suite (E-1916 Arm 1);
-//  3. a device file or an exempt location, unless it is inside the project —
-//     always writable;
+//  3. a device file, this worktree's own part of the shared .git, or an exempt
+//     location outside the project — always writable;
 //  4. containment — a session holding a claimed worktree writes inside it.
 //
 // 1 and 2 apply to every session. 3 and 4 apply only to a session that owns a
@@ -161,6 +198,11 @@ func writeTargetDecision(s writeScope, target string) (msg string, block bool) {
 	}
 	if pathWithin(s.worktree, target) || isDeviceFile(target) {
 		return "", false
+	}
+	for _, d := range s.gitDirs {
+		if pathWithin(d, target) {
+			return "", false
+		}
 	}
 	if s.projectRoot == "" || !pathWithin(s.projectRoot, target) {
 		for _, root := range s.exempt {

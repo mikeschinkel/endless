@@ -30,6 +30,10 @@ trap 'rm -rf "${WORK_TMP}"' EXIT
 WORK_TMP=$(cd "${WORK_TMP}" && pwd -P)
 
 BIN="${WORK_TMP}/endless-go"
+# The hook acts only for a supported harness (internal/agentenv), detected
+# from CLAUDE_CODE_ENTRYPOINT. A suite run from a plain terminal has none, so
+# every hook call here states it — otherwise the hook exits 0 doing nothing.
+hook_bin() { CLAUDE_CODE_ENTRYPOINT=cli "${BIN}" "$@"; }
 CFG="${WORK_TMP}/cfg"
 PROJ="${WORK_TMP}/proj"
 TID=424240
@@ -70,7 +74,7 @@ git_q -C "${PROJ}" worktree add -q -b "task/${TID}" "${WT}" || setup_error "git 
 
 # Prime the schema from a neutral directory, with a throwaway session id.
 printf '{"session_id":"e940-prime","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Read","tool_input":{}}' \
-    "${WORK_TMP}/prime" | "${BIN}" --db-dir "${CFG}" hook claude >/dev/null 2>&1
+    "${WORK_TMP}/prime" | hook_bin --db-dir "${CFG}" hook claude >/dev/null 2>&1
 [[ -f "${CFG}/endless.db" ]] || setup_error "temp database was not created"
 db() { sqlite3 "${CFG}/endless.db" "$1"; }
 db "INSERT INTO projects (id, name, path) VALUES (940, 'e940demo', '${PROJ}');" || setup_error "seed project"
@@ -83,7 +87,7 @@ hook() {
     payload=$(python3 -c 'import json,sys; print(json.dumps({"session_id":sys.argv[1],"cwd":sys.argv[2],
         "hook_event_name":"PreToolUse","tool_name":sys.argv[3],"tool_input":json.loads(sys.argv[4])}))' \
         "${HOOK_SID:-${SID}}" "${3:-${WT}}" "$1" "$2")
-    HOOK_OUT=$(printf '%s' "${payload}" | "${BIN}" --db-dir "${CFG}" hook claude 2>&1)
+    HOOK_OUT=$(printf '%s' "${payload}" | hook_bin --db-dir "${CFG}" hook claude 2>&1)
     HOOK_RC=$?
 }
 bash_hook() { hook Bash "$(python3 -c 'import json,sys; print(json.dumps({"command":sys.argv[1]}))' "$1")"; }
@@ -145,6 +149,12 @@ bash_hook "echo \"sed -i x ${PROJ}/f\""
 allowed "echo \"sed -i … main\" (a mention, not an invocation)"
 bash_hook "git restore ."
 allowed "git restore inside the worktree"
+bash_hook "rm -f ${PROJ}/.git/worktrees/e-${TID}/index.lock"
+allowed "rm this worktree's own index.lock in the shared .git"
+bash_hook "mkdir -p ${PROJ}/.git/info/endless/unlanded && echo x > ${PROJ}/.git/info/endless/unlanded/x"
+allowed "write Endless's git-side state under .git/info/endless"
+bash_hook "echo x >> ${PROJ}/.git/config"
+blocked "append to the shared .git/config is refused" "${OUTSIDE}"
 bash_hook "echo x > \"\$OUT\""
 allowed "dynamic target > \"\$OUT\" (unresolvable: allowed)"
 
