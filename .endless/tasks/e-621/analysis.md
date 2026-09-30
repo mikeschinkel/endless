@@ -1,0 +1,1 @@
+For shared tree state (status page), use a Go helper function to build the x-data string. For per-item state (plan detail page), define methods in the per-item x-data. Inline handlers should be short method calls like saveEdit(id), not multi-statement chains.
