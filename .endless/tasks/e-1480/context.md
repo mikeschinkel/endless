@@ -1,0 +1,1 @@
+Sessions have only active_task_id, which both 'claim' and 'bind' overwrite, so a session loses the task it was opened for once focus shifts (this very session: opened on E-1402, planning E-1479, with a misleading tmux bar).
