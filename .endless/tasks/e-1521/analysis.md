@@ -1,0 +1,1 @@
+Approach: introduce a small interface in monitor that the production caller satisfies with a real anthropic.Client and tests satisfy with a fake; cover happy-path recap + the GetSessionsNeedingRecap selection logic.
