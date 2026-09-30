@@ -30,7 +30,7 @@ SHARED ledger", with a measured incident behind it rather than a projection.
 ## Still open, and owed by nobody
 
 The "false claim to retract" below is unresolved. `internal/schema/changes/
-e-1929-add-tasks-removed.go:38` still asserts the window "is never entered in
+e-1929-add-tasks-removed.go` still asserts the window "is never entered in
 practice." It is entered — E-1969's land entered it. That comment is a
 standing invitation for a future change file to copy contradicted reasoning,
 and closing this task did not fix it. Whoever lands E-1972 should correct it,
@@ -67,3 +67,7 @@ Shape 1 is the only one that also covers the write case; 2 and 3 only shorten or
 # PRODUCT
 
 Not an endless-developing-endless artifact. Any tracked project whose land applies schema changes has the same gap between its migrated DB and whatever binary the user's shell, editor plugin, or background agent is still holding open. On a downstream project the stale reader is likelier to be a long-lived process the user never thinks about, which makes the window longer, not shorter.
+
+## From the description
+
+See --analysis for why reordering is not the fix.
