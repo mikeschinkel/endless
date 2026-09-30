@@ -30,3 +30,13 @@ even though the text view does not.
 This is also the clearest evidence for `--agent` over `--plain`. Rendering
 "another session is working this" where the human view prints `⟳` is not
 stripping chrome; it is rendering for a reader who cannot interpret a glyph.
+
+## From the description
+
+Scope is the FLAG SURFACE only: rename --llm to --agent on the 12 commands carrying both flags, remove --llm rather than keeping a deprecated alias per no-legacy, add --format wherever an output flag exists, and add --json to task deps and task relations, the two commands having --llm and no --json.
+
+Rejected --plain, which this task originally proposed on the premise that the flag merely strips chrome from human output: it does not.
+
+task show --llm emits key=value lines with fields regrouped and relations flattened, so --plain would misname it in the opposite direction from --llm; --agent names what actually varies, the reader.
+
+Explicitly NOT in scope: writing agent renderings for the 16 commands that have --json and no agent view.
