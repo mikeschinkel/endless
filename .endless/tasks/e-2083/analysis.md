@@ -7,3 +7,7 @@ Restoring the four is a straight git revert of those paths. The twelve amendment
 Then E-2074's own verify script needs its assert_absent block on the four deleted paths replaced, since after this they exist again.
 
 The violation propagated before it was caught: E-2081, working the same kind of removal three days later, read E-2074 as the convention and deleted E-1682's suite, amended e-2071 and e-2037, and ran both. All of that was reverted. E-1916 (block edits and runs of landed suites from the PreToolUse hook) would have refused every one of those moves at the tool call and is still only submitted; until it lands, the rule is prose an agent can rationalise past — and this is twice now that one did.
+
+## From the description
+
+That inverts the rule: a landed verify suite is a one-shot land-time gate whose post-land pass/fail is undefined, and it must not be edited because it records what was true when its task landed — deleting one being the strongest possible edit.
