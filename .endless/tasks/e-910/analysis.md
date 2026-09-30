@@ -17,3 +17,7 @@ at pickup, because this list is a snapshot and the ground moves:
   E-910's half is a design question, not just wiring. See E-799's analysis.
 - E-1035 (focus events failing the session_id FK on replay) is downstream of
   the same gap and has been folded into E-1041.
+
+## From the description
+
+the implementor determines which entities still apply and gets user approval on that scope before building.
