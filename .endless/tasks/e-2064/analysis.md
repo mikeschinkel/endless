@@ -11,6 +11,14 @@ costs every row. That asymmetry is the whole defect — this is not a request to
 undo E-1956.
 
 Worth checking while in there, as evidence rather than as scope: the sibling
-annotation for `duplicates` (E-1185) and `internal/sessionstatuscmd/session_status.go:885`,
+annotation for `duplicates` (E-1185) and `internal/sessionstatuscmd/session_status.go`,
 which comments that it follows the same shape, so `session status` may render a
 status column with the same problem.
+
+## From the description
+
+Every row pays that width so that a handful can carry an annotation already discoverable by opening the task.
+
+Confine the annotation to the detail view and leave tabular renderers showing the bare status.
+
+Which commands render a status column is for the implementor to determine and confirm with the user — `task list`, `task recent` and `task show --children` are the ones observed, not necessarily the whole set.
