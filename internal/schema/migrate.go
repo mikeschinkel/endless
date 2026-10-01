@@ -74,10 +74,16 @@ func MigrateContext(ctx context.Context, db *sql.DB) error {
 	return Seed(db)
 }
 
-// MigrateToContext brings db up to exactly version and reconciles the enum
-// mirrors — Migrate, stopped short. It exists to build a database that is
-// BEHIND the binary on purpose, which is the condition E-2020's connect rules
-// act on and so the one their tests have to be able to construct.
+// MigrateToContext brings db up to exactly version — Migrate, stopped short. It
+// exists to build a database that is BEHIND the binary on purpose, which is the
+// condition E-2020's connect rules act on and so the one their tests have to be
+// able to construct.
+//
+// It reconciles the enum mirrors only when version is the latest. seeds.sql is
+// written against the latest schema, so a behind database may lack a column it
+// names: E-1814's migration 11 added task_types.auto_spawnable, and seeding a
+// version-10 database with it failed. A behind database is reseeded by the
+// connect that migrates it forward, which is the path under test.
 func MigrateToContext(ctx context.Context, db *sql.DB, version int64) error {
 	provider, err := newProvider(db)
 	if err != nil {
@@ -88,6 +94,13 @@ func MigrateToContext(ctx context.Context, db *sql.DB, version int64) error {
 	}
 	if _, err = provider.UpTo(ctx, version); err != nil {
 		return fmt.Errorf("applying migrations up to %d: %w", version, err)
+	}
+	latest, err := LatestVersion()
+	if err != nil {
+		return err
+	}
+	if version < latest {
+		return nil
 	}
 	return Seed(db)
 }
