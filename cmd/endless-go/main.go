@@ -5,7 +5,7 @@
 // Subcommand layout — preserves the inner verbs each former binary
 // already parsed:
 //
-//	endless-go event         emit|validate-db|rebuild-db|apply-change|backup|reap-worktrees
+//	endless-go event         emit|validate-db|rebuild-db|migrate|upgrade|backup|reap-worktrees
 //	endless-go hook          prompt|claude|codex
 //	endless-go sandbox       run|enter|init|reset|bind|list|prune|destroy
 //	endless-go tmux          apply|status-line|active-id|show-menu
@@ -358,7 +358,7 @@ func usageText() string {
 	w := &b
 	fmt.Fprintln(w, "Usage: endless-go <subcommand> [args...]")
 	fmt.Fprintln(w, "Subcommands:")
-	fmt.Fprintln(w, "  event          emit|validate-db|rebuild-db|apply-change|backup|reap-worktrees")
+	fmt.Fprintln(w, "  event          emit|validate-db|rebuild-db|migrate|upgrade|backup|reap-worktrees")
 	fmt.Fprintln(w, "  hook           prompt|claude|codex")
 	fmt.Fprintln(w, "  sandbox        run|enter|init|reset|list|prune|destroy|claude-settings-repair")
 	fmt.Fprintln(w, "  tmux           apply|status-line|active-id|show-menu")

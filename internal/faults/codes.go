@@ -49,10 +49,9 @@ func (s Severity) Rank() (rank int) {
 // NUMBERS DO NOT MOVE. ERR-0001 became WARN-0001, not WARN-0006: a number is
 // spent the moment it ships, and renumbering would make every incident already
 // recorded in a user's database, every log line and every bug report cite a code
-// that now means something else. Seven of the fourteen changed prefix;
-// internal/schema/changes/e-2148-severity-keyed-fault-codes.sql rewrites
-// `errors.code` for the rows recorded before the change so they still resolve
-// to a catalog entry.
+// that now means something else. Seven of the fourteen changed prefix, and
+// E-2148 rewrote `errors.code` for the rows recorded before the change so they
+// still resolve to a catalog entry.
 //
 // # No subsystem prefix
 //

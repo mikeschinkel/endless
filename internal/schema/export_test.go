@@ -9,7 +9,7 @@ import (
 // shaped as it was before a later step — the only way to exercise a step's
 // data movement, since Migrate always runs the whole set.
 func MigrateUpTo(db *sql.DB, version int64) error {
-	provider, err := newProvider(db)
+	provider, err := newProvider(context.Background(), db)
 	if err != nil {
 		return err
 	}

@@ -124,7 +124,6 @@ func TestSchemaFreshDB_CreatesAllTables(t *testing.T) {
 	applySchema(t, db)
 
 	wantTables := []string{
-		"_schema_version",
 		"projects",
 		"project_deps",
 		"notes",

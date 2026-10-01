@@ -798,7 +798,7 @@ def default_db_to_main():
 
     The Python analogue of the Go-side PinMainDB (E-1450/E-1429) used by
     hook/tmux: some operations are inherently real/main regardless of
-    caller routing — worktree land, schema apply-change, db backup. Inside a
+    caller routing — worktree land, db backup. Inside a
     self-dev worktree the E-1429 gate refuses a DB-opening command that named
     no database; for these the answer is never in doubt, so this pins
     main_config_dir() at the command's entry: Python reads use the real DB and
@@ -810,8 +810,8 @@ def default_db_to_main():
     DBAwareGroup before the command body runs, so this is a no-op then.
 
     Pins main_config_dir() directly rather than through apply_db_choice: this is
-    a forced-main operation valid in ANY project (worktree land, db backup, and
-    apply-change run in downstream non-self-dev projects too), so it must bypass
+    a forced-main operation valid in ANY project (worktree land and db backup
+    run in downstream non-self-dev projects too), so it must bypass
     apply_db_choice's self-dev gate on the --db flag.
     """
     global PINNED_DB_CONTEXT

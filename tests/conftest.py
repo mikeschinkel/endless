@@ -140,10 +140,6 @@ def isolated_env(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(isolated_home))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(isolated_home / ".config"))
 
-    # Always auto-migrate in tests, regardless of the developer's shell setting
-    # for ENDLESS_AUTO_MIGRATE. Tests need a fully migrated schema.
-    monkeypatch.setenv("ENDLESS_AUTO_MIGRATE", "1")
-
     # E-1859: suppress automatic file-time triage. Every `task add` in the
     # suite would otherwise fan out a detached model call — slow, costly, and
     # nondeterministic (it races the assertions by mutating task status).

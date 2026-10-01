@@ -10,36 +10,33 @@ own migration: the installed one does not carry it, the worktree one may not run
 it.
 
 The way out is a third binary. `worktree land` builds
-<worktree>/bin/endless-migrate from the landing branch and applies the branch's
-changes with that — an executable carrying the migration set and no application
+<worktree>/bin/endless-migrate from the landing branch and migrates the
+database with that — an executable carrying the migration set and no application
 at all, so it has no expectation of the database it is about to change and
 nothing the database can disappoint.
 
 What this module pins, and nothing else does:
 
-  1. The build is UNCONDITIONAL in self_dev (E-2192 reversed this: it was
-     conditional on a change file). Every self_dev land runs `endless-migrate
-     up`, so every one builds it; a land with no change file applies nothing.
+  1. The build is UNCONDITIONAL in self_dev (E-2192). Every self_dev land runs
+     `endless-migrate up`, so every one builds it.
   2. The build precedes the ff-merge and the INVOKE follows it. E-1941's window
-     is unchanged for the apply; the build is earlier for E-1941's own reason —
-     a tree that cannot compile its migration tool must abort while base and the
-     database are untouched.
+     is unchanged for the migration; the build is earlier for E-1941's own
+     reason — a tree that cannot compile its migration tool must abort while
+     base and the database are untouched.
   3. Scope is self_dev. A non-self_dev land builds nothing, resolves nothing and
-     applies nothing: `internal/schema/changes/` is endless's own schema, and a
-     downstream project has one installed binary that applies its own migrations
-     under ED-1570.
-  4. The two binaries stay separated. The migration executable applies; the
-     worktree's endless-go backs up and records. That pairing is the half of
-     E-1664 that survives E-2088 and nothing else covers it.
-  5. `_migrate_change` invokes the executable the way every other Go shellout is
-     invoked — the DB target as a per-invocation flag (E-1429), which since
-     E-2157 is the same `--db main` endless-go takes (see
-     config.migrate_db_context_args) — and surfaces the executable's own error
-     text rather than a generic one.
+     migrates nothing: the migration set is endless's own schema, and a
+     downstream project has one installed binary whose connect brings its own
+     database forward.
+  4. The two binaries stay separated. The migration executable migrates; the
+     installed endless-go records. That pairing is the half of E-1664 that
+     survives E-2088 and nothing else covers it.
+  5. Invoking the executable surfaces its stderr when it died before printing a
+     document. (Flag threading and its own error text are pinned beside
+     `_migrate_up` in tests/test_worktree_land_migrate_up.py.)
 
 The ordering of the whole land, and the post-merge failure surfacing, live in
 tests/test_worktree_land_schema_apply.py with E-1941's other ordering
-assertions; they exercise `_migrate_change` there.
+assertions.
 """
 
 import os
@@ -51,13 +48,13 @@ import pytest
 from endless import worktree_cmd
 from endless.worktree_cmd import (
     _build_migration_executable,
-    _migrate_change,
+    _migrate_up,
     _resolve_land_migrate_bin,
     land_worktree,
 )
 
 CANON = "E-2088"
-CHANGE = "internal/schema/changes/e-2088-add-thing.sql"
+MIGRATION = "internal/schema/migrations/00099_add_thing.sql"
 
 
 # ---------------------------------------------------------------------------
@@ -189,12 +186,12 @@ def _noop_record(item_id, proj_name, branch, base_branch, canonical,
     return None
 
 
-def _commit_change_on_feat(worktree, rel=CHANGE):
+def _commit_migration_on_feat(worktree, rel=MIGRATION):
     p = worktree / rel
     p.parent.mkdir(parents=True, exist_ok=True)
     p.write_text("-- ddl\n")
     _git(["git", "add", "-A"], worktree)
-    _git(["git", "commit", "-q", "-m", "E-2088: add schema change"], worktree)
+    _git(["git", "commit", "-q", "-m", "E-2088: add a migration"], worktree)
 
 
 # ---------------------------------------------------------------------------
@@ -276,54 +273,6 @@ def test_build_skipped_for_non_self_dev(landable, monkeypatch, tmp_path):
 # 3. invoking it
 # ---------------------------------------------------------------------------
 
-def test_invocation_threads_config_dir_and_the_change_path(
-    landable, monkeypatch, tmp_path
-):
-    """The DB target rides as a per-invocation flag (E-1429), never an exported
-    variable: an export would silently redirect every later migration."""
-    wt = landable["worktree"]
-    argv_log = tmp_path / "argv.log"
-    binary = _make_migrate_bin(
-        wt,
-        f'printf "%s\\n" "$*" > {argv_log}\n'
-        '''printf '{"name":"e-2088-add-thing","status":"applied","db":"/tmp/x.db"}\\n'\n'''
-        "exit 0\n",
-    )
-    monkeypatch.setattr("endless.config.require_db_context", lambda: None)
-    # Stub the helper `_migrate_change` actually calls. Stubbing the other one
-    # is how this suite could stay green while every real land broke: the
-    # binaries' spellings diverged in E-1668, the land threaded endless-go's at
-    # endless-migrate, and the test that should have caught it had replaced the
-    # wrong function. E-2157 reunified the vocabulary; the stub still has to
-    # name the real dependency, because agreement today is not a contract.
-    monkeypatch.setattr(
-        "endless.config.migrate_db_context_args", lambda: ["--db", "main"]
-    )
-
-    res = _migrate_change(str(binary), wt / CHANGE)
-
-    assert argv_log.read_text().strip() == f"--db main apply {wt / CHANGE}"
-    assert res["status"] == "applied"
-    assert res["name"] == "e-2088-add-thing"
-
-
-def test_invocation_surfaces_the_executables_own_error(
-    landable, monkeypatch, tmp_path
-):
-    wt = landable["worktree"]
-    binary = _make_migrate_bin(
-        wt,
-        '''printf '{"status":"error","error":"no such table: thing"}\\n'\n'''
-        "exit 1\n",
-    )
-    monkeypatch.setattr("endless.config.require_db_context", lambda: None)
-    monkeypatch.setattr("endless.config.migrate_db_context_args", lambda: [])
-
-    with pytest.raises(click.ClickException) as ei:
-        _migrate_change(str(binary), wt / CHANGE)
-    assert "no such table: thing" in ei.value.message
-
-
 def test_invocation_falls_back_to_stderr_when_there_is_no_json(
     landable, monkeypatch, tmp_path
 ):
@@ -335,7 +284,7 @@ def test_invocation_falls_back_to_stderr_when_there_is_no_json(
     monkeypatch.setattr("endless.config.migrate_db_context_args", lambda: [])
 
     with pytest.raises(click.ClickException) as ei:
-        _migrate_change(str(binary), wt / CHANGE)
+        _migrate_up(str(binary))
     assert "segfault" in ei.value.message
 
 
@@ -345,7 +294,7 @@ def test_invocation_falls_back_to_stderr_when_there_is_no_json(
 
 def test_land_builds_and_invokes_it_around_the_ff_merge(landable, monkeypatch):
     main, wt = landable["main"], landable["worktree"]
-    _commit_change_on_feat(wt)
+    _commit_migration_on_feat(wt)
     _patch_land(monkeypatch, main, wt)
 
     calls = []
@@ -359,9 +308,9 @@ def test_land_builds_and_invokes_it_around_the_ff_merge(landable, monkeypatch):
         calls.append("resolve-migrate")
         return "/bin/echo"
 
-    def fake_apply(migrate_bin, change_path):
-        calls.append("apply")
-        main_at["apply"] = _head(main, "main")
+    def fake_up(migrate_bin):
+        calls.append("up")
+        main_at["up"] = _head(main, "main")
         main_at["bin"] = migrate_bin
         return {}
 
@@ -372,32 +321,28 @@ def test_land_builds_and_invokes_it_around_the_ff_merge(landable, monkeypatch):
 
     monkeypatch.setattr(worktree_cmd, "_build_migration_executable", fake_build)
     monkeypatch.setattr(worktree_cmd, "_resolve_land_migrate_bin", fake_resolve)
-    monkeypatch.setattr(worktree_cmd, "_migrate_change", fake_apply)
-    monkeypatch.setattr(
-        worktree_cmd, "_migrate_up",
-        lambda migrate_bin: calls.append("up") or {},
-    )
+    monkeypatch.setattr(worktree_cmd, "_migrate_up", fake_up)
     monkeypatch.setattr(worktree_cmd, "_record_landing", fake_record)
 
     feat_tip = _head(wt)
     land_worktree(CANON, dry_run=False)
 
-    assert calls == ["build-migrate", "resolve-migrate", "up", "apply", "record"]
+    assert calls == ["build-migrate", "resolve-migrate", "up", "record"]
     # Built while base is still behind: a broken build aborts having touched
     # neither base nor the database.
     assert main_at["build"] != feat_tip
     # Invoked once base HAS advanced — E-1941's window, unchanged.
-    assert main_at["apply"] == feat_tip
+    assert main_at["up"] == feat_tip
 
 
-def test_the_migration_executable_applies_and_endless_go_records(
+def test_the_migration_executable_migrates_and_endless_go_records(
     landable, monkeypatch
 ):
     """The half of E-1664 that survives E-2088. Two binaries, one database: the
-    migration executable applies the change, then the worktree's endless-go —
-    whose embedded enums match the rows just inserted — records the landing."""
+    migration executable migrates it, then endless-go — whose embedded schema
+    matches what was just written — records the landing."""
     main, wt = landable["main"], landable["worktree"]
-    _commit_change_on_feat(wt)
+    _commit_migration_on_feat(wt)
     _patch_land(monkeypatch, main, wt)
 
     seen = {}
@@ -409,34 +354,33 @@ def test_the_migration_executable_applies_and_endless_go_records(
         lambda wt_, root: str(wt / "bin" / "endless-migrate"),
     )
 
-    def fake_apply(migrate_bin, change_path):
-        seen["apply_bin"] = migrate_bin
+    def fake_up(migrate_bin):
+        seen["up_bin"] = migrate_bin
         return {}
 
     def fake_record(item_id, proj_name, branch, base_branch, canonical,
                     merge_sha, endless_go_bin=None):
         seen["record_bin"] = endless_go_bin
 
-    monkeypatch.setattr(worktree_cmd, "_migrate_change", fake_apply)
+    monkeypatch.setattr(worktree_cmd, "_migrate_up", fake_up)
     monkeypatch.setattr(worktree_cmd, "_record_landing", fake_record)
 
     land_worktree(CANON, dry_run=False)
 
-    assert seen["apply_bin"].endswith("/bin/endless-migrate")
+    assert seen["up_bin"].endswith("/bin/endless-migrate")
     assert seen["record_bin"] == "/bin/echo"
-    assert seen["apply_bin"] != seen["record_bin"]
+    assert seen["up_bin"] != seen["record_bin"]
 
 
-def test_a_land_with_no_schema_change_still_builds_and_migrates_up(
+def test_a_land_with_no_migration_still_builds_and_migrates_up(
     landable, monkeypatch
 ):
-    """E-2192 reversed assertion 1. Every self_dev land builds the executable and
-    runs `up`, because a goose migration the database lacks is not visible in
-    the diff. With no change file, nothing is applied."""
+    """E-2192: every self_dev land builds the executable and runs `up`, because
+    a goose migration the database lacks is not visible in the diff."""
     main, wt = landable["main"], landable["worktree"]
     (wt / "README").write_text("edited\n")
     _git(["git", "add", "-A"], wt)
-    _git(["git", "commit", "-q", "-m", "E-2088: no schema change"], wt)
+    _git(["git", "commit", "-q", "-m", "E-2088: no migration"], wt)
     _patch_land(monkeypatch, main, wt)
 
     calls = []
@@ -447,10 +391,6 @@ def test_a_land_with_no_schema_change_still_builds_and_migrates_up(
     monkeypatch.setattr(
         worktree_cmd, "_resolve_land_migrate_bin",
         lambda wt_, root: calls.append("resolve-migrate") or "/bin/echo",
-    )
-    monkeypatch.setattr(
-        worktree_cmd, "_migrate_change",
-        lambda migrate_bin, change_path: calls.append("apply"),
     )
     monkeypatch.setattr(
         worktree_cmd, "_migrate_up",
@@ -464,14 +404,14 @@ def test_a_land_with_no_schema_change_still_builds_and_migrates_up(
     assert _head(main, "main") == _head(wt)
 
 
-def test_a_non_self_dev_land_builds_nothing_and_applies_nothing(
+def test_a_non_self_dev_land_builds_nothing_and_migrates_nothing(
     landable, monkeypatch
 ):
-    """Assertion 5, as far as a land can assert it. A downstream project has no
-    land-time executable; its one installed binary applies its own migrations
-    under ED-1570 through `endless-go event apply-change`."""
+    """Assertion 3, as far as a land can assert it. A downstream project has no
+    land-time executable; its one installed binary brings its own database
+    forward on connect."""
     main, wt = landable["main"], landable["worktree"]
-    _commit_change_on_feat(wt)
+    _commit_migration_on_feat(wt)
     _patch_land(monkeypatch, main, wt, self_dev=False)
     monkeypatch.setattr(
         worktree_cmd, "_resolve_land_endless_go", lambda w, r: None
@@ -485,10 +425,6 @@ def test_a_non_self_dev_land_builds_nothing_and_applies_nothing(
     monkeypatch.setattr(
         worktree_cmd, "_resolve_land_migrate_bin",
         lambda wt_, root: calls.append("resolve-migrate"),
-    )
-    monkeypatch.setattr(
-        worktree_cmd, "_migrate_change",
-        lambda migrate_bin, change_path: calls.append("apply"),
     )
     monkeypatch.setattr(
         worktree_cmd, "_migrate_up",

@@ -161,7 +161,7 @@ func replayTaskCreated(db *sql.DB, evt *Event, result *ProjectResult) error {
 
 	// Legacy E-1378 routing: pre-extraction, decisions were created as
 	// task.created events with type='decision' in the payload. Route them
-	// to the decisions table so a fresh replay matches the post-change-file
+	// to the decisions table so a fresh replay matches the post-E-1378
 	// projection (decisions in decisions, not tasks).
 	if p.Type == "decision" {
 		return replayLegacyDecisionCreated(db, evt, &p)

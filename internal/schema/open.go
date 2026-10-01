@@ -109,8 +109,8 @@ end:
 
 // openFile opens and configures the connection. The three PRAGMAs configure the
 // CONNECTION rather than the schema, and monitor.DB() sets exactly these three:
-// a migration or a change file must run under the same connection settings
-// whichever program applies it — foreign_keys above all.
+// a migration must run under the same connection settings whichever program
+// applies it — foreign_keys above all.
 func openFile(path dt.Filepath) (db *sql.DB, err error) {
 	var pragma string
 

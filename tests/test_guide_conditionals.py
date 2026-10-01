@@ -186,7 +186,8 @@ def test_land_toml_self_dev_settings_are_taught_only_to_self_dev(endless_go_bin,
     path = GUIDE_DIR / "orchestration.md"
     on = _render(endless_go_bin, path, report_gate=report_gate, self_dev=True)
     off = _render(endless_go_bin, path, report_gate=report_gate, self_dev=False)
-    assert "schema_order" in on
-    assert "schema_order" not in off
+    assert "[self_dev]" in on
+    assert "endless-migrate up" in on
     assert "[self_dev]" not in off
+    assert "endless-migrate" not in off
     assert "land.toml" in off

@@ -7,8 +7,8 @@ declares, surfacing later as 'no such table' errors. event_bridge now
 prefers the worktree-built binary in that exact case and fails loudly when
 the binary is missing — silent fallback would re-introduce the bug.
 
-These tests verify all three schema-mutating shell-outs (apply_change,
-backup_db, emit_event) route through the same _resolve_endless_go helper.
+These tests verify the database-touching shell-outs (backup_db, emit_event)
+route through the same _resolve_endless_go helper.
 """
 
 import json
@@ -75,14 +75,7 @@ def synthetic_sandbox(tmp_path, monkeypatch):
     }
 
 
-# --- apply_change -------------------------------------------------------------
-
-
-def test_apply_change_uses_worktree_binary_under_db_sandbox(synthetic_sandbox):
-    event_bridge.apply_change("ignored")
-    assert len(synthetic_sandbox["calls"]) == 1
-    cmd = synthetic_sandbox["calls"][0]
-    assert cmd[0] == str(synthetic_sandbox["worktree_bin"])
+# --- worktree binary under --db sandbox ---------------------------------------
 
 
 def test_backup_db_uses_worktree_binary_under_db_sandbox(synthetic_sandbox):
@@ -139,7 +132,7 @@ def test_missing_worktree_binary_fails_loudly(tmp_path, monkeypatch):
         config, "RESOLVED_CONFIG_DIR", config.sandbox_config_dir(wt)
     )
     with pytest.raises(click.ClickException) as exc:
-        event_bridge.apply_change("ignored")
+        event_bridge.backup_db()
     msg = exc.value.message
     # Path is shown with $HOME collapsed to ~, indented 4 spaces, with a
     # blank line between the headline and the path, and a trailing newline.
@@ -180,7 +173,7 @@ def test_db_main_uses_path_lookup(tmp_path, monkeypatch):
         event_bridge.subprocess, "run",
         lambda cmd, **kw: (calls.append(list(cmd)), _FakeResult())[1],
     )
-    event_bridge.apply_change("ignored")
+    event_bridge.backup_db()
     assert calls[0][0] == "/fake/global-endless-go"
 
 
@@ -203,7 +196,7 @@ def test_no_db_context_uses_path_lookup(tmp_path, monkeypatch):
         event_bridge.subprocess, "run",
         lambda cmd, **kw: (calls.append(list(cmd)), _FakeResult())[1],
     )
-    event_bridge.apply_change("ignored")
+    event_bridge.backup_db()
     assert calls[0][0] == "/fake/global-endless-go"
 
 
@@ -229,7 +222,7 @@ def test_cwd_outside_worktree_uses_path_lookup(tmp_path, monkeypatch):
         event_bridge.subprocess, "run",
         lambda cmd, **kw: (calls.append(list(cmd)), _FakeResult())[1],
     )
-    event_bridge.apply_change("ignored")
+    event_bridge.backup_db()
     assert calls[0][0] == "/fake/global-endless-go"
 
 

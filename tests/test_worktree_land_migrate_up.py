@@ -1,6 +1,6 @@
 """Tests for E-2192: a self_dev land runs `endless-migrate up` before it records.
 
-`worktree land` applied only the branch's `internal/schema/changes/` files. Its
+`worktree land` once applied only the branch's per-ticket schema scripts. Its
 goose migrations reached the real ledger only when an installed binary next
 connected, so the worktree's endless-go that emits `task.landed` at Step 6 could
 meet a database missing its own new column. E-2188 hit exactly that — `no such
@@ -9,17 +9,16 @@ column: focus_task_id` — and main was left advanced with the landing unrecorde
 What this module pins:
 
   1. Every self_dev land runs `up` at Step 5.5, after the ff-merge and before
-     the record, behind the ONE backup the change loop already took.
-  2. The order of `up` and the change files follows the task's own
-     `.endless/tasks/e-<id>/land.toml` `[self_dev].schema_order`, read from the
-     landing branch: migrations first by default, `changes-first` on request.
-  3. Anything in land.toml the land does not understand refuses BEFORE the
-     ff-merge — an invalid value, an unknown table or key, a top-level key,
-     unreadable TOML — and names the offender.
+     the record, behind ONE backup.
+  2. The task's own `.endless/tasks/e-<id>/land.toml` is read from the landing
+     branch. It has no keys since E-2158 retired `[self_dev].schema_order`, so
+     an empty or absent file lands and anything else refuses BEFORE the
+     ff-merge — the retired key by name, an unknown table or key, a top-level
+     key, unreadable TOML — naming the offender.
   4. The recovery re-run — `just land` after "recording the landing failed" —
      runs `up` before retrying the record, so it no longer waits on an
      incidental migration by an installed binary.
-  5. An `up` failure is surfaced like a change failure: main advanced, no
+  5. An `up` failure is surfaced as a post-merge failure: main advanced, no
      record, re-run fixes it.
   6. `_migrate_up` threads the DB context as a flag and surfaces the
      executable's own error.
@@ -32,15 +31,13 @@ import pytest
 
 from endless import worktree_cmd
 from endless.worktree_cmd import (
-    SCHEMA_ORDER_CHANGES_FIRST,
-    SCHEMA_ORDER_MIGRATIONS_FIRST,
+    _check_land_settings,
     _migrate_up,
-    _read_schema_order,
     land_worktree,
 )
 
 CANON = "E-2192"
-CHANGE = "internal/schema/changes/e-2192-add-thing.sql"
+MIGRATION = "internal/schema/migrations/00099_add_thing.sql"
 LAND_TOML = ".endless/tasks/e-2192/land.toml"
 
 
@@ -157,7 +154,6 @@ def _patch_land(monkeypatch, main, worktree, calls, *, self_dev=True):
     monkeypatch.setattr(
         worktree_cmd, "_migrate_up", step("up", {"status": "current"})
     )
-    monkeypatch.setattr(worktree_cmd, "_migrate_change", step("apply", {}))
     monkeypatch.setattr(worktree_cmd, "_record_landing", step("record"))
 
 
@@ -185,36 +181,9 @@ def test_up_runs_after_the_merge_and_before_the_record(landable, monkeypatch):
     assert at["up"] == feat_tip
 
 
-def test_default_order_is_one_backup_then_up_then_changes(landable, monkeypatch):
-    main, wt = landable["main"], landable["worktree"]
-    _commit_on_feat(wt, {CHANGE: "-- ddl\n"})
-    calls = []
-    _patch_land(monkeypatch, main, wt, calls)
-
-    land_worktree(CANON, dry_run=False)
-
-    assert _names(calls) == ["build-migrate", "backup", "up", "apply", "record"]
-    assert _names(calls).count("backup") == 1
-
-
-def test_changes_first_order_from_land_toml(landable, monkeypatch):
-    main, wt = landable["main"], landable["worktree"]
-    _commit_on_feat(wt, {
-        CHANGE: "-- ddl\n",
-        LAND_TOML: '[self_dev]\nschema_order = "changes-first"\n',
-    })
-    calls = []
-    _patch_land(monkeypatch, main, wt, calls)
-
-    land_worktree(CANON, dry_run=False)
-
-    assert _names(calls) == ["build-migrate", "backup", "apply", "up", "record"]
-    assert _names(calls).count("backup") == 1
-
-
 def test_non_self_dev_land_runs_no_up(landable, monkeypatch):
     main, wt = landable["main"], landable["worktree"]
-    _commit_on_feat(wt, {CHANGE: "-- ddl\n"})
+    _commit_on_feat(wt, {MIGRATION: "-- ddl\n"})
     calls = []
     _patch_land(monkeypatch, main, wt, calls, self_dev=False)
 
@@ -234,42 +203,47 @@ def _write_land_toml(wt, body):
     return p
 
 
-def test_missing_land_toml_is_the_default(landable):
-    assert _read_schema_order(landable["worktree"], CANON, True) == \
-        SCHEMA_ORDER_MIGRATIONS_FIRST
-
-
-def test_land_toml_without_self_dev_is_the_default(landable):
+def test_missing_or_empty_land_toml_lands(landable):
     wt = landable["worktree"]
-    _write_land_toml(wt, "[self_dev]\n")
-    assert _read_schema_order(wt, CANON, True) == SCHEMA_ORDER_MIGRATIONS_FIRST
+    _check_land_settings(wt, CANON, True)
     _write_land_toml(wt, "")
-    assert _read_schema_order(wt, CANON, True) == SCHEMA_ORDER_MIGRATIONS_FIRST
+    _check_land_settings(wt, CANON, True)
 
 
-def test_land_toml_names_both_orders(landable):
+def test_retired_schema_order_is_refused_by_name(landable):
+    """A branch cut before E-2158 still carries the key. "Unknown key" would
+    read as a typo; the refusal says it was retired, by whom, and what to do."""
     wt = landable["worktree"]
     _write_land_toml(wt, '[self_dev]\nschema_order = "changes-first"\n')
-    assert _read_schema_order(wt, CANON, True) == SCHEMA_ORDER_CHANGES_FIRST
-    _write_land_toml(wt, '[self_dev]\nschema_order = "migrations-first"\n')
-    assert _read_schema_order(wt, CANON, True) == SCHEMA_ORDER_MIGRATIONS_FIRST
+    with pytest.raises(click.ClickException) as ei:
+        _check_land_settings(wt, CANON, True)
+    msg = ei.value.message
+    assert "land.toml" in msg
+    assert "schema_order" in msg
+    assert "retired" in msg
+    assert "E-2158" in msg
+    assert "Delete the key" in msg
+    assert "Nothing has been merged or migrated" in msg
 
 
 @pytest.mark.parametrize("body, names", [
-    ('[self_dev]\nschema_order = "sideways"\n',
-     ["'sideways'", "migrations-first", "changes-first"]),
-    ('[self_dev]\nschema_order = 1\n', ["migrations-first", "changes-first"]),
-    ('[self_dev]\nschema_ordr = "changes-first"\n', ["schema_ordr", "[self_dev]"]),
-    ('[merge]\nstrategy = "squash"\n', ["[merge]", "[self_dev]"]),
-    ('schema_order = "changes-first"\n', ["schema_order", "top level", "[self_dev]"]),
+    ('[self_dev]\nschema_ordr = "changes-first"\n',
+     ["[self_dev]", "no land settings apply to this project yet"]),
+    ('[self_dev]\n', ["[self_dev]", "no land settings apply to this project yet"]),
+    ('[merge]\nstrategy = "squash"\n',
+     ["[merge]", "no land settings apply to this project yet"]),
+    ('strategy = "squash"\n',
+     ["strategy", "top level", "no land settings apply to this project yet"]),
     ('[self_dev\n', ["not readable TOML"]),
-], ids=["bad-value", "non-string", "unknown-key", "unknown-table",
+], ids=["key-in-self-dev", "empty-self-dev-table", "unknown-table",
         "top-level-key", "bad-toml"])
 def test_land_toml_refusals_name_the_file_and_the_offender(landable, body, names):
+    """No key is known, so every setting is refused — and so is a table that
+    holds none, since no table is known either."""
     wt = landable["worktree"]
     _write_land_toml(wt, body)
     with pytest.raises(click.ClickException) as ei:
-        _read_schema_order(wt, CANON, True)
+        _check_land_settings(wt, CANON, True)
     msg = ei.value.message
     assert "land.toml" in msg
     assert "Nothing has been merged or migrated" in msg
@@ -277,14 +251,15 @@ def test_land_toml_refusals_name_the_file_and_the_offender(landable, body, names
         assert name in msg
 
 
-def test_invalid_land_toml_refuses_before_the_merge(landable, monkeypatch):
+@pytest.mark.parametrize("body", [
+    '[self_dev]\nschema_order = "changes-first"\n',
+    '[self_dev]\nanything = 1\n',
+], ids=["retired-key", "unknown-key"])
+def test_invalid_land_toml_refuses_before_the_merge(landable, monkeypatch, body):
     """The refusal leaves base and the database untouched: no build, no backup,
     no migration, no record, and main where it was."""
     main, wt = landable["main"], landable["worktree"]
-    _commit_on_feat(wt, {
-        CHANGE: "-- ddl\n",
-        LAND_TOML: '[self_dev]\nschema_order = "sideways"\n',
-    })
+    _commit_on_feat(wt, {MIGRATION: "-- ddl\n", LAND_TOML: body})
     calls = []
     _patch_land(monkeypatch, main, wt, calls)
     main_before = _head(main, "main")
@@ -297,20 +272,17 @@ def test_invalid_land_toml_refuses_before_the_merge(landable, monkeypatch):
 
 
 def test_land_toml_is_read_from_the_landing_branch_not_main(landable, monkeypatch):
-    """The agent that wrote the change is the one who knows its order, so the
-    branch's file wins; main carrying none does not reset it to the default."""
+    """The branch's file is the one that counts: main carrying none does not
+    let a branch's bad file through."""
     main, wt = landable["main"], landable["worktree"]
-    _commit_on_feat(wt, {
-        CHANGE: "-- ddl\n",
-        LAND_TOML: '[self_dev]\nschema_order = "changes-first"\n',
-    })
+    _commit_on_feat(wt, {LAND_TOML: '[self_dev]\nschema_order = "changes-first"\n'})
     assert not (main / LAND_TOML).exists()
     calls = []
     _patch_land(monkeypatch, main, wt, calls)
 
-    land_worktree(CANON, dry_run=False)
-
-    assert _names(calls).index("apply") < _names(calls).index("up")
+    with pytest.raises(click.ClickException) as ei:
+        land_worktree(CANON, dry_run=False)
+    assert "retired" in ei.value.message
 
 
 # ---------------------------------------------------------------------------
@@ -319,10 +291,10 @@ def test_land_toml_is_read_from_the_landing_branch_not_main(landable, monkeypatc
 
 def test_the_recovery_rerun_runs_up_before_recording(landable, monkeypatch):
     """E-2188's recovery path. The first land advances main and then fails to
-    record; the re-run's ff-merge is a no-op and its change list is empty, but
-    it still runs `up` before retrying the record."""
+    record; the re-run's ff-merge is a no-op, but it still runs `up` before
+    retrying the record."""
     main, wt = landable["main"], landable["worktree"]
-    _commit_on_feat(wt, {CHANGE: "-- ddl\n"})
+    _commit_on_feat(wt, {MIGRATION: "-- ddl\n"})
     calls = []
     _patch_land(monkeypatch, main, wt, calls)
 
@@ -351,7 +323,7 @@ def test_up_failure_reports_main_advanced_and_does_not_record(
     landable, monkeypatch
 ):
     main, wt = landable["main"], landable["worktree"]
-    _commit_on_feat(wt, {CHANGE: "-- ddl\n"})
+    _commit_on_feat(wt, {MIGRATION: "-- ddl\n"})
     calls = []
     _patch_land(monkeypatch, main, wt, calls)
 
@@ -368,7 +340,6 @@ def test_up_failure_reports_main_advanced_and_does_not_record(
     assert "disk I/O error" in msg
     assert "re-run" in msg
     assert "record" not in _names(calls)
-    assert "apply" not in _names(calls)
     # No rollback of the merge.
     assert _head(main, "main") == _head(wt)
 
@@ -423,8 +394,7 @@ def test_migrate_up_surfaces_the_executables_own_error(tmp_path, monkeypatch):
 # ---------------------------------------------------------------------------
 
 def test_no_land_toml_changes_nothing_outside_self_dev(landable):
-    assert _read_schema_order(landable["worktree"], CANON, False) == \
-        SCHEMA_ORDER_MIGRATIONS_FIRST
+    _check_land_settings(landable["worktree"], CANON, False)
 
 
 @pytest.mark.parametrize("body", [
@@ -438,7 +408,7 @@ def test_outside_self_dev_no_table_is_known_and_none_is_advertised(landable, bod
     wt = landable["worktree"]
     _write_land_toml(wt, body)
     with pytest.raises(click.ClickException) as ei:
-        _read_schema_order(wt, CANON, False)
+        _check_land_settings(wt, CANON, False)
     msg = ei.value.message
     assert "no land settings apply to this project yet" in msg
     assert "the known tables are" not in msg

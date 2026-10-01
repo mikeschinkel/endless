@@ -2,11 +2,11 @@
 -- Authoritative database schema (single source of truth).
 --
 -- Every table the codebase relies on is defined here, in its current shape,
--- as CREATE ... IF NOT EXISTS. This file is executed on every connection
--- (monitor.DB()), so it is a no-op on a populated DB and creates everything
--- on a fresh one. Additive change (new tables / nullable columns / indexes)
--- goes here directly. Destructive, one-off change goes in a per-ticket file
--- under internal/schema/changes/, applied once at land time.
+-- as CREATE ... IF NOT EXISTS. The versioned goose migrations under
+-- internal/schema/migrations/ are what build and upgrade a database; this file
+-- is the readable picture of where they end up, and TestMigrate_MatchesSchemaSQL
+-- fails if the two disagree. Every schema change is a new migration, mirrored
+-- here in the same commit.
 --
 -- NOTE: No CHECK constraints. SQLite cannot ALTER/DROP them without
 -- rebuilding the entire table, which caused catastrophic data loss.
@@ -15,15 +15,6 @@
 PRAGMA journal_mode=WAL;
 PRAGMA busy_timeout=5000;
 PRAGMA foreign_keys=ON;
-
--- Schema-change marker. One row per applied per-ticket change file
--- (internal/schema/changes/<name>), keyed by the change's basename. Empty on
--- a fresh DB; populated by `endless db apply-change` at land time. Re-applying
--- a change is gated by the presence of its row.
-CREATE TABLE IF NOT EXISTS _schema_version (
-    name       TEXT PRIMARY KEY,
-    applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
-);
 
 -- Projects
 CREATE TABLE IF NOT EXISTS projects (
@@ -234,8 +225,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 -- they are — there is no migration.
 --
 -- Stated here so a FRESH database gets it too, not only a migrated one (ED-1472:
--- the two shapes must not drift). e-1969's change file has to DROP it, rename,
--- and re-CREATE it, because SQLite re-parses every trigger on a table during
+-- the two shapes must not drift). E-1969's rename had to DROP it, rename, and
+-- re-CREATE it, because SQLite re-parses every trigger on a table during
 -- ALTER TABLE ... RENAME COLUMN and a trigger naming a column that does not
 -- exist yet aborts the rename.
 
@@ -247,7 +238,7 @@ BEGIN
 END;
 
 -- E-1530's two `sessions_null_process_on_end_*` triggers were REMOVED by E-1898,
--- and the change file drops them from existing databases.
+-- which also dropped them from existing databases.
 --
 -- They enforced "an ended session has process IS NULL", because a tmux pane id
 -- alone is reused after a server restart and an ended row holding "%414" would
@@ -271,11 +262,10 @@ END;
 -- it (E-1659): the enum is the source of truth, so the seed reconciles every
 -- existing row's slug/label to it on connect (INSERT OR IGNORE could only insert
 -- new ids, never correct a renamed row — a populated DB seeded under an old name
--- would keep it and trip VerifyIntegrity). Because schema.SQL runs before the
--- integrity check in monitor.DB(), the reconcile self-heals a rename with no
--- change-file. This is safe only because E-1818 opens the real DB schema-passive
--- when a candidate (worktree) binary is pinned to it, so an unlanded binary can
--- never apply this reconcile to a DB it does not own.
+-- would keep it and trip VerifyIntegrity). The seeds run after every
+-- migration, before the integrity check, so a rename self-heals with no
+-- migration of its own. A worktree binary never opens the real DB (ED-1601), so
+-- an unlanded binary can never apply this reconcile to a DB it does not own.
 --
 -- auto_spawnable (E-1814) mirrors tasktype.TaskType.AutoSpawnable(): whether
 -- the auto-spawn job may pick a task of this type. Spelled on the closing line
@@ -393,22 +383,20 @@ CREATE TABLE IF NOT EXISTS tasks (
 --
 -- NO INDEX ON tasks(removed), and that is load-bearing, not an omission.
 --
--- This file is executed on EVERY connection, including the one
--- `endless db apply-change` opens before it dispatches to the change script that
--- adds the column. CREATE VIEW resolves its column names lazily (at PREPARE time
--- of a query against it), so the view above is a no-op on a DB that has no
--- `removed` column yet. CREATE INDEX resolves them EAGERLY, at CREATE time — so
--- `CREATE INDEX ... ON tasks(removed)` here would abort schema application with
--- "no such column: removed" on every populated DB, and the migration that adds
--- the column could never run. It would deadlock its own rollout.
+-- When E-1929 added the column, this file was executed on EVERY connection,
+-- before the step that added the column could run. CREATE VIEW resolves its
+-- column names lazily (at PREPARE time of a query against it), so the view above
+-- was a no-op on a DB with no `removed` column yet. CREATE INDEX resolves them
+-- EAGERLY, at CREATE time — so `CREATE INDEX ... ON tasks(removed)` here would
+-- have aborted schema application with "no such column: removed" on every
+-- populated DB, deadlocking its own rollout.
 --
 -- The index bought nothing anyway: `removed = 0` matches virtually every row, so
 -- SQLite would ignore an index for the view's own filter, and `removed = 1`
 -- (`task list --removed`) is a rare scan over a small table.
 --
--- The rule this encodes for the next column added here: an eagerly-resolved
--- reference (index, generated column, CHECK) to a column that only reaches
--- populated DBs via a change file cannot live in schema.sql.
+-- Goose orders steps now, so that trap is gone; the reasoning above is kept
+-- because it is why the index does not exist.
 CREATE VIEW IF NOT EXISTS live_tasks AS
     SELECT * FROM tasks WHERE removed = 0;
 
@@ -554,12 +542,9 @@ CREATE INDEX IF NOT EXISTS idx_session_notices_undelivered
 -- notifies everyone when the actor is NULL, which is correct: a NULL actor is the
 -- user editing from a bare terminal, the case this whole feature exists for.
 --
--- DEPENDS ON tasks.changed_by_session, which the CREATE TABLE above declares for
--- fresh DBs and internal/schema/changes/e-1917-add-tasks-changed-by-session.go
--- adds to populated ones at land time. SQLite resolves a trigger body at FIRE
--- time, so on a populated DB this CREATE succeeds and UPDATE tasks then fails
--- with "no such column" until that change is applied — land before installing
--- the new binary. See the change file's ORDERING note.
+-- DEPENDS ON tasks.changed_by_session (E-1917). SQLite resolves a trigger body
+-- at FIRE time, so a database missing the column accepts this CREATE and then
+-- fails UPDATE tasks with "no such column".
 -- Fan-out excludes sessions in state 'ended' (E-1917 fix): they never take
 -- another turn, so their notices are undeliverable by construction and only
 -- accumulate — 82% of the table was dead weight before this filter. `idle` and
@@ -1132,13 +1117,9 @@ CREATE INDEX IF NOT EXISTS idx_task_landings_task
 -- json() around the inner object is required: without it json_object embeds the
 -- nested object as a *string*. Same trap as tasks_notify_sessions above.
 --
--- DEPENDS ON task_landings.base_branch and .landed_by_harness, which the CREATE
--- TABLE above declares for fresh DBs and
--- internal/schema/changes/e-2005-add-task-landing-notice-columns.go adds to
--- populated ones at land time. SQLite resolves a trigger body at FIRE time, so
--- on a populated DB this CREATE succeeds and INSERT INTO task_landings then
--- fails with "no such column" until that change is applied — land before
--- installing the new binary. See the change file's ORDERING note.
+-- DEPENDS ON task_landings.base_branch and .landed_by_harness (E-2005). SQLite
+-- resolves a trigger body at FIRE time, so a database missing them accepts this
+-- CREATE and then fails INSERT INTO task_landings with "no such column".
 CREATE TRIGGER IF NOT EXISTS task_landings_notify_sessions
 AFTER INSERT ON task_landings
 BEGIN
@@ -1200,10 +1181,10 @@ CREATE INDEX IF NOT EXISTS session_statuses_session_recent_idx
 -- enum is the source of truth, so the seed rewrites every existing row's
 -- slug/label to it on connect — INSERT OR IGNORE could only insert new ids, so
 -- a populated DB seeded under an old name would keep it and trip
--- VerifyIntegrity. Because schema.SQL runs before the integrity check in
--- monitor.DB(), a rename self-heals with no change file. Safe because E-1818
--- opens a non-owned real DB schema-passive, so an unlanded binary can never
--- apply this reconcile to a DB it does not own.
+-- VerifyIntegrity. The seeds run after every migration, before the integrity
+-- check, so a rename self-heals with no migration of its own. A worktree binary
+-- never opens the real DB (ED-1601), so an unlanded binary can never apply this
+-- reconcile to a DB it does not own.
 --
 -- E-1967 renamed id 1 from `goal`/`Goal` to `claimed`/`Claimed`. That is a
 -- label change, not a data migration: relation ids are what session_tasks
@@ -1440,15 +1421,13 @@ CREATE TABLE IF NOT EXISTS errors (
 -- fingerprint. faults.upsertIncident names the same expression in its ON
 -- CONFLICT target, which is how SQLite matches an upsert to an expression index.
 --
--- The index NAME is deliberately unchanged from E-698's. schema.SQL runs on
--- every connection, BEFORE `endless db apply-change` gets to add the column, so
--- a CREATE ... IF NOT EXISTS naming project_id would abort schema application on
--- every populated DB (the trap e-1929 documents). Keeping the name lets
--- IF NOT EXISTS short-circuit on the old index instead, and the change file
--- replaces the definition. For the same reason there is NO index on project_id
--- itself: a new index name could not short-circuit, and adding one only in the
--- change file would leave fresh and migrated DBs with different shapes. The
--- table is bounded by distinct-fingerprint count, so the scan is nothing.
+-- The index NAME is deliberately unchanged from E-698's. When E-1960 added the
+-- column, this file ran on every connection BEFORE the step that added it, so
+-- a CREATE ... IF NOT EXISTS naming project_id would have aborted schema
+-- application on every populated DB (the trap E-1929 documents). Keeping the
+-- name let IF NOT EXISTS short-circuit on the old index while E-1960 replaced
+-- the definition. There is NO index on project_id itself: the table is bounded
+-- by distinct-fingerprint count, so the scan is nothing.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_errors_open_uniq
     ON errors(COALESCE(project_id, 0), source, code, fingerprint)
  WHERE cleared_at IS NULL;

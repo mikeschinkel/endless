@@ -3,6 +3,7 @@ package schema_test
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"path/filepath"
 	"strings"
@@ -150,6 +151,10 @@ func TestMigrate_LeavesAPreVersioningDatabaseIntact(t *testing.T) {
 	if versioned, _ := tableExists(db, "goose_db_version"); versioned {
 		t.Fatal("a schema.sql database should carry no goose version table")
 	}
+	// The retired Python ladder left the real ledger at user_version 12. A
+	// pre-goose database below 6 is refused instead (E-2158; see
+	// TestMigrate_RefusesADatabaseOlderThanBothVersioningSchemes).
+	mustExec(t, db, `PRAGMA user_version = 12`)
 	mustExec(t, db, `INSERT INTO projects (id, name, path) VALUES (1, 'alpha', '~/a')`)
 	mustExec(t, db, `INSERT INTO tasks (id, project_id, title) VALUES (7, 1, 'survives')`)
 	before := shapeOf(t, db)
@@ -176,6 +181,81 @@ func TestMigrate_LeavesAPreVersioningDatabaseIntact(t *testing.T) {
 	}
 	if version != latest {
 		t.Errorf("recorded version = %d, want the latest %d", version, latest)
+	}
+}
+
+// TestMigrate_RefusesADatabaseOlderThanBothVersioningSchemes is E-2158's
+// refusal: Endless data, no goose_db_version, and a user_version the retired
+// Python ladder never finished. Goose's idempotent baseline would add missing
+// tables, miss missing columns and stamp the result current, so every door to
+// goose refuses it — the version read a connect makes first included — and
+// leaves the file exactly as it found it.
+func TestMigrate_RefusesADatabaseOlderThanBothVersioningSchemes(t *testing.T) {
+	db := buildDB(t, func(db *sql.DB) error {
+		_, err := db.Exec(`CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT);
+			PRAGMA user_version = 5`)
+		return err
+	})
+	before := shapeOf(t, db)
+
+	doors := map[string]func() error{
+		"Migrate": func() error { return schema.Migrate(db) },
+		"MigrateToContext": func() error {
+			return schema.MigrateToContext(context.Background(), db, schema.BaselineVersion)
+		},
+		"DBVersion": func() error {
+			_, err := schema.DBVersion(context.Background(), db)
+			return err
+		},
+		"Up": func() error {
+			_, err := schema.Up(context.Background(), db)
+			return err
+		},
+	}
+	for name, door := range doors {
+		err := door()
+		if !errors.Is(err, schema.ErrDatabaseTooOld) {
+			t.Errorf("%s: err = %v, want ErrDatabaseTooOld", name, err)
+			continue
+		}
+		for _, want := range []string{"endless.db", "user_version 5", "too old"} {
+			if !strings.Contains(err.Error(), want) {
+				t.Errorf("%s: the refusal does not mention %q: %v", name, want, err)
+			}
+		}
+	}
+
+	if after := shapeOf(t, db); after != before {
+		t.Errorf("the refusal changed the database:\n%s", firstDifference(before, after))
+	}
+}
+
+// TestMigrate_AGooseDatabaseAtUserVersionZeroMigrates: user_version is the
+// retired ladder's counter, and every database Go builds leaves it at 0. Only
+// the ABSENCE of goose_db_version makes it mean anything, so a goose-stamped
+// database at 0 — every sandbox, every fresh install — must migrate normally.
+func TestMigrate_AGooseDatabaseAtUserVersionZeroMigrates(t *testing.T) {
+	db := buildDB(t, func(db *sql.DB) error {
+		return schema.MigrateUpTo(db, schema.BaselineVersion)
+	})
+	var userVersion int
+	if err := db.QueryRow(`PRAGMA user_version`).Scan(&userVersion); err != nil || userVersion != 0 {
+		t.Fatalf("fixture user_version = %d (err %v), want 0", userVersion, err)
+	}
+
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("migrating a goose database at user_version 0: %v", err)
+	}
+	latest, err := schema.LatestVersion()
+	if err != nil {
+		t.Fatalf("latest version: %v", err)
+	}
+	version, err := schema.DBVersion(context.Background(), db)
+	if err != nil || version != latest {
+		t.Errorf("version = %d (err %v), want the latest %d", version, err, latest)
+	}
+	if exists, _ := tableExists(db, "_schema_version"); exists {
+		t.Error("_schema_version survived the migration that drops it")
 	}
 }
 

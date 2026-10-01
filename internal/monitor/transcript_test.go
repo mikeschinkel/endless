@@ -402,7 +402,7 @@ func TestParseTranscriptFull_EmptyPathNoOp(t *testing.T) {
 // change, and had no live consumer — session_messages is kept current by
 // ParseTranscript from the hook payload's path, not from a stored column.
 // Asserted against the schema rather than a deleted accessor so a re-added
-// column (in schema.sql or a stray change file) fails loudly here.
+// column (in schema.sql or a stray migration) fails loudly here.
 func TestSessionsHasNoTranscriptPathColumn(t *testing.T) {
 	db := withTestDB(t)
 	var n int

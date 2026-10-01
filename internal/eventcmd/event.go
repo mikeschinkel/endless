@@ -25,7 +25,6 @@ import (
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/schema"
-	"github.com/mikeschinkel/endless/internal/schemachange"
 )
 
 func Run(args []string) {
@@ -51,8 +50,6 @@ func Run(args []string) {
 		runMigrate()
 	case "upgrade":
 		runUpgrade()
-	case "apply-change":
-		runApplyChange(args[1:])
 	case "backup":
 		runBackup()
 	case "reap-worktrees":
@@ -79,7 +76,7 @@ func Run(args []string) {
 func usageText() string {
 	return strings.Join([]string{
 		"Usage: endless-go event <command> [flags]",
-		"Commands: emit, validate-db, rebuild-db, migrate, upgrade, apply-change, backup, reap-worktrees, commit-doc, commit-verify-report",
+		"Commands: emit, validate-db, rebuild-db, migrate, upgrade, backup, reap-worktrees, commit-doc, commit-verify-report",
 	}, "\n") + "\n"
 }
 
@@ -817,60 +814,6 @@ func runReapWorktrees(args []string) {
 	}
 }
 
-// runApplyChange applies one per-ticket schema-change file
-// (internal/schema/changes/<name>.{sql,go}) and records it in _schema_version.
-//
-// This is the INSTALLED binary's path, and outside self_dev the only one: it
-// opens through monitor.DB(), the application's connect, which checks the
-// schema version (E-2020), seeds the enum mirrors and runs the fail-closed
-// integrity gates before a change is applied at all.
-//
-// In self_dev at land time it is NOT the path. ED-1567 forbids a candidate
-// binary migrating the real ledger and a self_dev land only ever has one
-// (E-1664), so `worktree land` runs ED-1571's cmd/endless-migrate instead — the
-// same internal/schemachange logic reached through a direct file open rather
-// than through this connect. The difference between the two programs is exactly
-// that handle, which is why the applying itself lives in one place.
-func runApplyChange(args []string) {
-	fs := refusal.NewFlags("apply-change")
-	parseFlags(fs, "event apply-change", args)
-
-	pos := fs.Args()
-	if len(pos) != 1 {
-		emitChangeErr("", "apply-change requires exactly one <path> argument")
-	}
-	path, err := filepath.Abs(pos[0])
-	if err != nil {
-		emitChangeErr("", fmt.Sprintf("resolve path: %v", err))
-	}
-
-	db, err := monitor.DB()
-	if err != nil {
-		emitChangeErr(schemachange.Name(dt.Filepath(path)), fmt.Sprintf("open db: %v", err))
-	}
-
-	// A .go change's log lines are its own output, relayed unchanged: this
-	// process's stdout is one JSON document and nothing else, so they have
-	// nowhere to go but stderr, and refusal.Passthrough is how a child's stream
-	// is handed out deliberately rather than by oversight.
-	res, err := schemachange.Apply(db, dt.Filepath(monitor.DBPath()), dt.Filepath(path), refusal.Passthrough())
-	if err != nil {
-		emitChangeErr(res.Name, err.Error())
-	}
-	emitChangeResult(res.Name, string(res.Status), res.Reason)
-}
-
-// runBackup reports the destination path so the CLI can name the file it just
-// wrote. "skipped" means a backup newer than the throttle window already
-// existed and `path` is that one — the caller must not claim it wrote it (E-1942).
-//
-// BackupDB also enforces retention, and folds a failure of EITHER half into one
-// error. Which half is readable from the result: Path is empty only when no
-// backup exists. A land runs this unattended before applying a schema change, so
-// a failed unlink must not abort it — the copy the land needs is on disk. The
-// retention failure rides out as a warning instead, and the Python CLI prints
-// it, because a directory that has stopped being pruned is worth saying out loud
-// exactly once rather than never (E-2121).
 // runMigrate creates the database at the resolved DB context if it does not
 // exist, and reports the version it is at.
 //
@@ -968,6 +911,17 @@ func runUpgrade() {
 	fmt.Println(string(b))
 }
 
+// runBackup reports the destination path so the CLI can name the file it just
+// wrote. "skipped" means a backup newer than the throttle window already
+// existed and `path` is that one — the caller must not claim it wrote it (E-1942).
+//
+// BackupDB also enforces retention, and folds a failure of EITHER half into one
+// error. Which half is readable from the result: Path is empty only when no
+// backup exists. A land runs this unattended before migrating, so
+// a failed unlink must not abort it — the copy the land needs is on disk. The
+// retention failure rides out as a warning instead, and the Python CLI prints
+// it, because a directory that has stopped being pruned is worth saying out loud
+// exactly once rather than never (E-2121).
 func runBackup() {
 	payload := map[string]any{}
 	res, err := monitor.BackupDB()
@@ -992,21 +946,4 @@ func runBackup() {
 	payload["path"] = res.Path
 	payload["pruned"] = res.Pruned
 	_ = dbprovenance.Encode(os.Stdout, payload)
-}
-
-func emitChangeResult(name, status, reason string) {
-	out := map[string]any{"name": name, "status": status}
-	if reason != "" {
-		out["reason"] = reason
-	}
-	_ = dbprovenance.Encode(os.Stdout, out)
-}
-
-func emitChangeErr(name, msg string) {
-	out := map[string]any{"status": "error", "error": msg}
-	if name != "" {
-		out["name"] = name
-	}
-	_ = dbprovenance.Encode(os.Stdout, out)
-	os.Exit(1)
 }

@@ -3,31 +3,12 @@
 import os
 import re
 import sqlite3
-from pathlib import Path
 from typing import NamedTuple
 
 from endless import agent_help, config, event_bridge, provenance, statuses
 from endless.config import ensure_config_dir
 
 _conn: sqlite3.Connection | None = None
-
-# Where internal/schema/ sits relative to this package. Python no longer reads
-# schema.sql -- Go owns the schema and applies it through `endless-go event
-# migrate` (E-2019) -- so this survives only to locate the change directory
-# below, and goes when E-2158 deletes that.
-_SCHEMA_PATH = Path(__file__).resolve().parent.parent.parent / "internal" / "schema" / "schema.sql"
-
-# The per-ticket schema changes that carry an existing DB from one shape to the
-# next, beside the schema they amend. Present when endless is installed from a
-# source checkout (`just install` installs the Python CLI editable), absent when
-# it is not — every reader below tolerates the absence (E-2036).
-_CHANGES_DIR = _SCHEMA_PATH.parent / "changes"
-
-
-def _should_auto_migrate() -> bool:
-    val = os.environ.get("ENDLESS_AUTO_MIGRATE", "1").strip().lower()
-    return val in ("1", "true", "yes", "on")
-
 
 def get_db() -> sqlite3.Connection:
     global _conn
@@ -72,23 +53,17 @@ def get_db() -> sqlite3.Connection:
     _conn.execute("PRAGMA journal_mode=WAL")
     _conn.execute("PRAGMA busy_timeout=5000")
     _conn.execute("PRAGMA foreign_keys=ON")
-    if is_new:
-        # Just built, at the latest version. Nothing below applies to it, and
-        # _migrate() in particular MUST not see it: that ladder is for databases
-        # that predate the Go schema, it short-circuits on PRAGMA user_version
-        # rather than on anything goose writes, and it takes a backup before it
-        # looks. A fresh database would take the whole ladder and leave a backup
-        # file behind every time one was created.
-        pass
-    elif not _has_table(_conn, "projects"):
-        # File exists but lacks the foundational schema. Don't try to migrate
-        # (it would crash with a raw OperationalError). Surface a clear error
-        # naming the resolved path and resolution mechanism.
+    if not is_new and not _has_table(_conn, "projects"):
+        # File exists but lacks the foundational schema. Surface a clear error
+        # naming the resolved path and resolution mechanism rather than a raw
+        # OperationalError from the first query.
+        #
+        # Python migrates nothing (E-2158 deleted the legacy ladder that once
+        # ran here): Go owns the schema, brings a database forward on its own
+        # connect, and refuses one too old to bring forward at all.
         _conn.close()
         _conn = None
         raise _missing_schema_hint()
-    elif _should_auto_migrate():
-        _migrate(_conn)
     return _conn
 
 
@@ -102,423 +77,12 @@ def _init_schema():
     event_bridge.init_schema()
 
 
-def _backup_db():
-    """Snapshot the DB through SQLite's backup API before an ancient migration.
-
-    Throttled, not scheduled: it writes nothing when a backup less than 60
-    seconds old already exists, which stops two migrations seconds apart from
-    writing two near-identical copies. That is all the window has ever done —
-    read as a cadence it is how the newest backup came to be nine days old
-    (E-2121).
-
-    Cadence, and retention, belong to the Go side. `internal/backupjob` fires
-    `monitor.BackupDB` hourly and prunes this same directory by AGE — hourly for
-    a day, daily for a month, weekly for a year. So this function deliberately
-    does not rotate: the keep-last-60-by-count sweep it used to run is now a
-    second, contradictory policy over one directory, and the one that would win
-    is whichever ran last.
-
-    Reached only from `_migrate`, which short-circuits at PRAGMA user_version >=
-    6 — so on any database of the last two years this never runs at all.
-    """
-    import time as _time
-
-    if not config.DB_PATH.exists():
-        return
-
-    backup_dir = config.DB_PATH.parent / "backups"
-    backup_dir.mkdir(exist_ok=True)
-
-    # Check if recent backup exists
-    backups = sorted(backup_dir.glob("endless-*.db"))
-    if backups:
-        newest = backups[-1]
-        age = _time.time() - newest.stat().st_mtime
-        if age < 60:
-            return
-
-    # Use SQLite backup API for a consistent copy
-    ts = _time.strftime("%Y%m%d-%H%M%S")
-    dst = backup_dir / f"endless-{ts}.db"
-    src_conn = sqlite3.connect(str(config.DB_PATH))
-    dst_conn = sqlite3.connect(str(dst))
-    src_conn.backup(dst_conn)
-    dst_conn.close()
-    src_conn.close()
-
-
-def _migrate(conn: sqlite3.Connection):
-    """Run schema migrations for existing databases.
-
-    Short-circuits when PRAGMA user_version is already >= 6 (the highest
-    version this Python migrator knows about). Once Go's framework
-    (internal/monitor/migrate.go, E-863) owns the schema, this function
-    becomes a no-op. Slated for removal in E-894 Phase 5.
-    """
-    if conn.execute("PRAGMA user_version").fetchone()[0] >= 6:
-        return
-    _backup_db()  # backup before any migration
-    # Rename plans table to tasks if needed
-    tables = [
-        r[0]
-        for r in conn.execute(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name IN ('plans','tasks')"
-        ).fetchall()
-    ]
-    if "plans" in tables and "tasks" not in tables:
-        conn.execute("ALTER TABLE plans RENAME TO tasks")
-        conn.commit()
-
-    # Add type column to tasks if missing
-    task_cols = [
-        r[1] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()
-    ]
-    if "type" not in task_cols:
-        conn.execute(
-            "ALTER TABLE tasks ADD COLUMN type TEXT NOT NULL DEFAULT 'task'"
-        )
-        conn.commit()
-
-    # Rename plan_id to task_id if needed
-    if "plan_id" in task_cols and "task_id" not in task_cols:
-        conn.execute("ALTER TABLE tasks RENAME COLUMN plan_id TO task_id")
-        conn.commit()
-
-    # Add updated_at column to tasks if missing
-    task_cols2 = [
-        r[1] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()
-    ]
-    if "updated_at" not in task_cols2:
-        conn.execute(
-            "ALTER TABLE tasks ADD COLUMN updated_at TEXT NOT NULL DEFAULT ''"
-        )
-        conn.execute("UPDATE tasks SET updated_at = created_at WHERE updated_at = ''")
-        conn.executescript("""
-            CREATE TRIGGER IF NOT EXISTS tasks_updated_at AFTER UPDATE ON tasks
-            BEGIN
-                UPDATE tasks SET updated_at = strftime('%Y-%m-%dT%H:%M:%S', 'now')
-                WHERE id = NEW.id AND updated_at != strftime('%Y-%m-%dT%H:%M:%S', 'now');
-            END;
-        """)
-        conn.commit()
-
-    # Check if tasks has title column
-    cols = [
-        r[1] for r in conn.execute("PRAGMA table_info(tasks)").fetchall()
-    ]
-    if "title" not in cols:
-        conn.execute("ALTER TABLE tasks ADD COLUMN title TEXT")
-        conn.execute(
-            "UPDATE tasks SET title = substr(description, 1, 80) "
-            "WHERE title IS NULL"
-        )
-        conn.commit()
-
-    # Create task_deps table if missing (handles both old and new name)
-    exists = conn.execute(
-        "SELECT name FROM sqlite_master "
-        "WHERE type='table' AND name = 'task_deps'"
-    ).fetchone()
-    if not exists:
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS task_deps (
-                id INTEGER PRIMARY KEY,
-                source_type TEXT NOT NULL,
-                source_id INTEGER NOT NULL,
-                target_type TEXT NOT NULL,
-                target_id INTEGER NOT NULL,
-                dep_type TEXT NOT NULL DEFAULT 'blocks',
-                created_at TEXT NOT NULL
-                    DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-                UNIQUE(source_type, source_id, target_type, target_id, dep_type)
-            );
-        """)
-        conn.commit()
-
-    # === Schema v2 migrations ===
-    _migrate_v2(conn)
-
-    # === Schema v3: Session conversation history (E-857) ===
-    _migrate_v3(conn)
-
-    # === Schema v5: task_deps active-voice vocabulary (E-957) ===
-    _migrate_v5(conn)
-
-    # === Schema v6: outcome column on tasks (E-787) ===
-    _migrate_v6(conn)
-
-
 def _has_table(conn: sqlite3.Connection, table: str) -> bool:
     row = conn.execute(
         "SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?",
         (table,),
     ).fetchone()
     return row[0] > 0
-
-
-def _has_column(conn: sqlite3.Connection, table: str, column: str) -> bool:
-    cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
-    return column in cols
-
-
-def _migrate_v2(conn: sqlite3.Connection):
-    """Schema v2: drop dead tables, rename tables/columns, drop unused columns."""
-    # Step 1: Drop dead tables (E-741)
-    for table in [
-        "doc_dependencies", "doc_regions", "ai_chats",
-        "private_files", "privacy_rules", "claude_sessions",
-        "file_changes", "scan_log", "documents",
-    ]:
-        conn.execute(f"DROP TABLE IF EXISTS {table}")
-    # Drop old sessions table (ZSH prompt hook) if ai_sessions still exists
-    if _has_table(conn, "sessions") and _has_table(conn, "ai_sessions"):
-        conn.execute("DROP TABLE sessions")
-    conn.commit()
-
-    # Step 2: Rename tables (E-742). The msg_queue -> messages and
-    # msg_channels -> conversations renames went with the channel surface
-    # (E-2029); e-2029-drop-channel-tables.sql drops both names outright.
-    if _has_table(conn, "ai_sessions") and not _has_table(conn, "sessions"):
-        conn.execute("ALTER TABLE ai_sessions RENAME TO sessions")
-    conn.commit()
-
-    # Step 3: Rename columns (E-743). Left at the name E-743 produced: this is
-    # one link of a chain, not a declaration of the current shape. E-1969 renamed
-    # active_task_id -> task_id, and its change file
-    # (internal/schema/changes/e-1969-rename-sessions-task-id.go) picks up from
-    # here, so rewriting this step's target would break the chain rather than
-    # shorten it.
-    if _has_table(conn, "sessions"):
-        if _has_column(conn, "sessions", "active_goal_id") and not _has_column(conn, "sessions", "active_task_id"):
-            conn.execute("ALTER TABLE sessions RENAME COLUMN active_goal_id TO active_task_id")
-        if _has_column(conn, "sessions", "tmux_pane") and not _has_column(conn, "sessions", "process"):
-            conn.execute("ALTER TABLE sessions RENAME COLUMN tmux_pane TO process")
-    conn.commit()
-
-    # Steps 4-12: Table rebuild migrations — MOVED OUT
-    # These previously ran automatically but caused data loss when rebuild
-    # migrations dropped columns or failed to copy new columns.
-    # Now only safe data UPDATEs run automatically. Destructive, one-off
-    # changes live in internal/schema/changes/ and are applied at land time
-    # via 'endless db apply-change'.
-
-    # Safe data updates from former rebuild migrations:
-    if _has_table(conn, "task_deps"):
-        conn.execute("UPDATE task_deps SET source_type='task' WHERE source_type='plan'")
-        conn.execute("UPDATE task_deps SET target_type='task' WHERE target_type='plan'")
-        conn.commit()
-
-    # Step 8 (E-786) added tasks.tier, and a later data update advanced tier-1
-    # tasks to `ready`; Step 13 (E-856, E-1240) cleared tier on settled tasks.
-    # All three are gone: E-1813 dropped the column (migration 00008) in favour
-    # of the complexity and risk ratings, and re-adding it here on every connect
-    # would undo that migration.
-
-    # Safe data updates: fix completed_at on non-confirmed (legacy completed->confirmed
-    # rename removed in E-1240; `completed` is once again a real terminal status with
-    # findings-as-deliverable semantics, distinct from `confirmed`).
-    if _has_table(conn, "tasks"):
-        conn.execute(
-            "UPDATE tasks SET completed_at = NULL "
-            "WHERE completed_at IS NOT NULL AND status NOT IN "
-            f"({statuses.sql_list('sets-completed-at')})"
-        )
-        conn.commit()
-
-    # The "safety net" CREATE TABLE sessions that stood here is gone (E-2105).
-    #
-    # It was unreachable and wrong in three separate ways, and the third is why
-    # it was deleted rather than corrected. Unreachable: it was guarded by
-    # `if not _has_table(conn, "sessions")`, and the Go schema runs on every
-    # connection, so the table always exists by the time this reads. Wrong in
-    # shape: it declared a `sessions` missing process_id, epic_id, hidden and
-    # every report_* column that internal/schema/schema.sql — the authoritative
-    # definition — has carried for many revisions. And it carried a BANNED
-    # CHECK constraint on `state`: SQLite cannot ALTER or DROP one without
-    # rebuilding the whole table, which is how a schema change caused
-    # catastrophic data loss here once already. Validation lives in application
-    # code (ED-1495, and the header of schema.sql).
-    #
-    # It was also the fourth copy of the session state vocabulary, on the one
-    # surface — a CHECK — where a fifth state would not merely be misrendered
-    # but REFUSED at write time.
-
-
-def _migrate_v3(conn: sqlite3.Connection):
-    """Schema v3: session conversation messages + FTS5."""
-    # session_messages table
-    if not _has_table(conn, "session_messages"):
-        conn.executescript("""
-            CREATE TABLE IF NOT EXISTS session_messages (
-                id INTEGER PRIMARY KEY,
-                session_id TEXT NOT NULL,
-                role TEXT NOT NULL CHECK (role IN ('user', 'assistant', 'tool_use')),
-                content TEXT NOT NULL,
-                tool_name TEXT,
-                message_uuid TEXT UNIQUE,
-                created_at TEXT NOT NULL,
-                FOREIGN KEY (session_id) REFERENCES sessions(session_id) ON DELETE CASCADE
-            );
-            CREATE INDEX IF NOT EXISTS idx_session_messages_session
-                ON session_messages(session_id, created_at DESC);
-        """)
-        conn.commit()
-
-    # FTS5 for cross-session search
-    if not _has_table(conn, "session_messages_fts"):
-        conn.executescript("""
-            CREATE VIRTUAL TABLE IF NOT EXISTS session_messages_fts USING fts5(
-                content,
-                content=session_messages,
-                content_rowid=id
-            );
-            CREATE TRIGGER IF NOT EXISTS session_messages_ai AFTER INSERT ON session_messages BEGIN
-                INSERT INTO session_messages_fts(rowid, content) VALUES (new.id, new.content);
-            END;
-            CREATE TRIGGER IF NOT EXISTS session_messages_ad AFTER DELETE ON session_messages BEGIN
-                INSERT INTO session_messages_fts(session_messages_fts, rowid, content) VALUES('delete', old.id, old.content);
-            END;
-        """)
-        conn.commit()
-
-    # Add new columns to sessions
-    if _has_table(conn, "sessions"):
-        cols = [r[1] for r in conn.execute("PRAGMA table_info(sessions)").fetchall()]
-        if "transcript_offset" not in cols:
-            conn.execute("ALTER TABLE sessions ADD COLUMN transcript_offset INTEGER NOT NULL DEFAULT 0")
-            conn.commit()
-        # transcript_path was here until E-1905 dropped the column. Do NOT
-        # re-add it: this migration runs on every Python-side connect, so an
-        # ADD COLUMN here would silently resurrect the column right after the
-        # land-time change file drops it.
-        # summary was here until E-2074 dropped the column, for the same
-        # reason transcript_path's ALTER is gone above: this migrator runs on
-        # every Python-side connect, so re-adding it would resurrect the column
-        # right after the land-time change file drops it.
-        if "hidden" not in cols:
-            conn.execute("ALTER TABLE sessions ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
-            conn.commit()
-        # needs_recap / summary_seq were added here for the session-recap
-        # machinery, removed in E-1906. Their ALTERs are gone rather than
-        # merely unused: this migrator can still run on a pre-v6 DB, and
-        # re-adding the columns there would silently undo the drop that
-        # e-1906-drop-sessions-recap-columns.sql applies at land time. The
-        # same holds for summary above (E-2074).
-
-
-def _migrate_v5(conn: sqlite3.Connection):
-    """Schema v5: task_deps active-voice vocabulary (E-957).
-
-    Three changes:
-    1. Drop legacy CHECK constraints on task_deps (source_type, target_type, dep_type)
-       so new dep_types like 'implements', 'informs', 'relates_to' can be inserted.
-    2. Expand UNIQUE constraint to include dep_type so multiple typed relations
-       can coexist between the same ordered pair (e.g. A blocks B AND A relates_to B).
-    3. Migrate existing rows to active-voice storage:
-       - 'needs'/'blocks' rows → 'blocks' with source/target swapped (source becomes blocker)
-       - 'replaces' rows → swap source/target (label was already correct, layout was passive)
-    Both UPDATEs evaluate RHS against the original row, so source/target swap atomically.
-    """
-    # Idempotency gate: the swap UPDATEs below are NOT idempotent (running them
-    # twice flips rows back). Use PRAGMA user_version as a one-shot guard so V5
-    # only runs once. See E-1118 / E-863 for the structural fix (real schema
-    # version system).
-    if conn.execute("PRAGMA user_version").fetchone()[0] >= 5:
-        return
-    if not _has_table(conn, "task_deps"):
-        conn.execute("PRAGMA user_version = 5")
-        conn.commit()
-        return
-
-    sql_row = conn.execute(
-        "SELECT sql FROM sqlite_master WHERE type='table' AND name='task_deps'"
-    ).fetchone()
-    table_sql = sql_row[0] if sql_row is not None else ""
-    has_check = "CHECK" in table_sql
-    # Old UNIQUE constraint omits dep_type; new one includes it.
-    needs_unique_rebuild = (
-        "UNIQUE(source_type, source_id, target_type, target_id, dep_type)" not in table_sql
-    )
-
-    if has_check or needs_unique_rebuild:
-        # SQLite has no DROP CHECK; rebuild the table without the constraint.
-        # executescript implicitly commits before running, so we use individual
-        # execute() calls inside an explicit transaction.
-        conn.execute("PRAGMA foreign_keys=OFF")
-        try:
-            conn.execute("""
-                CREATE TABLE task_deps_new (
-                    id INTEGER PRIMARY KEY,
-                    source_type TEXT NOT NULL,
-                    source_id INTEGER NOT NULL,
-                    target_type TEXT NOT NULL,
-                    target_id INTEGER NOT NULL,
-                    dep_type TEXT NOT NULL DEFAULT 'blocks',
-                    created_at TEXT NOT NULL
-                        DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
-                    UNIQUE(source_type, source_id, target_type, target_id, dep_type)
-                )
-            """)
-            conn.execute(
-                "INSERT INTO task_deps_new "
-                "(id, source_type, source_id, target_type, target_id, dep_type, created_at) "
-                "SELECT id, source_type, source_id, target_type, target_id, dep_type, created_at "
-                "FROM task_deps"
-            )
-            conn.execute("DROP TABLE task_deps")
-            conn.execute("ALTER TABLE task_deps_new RENAME TO task_deps")
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            conn.execute("PRAGMA foreign_keys=ON")
-            raise
-        conn.execute("PRAGMA foreign_keys=ON")
-
-    # Active-voice migration: needs/blocks rows store source=blocker, target=blocked.
-    # Today's data has source=blocked, target=blocker, dep_type='needs'. Swap and rename.
-    try:
-        conn.execute("""
-            UPDATE task_deps
-            SET    source_id = target_id,
-                   target_id = source_id,
-                   dep_type  = 'blocks'
-            WHERE  dep_type IN ('needs', 'blocks')
-        """)
-        # replaces rows: label was active ('replaces') but layout was passive
-        # (source=replaced_task, target=replacement). Swap source/target so the row reads
-        # "source replaces target" — matching the label and the active-voice convention.
-        conn.execute("""
-            UPDATE task_deps
-            SET    source_id = target_id,
-                   target_id = source_id
-            WHERE  dep_type = 'replaces'
-        """)
-        # E-1003: informs/informed_by dropped from canonical vocabulary as too vague.
-        # Existing rows fold into relates_to (the soft catch-all). No source/target swap
-        # needed; both informs and relates_to store source=actor with same direction.
-        conn.execute(
-            "UPDATE task_deps SET dep_type='relates_to' WHERE dep_type='informs'"
-        )
-        conn.execute("PRAGMA user_version = 5")
-        conn.commit()
-    except sqlite3.IntegrityError as e:
-        conn.rollback()
-        # _backup_db writes beside the database, under the resolved config
-        # directory — never ~/.endless, which this message named for years and
-        # which Endless has never written anything to. Derived from the same
-        # expression _backup_db uses so the two cannot drift apart again.
-        raise RuntimeError(
-            "task_deps active-voice migration aborted: UNIQUE collision after swap. "
-            "Two tasks may have mirrored relations (A blocks B AND B blocks A as separate rows). "
-            f"Backup at {config.DB_PATH.parent / 'backups'}/. Original error: {e}"
-        )
-
-
-def _migrate_v6(conn: sqlite3.Connection):
-    """Schema v6: add outcome column to tasks (E-787)."""
-    if _has_table(conn, "tasks") and not _has_column(conn, "tasks", "outcome"):
-        conn.execute("ALTER TABLE tasks ADD COLUMN outcome TEXT")
-        conn.commit()
 
 
 class _MissingObject(NamedTuple):
@@ -572,77 +136,6 @@ def _classify_schema_error(err: sqlite3.OperationalError) -> _MissingObject | No
     return None
 
 
-def _change_files() -> list[Path]:
-    """Every per-ticket schema-change file this install ships.
-
-    runner/ is a directory (library code, not a change), so is_file() excludes
-    it. Empty when the directory is absent, which is the case for an install
-    that is a copy of src/endless/ rather than a source checkout — the hint
-    below degrades to naming the missing column and nothing more.
-    """
-    if not _CHANGES_DIR.is_dir():
-        return []
-    return sorted(
-        p for p in _CHANGES_DIR.iterdir()
-        if p.is_file() and p.suffix in (".sql", ".go")
-    )
-
-
-def _unapplied_changes(conn: sqlite3.Connection) -> list[Path]:
-    """The change files with no _schema_version marker in THIS database.
-
-    The marker key is the file's basename without extension — the same key
-    `endless db apply-change` computes (internal/schema/changes/runner). A DB
-    predating the marker table has applied nothing we can prove, so every file
-    counts as outstanding.
-    """
-    files = _change_files()
-    if not files:
-        return []
-    applied: set[str] = set()
-    if _has_table(conn, "_schema_version"):
-        applied = {r[0] for r in conn.execute("SELECT name FROM _schema_version")}
-    return [p for p in files if p.stem not in applied]
-
-
-def _changes_naming(
-    missing: _MissingObject, candidates: list[Path]
-) -> tuple[list[Path], bool]:
-    """The candidate changes that name the missing object, and how they name it.
-
-    Two tiers, because they are worth different confidence. A change whose text
-    carries the DDL that creates the object *adds* it — that is the file to
-    apply, and the flag says so. A change that merely mentions the identifier
-    (a .go change explaining an ordering constraint in a comment, say) is a
-    lead, not an answer, and the message words it as one.
-
-    The DDL match is a text match, not a parse: a `.go` change builds the same
-    statement as a string, so one pattern covers both file kinds.
-    """
-    ident = re.escape(missing.ident)
-    if missing.kind == "column":
-        ddl = re.compile(rf"ADD\s+(?:COLUMN\s+)?[\"'`\[]?{ident}\b", re.IGNORECASE)
-    else:
-        ddl = re.compile(
-            rf"CREATE\s+(?:TABLE|VIEW)\s+(?:IF\s+NOT\s+EXISTS\s+)?[\"'`\[]?{ident}\b",
-            re.IGNORECASE,
-        )
-    mention = re.compile(rf"\b{ident}\b")
-    adders, mentions = [], []
-    for path in candidates:
-        try:
-            text = path.read_text(errors="replace")
-        except OSError:
-            continue
-        if ddl.search(text):
-            adders.append(path)
-        elif mention.search(text):
-            mentions.append(path)
-    if adders:
-        return adders, True
-    return mentions, False
-
-
 def _sql_excerpt(sql: str, limit: int = 160) -> str:
     """The failing statement on one line, short enough to read."""
     one_line = " ".join(sql.split())
@@ -668,110 +161,42 @@ def _schema_error_hint(
     conn = _conn
     if conn is None or not _has_table(conn, "projects"):
         return _missing_schema_hint()
-    return _incomplete_schema_hint(conn, missing, sql)
+    return _incomplete_schema_hint(missing, sql)
 
 
-def _incomplete_schema_hint(
-    conn: sqlite3.Connection, missing: _MissingObject, sql: str
-) -> agent_help.Refusal:
+def _incomplete_schema_hint(missing: _MissingObject, sql: str) -> agent_help.Refusal:
     """Build the refusal for a schema'd database missing one table or column.
 
-    Two outcomes, because they need opposite fixes. An outstanding change file
-    names the object: the database lags the code, and the fix is to apply that
-    file. None does: the object exists nowhere, so the query is wrong or the
-    change that adds it was never written — and saying "out of date" there
-    would send the reader after a migration that does not exist.
+    The database has the endless schema, so it is not uninitialized: either it
+    is at an older schema version than this endless expects, which `endless db
+    upgrade` (E-2020) fixes, or the object exists nowhere and the query is what
+    is wrong. The text names both, so the reader is not sent after a migration
+    that does not exist.
 
-    Three classes come out of those two outcomes, and the third one is why the
-    class is decided HERE rather than handed to the agent as a question:
-
-    - A change file that ADDS the object, against a sandbox database — the
-      per-worktree scratch copy that exists to be experimented on — is
-      NO-REPORT. Applying it costs nothing anyone would mourn.
-    - The same file against the MAIN database is REPORT. Change files include
-      destructive one-offs normally applied at land time, and whether to run
-      one over the user's own rows is not a call any agent should make on their
-      behalf. It is also the safe default in a project with no sandbox at all.
-    - No change file adds it: the query and the schema disagree, which is
-      Endless being wrong about its own database. `fault` rather than `report`
-      — there is no decision for the user to make, only a defect to report or
-      an upgrade to install.
+    A fault either way. Every endless-go connect brings a behind database
+    forward on its own (E-2020), so a database still missing an object by the
+    time Python reads it means Endless is wrong about its own schema — there is
+    no decision for the user and nothing for an agent to route around. (Until
+    E-2158 a pending change file could add the object, and its sandbox-or-main
+    split decided the class; goose has no pending files to find.)
     """
     def line(label: str, value: str) -> str:
         return f"    {label:<15} {value}"
 
-    outstanding = _unapplied_changes(conn)
-    named_by, adds_it = _changes_naming(missing, outstanding)
-    lines = []
-    if named_by:
-        lines.append(
-            f"endless database schema is out of date at {config.tilde(config.DB_PATH)}"
-        )
-        lines.append(line(f"missing {missing.kind}:", missing.label))
-        for path in named_by:
-            lines.append(line(
-                "added by:" if adds_it else "named by:",
-                f"{config.tilde(path)} — not applied to this database",
-            ))
-        lines.append(line(
-            "apply it:" if adds_it else "try:",
-            f"endless db apply-change {config.tilde(named_by[0])}",
-        ))
-    else:
-        lines.append(
-            f"endless database at {config.tilde(config.DB_PATH)} "
-            f"has no {missing.kind} {missing.label}"
-        )
-        lines.append(
-            "    the database is initialized; only this one object is absent"
-        )
-        if not _CHANGES_DIR.is_dir():
-            lines.append(
-                f"    no schema changes to check against: "
-                f"{config.tilde(_CHANGES_DIR)} is not part of this install"
-            )
-        else:
-            lines.append(
-                f"    no outstanding schema change adds it "
-                f"({len(outstanding)} checked in {config.tilde(_CHANGES_DIR)})"
-            )
-        lines.append(
-            "    so either the query names it wrongly, or the change that adds "
-            "it was never written"
-        )
-    lines.append(line("query:", _sql_excerpt(sql)))
-    text = "\n".join(lines)
     where = config.tilde(config.DB_PATH)
-
-    if not (named_by and adds_it):
-        summary = (
-            f"The query needs {missing.kind} {missing.label}, which the "
-            f"database at {where} does not have and no pending schema change "
-            "adds. The statement did not run."
-        )
-        # A change file that only MENTIONS the object lands here too: it is a
-        # lead, not a fix, so applying it would not add the object and there is
-        # nothing an agent can act on in either shape of this branch.
-        return agent_help.fault(summary, text=text)
-
+    text = "\n".join([
+        f"endless database schema at {where} is older than this endless expects",
+        line(f"missing {missing.kind}:", missing.label),
+        line("upgrade it:", "endless db upgrade"),
+        "    if it is already current, nothing adds this "
+        f"{missing.kind}, so the query names it wrongly",
+        line("query:", _sql_excerpt(sql)),
+    ])
     summary = (
-        f"The database at {where} is missing {missing.kind} {missing.label}; "
-        f"{config.tilde(named_by[0])} adds it and has not been applied here. "
-        "The statement did not run."
+        f"The query needs {missing.kind} {missing.label}, which the database at "
+        f"{where} does not have. The statement did not run."
     )
-    if config.db_context_is_sandbox():
-        return agent_help.no_report(
-            summary,
-            f"Apply it — `endless db apply-change {config.tilde(named_by[0])}` "
-            "— then retry",
-            text=text,
-        )
-    return agent_help.report(
-        summary,
-        "whether to apply a pending schema change to their own Endless "
-        "database, which some change files rewrite data to do",
-        text=text,
-    )
+    return agent_help.fault(summary, text=text)
 
 
 def _missing_schema_hint() -> agent_help.Refusal:

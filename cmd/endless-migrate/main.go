@@ -1,27 +1,22 @@
-// Command endless-migrate applies Endless's schema changes and versioned
-// migrations, and does nothing else.
+// Command endless-migrate brings an Endless database to the newest schema
+// version this binary embeds, and does nothing else.
 //
 // ED-1571's third thing. In self_dev a candidate binary and an installed binary
 // coexist against one real ledger, and during the pre-land window neither of
 // them may migrate it: the candidate must not (ED-1567 — an unlanded build
 // mutating the production schema is the 2026-08-10 outage exactly), and the
-// installed one does not carry the change being landed. `worktree land` used to
-// square that circle by handing the apply step the WORKTREE's own endless-go,
-// whose embedded schema matches the rows the land just wrote (E-1664) — but that
-// binary is a candidate by definition, so the invariant and the prohibition
-// point opposite ways.
+// installed one does not carry the migration being landed.
 //
 // This executable is the way out. It is compiled from the landing branch, so it
-// carries that branch's change set; it opens the database FILE directly, so it
-// never reaches the application's connect; and it has no schema of its own to
-// apply, no enum mirror to verify and no business data to read, so there is
-// nothing about the database it can expect and therefore nothing the database
-// can disappoint. That is the whole of its safety, and it is why it is allowed
-// where a candidate endless-go is not.
+// carries that branch's migration set; it opens the database FILE directly, so
+// it never reaches the application's connect; and it has no business data to
+// read and no enum mirror to verify, so there is nothing about the database it
+// can expect and therefore nothing the database can disappoint. That is the
+// whole of its safety, and it is why it is allowed where a candidate endless-go
+// is not.
 //
 // Usage:
 //
-//	endless-migrate [--db main | --db-dir <dir>] apply <change-file>
 //	endless-migrate [--db main | --db-dir <dir>] up
 //
 // The flags are internal/dbcontext's, the same vocabulary endless-go takes
@@ -32,26 +27,25 @@
 // name is what tells a reader who learned `--db` from the guide why it does
 // not apply — which "unknown command" could not.
 //
-// There are two subcommands, one per kind of schema step a landing branch can
-// carry. `apply` applies one internal/schema/changes/ file. `up` brings the
-// database to the newest goose migration this binary embeds, then reconciles
-// the enum mirrors — internal/schema's own Migrate, the same call every other
-// opener makes, run here without the application around it (E-2192). Without
-// `up` a branch's goose migration reached the real ledger only when an
-// installed binary next connected, so the candidate that records the landing
-// could meet a database missing its own new column; E-2188 was that.
+// `up` brings the database to the newest goose migration this binary embeds,
+// then reconciles the enum mirrors — internal/schema's own Up, the same call
+// every other opener makes, run here without the application around it
+// (E-2192). Without it a branch's migration reached the real ledger only when
+// an installed binary next connected, so the candidate that records the landing
+// could meet a database missing its own new column; E-2188 was that. It is the
+// only subcommand: the per-ticket schema scripts an `apply` once ran were
+// retired by E-2158, when goose became the only way the schema moves.
 //
 // The absence of every other subcommand is a property rather than an omission:
-// no hook, no task, no event, no query, no tmux. internal/schemachange/
-// executable_test.go asserts both halves — the surface this exposes, and that
-// its build links nothing but the migration machinery. internal/schema is part
-// of that machinery: it carries the embedded migration set and the seeds, and
-// links no other Endless package.
+// no hook, no task, no event, no query, no tmux. main_test.go asserts both
+// halves — the surface this exposes, and that its build links nothing but the
+// migration machinery. internal/schema is that machinery: it carries the
+// embedded migration set and the seeds, and links no other Endless package.
 //
 // Scope is self_dev ONLY. Every other project has one installed binary and no
-// land at all, so it carries and applies its own migrations under ED-1570
-// through `endless-go event apply-change`; no separate executable exists there
-// and nothing here assumes one does.
+// land at all, and its connect brings its own database forward (or `endless db
+// upgrade` does, E-2020); no separate executable exists there and nothing here
+// assumes one does.
 package main
 
 import (
@@ -70,25 +64,15 @@ import (
 	"github.com/mikeschinkel/endless/internal/dbcontext"
 	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/schema"
-	"github.com/mikeschinkel/endless/internal/schemachange"
 )
 
 // upResult is the JSON document `up` prints on stdout: schema.UpResult — the
 // version the database was at, the version it is at now, and "migrated" or
-// "current" — plus the file.
+// "current" — plus the database that was actually opened, because a migration
+// tool that does not say which file it changed is asking to be trusted about
+// the one thing worth checking.
 type upResult struct {
 	schema.UpResult
-	DB dt.Filepath `json:"db"`
-}
-
-// result is the JSON document an apply prints on stdout. It is
-// schemachange.Result — the same shape `endless-go event apply-change` prints,
-// so a caller parses one document whichever program it invoked — plus the
-// database that was actually opened, because a migration tool that does not say
-// which file it changed is asking to be trusted about the one thing worth
-// checking.
-type result struct {
-	schemachange.Result
 	DB dt.Filepath `json:"db"`
 }
 
@@ -109,22 +93,11 @@ func main() {
 
 	switch args[1] {
 	case "-h", "--help", "help":
-		// Resolved in the apply arm rather than here, so --help answers
+		// Resolved in the up arm rather than here, so --help answers
 		// without a database context. The reader who typed the wrong flag
 		// needs the usage text most, and making them satisfy the flag in
 		// order to read about the flag is a loop.
 		fmt.Fprint(os.Stdout, usageText())
-		return
-	case "apply":
-		dir, err := configDir(flags)
-		if err != nil {
-			errUsage(err.Error(), dbTargetRemedy)
-		}
-		res, err := runApply(args[2:], dir)
-		if err != nil {
-			emitError(res.Name, err)
-		}
-		emit(res)
 		return
 	case "up":
 		dir, err := configDir(flags)
@@ -133,7 +106,7 @@ func main() {
 		}
 		res, err := runUp(args[2:], dir)
 		if err != nil {
-			emitError("", err)
+			emitError(err)
 		}
 		emit(res)
 		return
@@ -145,7 +118,7 @@ func main() {
 	//
 	// NO-REPORT and not the version-skew CONDITIONAL endless-go's dispatcher
 	// carries: this executable is built by the land that runs it, from the same
-	// branch, and the only caller passes `apply` or `up` from code. A command
+	// branch, and the only caller passes `up` from code. A command
 	// it does not know came from a hand invocation, and naming a real one is
 	// the whole of the fix.
 	refusal.NoReport(
@@ -161,7 +134,7 @@ func main() {
 // because each is shared by two or three call sites, and a remedy that drifts
 // between them is a remedy a reader cannot trust.
 const (
-	commandRemedy = "Re-run naming a command: `apply <change-file>` or `up`"
+	commandRemedy = "Re-run naming the command: `up`"
 
 	dbTargetRemedy = "Re-run with " + dbcontext.DBDirFlag + " <dir> to name " +
 		"the config directory outright, or " + dbcontext.DBFlag + " main for " +
@@ -188,7 +161,7 @@ var errSandboxNotRoutable = errors.New(
 //
 // No flag resolves the default, which is main ($XDG_CONFIG_HOME/endless, else
 // ~/.config/endless — E-2186) rather than refusing. A land always names its target, so the default is
-// reached only by a hand invocation, and the relative-path check in runApply is
+// reached only by a hand invocation, and OpenExisting's relative-path check is
 // what catches the case where that default resolves to nothing meaningful.
 func configDir(flags dbcontext.Flags) (dir dt.DirPath, err error) {
 	switch flags.Choice {
@@ -202,42 +175,6 @@ func configDir(flags dbcontext.Flags) (dir dt.DirPath, err error) {
 		dir = dbcontext.ConfigDir("")
 	}
 	return dir, err
-}
-
-// runApply applies exactly one change file to exactly one database.
-//
-// One file per invocation, matching what `worktree land` has always done: a
-// change set can be several files, one can apply and the next fail, and the
-// caller needs to know which — so it names them one at a time and reports each.
-func runApply(args []string, dir dt.DirPath) (res result, err error) {
-	var db *sql.DB
-	var path dt.Filepath
-
-	if len(args) != 1 {
-		err = errUsage("apply requires exactly one <change-file>",
-			"Pass exactly one change file per invocation and retry")
-		goto end
-	}
-
-	path, err = dt.Filepath(args[0]).Abs()
-	if err != nil {
-		err = fmt.Errorf("resolving %s: %w", args[0], err)
-		goto end
-	}
-
-	db, res.DB, err = openTarget(dir)
-	if err != nil {
-		goto end
-	}
-	defer closeDB(db)
-
-	// A .go change's own log lines are its own stream, not a refusal of ours:
-	// Apply hands this writer to the change, and what the change says about
-	// its own work is already in whatever words its author chose.
-	res.Result, err = schemachange.Apply(db, res.DB, path, refusal.Passthrough())
-
-end:
-	return res, err
 }
 
 // runUp brings exactly one database to the newest migration this binary embeds.
@@ -270,14 +207,12 @@ end:
 
 // openTarget resolves dir to its database file and opens it through
 // schema.OpenExisting, which refuses a relative path and a file that does not
-// exist. Both subcommands come through here, so neither can migrate a database
-// the other would have refused.
+// exist.
 //
 // OpenExisting opens the FILE: no schema application, no enum seed, no
 // integrity gate, no worktree-build check, no sandbox routing. That is the line
-// that separates this executable from `endless-go event apply-change`, which
-// opens through internal/monitor and brings the application's whole connect
-// with it.
+// that separates this executable from endless-go, which opens through
+// internal/monitor and brings the application's whole connect with it.
 func openTarget(dir dt.DirPath) (db *sql.DB, path dt.Filepath, err error) {
 	path = dt.FilepathJoin(dir, dbcontext.DBFileName)
 	db, err = schema.OpenExisting(path)
@@ -328,7 +263,7 @@ func emit(res any) {
 		// happened, and a shape built two lines above out of plain strings and
 		// ints cannot normally fail to marshal — so if it did, the migration
 		// may well have taken effect with nobody told. That is not a retry: a
-		// second `apply` would report "already applied" and prove nothing.
+		// second `up` would report "current" and prove nothing.
 		refusal.Report(
 			fmt.Sprintf("endless-migrate: encoding the result: %v", err),
 			"what state the database is in; the migration ran but its result "+
@@ -339,22 +274,18 @@ func emit(res any) {
 }
 
 // emitError prints a failure as the same kind of document a success gets, on
-// stdout, and exits 1 — the shape `endless-go event apply-change` established
-// and the Python caller parses.
-func emitError(name string, cause error) {
+// stdout, and exits 1 — the shape the Python caller parses.
+func emitError(cause error) {
 	out := map[string]any{"status": "error", "error": cause.Error()}
-	if name != "" {
-		out["name"] = name
-	}
 	b, err := json.Marshal(out)
 	if err != nil {
 		// The error document itself could not be built, so this line is all
-		// the caller gets about a schema change that failed after the land had
+		// the caller gets about a migration that failed after the land had
 		// already merged. The database lags the code until someone resolves
 		// the cause, and which way to resolve it is theirs to choose.
 		refusal.Report(
 			fmt.Sprintf("endless-migrate: %v", cause),
-			"how to resolve a schema change that failed to apply; the error "+
+			"how to resolve a migration that failed to apply; the error "+
 				"document could not be encoded, so this line is the whole report",
 		).Command("migrate").Exit(1)
 	}
@@ -371,16 +302,12 @@ func emitError(name string, cause error) {
 // the first of those.
 func usageText() string {
 	return strings.Join([]string{
-		"endless-migrate — apply Endless schema changes and migrations, and nothing else.",
+		"endless-migrate — apply Endless schema migrations, and nothing else.",
 		"",
 		"Usage:",
-		"  endless-migrate [--db main | --db-dir <dir>] apply <change-file>",
 		"  endless-migrate [--db main | --db-dir <dir>] up",
 		"",
 		"Commands:",
-		"  apply <change-file>   Apply one internal/schema/changes/<name>.{sql,go}",
-		"                        file and record it in _schema_version. Already",
-		"                        applied changes are skipped.",
 		"  up                    Apply every versioned migration this binary",
 		"                        embeds that the database lacks, then reconcile",
 		"                        the enum mirrors. A current database is a no-op.",

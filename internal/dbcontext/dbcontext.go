@@ -14,8 +14,8 @@
 // executable exists in order to avoid.
 //
 // So the rule has one definition here, and the two callers differ only in what
-// they layer on top. internal/schemachange/executable_test.go asserts that the
-// executable links nothing but this package and the change applier.
+// they layer on top. cmd/endless-migrate/main_test.go asserts that the
+// executable links nothing but this package and the migration set.
 //
 // # The vocabulary
 //

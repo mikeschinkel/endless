@@ -32,11 +32,8 @@ Normalization happens at the BOUNDARIES — on write, and on the read that hands
 a path to the filesystem — not per comparison, so a later contributor cannot
 get it wrong by omission. `match_project_path` is the one place that also
 compares in resolved form, as a fallback for rows written in an older
-spelling: E-2002's and E-2011's change scripts
-(`internal/schema/changes/e-*-project-paths.go`, whose logic is
-`monitor.RepairProjectPaths`) rewrite those, so the fallback is for rows
-written by hand, restored from an older backup, or living in a DB that has not
-run the changes yet.
+spelling: E-2002 and E-2011 rewrote the rows that existed then, so the
+fallback is for rows written by hand or restored from an older backup.
 """
 
 import os

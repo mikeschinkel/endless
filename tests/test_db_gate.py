@@ -133,7 +133,7 @@ def test_apply_db_choice_main_rejected_in_non_self_dev_main_checkout(tmp_path, m
 
 
 def test_default_db_to_main_pins_main_in_non_self_dev_worktree(tmp_path, monkeypatch):
-    """Forced-main operations (land/backup/apply-change) pin main directly and
+    """Forced-main operations (land/backup) pin main directly and
     must NOT be blocked by the --db self-dev gate — they run in downstream
     non-self_dev projects too."""
     wt = _make_worktree(tmp_path, sandbox=False, task_id="802")
@@ -210,31 +210,7 @@ def test_land_worktree_pins_main_from_sandbox(tmp_path, monkeypatch):
     assert seen["resolved"] == config.main_config_dir()
 
 
-def test_db_apply_change_pins_main_from_sandbox(tmp_path, monkeypatch):
-    """`endless db apply-change` (no --db) pins main so the _schema_version
-    marker lands in the real DB, not the sandbox."""
-    from endless import event_bridge
-
-    wt = _make_worktree(tmp_path, sandbox=True, task_id="1628")
-    monkeypatch.chdir(wt)
-    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
-
-    change_file = tmp_path / "0001-change.sql"
-    change_file.write_text("-- noop\n")
-
-    seen = {}
-
-    def _spy_apply_change(path):
-        seen["resolved"] = config.RESOLVED_CONFIG_DIR
-        return {"name": "0001-change", "status": "applied"}
-
-    monkeypatch.setattr(event_bridge, "apply_change", _spy_apply_change)
-    result = CliRunner().invoke(main, ["db", "apply-change", str(change_file)])
-    assert result.exit_code == 0, result.output
-    assert seen["resolved"] == config.main_config_dir()
-
-
-def test_db_apply_change_honors_explicit_sandbox(tmp_path, monkeypatch):
+def test_db_backup_honors_explicit_sandbox(tmp_path, monkeypatch):
     """An explicit --db sandbox is not overridden by the always-main default."""
     from endless import event_bridge
 
@@ -242,19 +218,14 @@ def test_db_apply_change_honors_explicit_sandbox(tmp_path, monkeypatch):
     monkeypatch.chdir(wt)
     monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", None)
 
-    change_file = tmp_path / "0001-change.sql"
-    change_file.write_text("-- noop\n")
-
     seen = {}
 
-    def _spy_apply_change(path):
+    def _spy_backup_db():
         seen["resolved"] = config.RESOLVED_CONFIG_DIR
-        return {"name": "0001-change", "status": "applied"}
+        return {}
 
-    monkeypatch.setattr(event_bridge, "apply_change", _spy_apply_change)
-    result = CliRunner().invoke(
-        main, ["db", "apply-change", str(change_file), "--db", "sandbox"]
-    )
+    monkeypatch.setattr(event_bridge, "backup_db", _spy_backup_db)
+    result = CliRunner().invoke(main, ["db", "backup", "--db", "sandbox"])
     assert result.exit_code == 0, result.output
     assert seen["resolved"] == config.sandbox_config_dir(wt)
 

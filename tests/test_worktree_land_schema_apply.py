@@ -1,5 +1,4 @@
-"""Tests for E-1941: `land` applies schema changes AFTER main advances, and
-refuses a self_dev land whose branch is behind base.
+"""Tests for E-1941: `land` migrates the database AFTER main advances.
 
 On 2026-08-10 the Justfile applied this branch's schema changes BEFORE calling
 `endless worktree land`. The apply succeeded, the land then failed, and the real
@@ -22,22 +21,20 @@ asked a proxy question, got it wrong three times, and even once tuned blocked
 every worktree continuously (main takes a Go commit every few hours) while
 directing users to hand-rebase — the operation that risks the E-1943 conflict.
 
-ED-1571/E-2088 changed WHAT applies a change, not WHEN. The apply step no longer
-runs `endless db apply-change` on the worktree's endless-go — that binary is a
-candidate build and ED-1567 forbids a candidate migrating the real ledger — but a
-migration-only executable built from the landing branch, which the land builds at
-Step 4.6 (before the ff-merge, so a broken build aborts with base untouched) and
-invokes at Step 5.5 (after it, in the same window as before). The recording at
-Step 6 still runs the worktree's endless-go, which is the half of E-1664 that
-survives. The ordering assertions below cover both binaries.
+ED-1571/E-2088 changed WHAT migrates, not WHEN: a migration-only executable
+built from the landing branch, which the land builds at Step 4.6 (before the
+ff-merge, so a broken build aborts with base untouched) and invokes at Step 5.5
+(after it, in the same window as before). E-2158 reduced the step to that
+executable's `up` alone — the per-ticket scripts it once also applied are
+gone. The ordering assertions below cover both binaries.
 
 Three layers:
-  1. Unit — `_rebuild_worktree_binary` and `_branch_schema_changes` against real
-     throwaway repos.
+  1. Unit — `_rebuild_worktree_binary` against real throwaway repos.
   2. Ordering — a genuine land (real rebase + ff-merge) recording the sequence of
-     rebuild / build-migrate / apply / record calls and main's SHA at each point.
-  3. Failure surfacing — an apply that raises must report main as advanced and
-     must not unwind the merge.
+     rebuild / build-migrate / backup / up / record calls and main's SHA at each
+     point.
+  3. Failure surfacing — a migration that raises must report main as advanced
+     and must not unwind the merge.
 """
 
 import os
@@ -49,13 +46,12 @@ import pytest
 
 from endless import worktree_cmd
 from endless.worktree_cmd import (
-    _branch_schema_changes,
     _rebuild_worktree_binary,
     land_worktree,
 )
 
 CANON = "E-1941"
-CHANGE = "internal/schema/changes/0099-add-thing.sql"
+MIGRATION = "internal/schema/migrations/00099_add_thing.sql"
 MIGRATE_BIN = "/bin/echo"
 
 
@@ -178,10 +174,10 @@ def _noop_record(item_id, proj_name, branch, base_branch, canonical,
     return None
 
 
-def _commit_change_on_feat(worktree, rel=CHANGE):
+def _commit_migration_on_feat(worktree, rel=MIGRATION):
     _write(worktree, rel)
     _git(["git", "add", "-A"], worktree)
-    _git(["git", "commit", "-q", "-m", "E-1941: add schema change"], worktree)
+    _git(["git", "commit", "-q", "-m", "E-1941: add a migration"], worktree)
 
 
 # ---------------------------------------------------------------------------
@@ -245,52 +241,16 @@ def test_no_behind_base_refusal_exists(landable, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 2. unit: the change list
+# 2. ordering: `up` runs after the ff-merge and before the record
 # ---------------------------------------------------------------------------
 
-def test_lists_added_sql_and_go_excluding_runner(landable):
-    wt = landable["worktree"]
-    _write(wt, CHANGE)
-    _write(wt, "internal/schema/changes/0100-thing.go")
-    _write(wt, "internal/schema/changes/runner/run.go")
-    _write(wt, "internal/schema/changes/README.md")
-    _write(wt, "src/unrelated.py")
-    _git(["git", "add", "-A"], wt)
-    _git(["git", "commit", "-q", "-m", "changes"], wt)
-
-    found = _branch_schema_changes(wt, "main")
-    assert CHANGE in found
-    assert "internal/schema/changes/0100-thing.go" in found
-    assert "internal/schema/changes/runner/run.go" not in found
-    assert "internal/schema/changes/README.md" not in found
-    assert "src/unrelated.py" not in found
-
-
-def test_no_changes_is_empty(landable):
-    assert _branch_schema_changes(landable["worktree"], "main") == []
-
-
-def test_list_is_empty_once_main_has_been_fast_forwarded(landable):
-    """Why the list is captured BEFORE Step 5: afterwards the three-dot diff
-    compares a commit with itself and every change would be silently skipped."""
-    wt, main = landable["worktree"], landable["main"]
-    _commit_change_on_feat(wt)
-    assert _branch_schema_changes(wt, "main") == [CHANGE]
-    _git(["git", "merge", "--ff-only", "feat"], main)
-    assert _branch_schema_changes(wt, "main") == []
-
-
-# ---------------------------------------------------------------------------
-# 3. ordering: apply runs after the ff-merge and before the record
-# ---------------------------------------------------------------------------
-
-def test_apply_runs_after_merge_and_before_record(landable, monkeypatch):
+def test_up_runs_after_merge_and_before_record(landable, monkeypatch):
     main, wt = landable["main"], landable["worktree"]
-    _commit_change_on_feat(wt)
+    _commit_migration_on_feat(wt)
     _patch_land(monkeypatch, main, wt)
 
     calls = []
-    main_at_apply = {}
+    main_at_up = {}
     main_at_rebuild = {}
 
     def fake_rebuild(wt, canon):
@@ -313,17 +273,13 @@ def test_apply_runs_after_merge_and_before_record(landable, monkeypatch):
         calls.append(("backup", endless_go_bin))
         return {}
 
-    def fake_apply(migrate_bin, change_path):
-        calls.append(("apply", str(change_path)))
-        main_at_apply["sha"] = _head(main, "main")
+    def fake_up(migrate_bin):
+        calls.append(("up", migrate_bin))
+        main_at_up["sha"] = _head(main, "main")
         return {}
 
     monkeypatch.setattr("endless.event_bridge.backup_db", fake_backup)
-    monkeypatch.setattr(worktree_cmd, "_migrate_change", fake_apply)
-    monkeypatch.setattr(
-        worktree_cmd, "_migrate_up",
-        lambda migrate_bin: calls.append(("up", migrate_bin)) or {},
-    )
+    monkeypatch.setattr(worktree_cmd, "_migrate_up", fake_up)
     def fake_record(item_id, proj_name, branch, base_branch, canonical,
                     merge_sha, endless_go_bin=None):
         calls.append(("record", merge_sha))
@@ -334,41 +290,38 @@ def test_apply_runs_after_merge_and_before_record(landable, monkeypatch):
     land_worktree(CANON, dry_run=False)
 
     assert [c[0] for c in calls] == [
-        "rebuild", "build-migrate", "backup", "up", "apply", "record",
+        "rebuild", "build-migrate", "backup", "up", "record",
     ]
     # Both builds happen BEFORE main advances, so a broken build of either
     # binary aborts with base and the DB untouched.
     assert main_at_rebuild["sha"] != feat_tip
     assert main_at_build_migrate["sha"] != feat_tip
-    # The apply saw main ALREADY advanced — the ordering the incident inverted.
-    assert main_at_apply["sha"] == feat_tip
+    # `up` saw main ALREADY advanced — the ordering the incident inverted.
+    assert main_at_up["sha"] == feat_tip
     by_name = dict(calls)
-    assert by_name["apply"].endswith(CHANGE)
+    assert by_name["up"] == MIGRATE_BIN
     # E-2020 reversed this: the backup is no longer pinned to the worktree's
     # binary (ED-1601 keeps worktree builds off main). It resolves the installed
     # one from PATH — a VACUUM INTO needs no particular build.
     assert by_name["backup"] is None
 
 
-def test_no_schema_changes_still_backs_up_and_migrates_up(landable, monkeypatch):
-    """E-2192 reversed what this used to assert. A branch with no change file
-    still builds the migrator, backs up once and runs `up`: whether the database
-    lacks a goose migration is a question about the database, not the diff.
-    It applies no change file, because there is none."""
+def test_a_branch_without_a_migration_still_backs_up_and_migrates_up(
+    landable, monkeypatch
+):
+    """E-2192: a branch with no migration still builds the migrator, backs up
+    once and runs `up` — whether the database lacks a goose migration is a
+    question about the database, not the diff."""
     main, wt = landable["main"], landable["worktree"]
     (wt / "README").write_text("edited\n")
     _git(["git", "add", "-A"], wt)
-    _git(["git", "commit", "-q", "-m", "E-1941: no schema change"], wt)
+    _git(["git", "commit", "-q", "-m", "E-1941: no migration"], wt)
     _patch_land(monkeypatch, main, wt)
 
     calls = []
     monkeypatch.setattr(
         "endless.event_bridge.backup_db",
         lambda endless_go_bin=None: calls.append("backup"),
-    )
-    monkeypatch.setattr(
-        worktree_cmd, "_migrate_change",
-        lambda migrate_bin, change_path: calls.append("apply"),
     )
     monkeypatch.setattr(
         worktree_cmd, "_build_migration_executable",
@@ -385,11 +338,11 @@ def test_no_schema_changes_still_backs_up_and_migrates_up(landable, monkeypatch)
     assert _head(main, "main") == _head(wt)
 
 
-def test_non_self_dev_land_never_applies(landable, monkeypatch):
-    """Downstream branches carry no endless schema changes; even if a path
+def test_non_self_dev_land_never_migrates(landable, monkeypatch):
+    """Downstream branches carry no endless migrations; even if a path
     matched, a non-self_dev land must not touch the DB."""
     main, wt = landable["main"], landable["worktree"]
-    _commit_change_on_feat(wt)
+    _commit_migration_on_feat(wt)
     _patch_land(monkeypatch, main, wt, self_dev=False)
     monkeypatch.setattr(
         worktree_cmd, "_resolve_land_endless_go", lambda w, r: None
@@ -401,8 +354,8 @@ def test_non_self_dev_land_never_applies(landable, monkeypatch):
         lambda endless_go_bin=None: calls.append("backup"),
     )
     monkeypatch.setattr(
-        worktree_cmd, "_migrate_change",
-        lambda migrate_bin, change_path: calls.append("apply"),
+        worktree_cmd, "_migrate_up",
+        lambda migrate_bin: calls.append("up") or {},
     )
     monkeypatch.setattr(
         worktree_cmd, "_build_migration_executable",
@@ -415,24 +368,24 @@ def test_non_self_dev_land_never_applies(landable, monkeypatch):
 
 
 # ---------------------------------------------------------------------------
-# 4. failure surfacing: the merge is NOT unwound
+# 3. failure surfacing: the merge is NOT unwound
 # ---------------------------------------------------------------------------
 
-def test_apply_failure_reports_main_advanced_and_keeps_the_merge(
+def test_up_failure_reports_main_advanced_and_keeps_the_merge(
     landable, monkeypatch
 ):
     main, wt = landable["main"], landable["worktree"]
-    _commit_change_on_feat(wt)
+    _commit_migration_on_feat(wt)
     _patch_land(monkeypatch, main, wt)
 
     monkeypatch.setattr(
         "endless.event_bridge.backup_db", lambda endless_go_bin=None: {}
     )
 
-    def boom(migrate_bin, change_path):
+    def boom(migrate_bin):
         raise click.ClickException("no such table: thing")
 
-    monkeypatch.setattr(worktree_cmd, "_migrate_change", boom)
+    monkeypatch.setattr(worktree_cmd, "_migrate_up", boom)
     recorded = []
 
     def fake_record(item_id, proj_name, branch, base_branch, canonical,
@@ -450,7 +403,7 @@ def test_apply_failure_reports_main_advanced_and_keeps_the_merge(
     assert "no such table: thing" in msg          # original cause preserved
     assert "no restore is needed" in msg          # the point of the reorder
     assert f"just land {CANON}" in msg            # how to recover
-    assert "_schema_version" in msg               # why the retry is safe
+    assert "goose records each migration" in msg  # why the retry is safe
     # main really did advance and stays advanced; the record never ran.
     assert _head(main, "main") == feat_tip
     assert recorded == []
@@ -458,7 +411,7 @@ def test_apply_failure_reports_main_advanced_and_keeps_the_merge(
 
 def test_backup_failure_is_also_surfaced_as_post_merge(landable, monkeypatch):
     main, wt = landable["main"], landable["worktree"]
-    _commit_change_on_feat(wt)
+    _commit_migration_on_feat(wt)
     _patch_land(monkeypatch, main, wt)
 
     def boom(endless_go_bin=None):
@@ -467,8 +420,8 @@ def test_backup_failure_is_also_surfaced_as_post_merge(landable, monkeypatch):
     monkeypatch.setattr("endless.event_bridge.backup_db", boom)
     applied = []
     monkeypatch.setattr(
-        worktree_cmd, "_migrate_change",
-        lambda migrate_bin, change_path: applied.append(str(change_path)),
+        worktree_cmd, "_migrate_up",
+        lambda migrate_bin: applied.append(migrate_bin) or {},
     )
     monkeypatch.setattr(worktree_cmd, "_record_landing", _noop_record)
 

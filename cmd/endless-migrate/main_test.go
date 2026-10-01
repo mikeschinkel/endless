@@ -1,13 +1,16 @@
-package schemachange_test
+package main_test
 
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	_ "modernc.org/sqlite"
 
 	"github.com/mikeschinkel/endless/internal/schema"
 )
@@ -28,12 +31,12 @@ const endlessPkgPrefix = "github.com/mikeschinkel/endless/"
 // allowlist can state.
 var allowedEndlessDeps = map[string]bool{
 	migrateCmdPkg: true,
-	"github.com/mikeschinkel/endless/internal/dbcontext":    true,
-	"github.com/mikeschinkel/endless/internal/schemachange": true,
+	"github.com/mikeschinkel/endless/internal/dbcontext": true,
 	// E-2192: `up` runs the versioned migration set. internal/schema is that
 	// set (embedded) plus the seeds, and links no Endless package but its own
 	// migrations subpackage — migration machinery by any reading, which is the
-	// only reason either is here.
+	// only reason either is here. (E-2158 removed the per-ticket script
+	// applier that once sat beside them.)
 	"github.com/mikeschinkel/endless/internal/schema":            true,
 	"github.com/mikeschinkel/endless/internal/schema/migrations": true,
 
@@ -167,6 +170,8 @@ func TestMigrateExecutable_HasNoApplicationSurface(t *testing.T) {
 	for _, sub := range []string{
 		"hook", "event", "task", "session", "session-query", "session-state",
 		"tmux", "worktree", "project", "db", "verify", "jobs", "spawn",
+		// E-2158 retired the per-ticket scripts this applied.
+		"apply",
 	} {
 		t.Run(sub, func(t *testing.T) {
 			stdout, stderr, code := run(t, binary, sub)
@@ -184,16 +189,15 @@ func TestMigrateExecutable_HasNoApplicationSurface(t *testing.T) {
 	}
 }
 
-// TestMigrateExecutable_OffersOnlyApplyAndUp pins the surface from the other
-// direction: whatever else changes, `apply` and `up` (E-2192) are the only
-// commands the help text advertises, so a later subcommand cannot arrive
-// documented-but-unnoticed.
+// TestMigrateExecutable_OffersOnlyUp pins the surface from the other
+// direction: whatever else changes, `up` (E-2192) is the only command the help
+// text advertises, so a later subcommand cannot arrive documented-but-unnoticed.
 //
 // Read from the Commands block rather than by grepping the whole page, because
 // the page deliberately says the words "hook", "task" and "query" in the
 // sentence that disclaims them — and a check that cannot tell an offer from a
 // disclaimer would force the disclaimer out to stay green.
-func TestMigrateExecutable_OffersOnlyApplyAndUp(t *testing.T) {
+func TestMigrateExecutable_OffersOnlyUp(t *testing.T) {
 	binary := buildMigrate(t)
 
 	stdout, _, code := run(t, binary, "--help")
@@ -202,8 +206,8 @@ func TestMigrateExecutable_OffersOnlyApplyAndUp(t *testing.T) {
 	}
 
 	commands := helpCommands(stdout)
-	if strings.Join(commands, " ") != "apply up" {
-		t.Errorf("help offers commands %v, want exactly [apply up]:\n%s",
+	if strings.Join(commands, " ") != "up" {
+		t.Errorf("help offers commands %v, want exactly [up]:\n%s",
 			commands, stdout)
 	}
 }
@@ -234,80 +238,6 @@ func helpCommands(help string) (names []string) {
 		names = append(names, strings.Fields(line)[0])
 	}
 	return names
-}
-
-// TestMigrateExecutable_RefusesADatabaseThatDoesNotExist: sql.Open would create
-// one, and a migration that CREATES its target has migrated nothing — it has
-// manufactured an empty file and reported success. A land that resolved the
-// wrong path must fail, not quietly migrate a database nobody meant.
-func TestMigrateExecutable_RefusesADatabaseThatDoesNotExist(t *testing.T) {
-	binary := buildMigrate(t)
-
-	change := writeChange(t, "e-2088-unused.sql", "CREATE TABLE thing (id INTEGER);\n")
-	cfgDir := t.TempDir()
-
-	stdout, _, code := run(t, binary, "--db-dir", cfgDir, "apply", string(change))
-	if code == 0 {
-		t.Fatal("apply succeeded against a config dir holding no database")
-	}
-	if !strings.Contains(stdout, "no database at") {
-		t.Errorf("the refusal does not say the database is missing: %q", stdout)
-	}
-	if _, err := os.Stat(filepath.Join(cfgDir, "endless.db")); err == nil {
-		t.Error("the refusal created the database it was refusing to migrate")
-	}
-}
-
-// TestMigrateExecutable_AppliesAChangeEndToEnd is the executable doing its one
-// job, through its real command line, against a database on disk: version
-// before, version after, the DML committed, and the second run a skip.
-func TestMigrateExecutable_AppliesAChangeEndToEnd(t *testing.T) {
-	binary := buildMigrate(t)
-
-	cfgDir := t.TempDir()
-	dbPath := filepath.Join(cfgDir, "endless.db")
-	db, err := openDBAt(t, dbPath)
-	if err != nil {
-		t.Fatalf("create %s: %v", dbPath, err)
-	}
-
-	change := writeChange(t, "e-2088-end-to-end.sql", `
-		CREATE TABLE task_types (id INTEGER PRIMARY KEY, slug TEXT NOT NULL);
-		INSERT OR IGNORE INTO task_types (id, slug) VALUES (1, 'todo');
-	`)
-
-	stdout, stderr, code := run(t, binary, "--db-dir", cfgDir, "apply", string(change))
-	if code != 0 {
-		t.Fatalf("apply exited %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
-	}
-	if !strings.Contains(stdout, `"status":"applied"`) {
-		t.Errorf("apply did not report applied: %q", stdout)
-	}
-	// The result names the database it opened, so a caller can check the one
-	// thing worth checking about a migration tool.
-	if !strings.Contains(stdout, dbPath) {
-		t.Errorf("the result does not name the database it changed: %q", stdout)
-	}
-
-	var slug string
-	err = db.QueryRow("SELECT slug FROM task_types WHERE id = 1").Scan(&slug)
-	if err != nil {
-		t.Fatalf("the change's DML did not commit: %v", err)
-	}
-	if slug != "todo" {
-		t.Errorf("slug = %q, want %q", slug, "todo")
-	}
-	if markerCount(t, db, "e-2088-end-to-end") != 1 {
-		t.Error("the change was applied but not recorded")
-	}
-
-	stdout, _, code = run(t, binary, "--db-dir", cfgDir, "apply", string(change))
-	if code != 0 {
-		t.Fatalf("re-apply exited %d: %s", code, stdout)
-	}
-	if !strings.Contains(stdout, `"status":"skipped"`) {
-		t.Errorf("re-applying did not skip: %q", stdout)
-	}
 }
 
 // TestMigrateExecutable_DBMainFollowsXDGThenHOME is the flag the land
@@ -344,28 +274,27 @@ func TestMigrateExecutable_DBMainFollowsXDGThenHOME(t *testing.T) {
 		).Scan(&name) == nil
 	}
 
-	change := writeChange(t, "e-2186-db-main-xdg.sql", "CREATE TABLE via_xdg (id INTEGER);\n")
 	stdout, stderr, code := runWithEnv(t, binary,
 		[]string{"HOME=" + home, "XDG_CONFIG_HOME=" + xdg},
-		"--db", "main", "apply", string(change))
+		"--db", "main", "up")
 	if code != 0 {
-		t.Fatalf("apply exited %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
+		t.Fatalf("up exited %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
 	if !strings.Contains(stdout, xdgDB) {
 		t.Errorf("--db main with XDG_CONFIG_HOME set did not open %s: %s", xdgDB, stdout)
 	}
-	if !hasTable(xdgDB, "via_xdg") || hasTable(homeDB, "via_xdg") {
+	// goose_db_version appears in exactly the database `up` migrated.
+	if !hasTable(xdgDB, "goose_db_version") || hasTable(homeDB, "goose_db_version") {
 		t.Error("--db main with XDG_CONFIG_HOME set migrated the wrong database")
 	}
 
-	change = writeChange(t, "e-2186-db-main-home.sql", "CREATE TABLE via_home (id INTEGER);\n")
 	stdout, stderr, code = runWithEnv(t, binary,
 		[]string{"HOME=" + home, "XDG_CONFIG_HOME="},
-		"--db", "main", "apply", string(change))
+		"--db", "main", "up")
 	if code != 0 {
-		t.Fatalf("apply exited %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
+		t.Fatalf("up exited %d\nstdout: %s\nstderr: %s", code, stdout, stderr)
 	}
-	if !hasTable(homeDB, "via_home") || hasTable(xdgDB, "via_home") {
+	if !hasTable(homeDB, "goose_db_version") {
 		t.Error("--db main with XDG_CONFIG_HOME unset did not migrate the database under HOME")
 	}
 }
@@ -381,9 +310,7 @@ func TestMigrateExecutable_DBMainFollowsXDGThenHOME(t *testing.T) {
 func TestMigrateExecutable_RefusesDBSandbox(t *testing.T) {
 	binary := buildMigrate(t)
 
-	change := writeChange(t, "e-2157-sandbox.sql", "CREATE TABLE thing (id INTEGER);\n")
-
-	_, stderr, code := run(t, binary, "--db", "sandbox", "apply", string(change))
+	_, stderr, code := run(t, binary, "--db", "sandbox", "up")
 	if code == 0 {
 		t.Fatal("--db sandbox was accepted; it has no cwd routing to resolve it with")
 	}
@@ -402,9 +329,7 @@ func TestMigrateExecutable_RefusesRetiredConfigDirFlag(t *testing.T) {
 	binary := buildMigrate(t)
 
 	cfgDir := t.TempDir()
-	change := writeChange(t, "e-2157-retired.sql", "CREATE TABLE thing (id INTEGER);\n")
-
-	_, stderr, code := run(t, binary, "--config-dir", cfgDir, "apply", string(change))
+	_, stderr, code := run(t, binary, "--config-dir", cfgDir, "up")
 	if code == 0 {
 		t.Fatal("--config-dir was accepted; E-2157 retired it")
 	}
@@ -522,20 +447,6 @@ func TestMigrateExecutable_UpOnACurrentDatabaseIsANoOp(t *testing.T) {
 	}
 }
 
-// TestMigrateExecutable_UpRefusesDBSandbox: `up` resolves its target exactly
-// as `apply` does, so ED-1571's one refusal holds for it too.
-func TestMigrateExecutable_UpRefusesDBSandbox(t *testing.T) {
-	binary := buildMigrate(t)
-
-	_, stderr, code := run(t, binary, "--db", "sandbox", "up")
-	if code == 0 {
-		t.Fatal("--db sandbox up was accepted")
-	}
-	if !strings.Contains(stderr, "--db-dir") {
-		t.Errorf("the refusal does not name the remedy: %s", stderr)
-	}
-}
-
 // TestMigrateExecutable_UpRefusesADatabaseThatDoesNotExist: a migration that
 // creates its target has migrated nothing. `up` on a missing file would build a
 // complete, empty ledger and report success.
@@ -553,4 +464,80 @@ func TestMigrateExecutable_UpRefusesADatabaseThatDoesNotExist(t *testing.T) {
 	if _, err := os.Stat(filepath.Join(cfgDir, "endless.db")); err == nil {
 		t.Error("the refusal created the database it was refusing to migrate")
 	}
+}
+
+// TestMigrateExecutable_UpRefusesADatabaseOlderThanBothVersioningSchemes is
+// E-2158's refusal through the real command line: a database with Endless data,
+// no goose_db_version and a user_version the retired Python ladder never
+// finished is refused, and the file is left exactly as it was.
+func TestMigrateExecutable_UpRefusesADatabaseOlderThanBothVersioningSchemes(t *testing.T) {
+	binary := buildMigrate(t)
+	cfgDir, dbPath := upDB(t)
+
+	db, err := openDBAt(t, dbPath)
+	if err != nil {
+		t.Fatalf("open %s: %v", dbPath, err)
+	}
+	_, err = db.Exec(`CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT);
+		PRAGMA user_version = 5`)
+	if err != nil {
+		t.Fatalf("building the fixture: %v", err)
+	}
+	before := masterRows(t, db)
+
+	stdout, _, code := run(t, binary, "--db-dir", cfgDir, "up")
+	if code == 0 {
+		t.Fatalf("up accepted a pre-versioning database: %s", stdout)
+	}
+	for _, want := range []string{dbPath, "user_version 5", "too old"} {
+		if !strings.Contains(stdout, want) {
+			t.Errorf("the refusal does not mention %q: %s", want, stdout)
+		}
+	}
+	if after := masterRows(t, db); after != before {
+		t.Errorf("the refusal changed the database\nbefore: %s\nafter:  %s", before, after)
+	}
+}
+
+// masterRows renders sqlite_master as one comparable string.
+func masterRows(t *testing.T, db *sql.DB) string {
+	t.Helper()
+
+	rows, err := db.Query(`SELECT type, name, coalesce(sql, '') FROM sqlite_master ORDER BY type, name`)
+	if err != nil {
+		t.Fatalf("reading sqlite_master: %v", err)
+	}
+	defer rows.Close()
+	var b strings.Builder
+	for rows.Next() {
+		var typ, name, text string
+		if err := rows.Scan(&typ, &name, &text); err != nil {
+			t.Fatalf("scanning sqlite_master: %v", err)
+		}
+		fmt.Fprintf(&b, "%s %s %s\n", typ, name, text)
+	}
+	return b.String()
+}
+
+// openDBAt opens the database file at path with one connection, closed when
+// the test ends.
+func openDBAt(t *testing.T, path string) (db *sql.DB, err error) {
+	t.Helper()
+
+	db, err = sql.Open("sqlite", path)
+	if err != nil {
+		return nil, err
+	}
+	t.Cleanup(func() {
+		closeErr := db.Close()
+		if closeErr != nil {
+			t.Errorf("close %s: %v", path, closeErr)
+		}
+	})
+	db.SetMaxOpenConns(1)
+	err = db.Ping()
+	if err != nil {
+		return nil, err
+	}
+	return db, nil
 }

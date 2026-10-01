@@ -4,17 +4,17 @@
 // e-2074-verify.sh sweeps the tree for any surviving mention of the dropped
 // identifiers, and a guard that must NAME what it forbids would trip that sweep
 // forever. The sweep exempts this file by name — the same exemption it grants
-// the change file and its own assertion list — so the exemption stays scoped to
-// code whose whole job is to prove absence.
+// the task's own schema script and assertion list — so the exemption stays
+// scoped to code whose whole job is to prove absence.
 package monitor
 
 import "testing"
 
 // TestSessionsHasNoneOfTheE2074Columns pins the four drops against the schema
 // rather than against deleted accessors, so a column re-added in schema.sql or
-// by a stray change file fails loudly here. Same shape as the E-1905 guard
-// above, and the same reason: db.py's _migrate_v3 runs on every Python connect
-// and has twice been the thing that resurrected a just-dropped column.
+// by a stray migration fails loudly here. Same shape as the E-1905 guard
+// above, and the same reason: db.py's retired migration ladder twice
+// resurrected a just-dropped column (E-2158 deleted it).
 func TestSessionsHasNoneOfTheE2074Columns(t *testing.T) {
 	db := withTestDB(t)
 	for _, col := range []string{"summary", "short_id", "kind_id", "plan_file_path"} {

@@ -5481,29 +5481,6 @@ def db_cmd():
     pass
 
 
-@db_cmd.command("apply-change")
-@click.argument("path", type=click.Path(exists=True))
-def db_apply_change(path):
-    """Apply one per-ticket schema-change file (internal/schema/changes/<name>).
-
-    Records the change in _schema_version; re-applying an already-applied change
-    is a no-op. Driven by `just land`, one file per invocation.
-    """
-    # Schema apply-change is an always-main operation driven by land; pin the
-    # real DB when run from a sandbox-routed session with no explicit --db, so
-    # the _schema_version marker lands in the real DB rather than the sandbox. E-1628.
-    from endless import config
-    config.default_db_to_main()
-    from endless.event_bridge import apply_change
-    result = apply_change(path)
-    name = result.get("name") or path
-    status = result.get("status") or "applied"
-    if status == "skipped":
-        click.echo(f"Change {name}: already applied (skipped).")
-    else:
-        click.echo(f"Change {name}: applied.")
-
-
 @db_cmd.command("backup")
 def db_backup():
     """Back up the database (VACUUM INTO a timestamped copy under backups/)."""

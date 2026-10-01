@@ -3353,7 +3353,7 @@ def _resolve_land_migrate_bin(worktree_path: Path, project_root: Path) -> str | 
     not happen rather than that the global would do instead (E-1662).
 
     Returns None for a non-self_dev project, which has no land, no worktree
-    binaries and no business applying endless's own schema changes.
+    binaries and no business applying endless's own schema migrations.
     """
     from endless import config
 
@@ -3386,8 +3386,7 @@ def _resolve_land_migrate_bin(worktree_path: Path, project_root: Path) -> str | 
 def _build_migration_executable(worktree_path: Path, canonical: str) -> None:
     """Build ED-1571's migration executable from the landing branch.
 
-    Called on EVERY self_dev land (E-2192). It used to run only when the branch
-    added an `internal/schema/changes/` file, but the land also runs
+    Called on EVERY self_dev land (E-2192), because every self_dev land runs
     `endless-migrate up`, and whether a branch carries a goose migration the
     database lacks is a question about the database, not the diff — a branch
     landing after a migration that never reached the ledger has the same gap.
@@ -3415,11 +3414,11 @@ def _build_migration_executable(worktree_path: Path, canonical: str) -> None:
             f"merged or migrated.",
             "whether to install `just`, which this machine needs before a "
             "self-dev land can build the executable that applies its schema "
-            "change",
+            "migrations",
             text=(f"cannot land {canonical}: `just` is not on PATH, so the "
                   f"migration-only executable cannot be built from the "
                   f"landing branch. That build is what lets this land apply "
-                  f"its own schema change at all — a binary built inside a "
+                  f"its own schema migrations at all — a binary built inside a "
                   f"task worktree is unlanded code and may not migrate the "
                   f"real database."),
         )
@@ -3449,14 +3448,13 @@ def _build_migration_executable(worktree_path: Path, canonical: str) -> None:
     )
 
 
-def _migrate_change(migrate_bin: str, change_path: Path) -> dict:
-    """Apply one schema change through the migration-only executable.
+def _migrate_up(migrate_bin: str) -> dict:
+    """Bring the database to the newest goose migration the landing branch
+    carries (E-2192).
 
-    Shells to `endless-migrate apply <path>` and returns its parsed JSON —
-    {"name", "status", "db"[, "reason"]}, the same document `endless-go event
-    apply-change` prints plus the database it opened. Raises click.ClickException
-    on failure; the executable reports its cause in the JSON's "error" field, as
-    the event bridge's apply_change does.
+    Shells to `endless-migrate up` — schema.Migrate, goose Up and then the enum
+    seeds — and returns its parsed JSON, {"status", "from", "to", "db"}, with
+    status "migrated" or "current".
 
     The DB context is threaded as a per-invocation flag (E-1429), never an
     environment variable, so a stale export cannot silently redirect a
@@ -3468,18 +3466,6 @@ def _migrate_change(migrate_bin: str, change_path: Path) -> dict:
     `--db main` and `--db-dir` from the same parser, and only `--db sandbox` is
     resolved here into `--db-dir <path>`, because ED-1571 leaves this executable
     no cwd routing to resolve it with. See config.migrate_db_context_args.
-    """
-    return _run_migrate(migrate_bin, ["apply", str(change_path)], "apply-change")
-
-
-def _migrate_up(migrate_bin: str) -> dict:
-    """Bring the database to the newest goose migration the landing branch
-    carries (E-2192).
-
-    Shells to `endless-migrate up` — schema.Migrate, goose Up and then the enum
-    seeds — and returns its parsed JSON, {"status", "from", "to", "db"}, with
-    status "migrated" or "current". Threads the DB context exactly as
-    `_migrate_change` does; see there.
 
     Without this a branch's goose migration reached the real ledger only when an
     installed binary next connected, so the binary that records the landing
@@ -3494,8 +3480,8 @@ def _run_migrate(migrate_bin: str, args: list[str], what: str) -> dict:
     return its parsed JSON document.
 
     The DB context rides as a per-invocation flag (E-1429), never an exported
-    variable. A failure raises click.ClickException carrying the executable's
-    own "error" text, else its stderr — a bare "it failed" teaches nothing.
+    variable. A failure raises a fault carrying the executable's own "error"
+    text, else its stderr — a bare "it failed" teaches nothing.
     """
     from endless import config
 
@@ -3514,7 +3500,7 @@ def _run_migrate(migrate_bin: str, args: list[str], what: str) -> dict:
             or result.stderr.strip()
             or "the migration executable failed"
         )
-        # Always wrapped: both callers run inside _apply_branch_schema_changes,
+        # Always wrapped: the one caller runs inside _migrate_landed_schema,
         # which catches this, reads `.message` and re-raises it as
         # _post_merge_failure — the refusal that knows main has already
         # advanced and what that means. So the class chosen here is the one
@@ -3530,12 +3516,23 @@ def _run_migrate(migrate_bin: str, args: list[str], what: str) -> dict:
 
 # land.toml: the per-branch land settings a task ships in its own directory
 # (E-2192). Keys live in tables, never at top level, so each later setting gets
-# its own; Endless-internal ones live under [self_dev]. Only one key exists.
+# its own; Endless-internal ones live under [self_dev]. No key exists today:
+# E-2158 retired the only one, so every key is refused, and the file stays as
+# the home a later setting will need.
 LAND_SETTINGS_FILENAME = "land.toml"
-SCHEMA_ORDER_MIGRATIONS_FIRST = "migrations-first"
-SCHEMA_ORDER_CHANGES_FIRST = "changes-first"
-_SCHEMA_ORDERS = (SCHEMA_ORDER_MIGRATIONS_FIRST, SCHEMA_ORDER_CHANGES_FIRST)
-_LAND_SETTINGS_KEYS = {"self_dev": {"schema_order"}}
+_LAND_SETTINGS_KEYS: dict[str, set[str]] = {}
+
+# Keys a land once understood, each with the task that retired it. Refused
+# like any unknown key, but by name: a branch cut before the retirement still
+# carries one, and "unknown key" would read as a typo rather than as a setting
+# that no longer has anything to do.
+_RETIRED_LAND_SETTINGS = {
+    ("self_dev", "schema_order"): (
+        "E-2158",
+        "goose migrations are the only schema step a land runs, so there is "
+        "nothing left to order",
+    ),
+}
 
 
 def _land_settings_path(worktree_path: Path, canonical: str) -> Path:
@@ -3545,23 +3542,19 @@ def _land_settings_path(worktree_path: Path, canonical: str) -> Path:
     )
 
 
-def _read_schema_order(worktree_path: Path, canonical: str, self_dev: bool) -> str:
-    """The order a self_dev land applies its schema steps in (E-2192).
+def _check_land_settings(worktree_path: Path, canonical: str, self_dev: bool) -> None:
+    """Read and validate the landing branch's land settings (E-2192).
 
     Read from `.endless/tasks/e-<id>/land.toml` in the WORKTREE — the landing
-    branch — because the agent that wrote the schema change is the one who
-    knows whether its change files must run before the goose migrations, not
-    whoever happens to run the land:
+    branch — because the agent that wrote the branch is the one who knows how it
+    must land, not whoever happens to run the land.
 
-        [self_dev]
-        schema_order = "changes-first"   # default: "migrations-first"
-
-    A missing file, or one with no [self_dev] table, is the default. Anything
-    the land does not understand — unreadable TOML, an unknown table or key, a
-    value that is not a string or not one of the two orders — refuses, naming
-    the file and the offender. A typo in a landing instruction must not be
-    silently ignored. Called before the ff-merge, so the refusal leaves base
-    and the database untouched.
+    A missing file is fine, and so is an empty one. Anything the land does not
+    understand — unreadable TOML, a setting at the top level, an unknown table
+    or key — refuses, naming the file and the offender. A typo in a landing
+    instruction must not be silently ignored. A retired key is refused by name,
+    with the task that retired it. Called before the ff-merge, so the refusal
+    leaves base and the database untouched.
 
     `[self_dev]` is known only on a self_dev project. Everywhere else no table
     is: nothing in it would do anything there, so it is refused like any other
@@ -3570,13 +3563,13 @@ def _read_schema_order(worktree_path: Path, canonical: str, self_dev: bool) -> s
     """
     path = _land_settings_path(worktree_path, canonical)
     if not path.is_file():
-        return SCHEMA_ORDER_MIGRATIONS_FIRST
+        return
 
     def refuse(problem: str) -> agent_help.Refusal:
         # No TSV row: land.toml arrived with E-2192, after the inventory.
         # NO-REPORT on the same reading every other "the branch's own file is
         # wrong" refusal gets: land.toml is written by the agent that wrote the
-        # schema change, it lives on the task branch, the message names the
+        # branch, it lives on the task branch, the message names the
         # offending key, and the fix is a commit on that branch. Nothing has
         # moved — this runs before the ff-merge.
         return agent_help.no_report(
@@ -3607,94 +3600,60 @@ def _read_schema_order(worktree_path: Path, canonical: str, self_dev: bool) -> s
                 f"sets `{table}` at the top level. Settings live in tables; "
                 f"{known_tables}"
             )
+        for key in value:
+            retired = _RETIRED_LAND_SETTINGS.get((table, key))
+            if retired:
+                task, why = retired
+                raise refuse(
+                    f"sets [{table}].{key}, which {task} retired: {why}. "
+                    f"Delete the key (and the file, if nothing else is in "
+                    f"it); {known_tables}"
+                )
         if table not in known:
             raise refuse(f"has an unknown table [{table}]; {known_tables}")
         for key in value:
             if key not in known[table]:
                 raise refuse(
                     f"has an unknown key `{key}` in [{table}]. Known keys: "
-                    + ", ".join(sorted(known[table])) + "."
+                    + (", ".join(sorted(known[table])) or "none") + "."
                 )
 
-    order = settings.get("self_dev", {}).get(
-        "schema_order", SCHEMA_ORDER_MIGRATIONS_FIRST,
-    )
-    if order not in _SCHEMA_ORDERS:
-        raise refuse(
-            f"sets [self_dev].schema_order = {order!r}; it must be "
-            f"\"{SCHEMA_ORDER_MIGRATIONS_FIRST}\" (the default) or "
-            f"\"{SCHEMA_ORDER_CHANGES_FIRST}\"."
-        )
-    return order
 
-
-def _branch_schema_changes(worktree_path: Path, base_branch: str) -> list[str]:
-    """Repo-relative schema-change files this branch ADDS since base (E-1941).
-
-    Must be called while `base_branch` and the branch still differ — i.e. BEFORE
-    the ff-merge. Afterwards they are the same commit, the three-dot diff is
-    empty, and every change would be silently skipped.
-
-    The runner/ package is excluded: library code, not a change script.
-    """
-    out = _git_run(
-        [
-            "diff", f"{base_branch}...HEAD", "--diff-filter=A", "--name-only",
-            "--", "internal/schema/changes/",
-            ":(exclude)internal/schema/changes/runner/",
-        ],
-        cwd=worktree_path,
-    )
-    return [
-        ln.strip() for ln in out.stdout.splitlines()
-        if ln.strip().endswith((".sql", ".go"))
-    ]
-
-
-def _apply_branch_schema_changes(
-    rel_paths: list[str],
-    worktree_path: Path,
+def _migrate_landed_schema(
     canonical: str,
     base_branch: str,
     migrate_bin: str | None,
-    schema_order: str = SCHEMA_ORDER_MIGRATIONS_FIRST,
 ) -> dict | None:
-    """Back up, then migrate and apply this branch's schema changes — AFTER the
-    ff-merge. Returns `endless-migrate up`'s result, {"status", "from", "to",
-    "db"}, which the land uses to clear the ERR-0020 its migration caused
-    (E-2205).
+    """Back up, then bring the database to the landing branch's newest goose
+    migration — AFTER the ff-merge. Returns `endless-migrate up`'s result,
+    {"status", "from", "to", "db"}, which the land uses to clear the ERR-0020
+    its migration caused (E-2205).
 
-    Two kinds of step, in `schema_order` (E-2192): `endless-migrate up`, which
-    brings the database to the newest goose migration the branch carries, and
-    the branch's own `internal/schema/changes/` files. Migrations run first
-    unless the task's land.toml says `changes-first`. `up` runs on every self_dev
-    land and is a no-op against a current database; the change loop is empty
-    when the branch adds none. ONE backup precedes whichever runs first.
+    One step (E-2158): `endless-migrate up`, which runs every migration the
+    branch carries that the database lacks and is a no-op against a current
+    database. It runs on every self_dev land, behind one backup.
 
-    Ordering is the whole point of E-1941. Applying BEFORE the merge meant a
+    Ordering is the whole point of E-1941. Migrating BEFORE the merge meant a
     merge failure left the real DB migrated to a schema no installed binary
     understood: unrecoverable without a restore, and on 2026-08-10 it froze
-    session tracking machine-wide. Applying AFTER inverts that asymmetry — main
-    has the code and the DB merely lags, which `endless db apply-change` fixes on
-    a re-run (it is idempotent, gated by _schema_version).
+    session tracking machine-wide. Migrating AFTER inverts that asymmetry — main
+    has the code and the DB merely lags, which a re-run fixes: goose records
+    every step in goose_db_version and `up` applies only what is missing.
 
     It cannot move later still: `_record_landing` runs the rebuilt installed
-    binary against the real DB, and for a branch adding a mirrored-enum value
-    that binary carries a constant the DB lacks until these changes land —
-    E-1664's failure inverted. Between the ff-merge and the record is the only
-    correct place.
+    binary against the real DB, and for a branch adding a column or a
+    mirrored-enum value that binary expects what the DB lacks until this runs —
+    E-1664's failure inverted, and E-2188's exactly. Between the ff-merge and
+    the record is the only correct place.
 
-    The backup is retained from the Justfile original: a change set can be
-    several files, so one can apply and the next fail, leaving a partial
-    migration no re-run heals — and there is still no `endless db restore`
+    The backup is kept because a migration set can be several steps, so one can
+    apply and the next fail — and there is still no `endless db restore`
     (E-1942).
 
-    WHAT APPLIES THEM changed with ED-1571. It used to be `endless db
-    apply-change` running on the worktree's endless-go, and that binary is a
-    candidate build (E-1664 made using it an invariant, and ED-1567 forbids a
-    candidate migrating the real ledger — the two point opposite ways). It is now
-    `migrate_bin`: the migration-only executable, built from this same branch a
-    step ago, which carries the change set and no application at all.
+    WHAT MIGRATES is ED-1571's: `migrate_bin`, the migration-only executable,
+    built from this same branch at Step 4.6, which carries the migration set and
+    no application at all. The worktree's endless-go is a candidate build, and
+    ED-1567 forbids a candidate migrating the real ledger.
 
     The BACKUP runs on the PATH-resolved installed endless-go, not pinned: the
     main checkout's own build does not exist yet in a fresh checkout — Step 5.6
@@ -3710,8 +3669,8 @@ def _apply_branch_schema_changes(
         # The one place in this file where report_if is the honest answer.
         #
         # `detail` is whatever failed — a backup that could not be written, a
-        # goose migration refusing against the real ledger, a change script's
-        # own error, or the self-declared land bug below. Those do not share a
+        # goose migration refusing against the real ledger, or the
+        # self-declared land bug below. Those do not share a
         # class: some are re-run-and-forget, and some mean the real database is
         # part-migrated with no `endless db restore` to undo it (E-1942). This
         # function cannot tell them apart from a string, and guessing wrong in
@@ -3731,8 +3690,8 @@ def _apply_branch_schema_changes(
                   f"The code is on {base_branch}; the database has not been "
                   f"migrated yet. Nothing is lost and no restore is needed — "
                   f"resolve the cause above and re-run `just land "
-                  f"{canonical}`. The ff-merge is idempotent and each schema "
-                  f"change is gated by _schema_version, so the retry applies "
+                  f"{canonical}`. The ff-merge is idempotent and goose "
+                  f"records each migration it applies, so the retry applies "
                   f"only what is still outstanding."),
         )
 
@@ -3743,11 +3702,11 @@ def _apply_branch_schema_changes(
         backup_db()
     except Exception as e:
         detail = e.message if isinstance(e, click.ClickException) else str(e)
-        raise _post_merge_failure("the pre-apply database backup", detail)
+        raise _post_merge_failure("the pre-migration database backup", detail)
 
     if migrate_bin is None:
         raise _post_merge_failure(
-            "applying this branch's schema changes",
+            "migrating the database",
             "no migration executable was resolved for a self_dev land; this is "
             "a bug in the land, not in the branch.",
         )
@@ -3768,21 +3727,7 @@ def _apply_branch_schema_changes(
                 + f" Migrated DB from version {res.get('from')} to {res.get('to')}"
             )
 
-    def apply_changes() -> None:
-        for rel in rel_paths:
-            click.echo(click.style("•", fg="cyan") + f" Applying schema change: {rel}")
-            try:
-                _migrate_change(migrate_bin, worktree_path / rel)
-            except Exception as e:
-                detail = e.message if isinstance(e, click.ClickException) else str(e)
-                raise _post_merge_failure(f"applying schema change {rel}", detail)
-
-    if schema_order == SCHEMA_ORDER_CHANGES_FIRST:
-        apply_changes()
-        migrate_up()
-    else:
-        migrate_up()
-        apply_changes()
+    migrate_up()
     return up_result
 
 
@@ -4294,16 +4239,15 @@ def land_worktree(
       4.2 Rebuild the worktree's endless-go from the now-current source,
          self_dev only (E-1941): the rebased branch must compile before main
          advances.
-      4.5 List the schema changes this branch adds (while main and the branch
-         still differ — after Step 5 the diff is empty).
+      4.6 Validate land.toml, and build the migration-only executable from the
+         landing branch, self_dev only (ED-1571).
       5. ff-merge from main.
       5.2 Build the installed (main checkout's) endless-go to the side,
          self_dev only (E-2205): the compile happens before the migration, so
          a failure leaves the database untouched.
-      5.5 Migrate (`endless-migrate up`, E-2192) and apply those schema
-         changes, self_dev only (E-1941), in land.toml's order. AFTER the
-         merge, so a failure leaves the DB lagging landed code (a re-run fixes
-         it) rather than migrated ahead of code that never landed.
+      5.5 Migrate (`endless-migrate up`, E-2192), self_dev only (E-1941).
+         AFTER the merge, so a failure leaves the DB lagging landed code (a
+         re-run fixes it) rather than migrated ahead of code that never landed.
       5.6 Swap Step 5.2's build in, self_dev only (E-2020, E-2205): a
          worktree build never opens main (ED-1601), so Step 6 records with the
          installed binary, which must match the database. Done by rename right
@@ -4320,7 +4264,7 @@ def land_worktree(
     task_landings; the dir and branch are reused.
     """
     # Landing is an always-main operation: the landed task lives only in the
-    # real DB, schema changes belong to it, and the merge is into main. When run
+    # real DB, schema migrations belong to it, and the merge is into main. When run
     # from a self-dev session whose XDG points at the worktree sandbox and no
     # explicit --db was given, pin main so the task.landed emit (and every
     # downstream endless-go shellout) targets the real DB rather than the
@@ -4750,26 +4694,6 @@ def land_worktree(
         # DB any more; see _rebuild_worktree_binary.)
         _rebuild_worktree_binary(worktree_path, canonical)
 
-        # Step 4.5 (E-1941): list this branch's schema changes while base and the
-        # branch are still different commits. After Step 5 they are the same
-        # commit and the three-dot diff is empty, so computing it later would
-        # silently skip every change. Listing is read-only — the DB is not
-        # touched until Step 5.5, after main has actually advanced.
-        try:
-            schema_changes = _branch_schema_changes(worktree_path, base_branch)
-        except subprocess.CalledProcessError as e:
-            # Read-only step, before the ff-merge, so nothing has moved. git
-            # named the cause and the agent acts on it.
-            raise agent_help.relay_foreign(
-                agent_help.no_report(
-                    f"git could not list {canonical}'s schema changes against "
-                    f"{base_branch}, so nothing was merged or migrated.",
-                    "Act on what git said below and retry the land",
-                    text="listing schema changes on the branch failed:",
-                ),
-                str(e.stderr or e),
-            )
-
         # Step 4.6 (ED-1571, E-2192): with base still unadvanced, read the
         # branch's land.toml and build the migration-only executable from the
         # landing branch. Every self_dev land builds it, because every self_dev
@@ -4779,7 +4703,7 @@ def land_worktree(
         # compile its own migration tool must abort while base and the database
         # are untouched. The land.toml read is not self_dev-gated: a typo in a
         # landing instruction is refused on any project.
-        schema_order = _read_schema_order(
+        _check_land_settings(
             worktree_path, canonical, config.project_is_self_dev(main_root),
         )
         migrate_bin = None
@@ -4826,41 +4750,35 @@ def land_worktree(
         # build failure stops the land while the database is untouched.
         _build_main_binary_next(main_root, canonical, base_branch)
 
-        # Step 5.5 (E-1941): apply this branch's schema changes now that main
-        # HAS advanced. Before the merge this was the irreversible case (DB
+        # Step 5.5 (E-1941): migrate the database now that main HAS advanced. Before the merge this was the irreversible case (DB
         # migrated, code not landed, no installed binary able to read it);
         # after it, a failure merely leaves the DB lagging code that is already
         # on main, which a re-run fixes. Must precede Steps 5.6 and 6: the
         # installed binary is swapped in at 5.6 and records the landing at
-        # 6, and it needs the rows these changes write (E-1664 inverted).
+        # 6, and it needs the schema these migrations write (E-1664 inverted,
+        # E-2188).
         #
-        # ED-1571: the applier is the migration executable built at Step 4.6,
+        # ED-1571: the migrator is the migration executable built at Step 4.6,
         # NOT the endless-go Step 6 uses. A worktree build may not open the real
         # ledger at all (ED-1601), so the two steps run two different programs
         # against one database — one that carries migrations and no schema
         # expectation, then the installed binary, swapped in at Step 5.6, whose
         # embedded schema matches what the first just wrote.
         #
-        # self_dev only: `internal/schema/changes/` is endless's OWN schema, so a
-        # downstream branch has no business migrating the user's DB even if a
-        # path happened to match.
+        # self_dev only: the migration set is endless's OWN schema, so a
+        # downstream land has no business migrating the user's DB.
         #
-        # E-2192: this runs on EVERY self_dev land, not only one that adds a
-        # change file, because `up` must run before Step 6 whatever the diff
-        # says. That includes the re-run after "recording the landing failed":
-        # its ff-merge is a no-op and its change list is empty, but `up` still
-        # brings the database to the branch's migrations before the record is
-        # retried, so the recovery no longer waits on an incidental migration.
+        # E-2192: this runs on EVERY self_dev land, whatever the diff says. That
+        # includes the re-run after "recording the landing failed": its ff-merge
+        # is a no-op, but `up` still brings the database to the branch's
+        # migrations before the record is retried.
         # E-2205: the moment the migration window opens, in the errors table's
         # own form, so the land can clear the ERR-0020 it causes and nothing
         # older.
         migrate_started = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
         up_result = None
         if config.project_is_self_dev(main_root):
-            up_result = _apply_branch_schema_changes(
-                schema_changes, worktree_path, canonical, base_branch,
-                migrate_bin, schema_order,
-            )
+            up_result = _migrate_landed_schema(canonical, base_branch, migrate_bin)
 
         # Step 5.6 (E-2020, ED-1601, E-2205): swap Step 5.2's build into place
         # the moment the migration has committed, so Step 6 records with a

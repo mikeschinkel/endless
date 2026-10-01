@@ -501,13 +501,12 @@ func execDecisionRelationDeleted(db dbQuerier, evt *Event) (*ExecuteResult, erro
 // =====================================================================
 
 // mapLegacyDecisionStatus reflects the pre-E-1378 status vocabulary onto the
-// new 3-state lifecycle. Mirrors the SQL mapping in
-// internal/schema/changes/e-1378-extract-decisions.sql so replay and
-// change-file produce the same projection.
+// new 3-state lifecycle. Mirrors the SQL mapping E-1378's schema migration
+// used, so a replay and a migrated database produce the same projection.
 //
 // E-1891 deliberately did NOT route these through internal/taskstatus. This
 // reads a FROZEN historical vocabulary — whatever those rows said when the
-// change file ran — and must keep answering the same way forever. Pointing it
+// migration ran — and must keep answering the same way forever. Pointing it
 // at the live registry would make a future status silently change how old
 // decisions project.
 func mapLegacyDecisionStatus(legacy string) string {
@@ -730,7 +729,7 @@ func replayDecisionRelationDeleted(db *sql.DB, evt *Event, result *ProjectResult
 // replayLegacyDecisionCreated handles pre-E-1378 task.created events where
 // the payload's type was 'decision'. It inserts the row into the decisions
 // table with the legacy status mapped through mapLegacyDecisionStatus so
-// the replay projection matches the post-change-file shape.
+// the replay projection matches the post-E-1378 shape.
 //
 // Called from projector.go's replayTaskCreated when payload.Type == "decision".
 func replayLegacyDecisionCreated(db *sql.DB, evt *Event, p *TaskCreatedPayload) error {

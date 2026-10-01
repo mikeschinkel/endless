@@ -177,8 +177,8 @@ land task_id="":
         echo "just land: could not resolve the main checkout." >&2
         exit 1
     fi
-    # Schema changes are NO LONGER applied here. `endless worktree land` applies
-    # them itself, between the ff-merge and the record-landing step (E-1941).
+    # The schema is NO LONGER migrated here. `endless worktree land` migrates
+    # it itself, between the ff-merge and the record-landing step (E-1941).
     # They used to run at this point — before the irreversible merge — and on
     # 2026-08-10 the apply succeeded, the merge then failed, and the real DB was
     # left migrated to a schema no installed binary could read: session tracking
@@ -195,7 +195,7 @@ land task_id="":
     # it has no consumer now, and was a build of pre-rebase source besides.
     #
     # E-1941: MAIN ADVANCING is what obliges a rebuild — not the land's exit
-    # code. The land can advance main and still fail afterwards (a schema apply
+    # code. The land can advance main and still fail afterwards (a migration
     # or the record-landing step), and bailing out there would leave the global
     # binaries older than the DB they now have to read: the very skew that took
     # session tracking down. So compare main before and after, refresh whenever
@@ -623,8 +623,7 @@ go-swap:
 # Deliberately NOT part of `just build` / `just go`. This binary exists for one
 # moment — a self_dev land — and `endless worktree land` builds it then, from
 # the landing branch, on every self_dev land: the land always runs its `up`
-# (E-2192), and may also `apply` the branch's change files. An ordinary
-# development build never builds it.
+# (E-2192). An ordinary development build never builds it.
 #
 # It is a recipe rather than an inlined `go build` inside the land for the same
 # reason `just go` is: the build command has one definition, and the land runs

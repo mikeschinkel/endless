@@ -49,8 +49,7 @@ def _child_refusal(text: str, returncode: int, what: str):
     sentinel, flattened three different Go classes under one Python wording, and
     left an agent two directives to reconcile, one of which nobody had chosen.
 
-    `text` is Go's stderr, or for apply-change the "error" field of the JSON it
-    prints on failure — still Go's own words, just arriving on the other stream.
+    `text` is Go's stderr — Go's own words.
 
     Silence is the one case that belongs to this side. A child that exits
     non-zero having written nothing said nothing to relay and gave nothing to
@@ -308,39 +307,6 @@ def emit_event(
     return None
 
 
-def apply_change(path: str, endless_go_bin: str | None = None) -> dict:
-    """Shell out to `endless-go event apply-change <path>` and return parsed JSON.
-
-    Applies one per-ticket schema-change file (internal/schema/changes/<name>)
-    and records it in _schema_version. Returns {"name", "status"[, "reason"]}.
-    Raises click.ClickException on failure (binary missing or non-zero exit).
-
-    endless_go_bin pins the binary, exactly as `emit_event` does (E-1664). A
-    self_dev land passes the worktree's build: its embedded schema.sql matches
-    the change file being applied, where the global is still main's baseline and
-    would produce 'no such table'. This replaces the caller-side
-    `PATH="<wt>/bin:$PATH"` prepend the Justfile used to need (E-1510/E-1660) —
-    the last of those hacks, superseded here as E-1664 superseded the one on the
-    record-landing step (E-1941).
-    """
-    config.require_db_context()  # E-1429
-    event_bin = _resolve_endless_go(override=endless_go_bin)
-    cmd = [event_bin, *config.go_db_context_args(), "event", "apply-change", str(path)]
-    result = subprocess.run(cmd, capture_output=True, text=True)
-    if result.returncode != 0:
-        # endless-event prints JSON with an "error" field on failure.
-        try:
-            payload = json.loads(result.stdout.strip()) if result.stdout.strip() else {}
-        except json.JSONDecodeError:
-            payload = {}
-        raise _child_refusal(payload.get("error") or result.stderr,
-                             result.returncode, "event apply-change")
-
-    if not result.stdout.strip():
-        return {}
-    return json.loads(result.stdout.strip())
-
-
 def project_registry(verb: str, *args: str):
     """Shell out to `endless-go project <verb> <args...>` and return its answer.
 
@@ -376,8 +342,8 @@ def init_schema(endless_go_bin: str | None = None) -> dict:
     tool. Go embeds the migration set in the binary, so it always has one.
 
     Returns {"status", "db", "version", "latest"}. Raises click.ClickException
-    on failure (binary missing or non-zero exit), like apply_change and
-    backup_db, whose shape this follows.
+    on failure (binary missing or non-zero exit), like backup_db, whose shape
+    this follows.
     """
     config.require_db_context()  # E-1429
     event_bin = _resolve_endless_go(override=endless_go_bin)
@@ -429,7 +395,8 @@ def backup_db(endless_go_bin: str | None = None) -> dict:
 
     Raises click.ClickException on failure (binary missing or non-zero exit).
 
-    endless_go_bin pins the binary; see apply_change. A backup is a VACUUM INTO
+    endless_go_bin pins the binary, exactly as `emit_event` does (E-1664). A
+    backup is a VACUUM INTO
     of the file and never goes through the application's connect, so which
     build takes it does not matter to the snapshot.
     """
