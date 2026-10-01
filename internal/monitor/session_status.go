@@ -9,6 +9,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
+	"github.com/mikeschinkel/endless/internal/tasktype"
 )
 
 // SessionStatusRow is one task row in the per-session "what's next" view
@@ -68,7 +69,7 @@ type SessionStatusRow struct {
 	// descendant in taskstatus.Shipped (E-2198). An epic's status is derived from
 	// its children and its own branch is normally empty, so neither says whether
 	// the epic has produced work — its descendants do. Filled with Unsettled by
-	// AnnotateSessionStatusUnsettled, and only for epic rows; see HasShippedWork.
+	// AnnotateSessionStatusUnsettled, and only for epic rows; see HasWorkProduct.
 	DescendantShipped bool
 	// Hidden / HiddenAt are the VIEWING session's per-session suppression of this
 	// task (E-1914): a session_hidden_tasks row for (viewer, task). Like Unsettled
@@ -126,16 +127,30 @@ type SessionStatusRow struct {
 	Duplicates []int64
 }
 
-// HasShippedWork reports whether the row's task has produced work product that
-// reached the verification gate or passed it — the ⊙/space split of the
-// unsettled column (E-2107). For an ordinary task that is its own status. For an
-// epic it is its descendants' (E-2198): an epic never ships by doing its own
-// work, so reading its own status would wear ⊙ however much its children landed.
-func (r SessionStatusRow) HasShippedWork() bool {
-	if r.TypeSlug == "epic" {
+// HasWorkProduct reports whether the row's task has ever produced work product —
+// the ⊙/space split of the unsettled column (E-2107). What counts as evidence
+// depends on what the task type delivers:
+//
+//   - Code-bearing (todo, bugfix): a task_landings row (E-2199). Its status is
+//     not evidence — a task that lands mid-flight and keeps working stays
+//     `underway`, and reading status wore ⊙ on real landed code.
+//   - Findings (research, brainstorm): its status. Their deliverable is outcome
+//     text, not code, so they normally have no landing row and that is correct.
+//   - Epic: its descendants' (E-2198). An epic never ships by doing its own
+//     work, so reading its own status would wear ⊙ however much its children
+//     landed.
+//
+// A worktree that is unsettled is evidence too, but the caller tests it first
+// (◆ outranks the ⊙/space split), so it is not repeated here.
+func (r SessionStatusRow) HasWorkProduct() bool {
+	switch r.TypeSlug {
+	case tasktype.TaskTypeEpic.String():
 		return r.DescendantShipped
+	case tasktype.TaskTypeResearch.String(), tasktype.TaskTypeBrainstorm.String():
+		return taskstatus.Has(taskstatus.Shipped, r.Status)
+	default:
+		return r.Landed
 	}
-	return taskstatus.Has(taskstatus.Shipped, r.Status)
 }
 
 // supersededByExpr is the `enr`-CTE column that collects a task's replacements as

@@ -202,16 +202,26 @@ func TestBlockField(t *testing.T) {
 }
 
 // TestUnsettledMark pins all four states of the column and the rule that picks
-// between them (E-1701 for ◆, E-2107 for the ⊙/space split, E-2128 for ~). Two
-// cases are load-bearing. `underway` settled and `unverified` settled differ ONLY
-// in status, and before E-2107 both rendered blank — the collapse that task
-// exists to undo. And every row here carries UnsettledKnown, because a row
-// WITHOUT it renders ~ whatever else is true of it: that is the precedence rule,
-// and the pair at the end of the table is what states it.
+// between them (E-1701 for ◆, E-2107 for the ⊙/space split, E-2128 for ~, E-2199
+// for what counts as evidence in that split). Three cases are load-bearing.
+// A landed `underway` todo and an unlanded one differ ONLY in Landed, and before
+// E-2199 both rendered ⊙ — the mis-signal that task exists to remove. A shipped
+// todo with no landing row reads ⊙, because for code-bearing work a status is
+// not evidence (the accepted pre-May-2026 consequence). And a completed research
+// task with no landing row reads blank, because its deliverable is outcome text
+// and no landing row is correct for it. Every row here carries UnsettledKnown,
+// because a row WITHOUT it renders ~ whatever else is true of it: that is the
+// precedence rule, and the trio at the end of the table is what states it.
 func TestUnsettledMark(t *testing.T) {
 	known := func(r monitor.SessionStatusRow) monitor.SessionStatusRow {
 		r.UnsettledKnown = true
 		return r
+	}
+	todo := func(status string, landed bool) monitor.SessionStatusRow {
+		return known(monitor.SessionStatusRow{Status: status, TypeSlug: "todo", Landed: landed})
+	}
+	findings := func(slug, status string) monitor.SessionStatusRow {
+		return known(monitor.SessionStatusRow{Status: status, TypeSlug: slug})
 	}
 	cases := []struct {
 		name   string
@@ -221,31 +231,43 @@ func TestUnsettledMark(t *testing.T) {
 	}{
 		{"unsettled beats everything", known(monitor.SessionStatusRow{Status: "underway", Unsettled: true}), "◆",
 			"a diverged worktree has outstanding work product whatever the status says"},
-		{"unsettled outranks a shipped status", known(monitor.SessionStatusRow{Status: "confirmed", Unsettled: true}), "◆",
+		{"unsettled outranks a landing", known(monitor.SessionStatusRow{Status: "confirmed", Landed: true, Unsettled: true}), "◆",
 			"◆ takes precedence over the ⊙/space split, unchanged from E-1701"},
-		{"never spawned", known(monitor.SessionStatusRow{Status: "ready"}), "⊙",
+
+		// Code-bearing work: the evidence is a landing row (E-2199).
+		{"never spawned", todo("ready", false), "⊙",
 			"nobody has picked this up, so there is no work product"},
-		{"unplanned", known(monitor.SessionStatusRow{Status: "unplanned"}), "⊙", "same, earlier still"},
-		{"claimed but empty", known(monitor.SessionStatusRow{Status: "underway"}), "⊙",
+		{"unplanned", todo("unplanned", false), "⊙", "same, earlier still"},
+		{"claimed but empty", todo("underway", false), "⊙",
 			"a session is sitting on it and has produced nothing — the same fact about the work"},
-		{"revisit", known(monitor.SessionStatusRow{Status: "revisit"}), "⊙",
-			"reopened work has not been restarted"},
-		{"declined", known(monitor.SessionStatusRow{Status: "declined"}), "⊙",
+		{"landed mid-flight and still underway", todo("underway", true), " ",
+			"E-2199: real landed code with nothing outstanding is not 'not started', whatever the status"},
+		{"landed bugfix still underway", known(monitor.SessionStatusRow{Status: "underway", TypeSlug: "bugfix", Landed: true}), " ",
+			"bugfix is code-bearing too"},
+		{"revisit after a land", todo("revisit", true), " ", "reopened, but what it landed is still on main"},
+		{"revisit, never landed", todo("revisit", false), "⊙", "reopened work has not been restarted"},
+		{"declined", todo("declined", false), "⊙",
 			"abandoned without shipping — terminal, but never any work product"},
-		{"obsolete", known(monitor.SessionStatusRow{Status: "obsolete"}), "⊙", "same"},
-		{"unverified and settled", known(monitor.SessionStatusRow{Status: "unverified"}), " ",
-			"reached the gate with a clean worktree: produced work, all of it landed"},
-		{"unreviewed and settled", known(monitor.SessionStatusRow{Status: "unreviewed"}), " ", "the findings-lane gate"},
-		{"confirmed and settled", known(monitor.SessionStatusRow{Status: "confirmed"}), " ", "past the gate"},
-		{"assumed and settled", known(monitor.SessionStatusRow{Status: "assumed"}), " ", "past the gate"},
-		{"completed and settled", known(monitor.SessionStatusRow{Status: "completed"}), " ", "past the gate"},
+		{"obsolete", todo("obsolete", false), "⊙", "same"},
+		{"unverified and landed", todo("unverified", true), " ", "produced work, all of it landed"},
+		{"confirmed and landed", todo("confirmed", true), " ", "past the gate"},
+		{"confirmed with no landing row", todo("confirmed", false), "⊙",
+			"a status is not evidence for code-bearing work: the pre-May-2026 rows, left for E-1715"},
+		{"untyped row reads as code-bearing", known(monitor.SessionStatusRow{Status: "underway", Landed: true}), " ",
+			"an unknown type falls through to the todo rule, as typeLetter does"},
+
+		// Findings work: the evidence is status; no landing row is correct (E-2199).
+		{"research unreviewed", findings("research", "unreviewed"), " ", "the findings-lane gate"},
+		{"research completed", findings("research", "completed"), " ", "past the gate, with no code to land"},
+		{"brainstorm completed", findings("brainstorm", "completed"), " ", "same lane"},
+		{"research underway", findings("research", "underway"), "⊙", "no outcome delivered yet"},
 
 		// E-2128. `~` is tested FIRST, so an unknown verdict outranks every state
 		// below it — including ◆, whose flag is meaningless until something has
 		// computed it.
 		{"not yet computed", monitor.SessionStatusRow{Status: "underway"}, "~",
 			"nothing has computed whether this clean worktree's commits reached the base"},
-		{"not yet computed outranks a shipped status", monitor.SessionStatusRow{Status: "confirmed"}, "~",
+		{"not yet computed outranks a landing", monitor.SessionStatusRow{Status: "confirmed", Landed: true}, "~",
 			"the ⊙/space split is an answer, and there is no answer yet"},
 		{"not yet computed outranks the unsettled flag", monitor.SessionStatusRow{Status: "underway", Unsettled: true}, "~",
 			"an Unsettled flag on a row whose verdict is unknown was never filled in; reporting ◆ would be inventing it"},
@@ -253,8 +275,8 @@ func TestUnsettledMark(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			if got := unsettledMark(c.row); got != c.want {
-				t.Errorf("unsettledMark(status=%q, unsettled=%v, known=%v) = %q, want %q — %s",
-					c.row.Status, c.row.Unsettled, c.row.UnsettledKnown, got, c.want, c.reason)
+				t.Errorf("unsettledMark(type=%q, status=%q, landed=%v, unsettled=%v, known=%v) = %q, want %q — %s",
+					c.row.TypeSlug, c.row.Status, c.row.Landed, c.row.Unsettled, c.row.UnsettledKnown, got, c.want, c.reason)
 			}
 		})
 	}
@@ -279,8 +301,10 @@ func TestUnsettledMarkOnEpicRows(t *testing.T) {
 		{"no child shipped", epic("underway", false, false, true), "⊙"},
 		{"children's verdicts not yet known", epic("underway", true, false, false), "~"},
 		{"an epic's own completed status is not shipped work", epic("completed", false, false, true), "⊙"},
-		{"a todo still reads its own status", monitor.SessionStatusRow{Status: "underway", TypeSlug: "todo",
+		{"a todo reads its own landing, not descendants", monitor.SessionStatusRow{Status: "confirmed", TypeSlug: "todo",
 			DescendantShipped: true, UnsettledKnown: true}, "⊙"},
+		{"an epic's own landing row is not its children's work", monitor.SessionStatusRow{Status: "underway", TypeSlug: "epic",
+			Landed: true, UnsettledKnown: true}, "⊙"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -408,8 +432,8 @@ func TestRenderFourStateColumn(t *testing.T) {
 		// ⊙ — never spawned at all. Same column state as E-2102 on purpose: this
 		// column does not distinguish them, the action icon does.
 		{ID: 2103, Title: "never spawned", Status: "ready", Phase: "now", TypeSlug: "todo", UnsettledKnown: true},
-		// (blank) — shipped and settled: produced work, all of it landed.
-		{ID: 2104, Title: "landed and done", Status: "unverified", Phase: "now", TypeSlug: "todo", UnsettledKnown: true},
+		// (blank) — landed and settled: produced work, all of it landed.
+		{ID: 2104, Title: "landed and done", Status: "unverified", Phase: "now", TypeSlug: "todo", Landed: true, UnsettledKnown: true},
 		// ~ — a clean worktree whose unlanded verdict nothing has computed yet
 		// (E-2128). The state the other four are answers to.
 		{ID: 2105, Title: "not yet determined", Status: "underway", Phase: "now", TypeSlug: "todo"},
@@ -537,11 +561,14 @@ func TestBuildLegend(t *testing.T) {
 		// is ●/↑/⏚.
 		{
 			name: "undecorated unlanded terminal row surfaces ⇥ closed and ✓ done, never ⁇",
-			rows: []monitor.SessionStatusRow{{Status: "confirmed", UnsettledKnown: true}},
+			rows: []monitor.SessionStatusRow{{Status: "completed", TypeSlug: "research", UnsettledKnown: true}},
 			want: "⇥ closed  ✓ done",
-			// No ⊙: `confirmed` is Shipped, so the row's column is a blank —
-			// "produced work, all of it landed". Contrast the declined/obsolete
-			// case below, which is terminal but never shipped anything (E-2107).
+			// No ⊙: a findings task is judged by status, and `completed` is
+			// Shipped, so the row's column is a blank — "produced work, nothing
+			// outstanding" — with no landing row, which is correct for research
+			// (E-2199). A code-bearing task in the same state would read ⊙. Contrast
+			// the declined/obsolete case below, which is terminal but never shipped
+			// anything (E-2107).
 			mustNotHave: []string{"⁇ unknown", "not started"},
 		},
 		{
@@ -626,10 +653,10 @@ func TestBuildLegend(t *testing.T) {
 		},
 		{
 			// The conditional half of the width-on-demand rule: a frame in which
-			// every row has shipped and settled bears no ⊙, so the legend must not
-			// advertise one (E-2107).
-			name:        "no ⊙ when every row has shipped and settled",
-			rows:        []monitor.SessionStatusRow{{Status: "unverified", UnsettledKnown: true}, {Status: "confirmed", UnsettledKnown: true}},
+			// every row has landed and settled bears no ⊙, so the legend must not
+			// advertise one (E-2107, E-2199).
+			name:        "no ⊙ when every row has landed and settled",
+			rows:        []monitor.SessionStatusRow{{Status: "unverified", Landed: true, UnsettledKnown: true}, {Status: "confirmed", Landed: true, UnsettledKnown: true}},
 			mustNotHave: []string{"not started"},
 		},
 		{
@@ -677,7 +704,7 @@ func TestRenderColumnsAndTruncation(t *testing.T) {
 	rows := []monitor.SessionStatusRow{
 		{ID: 1465, Title: "Implement endless session next briefing read command", Status: "underway", Phase: "now", TypeSlug: "todo", IsFocal: true, UnsettledKnown: true},
 		{ID: 1461, Title: "Add endless session next prospective remaining-work briefing", Status: "ready", Phase: "now", TypeSlug: "epic", IsParent: true, UnsettledKnown: true},
-		{ID: 1684, Title: "Add session next --tree showing task IDs in implementation order", Status: "confirmed", Phase: "now", TypeSlug: "todo", IsFrom: true, UnsettledKnown: true},
+		{ID: 1684, Title: "Add session next --tree showing task IDs in implementation order", Status: "confirmed", Phase: "now", TypeSlug: "todo", IsFrom: true, Landed: true, UnsettledKnown: true},
 	}
 	var b strings.Builder
 	renderTo(&b, rows, 1465, hintClaimBind, 40, false, hiddenOmit)

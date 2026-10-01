@@ -98,8 +98,8 @@ func TestEpicWorkProductRollsUpFromChildren(t *testing.T) {
 					got.DescendantShipped, got.Unsettled, got.UnsettledKnown,
 					c.wantShipped, c.wantUnsettled, c.wantKnown)
 			}
-			if got.HasShippedWork() != c.wantShipped {
-				t.Errorf("HasShippedWork() = %v, want %v", got.HasShippedWork(), c.wantShipped)
+			if got.HasWorkProduct() != c.wantShipped {
+				t.Errorf("HasWorkProduct() = %v, want %v", got.HasWorkProduct(), c.wantShipped)
 			}
 		})
 	}
@@ -162,7 +162,7 @@ func TestEpicWorkProductLeavesOrdinaryRowsAlone(t *testing.T) {
 	stub := installVerdictStub(t, map[int64]UnsettledDetail{11: verdictUnsettled})
 
 	got := annotateOne(t, SessionStatusRow{ID: 10, ProjectID: 1, Status: "underway", TypeSlug: "todo"})
-	if got.DescendantShipped || got.Unsettled || got.HasShippedWork() {
+	if got.DescendantShipped || got.Unsettled || got.HasWorkProduct() {
 		t.Errorf("a todo row rolled up its child: %+v", got)
 	}
 	if stub.calls[11] != 0 {

@@ -1298,28 +1298,47 @@ const (
 // this column deliberately does not try to tell them apart: the action icon and
 // the status already do.
 //
-// The ⊙/space split is decided by STATUS, not by landing history. task_landings
-// is not a reliable record of what reached main (E-2087 measured branches whose
-// content is demonstrably on main with no landing row at all), and a git-side
-// answer would put a new probe on a per-row hot path. taskstatus.Shipped is
-// exactly "reached the verification gate or passed it", which is what having
-// produced work product means, and it is already on the row for free — so a
-// status added to the vocabulary forces this decision rather than silently
-// defaulting to a blank.
+// The ⊙/space split is decided by EVIDENCE that work was produced, and what
+// counts as evidence depends on the task type (monitor.HasWorkProduct, E-2199):
 //
-// An epic is the exception, and the decision is not by its own status (E-2198).
-// Its status is derived from its children and its own branch is normally empty,
-// so it would wear ⊙ however much its children had landed. For an epic row the
-// data layer rolls ◆ and ~ up from its descendants' worktrees and the ⊙/space
-// split from their statuses (monitor.AnnotateSessionStatusUnsettled), and
-// HasShippedWork reads the rolled-up answer. This function still only reads
-// fields off the row.
+//   - A code-bearing task (todo, bugfix) has produced work when it has a
+//     task_landings row. Unsettled is evidence too, but ◆ is tested first, so
+//     by the time this split is reached it is already false.
+//   - A findings task (research, brainstorm) is decided by status —
+//     taskstatus.Shipped. It delivers outcome text, not code, so no landing row
+//     is the CORRECT state for it, not a gap.
+//   - An epic is decided by its descendants, not by its own status (E-2198).
+//     Its status is derived from its children and its own branch is normally
+//     empty, so it would wear ⊙ however much its children had landed. For an
+//     epic row the data layer rolls ◆ and ~ up from its descendants' worktrees
+//     and the ⊙/space split from their statuses
+//     (monitor.AnnotateSessionStatusUnsettled), and HasWorkProduct reads the
+//     rolled-up answer.
 //
-// One accepted mis-signal: a task that lands mid-flight and keeps working stays
-// `underway`, so it wears ⊙ despite real landed work. It is still true that
-// nothing is outstanding. The legend therefore labels ⊙ by what it MEANS —
-// "not started" — not by the status test it is derived from, so the derivation
-// can be sharpened later without the vocabulary changing.
+// This function still only reads fields off the row; Landed was already there,
+// driving the ⏚ action glyph, so the rule adds no read.
+//
+// History. E-2107 first decided the split by STATUS for every type: it was free
+// on the row, and task_landings looked unreliable — E-2087 had measured branches
+// whose content is demonstrably on main with no landing row at all. The cost was
+// an accepted mis-signal: a task that lands mid-flight and keeps working stays
+// `underway`, so it wore ⊙ despite real landed work. The legend labelled ⊙ by
+// what it MEANS — "not started" — rather than by the status test, so the
+// derivation could be sharpened without the vocabulary changing. E-2199 is that
+// sharpening. Measured 2026-09-30: of 760 landings on record, no code-bearing
+// task has lacked a landing row since May 2026 (88 gaps in April, 2 in May, 0
+// after). E-2087 was measuring the April backlog, which pre-dates the recording
+// mechanism.
+//
+// Accepted consequences:
+//
+//   - The ~90 finished code-bearing tasks from April 2026 and earlier that have
+//     no landing row now read ⊙, though their status says they shipped.
+//     Backfilling their landing records from git history is a much larger job
+//     with its own task (E-1715); this rule deliberately does not paper over it
+//     by falling back to status.
+//   - A task that produced work, landed none of it, and had its worktree reaped
+//     reads ⊙. Nothing of it survives to render from.
 //
 // ⊙ must NOT join ◆ in vetoing dim (see colorize): ◆ means "still something to
 // do here", ⊙ means the opposite, and a never-started `later` row should still
@@ -1334,7 +1353,7 @@ func unsettledMark(r monitor.SessionStatusRow) string {
 		return undeterminedGlyph
 	case r.Unsettled:
 		return unsettledGlyph
-	case !r.HasShippedWork():
+	case !r.HasWorkProduct():
 		return notStartedGlyph
 	default:
 		return " "
