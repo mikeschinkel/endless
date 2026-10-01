@@ -212,61 +212,116 @@ task exists to end.
 
 ## What the build changed about this plan (recorded at implementation)
 
-Nine things the plan did not say, each decided while converting and each
-visible in the diff.
+Written after the work landed in two passes: a first implementation, and a
+re-implementation when the first would not rebase. Both are below, because the
+second pass is where most of the deviations came from.
+
+### The rebase, and why the first pass was redone
+
+The first implementation sat unlanded for ten days while main moved. `just land`
+then failed on a conflict `endless worktree diagnose` classified as **symbol
+supersession (proven)**: the branch classified refusals in code main had since
+DELETED — the whole triage-context/triage-claim surface, plus `phrase_cmd.py`
+and `triage.py`. Resolving in place would have reintroduced calls to functions
+that no longer exist, which is exactly the failure `diagnose` refuses to
+prescribe a recovery for.
+
+So the WORK was re-based, not the diff: the old head was tagged, the branch
+reset to main, the 82 files main had not touched restored verbatim, and main's
+version taken for the 51 it had — then re-converted. Main had restructured most
+of the large ones, so a hunk-by-hunk merge would have been the riskier path. One
+merge that was attempted proves it: preferring this branch's side in
+`status_transition.go` reintroduced the early return E-2197 had just removed,
+and only main's own test caught it.
+
+Three pieces of the first pass were superseded outright and are gone:
+
+1. **The commit-on-main guard.** E-2177 rewrote it, and far better — it walks
+   the shell command, so `cd <dir> && git commit` and `git -C <dir> commit` are
+   both judged in the directory the commit RUNS in, and heredoc bodies are
+   stripped. This task's narrower regex fix and its test were dropped. What
+   survives is the wording E-2015 filed: a BLOCKED action no longer calls itself
+   "highly discouraged", and neither main guard teaches a hand-made
+   `git worktree add`, which skips the provisioning hook.
+2. **E-2177 also closed** the heredoc false positive this task tripped over
+   twice while documenting the guards.
+3. **The foreign-hook-build warning**, moved to the errors channel in the first
+   pass, has no site at all now: E-2166 removed the worktree hook pin, so
+   `warnForeignHookBuild` and `monitor.ForeignHookBuild` are gone from main. Its
+   catalog code went with it rather than shipping a code with no producer.
+
+### Deviations from the plan as written
 
 1. **The Go check also forbids `flag.NewFlagSet`.** The plan scoped it to
-   `os.Stderr`, which a plain `flag.FlagSet` never names: it writes "flag
-   provided but not defined" and its usage block to stderr from INSIDE the flag
-   package, and `flag.ExitOnError` prints and calls `os.Exit(2)` before the site
-   can classify anything. The check would have been decorative for every flag
-   error. `refusal.NewFlags` captures that text; 62 flag sets converted.
+   `os.Stderr`, which a plain `flag.FlagSet` never names: it writes its error
+   and usage block to stderr from INSIDE the flag package, and
+   `flag.ExitOnError` prints and exits before a site can classify anything. The
+   check would have been decorative for every flag error. `refusal.NewFlags`
+   captures that text, and `Flags.ExitOnHelp` restores the exit 0 that
+   `ExitOnError` gave `-h` — without it, asking for help reports failure.
 
-2. **`refusal` grew four things the plan did not name**: `NewFlags` and its
-   `ExitOnHelp` (which restores the exit 0 that `flag.ExitOnError` used to give
-   `-h`), `InitLog`/`SlogHandler` for step 6, and `Faultf`/`Infof`. The setters
-   copy rather than mutate — refusals are often package-level values reached
-   through `From()`, and one caller naming its command would otherwise write
-   that command onto a value every other caller shares.
+2. **`testdata/` is out of scope for the check.** A fixture program under it
+   (`internal/liveview/testdata/reexecprobe`) is built by the test that needs it
+   and by nothing else, so a message it writes reaches a harness, not a user.
+   `go build ./...` skips these for the same reason.
 
-3. **The verdict strips the binary prefix the message already carries.** Every
-   Go message opens `endless-go <verb>: `, and the verdict opens `[Endless]
-   <verb>: `; both belong where they are, printed adjacent they read as the same
-   words twice. Stripped in one place rather than at ~300 sites.
+3. **`internal/refusal` grew five things the plan did not name**: `NewFlags` and
+   `ExitOnHelp`, `InitLog`/`SlogHandler` for step 6, `Faultf`/`Infof`, a
+   nil-safe `Error()` (several gates spell "nothing to refuse" as a nil
+   `*Error`), and copy-on-write setters — a refusal is often a package-level
+   value reached through `From()`, and one caller naming its command would
+   otherwise write that command onto a value every other caller shares.
 
-4. **`agent_help.run_standalone`.** Plan step 10 puts the two unclassified
+4. **The verdict strips what it has already said** — both the `endless-go <verb>: `
+   binary prefix and the command's own name. Both belong in the message a person
+   reads; printed adjacent to the verdict's own opening they are the same words
+   twice, in the one line whose value is density. Stripped in one place rather
+   than at ~450 sites.
+
+5. **`agent_help.run_standalone`.** Plan step 10 puts the two unclassified
    categories in the root group's `main`. Click's standalone mode prints and
-   exits itself, so it is switched off and its block replicated — and that
-   block IS refusal machinery, so it lives in `agent_help` beside
-   `Refusal.show` rather than in `cli`.
+   exits itself, so it is switched off and its block replicated — and that block
+   IS refusal machinery, so it lives beside `Refusal.show` rather than in `cli`.
 
-5. **Python reads `ENDLESS_AUDIENCE` too**, snapshotted at import so this
-   process's own export cannot feed back as input. The plan had Python writing
-   it and Go reading it; one-way meant an operator who exported it got an
-   agent rendering from Go and a human one from Python, from one command.
+6. **Python reads `ENDLESS_AUDIENCE` too**, snapshotted at import so this
+   process's own export cannot feed back as its input. The plan had Python
+   writing it and Go reading it; one-way meant an operator who exported it got
+   an agent rendering from Go and a human one from Python, from one command.
 
-6. **Decision 5 is applied to one warning, not six.** The mechanism is in
-   place — `faults.Record`, `warn.record`, and `endless-go errors record`,
-   which already existed rather than needing to be built — and the hook's
-   foreign-build warning moved to the errors channel as WARN-0015, fixing the
-   tension the inventory names: on a non-blocking hook failure it became the
-   first stderr line the user saw and displaced the real error. The other five
-   are left on stderr and flagged: each needs a judgement about whether the
-   reader is the user or the agent, and moving one whose reader is the agent
-   silences it.
+7. **Plan item 5 covers five warnings, not six.** The sixth — a worktree
+   directory not git-ignored — went with `internal/sandboxcmd/bind.go` (E-1964)
+   and has no site. The five are WARN-0021 through WARN-0025
+   (`output-style-inactive`, `worktree-ttl-unreadable`, `unsupported-harness`,
+   `report-unminimized`, `sigil-synonym`), each with a `docs/errors.md` section
+   whose "What to do." paragraph is held byte-identical to its catalog remedy.
+   Numbering starts at 0021 because main spent 0001-0020 meanwhile.
+   Two notes on how they landed:
+   - **The unsupported-harness directive stays on stderr.** It tells the AGENT
+     to stop invoking Endless, and an agent that keeps going is the failure it
+     exists to prevent. What moved to the channel is the half the agent cannot
+     act on, for the user who chooses which harness they run in.
+   - **The sigil synonym question is no longer injected at all.** It used to
+     cost a turn's attention on every prompt using the new token, for a question
+     only the user can answer about their own vocabulary.
+   - `endless-go errors record` already existed; the plan expected it to need
+     building.
 
-7. **`cmd/endless-migrate`'s dependency allowlist admits `refusal` and
+8. **`cmd/endless-migrate`'s dependency allowlist admits `refusal` and
    `agentenv`.** Its test says the fix is never to widen the list — but that
-   rule governs packages that expect a schema, and these two import os, io,
-   fmt, log, strings, errors and path/filepath between them. They are already
-   leaves, so there is nothing to move into one.
+   rule governs packages that expect a schema, and these two import only
+   stdlib between them. Main's own E-2192 widened the same list on the same
+   reading. The property the test defends is intact, and it is transitive, so
+   the pair cannot smuggle a third package in later.
 
-8. **Two defects went further than rewording.** The commit-on-main guard now
-   matches `git -C <dir> commit` and reads `-C` when deciding which checkout
-   the commit lands in — the old regex missed every global-option form while
-   blocking the `--no-verify` its own message advertised. The revisit gate
-   exempts `AskUserQuestion`, the tool its instruction tells the agent to use.
+9. **Conditions resolved in code rather than handed over.** Of 80 CONDITIONAL
+   `lang=go` rows, 25 became `ReportIf`; the rest were settled from the actor, a
+   sentinel, an `errors.Is`, or state already in hand, per decision 3.
 
-9. **Conditions resolved in code rather than handed over.** 80 `lang=go` rows
-   are CONDITIONAL and 25 became `ReportIf`; the rest were settled from the
-   actor, a sentinel, `errors.Is`, or state already in hand, per decision 3.
+10. **Byte-identity needed its own audit, twice.** The rule is that a person's
+    stderr does not change, and the first audit hid its own worst case by
+    stripping the appended "Nothing was …" clause before comparing — which is
+    precisely the drift it existed to catch. Re-run honestly it found seven
+    sites, all since pinned with `text=`. A related one-place fix: the
+    human-only remedy now joins with a space only when it continues the
+    sentence, so a bypass that is its own paragraph no longer leaves a trailing
+    space on the line above it.
