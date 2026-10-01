@@ -1,0 +1,1 @@
+A successful land showed a new entry in errors list. Nothing was wrong, but the human still has to read it, decide it is noise, and clear it.
