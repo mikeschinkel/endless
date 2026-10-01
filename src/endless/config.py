@@ -105,6 +105,9 @@ def save_config(cfg: dict):
 INTERNAL_MODEL_DEFAULTS: dict[str, str] = {
     # E-1264: is the first word of a task title an actionable verb?
     "verb_check": "haiku",
+    # E-2203: complexity and risk for a submitted task nobody rated — a
+    # judgment over a whole plan, so not the lookup model.
+    "rater": "sonnet",
 }
 
 

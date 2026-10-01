@@ -112,7 +112,7 @@ A job that fails is rescheduled rather than abandoned. Jobs that declare a backo
 
 A job can end a run successfully without doing its work — nothing was due for it to act on. The **NOTE** column in `jobs list` says what the last run did and why; it is replaced every run, so it never describes an older one. A skip is not a failure and does not back off.
 
-The runner itself knows nothing job-specific — jobs register themselves with it. Today they are the auto-spawn selector below, the hourly database backup, the document-mirror sweep, the unlanded-branch cache, and the minimizer's autoresearch tick.
+The runner itself knows nothing job-specific — jobs register themselves with it. Today they are the auto-spawn selector below, the rater (which proposes complexity and risk for `submitted` tasks nobody rated — see **Ratings** in `endless guide tasks`), the hourly database backup, the document-mirror sweep, the unlanded-branch cache, and the minimizer's autoresearch tick.
 
 ### Auto-spawn
 

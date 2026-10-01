@@ -792,3 +792,26 @@ on every command that read the companion. Recorded here it is one incident per
 worktree, waiting for the person who owns the file.
 
 **What to do.** Remove the legacy `task_id` key from the worktree's `.endless/worktree.json` (the incident's summary names it); nothing reads it any more, and the path-derived task is already the one in use. Dismiss with `endless errors clear <id>` once the key is gone.
+## WARN-0029 — rate-failed
+
+**Severity:** warning · **Raised by:** the `rater` job and `endless rater run`
+(E-2203)
+
+The rater proposes complexity and risk for a `submitted` task that nobody rated
+— in practice one a person filed, since an agent cannot promote a task to
+`submitted` without rating it. This incident says one task got no proposal: the
+model call timed out, `claude` was not found or exited non-zero, its reply
+carried no usable `COMPLEXITY:` or `RISK:` line, or reading the task or
+rendering the prompt failed first.
+
+Warning rather than error, because the rater is fail-open: the task keeps its
+status and stays unrated, nothing is written, and the next run retries it.
+Fingerprinted on the cause rather than the task, so a machine with no `claude`
+raises one incident however many tasks are waiting.
+
+**What to do.** Check that `claude` is on PATH and answering — the incident's
+detail carries the failing step. Nothing is lost: the task keeps its status and
+the rater job retries it on its next run. To rate it now, run `endless task
+update <id> --complexity <low|medium|high> --risk <low|medium|high>`, or
+`endless rater run --task <id>` to retry the model. Dismiss with `endless errors
+clear <id>`.

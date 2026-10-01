@@ -4749,6 +4749,53 @@ def worktree_check():
     check_worktree()
 
 
+@main.group("rater")
+def rater_cmd():
+    """Propose complexity and risk for submitted tasks nobody rated.
+
+    An agent rates a task when it plans it. A task a person filed with a plan
+    arrives unrated, and the `rater` background job proposes its ratings, so
+    approving it means ratifying them rather than inventing them.
+    """
+    pass
+
+
+@rater_cmd.command("run")
+@click.option("--task", "task_ref", default=None,
+              help="Rate exactly this task (E-N), ignoring the queue")
+@click.option("--limit", type=int, default=None,
+              help="Max tasks to rate in one sweep "
+                   "(default: 10; every task is a model call)")
+@click.option("--project", default=None,
+              help="Registered project name to sweep (default: the project cwd is in)")
+@click.option("--all-projects", is_flag=True,
+              help="Sweep every project — what the background job does")
+@click.option("--dry-run", is_flag=True,
+              help="Print the proposed ratings; write nothing")
+def rater_run(task_ref, limit, project, all_projects, dry_run):
+    """Propose ratings for submitted tasks with complexity or risk unset.
+
+    Writes only an axis still unset, and only while the task is still
+    submitted, so a rating a person gave always wins. Fail-open: a model
+    timeout, a missing `claude` or an unusable reply writes nothing, records a
+    WARN-0029 fault, and exits zero; the next sweep retries.
+    """
+    from endless import rater
+    from endless.task_cmd import parse_task_id
+
+    if project and all_projects:
+        raise click.ClickException(
+            "--project and --all-projects are mutually exclusive."
+        )
+    rater.run(
+        task_id=parse_task_id(task_ref) if task_ref else None,
+        limit=limit if limit is not None else rater.DEFAULT_BATCH_LIMIT,
+        project=project,
+        all_projects=all_projects,
+        dry_run=dry_run,
+    )
+
+
 @main.group("jobs")
 def jobs_cmd():
     """Inspect and drive the fire-once background job runner."""

@@ -12,6 +12,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/mikeschinkel/endless/internal/dbprovenance"
 	"github.com/mikeschinkel/endless/internal/docmirror"
@@ -101,6 +102,22 @@ func Run(args []string) {
 		if err := runQuestionTarget(args[1:]); err != nil {
 			fail("question-target", err)
 		}
+	case "unrated-tasks":
+		if err := runUnratedTasks(args[1:]); err != nil {
+			fail("unrated-tasks", err)
+		}
+	case "rater-context":
+		if err := runRaterContext(args[1:]); err != nil {
+			fail("rater-context", err)
+		}
+	case "rater-claim":
+		if err := runRaterClaim(args[1:]); err != nil {
+			fail("rater-claim", err)
+		}
+	case "rater-release":
+		if err := runRaterRelease(args[1:]); err != nil {
+			fail("rater-release", err)
+		}
 	case "resume-target":
 		if err := runResumeTarget(args[1:]); err != nil {
 			fail("resume-target", err)
@@ -162,6 +179,14 @@ func usageText() string {
 		"  task-report --id <task-id>        JSON {task_id, status, type, landed, successors[]} of a task's computed report facts (E-1771)",
 		"  task-questions [--id <task-id>] [--project <name>] [--all]   JSON array of open (or --all) task questions",
 		"  question-target (--task <id> | --question <id>)   JSON {task_id, project[, status]} a question command acts on",
+		"  unrated-tasks [--project <name>] [--limit N]",
+		"                                    JSON array [{id, project, title}] of submitted tasks missing a rating, oldest first (E-2203)",
+		"  rater-context --id <task-id>      JSON {task_id, project, project_root, title, description, context, plan, type, phase,",
+		"                                    status, complexity, risk, parent, siblings[], decisions[]} — what the rater may judge (E-2203)",
+		"  rater-claim --id <task-id> --ttl-seconds N [--owner <id>]",
+		"                                    take the per-task rater claim; prints 1 if won, 0 if another holds it (E-2203)",
+		"  rater-release --id <task-id> [--owner <id>]",
+		"                                    drop this owner's rater claim (E-2203)",
 		"  relay-checkpoint --session-id <id> [--draft-file <path>] [--task-id <id>]",
 		"                                    record the minimized report text (read from STDIN) the session",
 		"                                    owes as its final message; the Stop gate enforces it (E-1901/E-1953).",
@@ -481,6 +506,103 @@ func runQuestionTarget(args []string) error {
 		return err
 	}
 	return dbprovenance.Encode(os.Stdout, tgt)
+}
+
+// defaultUnratedLimit caps a rater sweep that names no limit, so a caller that
+// forgets --limit cannot walk an unbounded backlog: every task selected here
+// becomes a model call downstream.
+const defaultUnratedLimit = 10
+
+// runUnratedTasks prints the rater queue (E-2203) as JSON — `submitted` tasks
+// with either rating unset, oldest first, capped by --limit. No --project means
+// every project: the background job has a database but no cwd.
+func runUnratedTasks(args []string) error {
+	fs := refusal.NewFlags("unrated-tasks")
+	project := fs.String("project", "", "registered project name (default: every project)")
+	limit := fs.Int("limit", defaultUnratedLimit, "max tasks to return")
+	if err := parseFlags(fs, "unrated-tasks", args); err != nil {
+		return err
+	}
+	if *limit <= 0 {
+		return refusal.NoReport("--limit must be positive", "Pass a positive --limit and retry")
+	}
+	tasks, err := monitor.UnratedSubmittedTasks(*project, *limit)
+	if err != nil {
+		return fmt.Errorf("read rater queue: %w", err)
+	}
+	return dbprovenance.Encode(os.Stdout, tasks)
+}
+
+// runRaterContext prints one task's rater context (E-2203) as JSON: the
+// persisted artifacts the rating prompt may judge. No transcript — the rater
+// judges what is written down, as a future implementer will have to.
+func runRaterContext(args []string) error {
+	fs := refusal.NewFlags("rater-context")
+	id := fs.Int64("id", 0, "task id")
+	if err := parseFlags(fs, "rater-context", args); err != nil {
+		return err
+	}
+	if *id == 0 {
+		return refusal.NoReport("--id is required", "Pass --id and retry")
+	}
+	ctx, err := monitor.BuildRaterContext(*id)
+	if err != nil {
+		return fmt.Errorf("build rater context for E-%d: %w", *id, err)
+	}
+	return dbprovenance.Encode(os.Stdout, ctx)
+}
+
+// runRaterClaim takes the per-task rater claim (E-2203) and prints "1" when
+// this process won it, "0" when another holds a live claim. Zero is an ordinary
+// outcome, so the exit status stays 0 either way; the caller branches on the
+// printed value. See internal/monitor/rater_claims.go.
+func runRaterClaim(args []string) error {
+	fs := refusal.NewFlags("rater-claim")
+	id := fs.Int64("id", 0, "task id")
+	owner := fs.String("owner", "", "claimant identity (default: this process)")
+	ttl := fs.Int("ttl-seconds", 0, "claim lifetime; must exceed the worst-case model call")
+	if err := parseFlags(fs, "rater-claim", args); err != nil {
+		return err
+	}
+	if *id == 0 {
+		return refusal.NoReport("--id is required", "Pass --id and retry")
+	}
+	if *ttl <= 0 {
+		return refusal.NoReport("--ttl-seconds must be positive", "Pass a positive --ttl-seconds and retry")
+	}
+	who := *owner
+	if who == "" {
+		who = monitor.RaterClaimOwner()
+	}
+	claimed, err := monitor.ClaimRater(*id, who, time.Duration(*ttl)*time.Second)
+	if err != nil {
+		return fmt.Errorf("claim rating of E-%d: %w", *id, err)
+	}
+	if claimed {
+		fmt.Println("1")
+		return nil
+	}
+	fmt.Println("0")
+	return nil
+}
+
+// runRaterRelease drops this owner's rater claim (E-2203). Releasing a claim
+// that already lapsed and was taken by someone else is a no-op, not a steal.
+func runRaterRelease(args []string) error {
+	fs := refusal.NewFlags("rater-release")
+	id := fs.Int64("id", 0, "task id")
+	owner := fs.String("owner", "", "claimant identity (default: this process)")
+	if err := parseFlags(fs, "rater-release", args); err != nil {
+		return err
+	}
+	if *id == 0 {
+		return refusal.NoReport("--id is required", "Pass --id and retry")
+	}
+	who := *owner
+	if who == "" {
+		who = monitor.RaterClaimOwner()
+	}
+	return monitor.ReleaseRater(*id, who)
 }
 
 // runResumeTarget prints the JSON a `session resume` needs to relaunch a lost

@@ -1273,6 +1273,27 @@ CREATE TABLE IF NOT EXISTS session_hidden_tasks (
 CREATE INDEX IF NOT EXISTS idx_session_hidden_tasks_task
     ON session_hidden_tasks(task_id);
 
+-- Per-task rater claims (E-2203). Taken BEFORE the rater's model call, so two
+-- rater runs that select the same unrated task — the background job and a
+-- person's `endless rater run`, which the job lease does not arbitrate — cannot
+-- both pay for it. The post-call re-read guards the write; only a claim guards
+-- the spend. The shape is the retired triage_claims table's (E-1859).
+--
+-- Time-boxed like the jobs lease rather than an OS lock, so a claimant that dies
+-- mid-call needs no cleanup: its claim lapses and the next attempt re-claims.
+-- Every expiry comparison uses SQLite's clock so racing processes agree.
+--
+-- No FK to tasks: a claim must outlive a task deleted mid-call rather than
+-- cascade away underneath a running model call.
+CREATE TABLE IF NOT EXISTS rater_claims (
+    task_id INTEGER PRIMARY KEY,
+    owner TEXT NOT NULL,
+    claimed_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_rater_claims_expires
+    ON rater_claims(expires_at);
+
 -- Background jobs (E-698). One row per registered job, holding ONLY its
 -- scheduling state — the job's identity and behavior live in Go code
 -- (internal/jobs), never here. Rows are upserted by the runner on first sight

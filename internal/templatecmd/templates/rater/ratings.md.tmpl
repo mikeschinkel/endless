@@ -1,0 +1,61 @@
+You are rating one task in a software project's task tracker.
+
+The task already has a plan. Propose its two ratings. A person will ratify or
+change them when they approve the plan; your job is to save them from having to
+originate them.
+
+## The two ratings
+
+- **COMPLEXITY** — how much human-AI interaction is still needed to nail down
+  the specifics. `low`: an implementer can proceed from the plan without asking
+  anything. `medium`: a few details will need confirming along the way. `high`:
+  expect real back-and-forth before the work settles.
+- **RISK** — the blast radius if the work is wrong. `low`: contained, easy to
+  notice and revert. `medium`: touches shared behavior or data others rely on.
+  `high`: could corrupt durable state, break many users, or be hard to undo.
+
+They are independent: a one-line change can still be high risk, and a long plan
+can still be low risk.
+
+Judge ONLY what is written below. There is no transcript and no author to ask.
+If the plan only makes sense to someone who was in the room, that is itself
+complexity.
+
+## The task
+
+- ID: E-{{.task_id}}
+- Project: {{.project}}
+- Type: {{.type}}
+- Title: {{.title}}
+
+Description:
+{{if .description}}{{.description}}{{else}}(none){{end}}
+{{if .context}}
+Context (why the task exists):
+{{.context}}
+{{end}}
+Plan:
+{{.plan}}
+{{if .parent}}
+## Its parent
+
+- E-{{.parent.id}} [{{.parent.status}}]: {{.parent.title}}
+{{if .parent.description}}
+Parent description:
+{{.parent.description}}
+{{end}}{{end}}{{if .siblings}}
+## Sibling tasks under the same parent
+
+{{range .siblings}}- {{.}}
+{{end}}{{end}}{{if .decisions}}
+## Decisions linked to this task
+
+{{range .decisions}}- ED-{{.id}} [{{.status}}] ({{.relation}}): {{.title}}
+{{end}}{{end}}
+## Your reply
+
+Reply with exactly these two lines and nothing else — no preamble, no markdown,
+no explanation:
+
+COMPLEXITY: <low|medium|high>
+RISK: <low|medium|high>

@@ -588,10 +588,22 @@ accepts the same two flags to supply or override one; it reports the ratings it
 ratified. `task update --status submitted` and `--status ready` meet the same
 gates, since they are the same acts under another verb.
 
-Two routes reach `submitted` without `task submit`, and neither is refused for
-missing ratings. Attaching a plan promotes a task to `submitted` too, and prints
-the exact `task update` flags for whatever is still unrated. Either way, approve
-is the backstop.
+Attaching a plan promotes a task to `submitted` too, so an **agent** attaching
+one must rate it in the same call. `task add --plan` by an agent with either
+rating unset files nothing and names the missing flags; `task update --plan`
+writes the plan, keeps the task at its status, and names `task submit <id>
+--complexity … --risk …` as the way on. Ratings already on the task count.
+Epics are exempt — their status is derived from their children.
+
+A **person** attaching a plan is never refused: the user ratifies ratings and
+should not have to originate them. The `rater` background job proposes them
+instead — every few minutes it rates `submitted` tasks with either rating unset,
+writing only the unset axes and only while the task is still `submitted`, so a
+rating anyone gave always wins. `endless rater run --task <id>` runs it now.
+It is fail-open: a model failure writes nothing and raises `WARN-0029`. When
+approve meets an unrated task anyway, its refusal says the ratings were never
+proposed and who proposes them, and names `--complexity`/`--risk` second, as
+the override.
 
 **Ratings never move status**, and nothing requires them to claim or spawn a
 task. They stay editable at any status. `task show` always prints them,

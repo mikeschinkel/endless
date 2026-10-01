@@ -167,8 +167,10 @@ const (
 	// one-line rationale ride in the payload as provenance, which is a separate
 	// concern from attribution.
 	//
-	// Nothing emits it since E-1993 removed the triager. It stays valid because
-	// the ledger is immutable and its historical events carry it.
+	// The kind names the CLASS of job, not one job: E-1993 removed the
+	// description triager that introduced it, and the rater job (E-2203) emits
+	// it now, for the ratings it proposes. Its provenance block says which job
+	// and which model.
 	ActorTriager ActorKind = "triager"
 )
 
@@ -461,7 +463,7 @@ var validActorKinds = map[ActorKind]bool{
 	ActorHook:    true,
 	ActorSystem:  true,
 	ActorWeb:     true,
-	ActorTriager: true, // E-1859; historical only since E-1993
+	ActorTriager: true, // E-1859; the rater job since E-2203
 }
 
 // internalContractRefusal classifies a message that can mean exactly two things

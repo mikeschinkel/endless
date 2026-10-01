@@ -671,6 +671,28 @@ var (
 			"in use. Dismiss with `endless errors clear <id>` once the key is " +
 			"gone.",
 	}
+
+	// ErrCodeRateFailed covers the rater job (E-2203) failing to propose
+	// ratings for a submitted task: the model call timed out or failed, its
+	// reply carried no usable COMPLEXITY/RISK line, or a read or render before
+	// it failed.
+	//
+	// Warning rather than error: the rater is fail-open, so the task keeps its
+	// status, stays unrated, and is retried on the next run. Fingerprinted on
+	// the cause rather than the task, so a machine with no `claude` raises one
+	// incident, not one per task.
+	ErrCodeRateFailed = Code{
+		ID:       "WARN-0029",
+		Slug:     "rate-failed",
+		Severity: SeverityWarning,
+		Title:    "The rater could not propose ratings for a task",
+		Remedy: "Check that `claude` is on PATH and answering — the incident's de" +
+			"tail carries the failing step. Nothing is lost: the task keeps i" +
+			"ts status and the rater job retries it on its next run. To rate " +
+			"it now, run `endless task update <id> --complexity <low|medium|h" +
+			"igh> --risk <low|medium|high>`, or `endless rater run --task <id" +
+			">` to retry the model. Dismiss with `endless errors clear <id>`.",
+	}
 )
 
 // catalog indexes every registered Code by ID. Built once at init from the
@@ -704,6 +726,7 @@ var catalog = buildCatalog(
 	ErrCodeCreateHookNotExecutable,
 	ErrCodePostLandNotExecutable,
 	ErrCodeStaleCompanion,
+	ErrCodeRateFailed,
 )
 
 // buildCatalog indexes codes by ID. It panics on a duplicate ID: a collision is

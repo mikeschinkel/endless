@@ -599,6 +599,7 @@ func TestCatalog_NumbersAreNeverReused(t *testing.T) {
 		"0026": "create-hook-not-executable",
 		"0027": "post-land-not-executable",
 		"0028": "stale-companion",
+		"0029": "rate-failed",
 	}
 
 	for _, code := range faults.Codes() {

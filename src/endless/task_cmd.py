@@ -2568,6 +2568,17 @@ def add_item(
     # rating does not move status.
     status = status or "unplanned"
 
+    # E-2203: an agent filing with a plan is filing straight to `submitted`, and
+    # submitting is where the agent proposes both ratings — so it must rate in
+    # the same call. Refused before anything is written: a refusal after the
+    # row exists would invite a re-run that files a duplicate.
+    if _agent_promotion_held(task_type, status, plan):
+        _refuse_unrated_promotion(None, {
+            axis: (None if v == ratings.NONE else v)
+            for axis, v in (("complexity", ratings.normalize(complexity)),
+                            ("risk", ratings.normalize(risk)))
+        })
+
     # E-1577/E-1579: research/epic tasks cannot be created in
     # 'unverified'/'assumed'/'confirmed'.
     _require_status_allowed_for_type(status, task_type)
@@ -3828,6 +3839,58 @@ def _refuse_unrated(item_id: int, verb: str, effective: dict, why: str):
     )
 
 
+def _refuse_unrated_approve(item_id: int, effective: dict):
+    """Refuse an approve of a task whose ratings were never proposed (E-2203).
+
+    Addressed to the person approving, who ratifies ratings and should never
+    have to originate them: it says who proposes them first, and names the
+    flags only second, as the override they are.
+    """
+    unrated = ratings.missing(effective["complexity"], effective["risk"])
+    if not unrated:
+        return
+    tid = task_id_display(item_id)
+    flags = " ".join(f"--{a} <low|medium|high>" for a in unrated)
+    raise click.ClickException(
+        f"Cannot approve {tid}: its {' and '.join(unrated)} "
+        f"{'was' if len(unrated) == 1 else 'were'} never proposed, and "
+        f"approving ratifies proposed ratings.\n"
+        f"  The agent that planned it proposes them, or the rater job does on "
+        f"its next run (`endless rater run --task {tid}` runs it now).\n"
+        f"  To set them yourself instead: endless task approve {tid} {flags}"
+    )
+
+
+def _refuse_unrated_promotion(item_id: int | None, effective: dict):
+    """Refuse an agent's plan-attach promotion while a rating is unset (E-2203).
+
+    Attaching a plan moves a task to `submitted`, and submitting is where the
+    agent proposes both ratings for the user to ratify — so an agent that
+    attaches a plan must rate it in the same call. `item_id` None is a `task
+    add`, which is refused before anything is filed; otherwise the plan has
+    already been written and the task held at its status.
+    """
+    unrated = ratings.missing(effective["complexity"], effective["risk"])
+    if not unrated:
+        return
+    flags = " ".join(f"--{a} <low|medium|high>" for a in unrated)
+    what = f"{' and '.join(unrated)} {'is' if len(unrated) == 1 else 'are'} unrated"
+    why = (
+        "A plan moves a task to submitted, and submitting proposes both "
+        "ratings for the user to ratify."
+    )
+    if item_id is None:
+        raise click.ClickException(
+            f"Cannot file a task with a plan while {what}. {why} Nothing was "
+            f"filed — re-run this add with {flags}."
+        )
+    tid = task_id_display(item_id)
+    raise click.ClickException(
+        f"Plan saved, but {tid} was not submitted: {what}. {why}\n"
+        f"  Rate and submit it: endless task submit {tid} {flags}"
+    )
+
+
 def submit_item(item_id: int, complexity: str | None = None,
                 risk: str | None = None):
     """Mark a task as `submitted` — spec-complete, awaiting the user's review.
@@ -3841,8 +3904,8 @@ def submit_item(item_id: int, complexity: str | None = None,
 
     E-1813: submitting is where the agent PROPOSES both ratings (ED-1538), so
     it is refused while either is unset — from the flags here or already on
-    the task. The plan-attach promotion does not demand them (it is inferred,
-    not asked for); it nudges instead, and approve is the backstop.
+    the task. E-2203 holds an agent's plan-attach promotion to the same rule;
+    a person's is not held, and the rater job proposes ratings for it.
     """
     from endless.event_bridge import emit_event
 
@@ -3961,10 +4024,7 @@ def approve_item(item_id: int, complexity: str | None = None,
             "there is nothing left to approve on work already under way",
         )
     effective, changed = _resolve_ratings(row, complexity, risk)
-    _refuse_unrated(
-        item_id, "approve", effective,
-        "Approving ratifies both ratings, so supply them here.",
-    )
+    _refuse_unrated_approve(item_id, effective)
 
     _, proj_name = _resolve_project(None)
     _emit_ratings(item_id, proj_name, changed)
@@ -5715,10 +5775,7 @@ def update_plan(
                 "approve.",
             )
         else:
-            _refuse_unrated(
-                item_id, "approve", effective,
-                "Approving ratifies both ratings, so supply them here.",
-            )
+            _refuse_unrated_approve(item_id, effective)
 
     if status in _ABANDONMENT_STATUSES and outcome is not None and reason is None:
         reason, outcome = outcome, None
@@ -5890,6 +5947,24 @@ def update_plan(
         and row[0]["status"] in _PRE_JUDGMENT_STATUSES
     )
 
+    # E-2203: an agent's plan-attach promotion is refused while either rating
+    # is unset — given in this call or already on the task. The plan is still
+    # written; the status is pinned exactly as --keep-status pins it, and the
+    # refusal is raised once the write has landed.
+    promotion_refused = False
+    if (
+        status is None and not keep_status
+        and row[0]["status"] in _PRE_JUDGMENT_STATUSES
+        and _agent_promotion_held(
+            task_type if task_type is not None else row[0]["type"],
+            row[0]["status"], plan,
+        )
+    ):
+        held_ratings, _ = _resolve_ratings(row[0], complexity, risk)
+        promotion_refused = bool(
+            ratings.missing(held_ratings["complexity"], held_ratings["risk"])
+        )
+
     # Build the fields map for the event payload, plus an ordered list of
     # (name, old, new) tuples for change-output rendering.
     fields = {}
@@ -5903,7 +5978,7 @@ def update_plan(
         _add("status", status)
     elif auto_unapprove:
         _add("status", "submitted")
-    elif keep_status_pin:
+    elif keep_status_pin or promotion_refused:
         # Deliberately not _add(): this writes back the status the row already
         # has, purely to make the executor stand down. Nothing changed, so
         # rendering "Status: unplanned -> unplanned" would misreport the update.
@@ -6047,11 +6122,19 @@ def update_plan(
             f"a typo- or formatting-only edit to keep it approved."
         )
 
+    # E-2203: the plan and every other field have landed; the promotion has
+    # not. Refused as an error, not a note, so the agent cannot carry on as if
+    # the task were submitted.
+    if promotion_refused:
+        _refuse_unrated_promotion(item_id, {
+            a: fields.get(a, row[0][a]) for a in ratings.AXES
+        })
+
     # E-1813: a task promoted to `submitted` by attaching a plan was not
     # submitted through `task submit`, which is the route that demands ratings.
-    # Say so while the agent that wrote the plan is still here to rate it —
-    # approve will refuse the task until someone does. Shown to agents too:
-    # unlike the status render above, this names something they can act on.
+    # Since E-2203 an agent is refused that promotion unrated (above), so what
+    # reaches here unrated is a person's — and the rater job proposes ratings
+    # for it, which the note says rather than asking them to originate any.
     promoted = (
         auto_unapprove
         or (
@@ -6075,17 +6158,35 @@ def update_plan(
 
 
 def _nudge_unrated(item_id: int, complexity: str | None, risk: str | None):
-    """One line naming the flags that rate a task just promoted to `submitted`
-    without ratings. Silent when both are already set."""
+    """One line saying a task just promoted to `submitted` is unrated, and
+    who rates it. Silent when both are already set."""
     unrated = ratings.missing(complexity, risk)
     if not unrated:
         return
     flags = " ".join(f"--{a} <low|medium|high>" for a in unrated)
     click.echo(
         f"{task_id_display(item_id)} is submitted without "
-        f"{' or '.join(unrated)}; propose it with "
-        f"`endless task update {task_id_display(item_id)} {flags}` — "
-        "approve refuses an unrated task."
+        f"{' or '.join(unrated)}; the rater job proposes "
+        f"{'it' if len(unrated) == 1 else 'them'} on its next run, or set "
+        f"{'it' if len(unrated) == 1 else 'them'} now with "
+        f"`endless task update {task_id_display(item_id)} {flags}`."
+    )
+
+
+def _agent_promotion_held(task_type: str | None, status: str,
+                          plan: str | None) -> bool:
+    """Would this plan attach promote a task an AGENT is writing (E-2203)?
+
+    True when an agent attaches a non-empty plan to a task at a pre-judgment
+    status — the promotion the rating rule holds back. Epics are exempt: their
+    status is derived from their children, not approved and ratified. A person
+    attaching a plan is never held; the rater job rates for them.
+    """
+    return (
+        bool((plan or "").strip())
+        and status in _PRE_JUDGMENT_STATUSES
+        and task_type != "epic"
+        and agent_help.agent_facing()
     )
 
 
