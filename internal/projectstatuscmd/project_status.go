@@ -25,6 +25,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/liveview"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // fallbackCols is the width used when none can be detected (output not a tty, no
@@ -71,7 +72,7 @@ type options struct {
 }
 
 func runStatus(args []string) {
-	fs := flag.NewFlagSet("project-status", flag.ContinueOnError)
+	fs := refusal.NewFlags("project-status")
 	var o options
 	fs.StringVar(&o.project, "project", "", "project name (default: the project enclosing the working directory)")
 	fs.Int64Var(&o.projectID, "project-id", 0, "explicit project id (headless: bypasses name/cwd resolution and reads the resolved DB context instead of pinning main; intended for tests)")
@@ -88,19 +89,24 @@ func runStatus(args []string) {
 	fs.IntVar(&o.rows, "rows", 0, "terminal height override (0 = auto-detect; the budget the monitor fits its frame into)")
 	fs.BoolVar(&o.asJSON, "json", false, "emit the row set as JSON instead of the rendered frame")
 	if err := fs.Parse(args); err != nil {
-		os.Exit(2)
+		// Text carries flag's own error line and the flag defaults it appends,
+		// which is what stderr held before this was classified.
+		refusal.NoReport(err.Error(), "Fix the flag and retry").
+			Command("project-status").Text(fs.Output()).Exit(2)
 	}
 
 	// Mutually exclusive by design, not by precedence, matching rowcap.py: a cap
 	// and the removal of the cap are contradictory requests, and silently
 	// honoring one answers a question the caller did not ask.
-	if o.noLimit && wasSet(fs, "limit") {
-		fmt.Fprintln(os.Stderr, "project-status: --limit and --no-limit are mutually exclusive")
-		os.Exit(2)
+	if o.noLimit && wasSet(fs.FlagSet, "limit") {
+		refusal.NoReport("project-status: --limit and --no-limit are mutually exclusive",
+			"Pass only one of --limit and --no-limit and retry").
+			Command("project-status").Exit(2)
 	}
 	if !o.noLimit && o.limit < 1 {
-		fmt.Fprintln(os.Stderr, "project-status: --limit must be at least 1; pass --no-limit to render every row")
-		os.Exit(2)
+		refusal.NoReport("project-status: --limit must be at least 1; pass --no-limit to render every row",
+			"Pass --limit 1 or higher, or --no-limit, and retry").
+			Command("project-status").Exit(2)
 	}
 
 	projectID, name := resolveProject(o)
@@ -221,6 +227,15 @@ func resolveProject(o options) (int64, string) {
 	if o.project != "" {
 		id, name, err := monitor.ProjectByName(o.project)
 		if err != nil {
+			// Resolved in code rather than handed to the agent as a condition:
+			// ErrNoProject says the NAME is not registered, which `endless
+			// project list` answers and a second call fixes. Any other error is
+			// the database failing to answer, and fail gives that to the user.
+			if errors.Is(err, monitor.ErrNoProject) {
+				refusal.NoReport(fmt.Sprintf("project-status: %v", err),
+					"Check `endless project list` for the registered name and retry").
+					Command("project-status").Exit(1)
+			}
 			fail(err)
 		}
 		return id, name
@@ -229,10 +244,18 @@ func resolveProject(o options) (int64, string) {
 	id, name, err := monitor.ProjectForCwd()
 	if err != nil {
 		if errors.Is(err, monitor.ErrNoProject) {
-			fmt.Fprintln(os.Stderr,
+			// Genuinely undecidable here. This command can see that the working
+			// directory is not in a project; it cannot see whether the user meant
+			// to work on a project that IS registered — in which case naming it
+			// is a retry away — or meant THIS directory to become one, which is
+			// a choice about their repository that nobody else gets to make.
+			refusal.ReportIf(
 				"project-status: not inside a registered project. "+
-					"Name one with --project <name>, or register this directory with `endless project init`.")
-			os.Exit(1)
+					"Name one with --project <name>, or register this directory with `endless project init`.",
+				"the user meant this directory itself to become an Endless project",
+				"rerun with --project <name>, or from inside a directory that is already registered",
+				"registering a directory as an Endless project is theirs to choose",
+			).Command("project-status").Exit(1)
 		}
 		fail(err)
 	}
@@ -255,7 +278,21 @@ func wasSet(fs *flag.FlagSet, name string) bool {
 
 func isTTY() bool { return liveview.IsTerminal(os.Stdout) }
 
+// fail ends the command on an error that reached it without a class of its own
+// — a row query, a frame render, the JSON write, or the monitor loop giving up.
+//
+// An error that DID choose one keeps it: --project-id skips the main-DB pin, so
+// inside a self-dev worktree err can be the E-1429 sandbox gate, which is a
+// no-report "pass --db" and not a project-status failure at all. Everything
+// else is the database or the renderer refusing under a read-only command —
+// there is no other call this command could make instead, so the next move is
+// the user's.
 func fail(err error) {
-	fmt.Fprintln(os.Stderr, "project-status:", err)
-	os.Exit(1)
+	var classified *refusal.Error
+	if !errors.As(err, &classified) {
+		classified = refusal.Report(err.Error(),
+			"whether a project-status read Endless could not complete is something they can clear")
+	}
+	classified.Command("project-status").
+		Text(fmt.Sprintf("project-status: %v", err)).Exit(1)
 }

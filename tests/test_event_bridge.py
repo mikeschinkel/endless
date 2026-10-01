@@ -270,8 +270,14 @@ def test_no_session_flag_off_preserves_gate(captured_emit, monkeypatch):
 
 
 def test_gate_error_advertises_no_session_flag(captured_emit, monkeypatch):
-    """The refusal message must include the --no-session bullet so callers
-    discover the escape hatch."""
+    """A PERSON reading the refusal must find the --no-session bullet.
+
+    E-2159 moved that bullet into `human_remedy`, which renders for a human and
+    is withheld from an agent: it is a bypass of the attribution this gate
+    exists to keep, and an agent handed a bypass takes it. So the assertion is
+    on the rendered message rather than on `.message`, which now carries only
+    the part both audiences read.
+    """
     from endless import config
     monkeypatch.setattr(config, "NO_SESSION", False)
     _force_resolver(monkeypatch, None)
@@ -279,7 +285,7 @@ def test_gate_error_advertises_no_session_flag(captured_emit, monkeypatch):
     with pytest.raises(click.ClickException) as exc:
         _emit(actor_kind="cli")
 
-    assert "--no-session" in exc.value.message
+    assert "--no-session" in exc.value.format_message()
 
 
 # --- E-1444: --no-session is position-anywhere (DBAwareGroup pre-extractor) ---

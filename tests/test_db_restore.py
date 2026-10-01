@@ -286,7 +286,11 @@ def test_restore_refuses_while_the_database_is_open(target, monkeypatch):
         db_restore.run_restore(None, dry_run=False, force=False)
 
     assert "refusing to restore" in str(e.value)
-    assert "--force" in str(e.value)
+    # E-2159: --force waives a data-loss risk, so it moved out of the message
+    # string into the refusal's human_remedy. A person still reads it —
+    # format_message is what Click prints — and an agent never does.
+    assert "--force" in e.value.format_message()
+    assert "--force" not in e.value.message
     assert marker_of(target) == "live"
     assert not db_restore.pre_restore_dir(target).exists()
 

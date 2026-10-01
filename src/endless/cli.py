@@ -147,10 +147,15 @@ def retired_option(old, new, is_flag=False):
     def _callback(ctx, param, value):
         if value is None or value is False:
             return None
-        raise click.UsageError(
-            f"{old} was renamed to {new}.\n"
-            f"  The old name is still recognised, so this is a pointer rather "
-            f"than \"no such option\" — but it no longer works. Re-run with {new}."
+        raise agent_help.no_report(
+            f"{old} was renamed to {new}. Nothing ran.",
+            f"Re-run with {new}",
+            exit_code=2,
+            text=(
+                f"{old} was renamed to {new}.\n"
+                f"  The old name is still recognised, so this is a pointer rather "
+                f"than \"no such option\" — but it no longer works. Re-run with {new}."
+            ),
         )
 
     return click.option(
@@ -267,11 +272,17 @@ def _resolve_output_format(fmt, agent, as_json):
 
     if len(spellings) > 1:
         names = sorted(spellings)
-        raise click.UsageError(
+        raise agent_help.no_report(
             f"{' and '.join(spellings[n] for n in names)} name two different "
-            f"output renderings.\n"
-            f"  Re-run with just one — "
-            f"{' or '.join(f'--format {n}' for n in names)}."
+            f"output renderings. Nothing ran.",
+            f"Re-run with just one — {' or '.join(f'--format {n}' for n in names)}",
+            exit_code=2,
+            text=(
+                f"{' and '.join(spellings[n] for n in names)} name two different "
+                f"output renderings.\n"
+                f"  Re-run with just one — "
+                f"{' or '.join(f'--format {n}' for n in names)}."
+            ),
         )
 
     mode = next(iter(spellings), TEXT_FORMAT)
@@ -445,6 +456,50 @@ def _scan_db_choice(argv: list[str]) -> str | None:
     return last
 
 
+def _scan_agent_format(argv: list[str]) -> bool:
+    """Did this invocation ask for the AGENT rendering? (E-2159)
+
+    Three spellings, because E-1504 made them three spellings of one setting:
+    `--agent`, the retired `--llm` that still points at it, and `--format agent`
+    in either of its forms. A command that has no agent rendering refuses
+    `--format agent` by name in FormatArg.convert — and that refusal is itself
+    addressed to an agent, so recognising the flag here is right even when the
+    command will go on to reject it.
+
+    Argv-agnostic, like `_scan_db_choice`: it reads the list it is handed, so
+    CliRunner's arguments and a real shell's `sys.argv` get the same answer.
+    """
+    for i, arg in enumerate(argv):
+        if arg in ("--agent", "--llm"):
+            return True
+        if arg == f"--format={AGENT_FORMAT}":
+            return True
+        if arg == "--format" and i + 1 < len(argv) and argv[i + 1] == AGENT_FORMAT:
+            return True
+    return False
+
+
+def _export_audience() -> None:
+    """Tell endless-go which audience this invocation is for (E-2159).
+
+    Python decides the audience once, from the harness environment plus the
+    flags above, and exports the answer so a refusal raised inside endless-go
+    and relayed back renders for the same reader who asked the question.
+
+    Without it the two halves disagree in both directions: `endless worktree
+    drop --agent` run by a person would relay a human-rendered probe refusal
+    into an agent-rendered command, and `--agent-view` — whose entire purpose is
+    showing a human what an agent sees — would stop working at the language
+    boundary.
+
+    Only ever SET, never cleared: an ambient ENDLESS_AUDIENCE=agent is a
+    deliberate act by whoever exported it, and a human-facing invocation
+    silently unsetting it would break the escape hatch it exists to be.
+    """
+    if agent_help.agent_facing():
+        os.environ[agent_help.AUDIENCE_VAR] = agent_help.AUDIENCE_AGENT
+
+
 class DBAwareGroup(click.Group):
     """Click group that accepts the global --db flag in ANY argument position.
 
@@ -504,8 +559,10 @@ class DBAwareGroup(click.Group):
             arg = argv[i]
             if arg == "--db":
                 if i + 1 >= len(argv):
-                    click.echo("Error: --db requires a value: main or sandbox", err=True)
-                    sys.exit(2)
+                    agent_help.abort(agent_help.no_report(
+                        "--db requires a value: main or sandbox",
+                        "Re-run with --db main or --db sandbox",
+                        command="endless", exit_code=2))
                 db_value = argv[i + 1]
                 i += 2
                 continue
@@ -532,6 +589,13 @@ class DBAwareGroup(click.Group):
             i += 1
         if agent_view:
             agent_help.set_agent_view(True)
+        # E-2159: `--agent`, `--llm` and `--format agent` are three spellings of
+        # one rendering (E-1504), and asking for it makes this invocation
+        # agent-facing for its REFUSALS too. Observed rather than consumed —
+        # unlike --db and --agent-view, these are real per-command options that
+        # Click must still parse and the command body still receives.
+        agent_help.set_agent_format(_scan_agent_format(cleaned))
+        _export_audience()
         if no_session:
             config.NO_SESSION = True
         if db_value is not None:
@@ -541,9 +605,32 @@ class DBAwareGroup(click.Group):
             try:
                 config.apply_db_choice(db_value)
             except ValueError as e:
-                click.echo(f"Error: {e}", err=True)
-                sys.exit(2)
-        return super().main(args=cleaned, **extra)
+                # apply_db_choice refuses an unknown value, and refuses
+                # --db sandbox outside a self-dev worktree. Both are the flag
+                # being wrong, which the caller fixes and re-runs.
+                agent_help.abort(agent_help.no_report(
+                    f"{e}",
+                    "Drop --db in a single-database project, use --db main "
+                    "outside a worktree, or pass main|sandbox",
+                    command="endless", exit_code=2))
+        # Click's standalone mode prints and exits by itself, so it is switched
+        # off and agent_help runs the loop instead — which is where the two
+        # failures nobody raises at a site (Click's own usage errors, and an
+        # uncaught exception) get their class. A caller that already asked for
+        # standalone_mode=False gets what it asked for; the test suite uses it
+        # to inspect exceptions directly.
+        if extra.get("standalone_mode") is False:
+            return super().main(args=cleaned, **extra)
+        extra = dict(extra, standalone_mode=False)
+        # The parent's main is bound HERE, not inside the lambda. A lambda has
+        # no `__class__` cell, so zero-arg super() is unavailable in it, and the
+        # explicit `super(DBAwareGroup, self)` form looks the class up by global
+        # name at call time — which breaks the moment a test reloads this module,
+        # because `main` is then an instance of the OLD class while the global
+        # names the new one. Binding first sidesteps both.
+        parent_main = super().main
+        return agent_help.run_standalone(
+            lambda: parent_main(args=cleaned, **extra))
 
 
 class SettingAwareMixin:
@@ -629,30 +716,39 @@ def main(ctx):
     try:
         os.getcwd()
     except FileNotFoundError:
-        click.echo(
-            "endless: current working directory no longer exists "
-            "(was it deleted from another shell?). cd to an existing "
-            "directory and retry.",
-            err=True,
+        raise agent_help.no_report(
+            "endless: the current working directory no longer exists. "
+            "Nothing ran.",
+            "cd to an existing directory — the project root will do — and retry",
+            text=("endless: current working directory no longer exists "
+                  "(was it deleted from another shell?). cd to an existing "
+                  "directory and retry."),
         )
-        ctx.exit(1)
     # E-1429/E-1476: --db is consumed and applied by DBAwareGroup.main() before
     # Click parses (so it works in any position). Enforcement of "required
     # inside a worktree" happens at the DB-access choke points (db.get_db /
     # go_db_context_args), so commands that never touch the DB stay flag-free.
     sandbox = os.environ.get("ENDLESS_SANDBOX")
     if sandbox and ctx.invoked_subcommand not in SANDBOX_SAFE_SUBCOMMANDS:
-        click.echo(
-            f"endless: refusing to run '{ctx.invoked_subcommand}' inside "
-            f"endless-go sandbox at {sandbox}",
-            err=True,
+        # REPORT-IF, and the branch is one this process cannot see.
+        # ENDLESS_SANDBOX is inherited, so a shell the agent itself opened and a
+        # HARNESS that was launched inside the subshell look identical from
+        # here: in the first case the agent types `exit`, in the second only the
+        # user can leave, because leaving means restarting their session.
+        raise agent_help.report_if(
+            f"endless: refusing to run '{ctx.invoked_subcommand}' inside the "
+            f"endless-go sandbox at {sandbox}. Nothing ran.",
+            "your whole session was started inside the sandbox subshell rather "
+            "than you having entered it",
+            "run `exit` to leave the subshell and retry",
+            "only they can leave a sandbox their session was launched in",
+            text=(
+                f"endless: refusing to run '{ctx.invoked_subcommand}' inside "
+                f"endless-go sandbox at {sandbox}\n"
+                "    Run 'exit' to leave the sandbox subshell, "
+                "or open a new terminal."
+            ),
         )
-        click.echo(
-            "    Run 'exit' to leave the sandbox subshell, "
-            "or open a new terminal.",
-            err=True,
-        )
-        ctx.exit(1)
 
     # E-1962: last, so a broken cwd and the sandbox guard still report their own
     # (more specific) diagnosis first.
@@ -831,7 +927,10 @@ def project_monitor(name, show_all, use_tmux, no_switch, limit, no_limit):
         project_status_cmd.project_window_resolve(name, no_switch=no_switch)
         return
     if no_switch:
-        raise click.UsageError("--no-switch only applies with --tmux.")
+        raise agent_help.no_report(
+            "--no-switch only applies with --tmux. Nothing ran.",
+            "Re-run adding --tmux, or drop --no-switch", exit_code=2,
+            text="--no-switch only applies with --tmux.")
     project_status_cmd.project_status_resolve(
         name, monitor=True, show_all=show_all, limit=limit, no_limit=no_limit,
     )
@@ -867,9 +966,11 @@ def discover(path, show_all, reset):
 def _make_moved_stub(old_name):
     @click.argument("args", nargs=-1, type=click.UNPROCESSED)
     def _stub(args):
-        raise click.ClickException(
-            f"`endless {old_name}` moved to `endless project {old_name}`.\n"
-            f"Run: endless project {old_name}"
+        raise agent_help.no_report(
+            f"`endless {old_name}` moved to `endless project {old_name}`. Nothing ran.",
+            f"Re-run as `endless project {old_name}`",
+            text=(f"`endless {old_name}` moved to `endless project {old_name}`.\n"
+                  f"Run: endless project {old_name}"),
         )
     return _stub
 
@@ -947,7 +1048,7 @@ def _refuse_unsupported_agent(ctx) -> None:
     if harness == agent_env.UNKNOWN or agent_env.supported():
         return
 
-    echo = lambda line="": click.echo(line, err=True)
+    echo = lambda line="": agent_help.info(line, err=True)
     echo()
     echo(click.style(
         f"▸ Endless does not support {agent_env.label(harness)}.",
@@ -967,6 +1068,23 @@ def _refuse_unsupported_agent(ctx) -> None:
     echo(click.style(
         "  Reading as a human? The guide is at docs/guide/index.md.", dim=True))
     echo()
+
+    # ...and the same fact for the USER, who is the only one who can change
+    # which harness they are running in (E-2159 decision 5). The notice above
+    # is a directive to the AGENT — stop invoking Endless — and it stays, because
+    # an agent that keeps going is the failure this exists to prevent. What the
+    # errors channel adds is the half the agent cannot act on: the user learns
+    # from their session-status badge rather than from an aside in a reply.
+    #
+    # Fingerprinted on the harness, so one unsupported session is one incident
+    # however many commands it runs.
+    agent_help.warn.record(
+        "WARN-0023",
+        f"Endless does not support {agent_env.label(harness)}; its hooks do not "
+        f"fire here, so session and task tracking cannot work",
+        source="cli:harness",
+        fingerprint=f"harness={harness}",
+    )
     ctx.exit(0)
 
 
@@ -985,9 +1103,10 @@ def guide(section, list_sections):
         Path(__file__).resolve().parent.parent.parent / "docs" / "guide"
     )
     if not guide_dir.is_dir():
-        raise click.ClickException(
-            f"Guide directory not found at {guide_dir}"
-        )
+        raise agent_help.report(
+            f"Guide directory not found at {guide_dir}. Nothing was printed.",
+            "how to repair an Endless install whose bundled guide is missing",
+            text=f"Guide directory not found at {guide_dir}")
 
     available = sorted(
         p.stem for p in guide_dir.glob("*.md") if p.stem != "index"
@@ -1001,15 +1120,17 @@ def guide(section, list_sections):
     if section is None:
         target = guide_dir / "index.md"
         if not target.exists():
-            raise click.ClickException(
-                f"Guide index not found at {target}"
-            )
+            raise agent_help.report(
+                f"Guide index not found at {target}. Nothing was printed.",
+                "how to repair an Endless install whose bundled guide is missing",
+                text=f"Guide index not found at {target}")
     else:
         if section == "index" or section not in available:
-            raise click.ClickException(
-                f"Unknown section '{section}'. Available: "
-                + ", ".join(available)
-            )
+            raise agent_help.no_report(
+                f"Unknown guide section '{section}'. Nothing was printed.",
+                "Re-run with a listed slug, or `endless guide --list`",
+                text=(f"Unknown section '{section}'. Available: "
+                      + ", ".join(available)))
         target = guide_dir / f"{section}.md"
 
     click.echo(render_guide_file(target), nl=False)
@@ -1088,12 +1209,18 @@ def render_guide_file(path: Path) -> str:
         detail = (result.stderr or "").strip()
         hint = ""
         if "not defined: -file" in detail:
+            # `just install` is Endless's OWN checkout's recipe. A user running
+            # Endless against their own project has no justfile and no source
+            # tree, so naming it is a remedy they cannot type. Name what has to
+            # become true instead, and let them reach it however they installed.
             hint = ("\n\nThe endless-go on PATH predates `template render --file`, "
-                    "which the guide needs. Rebuild and reinstall: `just install`.")
-        raise click.ClickException(
-            f"Could not render the guide from {path}"
-            + (f": {detail}" if detail else ".") + hint
-        )
+                    "which the guide needs. Reinstall endless so the CLI and "
+                    "endless-go come from the same version.")
+        raise agent_help.report(
+            f"Could not render the guide from {path}. Nothing was printed.",
+            "how to install an endless-go that matches the endless CLI",
+            text=(f"Could not render the guide from {path}"
+                  + (f": {detail}" if detail else ".") + hint))
     return result.stdout
 
 
@@ -1246,10 +1373,14 @@ def sql_query(query, write, tsv, limit, no_limit):
     cap = rowcap.resolve_cap(limit, no_limit, machine=tsv)
 
     if not write and not _is_read_only_sql(query):
-        raise click.ClickException(
+        raise agent_help.no_report(
             "Refusing to run a non-read-only query without --write. "
-            "Allowed prefixes: SELECT, WITH, EXPLAIN.\n"
-            "If you need to mutate, pass --write explicitly."
+            "Nothing was executed.",
+            "Re-run as a SELECT/WITH/EXPLAIN query, or add --write when the "
+            "mutation is intended",
+            text=("Refusing to run a non-read-only query without --write. "
+                  "Allowed prefixes: SELECT, WITH, EXPLAIN.\n"
+                  "If you need to mutate, pass --write explicitly."),
         )
 
     try:
@@ -1264,7 +1395,23 @@ def sql_query(query, write, tsv, limit, no_limit):
         if write:
             conn.commit()
     except sqlite3.Error as e:
-        raise click.ClickException(f"SQL error: {e}")
+        # The TSV files this CONDITIONAL — the agent's own bad query versus a
+        # corrupt or locked database — and sqlite3 answers it for us. An
+        # OperationalError that is a lock, or a DatabaseError at all, is the
+        # store; everything else is the query the caller just wrote.
+        broken = isinstance(e, (sqlite3.DatabaseError,)) and not isinstance(
+            e, sqlite3.OperationalError)
+        if isinstance(e, sqlite3.OperationalError) and "locked" in str(e).lower():
+            broken = True
+        if broken:
+            raise agent_help.report(
+                f"SQL error: {e}. Nothing was read or written.",
+                "how to deal with a locked or damaged Endless database",
+                text=f"SQL error: {e}")
+        raise agent_help.no_report(
+            f"SQL error: {e}. Nothing was read or written.",
+            "Correct the query and retry",
+            text=f"SQL error: {e}")
 
     headers = [c[0] for c in cursor.description] if cursor.description else []
     if not rows:
@@ -1462,14 +1609,29 @@ def session_monitor(show_all, tree, graph, show_hidden, only_hidden, restart,
                             ("--all-tmux-sessions", all_tmux_sessions),
                             ("--dry-run", dry_run)):
             if given:
-                raise click.UsageError(f"{flag} only applies with --restart.")
+                # No TSV row for either guard — `--restart` postdates the
+                # audit — but `project_monitor`'s `--no-switch` row is the same
+                # shape and the same answer: a flag combination the caller
+                # typed, refused before either the monitor loop or the restart
+                # sweep runs. exit_code=2 because the UsageError this replaces
+                # exited 2, and a status that silently became 1 would change
+                # what a script reading it concludes.
+                raise agent_help.no_report(
+                    f"{flag} only applies with --restart. Nothing ran.",
+                    "Re-run adding --restart, or drop the flag",
+                    exit_code=2,
+                    text=f"{flag} only applies with --restart.")
     else:
         for flag, given in (("--all", show_all), ("--tree", tree),
                             ("--graph", graph),
                             ("--show-hidden", show_hidden),
                             ("--only-hidden", only_hidden)):
             if given:
-                raise click.UsageError(f"{flag} does not apply with --restart.")
+                raise agent_help.no_report(
+                    f"{flag} does not apply with --restart. Nothing ran.",
+                    "Re-run without --restart, or drop the flag",
+                    exit_code=2,
+                    text=f"{flag} does not apply with --restart.")
         from endless.session_cmd import session_monitor_restart
         session_monitor_restart(tmux_session=tmux_session,
                                 all_tmux_sessions=all_tmux_sessions,
@@ -1794,10 +1956,19 @@ def session_resume(ref, tmux_session, all_tmux_sessions, review, reopen,
         )
         return
     if ref is None:
-        raise click.UsageError(
-            "give REF, or --tmux-session NAME / --all-tmux-sessions to resume "
-            "every task window of a tmux session."
-        )
+        # No TSV row (the tmux-session sweep postdates the audit). NO-REPORT
+        # usage: the command names three ways to say what to resume and was
+        # given none, which is the invocation to fix, not a question about
+        # which session the user meant — REF is the form the caller already had
+        # in hand if it knew of one. exit_code=2 preserves the UsageError's.
+        raise agent_help.no_report(
+            "session resume was given neither a REF nor a tmux-session flag. "
+            "Nothing was resumed.",
+            "Retry with the REF, or with --tmux-session NAME / "
+            "--all-tmux-sessions",
+            exit_code=2,
+            text="give REF, or --tmux-session NAME / --all-tmux-sessions to "
+                 "resume every task window of a tmux session.")
     from endless.session_cmd import resume_session
     resume_session(ref, review=review, reopen=reopen,
                    dry_run=dry_run or print_decision, force=force,
@@ -1864,19 +2035,23 @@ def session_hide(session_ids, task_refs):
     """
     if task_refs:
         if len(session_ids) > 1:
-            raise click.ClickException(
+            raise agent_help.no_report(
                 "--task hides tasks for ONE session; name at most one session "
-                f"(got {len(session_ids)})."
-            )
+                f"(got {len(session_ids)}). Nothing changed.",
+                "Re-run naming at most one session",
+                text=("--task hides tasks for ONE session; name at most one "
+                      f"session (got {len(session_ids)})."))
         from endless.session_cmd import hide_session_tasks
         hide_session_tasks(session_ids[0] if session_ids else None,
                            list(task_refs))
         return
     if not session_ids:
-        raise click.ClickException(
-            "Name at least one session to hide, or pass --task <id> to hide "
-            "tasks from a session's status view."
-        )
+        raise agent_help.no_report(
+            "Name at least one session to hide. Nothing changed.",
+            "Re-run naming a session id, or with --task <id> to hide tasks "
+            "from a session's status view",
+            text=("Name at least one session to hide, or pass --task <id> to hide "
+                  "tasks from a session's status view."))
     from endless.session_cmd import hide_sessions
     hide_sessions(list(session_ids))
 
@@ -1894,19 +2069,23 @@ def session_unhide(session_ids, task_refs):
     """
     if task_refs:
         if len(session_ids) > 1:
-            raise click.ClickException(
+            raise agent_help.no_report(
                 "--task unhides tasks for ONE session; name at most one session "
-                f"(got {len(session_ids)})."
-            )
+                f"(got {len(session_ids)}). Nothing changed.",
+                "Re-run naming at most one session",
+                text=("--task unhides tasks for ONE session; name at most one "
+                      f"session (got {len(session_ids)})."))
         from endless.session_cmd import hide_session_tasks
         hide_session_tasks(session_ids[0] if session_ids else None,
                            list(task_refs), unhide=True)
         return
     if not session_ids:
-        raise click.ClickException(
-            "Name at least one session to unhide, or pass --task <id> to "
-            "restore tasks to a session's status view."
-        )
+        raise agent_help.no_report(
+            "Name at least one session to unhide. Nothing changed.",
+            "Re-run naming a session id, or with --task <id> to restore tasks "
+            "to a session's status view",
+            text=("Name at least one session to unhide, or pass --task <id> to "
+                  "restore tasks to a session's status view."))
     from endless.session_cmd import unhide_sessions
     unhide_sessions(list(session_ids))
 
@@ -2562,11 +2741,17 @@ def task_unsettled(item_id, project, show_all, include_settled, limit, agent, as
     branch) — the fix differs, which is why the marker alone is not enough.
     """
     if item_id is not None and show_all:
-        raise click.UsageError("pass a task id or --all, not both.")
+        raise agent_help.no_report(
+            "pass a task id or --all, not both. Nothing ran.",
+            "Re-run with either a task id or --all", exit_code=2,
+            text="pass a task id or --all, not both.")
     if item_id is None and not show_all:
-        raise click.UsageError(
-            "specify a task id (endless task unsettled <id>) or --all to survey "
-            "every worktree in the project.")
+        raise agent_help.no_report(
+            "specify a task id or --all. Nothing ran.",
+            "Re-run with a task id, or --all to survey every worktree",
+            exit_code=2,
+            text=("specify a task id (endless task unsettled <id>) or --all to survey "
+                  "every worktree in the project."))
 
     from endless.task_cmd import unsettled_list, unsettled_item
     if item_id is not None:
@@ -2816,7 +3001,13 @@ def _content_gate_settings():
     try:
         return config.project_content_config(root)
     except ValueError as e:
-        raise click.ClickException(str(e))
+        # The project's own content policy contradicts itself — an extension
+        # listed as both blocked and unblocked. Only whoever wrote
+        # .endless/config.json can say which they meant.
+        raise agent_help.report(
+            f"{e} Nothing ran.",
+            "which of the two lists the extension belongs in",
+            text=str(e))
 
 
 def _guard_inline_content(inline, name, allow_paths):
@@ -2832,11 +3023,12 @@ def _guard_inline_content(inline, name, allow_paths):
     if stripped and len(stripped.split()) == 1 and _is_path_shaped(stripped):
         is_abs = _is_absolute_path(os.path.expanduser(stripped))
         if not (is_abs and _path_exempt(stripped, allow_paths)):
-            raise click.ClickException(
-                f"--{name} received a file path ({stripped!r}). --{name} stores its "
-                f"argument verbatim as inline content; to load a file's content use "
-                f"--{name}-file."
-            )
+            raise agent_help.no_report(
+                f"--{name} received a file path ({stripped!r}). Nothing was written.",
+                f"Re-run with --{name}-file {stripped}",
+                text=(f"--{name} received a file path ({stripped!r}). --{name} stores its "
+                      f"argument verbatim as inline content; to load a file's content use "
+                      f"--{name}-file."))
 
 
 def _guard_content_rules(content, name, allow_paths, whole_value_checked=False):
@@ -2869,23 +3061,28 @@ def _guard_content_rules(content, name, allow_paths, whole_value_checked=False):
             for tok in _absolute_path_tokens(content):
                 if _path_exempt(tok, allow_paths):
                     continue
-                raise click.ClickException(
-                    f"--{name} content contains an absolute path ({tok!r}). To keep this "
-                    f"path, add --allow-path with a regex matching it. {_gate_alternative(name)} "
-                    f"Absolute paths don't belong in durable ledger content — they're "
-                    f"non-portable, and a /tmp path is lost when a worktree drops."
-                )
+                raise agent_help.no_report(
+                    f"--{name} content contains an absolute path ({tok!r}). "
+                    f"Nothing was written.",
+                    "Rewrite the path project-relative (or as a Git URL) and retry; "
+                    "add --allow-path only when the absolute path is genuinely needed",
+                    text=(f"--{name} content contains an absolute path ({tok!r}). To keep this "
+                          f"path, add --allow-path with a regex matching it. {_gate_alternative(name)} "
+                          f"Absolute paths don't belong in durable ledger content — they're "
+                          f"non-portable, and a /tmp path is lost when a worktree drops."))
 
     if gates["line_citations"]:
         for tok in _line_citation_tokens(content, settings["extensions"]):
-            raise click.ClickException(
-                f"--{name} content cites a line number ({tok!r}). There is no "
-                f"--allow flag for this one, by decision.\n"
-                f"  Line numbers go stale the moment anything else lands, so a "
-                f"later session cannot tell whether to trust them.\n"
-                f"  Name the function, command or symbol instead — or better, "
-                f"state the search that finds the site."
-            )
+            raise agent_help.no_report(
+                f"--{name} content cites a line number ({tok!r}). Nothing was written.",
+                "Replace the line citation with the symbol's name, or with the "
+                "search that finds the site, and retry",
+                text=(f"--{name} content cites a line number ({tok!r}). There is no "
+                      f"--allow flag for this one, by decision.\n"
+                      f"  Line numbers go stale the moment anything else lands, so a "
+                      f"later session cannot tell whether to trust them.\n"
+                      f"  Name the function, command or symbol instead — or better, "
+                      f"state the search that finds the site."))
 
 
 # ─── empty-file gate (E-2008) ────────────────────────────────────────────────
@@ -2930,7 +3127,12 @@ def _refuse_empty_file(path, content, name, clearable):
         msg += (
             f"\n  To erase {name} on purpose, say so: --clear {name}"
         )
-    raise click.ClickException(msg)
+    raise agent_help.no_report(
+        f"--{name}-file loaded no content from {path} "
+        f"({_describe_empty_file(content)}). Nothing was written.",
+        "Re-check the step that produced the file, regenerate it, and retry"
+        + (f"; use --clear {name} only when erasing is the intent" if clearable else ""),
+        text=msg)
 
 
 def _resolve_content_flag(inline, file_path, name, allow_paths=(), clearable=False):
@@ -2948,13 +3150,17 @@ def _resolve_content_flag(inline, file_path, name, allow_paths=(), clearable=Fal
     it; `add` and the status-transition verbs do not, because there is nothing
     to clear when a field is being written for the first time."""
     if inline is not None and file_path is not None:
-        raise click.ClickException(
-            f"Pass either --{name} or --{name}-file, not both."
-        )
+        raise agent_help.no_report(
+            f"Pass either --{name} or --{name}-file, not both. Nothing was written.",
+            "Re-run with one of the two",
+            text=f"Pass either --{name} or --{name}-file, not both.")
     if file_path is not None:
         p = Path(file_path).expanduser()
         if not p.exists():
-            raise click.ClickException(f"File not found: {p}")
+            raise agent_help.no_report(
+                f"File not found: {p}. Nothing was written.",
+                f"Write the file first, or correct the --{name}-file path, and retry",
+                text=f"File not found: {p}")
         content = p.read_text()
         if not content.strip():
             _refuse_empty_file(p, content, name, clearable)
@@ -2982,12 +3188,14 @@ def _apply_clear_flags(clear_fields, resolved):
     out = dict(resolved)
     for name in clear_fields:
         if resolved.get(name) is not None:
-            raise click.ClickException(
-                f"--clear {name} conflicts with --{name}/--{name}-file in the "
-                f"same command.\n"
-                f"  Two flags writing one field is exactly the ambiguity this guard "
-                f"exists to remove; pass one or the other."
-            )
+            raise agent_help.no_report(
+                f"--clear {name} conflicts with --{name}/--{name}-file in the same "
+                f"command. Nothing was written.",
+                "Re-run with only one of them",
+                text=(f"--clear {name} conflicts with --{name}/--{name}-file in the "
+                      f"same command.\n"
+                      f"  Two flags writing one field is exactly the ambiguity this guard "
+                      f"exists to remove; pass one or the other."))
         out[name] = ""
     return out
 
@@ -3402,16 +3610,21 @@ def task_report(item_id, draft_file, raw):
     from endless.report_cmd import report_item, show_raw
     if raw:
         if draft_file is not None:
-            raise click.ClickException("Pass either --raw or --draft-file, not both.")
+            raise agent_help.no_report(
+                "Pass either --raw or --draft-file, not both. Nothing was sent.",
+                "Re-run with one of the two",
+                text="Pass either --raw or --draft-file, not both.")
         show_raw()
         return
     if draft_file is None:
-        raise click.ClickException(
-            "--draft-file is required.\n"
-            "\n"
-            "  Write the reply you were about to send to a file and pass its path.\n"
-            "  Pass the whole thing — the minimizer decides what survives."
-        )
+        raise agent_help.no_report(
+            "--draft-file is required. Nothing was sent.",
+            "Write the reply you were about to send to a file and re-run with "
+            "--draft-file <path>",
+            text=("--draft-file is required.\n"
+                  "\n"
+                  "  Write the reply you were about to send to a file and pass its path.\n"
+                  "  Pass the whole thing — the minimizer decides what survives."))
     report_item(item_id, draft_file)
 
 
@@ -3493,7 +3706,10 @@ def task_complete_cmd(item_ids, outcome, outcome_file, allow_paths):
     from endless.task_cmd import mark_completed_item
     outcome = _resolve_content_flag(outcome, outcome_file, "outcome", allow_paths)
     if outcome is None:
-        raise click.ClickException("Provide --outcome or --outcome-file.")
+        raise agent_help.no_report(
+            "Provide --outcome or --outcome-file. Nothing was changed.",
+            "Re-run with --outcome or --outcome-file",
+            text="Provide --outcome or --outcome-file.")
     for item_id in item_ids:
         mark_completed_item(item_id, outcome=outcome)
 
@@ -3573,11 +3789,13 @@ def task_start_deprecated(item_id):
     caller (agent or human) switches to the new verb instead of being
     silently enabled to keep using the old one.
     """
-    raise click.ClickException(
-        "`task start` was renamed to `task claim`.\n"
-        "Run: endless task claim "
-        + (f"E-{item_id}" if item_id is not None else "<id>")
-    )
+    raise agent_help.no_report(
+        "`task start` was renamed to `task claim`. Nothing ran.",
+        "Re-run as `endless task claim "
+        + (f"E-{item_id}" if item_id is not None else "<id>") + "`",
+        text=("`task start` was renamed to `task claim`.\n"
+              "Run: endless task claim "
+              + (f"E-{item_id}" if item_id is not None else "<id>")))
 
 
 @task_cmd.command("move")
@@ -3669,7 +3887,11 @@ def task_spawn(item_id, project, permission_mode, model, session_name,
     did, resume that session instead: `endless session goto <ref> --resume`.
     """
     if reopen or new_session or print_decision:
-        raise click.ClickException(
+        raise agent_help.no_report(
+            "`task spawn --reopen` is retired. Nothing ran.",
+            f"Re-run as `endless session goto E-{item_id} --resume --revisit` "
+            "(--no-revisit to read it back without reopening the task)",
+            text=(
             "`task spawn --reopen` is retired. Spawning a fresh "
             "session on reopened work threw away the session that did it.\n"
             "Reopen and continue in that session instead:\n"
@@ -3677,16 +3899,17 @@ def task_spawn(item_id, project, permission_mode, model, session_name,
             "  (--no-revisit instead, to read it back without reopening the "
             "task.)\n"
             "--new-session and --print-decision went with it; they only ever "
-            "modified --reopen."
-        )
+            "modified --reopen."))
     if bg or attach:
-        raise click.ClickException(
+        raise agent_help.no_report(
+            "`task spawn --bg` and `--attach` are retired. Nothing ran.",
+            f"Re-run as `endless task spawn E-{item_id}` without --bg/--attach",
+            text=(
             "`task spawn --bg` and `--attach` are retired: Endless no longer "
             "supports background agents. They never became as reliable as "
             "tmux-hosted sessions, and every surface that read them is gone.\n"
             "Spawn a tmux-hosted session instead:\n"
-            f"    endless task spawn E-{item_id}"
-        )
+            f"    endless task spawn E-{item_id}"))
     from endless.task_cmd import spawn_plan
     spawn_plan(item_id, project_name=project,
                worktree=worktree, force=force,
@@ -3851,7 +4074,10 @@ def plan_redirect(args):
         "If recording a Claude plan (from ~/.claude/plans/), "
         "use --type=plan with 'task add'."
     )
-    raise SystemExit(1)
+    raise agent_help.no_report(
+        "The 'plan' command has been renamed to 'task'. Nothing ran.",
+        f"Re-run as `{corrected}`",
+        text="The 'plan' command has been renamed to 'task'.")
 
 
 @main.group("decision")
@@ -4570,10 +4796,12 @@ def errors_show(error_id, detail, id_flag):
     from endless.jobs_cmd import errors_show as impl
     chosen = error_id if error_id is not None else id_flag
     if chosen is None:
-        raise click.UsageError(
-            "errors show needs an id — `endless errors show 7`. "
-            "To see which errors exist, run `endless errors list`."
-        )
+        raise agent_help.no_report(
+            "errors show needs an id. Nothing was printed.",
+            "Name one error's id — `endless errors list` prints them — and retry",
+            exit_code=2,
+            text=("errors show needs an id — `endless errors show 7`. "
+                  "To see which errors exist, run `endless errors list`."))
     impl(chosen, detail)
 
 
@@ -5099,8 +5327,10 @@ def db_backup():
     # Saying nothing would let a backups directory stop being pruned in silence.
     warning = result.get("warning")
     if warning:
-        click.echo(f"Warning: backup retention did not complete: {warning}",
-                   err=True)
+        # The backup itself was written; only pruning older ones fell short.
+        agent_help.warn.no_report(
+            f"Warning: backup retention did not complete: {warning}",
+            "Nothing — the backup was written; carry on")
 
 
 @db_cmd.command("upgrade")
@@ -5179,10 +5409,11 @@ def db_path():
     from endless import config
 
     if config.RESOLVED_CONFIG_DIR is None:
-        raise click.ClickException(
-            "db path needs an explicit --db value: "
-            "'endless db path --db=main' or 'endless db path --db=sandbox'."
-        )
+        raise agent_help.no_report(
+            "db path needs an explicit --db value. Nothing was printed.",
+            "Re-run with --db=main or --db=sandbox",
+            text=("db path needs an explicit --db value: "
+                  "'endless db path --db=main' or 'endless db path --db=sandbox'."))
     click.echo(str(config.DB_PATH))
 
 
@@ -5255,5 +5486,8 @@ def internal_template_render(name, project):
     )
     sys.stdout.write(result.stdout)
     if result.stderr:
-        sys.stderr.write(result.stderr)
-    sys.exit(result.returncode)
+        # endless-go classified this itself and its verdict lines are already at
+        # both ends of the text. Relaying it verbatim is the whole contract —
+        # a second directive here would contradict the first.
+        agent_help.relay(result.stderr, exit_code=result.returncode or 1).show()
+    agent_help.passthrough_exit(result.returncode)

@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // E-940: the Bash write-target gate. These pin the extraction (what a command
@@ -272,11 +274,14 @@ func newWriteFixture(t *testing.T) writeFixture {
 		projectRoot: f.main,
 		gitDirs:     worktreeGitDirs(f.wt),
 		exempt:      []string{f.tmp, root}, // root is "the temp dir" the project lives in
-		landed: func(id int64) (string, bool) {
+		landed: func(id int64) (*refusal.Error, bool) {
 			if id == 101 {
-				return "LANDED-SUITE-REFUSAL", true
+				// A classified stand-in: the gate under test only cares that
+				// the landed-suite arm fires and that its refusal is what comes
+				// back, not what class it carries.
+				return refusal.NoReport("LANDED-SUITE-REFUSAL", "stub remedy"), true
 			}
-			return "", false
+			return nil, false
 		},
 	}
 	return f
@@ -319,7 +324,7 @@ func TestWriteTargetDecision(t *testing.T) {
 			if block != c.block {
 				t.Fatalf("writeTargetDecision(%s) block = %v, want %v\n%s", c.target, block, c.block, msg)
 			}
-			if c.contain != "" && !strings.Contains(msg, c.contain) {
+			if c.contain != "" && !strings.Contains(msg.Error(), c.contain) {
 				t.Errorf("message lacks %q:\n%s", c.contain, msg)
 			}
 		})
@@ -376,10 +381,10 @@ func TestBashWriteGateMatchesWriteGate(t *testing.T) {
 			if writeBlock != bashBlock {
 				t.Fatalf("Write block=%v, Bash block=%v", writeBlock, bashBlock)
 			}
-			if writeBlock && !strings.HasSuffix(bashMsg, writeMsg) {
+			if writeBlock && !strings.HasSuffix(bashMsg.Error(), writeMsg.Error()) {
 				t.Errorf("Bash refusal does not carry the Write refusal's body:\nWrite:\n%s\nBash:\n%s", writeMsg, bashMsg)
 			}
-			if bashBlock && !strings.HasPrefix(bashMsg, "`>` would write ") {
+			if bashBlock && !strings.HasPrefix(bashMsg.Error(), "`>` would write ") {
 				t.Errorf("Bash refusal does not name the construct:\n%s", bashMsg)
 			}
 		})
@@ -392,7 +397,7 @@ func TestBashWritesRefusalNamesGitCheck(t *testing.T) {
 	if !block {
 		t.Fatal("git restore in main was allowed")
 	}
-	if !strings.Contains(msg, `"`+gitWritesCheck+`": false`) {
+	if !strings.Contains(msg.Error(), `"`+gitWritesCheck+`": false`) {
 		t.Errorf("git refusal does not name the %s key:\n%s", gitWritesCheck, msg)
 	}
 }

@@ -25,6 +25,7 @@ from pathlib import Path
 
 import click
 
+from endless import agent_help
 from endless import event_bridge
 from endless.statuses import TASK_STATUSES
 from endless.task_cmd import _current_endless_session_id, _resolve_project
@@ -34,6 +35,15 @@ from endless.task_cmd import _current_endless_session_id, _resolve_project
 # copy and had drifted to omit `submitted`, so a snapshot naming a submitted
 # task was rejected as carrying an invalid status.
 _VALID_STATUSES = frozenset(TASK_STATUSES)
+
+# Every refusal in this module below `session_status_add` is a schema
+# violation in the XML the agent just composed, so they are all NO-REPORT: the
+# agent fixes its own document and runs the command again, and there is nothing
+# in that round trip a user would want narrated. Nothing is written until the
+# whole document has validated, which is why each summary can say so outright —
+# an agent that cannot tell a rejected snapshot from a half-recorded one sends
+# the next one twice.
+_NOT_RECORDED = "Nothing was recorded."
 
 _TASK_ID_RE = re.compile(r"^E-\d+$")
 _SHA_RE = re.compile(r"^[0-9a-f]{7,40}$")
@@ -61,8 +71,16 @@ def session_status_add(input_file: str | None, session_id_override: int | None) 
     )
 
     if result is None:
-        raise click.ClickException(
-            "`endless-go event` returned no output; nothing to display."
+        # A fault, not a validation refusal: the payload passed every check and
+        # the event was handed to Go, which answered with nothing. Whether the
+        # snapshot reached `session_statuses` is genuinely unknown from here, so
+        # the directive that matters is the one `fault` carries — tell the user,
+        # and do not retry, because a retry against a write that did land
+        # records the same snapshot twice.
+        raise agent_help.fault(
+            "`endless-go event` returned no output, so whether the snapshot was "
+            "recorded is unknown.",
+            text="`endless-go event` returned no output; nothing to display.",
         )
 
     markdown = result.get("markdown", "")
@@ -91,8 +109,11 @@ def _read_input(input_file: str | None) -> str:
     else:
         text = sys.stdin.read()
     if not text.strip():
-        raise click.ClickException(
-            "session snapshot add: empty input (expected XML on stdin or via file arg)"
+        raise agent_help.no_report(
+            f"session snapshot add: empty input. {_NOT_RECORDED}",
+            "Retry piping the snapshot XML on stdin, or passing a file path",
+            text="session snapshot add: empty input (expected XML on stdin or "
+                 "via file arg)",
         )
     return text
 
@@ -139,11 +160,19 @@ def _parse_and_validate(xml_text: str) -> dict:
     try:
         root = ET.fromstring(xml_text)
     except ET.ParseError as e:
-        raise click.ClickException(f"session snapshot: malformed XML: {e}")
+        raise agent_help.no_report(
+            f"session snapshot: malformed XML: {e}. {_NOT_RECORDED}",
+            "Fix the XML at the position the parser named and retry",
+            text=f"session snapshot: malformed XML: {e}",
+        )
 
     if root.tag != "session-status":
-        raise click.ClickException(
-            f"session snapshot: root element must be <session-status>, got <{root.tag}>"
+        raise agent_help.no_report(
+            f"session snapshot: root element must be <session-status>, got "
+            f"<{root.tag}>. {_NOT_RECORDED}",
+            "Retry with <session-status> as the root element",
+            text=f"session snapshot: root element must be <session-status>, "
+                 f"got <{root.tag}>",
         )
 
     payload = {
@@ -173,8 +202,12 @@ def _parse_and_validate(xml_text: str) -> dict:
         elif tag == "summary":
             payload["summary"] = _serialize_summary(child)
         else:
-            raise click.ClickException(
-                f"session snapshot: unknown element <{tag}> under <session-status>"
+            raise agent_help.no_report(
+                f"session snapshot: unknown element <{tag}> under "
+                f"<session-status>. {_NOT_RECORDED}",
+                f"Remove or rename <{tag}> and retry",
+                text=f"session snapshot: unknown element <{tag}> under "
+                     f"<session-status>",
             )
 
     return payload
@@ -190,26 +223,39 @@ def _serialize_tasks(section_el: ET.Element) -> str:
     lines = []
     for el in section_el:
         if el.tag != "task":
-            raise click.ClickException(
-                f"session snapshot: unexpected <{el.tag}> inside <tasks>; "
-                f"only <task> elements allowed"
+            raise agent_help.no_report(
+                f"session snapshot: unexpected <{el.tag}> inside <tasks>. "
+                f"{_NOT_RECORDED}",
+                "Retry with only <task> children under <tasks>",
+                text=f"session snapshot: unexpected <{el.tag}> inside <tasks>; "
+                     f"only <task> elements allowed",
             )
         tid = el.attrib.get("id", "")
         if not _TASK_ID_RE.match(tid):
-            raise click.ClickException(
-                f"session snapshot: <task id={tid!r}> must match E-NNN"
+            raise agent_help.no_report(
+                f"session snapshot: <task id={tid!r}> must match E-NNN. "
+                f"{_NOT_RECORDED}",
+                "Retry with E-NNN task ids",
+                text=f"session snapshot: <task id={tid!r}> must match E-NNN",
             )
         status = el.attrib.get("status", "")
         if status not in _VALID_STATUSES:
-            raise click.ClickException(
+            raise agent_help.no_report(
                 f"session snapshot: <task id={tid!r}> has invalid status "
-                f"{status!r}; valid: {', '.join(sorted(_VALID_STATUSES))}"
+                f"{status!r}. {_NOT_RECORDED}",
+                "Retry with a status from the listed vocabulary",
+                text=f"session snapshot: <task id={tid!r}> has invalid status "
+                     f"{status!r}; valid: "
+                     f"{', '.join(sorted(_VALID_STATUSES))}",
             )
         filed = el.attrib.get("filed")
         if filed is not None and filed not in ("true", "false"):
-            raise click.ClickException(
-                f"session snapshot: <task id={tid!r}> filed must be 'true' "
-                f"or 'false', got {filed!r}"
+            raise agent_help.no_report(
+                f"session snapshot: <task id={tid!r}> filed must be 'true' or "
+                f"'false', got {filed!r}. {_NOT_RECORDED}",
+                "Retry with filed=\"true\" or filed=\"false\"",
+                text=f"session snapshot: <task id={tid!r}> filed must be 'true' "
+                     f"or 'false', got {filed!r}",
             )
         lines.append(_element_to_line(el))
     return "\n".join(lines)
@@ -220,17 +266,26 @@ def _serialize_summary(section_el: ET.Element) -> str:
     lines = []
     for el in section_el:
         if el.tag != "layer":
-            raise click.ClickException(
-                f"session snapshot: unexpected <{el.tag}> inside <summary>; "
-                f"only <layer> elements allowed"
+            raise agent_help.no_report(
+                f"session snapshot: unexpected <{el.tag}> inside <summary>. "
+                f"{_NOT_RECORDED}",
+                "Retry with only <layer> children under <summary>",
+                text=f"session snapshot: unexpected <{el.tag}> inside "
+                     f"<summary>; only <layer> elements allowed",
             )
         if not el.attrib.get("name"):
-            raise click.ClickException(
-                "session snapshot: <layer> requires a name attribute"
+            raise agent_help.no_report(
+                f"session snapshot: <layer> requires a name attribute. "
+                f"{_NOT_RECORDED}",
+                "Add name= to the <layer> element and retry",
+                text="session snapshot: <layer> requires a name attribute",
             )
         if not el.attrib.get("files"):
-            raise click.ClickException(
-                "session snapshot: <layer> requires a files attribute"
+            raise agent_help.no_report(
+                f"session snapshot: <layer> requires a files attribute. "
+                f"{_NOT_RECORDED}",
+                "Add files= to the <layer> element and retry",
+                text="session snapshot: <layer> requires a files attribute",
             )
         lines.append(_element_to_line(el))
     return "\n".join(lines)
@@ -240,9 +295,12 @@ def _serialize_decisions(section_el: ET.Element) -> str:
     lines = []
     for el in section_el:
         if el.tag != "decision":
-            raise click.ClickException(
-                f"session snapshot: unexpected <{el.tag}> inside <decisions>; "
-                f"only <decision> elements allowed"
+            raise agent_help.no_report(
+                f"session snapshot: unexpected <{el.tag}> inside <decisions>. "
+                f"{_NOT_RECORDED}",
+                "Retry with only <decision> children under <decisions>",
+                text=f"session snapshot: unexpected <{el.tag}> inside "
+                     f"<decisions>; only <decision> elements allowed",
             )
         lines.append(_element_to_line(el))
     return "\n".join(lines)
@@ -252,14 +310,21 @@ def _serialize_commits(section_el: ET.Element) -> str:
     lines = []
     for el in section_el:
         if el.tag != "commit":
-            raise click.ClickException(
-                f"session snapshot: unexpected <{el.tag}> inside <commits>; "
-                f"only <commit> elements allowed"
+            raise agent_help.no_report(
+                f"session snapshot: unexpected <{el.tag}> inside <commits>. "
+                f"{_NOT_RECORDED}",
+                "Retry with only <commit> children under <commits>",
+                text=f"session snapshot: unexpected <{el.tag}> inside "
+                     f"<commits>; only <commit> elements allowed",
             )
         sha = el.attrib.get("sha", "")
         if not _SHA_RE.match(sha):
-            raise click.ClickException(
-                f"session snapshot: <commit sha={sha!r}> must match [0-9a-f]{{7,40}}"
+            raise agent_help.no_report(
+                f"session snapshot: <commit sha={sha!r}> must match "
+                f"[0-9a-f]{{7,40}}. {_NOT_RECORDED}",
+                "Retry with a real 7-40 character hex sha",
+                text=f"session snapshot: <commit sha={sha!r}> must match "
+                     f"[0-9a-f]{{7,40}}",
             )
         lines.append(_element_to_line(el))
     return "\n".join(lines)
@@ -269,13 +334,19 @@ def _serialize_memory(section_el: ET.Element) -> str:
     lines = []
     for el in section_el:
         if el.tag != "entry":
-            raise click.ClickException(
-                f"session snapshot: unexpected <{el.tag}> inside <memory>; "
-                f"only <entry> elements allowed"
+            raise agent_help.no_report(
+                f"session snapshot: unexpected <{el.tag}> inside <memory>. "
+                f"{_NOT_RECORDED}",
+                "Retry with only <entry> children under <memory>",
+                text=f"session snapshot: unexpected <{el.tag}> inside "
+                     f"<memory>; only <entry> elements allowed",
             )
         if not el.attrib.get("path"):
-            raise click.ClickException(
-                "session snapshot: <entry> requires a path attribute"
+            raise agent_help.no_report(
+                f"session snapshot: <entry> requires a path attribute. "
+                f"{_NOT_RECORDED}",
+                "Add path= to the <entry> element and retry",
+                text="session snapshot: <entry> requires a path attribute",
             )
         lines.append(_element_to_line(el))
     return "\n".join(lines)

@@ -161,7 +161,12 @@ def test_a_crowded_window_names_the_flag(crash):
     with pytest.raises(click.ClickException) as exc:
         crash.resume()
 
-    msg = str(exc.value)
+    # `format_message()`, not `str(...)`: E-2159 moved both recovery flags into
+    # the refusal's `human_remedy`, which a person reads and an agent does not.
+    # `str(...)` is the exception's bare text and no longer carries them —
+    # rendering is what a reader is actually shown, so rendering is what these
+    # assert on.
+    msg = exc.value.format_message()
     assert "3 panes" in msg
     assert "endless session resume E-10 --no-sibling-panes" in msg
     # The sibling verb is still offered — it is right when the panes are yours.
@@ -202,7 +207,7 @@ def test_a_stale_claim_names_the_flag(crash):
     with pytest.raises(click.ClickException) as exc:
         crash.resume()
 
-    msg = str(exc.value)
+    msg = exc.value.format_message()
     assert "E-999" in msg                 # what the window claims
     assert "E-10" in msg                  # what resuming would bind it to
     assert "endless session resume E-10 --rebind" in msg
@@ -254,11 +259,11 @@ def test_the_two_flags_do_not_imply_each_other(crash):
 
     with pytest.raises(click.ClickException) as exc:
         crash.resume(no_sibling_panes=True)
-    assert "--rebind" in str(exc.value)
+    assert "--rebind" in exc.value.format_message()
 
     with pytest.raises(click.ClickException) as exc:
         crash.resume(rebind=True)
-    assert "--no-sibling-panes" in str(exc.value)
+    assert "--no-sibling-panes" in exc.value.format_message()
 
     with pytest.raises(_Exec):
         crash.resume(rebind=True, no_sibling_panes=True)
@@ -278,7 +283,7 @@ def test_rebind_refuses_a_live_window_on_the_target(crash):
     with pytest.raises(click.ClickException) as exc:
         crash.resume(rebind=True)
 
-    msg = str(exc.value)
+    msg = exc.value.format_message()
     assert "main:9" in msg                       # names the window
     assert "1234" in msg                         # names the session
     assert "endless session goto E-10" in msg
@@ -324,7 +329,7 @@ def test_neither_flag_waives_force(crash, monkeypatch):
     with pytest.raises(click.ClickException) as exc:
         crash.resume(rebind=True, no_sibling_panes=True)
 
-    msg = str(exc.value)
+    msg = exc.value.format_message()
     assert "E-1958" in msg
     assert "--force" in msg
 
@@ -377,7 +382,7 @@ def test_a_taskless_target_is_gated(crash, monkeypatch):
 
     with pytest.raises(click.ClickException) as exc:
         crash.resume()
-    assert "--rebind" in str(exc.value)
+    assert "--rebind" in exc.value.format_message()
 
 
 def test_outside_tmux_nothing_is_gated(crash, monkeypatch):

@@ -10,6 +10,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/rating"
+	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/sessionstate"
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
@@ -364,7 +365,13 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 					"accepted only when replaying a historical ledger", evt.Kind,
 			)
 		}
-		return nil, fmt.Errorf("events: executor does not handle kind %q", evt.Kind)
+		// The kind passed ValidKinds and then found no executor, which means
+		// Endless emits an event it cannot apply. The ledger line is already
+		// written and committed by now, so this leaves an orphan entry behind
+		// that a retry only duplicates.
+		return nil, refusal.Report(
+			fmt.Sprintf("events: executor does not handle kind %q", evt.Kind),
+			"an event kind Endless accepts but has no executor for — the ledger already holds the entry, so it needs reporting rather than retrying")
 	}
 }
 
@@ -372,7 +379,16 @@ func resolveProjectID(db dbQuerier, name string) (int64, error) {
 	var id int64
 	err := db.QueryRow("SELECT id FROM projects WHERE name = ?", name).Scan(&id)
 	if err != nil {
-		return 0, fmt.Errorf("events: project %q not found: %w", name, err)
+		// Two readings, and the row cannot distinguish them: the project may be
+		// genuinely unregistered here, or the invocation may simply be pointed at
+		// the wrong database or project name. Registering a project is the user's
+		// choice; correcting a --db or --project is not.
+		return 0, refusal.ReportIf(
+			fmt.Sprintf("events: project %q not found: %s", name, err),
+			"this is the database and project the user meant",
+			"retry naming the right project, or the right database with --db",
+			"the project is not registered in this database, and registering it is the user's choice",
+		).Cause(err)
 	}
 	return id, nil
 }
@@ -423,7 +439,10 @@ func execTaskCreated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 		var afterSort int
 		err := db.QueryRow("SELECT sort_order FROM tasks WHERE id = ?", *p.AfterID).Scan(&afterSort)
 		if err != nil {
-			return nil, fmt.Errorf("events: after task %d not found: %w", *p.AfterID, err)
+			return nil, refusal.NoReport(
+				fmt.Sprintf("events: after task %d not found: %s", *p.AfterID, err),
+				"Re-check the --after id with `endless task list` or `endless task show`, and retry",
+			).Cause(err)
 		}
 		sortOrder = afterSort + 5
 	} else if sortOrder == 0 {
@@ -657,12 +676,16 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 		}
 		col, ok := allowedFields[field]
 		if !ok {
-			return nil, fmt.Errorf("events: unknown field %q in task.fields_updated", field)
+			return nil, internalContractRefusal(
+				fmt.Sprintf("events: unknown field %q in task.fields_updated", field),
+				"retry naming a field `task update` accepts")
 		}
 		if field == "phase" {
 			phaseStr, ok := value.(string)
 			if !ok {
-				return nil, fmt.Errorf("events: phase field must be string, got %T", value)
+				return nil, internalContractRefusal(
+					fmt.Sprintf("events: phase field must be string, got %T", value),
+					"retry with the phase given as a string")
 			}
 			if err := ValidatePhase(phaseStr); err != nil {
 				return nil, err
@@ -671,7 +694,9 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 		if field == "type" {
 			typeStr, ok := value.(string)
 			if !ok {
-				return nil, fmt.Errorf("events: type field must be string, got %T", value)
+				return nil, internalContractRefusal(
+					fmt.Sprintf("events: type field must be string, got %T", value),
+					"retry with the type given as a string")
 			}
 			tt, err := tasktype.Parse(typeStr)
 			if err != nil {
@@ -1145,7 +1170,9 @@ func execTaskDepCreated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return nil, fmt.Errorf("events: unmarshal task_dep.created payload: %w", err)
 	}
 	if p.DepType == "" {
-		return nil, fmt.Errorf("events: task_dep.created requires dep_type")
+		return nil, refusal.NoReport(
+			"events: task_dep.created requires dep_type",
+			"Pass a dep_type and retry")
 	}
 	if _, err := db.Exec(
 		`INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type)
@@ -1169,7 +1196,9 @@ func execTaskDepDeleted(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return nil, fmt.Errorf("events: unmarshal task_dep.deleted payload: %w", err)
 	}
 	if p.DepType == "" {
-		return nil, fmt.Errorf("events: task_dep.deleted requires dep_type")
+		return nil, refusal.NoReport(
+			"events: task_dep.deleted requires dep_type",
+			"Pass a dep_type and retry")
 	}
 	result, err := db.Exec(
 		`DELETE FROM task_deps
@@ -1182,7 +1211,12 @@ func execTaskDepDeleted(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	}
 	n, _ := result.RowsAffected()
 	if n == 0 {
-		return nil, fmt.Errorf("events: delete task_dep: no matching row")
+		// The link asked to be gone is gone, so nothing is left to decide. The
+		// ledger line is already appended and committed when this fires, so a
+		// retry leaves the refused event behind without changing the outcome.
+		return nil, refusal.NoReport(
+			"events: delete task_dep: no matching row",
+			"Nothing to unlink — confirm with `endless task show` and carry on")
 	}
 	if err := recordDepTouch(db, evt, p.SourceID, p.TargetID); err != nil {
 		return nil, err

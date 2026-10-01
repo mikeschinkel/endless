@@ -131,8 +131,11 @@ def parse_parent_filter(value: str) -> int:
     try:
         return int(s)
     except ValueError:
-        raise click.ClickException(
-            f"Invalid parent '{value}'. Expected 'none' or a task ID (e.g. E-101)"
+        # NO-REPORT: a --parent value is the invocation's own, so a mistyped one
+        # is rewritten and tried again. The user never needs to hear about it.
+        raise agent_help.no_report(
+            f"Invalid parent '{value}'. Expected 'none' or a task ID (e.g. E-101)",
+            "Pass none or a task id and retry",
         )
 
 
@@ -298,6 +301,20 @@ NOTHING_CREATED = "Nothing was created."
 NOTHING_CHANGED = "Nothing was changed."
 NOTHING_WRITTEN = "Nothing was written."
 
+# Fifteen refusals in this module say "there is no such id", and every one of
+# them is the same refusal: the id in the invocation is wrong, the listing says
+# what the right one is, and nothing about a mistyped id needs the user. One
+# constant so the fifteen cannot drift into fifteen different remedies for the
+# one mistake.
+_NO_SUCH_ID_REMEDY = (
+    "Re-check the id (endless task list, or task search) and retry with the "
+    "right one"
+)
+
+# The same for a relation type: the vocabulary is closed and the message has
+# just listed it, so the next call is the fix.
+_RELATION_TYPE_REMEDY = "Pick a listed relation type and retry"
+
 # Where text that does not belong in a title or description goes instead
 # (E-1993, per E-2187's survey). The error message is the teaching surface, so
 # each remedy names destinations, not only the limit.
@@ -402,6 +419,36 @@ def _title_problems(title: str, force: bool) -> list[_Refusal]:
             matchers.add_verb(value=first_word, definition=definition)
         except ValueError:
             pass
+        except RuntimeError as exc:
+            # `add_verb` writes verbs.jsonl and THEN commits it, so by the time
+            # the commit can fail the verb is already registered on disk and the
+            # file is left MODIFIED on the main checkout. That is why this
+            # refusal does not say "nothing changed": the task write never
+            # happened, and the verb write did, and both halves have to be said.
+            #
+            # The lie would be the expensive half. A plain retry now passes the
+            # verb gate — the verb is registered — and files the task, so an
+            # agent told "nothing changed" would conclude the retry had fixed
+            # everything while verbs.jsonl sat uncommitted on main. REPORT
+            # because clearing that is the user's: committing on the main
+            # checkout is not something a session working in a worktree does.
+            raise agent_help.report(
+                f"Auto-registered the verb '{first_word}', but committing "
+                f".endless/verbs.jsonl on the main checkout failed. No task was "
+                f"created and no field was changed; the verb IS registered on "
+                f"disk, and verbs.jsonl is left modified on the main checkout.",
+                "whether to commit the newly registered verb on main or revert "
+                "verbs.jsonl there",
+                text=(
+                    f"Could not commit .endless/verbs.jsonl on the main "
+                    f"checkout:\n"
+                    f"  {exc}\n"
+                    f"No task was created. The verb '{first_word}' IS "
+                    f"registered — verbs.jsonl was written before the commit "
+                    f"was attempted — and that file is left modified on the "
+                    f"main checkout."
+                ),
+            ) from exc
         else:
             click.echo(
                 click.style("•", fg="cyan")
@@ -536,7 +583,7 @@ def _refuse(problems: list[_Refusal], action: str) -> None:
     for problem in problems:
         if problem.remedy and problem.remedy not in remedies:
             remedies.append(problem.remedy)
-    summary = " ".join([verdict, *remedies, action])
+    summary = " ".join([verdict, action])
 
     # A lone problem renders today's message unchanged, trailing newline and
     # all — a human must see no difference. Only a multi-problem refusal, which
@@ -547,8 +594,15 @@ def _refuse(problems: list[_Refusal], action: str) -> None:
         guidance = "\n\n".join(p.guidance.rstrip("\n") for p in problems)
 
     if not agent_help.agent_facing() and any(p.blank_before for p in problems):
-        click.echo("", err=True)
-    raise click.ClickException(agent_help.agent_error(summary, guidance))
+        agent_help.info("", err=True)
+    # NO-REPORT, for every field problem there is: the content the caller wrote
+    # has a named home, the remedy says which, and the next call is the fix.
+    # `agent_error` drops out — the factory does what it did, and additionally
+    # says out loud that this refusal is the agent's to handle. The remedies
+    # move out of the summary into `remedy`, which is where the factory renders
+    # them; the verdict line still carries the measured problems, the remedies
+    # and whether anything changed, as it did before.
+    raise agent_help.no_report(summary, " ".join(remedies), text=guidance)
 
 
 def _first_word(text: str) -> str:
@@ -766,18 +820,29 @@ def _resolve_project(name: str | None) -> tuple[int, str]:
         cwd = config.resolution_cwd()
         name = project_name_for_cwd(cwd)
         if not name:
-            raise click.ClickException(
+            # CONDITIONAL, and genuinely unresolvable here: this command cannot
+            # see which project the caller meant. If the directory being worked
+            # in is simply not registered, registering it is the user's call; if
+            # the project they meant is registered under another path, naming it
+            # is a retry and nothing more.
+            raise agent_help.report_if(
                 "Not in a registered project directory. "
                 "Specify a name: endless task <command> "
-                "--project <name>"
+                "--project <name>",
+                "the project being worked in is not registered at all",
+                "look the intended project up (endless project list) and retry "
+                "with --project <name>",
+                "registering a project is the user's choice",
             )
     row = db.query(
         "SELECT id, name FROM projects WHERE name = ?",
         (name,),
     )
     if not row:
-        raise click.ClickException(
-            f"No project found with name '{name}'"
+        raise agent_help.no_report(
+            f"No project found with name '{name}'",
+            "List the registered projects (endless project list) and retry with "
+            "a correct --project",
         )
     # E-1668: record what this invocation resolved, so the provenance trace can
     # say so when it is not the project enclosing cwd. Recorded at the RESOLVERS
@@ -1621,7 +1686,8 @@ def landed_item(item_id: int, agent: bool = False, as_json: bool = False):
         (item_id,),
     )
     if not row:
-        raise click.ClickException(f"No task found with id {item_id}")
+        raise agent_help.no_report(
+            f"No task found with id {item_id}", _NO_SUCH_ID_REMEDY)
     item = row[0]
     landings = _task_landings(item_id)
 
@@ -1957,7 +2023,13 @@ def _unsettled_probe(paths: list[Path]) -> list[dict]:
         return []
     binary = shutil.which("endless-go")
     if not binary:
-        raise click.ClickException("endless-go not found on PATH")
+        # REPORT: installing Endless's own Go binary, or repairing PATH, happens
+        # on the user's machine. There is no second way to ask this question, so
+        # there is nothing for an agent to retry.
+        raise agent_help.report(
+            "endless-go not found on PATH",
+            "installing endless-go or fixing PATH on this machine",
+        )
     from endless import config
     result = subprocess.run(
         [binary, *config.go_db_context_args(),
@@ -1965,14 +2037,27 @@ def _unsettled_probe(paths: list[Path]) -> list[dict]:
         capture_output=True, text=True,
     )
     if result.returncode != 0:
-        raise click.ClickException(
-            f"worktree-unsettled probe failed: {result.stderr.strip() or result.returncode}"
+        # endless-go classified this at the site that raised it — every
+        # session-query failure goes through internal/refusal — and its verdict
+        # lines are already at both ends of its stderr. Relaying it verbatim is
+        # the whole job; a Python wrapper around it would add a second,
+        # contradicting directive and re-word the one diagnosis there is.
+        if result.stderr.strip():
+            raise agent_help.relay(result.stderr, exit_code=result.returncode)
+        # An exit code and nothing else: nobody classified anything, so there is
+        # nothing to relay and no retry to name.
+        raise agent_help.fault(
+            f"the worktree-unsettled probe exited {result.returncode} and "
+            f"said nothing."
         )
     import json
     try:
         return provenance.rows_of(json.loads(result.stdout))
     except ValueError as exc:
-        raise click.ClickException(f"unreadable probe output: {exc}") from exc
+        # The probe answered and Python could not read it, which means the two
+        # halves of Endless disagree about the format. That is Endless broken
+        # against itself, not a call anyone mistyped.
+        raise agent_help.fault(f"unreadable probe output: {exc}") from exc
 
 
 def _worktree_path_for_task(root: Path, item_id: int) -> Path | None:
@@ -2188,7 +2273,8 @@ def unsettled_item(item_id: int, agent: bool = False, as_json: bool = False):
         item = {"id": item_id, "title": "(no task row)",
                 "status": "?", "project_name": "?"}
     else:
-        raise click.ClickException(f"No task found with id {item_id}")
+        raise agent_help.no_report(
+            f"No task found with id {item_id}", _NO_SUCH_ID_REMEDY)
     probe = _unsettled_probe([path])[0] if path else {
         "has_worktree": False, "unsettled": False, "modified": False,
         "unlanded": False, "reason": "no worktree", "branch": "",
@@ -2316,20 +2402,44 @@ _RESEARCH_GATE_MSG = (
     "research can't be inline in a do-task."
 )
 
+# The remedy every research-gate refusal names. It says the replacement out
+# loud because this remedy used to be impossible to carry out: a task whose
+# notes already carried a `## Justification` section was refused HERE without
+# --justification and refused by `_compose_justification_notes` with it, and no
+# command edits notes — so a task that had ever been research could never be
+# made research again. The composer replaces the section now (E-2159), which is
+# what turns this sentence into something an agent can actually do.
+_RESEARCH_GATE_REMEDY = (
+    "Add --justification (it replaces any '## Justification' section the notes "
+    "already carry), or file the work as a do-task, or parent it under an "
+    "underway epic, and retry"
+)
+
 _JUSTIFICATION_HEADING_RE = re.compile(r"(?m)^##\s+Justification\b")
+
+# Where the justification section ENDS: the next heading at the same level or
+# above, or the end of the notes. Replacing a section means replacing its body
+# and nothing else, so a later `## Plan` has to survive untouched.
+_SECTION_END_RE = re.compile(r"(?m)^#{1,2}\s+")
 
 
 def _research_gate_check(parent_id: int | None, justification: str | None) -> None:
-    """Raise click.ClickException if the research gate fails.
+    """Refuse, NO-REPORT, when the research gate fails.
 
     Pass when (a) `justification` is non-empty, or (b) parent is a
     type=epic, status=underway task. Sticky-override statuses
     (revisit/blocked/declined/obsolete) do NOT exempt.
+
+    NO-REPORT on every branch: each one names something the caller can do in
+    the next call — write the justification, re-file the work as a do-task, or
+    parent it under the epic it belongs to. Nothing here is the user's to
+    decide, which is only true because the remedy now works (see
+    `_RESEARCH_GATE_REMEDY`).
     """
     if justification:
         return
     if parent_id is None:
-        raise click.ClickException(_RESEARCH_GATE_MSG)
+        raise agent_help.no_report(_RESEARCH_GATE_MSG, _RESEARCH_GATE_REMEDY)
     row = db.query(
         "SELECT t.status, COALESCE(tt.slug, '') AS type_slug "
         "FROM live_tasks t LEFT JOIN task_types tt ON tt.id = t.type_id "
@@ -2337,11 +2447,12 @@ def _research_gate_check(parent_id: int | None, justification: str | None) -> No
         (parent_id,),
     )
     if not row:
-        raise click.ClickException(
-            f"Parent task E-{parent_id} not found"
+        raise agent_help.no_report(
+            f"Parent task E-{parent_id} not found",
+            "Re-check the --parent id and retry",
         )
     if row[0]["type_slug"] != "epic" or row[0]["status"] != "underway":
-        raise click.ClickException(_RESEARCH_GATE_MSG)
+        raise agent_help.no_report(_RESEARCH_GATE_MSG, _RESEARCH_GATE_REMEDY)
 
 
 def _reject_maybe_with_parent(phase: str | None, parent_id: int | None) -> None:
@@ -2356,12 +2467,16 @@ def _reject_maybe_with_parent(phase: str | None, parent_id: int | None) -> None:
     and move.
     """
     if phase == "maybe" and parent_id is not None:
-        raise click.ClickException(
+        # NO-REPORT: both ways out are the caller's own next call — promote the
+        # phase, or record the connection as a relation instead of a parent.
+        raise agent_help.no_report(
             "A maybe-phase task cannot have a parent. "
             "maybe = uncommitted; parent-child = scope binding, and mixing the "
             "two creates phantom scope. Promote it (--phase now/next/later) to "
             "place it under a parent, or link it with a relates_to relation "
-            "instead."
+            "instead.",
+            "Promote the phase (--phase now/next/later), or use a relates_to "
+            "link instead of --parent, and retry",
         )
 
 
@@ -2369,25 +2484,52 @@ def _compose_justification_notes(
     existing_notes: str | None,
     justification: str | None,
 ) -> str | None:
-    """Return notes-string with a '## Justification' section appended.
+    """Return notes carrying a '## Justification' section for `justification`.
 
     - If `justification` is empty/None, returns None (no notes change).
-    - If existing notes already contains a '## Justification' heading,
-      raises click.ClickException (no overwrite — collision is loud).
-    - Otherwise appends `## Justification\\n\\n<text>\\n`, preserving any
-      existing content.
+    - If the existing notes already carry a '## Justification' heading, that
+      section's BODY is REPLACED and everything around it is preserved.
+    - Otherwise the section is appended, preserving any existing content.
+
+    E-2159 made the replacement happen. This used to refuse a collision — "notes
+    already contains a '## Justification' section; clear or edit it manually
+    before re-justifying" — and that refusal had no remedy anyone could carry
+    out. `task update --type research` demands --justification (see
+    `_research_gate_check`), this rejected it, and no command edits notes: a
+    task that had ever been research could never become research again, and the
+    refusal named a manual edit the CLI does not offer. A class that tells an
+    agent to handle something itself has to leave it something it can do.
+
+    Re-justifying is the ordinary act of a task being re-scoped, so that is the
+    one that works. The replaced body is not lost — every notes write is a
+    ledger event, so the previous justification is recoverable from the record
+    rather than from a refusal.
     """
     if not justification:
         return None
     section = "## Justification\n\n" + justification.strip() + "\n"
     if existing_notes and _JUSTIFICATION_HEADING_RE.search(existing_notes):
-        raise click.ClickException(
-            "notes already contains a '## Justification' section; "
-            "clear or edit it manually before re-justifying."
-        )
+        return _replace_justification_section(existing_notes, section)
     if not existing_notes:
         return section
     return existing_notes.rstrip() + "\n\n" + section
+
+
+def _replace_justification_section(notes: str, section: str) -> str:
+    """Swap the existing '## Justification' section for `section`.
+
+    The old section runs from its heading to the next heading at the same level
+    or above (`_SECTION_END_RE`), or to the end of the notes. Everything before
+    the heading and everything from the next heading onward is preserved
+    verbatim, so re-justifying a task never costs it the rest of its notes.
+    """
+    match = _JUSTIFICATION_HEADING_RE.search(notes)
+    before = notes[: match.start()].rstrip()
+    rest = notes[match.end():]
+    end = _SECTION_END_RE.search(rest)
+    after = rest[end.start():].strip("\n") if end else ""
+    out = (before + "\n\n" if before else "") + section
+    return out + ("\n" + after + "\n" if after else "")
 
 
 def add_item(
@@ -2737,7 +2879,7 @@ def _orphan_refusal(
     headline: str,
     found: list[tuple[int, str]],
     group_by_task: bool,
-) -> click.ClickException:
+) -> agent_help.Refusal:
     """Build the refusal every relation-orphaning delete path raises.
 
     One message shape wherever a task is about to be deleted, so the rule reads
@@ -2758,7 +2900,17 @@ def _orphan_refusal(
             lines += [f"      {cmd}" for o, cmd in found if o == owner]
     else:
         lines += [f"    {cmd}" for _, cmd in found]
-    return click.ClickException("\n".join(lines))
+    # CONDITIONAL, and the command cannot settle it. The listed unlink commands
+    # ARE the retry when the relations were meant to go with the task — but a
+    # severed relation cannot be reconstructed, and only the conversation that
+    # asked for the removal says whether they were.
+    return agent_help.report_if(
+        f"{headline} Removing would orphan them. Nothing was removed.",
+        "severing the listed relations was not part of what was asked for",
+        "run the listed unlink commands and retry the removal",
+        "unlinking cannot be undone",
+        text="\n".join(lines),
+    )
 
 
 def _refuse_removal_with_relations(
@@ -2806,8 +2958,8 @@ def remove_item(item_id: int, cascade: bool = False):
         (item_id,),
     )
     if not row:
-        raise click.ClickException(
-            f"No task found with id {item_id}"
+        raise agent_help.no_report(
+            f"No task found with id {item_id}", _NO_SUCH_ID_REMEDY
         )
 
     # parent_id, not effective_parent_id, and deliberately (E-2161). This gate
@@ -2821,9 +2973,19 @@ def remove_item(item_id: int, cascade: bool = False):
     ) or 0
 
     if child_count > 0 and not cascade:
-        raise click.ClickException(
-            f"Task {task_id_display(item_id)} has {child_count} child(ren). "
-            f"Use --cascade to remove it and all descendants."
+        # CONDITIONAL on something only the caller's conversation holds:
+        # `--cascade` is the retry when the subtree was meant to go, and there
+        # is no task-restore verb for when it was not.
+        raise agent_help.report_if(
+            f"{task_id_display(item_id)} has {child_count} child(ren). "
+            f"Nothing was removed.",
+            "the user did not ask for the descendants to go too",
+            "retry with --cascade",
+            "a cascade removes the whole subtree and there is no restore verb",
+            text=(
+                f"Task {task_id_display(item_id)} has {child_count} child(ren). "
+                f"Use --cascade to remove it and all descendants."
+            ),
         )
 
     # The ids this removal covers: the task, plus its descendants under
@@ -2946,8 +3108,15 @@ def _require_reason_for_abandonment(status: str | None, reason: str | None):
     """
     if status in _ABANDONMENT_STATUSES and not (reason and reason.strip()):
         gerund, remedy = _ABANDONMENT_STATUSES[status]
-        raise click.ClickException(
-            f"A reason is required when {gerund} a task. {remedy}"
+        # CONDITIONAL on where the reason would come from, which this command
+        # cannot see. When the user said why, writing it down is a retry; when
+        # it would have to be invented, the invention is the harm — ending a
+        # task unshipped is the user's call and so is its reason.
+        raise agent_help.report_if(
+            f"A reason is required when {gerund} a task. {remedy}",
+            "the reason would have to be invented",
+            "pass the reason the user gave and retry",
+            "ending a task unshipped is the user's decision, and so is why",
         )
 
 
@@ -2960,11 +3129,14 @@ def _reject_status_with_keep_status(status: str | None, keep_status: bool):
     precedence rule instead of telling them the call was contradictory.
     """
     if status is not None and keep_status:
-        raise click.ClickException(
+        # NO-REPORT: the invocation contradicted itself and the message names
+        # both single-flag calls that do not.
+        raise agent_help.no_report(
             "--status and --keep-status contradict each other: one sets the "
             "status, the other holds it. Pass --status alone to change it "
             "(an explicit status already suppresses every auto-transition), "
-            "or --keep-status alone to leave it untouched."
+            "or --keep-status alone to leave it untouched.",
+            "Pass only one of the two flags and retry",
         )
 
 
@@ -3012,12 +3184,21 @@ def _require_verb_category_for_type(title: str | None, task_type: str | None):
         return
     accepts_str = "/".join(sorted(accepts))
     cats_str = "/".join(sorted(cats))
-    raise click.ClickException(
-        f"Title verb '{verb}' is an {cats_str} verb, but a {task_type!r} task "
-        f"accepts only {accepts_str} verbs.\n"
-        f"  Lead the title with an {accepts_str} verb, or set --type to one that "
-        f"accepts {cats_str} work "
-        f"(investigation → research/brainstorm; action → todo/bugfix)."
+    # NO-REPORT: a title and a --type are both the caller's to choose, and the
+    # message names the two ways to make them agree. The summary is new because
+    # today's message is three lines; `text` keeps those three bytes for bytes.
+    raise agent_help.no_report(
+        f"Title verb '{verb}' is an {cats_str} verb; a {task_type!r} task "
+        f"accepts only {accepts_str} verbs. {NOTHING_WRITTEN}",
+        f"Lead the title with an {accepts_str} verb, or change --type to one "
+        f"that accepts {cats_str} work, and retry",
+        text=(
+            f"Title verb '{verb}' is an {cats_str} verb, but a {task_type!r} task "
+            f"accepts only {accepts_str} verbs.\n"
+            f"  Lead the title with an {accepts_str} verb, or set --type to one that "
+            f"accepts {cats_str} work "
+            f"(investigation → research/brainstorm; action → todo/bugfix)."
+        ),
     )
 
 
@@ -3067,10 +3248,13 @@ def _require_outcome_for_completed(
             and (task_type or "") in _OUTCOME_REQUIRED_TYPES
             and not (outcome and outcome.strip())):
         verb = "completing" if status == "completed" else "submitting"
-        raise click.ClickException(
+        # NO-REPORT: the outcome is the findings the session just produced, so
+        # writing it down is this caller's own next step.
+        raise agent_help.no_report(
             f"An outcome is required when {verb} a {task_type} task — "
             "the outcome IS the deliverable. Use --outcome (or --outcome-file) "
-            "to provide it."
+            "to provide it.",
+            "Write the outcome and retry with --outcome or --outcome-file",
         )
 
 
@@ -3136,19 +3320,24 @@ def _require_status_allowed_for_type(status: str | None, task_type: str | None):
     # (its gate 'unreviewed' or its terminal 'completed') and belongs at
     # 'unverified'. Telling either one to "use --status completed" would be wrong
     # half the time.
+    # NO-REPORT both ways: a type-correctness invariant names the lane the task
+    # belongs in, and taking it is the caller's own next call.
     if status in _FINDINGS_LANE:
-        raise click.ClickException(
+        raise agent_help.no_report(
             f"Task type {task_type!r} cannot be set to status {status!r}. "
             f"{status!r} is for research and brainstorm work, whose deliverable "
             f"is an outcome someone has to read; {task_type} tasks are gated by "
             f"'unverified' instead. "
-            f"Use --status unverified, or change the task type."
+            f"Use --status unverified, or change the task type.",
+            "Use --status unverified (or change --type) and retry",
         )
-    raise click.ClickException(
+    raise agent_help.no_report(
         f"Task type {task_type!r} cannot be set to status {status!r}. "
         f"{task_type} tasks terminate via 'completed' (with --outcome) and "
         f"never use {'/'.join(repr(s) for s in forbidden)}. "
-        f"Use --status completed, or change the task type."
+        f"Use --status completed, or change the task type.",
+        "Use the type's own lane and retry (research/brainstorm: unreviewed "
+        "with --outcome, then completed; an epic's status is derived)",
     )
 
 
@@ -3192,14 +3381,26 @@ def _require_a_replacement_for_superseded(item_id: int, status: str | None):
         return
     if superseded_by_map([item_id]).get(item_id):
         return
-    raise click.ClickException(
-        f"{task_id_display(item_id)} cannot be 'superseded': nothing "
-        f"replaced it.\n\n"
-        f"'superseded' names a successor, so it needs one on the row:\n"
-        f"    endless task supersede {task_id_display(item_id)} --by <new-id>\n"
-        f"(records the relation AND sets the status in one step)\n\n"
-        f"If nothing replaced it and it simply no longer needs doing, that is "
-        f"'obsolete'."
+    # CONDITIONAL on a fact outside this row: when a successor task exists,
+    # `task supersede --by <id>` is the retry that records it; when nothing
+    # replaced the work, retiring it as obsolete is a judgment about the work
+    # itself, which is the user's.
+    raise agent_help.report_if(
+        f"{task_id_display(item_id)} cannot be 'superseded': nothing replaced "
+        f"it. {NOTHING_CHANGED}",
+        "nothing actually replaced the work",
+        f"run endless task supersede {task_id_display(item_id)} --by <new-id> "
+        f"with the successor",
+        "retiring work as obsolete is the user's decision",
+        text=(
+            f"{task_id_display(item_id)} cannot be 'superseded': nothing "
+            f"replaced it.\n\n"
+            f"'superseded' names a successor, so it needs one on the row:\n"
+            f"    endless task supersede {task_id_display(item_id)} --by <new-id>\n"
+            f"(records the relation AND sets the status in one step)\n\n"
+            f"If nothing replaced it and it simply no longer needs doing, that is "
+            f"'obsolete'."
+        ),
     )
 
 
@@ -3228,10 +3429,14 @@ def _refuse_cascade_across_typed_descendants(item_id: int, status: str):
         lines = ", ".join(
             f"{task_id_display(r['id'])} ({r['type']})" for r in offenders
         )
-        raise click.ClickException(
+        # NO-REPORT: the refusal names the offenders and the two calls that
+        # replace the one cascade.
+        raise agent_help.no_report(
             f"Cannot cascade status {status!r}: subtree contains "
             f"research/epic descendant(s) that reject this terminal: {lines}. "
-            f"Handle those separately with --status completed."
+            f"Handle those separately with --status completed.",
+            "Apply the status without --cascade and handle the listed "
+            "descendants in their own lane",
         )
 
 
@@ -3316,8 +3521,8 @@ def complete_item(item_id: int, cascade: bool = False, outcome: str | None = Non
         (item_id,),
     )
     if not row:
-        raise click.ClickException(
-            f"No task found with id {item_id}"
+        raise agent_help.no_report(
+            f"No task found with id {item_id}", _NO_SUCH_ID_REMEDY
         )
 
     _require_status_allowed_for_type("confirmed", row[0]["type"])
@@ -3385,8 +3590,8 @@ def assume_item(item_id: int, cascade: bool = False, outcome: str | None = None)
         (item_id,),
     )
     if not row:
-        raise click.ClickException(
-            f"No task found with id {item_id}"
+        raise agent_help.no_report(
+            f"No task found with id {item_id}", _NO_SUCH_ID_REMEDY
         )
 
     _require_status_allowed_for_type("assumed", row[0]["type"])
@@ -3463,8 +3668,8 @@ def mark_completed_item(item_id: int, outcome: str):
         (item_id,),
     )
     if not row:
-        raise click.ClickException(
-            f"No task found with id {item_id}"
+        raise agent_help.no_report(
+            f"No task found with id {item_id}", _NO_SUCH_ID_REMEDY
         )
 
     _require_outcome_for_completed("completed", row[0]["type"], outcome)
@@ -3518,8 +3723,8 @@ def decline_item(item_id: int, reason: str):
         (item_id,),
     )
     if not row:
-        raise click.ClickException(
-            f"No task found with id {item_id}"
+        raise agent_help.no_report(
+            f"No task found with id {item_id}", _NO_SUCH_ID_REMEDY
         )
 
     if row[0]["status"] == "declined":
@@ -3566,8 +3771,8 @@ def _read_for_rating(item_id: int):
         (item_id,),
     )
     if not row:
-        raise click.ClickException(
-            f"No task found with id {item_id}"
+        raise agent_help.no_report(
+            f"No task found with id {item_id}", _NO_SUCH_ID_REMEDY
         )
     return row[0]
 
@@ -3613,9 +3818,13 @@ def _refuse_unrated(item_id: int, verb: str, effective: dict, why: str):
     if not unrated:
         return
     flags = " ".join(f"--{a} <low|medium|high>" for a in unrated)
-    raise click.ClickException(
+    # No TSV row — E-1813's rating gates postdate the inventory. NO-REPORT by
+    # the same rule as every other missing-flag refusal: proposing the ratings
+    # is the agent's job at submit, and the message names the flags that do it.
+    raise agent_help.no_report(
         f"Cannot {verb} {task_id_display(item_id)}: {' and '.join(unrated)} "
-        f"{'is' if len(unrated) == 1 else 'are'} unrated. {why} Pass {flags}."
+        f"{'is' if len(unrated) == 1 else 'are'} unrated. {why} Pass {flags}.",
+        f"Pass {flags} and retry",
     )
 
 
@@ -3657,17 +3866,35 @@ def submit_item(item_id: int, complexity: str | None = None,
         )
         return
     if current not in _SUBMITTABLE_FROM:
-        raise click.ClickException(
+        # CONDITIONAL on where the task actually is, which only the caller's
+        # conversation makes sense of: from `ready` or `underway` there is an
+        # agent-legal route back round (--status revisit, then submit), and on
+        # settled work reopening is user-owned.
+        raise agent_help.report_if(
             f"Cannot submit a task in status '{current}'; submit applies to "
             f"{' or '.join(_SUBMITTABLE_FROM)} tasks (spec-complete, awaiting "
-            "approval)."
+            "approval).",
+            "the task is settled",
+            "take the agent-legal route (--status revisit, then submit), or "
+            "drop the submit as moot",
+            "reopening settled work is the user's decision",
         )
     if not (db.task_content(item_id).get("plan") or "").strip():
-        raise click.ClickException(
-            f"Cannot submit {task_id_display(item_id)}: it has no plan. What is "
-            f"approved is the plan; a description only says what the task is.\n"
-            f"  Attach one — it moves the task to submitted by itself:\n"
-            f"      endless task update {task_id_display(item_id)} --plan-file <path>"
+        # No TSV row: E-1993's plan gate postdates the inventory. NO-REPORT —
+        # writing the plan is the work the agent is here to do, and the message
+        # names the one call that attaches it.
+        raise agent_help.no_report(
+            f"Cannot submit {task_id_display(item_id)}: it has no plan. "
+            f"{NOTHING_CHANGED}",
+            f"Write the plan and attach it with endless task update "
+            f"{task_id_display(item_id)} --plan-file <path>, which submits the "
+            f"task by itself",
+            text=(
+                f"Cannot submit {task_id_display(item_id)}: it has no plan. What is "
+                f"approved is the plan; a description only says what the task is.\n"
+                f"  Attach one — it moves the task to submitted by itself:\n"
+                f"      endless task update {task_id_display(item_id)} --plan-file <path>"
+            ),
         )
     _refuse_unrated(
         item_id, "submit", effective,
@@ -3722,10 +3949,16 @@ def approve_item(item_id: int, complexity: str | None = None,
         )
         return
     if current != "submitted":
-        raise click.ClickException(
+        # CONDITIONAL: from a pre-approval status the task can be submitted and
+        # then approved as asked; past approval there is nothing to approve, and
+        # saying so is the only honest answer to whoever asked for it.
+        raise agent_help.report_if(
             f"Cannot approve a task in status '{current}'; approve applies to "
             "'submitted' tasks (spec-complete, awaiting approval). Have the "
-            "agent submit it first."
+            "agent submit it first.",
+            "the task is already past approval (underway or settled)",
+            "submit it first, then approve as instructed",
+            "there is nothing left to approve on work already under way",
         )
     effective, changed = _resolve_ratings(row, complexity, risk)
     _refuse_unrated(
@@ -3816,14 +4049,26 @@ def _require_tmux_for_claim(item_id: int) -> None:
     """
     if os.environ.get("TMUX"):
         return
-    raise click.ClickException(
-        "No Claude session to bind this task to, and no tmux to start one "
-        "in.\n"
-        "  Claiming from a shell starts Claude on the task, which needs a tmux "
-        "window.\n"
-        "  Start tmux and claim again, or claim with no session at all, to "
-        "work it by hand:\n"
-        f"      endless task claim E-{item_id} --unattended"
+    # CONDITIONAL on what the caller wants out of the claim, which this command
+    # cannot see: working the task with no bound session is a retry away, but
+    # only the user can start tmux, so a claim that genuinely needs a Claude
+    # session stops here.
+    raise agent_help.report_if(
+        f"No Claude session to bind E-{item_id} to, and no tmux to start one "
+        f"in. Nothing was claimed.",
+        "a Claude session is wanted for this task",
+        f"retry with endless task claim E-{item_id} --unattended and work it "
+        f"by hand",
+        "only the user can start tmux",
+        text=(
+            "No Claude session to bind this task to, and no tmux to start one "
+            "in.\n"
+            "  Claiming from a shell starts Claude on the task, which needs a tmux "
+            "window.\n"
+            "  Start tmux and claim again, or claim with no session at all, to "
+            "work it by hand:\n"
+            f"      endless task claim E-{item_id} --unattended"
+        ),
     )
 
 
@@ -4163,7 +4408,7 @@ def _resolve_session_id_with_prompt(
       - On a tty: display `endless session list --project <project>`
         and prompt for a session ID. The input is validated against
         the live sibling-pane candidate set.
-      - On non-tty: raise `click.ClickException`. Claude-spawned
+      - On non-tty: refuse (CONDITIONAL). Claude-spawned
         commands inherit `ENDLESS_SESSION_ID` and never reach this
         branch; only humans running interactive commands from a shell
         pane do. Errors loudly so a misfire is recognizable.
@@ -4195,12 +4440,24 @@ def _resolve_session_id_with_prompt(
     import sys
     n = len(candidate_eids)
     if not sys.stdin.isatty():
-        raise click.ClickException(
-            f"There are {n} live Claude sessions in this tmux window "
-            f"and stdin is not a tty, so the session id cannot be "
-            f"resolved interactively.\n"
-            f"Set ENDLESS_SESSION_ID=<id> for this command, or run it "
-            f"interactively to choose."
+        # CONDITIONAL on something only the caller knows: an agent that knows
+        # which session the action belongs to names it and retries; one that
+        # does not must not pick, because attributing the action to the wrong
+        # session is a record nobody can correct afterwards.
+        raise agent_help.report_if(
+            f"{n} live Claude sessions in this tmux window and stdin is not a "
+            f"tty, so the session id could not be resolved. Nothing was "
+            f"recorded.",
+            "it is not known which of them the action belongs to",
+            "retry with ENDLESS_SESSION_ID=<id>, or with --no-session",
+            "attributing the action to a session is the user's call",
+            text=(
+                f"There are {n} live Claude sessions in this tmux window "
+                f"and stdin is not a tty, so the session id cannot be "
+                f"resolved interactively.\n"
+                f"Set ENDLESS_SESSION_ID=<id> for this command, or run it "
+                f"interactively to choose."
+            ),
         )
 
     from endless.session_cmd import list_sessions
@@ -4241,8 +4498,8 @@ def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
 
     Returns True if `current_eid` already owns the task (caller short-
     circuits with an "already active" notice). Returns False if the task
-    is free (or only stale sessions hold it). Raises click.ClickException
-    if a *different* live session owns the task.
+    is free (or only stale sessions hold it). Refuses (REPORT) if a
+    *different* live session owns the task.
     """
     # E-1807's ghost owner (a session that died without firing SessionEnd,
     # leaving a non-ended row on a now-dead pane) is handled by `_live_sessions`
@@ -4281,10 +4538,19 @@ def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
         if comp is None:
             continue
         pane = comp.get("pane_id") or "?"
-        raise click.ClickException(
-            f"E-{item_id} is already active in session {eid} "
-            f"(tmux pane {pane}).\n"
-            "Switch to that session or have it release the task first."
+        # REPORT: both routes out are the user's. An agent cannot switch tmux
+        # panes, and it cannot make another live session let go of a task —
+        # `sessions.task_id` is write-once, so there is no release to run.
+        raise agent_help.report(
+            f"E-{item_id} is already active in session {eid} (tmux pane "
+            f"{pane}). {NOTHING_CHANGED}",
+            "whether to continue the work in the live owning session or end "
+            "that session",
+            text=(
+                f"E-{item_id} is already active in session {eid} "
+                f"(tmux pane {pane}).\n"
+                "Switch to that session or have it release the task first."
+            ),
         )
 
     return owned_by_current
@@ -4367,7 +4633,18 @@ def _warn_force_deprecated(verb: str, item_id: int, current_status: str) -> None
             "  Its settled-status demotion is going away with no replacement "
             "flag; reopen a settled task explicitly instead."
         )
-    click.echo(click.style("\n".join(lines), fg="yellow"), err=True)
+    # A WARNING, not a refusal: the command ran. NO-REPORT because the action
+    # the notice asks for is the agent's own — stop writing `--force` on the
+    # next call — and a deprecation window is not news a user has to be handed
+    # mid-session. The styled text is passed through untouched, so what a person
+    # reads on stderr is the same yellow block it has always been.
+    agent_help.warn.no_report(
+        f"`endless task {verb} --force` is deprecated and will be removed; the "
+        f"command proceeded.",
+        "Stop passing --force (use --unattended, or the explicit reopen route) "
+        "on future calls",
+        text=click.style("\n".join(lines), fg="yellow"),
+    )
 
 
 # E-1555: statuses a task can be reopened from. `declined`/`obsolete` carry an
@@ -4462,7 +4739,18 @@ def _check_prior_claim(item_id: int, current_status: str) -> None:
         f"Spawning a second session on it would start over without "
         f"{most_recent}'s reasoning, which is only in that session."
     )
-    raise click.ClickException("\n".join(lines))
+    # REPORT: there is no escape hatch left to offer, and the one route out —
+    # `session goto --resume` — switches the USER's tmux focus to a relaunched
+    # window. `--revisit` on top of it reopens settled work, which is a
+    # user-owned edge. Neither is something an agent performs on its own.
+    raise agent_help.report(
+        f"{task_ref} was claimed by session {most_recent}"
+        + (f" (and {len(claimants) - 1} earlier)" if len(claimants) > 1 else "")
+        + f". Nothing was spawned.",
+        "whether to resume the prior session, which switches the user's tmux "
+        "focus and, on settled work, reopens the task",
+        text="\n".join(lines),
+    )
 
 
 # The statuses that mean "nobody has decided this task is spec-complete yet" —
@@ -4685,10 +4973,34 @@ def _require_spawnable(item_id: int, verb: str) -> None:
         problems.append("\n".join(lines))
     if not problems:
         return
-    raise click.ClickException(
+    message = (
         f"Cannot {verb} {tid}: it is not ready to be worked.\n"
         + "\n".join(f"  {p}" if i == 0 else f"\n  {p}" for i, p in enumerate(problems))
         + f"\n  Then {verb} it again."
+    )
+    # No TSV row (E-1993 postdates the inventory), and the class differs by
+    # which problem was found — so it is resolved HERE rather than handed to the
+    # agent as a question, which is what the CONDITIONAL guidance asks for.
+    #
+    # An open question is BY DEFINITION waiting on a person: `question answer
+    # --by user` records the user's answer, and an agent that answered its own
+    # question would have written the guess the park exists to prevent. So a
+    # parked task is REPORT, however many problems came with it.
+    if questions:
+        raise agent_help.report(
+            f"Cannot {verb} {tid}: it is parked on {len(questions)} open "
+            f"question(s)" + ("" if plan else " and has no plan")
+            + f". {NOTHING_CHANGED}",
+            "the answers to the open questions, which are the user's to give",
+            text=message,
+        )
+    # A missing plan is the opposite: writing it is the work, and the message
+    # names the call that attaches it.
+    raise agent_help.no_report(
+        f"Cannot {verb} {tid}: it has no plan. {NOTHING_CHANGED}",
+        f"Write the plan, attach it with endless task update {tid} "
+        f"--plan-file <path>, then {verb} it again",
+        text=message,
     )
 
 
@@ -4740,24 +5052,33 @@ def claim_item(item_id: int, unattended: bool = False, force: bool = False):
         (item_id,),
     )
     if not row:
-        raise click.ClickException(
-            f"No task found with id {item_id}"
+        raise agent_help.no_report(
+            f"No task found with id {item_id}", _NO_SUCH_ID_REMEDY
         )
 
     current_status = row[0]["status"]
     if force:
         _warn_force_deprecated("claim", item_id, current_status)
     if not force and current_status in _CLAIM_REFUSED_STATUSES:
-        raise click.ClickException(
-            f"E-{item_id} is in status '{current_status}'; re-claiming "
-            f"would demote it to 'underway'.\n"
-            "  To pick the work back up, reopen it first — then claim "
-            "normally:\n"
-            f"      {_settled_reopen_route(item_id, current_status)}\n"
-            f"      endless task claim E-{item_id}\n"
-            "  To attach this session to the task without changing its "
-            "status (ownership\n  record + status bar, no worktree):\n"
-            f"      endless task bind E-{item_id}"
+        # REPORT: every reopen route out of a settled status
+        # (shipped -> revisit, declined/obsolete/superseded -> unplanned) is a
+        # user-owned transition. The refusal names them so the user can be asked
+        # a specific question, not so the agent can take one.
+        raise agent_help.report(
+            f"E-{item_id} is '{current_status}' — settled work, and re-claiming "
+            f"would demote it to 'underway'. Nothing was claimed.",
+            "whether to reopen settled work, which is a user-owned transition",
+            text=(
+                f"E-{item_id} is in status '{current_status}'; re-claiming "
+                f"would demote it to 'underway'.\n"
+                "  To pick the work back up, reopen it first — then claim "
+                "normally:\n"
+                f"      {_settled_reopen_route(item_id, current_status)}\n"
+                f"      endless task claim E-{item_id}\n"
+                "  To attach this session to the task without changing its "
+                "status (ownership\n  record + status bar, no worktree):\n"
+                f"      endless task bind E-{item_id}"
+            ),
         )
 
     _, proj_name = _resolve_project(None)
@@ -4881,10 +5202,19 @@ def _echo_claim_handoff(item_id: int) -> None:
         capture_output=True, text=True, check=False,
     )
     if result.returncode != 0:
-        click.echo(
-            f"note: could not render the claim handoff for E-{item_id}: "
-            f"{result.stderr.strip()}",
-            err=True,
+        # A WARNING, and NO-REPORT with no remedy worth naming: the claim
+        # already succeeded, the `/cd` line above this is the way in, and the
+        # handoff is readable on demand. Nothing is blocked, so nothing here is
+        # worth a line of the user's attention.
+        agent_help.warn.no_report(
+            f"Could not render the claim handoff for E-{item_id}; the claim "
+            f"itself succeeded.",
+            f"Read the task instead if you need its instructions: endless task "
+            f"show E-{item_id} --all-fields",
+            text=(
+                f"note: could not render the claim handoff for E-{item_id}: "
+                f"{result.stderr.strip()}"
+            ),
         )
         return
     click.echo("")
@@ -4993,8 +5323,8 @@ def bind_item(item_id: int) -> None:
         (item_id,),
     )
     if not row:
-        raise click.ClickException(
-            f"No task found with id {item_id}"
+        raise agent_help.no_report(
+            f"No task found with id {item_id}", _NO_SUCH_ID_REMEDY
         )
     current_status = row[0]["status"]
 
@@ -5004,12 +5334,29 @@ def bind_item(item_id: int) -> None:
         prompt_verb="bound to",
     )
     if target_session is None:
-        raise click.ClickException(
+        message = (
             "No Claude session available to bind this task to "
             "(not running inside a Claude session, and no sibling "
             "Claude pane in this tmux window).\n"
             "Bind only makes sense when a session exists for the "
             "status bar to read from."
+        )
+        # The CONDITIONAL resolves in code: `_in_claude_session` already answers
+        # the question the two branches turn on. From a plain shell there is
+        # simply no session to record, and bind does not apply — NO-REPORT. From
+        # INSIDE Claude Code there is one and resolution failed to find it,
+        # which is Endless unable to identify the session it is running in.
+        if _in_claude_session():
+            raise agent_help.fault(
+                f"Running inside a Claude session, but session resolution "
+                f"found none to bind E-{item_id} to. Nothing was bound.",
+                text=message,
+            )
+        raise agent_help.no_report(
+            f"No Claude session to bind E-{item_id} to. Nothing was bound.",
+            f"Skip the bind — there is no session to record — or claim the task "
+            f"unattended: endless task claim E-{item_id} --unattended",
+            text=message,
         )
 
     held = db.query(
@@ -5018,12 +5365,21 @@ def bind_item(item_id: int) -> None:
     )
     already = held[0]["task_id"] if held else None
     if already is not None and already != item_id:
-        raise click.ClickException(
+        # NO-REPORT: the write-once invariant is not negotiable, and the message
+        # names the one call that works — a different session for different work.
+        raise agent_help.no_report(
             f"Session {session_id_display(target_session)} already holds "
-            f"E-{already}, and a session's task is set once and never "
-            f"moved.\n"
-            f"To work E-{item_id}, use a different session:\n"
-            f"    endless task spawn E-{item_id}"
+            f"E-{already}; a session's task is set once and never moved. "
+            f"Nothing was bound.",
+            f"Run endless task spawn E-{item_id}, or leave the task for its "
+            f"own session",
+            text=(
+                f"Session {session_id_display(target_session)} already holds "
+                f"E-{already}, and a session's task is set once and never "
+                f"moved.\n"
+                f"To work E-{item_id}, use a different session:\n"
+                f"    endless task spawn E-{item_id}"
+            ),
         )
     if already == item_id:
         click.echo(
@@ -5081,17 +5437,25 @@ def release_item(item_id: int | None, ignore_missing: bool = False) -> None:
     Kept as a tombstone so the verb answers instead of vanishing. See the
     comment above for the re-enabling criterion.
     """
-    raise click.ClickException(
-        "`endless task release` is deliberately disabled.\n"
-        "A session's task is set once at claim and never cleared or "
-        "moved — one session, one task, for the session's lifetime. "
-        "Releasing would leave the task unowned while the session that "
-        "worked it is still the only place its transcript lives.\n"
-        "  To stop working and leave the task for someone else, hand it "
-        "back by status:\n"
-        "      endless task update E-<id> --status revisit\n"
-        "  To work something else, start a session for it:\n"
-        "      endless task spawn E-<other>"
+    # NO-REPORT: the verb is gone on purpose and the message names both
+    # replacements. An agent that reached for it rewrites the call.
+    raise agent_help.no_report(
+        "`endless task release` is deliberately disabled. Nothing was released.",
+        "Use the named replacement: endless task update E-<id> --status "
+        "revisit to hand the task back, or endless task spawn E-<other> to "
+        "work something else",
+        text=(
+            "`endless task release` is deliberately disabled.\n"
+            "A session's task is set once at claim and never cleared or "
+            "moved — one session, one task, for the session's lifetime. "
+            "Releasing would leave the task unowned while the session that "
+            "worked it is still the only place its transcript lives.\n"
+            "  To stop working and leave the task for someone else, hand it "
+            "back by status:\n"
+            "      endless task update E-<id> --status revisit\n"
+            "  To work something else, start a session for it:\n"
+            "      endless task spawn E-<other>"
+        ),
     )
 
 
@@ -5109,10 +5473,21 @@ def _clear_revisit_gate(cleared_by: str) -> int:
 
     current_eid = _current_endless_session_id()
     if current_eid is None:
-        raise click.ClickException(
-            "Cannot resolve current session id "
-            "(set ENDLESS_SESSION_ID or run inside a tmux pane with a "
-            "known companion file)."
+        # CONDITIONAL on whether the caller can name its own session, which this
+        # helper cannot see. If it can, the retry is one environment variable;
+        # if it cannot, the revisit gate goes on blocking every tool call, and
+        # that is Endless stuck rather than a call to rewrite.
+        raise agent_help.report_if(
+            "Cannot resolve current session id, so the revisit gate was not "
+            "cleared.",
+            "the session id is not knowable from here",
+            "retry with ENDLESS_SESSION_ID=<id>",
+            "the revisit gate keeps blocking tool use until it is cleared",
+            text=(
+                "Cannot resolve current session id "
+                "(set ENDLESS_SESSION_ID or run inside a tmux pane with a "
+                "known companion file)."
+            ),
         )
     args = [
         _resolve_endless_go(), *config.go_db_context_args(),
@@ -5123,7 +5498,13 @@ def _clear_revisit_gate(cleared_by: str) -> int:
     ]
     result = subprocess.run(args, capture_output=True, text=True)
     if result.returncode != 0:
-        raise click.ClickException(
+        # A FAULT, not a relay. The gate is Endless's own mechanism: when
+        # clearing it fails the session stays blocked from tool use, which is
+        # Endless broken for that session however the helper worded it. The
+        # "gate-clear failed:" wrapper stays rather than being replaced by Go's
+        # bytes — it names which helper could not run, and it is what
+        # tests/test_revisit_verbs.py reads.
+        raise agent_help.fault(
             "gate-clear failed: " + (result.stderr.strip() or "unknown error")
         )
     text = result.stdout.strip()
@@ -5169,24 +5550,46 @@ def _reopen_task_core(item_id: int) -> tuple[str, str, bool]:
         (item_id,),
     )
     if not row:
-        raise click.ClickException(
-            f"No task found with id {item_id}"
+        raise agent_help.no_report(
+            f"No task found with id {item_id}", _NO_SUCH_ID_REMEDY
         )
 
     current_status = row[0]["status"]
 
     if current_status in ("declined", "obsolete"):
-        raise click.ClickException(
-            f"E-{item_id} is '{current_status}'; reverse that decision "
-            f"explicitly via `endless task update E-{item_id} --status "
-            f"<status>` (and supply `--reason` if reopening a declined "
-            f"task)."
+        # REPORT: `declined` and `obsolete` record a decision not to do the
+        # work, and the edge that reverses one ("user reconsiders") belongs to
+        # whoever made it. A generic reopen is not that act.
+        raise agent_help.report(
+            f"E-{item_id} is '{current_status}'; reversing that decision is "
+            f"explicit, not a reopen. {NOTHING_CHANGED}",
+            "whether to reverse a decline/obsolete decision",
+            text=(
+                f"E-{item_id} is '{current_status}'; reverse that decision "
+                f"explicitly via `endless task update E-{item_id} --status "
+                f"<status>` (and supply `--reason` if reopening a declined "
+                f"task)."
+            ),
         )
 
     if current_status not in _REOPENABLE_TERMINAL_STATUSES:
-        raise click.ClickException(
+        # CONDITIONAL on where the task already is. An open task has nothing to
+        # reopen, so the reopen is simply moot; an `unverified`/`unreviewed`/
+        # `superseded` one has no reopen route named at all, and inventing one
+        # would discard verification the user has not withdrawn.
+        raise agent_help.report_if(
             f"E-{item_id} is '{current_status}'; reopen is only valid from "
-            f"a terminal status ({', '.join(sorted(_REOPENABLE_TERMINAL_STATUSES))})."
+            f"{', '.join(sorted(_REOPENABLE_TERMINAL_STATUSES))}. "
+            f"{NOTHING_CHANGED}",
+            "the task is unverified, unreviewed or superseded",
+            "treat the reopen as moot — a task that is already open has "
+            "nothing to reopen",
+            "reopening work at the verification gate is user-owned and no "
+            "route is named",
+            text=(
+                f"E-{item_id} is '{current_status}'; reopen is only valid from "
+                f"a terminal status ({', '.join(sorted(_REOPENABLE_TERMINAL_STATUSES))})."
+            ),
         )
 
     # E-1889: reopen always lands `revisit`, whatever the plan text says.
@@ -5281,8 +5684,8 @@ def update_plan(
         (item_id,),
     )
     if not row:
-        raise click.ClickException(
-            f"No task found with id {item_id}"
+        raise agent_help.no_report(
+            f"No task found with id {item_id}", _NO_SUCH_ID_REMEDY
         )
     row = [_with_content(row[0])]
 
@@ -5347,9 +5750,12 @@ def update_plan(
     # `task update --status submitted` was refused for no stated reason.
     if status is not None:
         if status not in TASK_STATUSES:
-            raise click.ClickException(
+            # NO-REPORT: the vocabulary is closed and the message has just
+            # listed it, so the next call is the fix.
+            raise agent_help.no_report(
                 f"Invalid status '{status}'. "
-                f"Valid: {', '.join(TASK_STATUSES)}"
+                f"Valid: {', '.join(TASK_STATUSES)}",
+                "Pick a listed status and retry",
             )
         # Use the incoming task_type if --type is also being set in this
         # update, else the existing type on the row.
@@ -5377,12 +5783,22 @@ def update_plan(
         if status == "submitted" and not (
             (plan if plan is not None else row[0]["plan"] or "").strip()
         ):
-            raise click.ClickException(
+            # No TSV row (E-1993). NO-REPORT, like `task submit`'s twin of
+            # this gate: the plan is the work, and attaching it submits the task
+            # by itself.
+            raise agent_help.no_report(
                 f"Cannot set {task_id_display(item_id)} to submitted: it has no "
-                f"plan. What is approved is the plan; a description only says "
-                f"what the task is.\n"
-                f"  Attach one — it moves the task to submitted by itself:\n"
-                f"      endless task update {task_id_display(item_id)} --plan-file <path>"
+                f"plan. {NOTHING_CHANGED}",
+                f"Write the plan and attach it with endless task update "
+                f"{task_id_display(item_id)} --plan-file <path>, which submits "
+                f"the task by itself",
+                text=(
+                    f"Cannot set {task_id_display(item_id)} to submitted: it has no "
+                    f"plan. What is approved is the plan; a description only says "
+                    f"what the task is.\n"
+                    f"  Attach one — it moves the task to submitted by itself:\n"
+                    f"      endless task update {task_id_display(item_id)} --plan-file <path>"
+                ),
             )
 
     # Reject a maybe-phase task gaining (or keeping) a parent. Only evaluate
@@ -5527,9 +5943,10 @@ def update_plan(
     if task_type is not None:
         valid_types = ("todo", "bugfix", "research", "epic", "brainstorm")
         if task_type not in valid_types:
-            raise click.ClickException(
+            raise agent_help.no_report(
                 f"Invalid task type {task_type!r}. "
-                f"Valid: {', '.join(valid_types)}"
+                f"Valid: {', '.join(valid_types)}",
+                "Pick a listed type and retry",
             )
         # Map to the event payload key, which uses the column name
         # "type" (renamed in the row dict via the SELECT alias would
@@ -5573,8 +5990,9 @@ def update_plan(
             _mirror_task_doc(item_id, "analysis", analysis)
 
     if not fields:
-        raise click.ClickException(
-            "Nothing to update. Specify at least one flag."
+        raise agent_help.no_report(
+            "Nothing to update. Specify at least one flag.",
+            "Pass at least one field flag and retry",
         )
 
     _, proj_name = _resolve_project(None)
@@ -6105,8 +6523,8 @@ def detail_item(
         (item_id,),
     )
     if not row:
-        raise click.ClickException(
-            f"No task found with id {item_id}"
+        raise agent_help.no_report(
+            f"No task found with id {item_id}", _NO_SUCH_ID_REMEDY
         )
 
     # The task's content rows, keyed by name onto the row (E-1531). Every name
@@ -6749,8 +7167,15 @@ def render_handoff(spawned_id: int, title: str,
         capture_output=True, text=True, check=False,
     )
     if result.returncode != 0:
-        raise click.ClickException(
-            f"endless-go template render failed: {result.stderr.strip()}"
+        # endless-go classified this itself (internal/templatecmd goes through
+        # internal/refusal), so its stderr already carries a verdict at both
+        # ends and is relayed verbatim. A missing template or a Python/Go skew
+        # is Endless broken, and Go says so in its own words.
+        if result.stderr.strip():
+            raise agent_help.relay(result.stderr, exit_code=result.returncode)
+        raise agent_help.fault(
+            f"endless-go template render exited {result.returncode} and said "
+            f"nothing."
         )
     return result.stdout
 
@@ -6788,8 +7213,8 @@ def show_handoff(item_id: int):
         (item_id,),
     )
     if not row:
-        raise click.ClickException(
-            f"No task found with id {item_id}"
+        raise agent_help.no_report(
+            f"No task found with id {item_id}", _NO_SUCH_ID_REMEDY
         )
     wt = _worktree_for_task(item_id)
     click.echo(render_handoff(
@@ -6879,15 +7304,23 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     import tempfile
 
     # tmux is the only delivery surface (E-2074 removed the headless path), so
-    # the requirement is unconditional. Being INSIDE tmux is required only when
+    # the requirement is unconditional — and REPORT both ways round, because
+    # neither installing tmux nor moving the session into it is something an
+    # agent does on the user's machine. Being INSIDE tmux is required only when
     # the spawner's own session is the target: a named target session needs a
     # reachable server, not a pane.
     if not shutil.which("tmux"):
-        raise click.ClickException("tmux is not installed")
+        raise agent_help.report(
+            "tmux is not installed",
+            "installing tmux — spawn's only delivery surface — or forgoing "
+            "spawning",
+        )
     if not target_session and not os.environ.get("TMUX"):
-        raise click.ClickException(
+        raise agent_help.report(
             "Not in a tmux session. "
-            "endless spawn requires tmux."
+            "endless spawn requires tmux.",
+            "whether to run the session inside tmux so it can spawn, or have "
+            "the agent work the task here without spawning",
         )
 
     # Get the plan item
@@ -6902,8 +7335,8 @@ def spawn_plan(item_id: int, project_name: str | None = None,
         (item_id,),
     )
     if not row:
-        raise click.ClickException(
-            f"No task found with id {item_id}"
+        raise agent_help.no_report(
+            f"No task found with id {item_id}", _NO_SUCH_ID_REMEDY
         )
     item = row[0]
 
@@ -6921,9 +7354,10 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     if worktree is not None:
         cd_target = os.path.abspath(os.path.expanduser(worktree))
         if not os.path.isdir(cd_target):
-            raise click.ClickException(
+            raise agent_help.no_report(
                 f"--worktree path does not exist or is not a directory: "
-                f"{cd_target}"
+                f"{cd_target}",
+                "Fix or omit --worktree and retry",
             )
     else:
         cd_target = None  # default below to the spawn-created worktree
@@ -6939,23 +7373,39 @@ def spawn_plan(item_id: int, project_name: str | None = None,
             # the trap it had just warned them about. The right move on settled
             # work is to pick up the session that did it, not to start a second
             # one that cannot see its reasoning.
-            raise click.ClickException(
-                f"E-{item_id} is '{current_status}' — settled work. Pick it "
-                f"back up in the session that did it:\n"
-                f"    endless session goto E-{item_id} --resume --revisit\n"
-                f"  (--no-revisit instead, to read it back without reopening "
-                f"the task.)"
+            # REPORT: the route out resumes the prior session, which switches
+            # the user's tmux focus, and `--revisit` reopens shipped work.
+            # Both edges are the user's.
+            raise agent_help.report(
+                f"E-{item_id} is '{current_status}' — settled work. Nothing "
+                f"was spawned.",
+                "whether to reopen shipped work and resume the session that "
+                "did it, which switches the user's tmux focus",
+                text=(
+                    f"E-{item_id} is '{current_status}' — settled work. Pick it "
+                    f"back up in the session that did it:\n"
+                    f"    endless session goto E-{item_id} --resume --revisit\n"
+                    f"  (--no-revisit instead, to read it back without reopening "
+                    f"the task.)"
+                ),
             )
         # E-2093: the demotion bypass is going, so this no longer offers
         # `--force`. It names the same route claim's refusal does — reopen
         # explicitly, then spawn normally — so the two verbs stop disagreeing
         # about what settled work costs to pick back up.
-        raise click.ClickException(
-            f"E-{item_id} is in status '{current_status}'; spawning "
-            f"would demote it to 'underway'.\n"
-            "  Reopen it first, then spawn normally:\n"
-            f"      {_settled_reopen_route(item_id, current_status)}\n"
-            f"      endless task spawn E-{item_id}"
+        # REPORT, for the same reason claim's twin of this refusal is: every
+        # reopen route out of a settled status is a user-owned transition.
+        raise agent_help.report(
+            f"E-{item_id} is '{current_status}' — settled work, and spawning "
+            f"would demote it to 'underway'. Nothing was spawned.",
+            "whether to reopen settled work, which is a user-owned transition",
+            text=(
+                f"E-{item_id} is in status '{current_status}'; spawning "
+                f"would demote it to 'underway'.\n"
+                "  Reopen it first, then spawn normally:\n"
+                f"      {_settled_reopen_route(item_id, current_status)}\n"
+                f"      endless task spawn E-{item_id}"
+            ),
         )
 
     # Refuse if another live session already owns the task. Passing
@@ -7229,27 +7679,34 @@ def move_task(
 ):
     """Move tasks between parents, to root, or batch-move children."""
     # Validation: must specify exactly one destination
+    # Five NO-REPORT usage refusals: each one says the invocation contradicted
+    # itself or left a required half out, and the next call is the whole fix.
     if not parent and not root:
-        raise click.ClickException(
-            "Must specify either --parent or --root as the destination."
+        raise agent_help.no_report(
+            "Must specify either --parent or --root as the destination.",
+            "Fix the flag combination and retry",
         )
     if parent and root:
-        raise click.ClickException(
-            "Cannot specify both --parent and --root."
+        raise agent_help.no_report(
+            "Cannot specify both --parent and --root.",
+            "Fix the flag combination and retry",
         )
 
     # Validation: children-of vs item_id
     if children_of and item_id:
-        raise click.ClickException(
-            "Cannot specify both item_id and --children-of."
+        raise agent_help.no_report(
+            "Cannot specify both item_id and --children-of.",
+            "Fix the flag combination and retry",
         )
     if not children_of and not item_id:
-        raise click.ClickException(
-            "Must specify either an item_id or --children-of."
+        raise agent_help.no_report(
+            "Must specify either an item_id or --children-of.",
+            "Fix the flag combination and retry",
         )
     if with_children and not item_id:
-        raise click.ClickException(
-            "--with-children requires an item_id."
+        raise agent_help.no_report(
+            "--with-children requires an item_id.",
+            "Fix the flag combination and retry",
         )
 
     # Resolve target parent
@@ -7260,8 +7717,9 @@ def move_task(
             (parent,),
         )
         if not row:
-            raise click.ClickException(
-                f"Target parent {task_id_display(parent)} not found."
+            raise agent_help.no_report(
+                f"Target parent {task_id_display(parent)} not found.",
+                _NO_SUCH_ID_REMEDY,
             )
         target_parent_id = parent
 
@@ -7274,8 +7732,9 @@ def move_task(
             (children_of,),
         )
         if not row:
-            raise click.ClickException(
-                f"Source parent {task_id_display(children_of)} not found."
+            raise agent_help.no_report(
+                f"Source parent {task_id_display(children_of)} not found.",
+                _NO_SUCH_ID_REMEDY,
             )
 
         # Count children — parent_id, because this number previews the UPDATE
@@ -7314,8 +7773,8 @@ def move_task(
         (item_id,),
     )
     if not row:
-        raise click.ClickException(
-            f"Task {task_id_display(item_id)} not found."
+        raise agent_help.no_report(
+            f"Task {task_id_display(item_id)} not found.", _NO_SUCH_ID_REMEDY
         )
 
     # A maybe-phase task cannot be moved under a parent. Moving to root
@@ -7357,14 +7816,19 @@ def link_tasks(source_id: int, target_id: int, dep_type: str):
     """
     if dep_type not in CANONICAL_DEP_TYPES:
         valid = ", ".join(CANONICAL_DEP_TYPES)
-        raise click.ClickException(
-            f"Invalid relation type '{dep_type}'. Valid: {valid}"
+        raise agent_help.no_report(
+            f"Invalid relation type '{dep_type}'. Valid: {valid}",
+            _RELATION_TYPE_REMEDY,
         )
     if source_id == target_id:
-        raise click.ClickException("A task cannot link to itself.")
+        raise agent_help.no_report(
+            "A task cannot link to itself.",
+            "Link to a different task, or drop the link",
+        )
     for tid in (source_id, target_id):
         if not db.exists("SELECT 1 FROM live_tasks WHERE id = ?", (tid,)):
-            raise click.ClickException(f"Task {task_id_display(tid)} not found.")
+            raise agent_help.no_report(
+                f"Task {task_id_display(tid)} not found.", _NO_SUCH_ID_REMEDY)
 
     stored, swap = CANONICAL_DEP_TYPES[dep_type]
     src, tgt = (target_id, source_id) if swap else (source_id, target_id)
@@ -7379,8 +7843,11 @@ def link_tasks(source_id: int, target_id: int, dep_type: str):
     # storage order is a duplicate too — otherwise `A conflicts_with B` then
     # `B conflicts_with A` would store two rows for one conflict.
     if _dep_row(src, tgt, stored) is not None:
-        raise click.ClickException(
-            f"{task_id_display(source_id)} is already linked to {task_id_display(target_id)} as '{dep_type}'."
+        # NO-REPORT, and idempotent: the relation the caller asked for exists,
+        # so the state they wanted is the state there is.
+        raise agent_help.no_report(
+            f"{task_id_display(source_id)} is already linked to {task_id_display(target_id)} as '{dep_type}'.",
+            "Nothing to do — the relation already exists",
         )
 
     # Emit rather than writing task_deps directly: the Go executor owns the
@@ -7437,8 +7904,9 @@ def unlink_tasks(source_id: int, target_id: int, dep_type: str | None = None):
     if dep_type is not None:
         if dep_type not in CANONICAL_DEP_TYPES:
             valid = ", ".join(CANONICAL_DEP_TYPES)
-            raise click.ClickException(
-                f"Invalid relation type '{dep_type}'. Valid: {valid}"
+            raise agent_help.no_report(
+                f"Invalid relation type '{dep_type}'. Valid: {valid}",
+                _RELATION_TYPE_REMEDY,
             )
         stored, swap = CANONICAL_DEP_TYPES[dep_type]
         src, tgt = (target_id, source_id) if swap else (source_id, target_id)
@@ -7447,8 +7915,10 @@ def unlink_tasks(source_id: int, target_id: int, dep_type: str | None = None):
         # while we still hold the user's E-NNN formatting.
         found = _dep_row(src, tgt, stored)
         if found is None:
-            raise click.ClickException(
-                f"No '{dep_type}' relation: {task_id_display(source_id)} → {task_id_display(target_id)}"
+            raise agent_help.no_report(
+                f"No '{dep_type}' relation: {task_id_display(source_id)} → {task_id_display(target_id)}",
+                "Nothing to unlink; confirm with endless task relations if a "
+                "different type was meant",
             )
         # A symmetric row may be stored in the other order; delete the one
         # that exists rather than the one the caller happened to name.
@@ -7479,16 +7949,18 @@ def unlink_tasks(source_id: int, target_id: int, dep_type: str | None = None):
         (source_id, target_id, target_id, source_id),
     )
     if not rows:
-        raise click.ClickException(
-            f"No relation between {task_id_display(source_id)} and {task_id_display(target_id)}."
+        raise agent_help.no_report(
+            f"No relation between {task_id_display(source_id)} and {task_id_display(target_id)}.",
+            "Nothing to unlink; confirm with endless task relations",
         )
     if len(rows) > 1:
         names = []
         for r in rows:
             names.append(_relation_display_name_from(r, source_id))
-        raise click.ClickException(
+        raise agent_help.no_report(
             f"Multiple relations between {task_id_display(source_id)} and "
-            f"{task_id_display(target_id)} ({', '.join(names)}). Specify --type <type>."
+            f"{task_id_display(target_id)} ({', '.join(names)}). Specify --type <type>.",
+            "Retry with --type naming the relation to remove",
         )
 
     row = rows[0]
@@ -7550,10 +8022,14 @@ def supersede_task(
     from endless.event_bridge import emit_event
 
     if old_id == new_id:
-        raise click.ClickException("A task cannot supersede itself.")
+        raise agent_help.no_report(
+            "A task cannot supersede itself.",
+            "Name the actual successor and retry",
+        )
     for tid in (old_id, new_id):
         if not db.exists("SELECT 1 FROM live_tasks WHERE id = ?", (tid,)):
-            raise click.ClickException(f"Task {task_id_display(tid)} not found.")
+            raise agent_help.no_report(
+                f"Task {task_id_display(tid)} not found.", _NO_SUCH_ID_REMEDY)
 
     # Read the old row BEFORE anything is written: it decides the default status
     # and feeds the guard, and both must run while the call can still be refused
@@ -7577,9 +8053,14 @@ def supersede_task(
     try:
         link_tasks(old_id, new_id, "superseded_by")
     except click.ClickException as e:
+        # `link_tasks` already refused NO-REPORT; this re-words its message in
+        # the vocabulary the caller used (`replace`, not `link`) and keeps the
+        # class, because the fact is the same one: the state asked for is the
+        # state on the row.
         if "already linked" in str(e):
-            raise click.ClickException(
-                f"{task_id_display(old_id)} is already superseded by {task_id_display(new_id)}."
+            raise agent_help.no_report(
+                f"{task_id_display(old_id)} is already superseded by {task_id_display(new_id)}.",
+                "Nothing to do — the supersession is already recorded",
             )
         raise
 
@@ -8085,8 +8566,9 @@ def _related_task_ids(item_id: int, rel_type: str | None = None) -> list[int]:
     """Return task IDs related to item_id, optionally narrowed by rel_type display name."""
     if rel_type is not None and rel_type not in CANONICAL_DEP_TYPES:
         valid = ", ".join(CANONICAL_DEP_TYPES)
-        raise click.ClickException(
-            f"Invalid relation type '{rel_type}'. Valid: {valid}"
+        raise agent_help.no_report(
+            f"Invalid relation type '{rel_type}'. Valid: {valid}",
+            _RELATION_TYPE_REMEDY,
         )
 
     if rel_type is None:
@@ -8147,7 +8629,8 @@ def show_relations(item_id: int, agent: bool = False, as_json: bool = False):
     JSON renderings.
     """
     if not db.exists("SELECT 1 FROM live_tasks WHERE id = ?", (item_id,)):
-        raise click.ClickException(f"Task {task_id_display(item_id)} not found.")
+        raise agent_help.no_report(
+            f"Task {task_id_display(item_id)} not found.", _NO_SUCH_ID_REMEDY)
 
     if as_json:
         import json

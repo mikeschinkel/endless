@@ -42,7 +42,7 @@ from pathlib import Path
 
 import click
 
-from endless import doc_mirror, land_conflict, provenance, rowcap
+from endless import agent_help, doc_mirror, land_conflict, provenance, rowcap
 from endless.task_cmd import _display_path, _resolve_project
 from endless.project_path import resolved
 
@@ -191,7 +191,16 @@ def _project_root() -> Path:
     from endless import db
     row = db.query("SELECT path FROM projects WHERE id = ? LIMIT 1", (project_id,))
     if not row:
-        raise click.ClickException(f"Project id {project_id} has no registered path")
+        # The id resolved but the row it names has no path: the project
+        # registration itself disagrees with itself. Nothing an agent can do
+        # from here — re-registering a project is a statement about which
+        # directory on this machine IS the project, which only the person who
+        # owns the machine can make.
+        raise agent_help.report(
+            f"Project id {project_id} has no registered path",
+            "whether to repair or re-register this project, since its id "
+            "resolves but its path row does not exist",
+        )
     return resolved(row[0]["path"])
 
 
@@ -297,11 +306,17 @@ def _warn_if_companion_disagrees(worktree_path: Path, companion: dict | None) ->
         return
     from_path = _task_id_from_worktree_path(worktree_path)
     if from_path is not None and legacy != from_path:
-        import sys
-        sys.stderr.write(
+        # Nothing is blocked and nothing is wrong with the answer: the
+        # path-derived id is used and the command finishes. The warning exists
+        # so a stale companion stops being invisible, which is why it is
+        # no_report rather than record — it is about the worktree the reader
+        # just asked about, not a standing condition of the project.
+        agent_help.warn.no_report(
             f"endless: stale companion in {worktree_path}/.endless/worktree.json: "
             f"task_id={legacy!r} disagrees with path-derived {from_path!r}; "
-            f"using {from_path!r}.\n"
+            f"using {from_path!r}.",
+            f"The path-derived {from_path} is what was used, so continue; the "
+            f"legacy task_id key can be removed from the companion",
         )
 
 
@@ -539,16 +554,67 @@ def current_worktree(as_json: bool) -> None:
     try:
         toplevel_str = _git(["rev-parse", "--show-toplevel"], cwd=cwd)
     except subprocess.CalledProcessError:
-        raise click.ClickException("Not inside a git repository")
+        # The TSV left this CONDITIONAL, and the condition is answerable here
+        # rather than by the agent: ask whether the REGISTERED project is a git
+        # repository. If it is, cwd simply is not inside it and the agent only
+        # has to cd; if it is not, the project was registered against a
+        # directory git does not manage, and which directory this project
+        # actually is — or whether to `git init` the one named — is the user's
+        # to settle. Both branches read the same sentence, which is why `text`
+        # pins it and only the verdict differs.
+        here = "Not inside a git repository"
+        project_root = _project_root()
+        project_is_repo = _git_run(
+            ["rev-parse", "--git-dir"], cwd=project_root, check=False,
+        ).returncode == 0
+        if project_is_repo:
+            raise agent_help.no_report(
+                f"{here}: cwd {cwd} is outside {project_root}, which is one.",
+                f"cd into {project_root} (or one of its task worktrees) and "
+                f"re-run",
+                text=here,
+            )
+        raise agent_help.report(
+            f"{here}, and neither is the registered project root "
+            f"{project_root}.",
+            "whether this project is registered against the right directory, "
+            "or whether that directory should be a git repository at all",
+            text=here,
+        )
     toplevel = Path(toplevel_str).resolve()
 
     root = _project_root()
     rows = _enriched_list(root)
     match = next((r for r in rows if Path(r["path"]).resolve() == toplevel), None)
     if match is None:
-        raise click.ClickException(
+        inconsistent = (
             f"cwd {cwd} resolves to a working tree {toplevel} that "
             f"git worktree list does not report. Inconsistent state."
+        )
+        # Also CONDITIONAL in the TSV, and also answerable here. Two different
+        # situations produce the same sentence:
+        #
+        #  - cwd is in the project's OWN checkout, which `git worktree list`
+        #    always reports first. Not being in the list means the registry
+        #    disagrees with the disk, and reconciling that (prune? re-add? is
+        #    this even the same repository?) is not something to attempt under
+        #    a command that was only asked to print a path.
+        #  - cwd is in some OTHER repository — a nested clone or a submodule
+        #    under the project root. Nothing is broken; the agent is standing
+        #    in the wrong tree.
+        if toplevel == Path(root).resolve():
+            raise agent_help.report(
+                f"{inconsistent} Nothing was changed: the project's own "
+                f"checkout is missing from its git worktree registry.",
+                "how to reconcile a git worktree registry that disagrees with "
+                "what is on disk for the project's own checkout",
+                text=inconsistent,
+            )
+        raise agent_help.no_report(
+            f"{inconsistent} It is a different repository nested under "
+            f"{root}, not one of this project's worktrees.",
+            f"cd to {root} or to a task worktree under it and re-run",
+            text=inconsistent,
         )
 
     if as_json:
@@ -596,14 +662,20 @@ def check_worktree() -> None:
     """
     root = worktree_root_for_cwd()
     if root is None:
-        raise click.ClickException(
+        raise agent_help.no_report(
             "not inside an endless-managed worktree — run this from within a "
-            "task worktree (.endless/worktrees/e-NNN)"
+            "task worktree (.endless/worktrees/e-NNN)",
+            "cd into the task worktree and re-run `endless worktree check`",
         )
 
     binary = shutil.which("endless-go")
     if not binary:
-        raise click.ClickException("endless-go not found on PATH")
+        # Installing Endless on the machine it is missing from is not something
+        # an agent does inside somebody's project checkout.
+        raise agent_help.report(
+            "endless-go not found on PATH",
+            "whether to install or repair the Endless install on this machine",
+        )
 
     # E-971 path convention: a worktree root is <main>/.endless/worktrees/e-NNN,
     # so its 3rd-level parent is the repo main checkout (which enables the
@@ -620,9 +692,18 @@ def check_worktree() -> None:
     )
     if result.stdout:
         click.echo(result.stdout, nl=False)
+    if result.stderr and result.returncode != 0:
+        # endless-go's own refusal. Go classified it at the site that raised it
+        # and its verdict lines already bracket the text, so relaying is the
+        # whole job here: a second directive from this side would contradict
+        # the first, and the exit code is the child's own.
+        raise agent_help.relay(result.stderr, exit_code=result.returncode)
     if result.stderr:
-        click.echo(result.stderr, nl=False, err=True)
-    raise SystemExit(result.returncode)
+        # Exit 0 with something on stderr is a progress line, not a refusal.
+        agent_help.info(result.stderr.rstrip("\n"), err=True)
+    # 0 clean, 1 anomalies (the stdout listing above IS the answer), 2 error.
+    # Nothing left to say in Endless's voice, so the status travels alone.
+    agent_help.passthrough_exit(result.returncode)
 
 
 def _git_state_anomaly(path: Path) -> str:
@@ -689,7 +770,12 @@ def _sync_state(path: Path, base: str, here: Path | None) -> tuple[str, str]:
     if verdict != "free":
         # Fail closed, as `drop` does: a sweep that cannot tell whether someone
         # is standing here does not rebase on the assumption that nobody is.
-        return "skip", f"cannot tell whether it is in use ({detail})"
+        #
+        # Collapsed to one line: since E-2159 fixed which stream the probe's
+        # detail comes from, an undetermined verdict carries endless-go's whole
+        # refusal rather than the word `undetermined`, and this sweep prints one
+        # line per worktree.
+        return "skip", f"cannot tell whether it is in use ({' '.join(detail.split())})"
 
     res = _git_run(["merge-base", "--is-ancestor", base, "HEAD"], cwd=path, check=False)
     if res.returncode == 0:
@@ -832,7 +918,10 @@ def show_worktree(name_or_path: str, as_json: bool) -> None:
                 break
 
     if target is None:
-        raise click.ClickException(f"No worktree matches: {name_or_path}")
+        raise agent_help.no_report(
+            f"No worktree matches: {name_or_path}",
+            "Re-check the name against `endless worktree list` and retry",
+        )
 
     if as_json:
         click.echo(json.dumps(provenance.attach(target), indent=2))
@@ -856,7 +945,10 @@ def for_task(task_id: str, as_json: bool) -> None:
     """Resolve a task ID (e.g. E-967 or 967) to its worktree path."""
     m = re.fullmatch(r"(?:[Ee]-)?(\d+)", task_id.strip())
     if m is None:
-        raise click.ClickException(f"Invalid task id: {task_id}")
+        raise agent_help.no_report(
+            f"Invalid task id: {task_id}",
+            "Pass E-NNN or NNN and retry",
+        )
     canonical = f"E-{m.group(1)}"
 
     root = _project_root()
@@ -912,11 +1004,14 @@ def sandbox_dir(task_id: str | None) -> None:
     if task_id is None:
         wt_dir = config.worktree_path()
         if wt_dir is None:
-            raise click.ClickException(
-                "Not inside a task worktree, so there is no sandbox to "
-                "resolve.\n"
-                "  Name the task instead:\n"
-                "      endless worktree sandbox E-<id>"
+            raise agent_help.no_report(
+                "Not inside a task worktree, so there is no sandbox path to "
+                "print. Nothing was changed.",
+                "Re-run naming the task: `endless worktree sandbox E-<id>`",
+                text=("Not inside a task worktree, so there is no sandbox to "
+                      "resolve.\n"
+                      "  Name the task instead:\n"
+                      "      endless worktree sandbox E-<id>"),
             )
         canonical = _task_id_from_worktree_path(Path.cwd()) or wt_dir.name
     else:
@@ -924,19 +1019,28 @@ def sandbox_dir(task_id: str | None) -> None:
         root = _project_root()
         wt_dir = root / ".endless" / "worktrees" / f"e-{canonical[2:]}"
         if not wt_dir.is_dir():
-            raise click.ClickException(
+            raise agent_help.no_report(
                 f"No endless-managed worktree for {canonical}, so it has no "
-                f"sandbox."
+                f"sandbox.",
+                "Check `endless worktree list` and retry with an id that has "
+                "a worktree",
             )
 
     path = config.sandbox_root(wt_dir)
     if not path.is_dir():
         remedy = "Recreate and seed it from the worktree with:  endless sandbox reset"
-        raise click.ClickException(
-            f"{canonical}'s sandbox is missing:\n\n"
-            f"    {path}\n\n"
-            "A sandbox is created with its worktree, so something removed it.\n"
-            f"{remedy}"
+        # Mechanical and local. A sandbox is throwaway state by construction,
+        # so recreating one destroys nothing anybody has to be consulted about.
+        raise agent_help.no_report(
+            f"{canonical}'s sandbox directory {path} does not exist, so no "
+            f"path was printed.",
+            "Run `endless sandbox reset` from the worktree to recreate and "
+            "seed it",
+            text=(f"{canonical}'s sandbox is missing:\n\n"
+                  f"    {path}\n\n"
+                  "A sandbox is created with its worktree, so something "
+                  "removed it.\n"
+                  f"{remedy}"),
         )
     click.echo(str(path))
 
@@ -1025,7 +1129,7 @@ def _rebase_in_progress(worktree_path: Path) -> bool:
 
     Land reads conflict state (unmerged paths, REBASE_HEAD) only when this is
     true for a rebase it started itself. Read unconditionally, that state can
-    belong to an entirely different operation — see `_rebase_failure_message`.
+    belong to an entirely different operation — see `_rebase_failure_refusal`.
     """
     probe = _git_run(
         ["rev-parse", "--absolute-git-dir"], cwd=worktree_path, check=False,
@@ -1084,11 +1188,33 @@ def _rebase_conflict_message(
     worktree_path: Path, base_branch: str, *, phase: str,
     stderr: str | None = None,
 ) -> str:
+    """Just the message. See _rebase_conflict_report, which does the work.
+
+    Kept as its own name because the message is a thing on its own: what land
+    puts in front of a reader when a rebase conflicts, which is what
+    tests/test_worktree_land_conflict_msg.py is about and what E-2122 and
+    E-1957 reshaped. The classification needs two more facts than a string can
+    carry, so it reads them from the report.
+    """
+    msg, _ev, _captured = _rebase_conflict_report(
+        worktree_path, base_branch, phase=phase, stderr=stderr,
+    )
+    return msg
+
+
+def _rebase_conflict_report(
+    worktree_path: Path, base_branch: str, *, phase: str,
+    stderr: str | None = None,
+) -> tuple[str, land_conflict.ConflictEvidence, bool]:
     """Capture a live rebase conflict, persist it, and build land's message.
+
+    Returns (message, evidence, captured). The last two exist for E-2159: the
+    refusal's CLASS turns on which of the three reports `_conflict_message`
+    rendered, and that is not recoverable from the finished string.
 
     Only for a rebase that actually stopped on conflicting content. The caller
     establishes that (non-empty `--diff-filter=U`) before choosing this over the
-    other reports in `_rebase_failure_message`; reaching here on a rebase that
+    other reports in `_rebase_failure_refusal`; reaching here on a rebase that
     never started produces the fiction E-2122 removed.
 
     Called from BOTH conflict handlers (Step 3.7 orphan-replay and Step 4 main
@@ -1130,7 +1256,12 @@ def _rebase_conflict_message(
         rebase_in_progress=_rebase_in_progress(worktree_path),
     )
     stored = land_conflict.store_evidence(worktree_path, ev)
-    return _conflict_message(ev, captured=stored is not None, stderr=stderr)
+    captured = stored is not None
+    return (
+        _conflict_message(ev, captured=captured, stderr=stderr),
+        ev,
+        captured,
+    )
 
 
 def _conflict_message(
@@ -1217,11 +1348,17 @@ def _conflict_message(
     )
 
 
-def _rebase_failure_message(
+def _rebase_failure_refusal(
     worktree_path: Path, base_branch: str, *, phase: str,
     stderr: str | None, pre_existing: bool,
-) -> str:
+) -> agent_help.Refusal:
     """Report a non-zero `git rebase` as what it actually was (E-2122).
+
+    Returns the refusal to RAISE, not a string. The three outcomes below are
+    three different answers to "can the agent continue without asking?", and
+    this is the only place that knows which one happened: by the time the
+    caller has it, `git rebase --abort` has already run and the evidence it
+    classified from is gone. The human's text is unchanged in each case.
 
     Land used to treat EVERY non-zero exit as a content conflict. `git rebase`
     also exits non-zero when it refuses to start at all — a dirty worktree, a
@@ -1242,20 +1379,37 @@ def _rebase_failure_message(
       the cause is already stated.
     """
     wt = _display_path(worktree_path)
+    # For the verdict only — the human's text is built from `wt` as before.
+    who = _task_id_from_worktree_path(worktree_path) or wt
 
     if pre_existing:
-        return (
-            f"cannot rebase: a rebase was already in progress in this worktree "
-            f"before land started, so land did not begin one.\n\n"
-            f"git said:\n{_git_said(stderr)}\n\n"
-            f"That rebase has been left exactly as it was — land does not abort "
-            f"an operation it did not start. Finish or abandon it yourself, then "
-            f"retry:\n"
-            f"  cd {wt}\n"
-            f"  git status                # see what it stopped on\n"
-            f"  git rebase --continue     # if you can resolve it\n"
-            f"  git rebase --abort        # to discard it\n"
-            f"then re-run: endless worktree land <id>\n"
+        # The TSV's 2026-09-18 decision for this row: name both branches. The
+        # rebase in this worktree is not land's, and land will not touch it. If
+        # the agent started it, continuing or aborting it is its own cleanup;
+        # if somebody else did, `git rebase --abort` throws away a conflict
+        # resolution in progress, which is not recoverable. Nothing here can
+        # tell whose it is — a rebase leaves no author — so the reader holding
+        # the conversation decides.
+        return agent_help.report_if(
+            f"A rebase was already in progress in {who}'s "
+            f"worktree before land started, so land did not begin one and "
+            f"nothing was changed.",
+            "the agent did not start that rebase itself",
+            "finish or abort it in the worktree, then retry the land",
+            "aborting a rebase somebody else is in the middle of discards "
+            "their conflict resolution",
+            text=(f"cannot rebase: a rebase was already in progress in this "
+                  f"worktree before land started, so land did not begin "
+                  f"one.\n\n"
+                  f"git said:\n{_git_said(stderr)}\n\n"
+                  f"That rebase has been left exactly as it was — land does "
+                  f"not abort an operation it did not start. Finish or abandon "
+                  f"it yourself, then retry:\n"
+                  f"  cd {wt}\n"
+                  f"  git status                # see what it stopped on\n"
+                  f"  git rebase --continue     # if you can resolve it\n"
+                  f"  git rebase --abort        # to discard it\n"
+                  f"then re-run: endless worktree land <id>\n"),
         )
 
     unmerged = _git_run(
@@ -1263,21 +1417,91 @@ def _rebase_failure_message(
         cwd=worktree_path, check=False,
     ).stdout
     if any(ln.strip() for ln in unmerged.splitlines()):
-        return _rebase_conflict_message(
+        msg, ev, captured = _rebase_conflict_report(
             worktree_path, base_branch, phase=phase, stderr=stderr,
         )
+        target = ev.task_id or "<id>"
+        files = ev.unmerged_paths
+        if files and all(_is_auto_file(f) for f in files):
+            # The one proven path. Endless wrote every one of these files and
+            # none carries authored work, so restoring them from the base is
+            # lossless by construction and the retry continues a land the user
+            # already asked for.
+            return agent_help.no_report(
+                f"{target}'s rebase conflicts, and all {len(files)} "
+                f"conflicting file(s) are endless-managed auto-files. The "
+                f"rebase was aborted; the branch is exactly as it was.",
+                f"Restore them from {ev.base_branch} with the printed git "
+                f"checkout, then re-run the land",
+                text=msg,
+            )
+        if not captured:
+            # CONDITIONAL in the TSV, and it stays one: the capture failed to
+            # reach disk, and whether that path can be made writable is a fact
+            # about this machine — a directory the agent created, or a
+            # permission or a full disk that it cannot do anything about.
+            return agent_help.report_if(
+                f"{target}'s rebase conflicts on source files AND the conflict "
+                f"state could not be written, so `diagnose` has nothing to "
+                f"read. The rebase was aborted; the branch is exactly as it "
+                f"was.",
+                "the capture path cannot be made writable from here — a "
+                "permission or a full disk rather than a missing directory",
+                "fix the path named below and re-run the land, which produces "
+                "a diagnosable failure",
+                "a source conflict whose evidence is lost cannot be classified "
+                "later, and the recoveries that fit most conflicts can ship "
+                "code that fails on first use",
+                text=msg,
+            )
+        # Source conflict, recorded. NO-REPORT: the next step is one read-only
+        # command, `endless worktree diagnose`, which is what decides whether
+        # anything after it needs a person. Asking before running it would be
+        # asking without the one piece of information that settles the question.
+        return agent_help.no_report(
+            f"{target}'s rebase conflicts on source files. The rebase was "
+            f"aborted and the branch is exactly as it was, but the conflict "
+            f"state WAS recorded first.",
+            f"Run `endless worktree diagnose {target}` — its classification "
+            f"decides the next step, and it prescribes one only when it can "
+            f"prove it",
+            text=msg,
+        )
 
-    return (
-        f"rebase failed while {phase}.\n\n"
-        f"This was NOT a content conflict — no files are in conflict, so there "
-        f"is nothing to resolve. Git reported why:\n\n"
-        f"git said:\n{_git_said(stderr)}\n\n"
-        f"Act on what git said above. No recovery candidates are offered here: "
-        f"the cause is stated, so there is nothing to guess between.\n\n"
-        f"Inspect:\n"
-        f"  git -C {wt} status\n"
-        f"  git -C {wt} log {base_branch}..HEAD\n"
+    # Not a conflict at all: git refused and said why. The TSV leaves this
+    # inheriting git's class, and the inheritance is real — "fatal: invalid
+    # upstream" is the agent's to fix, a repository git cannot read is not —
+    # so both branches are named rather than one guessed. Nothing merged.
+    return agent_help.report_if(
+        f"The rebase of {who} failed while "
+        f"{phase}, and NOT on a content conflict — no files are in conflict. "
+        f"Nothing was merged.",
+        "what git said below names something you cannot change — the "
+        "repository, the machine, or another process's state",
+        "act on what git said and retry the land",
+        "a rebase that keeps failing for a reason outside this worktree will "
+        "not be fixed by trying again",
+        text=(f"rebase failed while {phase}.\n\n"
+              f"This was NOT a content conflict — no files are in conflict, so "
+              f"there is nothing to resolve. Git reported why:\n\n"
+              f"git said:\n{_git_said(stderr)}\n\n"
+              f"Act on what git said above. No recovery candidates are offered "
+              f"here: the cause is stated, so there is nothing to guess "
+              f"between.\n\n"
+              f"Inspect:\n"
+              f"  git -C {wt} status\n"
+              f"  git -C {wt} log {base_branch}..HEAD\n"),
     )
+
+
+#: The same function under the name land's call sites use. E-2122 named it for
+#: what it returned — the message — and E-2159 changed that to the classified
+#: refusal carrying the message, so the new name is the accurate one. The old
+#: one stays live because it is what the call sites read as, and what
+#: tests/test_worktree_land_lock_contention.py looks for in land's own source
+#: to prove the contention check comes first: the thing that must not regress
+#: is the ORDER of those two calls, and it is spelled out there under this name.
+_rebase_failure_message = _rebase_failure_refusal
 
 
 def _guard_modified_worktree(worktree_path: Path, branch: str, canonical: str) -> None:
@@ -1304,33 +1528,66 @@ def _guard_modified_worktree(worktree_path: Path, branch: str, canonical: str) -
         # holder out. Every other failure is still reported here.
         if _lock_contention_text(e) is not None:
             raise
-        raise click.ClickException(
-            f"git status in worktree failed: {e.stderr or e}"
+        # git is a FOREIGN child: nothing upstream classified this, so the site
+        # does, and git's own words ride along as detail — a git error quoted
+        # verbatim is usually the whole diagnosis.
+        #
+        # Definite rather than report_if, and the reason is the branch just
+        # above: lock contention — the one cause of a failing `git status` that
+        # retrying fixes — has already been filtered out and sent to land's
+        # retry loop. What reaches here is a worktree whose git plumbing does
+        # not work, and repairing or recreating somebody's checkout is not a
+        # land's business.
+        raise agent_help.relay_foreign(
+            agent_help.report(
+                f"git status in the worktree for {canonical} failed, so land "
+                f"could not tell whether it is modified. Nothing was landed.",
+                "how to repair a worktree whose own `git status` fails",
+                text="git status in worktree failed:",
+            ),
+            str(e.stderr or e),
         )
     if wt_auto:
         file_list = "\n  ".join(wt_auto[:20])
         more = "" if len(wt_auto) <= 20 else f"\n  ... and {len(wt_auto) - 20} more"
-        raise click.ClickException(
-            f"worktree for {canonical} has uncommitted auto-managed files; "
-            f"cannot land.\n\n"
-            f"Files:\n  {file_list}{more}\n\n"
-            f"These paths are owned by endless writers that commit them at "
-            f"write time. Their presence here means a writer is broken or "
-            f"skipped its commit. Report the writer that produced these "
-            f"files; do not auto-commit them manually."
+        # The message itself tells the reader to report this and forbids the
+        # obvious fix, which is exactly what REPORT means: an Endless writer
+        # failed to commit its own file, and whether those files are committed
+        # or discarded is the user's call — along with hearing about the bug.
+        raise agent_help.report(
+            f"{len(wt_auto)} auto-managed file(s) are uncommitted in "
+            f"{canonical}'s worktree, so an Endless writer skipped its own "
+            f"commit. Nothing was landed.",
+            "whether those auto-managed files are committed or discarded, and "
+            "which writer bug produced them",
+            text=(f"worktree for {canonical} has uncommitted auto-managed "
+                  f"files; cannot land.\n\n"
+                  f"Files:\n  {file_list}{more}\n\n"
+                  f"These paths are owned by endless writers that commit them "
+                  f"at write time. Their presence here means a writer is "
+                  f"broken or skipped its commit. Report the writer that "
+                  f"produced these files; do not auto-commit them manually."),
         )
     if wt_user:
         file_list = "\n  ".join(wt_user[:20])
         more = "" if len(wt_user) <= 20 else f"\n  ... and {len(wt_user) - 20} more"
-        raise click.ClickException(
-            f"worktree for {canonical} has uncommitted user changes; "
-            f"cannot land.\n\n"
-            f"Files:\n  {file_list}{more}\n\n"
-            f"Resolve from inside the worktree:\n"
-            f"  - commit on {branch} (most common)\n"
-            f"  - move the file aside (mv outside the worktree)\n"
-            f"  - revert if unwanted (git checkout -- <file>)\n"
-            f"then retry land."
+        # The worktree is the agent's own, so uncommitted work in it is the
+        # agent's own: committing it on the task branch is what it was going to
+        # do anyway. Files of unknown provenance here would be the only reason
+        # to ask, and a task worktree does not get those.
+        raise agent_help.no_report(
+            f"{len(wt_user)} uncommitted user file(s) in {canonical}'s "
+            f"worktree block the rebase. Nothing was landed.",
+            f"Commit them on {branch} (or move them aside, or revert them), "
+            f"then retry the land",
+            text=(f"worktree for {canonical} has uncommitted user changes; "
+                  f"cannot land.\n\n"
+                  f"Files:\n  {file_list}{more}\n\n"
+                  f"Resolve from inside the worktree:\n"
+                  f"  - commit on {branch} (most common)\n"
+                  f"  - move the file aside (mv outside the worktree)\n"
+                  f"  - revert if unwanted (git checkout -- <file>)\n"
+                  f"then retry land."),
         )
 
 
@@ -1447,8 +1704,19 @@ def _branch_for_task(rows: list[dict], task_id: str) -> dict | None:
 def _reap_stale_worktrees(project_root: Path) -> None:
     """Run the worktree reaper sweep (E-1337). Best-effort: shells out
     to `endless-go event reap-worktrees`. Stderr from the helper is
-    forwarded so reaped-dir log lines reach the user; non-zero exit
-    raises subprocess.CalledProcessError (caller decides how loud).
+    forwarded so reaped-dir log lines reach the user.
+
+    E-2159 changed what a non-zero exit becomes. It used to be a bare
+    `CalledProcessError` from `check=True`: land caught it and printed its
+    non-fatal warning, `task claim` swallowed it, and `endless worktree reap`
+    let it escape as a Python traceback — the only one of the three that a
+    person ever saw, and the least informative thing the helper could have
+    produced. The sweep's stderr is now captured instead, so the failure can be
+    relayed as what it is: endless-go's own refusal, classified by Go at the
+    site that raised it, with its verdict already at both ends of the text.
+    Nothing is added here, and the exit code is the child's.
+
+    Stdout stays inherited, so anything the helper streams there is unchanged.
     """
     from endless import config
 
@@ -1458,11 +1726,19 @@ def _reap_stale_worktrees(project_root: Path) -> None:
     # E-1429: thread the resolved --db context so this DB-opening subprocess
     # isn't refused by the self-dev-worktree gate when land runs from inside a
     # worktree. Empty (no flag) outside a gated worktree, so a no-op there.
-    subprocess.run(
+    result = subprocess.run(
         [binary, *config.go_db_context_args(), "event", "reap-worktrees",
          "--project-root", str(project_root)],
-        check=True,
+        stderr=subprocess.PIPE, text=True,
     )
+    if result.returncode != 0:
+        raise agent_help.relay(result.stderr, exit_code=result.returncode)
+    if result.stderr:
+        # The reaped-dir log lines, which the helper writes to stderr by
+        # design and which were always forwarded to the terminal. Classified
+        # as a notice so this site still names a class, which is what keeps
+        # the AST check enforceable without an exemption list.
+        agent_help.info(result.stderr.rstrip("\n"), err=True)
 
 
 def _warm_unlanded_cache(worktree_path: Path) -> None:
@@ -1506,7 +1782,10 @@ def _warm_unlanded_cache(worktree_path: Path) -> None:
 def _normalize_task_id(task_id: str) -> str:
     m = re.fullmatch(r"(?:[Ee]-)?(\d+)", task_id.strip())
     if m is None:
-        raise click.ClickException(f"Invalid task id: {task_id}")
+        raise agent_help.no_report(
+            f"Invalid task id: {task_id}",
+            "Pass E-NNN or NNN and retry",
+        )
     return f"E-{m.group(1)}"
 
 
@@ -1533,8 +1812,12 @@ def task_branch(task_id: int) -> str:
     return f"task/{task_id}"
 
 
-class DefaultBranchUnresolved(click.ClickException):
-    """Raised when no resolution step could name this repo's default branch."""
+# E-2159 retired `class DefaultBranchUnresolved(click.ClickException)`. It
+# existed so a caller could catch "the default branch is unknown" apart from
+# any other refusal, and nothing ever did: every call site let it reach the
+# user. A refusal now names its class through the factory that built it, which
+# is the distinction that was actually wanted, and a bare subclass could not
+# make — it carried a message and no verdict.
 
 
 def _read_default_branch_config(project_root: Path) -> str:
@@ -1586,9 +1869,15 @@ def _default_base_branch(project_root: Path) -> str:
     configured = _read_default_branch_config(project_root)
     if configured:
         if not _branch_if_exists(project_root, configured):
-            raise DefaultBranchUnresolved(
+            # The user wrote this branch name into their own project config.
+            # An agent "fixing" an obvious typo would be choosing, silently,
+            # which branch this project's work lands into — and the config is
+            # the one place that choice is recorded on purpose.
+            raise agent_help.report(
                 f"{_tilde(project_root)}/.endless/config.json sets default_branch "
-                f"{configured!r}, which does not exist in this repository."
+                f"{configured!r}, which does not exist in this repository.",
+                "which branch is this project's default, since its own config "
+                "names one that is not in the repository",
             )
         return configured
 
@@ -1608,10 +1897,31 @@ def _default_base_branch(project_root: Path) -> str:
         if _branch_if_exists(project_root, candidate):
             return candidate
 
-    raise DefaultBranchUnresolved(
+    unresolved = (
         f"Cannot resolve the default branch of {_tilde(project_root)}. "
         f"Set it explicitly: add \"default_branch\": \"<branch>\" to "
         f".endless/config.json, or run `git remote set-head origin --auto`."
+    )
+    # The TSV left this CONDITIONAL on something this function can simply look
+    # up: whether the repository has an `origin` remote. With one, the second
+    # half of the message is a command the agent can run — `set-head` asks
+    # origin which branch it points at, which is a fact, not a choice — and the
+    # retry then resolves. With no origin and no main/master, there is no fact
+    # to recover: which branch this project's work lands into has never been
+    # stated anywhere, and stating it is the user's.
+    if _git_config_value(project_root, "remote.origin.url"):
+        raise agent_help.no_report(
+            f"{unresolved} Nothing was changed.",
+            "Run `git remote set-head origin --auto` in the project root and "
+            "retry",
+            text=unresolved,
+        )
+    raise agent_help.report(
+        f"{unresolved} Nothing was changed; the repository has no origin "
+        f"remote and no main or master branch.",
+        "which branch this project's work lands into, since nothing in the "
+        "repository or its config says",
+        text=unresolved,
     )
 
 
@@ -1684,8 +1994,22 @@ def _branch_unique_files(base: str, branch: str, project_root: Path) -> list[str
     )
     if res.returncode != 0:
         # Don't risk deleting a branch we couldn't analyze — refuse loudly.
-        raise click.ClickException(
-            f"Could not compare {branch} to {base}:\n{res.stderr or res.stdout}"
+        #
+        # git is foreign here, so the site classifies and git's words come
+        # along as detail. REPORT because of what the refusal is protecting:
+        # the next step after a successful compare is deleting the branch, and
+        # the compare is the only thing that proves the branch holds nothing.
+        # Without it there is no safe retry, only a guess about somebody's
+        # commits.
+        raise agent_help.relay_foreign(
+            agent_help.report(
+                f"git could not compare {branch} to {base}, so the orphan "
+                f"branch was left in place and the claim stopped.",
+                "whether the orphan branch may be deleted without anything "
+                "having established what it holds",
+                text=f"Could not compare {branch} to {base}:",
+            ),
+            res.stderr or res.stdout,
         )
     return [ln for ln in res.stdout.splitlines() if ln.strip()]
 
@@ -1744,11 +2068,29 @@ def _delete_orphan_branch(branch: str, project_root: Path) -> None:
             return
         err = (res.stderr or "") + (res.stdout or "")
     root = _tilde(project_root)
-    raise click.ClickException(
-        f"Could not delete orphan branch {branch}:\n{err}\n"
-        f"Resolve manually, then retry:\n"
-        f"  git -C {root} worktree prune\n"
-        f"  git -C {root} branch -D {branch}"
+    # Not relay_foreign: git's own stderr is already inside the message, between
+    # the facts and the remedy, and attaching it again as detail would print it
+    # twice and move it after the commands it is supposed to explain.
+    #
+    # REPORT, and the TSV's condition resolves itself: the two commands the
+    # message prints are the two this function has just run — `worktree prune`,
+    # then `branch -D` again — so the agent-fixable branch has already been
+    # taken and failed. What is left is a live worktree still holding the branch
+    # or a permissions problem, neither of which a retry reaches.
+    #
+    # The printed commands stay in the message rather than moving to
+    # `human_remedy`: this branch was proven to hold no unique work before
+    # anything tried to delete it (see _handle_orphan_branch), so `branch -D`
+    # here destroys nothing — it is the remedy, not a bypass of a safety check.
+    raise agent_help.report(
+        f"git refused to delete orphan branch {branch} even after a worktree "
+        f"prune, so the claim stopped and nothing was created.",
+        "how to clear an orphan branch git will not delete — a live worktree "
+        "still holding it, or the permissions on the repository",
+        text=(f"Could not delete orphan branch {branch}:\n{err}\n"
+              f"Resolve manually, then retry:\n"
+              f"  git -C {root} worktree prune\n"
+              f"  git -C {root} branch -D {branch}"),
     )
 
 
@@ -1846,12 +2188,41 @@ def _check_orphan_mirrors(
             mismatched.append(rel)
 
     if mismatched:
-        raise click.ClickException(
-            _orphan_mirror_mismatch_msg(task_id, branch, mismatched, project_root)
+        # Which of two texts governs the task is a judgment about intent, and
+        # either answer throws the other away. The TSV left the old plan-only
+        # version of this CONDITIONAL on "is one plainly a stale prefix of the
+        # other"; that heuristic is what E-2137 removed along with the
+        # character-count viability rule, and nothing replaced it because
+        # nothing could. Definite REPORT.
+        #
+        # The closing `git branch -D` is a destructive escape and would belong
+        # in `human_remedy` on its own merits; it stays in the message because
+        # tests/test_worktree_orphan_branch.py asserts on it (see the report
+        # for E-2159).
+        raise agent_help.report(
+            f"E-{task_id}: {len(mismatched)} document mirror(s) on branch "
+            f"{branch} differ from the database's copy. The claim stopped; "
+            f"nothing was created or deleted.",
+            "which copy of the task's documents governs — adopting the "
+            "branch's or keeping the database's discards the other",
+            text=_orphan_mirror_mismatch_msg(
+                task_id, branch, mismatched, project_root,
+            ),
         )
     if unreadable:
-        raise click.ClickException(
-            _orphan_unreadable_mirror_msg(task_id, branch, unreadable, project_root)
+        # Not "the database says discard this" — "the database could not be
+        # asked". The one thing that would make deleting the branch safe is the
+        # thing that failed, so the refusal cannot resolve into a retry: whether
+        # to accept the risk is the user's.
+        raise agent_help.report(
+            f"E-{task_id}: the database could not be asked what "
+            f"{len(unreadable)} document mirror(s) on branch {branch} should "
+            f"contain, so the branch was left alone and the claim stopped.",
+            "whether the branch's mirrors may be discarded without anything "
+            "having confirmed the database already holds their content",
+            text=_orphan_unreadable_mirror_msg(
+                task_id, branch, unreadable, project_root,
+            ),
         )
 
 
@@ -1901,8 +2272,19 @@ def _handle_orphan_branch(
     mirrors = [f for f in unique if doc_mirror.is_mirror_path(f)]
     real_work = [f for f in unique if not doc_mirror.is_mirror_path(f)]
     if real_work:
-        raise click.ClickException(
-            _orphan_real_work_msg(task_id, branch, base, real_work, project_root)
+        # Commits nothing else holds. Keep-or-discard is the user's, and the
+        # discard half is irreversible. (The closing `git branch -D` would
+        # belong in `human_remedy`; it stays in the message because
+        # tests/test_worktree_orphan_branch.py asserts on it.)
+        raise agent_help.report(
+            f"E-{task_id}: orphan branch {branch} holds {len(real_work)} "
+            f"file(s) of real work beyond {base}. No worktree was created and "
+            f"the branch was left exactly as it was.",
+            "whether to resume the prior work on that branch or discard it "
+            "permanently",
+            text=_orphan_real_work_msg(
+                task_id, branch, base, real_work, project_root,
+            ),
         )
     if mirrors:
         _check_orphan_mirrors(task_id, branch, mirrors, project_root)
@@ -1931,14 +2313,29 @@ def create_task_worktree(
         # companion's existence is the "endless-managed marker" check.
         if _task_id_from_worktree_path(wt_dir) == canonical and _read_companion(wt_dir):
             return wt_dir, False
-        raise click.ClickException(
+        # A directory Endless did not create is sitting on the path this task's
+        # worktree needs. Moving or removing somebody else's directory is not
+        # an agent's act, whatever is in it.
+        raise agent_help.report(
             f"Path {_tilde(wt_dir)} exists but does not belong to {canonical}. "
-            f"Resolve manually before retrying."
+            f"Resolve manually before retrying.",
+            "what to do with the foreign directory occupying the task's "
+            "worktree path",
         )
 
     msg = _check_plan_file_committed(task_id, project_root)
     if msg:
-        raise click.ClickException(msg)
+        # NO-REPORT: the mirror is Endless's own file, uncommitted in main, and
+        # the message prints the two git commands that capture it. Committing a
+        # plan mirror on main is what `task update` does at write time anyway,
+        # so the retry is the ordinary path rather than a decision.
+        raise agent_help.no_report(
+            f"E-{task_id}'s plan mirror is uncommitted in main, so the "
+            f"worktree was not created.",
+            "Run the printed git add/commit on the main checkout, then retry "
+            f"`endless task claim E-{task_id}`",
+            text=msg,
+        )
 
     # E-1500: the dir is gone but a branch for this task may still exist (an
     # orphan left by `worktree drop` / land-reap). Recover instead of failing on
@@ -1954,8 +2351,22 @@ def create_task_worktree(
             cwd=project_root,
         )
     except subprocess.CalledProcessError as e:
-        raise click.ClickException(
-            f"git worktree add failed for {canonical}:\n{e.stderr or e}"
+        # git is foreign; the site classifies and git's words ride as detail.
+        #
+        # NO-REPORT, because everything this command can collide with has
+        # already been cleared above: a foreign directory on the path and an
+        # orphan branch holding the name each have their own refusal, and both
+        # are REPORT. What is left for `worktree add` to fail on is a stale
+        # registration, a missing base ref, a path the agent chose — things git
+        # names precisely and the agent acts on. Nothing was created.
+        raise agent_help.relay_foreign(
+            agent_help.no_report(
+                f"git worktree add failed for {canonical}; no worktree was "
+                f"created and nothing was changed.",
+                "Act on what git said below, then retry the claim",
+                text=f"git worktree add failed for {canonical}:",
+            ),
+            str(e.stderr or e),
         )
 
     _bootstrap_task_worktree(task_id, wt_dir, base, branch, project_root)
@@ -2053,9 +2464,14 @@ def recreate_dropped_worktree(
         # no-op, and refuse a foreign collision (mirrors create_task_worktree).
         if _task_id_from_worktree_path(wt_dir) == canonical and _read_companion(wt_dir):
             return wt_dir
-        raise click.ClickException(
+        # Same refusal as create_task_worktree's, for the same reason: a
+        # directory Endless did not create is in the way, and clearing it is
+        # the user's act.
+        raise agent_help.report(
             f"Path {_tilde(wt_dir)} exists but does not belong to {canonical}. "
-            f"Resolve manually before retrying."
+            f"Resolve manually before retrying.",
+            "what to do with the foreign directory occupying the task's "
+            "worktree path",
         )
 
     wt_dir.parent.mkdir(parents=True, exist_ok=True)
@@ -2077,8 +2493,17 @@ def recreate_dropped_worktree(
     try:
         _git_run(add_args, cwd=project_root)
     except subprocess.CalledProcessError as e:
-        raise click.ClickException(
-            f"git worktree add failed for {canonical}:\n{e.stderr or e}"
+        # As in create_task_worktree: the collisions that need a person are
+        # refused above, so what reaches here is git naming something the agent
+        # can act on, and the recovery is to act on it and retry the resume.
+        raise agent_help.relay_foreign(
+            agent_help.no_report(
+                f"git worktree add failed for {canonical}; the worktree was "
+                f"not recreated and nothing was changed.",
+                "Act on what git said below, then retry the resume",
+                text=f"git worktree add failed for {canonical}:",
+            ),
+            str(e.stderr or e),
         )
 
     _bootstrap_task_worktree(task_id, wt_dir, base, companion_branch, project_root)
@@ -2121,13 +2546,25 @@ def _run_post_worktree_create_hook(project_root: Path, worktree_path: Path) -> N
     if not hook.exists():
         return
     if not os.access(hook, os.X_OK):
-        click.echo(
-            click.style("⚠ post-worktree-create hook is not executable", fg="yellow")
-            + f"\n    {_tilde(hook)}\n"
-            f"    Make it executable and re-run:\n"
-            f"        chmod +x {_tilde(hook)}\n"
-            f"        cd {_tilde(worktree_path)} && {_tilde(hook)} {_tilde(worktree_path)}",
-            err=True,
+        # Nothing is blocked: the worktree exists and is usable, only its
+        # project-specific bootstrap did not run. The remedy deliberately does
+        # NOT say chmod — that edits a tracked file in the user's main
+        # checkout, a project change nobody asked for — it says run the script
+        # through its interpreter, which finishes the bootstrap and changes
+        # nothing.
+        agent_help.warn.no_report(
+            f"post-worktree-create hook {_tilde(hook)} is not executable, so "
+            f"the worktree was created without running it.",
+            f"Run it through its interpreter in the new worktree "
+            f"(`sh {_tilde(hook)} {_tilde(worktree_path)}`) to finish bootstrap",
+            text=(
+                click.style("⚠ post-worktree-create hook is not executable",
+                            fg="yellow")
+                + f"\n    {_tilde(hook)}\n"
+                f"    Make it executable and re-run:\n"
+                f"        chmod +x {_tilde(hook)}\n"
+                f"        cd {_tilde(worktree_path)} && {_tilde(hook)} {_tilde(worktree_path)}"
+            ),
         )
         return
     click.echo(
@@ -2139,25 +2576,53 @@ def _run_post_worktree_create_hook(project_root: Path, worktree_path: Path) -> N
             [str(hook), str(worktree_path)], cwd=str(worktree_path),
         )
     except OSError as e:
-        click.echo(
-            click.style("⚠ post-worktree-create hook failed to start", fg="yellow")
-            + f"\n    {_tilde(hook)}: {e}\n"
-            f"    Worktree kept. Re-run after fixing:\n"
-            f"        cd {_tilde(worktree_path)} && {_tilde(hook)} {_tilde(worktree_path)}",
-            err=True,
+        # The TSV left this CONDITIONAL on "can the agent run the hook without
+        # changing it". The branch above already answered it: the file IS
+        # executable (os.X_OK passed), so the exec itself failing means the
+        # shebang names an interpreter that is not there, or the file is not in
+        # a format this kernel can run. No invocation of a script in that state
+        # succeeds, so there is no retry to hand the agent — the project's
+        # bootstrap script is the user's to fix.
+        agent_help.warn.report(
+            f"post-worktree-create hook {_tilde(hook)} could not be executed "
+            f"at all ({e}); the worktree was created and kept, unbootstrapped.",
+            "how to repair the project's bootstrap script, which is executable "
+            "but cannot be run (usually its shebang's interpreter)",
+            text=(
+                click.style("⚠ post-worktree-create hook failed to start",
+                            fg="yellow")
+                + f"\n    {_tilde(hook)}: {e}\n"
+                f"    Worktree kept. Re-run after fixing:\n"
+                f"        cd {_tilde(worktree_path)} && {_tilde(hook)} {_tilde(worktree_path)}"
+            ),
         )
         return
     if result.returncode != 0:
-        click.echo(
-            click.style(
-                f"⚠ post-worktree-create hook exited {result.returncode}", fg="yellow"
-            )
-            + f"\n    script:   {_tilde(hook)}\n"
-            f"    worktree: {_tilde(worktree_path)}\n"
-            f"    The worktree was KEPT. The hook must be idempotent/re-runnable;\n"
-            f"    finish bootstrap by re-running it:\n"
-            f"        cd {_tilde(worktree_path)} && {_tilde(hook)} {_tilde(worktree_path)}",
-            err=True,
+        # The hook's own stdout/stderr streamed live just above, so its
+        # diagnosis is already in front of the reader and there is nothing to
+        # relay — only to classify. NO-REPORT: the hook contract REQUIRES
+        # idempotency, the worktree was kept, and re-running it is the whole
+        # recovery. A bootstrap that fails the same way twice stops being this
+        # warning's problem — whatever it was supposed to install will refuse
+        # on its own, with its own class.
+        agent_help.warn.no_report(
+            f"post-worktree-create hook {_tilde(hook)} exited "
+            f"{result.returncode}; the worktree was created and KEPT, but its "
+            f"bootstrap did not finish.",
+            f"Re-run the hook in the worktree (`cd {_tilde(worktree_path)} && "
+            f"{_tilde(hook)} {_tilde(worktree_path)}`) — it is required to be "
+            f"idempotent",
+            text=(
+                click.style(
+                    f"⚠ post-worktree-create hook exited {result.returncode}",
+                    fg="yellow",
+                )
+                + f"\n    script:   {_tilde(hook)}\n"
+                f"    worktree: {_tilde(worktree_path)}\n"
+                f"    The worktree was KEPT. The hook must be idempotent/re-runnable;\n"
+                f"    finish bootstrap by re-running it:\n"
+                f"        cd {_tilde(worktree_path)} && {_tilde(hook)} {_tilde(worktree_path)}"
+            ),
         )
 
 
@@ -2200,14 +2665,23 @@ def _run_post_land_script(
         return
     rerun = f"cd {_tilde(main_root)} && {_tilde(script)} {_tilde(main_root)}"
     if not os.access(script, os.X_OK):
-        click.echo(
-            click.style("⚠ post-land script is not executable", fg="yellow")
-            + f"\n    {_tilde(script)}\n"
-            f"    The land succeeded, but this step was skipped.\n"
-            f"    Make it executable and re-run:\n"
-            f"        chmod +x {_tilde(script)}\n"
-            f"        {rerun}",
-            err=True,
+        # The land SUCCEEDED; only this one-time step did not run. As with the
+        # create hook, the remedy runs the script through its interpreter
+        # rather than chmod'ing it: the file is now on main, so making it
+        # executable for good needs another commit landed there.
+        agent_help.warn.no_report(
+            f"post-land script {_tilde(script)} is not executable, so it was "
+            f"skipped. The land itself succeeded.",
+            f"Run it through its interpreter on the main checkout "
+            f"(`sh {_tilde(script)} {_tilde(main_root)}`)",
+            text=(
+                click.style("⚠ post-land script is not executable", fg="yellow")
+                + f"\n    {_tilde(script)}\n"
+                f"    The land succeeded, but this step was skipped.\n"
+                f"    Make it executable and re-run:\n"
+                f"        chmod +x {_tilde(script)}\n"
+                f"        {rerun}"
+            ),
         )
         return
     click.echo(
@@ -2226,25 +2700,44 @@ def _run_post_land_script(
             [str(script), str(main_root)], cwd=str(main_root), env=env,
         )
     except OSError as e:
-        click.echo(
-            click.style("⚠ post-land script failed to start", fg="yellow")
-            + f"\n    {_tilde(script)}: {e}\n"
-            f"    Main already advanced; the land succeeded. Re-run after fixing:\n"
-            f"        {rerun}",
-            err=True,
+        # Same resolution as the create hook's: the file passed os.X_OK, so a
+        # failing exec means the script cannot be run in the state it is in and
+        # no re-run reaches it. And it is now ON main, so fixing it means
+        # landing another change there — the user's act either way.
+        agent_help.warn.report(
+            f"post-land script {_tilde(script)} could not be executed at all "
+            f"({e}); the land succeeded and main is advanced, but this step "
+            f"did not run.",
+            "how to repair a post-land script that is already on main and "
+            "cannot be executed — fixing it means landing another change",
+            text=(
+                click.style("⚠ post-land script failed to start", fg="yellow")
+                + f"\n    {_tilde(script)}: {e}\n"
+                f"    Main already advanced; the land succeeded. Re-run after fixing:\n"
+                f"        {rerun}"
+            ),
         )
         return
     if result.returncode != 0:
-        click.echo(
-            click.style(
-                f"⚠ post-land script exited {result.returncode}", fg="yellow"
-            )
-            + f"\n    script: {_tilde(script)}\n"
-            f"    cwd:    {_tilde(main_root)}\n"
-            f"    The land SUCCEEDED (main was already advanced); this step did not.\n"
-            f"    The script must be idempotent/re-runnable; finish by re-running it:\n"
-            f"        {rerun}",
-            err=True,
+        # The script's own output streamed live above, so there is nothing to
+        # relay. NO-REPORT for the create hook's reason: the contract requires
+        # the script be idempotent, the land stands either way, and re-running
+        # it is the documented recovery.
+        agent_help.warn.no_report(
+            f"post-land script {_tilde(script)} exited {result.returncode}; "
+            f"the land SUCCEEDED and main is advanced, but this step did not "
+            f"complete.",
+            f"Re-run the script (`{rerun}`) — it is required to be idempotent",
+            text=(
+                click.style(
+                    f"⚠ post-land script exited {result.returncode}", fg="yellow"
+                )
+                + f"\n    script: {_tilde(script)}\n"
+                f"    cwd:    {_tilde(main_root)}\n"
+                f"    The land SUCCEEDED (main was already advanced); this step did not.\n"
+                f"    The script must be idempotent/re-runnable; finish by re-running it:\n"
+                f"        {rerun}"
+            ),
         )
 
 
@@ -2328,14 +2821,26 @@ def _check_post_land_residue(
             f"    (or remove the files manually)."
         )
     noun = "path" if len(residue) == 1 else "paths"
-    raise click.ClickException(
-        f"Landed {canonical}: main was advanced, but the land un-ignored "
-        f"{len(residue)} {noun} left as untracked residue on main:\n\n"
-        f"  {listing}\n\n"
-        f"{script_note}\n\n"
-        f"    A later land could sweep this residue into a commit. The land "
-        f"itself SUCCEEDED and cannot be unwound; this check is non-fatal but "
-        f"exits non-zero so automation notices."
+    # The land SUCCEEDED and main is advanced — this exits non-zero only so
+    # automation notices. REPORT because of what the residue is: files that
+    # were ignored and present on the USER's main checkout a moment ago, which
+    # means they may be their own local data. The message's own "or remove the
+    # files manually" is not an instruction an agent may take, and deleting
+    # untracked files in somebody's checkout is not recoverable.
+    raise agent_help.report(
+        f"Landed {canonical} — main IS advanced — but the land un-ignored "
+        f"{len(residue)} {noun} now sitting on main as untracked residue.",
+        "whether to delete, track or re-ignore those untracked files on main; "
+        "they were ignored local files and may be the user's own data",
+        text=(
+            f"Landed {canonical}: main was advanced, but the land un-ignored "
+            f"{len(residue)} {noun} left as untracked residue on main:\n\n"
+            f"  {listing}\n\n"
+            f"{script_note}\n\n"
+            f"    A later land could sweep this residue into a commit. The "
+            f"land itself SUCCEEDED and cannot be unwound; this check is "
+            f"non-fatal but exits non-zero so automation notices."
+        ),
     )
 
 
@@ -2451,11 +2956,17 @@ def _resolve_land_endless_go(worktree_path: Path, project_root: Path) -> str | N
         return None
     if shutil.which("just") is None:
         canonical = _task_id_from_worktree_path(worktree_path) or str(worktree_path)
-        raise click.ClickException(
-            f"cannot land {canonical}: `just` is not on PATH, so the main "
-            f"checkout's endless-go cannot be rebuilt after the merge. The land "
-            f"records itself with that binary, and it has to match the database "
-            f"the land migrates."
+        # Installing a build tool on the machine is the user's. Resolved before
+        # the ff-merge, so nothing has moved.
+        raise agent_help.report(
+            f"cannot land {canonical}: `just` is not on PATH. Nothing was "
+            f"merged or migrated.",
+            "whether to install `just`, which this machine needs before a "
+            "self-dev land can rebuild the binary it records with",
+            text=(f"cannot land {canonical}: `just` is not on PATH, so the "
+                  f"main checkout's endless-go cannot be rebuilt after the "
+                  f"merge. The land records itself with that binary, and it "
+                  f"has to match the database the land migrates."),
         )
     return str(project_root / "bin" / "endless-go")
 
@@ -2485,13 +2996,27 @@ def _rebuild_main_binary(main_root: Path, canonical: str, base_branch: str) -> N
         ["just", "go"], cwd=str(main_root), capture_output=True, text=True,
     )
     if result.returncode != 0:
-        raise click.ClickException(
+        # `just go` is a foreign child, but its compiler output is already
+        # inside the message where it belongs — between the facts and the
+        # recovery — so attaching it again as detail would print it twice.
+        #
+        # NO-REPORT: the build is of code that is now ON main, the message
+        # names the exact re-run, and both steps it would repeat are
+        # idempotent. Nothing is lost and nothing needs deciding.
+        raise agent_help.no_report(
             f"Landed {canonical} into {base_branch} and migrated the database, "
-            f"but rebuilding the installed endless-go failed:\n\n"
-            f"{(result.stderr or result.stdout).strip()}\n\n"
-            f"The landing is not recorded yet. Fix the build and re-run "
-            f"`just land {canonical}`: the ff-merge and the migration are "
-            f"idempotent, so the re-run rebuilds and records."
+            f"but rebuilding the installed endless-go failed, so the landing "
+            f"is NOT recorded yet.",
+            f"Fix the build and re-run `just land {canonical}` — the ff-merge "
+            f"and the migration are idempotent, so the re-run rebuilds and "
+            f"records",
+            text=(f"Landed {canonical} into {base_branch} and migrated the "
+                  f"database, but rebuilding the installed endless-go "
+                  f"failed:\n\n"
+                  f"{(result.stderr or result.stdout).strip()}\n\n"
+                  f"The landing is not recorded yet. Fix the build and re-run "
+                  f"`just land {canonical}`: the ff-merge and the migration "
+                  f"are idempotent, so the re-run rebuilds and records."),
         )
     click.echo(
         click.style("•", fg="cyan")
@@ -2536,22 +3061,41 @@ def _rebuild_worktree_binary(worktree_path: Path, canonical: str) -> None:
     if not config.project_is_self_dev(worktree_path):
         return
     if shutil.which("just") is None:
-        raise click.ClickException(
-            f"cannot land {canonical}: `just` is not on PATH, so the worktree's "
-            f"endless-go cannot be rebuilt after the rebase onto base. That "
-            f"rebuild is what proves the rebased branch compiles before main "
-            f"advances."
+        raise agent_help.report(
+            f"cannot land {canonical}: `just` is not on PATH. Nothing was "
+            f"merged or migrated.",
+            "whether to install `just`, which this machine needs before a "
+            "self-dev land can prove the rebased branch compiles",
+            text=(f"cannot land {canonical}: `just` is not on PATH, so the "
+                  f"worktree's endless-go cannot be rebuilt after the rebase "
+                  f"onto base. That rebuild is what proves the rebased branch "
+                  f"compiles before main advances."),
         )
     result = subprocess.run(
         ["just", "go"], cwd=str(worktree_path), capture_output=True, text=True,
     )
     if result.returncode != 0:
-        raise click.ClickException(
-            f"cannot land {canonical}: rebuilding the worktree's endless-go "
-            f"after the rebase onto base failed.\n\n"
-            f"{(result.stderr or result.stdout).strip()}\n\n"
-            f"Nothing has been merged or migrated — base and the database are "
-            f"untouched. Fix the build and retry."
+        # Compiler output stays inline (already in the message, before the
+        # recovery), so no relay_foreign.
+        #
+        # The TSV left this CONDITIONAL between "errors in the branch's code"
+        # and "a broken toolchain". It resolves at the step before: `just` was
+        # found, and the source being compiled is this branch's, freshly
+        # rebased onto base. A toolchain that cannot build at all would have
+        # failed the same way for every worktree in the repo, not this one, so
+        # the overwhelmingly likely fault is in the branch — which is the
+        # agent's own work to fix and re-land. Nothing has moved.
+        raise agent_help.no_report(
+            f"cannot land {canonical}: the rebased branch does not build. "
+            f"Nothing was merged or migrated — base and the database are "
+            f"untouched.",
+            "Fix the build errors on the task branch, commit, and retry the "
+            "land",
+            text=(f"cannot land {canonical}: rebuilding the worktree's "
+                  f"endless-go after the rebase onto base failed.\n\n"
+                  f"{(result.stderr or result.stdout).strip()}\n\n"
+                  f"Nothing has been merged or migrated — base and the "
+                  f"database are untouched. Fix the build and retry."),
         )
     click.echo(
         click.style("•", fg="cyan")
@@ -2589,12 +3133,24 @@ def _resolve_land_migrate_bin(worktree_path: Path, project_root: Path) -> str | 
         return None
     migrate_bin = worktree_path / "bin" / "endless-migrate"
     if not migrate_bin.is_file() or not os.access(migrate_bin, os.X_OK):
-        raise click.ClickException(
-            f"The land-time migration executable is missing or not "
-            f"executable:\n\n    {_display_path(migrate_bin)}\n\n"
-            f"It is built from the landing branch by the land itself; if you "
-            f"are running one by hand, build it with `just migrate-bin` in the "
-            f"worktree."
+        # A land reaches here immediately after building this binary, so an
+        # absent one says the build silently did not happen: Endless failing at
+        # its own sequence. The TSV calls the kind `fault` and the class
+        # NO-REPORT because the message carries a workaround that works — the
+        # named `just migrate-bin` — and `fault`'s directive ("do not retry")
+        # would be wrong about a step that a re-run fixes. So: no_report with
+        # the build command, and the bug it indicates is named in the summary
+        # rather than hidden behind it.
+        raise agent_help.no_report(
+            f"The land-time migration executable {_display_path(migrate_bin)} "
+            f"is missing, although the land just built it. Nothing was merged "
+            f"or migrated.",
+            "Run `just migrate-bin` in the worktree and retry the land",
+            text=(f"The land-time migration executable is missing or not "
+                  f"executable:\n\n    {_display_path(migrate_bin)}\n\n"
+                  f"It is built from the landing branch by the land itself; if "
+                  f"you are running one by hand, build it with `just "
+                  f"migrate-bin` in the worktree."),
         )
     return str(migrate_bin)
 
@@ -2626,24 +3182,38 @@ def _build_migration_executable(worktree_path: Path, canonical: str) -> None:
     if not config.project_is_self_dev(worktree_path):
         return
     if shutil.which("just") is None:
-        raise click.ClickException(
-            f"cannot land {canonical}: `just` is not on PATH, so the "
-            f"migration-only executable cannot be built from the landing "
-            f"branch. That build is what lets this land apply its own schema "
-            f"change at all — a binary built inside a task worktree is "
-            f"unlanded code and may not migrate the real database."
+        raise agent_help.report(
+            f"cannot land {canonical}: `just` is not on PATH. Nothing was "
+            f"merged or migrated.",
+            "whether to install `just`, which this machine needs before a "
+            "self-dev land can build the executable that applies its schema "
+            "change",
+            text=(f"cannot land {canonical}: `just` is not on PATH, so the "
+                  f"migration-only executable cannot be built from the "
+                  f"landing branch. That build is what lets this land apply "
+                  f"its own schema change at all — a binary built inside a "
+                  f"task worktree is unlanded code and may not migrate the "
+                  f"real database."),
         )
     result = subprocess.run(
         ["just", "migrate-bin"], cwd=str(worktree_path),
         capture_output=True, text=True,
     )
     if result.returncode != 0:
-        raise click.ClickException(
-            f"cannot land {canonical}: building the migration-only executable "
-            f"from the landing branch failed.\n\n"
-            f"{(result.stderr or result.stdout).strip()}\n\n"
-            f"Nothing has been merged or migrated — base and the database are "
-            f"untouched. Fix the build and retry."
+        # Resolved as _rebuild_worktree_binary's twin, for the same reason:
+        # `just` exists and the source is this branch's, so the failure is in
+        # the branch. Nothing has moved.
+        raise agent_help.no_report(
+            f"cannot land {canonical}: the branch's migration-only executable "
+            f"does not build. Nothing was merged or migrated — base and the "
+            f"database are untouched.",
+            "Fix the build errors on the task branch, commit, and retry the "
+            "land",
+            text=(f"cannot land {canonical}: building the migration-only "
+                  f"executable from the landing branch failed.\n\n"
+                  f"{(result.stderr or result.stdout).strip()}\n\n"
+                  f"Nothing has been merged or migrated — base and the "
+                  f"database are untouched. Fix the build and retry."),
         )
     click.echo(
         click.style("•", fg="cyan")
@@ -2716,7 +3286,14 @@ def _run_migrate(migrate_bin: str, args: list[str], what: str) -> dict:
             or result.stderr.strip()
             or "the migration executable failed"
         )
-        raise click.ClickException(f"{what} failed: {msg}")
+        # Always wrapped: both callers run inside _apply_branch_schema_changes,
+        # which catches this, reads `.message` and re-raises it as
+        # _post_merge_failure — the refusal that knows main has already
+        # advanced and what that means. So the class chosen here is the one
+        # nobody reads, and `fault` is the honest answer for the day somebody
+        # adds a third caller that lets it escape: endless-migrate is
+        # Endless's own executable, and it refusing is Endless failing.
+        raise agent_help.fault(f"{what} failed: {msg}")
 
     if not result.stdout.strip():
         return {}
@@ -2767,11 +3344,22 @@ def _read_schema_order(worktree_path: Path, canonical: str, self_dev: bool) -> s
     if not path.is_file():
         return SCHEMA_ORDER_MIGRATIONS_FIRST
 
-    def refuse(problem: str) -> click.ClickException:
-        return click.ClickException(
-            f"cannot land {canonical}: {_display_path(path)} {problem}\n\n"
-            f"Nothing has been merged or migrated — base and the database are "
-            f"untouched. Fix the file on the task branch, commit, and retry."
+    def refuse(problem: str) -> agent_help.Refusal:
+        # No TSV row: land.toml arrived with E-2192, after the inventory.
+        # NO-REPORT on the same reading every other "the branch's own file is
+        # wrong" refusal gets: land.toml is written by the agent that wrote the
+        # schema change, it lives on the task branch, the message names the
+        # offending key, and the fix is a commit on that branch. Nothing has
+        # moved — this runs before the ff-merge.
+        return agent_help.no_report(
+            f"cannot land {canonical}: its land.toml {problem} Nothing was "
+            f"merged or migrated.",
+            "Fix the named key in the task's land.toml, commit it on the task "
+            "branch, and retry the land",
+            text=(f"cannot land {canonical}: {_display_path(path)} {problem}\n\n"
+                  f"Nothing has been merged or migrated — base and the "
+                  f"database are untouched. Fix the file on the task branch, "
+                  f"commit, and retry."),
         )
 
     try:
@@ -2888,15 +3476,34 @@ def _apply_branch_schema_changes(
     """
     from endless.event_bridge import backup_db
 
-    def _post_merge_failure(what: str, detail: str) -> click.ClickException:
-        return click.ClickException(
-            f"Landed {canonical} into {base_branch}: main was advanced, but "
-            f"{what} failed:\n\n{detail}\n\n"
-            f"The code is on {base_branch}; the database has not been migrated "
-            f"yet. Nothing is lost and no restore is needed — resolve the cause "
-            f"above and re-run `just land {canonical}`. The ff-merge is "
-            f"idempotent and each schema change is gated by _schema_version, so "
-            f"the retry applies only what is still outstanding."
+    def _post_merge_failure(what: str, detail: str) -> agent_help.Refusal:
+        # The one place in this file where report_if is the honest answer.
+        #
+        # `detail` is whatever failed — a backup that could not be written, a
+        # goose migration refusing against the real ledger, a change script's
+        # own error, or the self-declared land bug below. Those do not share a
+        # class: some are re-run-and-forget, and some mean the real database is
+        # part-migrated with no `endless db restore` to undo it (E-1942). This
+        # function cannot tell them apart from a string, and guessing wrong in
+        # the second direction is the expensive one — so both branches are
+        # named and the agent, which can read `detail`, decides.
+        return agent_help.report_if(
+            f"Landed {canonical} into {base_branch} — main IS advanced — but "
+            f"{what} failed, so the database is NOT migrated.",
+            "the cause below is a backup or migration failing against the real "
+            "database, or names no cause at all",
+            "re-run `just land " + canonical + "`, which applies only what is "
+            "still outstanding",
+            "a part-migrated real database cannot be rolled back — there is no "
+            "`endless db restore`",
+            text=(f"Landed {canonical} into {base_branch}: main was advanced, "
+                  f"but {what} failed:\n\n{detail}\n\n"
+                  f"The code is on {base_branch}; the database has not been "
+                  f"migrated yet. Nothing is lost and no restore is needed — "
+                  f"resolve the cause above and re-run `just land "
+                  f"{canonical}`. The ff-merge is idempotent and each schema "
+                  f"change is gated by _schema_version, so the retry applies "
+                  f"only what is still outstanding."),
         )
 
     click.echo(
@@ -2969,7 +3576,10 @@ def _record_only_landing(
     existed for stopped being a case.
     """
     if not sha:
-        raise click.ClickException("--record-only requires --sha <merge-commit-sha>.")
+        raise agent_help.no_report(
+            "--record-only requires --sha <merge-commit-sha>.",
+            "Pass --sha <merge-commit-sha> and retry",
+        )
 
     main_root = _project_root()
     _, proj_name = _resolve_project(None)
@@ -2980,14 +3590,25 @@ def _record_only_landing(
         try:
             landed_at = _git(["show", "-s", "--format=%cI", sha], cwd=main_root)
         except subprocess.CalledProcessError as e:
-            raise click.ClickException(
-                f"Cannot read the commit date for {sha} in "
-                f"{_project_root()}: {(e.stderr or e).strip() if hasattr(e, 'stderr') else e}\n\n"
-                f"Confirm the SHA exists on this checkout, or pass --at <RFC3339>."
+            # git's words are already inside the message, so no relay_foreign.
+            # NO-REPORT: the whole input is a SHA the caller supplied, and both
+            # ways out — a SHA that exists here, or an explicit --at — are the
+            # caller's to supply. Nothing was recorded.
+            raise agent_help.no_report(
+                f"git could not read a commit date for {sha}, so no landing "
+                f"was recorded for {canonical}.",
+                "Verify the SHA with `git log`, or pass --at <RFC3339>, and "
+                "retry",
+                text=(f"Cannot read the commit date for {sha} in "
+                      f"{_project_root()}: "
+                      f"{(e.stderr or e).strip() if hasattr(e, 'stderr') else e}\n\n"
+                      f"Confirm the SHA exists on this checkout, or pass --at "
+                      f"<RFC3339>."),
             )
     if not landed_at:
-        raise click.ClickException(
-            f"commit {sha} produced no date; pass --at <RFC3339> explicitly."
+        raise agent_help.no_report(
+            f"commit {sha} produced no date; pass --at <RFC3339> explicitly.",
+            "Take the date from `git log` and pass it as --at, then retry",
         )
 
     if dry_run:
@@ -3060,15 +3681,48 @@ def _record_landing(
         )
     except Exception as e:
         detail = e.message if isinstance(e, click.ClickException) else str(e)
-        raise click.ClickException(
-            f"Landed {canonical} ({branch}) into {base_branch}: main was "
-            f"advanced, but recording the landing failed:\n\n{detail}\n\n"
-            f"The ff-merge is idempotent. Re-run `just land {canonical}` to "
-            f"record the landing once the cause above is resolved."
+        # CONDITIONAL in the TSV, and genuinely so: the common cause is the
+        # session-attribution gate, which the agent clears by re-running from
+        # the bound session, while a schema or database fault leaves merged work
+        # unrecorded until a person intervenes. The emit's own text is the only
+        # thing that separates them, and it is right here in `detail` — so the
+        # agent that can read it gets both branches rather than a guess made
+        # without it.
+        raise agent_help.report_if(
+            f"Landed {canonical} ({branch}) into {base_branch} — main IS "
+            f"advanced — but the task.landed event did NOT record, so the "
+            f"landing is unrecorded.",
+            "the cause below is a database or schema fault rather than the "
+            "session-attribution gate",
+            f"re-run `just land {canonical}` from the bound session, which "
+            f"records the landing without re-merging anything",
+            "work that is merged into the base branch but recorded nowhere "
+            "will not be found again by any Endless surface",
+            text=(f"Landed {canonical} ({branch}) into {base_branch}: main was "
+                  f"advanced, but recording the landing failed:\n\n{detail}\n\n"
+                  f"The ff-merge is idempotent. Re-run `just land {canonical}` "
+                  f"to record the landing once the cause above is resolved."),
         )
 
 
-def _no_worktree_to_land_message(canonical: str) -> str:
+def _latest_landing(canonical: str) -> dict | None:
+    """The newest recorded landing for a task, or None.
+
+    Landing is append-only — a follow-up commit lands again — so the row that
+    answers "where did my work go?" is the newest.
+    """
+    from endless.task_cmd import _task_landings
+
+    try:
+        landings = _task_landings(int(canonical.removeprefix("E-")))
+    except Exception:
+        return None
+    return landings[0] if landings else None
+
+
+def _no_worktree_to_land_message(
+    canonical: str, latest: dict | None = None,
+) -> str:
     """The message for `worktree land <id>` when no worktree exists (E-1308).
 
     A landed worktree is REMOVED by the reaper once its recorded landing ages
@@ -3083,14 +3737,9 @@ def _no_worktree_to_land_message(canonical: str) -> str:
     landing is the reliable signal — the same one the unsettled probe and the
     reaper now use.
     """
-    from endless.task_cmd import _task_landings
-
-    try:
-        landings = _task_landings(int(canonical.removeprefix("E-")))
-    except Exception:
-        landings = []
-    if landings:
-        latest = landings[0]
+    if latest is None:
+        latest = _latest_landing(canonical)
+    if latest:
         sha = (latest["merge_commit_sha"] or "")[:12]
         return (
             f"{canonical} already landed (commit {sha} at {latest['landed_at']}); "
@@ -3101,6 +3750,47 @@ def _no_worktree_to_land_message(canonical: str) -> str:
         f"No endless-managed worktree for {canonical}, and no landing is "
         f"recorded for it. "
         f"(Use 'endless worktree list' to see available worktrees.)"
+    )
+
+
+def _no_worktree_to_land_refusal(canonical: str) -> agent_help.Refusal:
+    """Classify the two outcomes `_no_worktree_to_land_message` renders.
+
+    They are not one refusal wearing two texts, they are two refusals, and the
+    TSV classed them apart:
+
+    * A recorded landing. The work IS in the base branch and the reaper removed
+      the directory on schedule — an idempotent no-op dressed as a non-zero
+      exit (which it keeps, so automation's reading does not change). There is
+      nothing for a person to decide about a land that already happened.
+    * No landing and no worktree. Which of the two readings applies depends on
+      who named the id: an agent that reached for the wrong one retries with
+      the right one, while a task the USER asked to land that has neither a
+      worktree nor a landing is a real gap in their fleet. This function cannot
+      see which, so both branches are named — the TSV's 2026-09-18 decision for
+      this row.
+    """
+    latest = _latest_landing(canonical)
+    text = _no_worktree_to_land_message(canonical, latest=latest)
+    if latest:
+        sha = (latest["merge_commit_sha"] or "")[:12]
+        return agent_help.no_report(
+            f"{canonical} already landed at {sha}; nothing was done and "
+            f"nothing needed to be. Its worktree was reaped after the landing "
+            f"aged past worktree_ttl.",
+            "Treat the land as already done; `endless task landed "
+            f"{canonical}` has the history",
+            text=text,
+        )
+    return agent_help.report_if(
+        f"No worktree and no recorded landing exist for {canonical}; nothing "
+        f"was landed.",
+        "the user named this task to land",
+        "re-check `endless worktree list` and retry with the id that has a "
+        "worktree",
+        "a task the user expected to be landable having neither a worktree nor "
+        "a landing is a gap in their fleet, not a mistyped id",
+        text=text,
     )
 
 
@@ -3122,19 +3812,27 @@ def _resolve_land_target(task_id: str | None) -> tuple[str, Path, str, str]:
         here = worktree_root_for_cwd()
         canonical = _task_id_from_worktree_path(here) if here else None
         if not canonical:
-            raise click.ClickException(
+            raise agent_help.no_report(
                 "Not inside a task worktree, so there is no task to diagnose. "
-                "Name one: endless worktree diagnose E-NNNN"
+                "Name one: endless worktree diagnose E-NNNN",
+                "Re-run naming the task id",
             )
 
     rows = _enriched_list(_project_root())
     target = _branch_for_task(rows, canonical)
     if target is None:
-        raise click.ClickException(_no_worktree_to_land_message(canonical))
+        raise _no_worktree_to_land_refusal(canonical)
     branch = target["branch"]
     if not branch:
-        raise click.ClickException(
-            f"Worktree for {canonical} has no branch (detached HEAD)."
+        # Read-only diagnostic: there is simply nothing to diagnose on a
+        # detached tree, and the agent has two ways on (check out the branch
+        # there, or diagnose another task) without anybody being consulted.
+        raise agent_help.no_report(
+            f"Worktree for {canonical} has no branch (detached HEAD), so there "
+            f"is nothing to diagnose. Nothing was changed.",
+            f"Check out task/{canonical[2:]} in that worktree, or diagnose "
+            f"another task",
+            text=f"Worktree for {canonical} has no branch (detached HEAD).",
         )
     base_branch = (target["companion"] or {}).get("base_branch") \
         or _default_base_branch(_project_root())
@@ -3157,15 +3855,23 @@ def diagnose_land_conflict(task_id: str | None, as_json: bool) -> None:
 
     ev = land_conflict.load_evidence(worktree_path)
     if ev is None:
-        raise click.ClickException(
-            f"No land conflict is recorded for {canonical}.\n\n"
-            f"A capture is written only when `endless worktree land` actually "
-            f"hits a rebase conflict, and it is stored with the worktree, so it "
-            f"is gone once the worktree is reaped. Nothing is reproduced here on "
-            f"purpose: a conflict re-derived now would be against today's "
-            f"{base_branch}, not the one the land failed against.\n\n"
-            f"To see whether a land WOULD conflict, rehearse it:\n"
-            f"  endless worktree land {canonical} --dry-run"
+        # Non-zero by design, and nothing is wrong: this is the command's
+        # answer, which happens to be "nothing to diagnose". The message names
+        # the one next step, `--dry-run`, which the agent can run itself.
+        raise agent_help.no_report(
+            f"No land conflict is recorded for {canonical}, so there is "
+            f"nothing to classify. Nothing was changed.",
+            f"Rehearse a land instead — `endless worktree land {canonical} "
+            f"--dry-run` runs the real rebase on a throwaway branch",
+            text=(f"No land conflict is recorded for {canonical}.\n\n"
+                  f"A capture is written only when `endless worktree land` "
+                  f"actually hits a rebase conflict, and it is stored with the "
+                  f"worktree, so it is gone once the worktree is reaped. "
+                  f"Nothing is reproduced here on purpose: a conflict "
+                  f"re-derived now would be against today's {base_branch}, not "
+                  f"the one the land failed against.\n\n"
+                  f"To see whether a land WOULD conflict, rehearse it:\n"
+                  f"  endless worktree land {canonical} --dry-run"),
         )
 
     cl = land_conflict.classify(ev, worktree_path)
@@ -3338,11 +4044,39 @@ def land_worktree(
     rows = _enriched_list(main_root)
     target = _branch_for_task(rows, canonical)
     if target is None:
-        raise click.ClickException(_no_worktree_to_land_message(canonical))
+        raise _no_worktree_to_land_refusal(canonical)
     branch = target["branch"]
     if not branch:
-        raise click.ClickException(
+        detached = (
             f"Worktree for {canonical} has no branch (detached HEAD); cannot land."
+        )
+        # The TSV's 2026-09-18 decision for this row was to resolve the
+        # condition in code rather than hand it to the agent, and the
+        # companion file already holds the answer. `session resume --review`
+        # creates its inspection tree with `git worktree add --detach` and
+        # writes `"branch": null` (recreate_dropped_worktree), so a companion
+        # that names no branch IS a review tree — one that was never meant to
+        # land, and putting a branch on it would change what the user is
+        # inspecting. A companion that NAMES a branch while git reports
+        # detached is a worktree somebody detached after the fact, in the
+        # agent's own tree, and checking the branch back out restores it.
+        companion = target["companion"] or {}
+        if "branch" in companion and companion["branch"] is None:
+            raise agent_help.report(
+                f"{canonical}'s worktree is a detached `session resume "
+                f"--review` inspection tree, which has no branch to land. "
+                f"Nothing was landed.",
+                "whether to turn a read-only inspection tree into a working "
+                "one, which changes what is being inspected",
+                text=detached,
+            )
+        raise agent_help.no_report(
+            f"{canonical}'s worktree is on a detached HEAD although its "
+            f"companion names {companion.get('branch') or task_branch(int(canonical[2:]))}. "
+            f"Nothing was landed.",
+            f"Check out {task_branch(int(canonical[2:]))} in that worktree and "
+            f"retry the land",
+            text=detached,
         )
     worktree_path = Path(target["path"])
     # E-1940: the companion records the base the worktree was cut from; resolve
@@ -3368,8 +4102,19 @@ def land_worktree(
                 worktree_path, branch, base_branch, main_root, canonical,
             )
         except subprocess.CalledProcessError as e:
-            raise click.ClickException(
-                f"could not rehearse the rebase: {e.stderr or e}"
+            # git is foreign, so the site classifies and git's words ride as
+            # detail. NO-REPORT: the rehearsal happens entirely on a throwaway
+            # branch in a throwaway checkout, both removed in a `finally`, so a
+            # failure here changed nothing anywhere — and `--dry-run` is itself
+            # the safe thing to retry.
+            raise agent_help.relay_foreign(
+                agent_help.no_report(
+                    f"could not rehearse {canonical}'s rebase; nothing was "
+                    f"changed — the rehearsal runs on a throwaway branch.",
+                    "Act on what git said below and re-run the --dry-run",
+                    text="could not rehearse the rebase:",
+                ),
+                str(e.stderr or e),
             )
         if ev is None:
             click.echo(
@@ -3385,7 +4130,39 @@ def land_worktree(
         )
         cl = land_conflict.classify(ev, worktree_path)
         click.echo(land_conflict.render_human(ev, cl), nl=False)
-        raise SystemExit(1)
+        # The classification above stays on STDOUT, where it has always been:
+        # it is this command's answer, and `--dry-run > report.txt` is a real
+        # way to read it. What changes is the exit, which was a bare
+        # SystemExit(1) — non-zero so automation can gate on a predicted
+        # conflict, and silent about whether the reader has to do anything.
+        # Same exit code, now with a verdict.
+        #
+        # The CONDITIONAL resolves off the classification itself, which is
+        # already in hand: `prescription` is non-empty exactly when the class
+        # is proven AND the steps are safe to run (land_conflict asserts that
+        # invariant), so a prescription means the agent can carry it out, and
+        # its absence means the repository could not settle the question —
+        # mid-branch orphaned-ledger, symbol supersession, semantic overlap.
+        # Those are choices between two people's intent, which is the one
+        # thing this command says it does not have.
+        conflict_summary = (
+            f"Rehearsed {canonical}'s rebase onto {base_branch} on a throwaway "
+            f"branch: it conflicts ({cl.klass}). Nothing was landed and "
+            f"nothing was changed; the classification is on stdout above."
+        )
+        if cl.prescription:
+            raise agent_help.no_report(
+                conflict_summary,
+                "Run the proven recovery printed above, then land",
+                text=conflict_summary,
+            )
+        raise agent_help.report(
+            conflict_summary,
+            "what this branch should become where it overlaps "
+            f"{base_branch} — nothing in the repository settles it, and no "
+            f"recovery is safe to prescribe",
+            text=conflict_summary,
+        )
 
     # Resolve the binary the record-landing emit must use BEFORE the ff-merge,
     # so a self_dev worktree that isn't built fails loudly here rather than
@@ -3401,8 +4178,18 @@ def land_worktree(
     try:
         ignored_before = _ignored_present_files(main_root)
     except subprocess.CalledProcessError as e:
-        raise click.ClickException(
-            f"git ls-files (pre-land ignored snapshot) failed: {e.stderr or e}"
+        # Pre-flight on the MAIN checkout, before anything moves. git is
+        # foreign, so the site classifies; NO-REPORT because `git ls-files` on
+        # a repository that is otherwise working fails for reasons git names
+        # and the agent can clear, and the land has not started.
+        raise agent_help.relay_foreign(
+            agent_help.no_report(
+                f"git ls-files failed on {main_root}, so land could not take "
+                f"its pre-land ignored-file snapshot. Nothing was landed.",
+                "Act on what git said below and retry the land",
+                text="git ls-files (pre-land ignored snapshot) failed:",
+            ),
+            str(e.stderr or e),
         )
 
     last_error = None
@@ -3421,16 +4208,45 @@ def land_worktree(
                 last_error, last_was_contention = busy, True
                 _lock_backoff(attempt)
                 continue
-            raise click.ClickException(f"git status failed: {e.stderr or e}")
+            # Lock contention is filtered out above and retried, so what
+            # reaches here is main's git plumbing not working. NO-REPORT: git
+            # names it, nothing has moved, and `git status` on the main
+            # checkout is not a question about anybody's intent.
+            raise agent_help.relay_foreign(
+                agent_help.no_report(
+                    f"git status failed on {main_root}, so land could not "
+                    f"partition its working tree. Nothing was landed.",
+                    "Act on what git said below and retry the land",
+                    text="git status failed:",
+                ),
+                str(e.stderr or e),
+            )
 
         # Step 2: refuse if user-work modified.
         if user_files:
             file_list = "\n  ".join(user_files[:20])
             more = "" if len(user_files) <= 20 else f"\n  ... and {len(user_files) - 20} more"
-            raise click.ClickException(
-                f"main has uncommitted user changes; cannot land {canonical}.\n\n"
-                f"Files:\n  {file_list}{more}\n\n"
-                f"Resolve them: commit (in a worktree), move to a worktree, or set them aside, then retry."
+            # CONDITIONAL, and the TSV's 2026-09-18 decision was to name both
+            # branches rather than guess: these are uncommitted files on the
+            # USER's main checkout, and whose they are is the whole question.
+            # The agent's own stray writes into main it can move to its
+            # worktree and commit there; another session's in-flight work, or
+            # the user's, it must not touch at all. Only the reader holding the
+            # conversation can tell which, from the file list.
+            raise agent_help.report_if(
+                f"main has {len(user_files)} uncommitted user file(s), so "
+                f"{canonical} was not landed. Nothing was changed.",
+                "the listed files are not the agent's own stray writes into "
+                "main",
+                "move them into the task worktree, commit them there, and "
+                "retry the land",
+                "moving or setting aside another session's or the user's "
+                "in-flight work on main is not recoverable from here",
+                text=(f"main has uncommitted user changes; cannot land "
+                      f"{canonical}.\n\n"
+                      f"Files:\n  {file_list}{more}\n\n"
+                      f"Resolve them: commit (in a worktree), move to a "
+                      f"worktree, or set them aside, then retry."),
             )
 
         # Step 3: auto-commit endless-managed modifications, if any.
@@ -3446,8 +4262,20 @@ def land_worktree(
                     last_error, last_was_contention = busy, True
                     _lock_backoff(attempt)
                     continue
-                raise click.ClickException(
-                    f"auto-commit failed: {e.stderr or e}"
+                # The files are Endless's own auto-managed paths on main, and
+                # lock contention has already been sent back to the retry
+                # loop. What is left is git refusing the add or the commit —
+                # a pre-commit hook, an unwritable index — which git names and
+                # the agent clears. Nothing merged.
+                raise agent_help.relay_foreign(
+                    agent_help.no_report(
+                        f"git could not auto-commit main's endless-managed "
+                        f"files, so {canonical} was not landed. Nothing was "
+                        f"merged.",
+                        "Act on what git said below and retry the land",
+                        text="auto-commit failed:",
+                    ),
+                    str(e.stderr or e),
                 )
 
         # Step 3.5: dedup the worktree's verbs.jsonl against main's, committing
@@ -3459,8 +4287,16 @@ def land_worktree(
                 last_error, last_was_contention = busy, True
                 _lock_backoff(attempt)
                 continue
-            raise click.ClickException(
-                f"verbs.jsonl dedup on worktree failed: {e.stderr or e}"
+            # Step 3.5 works inside the agent's OWN worktree, on an auto-file
+            # Endless writes. Nothing has merged, and git has named why.
+            raise agent_help.relay_foreign(
+                agent_help.no_report(
+                    f"git could not commit the deduped verbs.jsonl in "
+                    f"{canonical}'s worktree, so nothing was landed.",
+                    "Act on what git said below and retry the land",
+                    text="verbs.jsonl dedup on worktree failed:",
+                ),
+                str(e.stderr or e),
             )
 
         # Step 3.7: drop orphan auto-amend commits at branch base (E-1342).
@@ -3490,14 +4326,17 @@ def land_worktree(
             # rebase; a conflict here is the replay conflicting, not the drop.
             # Read the state BEFORE aborting, then abort — but only a rebase
             # this step actually started.
-            msg = _rebase_failure_message(
+            # Already classified: _rebase_failure_message returns the refusal,
+            # because only it can still see which of the three failures this
+            # was — the abort below destroys the evidence.
+            refusal = _rebase_failure_message(
                 worktree_path, base_branch,
                 phase="replaying your commits after dropping base auto-amend commits",
                 stderr=e.stderr, pre_existing=rebase_was_running,
             )
             if not rebase_was_running:
                 _git_run(["rebase", "--abort"], cwd=worktree_path, check=False)
-            raise click.ClickException(msg)
+            raise refusal
         if n_orphans:
             noun = "commit" if n_orphans == 1 else "commits"
             click.echo(
@@ -3516,15 +4355,31 @@ def land_worktree(
             listing = "\n".join(
                 f"  {sha[:12]}  {subject}" for sha, subject in offenders
             )
-            raise click.ClickException(
-                f"cannot land {canonical}: the branch has {len(offenders)} "
-                f"{noun} modifying the database ledger ({DB_LEDGER_DIR}/):\n\n"
-                f"{listing}\n\n"
-                f"Ledger entries are recorded on the main checkout, never on a "
-                f"task branch — landing these would rebase a branch-authored "
-                f"ledger segment into main and corrupt the shared database "
-                f"history. Remove these commits from the branch before retrying "
-                f"(inspect each with `git show <sha>`)."
+            # The message says "remove these commits", which the rule would
+            # normally make NO-REPORT. It is not. An Endless writer broke the
+            # ledger routing invariant to put them there, and the remedy
+            # rewrites durable history: the db-ledger is the permanent record
+            # the SQLite database is only a projection of, so commits dropped
+            # here may be recorded task state that exists nowhere else.
+            # Deciding they can go is the user's, and the broken writer is
+            # something they need told about.
+            raise agent_help.report(
+                f"cannot land {canonical}: {len(offenders)} commit(s) on the "
+                f"branch modify the database ledger, which only the main "
+                f"checkout may do. Nothing was merged.",
+                "whether those branch-side ledger commits can be thrown away — "
+                "they may hold recorded task state that exists nowhere else, "
+                "and an Endless writer put them there",
+                text=(f"cannot land {canonical}: the branch has "
+                      f"{len(offenders)} {noun} modifying the database ledger "
+                      f"({DB_LEDGER_DIR}/):\n\n"
+                      f"{listing}\n\n"
+                      f"Ledger entries are recorded on the main checkout, "
+                      f"never on a task branch — landing these would rebase a "
+                      f"branch-authored ledger segment into main and corrupt "
+                      f"the shared database history. Remove these commits from "
+                      f"the branch before retrying (inspect each with `git "
+                      f"show <sha>`)."),
             )
 
         # Step 3.8 (E-1416): guard against modified worktree tree before rebase.
@@ -3534,13 +4389,23 @@ def land_worktree(
             # E-2174: the guard re-raises rather than classifies when its own
             # `git status` lost the index lock — the same race as Step 1, one
             # worktree over. Anything it CAN classify it raises as a
-            # ClickException, which is not caught here.
+            # Refusal, which is not caught here.
             if (busy := _lock_contention_text(e)) is not None:
                 last_error, last_was_contention = busy, True
                 _lock_backoff(attempt)
                 continue
-            raise click.ClickException(
-                f"git status in worktree failed: {e.stderr or e}"
+            # Same refusal the guard itself would have raised, for the same
+            # reason: contention is handled above, so this is the worktree's
+            # git plumbing not working, and that is not a land's to repair.
+            raise agent_help.relay_foreign(
+                agent_help.report(
+                    f"git status in {canonical}'s worktree failed, so land "
+                    f"could not tell whether it is modified. Nothing was "
+                    f"landed.",
+                    "how to repair a worktree whose own `git status` fails",
+                    text="git status in worktree failed:",
+                ),
+                str(e.stderr or e),
             )
 
         # Step 4: rebase the worktree branch onto main.
@@ -3560,14 +4425,14 @@ def land_worktree(
             # abort. What git printed decides which report this is: a conflict
             # names files and offers candidates, anything else quotes git and
             # offers none (E-2122).
-            msg = _rebase_failure_message(
+            refusal = _rebase_failure_message(
                 worktree_path, base_branch,
                 phase=f"rebasing your branch onto {base_branch}",
                 stderr=e.stderr, pre_existing=rebase_was_running,
             )
             if not rebase_was_running:
                 _git_run(["rebase", "--abort"], cwd=worktree_path, check=False)
-            raise click.ClickException(msg)
+            raise refusal
 
         # Step 4.2 (E-1941): the branch is now rebased onto base, so the
         # worktree's source is current — rebuild endless-go from it, which proves
@@ -3584,8 +4449,16 @@ def land_worktree(
         try:
             schema_changes = _branch_schema_changes(worktree_path, base_branch)
         except subprocess.CalledProcessError as e:
-            raise click.ClickException(
-                f"listing schema changes on the branch failed: {e.stderr or e}"
+            # Read-only step, before the ff-merge, so nothing has moved. git
+            # named the cause and the agent acts on it.
+            raise agent_help.relay_foreign(
+                agent_help.no_report(
+                    f"git could not list {canonical}'s schema changes against "
+                    f"{base_branch}, so nothing was merged or migrated.",
+                    "Act on what git said below and retry the land",
+                    text="listing schema changes on the branch failed:",
+                ),
+                str(e.stderr or e),
             )
 
         # Step 4.6 (ED-1571, E-2192): with base still unadvanced, read the
@@ -3617,8 +4490,25 @@ def land_worktree(
             if _is_retryable_ff_merge_error(err_text):
                 last_error, last_was_contention = err_text, False
                 continue
-            raise click.ClickException(
-                f"ff-merge failed: {err_text}"
+            # The last step before main moves, and the one whose failure says
+            # most about main itself. The retryable races — a diverged or
+            # dirty main, lock contention — are consumed above, so what is
+            # left is main not being where a fast-forward can happen: on
+            # another branch, or holding state the agent must not alter. The
+            # TSV's own note says REPORT is the typical reading, and it is the
+            # safe one: nothing merged, and "make main fast-forwardable" can
+            # mean moving somebody's checkout.
+            raise agent_help.relay_foreign(
+                agent_help.report(
+                    f"git refused the fast-forward merge of {branch} into "
+                    f"{base_branch} on {main_root}, so {canonical} was NOT "
+                    f"landed and nothing was merged.",
+                    "how to make the main checkout fast-forwardable — it is "
+                    "not where this land needs it, and moving it may disturb "
+                    "work in progress there",
+                    text="ff-merge failed:",
+                ),
+                err_text,
             )
 
         # Step 5.5 (E-1941): apply this branch's schema changes now that main
@@ -3670,8 +4560,23 @@ def land_worktree(
                 text=True,
             ).strip()
         except subprocess.CalledProcessError as e:
-            raise click.ClickException(
-                f"Landed {canonical} but reading merge SHA failed: {e.stderr or e}"
+            # Main HAS advanced. `git rev-parse HEAD` on a checkout that just
+            # took a merge should not fail, and this message names no recovery
+            # because there is no obvious one: the work is in the base branch
+            # and the landing is unrecorded. Re-running the land would record
+            # it (the ff-merge is idempotent), but nothing has ever said so
+            # here, so the agent is not told it as a remedy it can rely on.
+            raise agent_help.relay_foreign(
+                agent_help.report(
+                    f"Landed {canonical} — main IS advanced — but git could "
+                    f"not read the merge SHA, so the landing was not "
+                    f"recorded.",
+                    "what to do about work that is merged into the base branch "
+                    "but recorded nowhere, on a checkout whose `git rev-parse` "
+                    "is failing",
+                    text=f"Landed {canonical} but reading merge SHA failed:",
+                ),
+                str(e.stderr or e),
             )
 
         _, proj_name = _resolve_project(None)
@@ -3728,22 +4633,37 @@ def land_worktree(
         return
 
     if last_was_contention:
-        raise click.ClickException(
-            f"Land of {canonical} failed after {LAND_MAX_RETRIES} retries; "
-            f"the repository stayed busy throughout — every attempt lost the "
-            f"git index lock to another process holding it.\n\n"
-            f"This is NOT a conflict and nothing is wrong with your branch: "
-            f"there is nothing to resolve and nothing to inspect. Endless's own "
-            f"surfaces are the usual holders (the session monitor, the "
-            f"per-minute unlanded sweep, `worktree check`), so a quieter moment "
-            f"is normally all it takes. Do NOT delete the lock file — its holder "
-            f"is a live process, and removing it corrupts the index.\n\n"
-            f"Last error:\n{last_error or '(none)'}"
+        # Both exhaustion paths are NO-REPORT and for the same reason: nothing
+        # is wrong, nothing moved, and waiting IS the recovery. Reporting a
+        # busy repository to the user would be reporting the weather.
+        raise agent_help.no_report(
+            f"Land of {canonical} lost the git index lock on all "
+            f"{LAND_MAX_RETRIES} attempts. Nothing was merged; the branch is "
+            f"untouched and there is nothing to resolve.",
+            "Wait for the repository to go quiet and re-run the land; do not "
+            "delete the lock file, its holder is a live process",
+            text=(f"Land of {canonical} failed after {LAND_MAX_RETRIES} "
+                  f"retries; the repository stayed busy throughout — every "
+                  f"attempt lost the git index lock to another process holding "
+                  f"it.\n\n"
+                  f"This is NOT a conflict and nothing is wrong with your "
+                  f"branch: there is nothing to resolve and nothing to "
+                  f"inspect. Endless's own surfaces are the usual holders (the "
+                  f"session monitor, the per-minute unlanded sweep, `worktree "
+                  f"check`), so a quieter moment is normally all it takes. Do "
+                  f"NOT delete the lock file — its holder is a live process, "
+                  f"and removing it corrupts the index.\n\n"
+                  f"Last error:\n{last_error or '(none)'}"),
         )
-    raise click.ClickException(
-        f"Land of {canonical} failed after {LAND_MAX_RETRIES} retries; "
-        f"another session is appending to auto-files faster than land "
-        f"can converge. Try again later.\n\nLast error:\n{last_error or '(none)'}"
+    raise agent_help.no_report(
+        f"Land of {canonical} failed after {LAND_MAX_RETRIES} retries: another "
+        f"session appends to the auto-files faster than land converges. "
+        f"Nothing was merged.",
+        "Wait for the other session to go quiet and re-run the land",
+        text=(f"Land of {canonical} failed after {LAND_MAX_RETRIES} retries; "
+              f"another session is appending to auto-files faster than land "
+              f"can converge. Try again later.\n\nLast error:\n"
+              f"{last_error or '(none)'}"),
     )
 
 
@@ -3756,6 +4676,20 @@ def _worktree_in_use_probe(worktree_path: Path) -> tuple[str, str]:
     milder form: rebasing a branch under a session that is standing in it does
     not orphan its cwd, but it does change every file beneath a process that
     has already read them.
+
+    `detail` comes from a different stream per verdict, and getting that wrong
+    is the defect E-2159 found here. It used to be one expression,
+    `stdout or stderr`, and on the UNDETERMINED path those are two different
+    things: worktreecmd.report writes the literal reason word `undetermined` to
+    stdout, and the actual failure — classified, as a Go refusal, with the
+    error inside it — to stderr. Preferring stdout therefore quoted the probe's
+    own placeholder and dropped the diagnosis, so `worktree drop` refused with
+    "Cannot verify whether this worktree is in use: undetermined" and the
+    reason went nowhere. Taking stderr first on that path is what lets the
+    caller relay Go's refusal, which is already classified, instead of
+    re-describing it from nothing. On the IN-USE path the precedence is the
+    other way round and always was: there stdout carries the answer and nothing
+    is written to stderr at all.
 
     This shells out rather than probing here, because monitor.WorktreeInUse is
     the one implementation of the question and it runs two complementary probes
@@ -3783,13 +4717,15 @@ def _worktree_in_use_probe(worktree_path: Path) -> tuple[str, str]:
          "--dir", str(worktree_path), "--task", task_arg],
         capture_output=True, text=True,
     )
-    detail = (result.stdout.strip() or result.stderr.strip()
-              or f"exit {result.returncode}")
     if result.returncode == 0:
         return "free", ""
     if result.returncode == 3:
-        return "in-use", detail
-    return "unknown", detail
+        # Exit 3 IS the answer, and the answer is the reason on stdout — the
+        # session row or the live process monitor.WorktreeInUse found.
+        return "in-use", result.stdout.strip() or "in use"
+    # Undetermined: stderr first, because that is where the cause is.
+    return "unknown", (result.stderr.strip() or result.stdout.strip()
+                       or f"exit {result.returncode}")
 
 
 def _guard_worktree_in_use(worktree_path: Path) -> None:
@@ -3807,36 +4743,80 @@ def _guard_worktree_in_use(worktree_path: Path) -> None:
     binary — a guard that cannot answer must not wave the caller through.
 
     Callers pass --force to skip this entirely, as with drop's other refusals.
+
+    The refusals this site raises are REPORT, and that is a decision about the
+    COMMAND rather than about each cause (E-2162): removing a directory is the
+    user's act, so a guard that will not clear it hands the question to them
+    whatever stopped it. Each message also offers `--force`, and that sentence
+    is the one an agent must never be handed — told about the flag, it uses it,
+    which is the opposite of stopping to ask, and here the thing it would be
+    forcing past is a live session's working directory. So `--force` travels in
+    `human_remedy`: dropped from the agent's copy, re-joined for a person,
+    whose text is the sentence that was always there.
+
+    The undetermined case is the exception, and deliberately: it relays Go's
+    own refusal instead of wrapping it, so neither the Endless-side sentence
+    nor the `--force` it offered survives. Go classified that failure at the
+    site that knows what failed, to the same verdict — "whether to remove a
+    worktree Endless could not prove is idle" — and saying it twice, once in
+    each language, is how the two drift apart.
     """
     verdict, detail = _worktree_in_use_probe(worktree_path)
     if verdict == "free":
         return
     if verdict == "no-binary":
-        raise click.ClickException(
-            f"Cannot verify whether this worktree is in use: endless-go is "
-            f"not on PATH.\n{worktree_path}\n"
-            f"Install it (`just install`) or use --force to drop anyway."
+        raise agent_help.report(
+            f"Cannot verify whether {worktree_path} is in use: endless-go is "
+            f"not on PATH. Nothing was dropped.",
+            "whether to drop this worktree, which Endless cannot prove is "
+            "idle without the binary the user has to install",
+            text=(f"Cannot verify whether this worktree is in use: endless-go "
+                  f"is not on PATH.\n{worktree_path}\n"
+                  f"Install it (`just install`)"),
+            human_remedy="or use --force to drop anyway.",
         )
     if verdict == "unknown":
-        raise click.ClickException(
-            f"Cannot verify whether this worktree is in use: {detail}\n"
-            f"{worktree_path}\n"
-            f"Resolve the error, or use --force to drop anyway."
-        )
-    raise click.ClickException(
-        f"Refusing to drop a worktree that is in use: {worktree_path}\n"
-        f"  {detail}\n\n"
-        f"Dropping removes the directory out from under whatever is standing "
-        f"in it, orphaning that session's cwd.\n"
-        f"If the goal is to discard diverged history rather than the "
-        f"directory, reset or rebase the branch in place — the worktree "
-        f"survives and the session keeps working.\n"
-        f"Use --force only once you know nothing is using it."
+        # endless-go's own refusal, already classified by Go: worktreecmd's
+        # undetermined path raises refusal.Report with the decision "whether to
+        # remove a worktree Endless could not prove is idle" — the same verdict
+        # this site would reach, written by the code that knows what failed. So
+        # it relays, verbatim, with no second directive to contradict the
+        # first. Reaching Go's words here at all is what the probe's stdout/
+        # stderr fix bought; before it, this site had `undetermined` and
+        # nothing else.
+        raise agent_help.relay(detail, exit_code=1)
+    raise agent_help.report(
+        f"Refusing to drop {worktree_path}: it is in use ({detail}). Nothing "
+        f"was dropped.",
+        "whether to remove a worktree a live session or process is using — it "
+        "orphans that session's working directory",
+        text=(f"Refusing to drop a worktree that is in use: {worktree_path}\n"
+              f"  {detail}\n\n"
+              f"Dropping removes the directory out from under whatever is "
+              f"standing in it, orphaning that session's cwd.\n"
+              f"If the goal is to discard diverged history rather than the "
+              f"directory, reset or rebase the branch in place — the worktree "
+              f"survives and the session keeps working."),
+        human_remedy="Use --force only once you know nothing is using it.",
     )
 
 
 def drop_worktree(name_or_path: str, force: bool) -> None:
-    """Remove a worktree explicitly. Refuses in-use/modified/foreign without --force."""
+    """Remove a worktree explicitly. Refuses in-use/modified/foreign without --force.
+
+    Every refusal below is REPORT, decided per COMMAND rather than per cause
+    (E-2162): `drop` deletes a directory, which is the user's act, so anything
+    that stops it is theirs to clear. That includes the one refusal the TSV
+    left CONDITIONAL — a name that matches no worktree — because the branch
+    that would have been NO-REPORT is "retry with a different target", and
+    substituting a different directory to delete is the last thing this command
+    may do on its own.
+
+    The escapes these messages offer — `--force`, and `git worktree remove` —
+    are in `human_remedy` for the reason `human_remedy` exists: named in a
+    refusal, a bypass is what an agent reaches for, and what it would be
+    bypassing here is the guard between a live session and `rm -rf`.
+    """
     main_root = _project_root()
     rows = _enriched_list(main_root)
 
@@ -3855,18 +4835,30 @@ def drop_worktree(name_or_path: str, force: bool) -> None:
                 target = r
                 break
     if target is None:
-        raise click.ClickException(f"No worktree matches: {name_or_path}")
+        raise agent_help.report(
+            f"No worktree matches: {name_or_path}",
+            "which worktree was meant — a drop must not be retried against a "
+            "different directory than the one named",
+        )
     if target["state"] == "main":
-        raise click.ClickException("Refusing to drop the main checkout.")
+        raise agent_help.report(
+            "Refusing to drop the main checkout.",
+            "what was meant, since the main checkout can never be dropped",
+        )
 
     worktree_path = Path(target["path"])
 
     if not force:
         if target["state"] == "foreign":
-            raise click.ClickException(
-                f"Refusing to drop foreign worktree (no endless companion): "
-                f"{worktree_path}\n"
-                f"Use --force to drop anyway, or remove via 'git worktree remove'."
+            raise agent_help.report(
+                f"Refusing to drop {worktree_path}: it has no endless "
+                f"companion, so Endless did not create it. Nothing was "
+                f"dropped.",
+                "whether to remove a worktree Endless did not create",
+                text=(f"Refusing to drop foreign worktree (no endless "
+                      f"companion): {worktree_path}"),
+                human_remedy=("Use --force to drop anyway, or remove via "
+                              "'git worktree remove'."),
             )
         # Before the git-state checks: a worktree in use must say so FIRST.
         # "uncommitted changes" invites --force, and reaching for --force on a
@@ -3881,12 +4873,30 @@ def drop_worktree(name_or_path: str, force: bool) -> None:
                 check=True,
             )
             if res.stdout.strip():
-                raise click.ClickException(
-                    f"Worktree has uncommitted changes: {worktree_path}\n"
-                    f"Commit or discard them, or use --force."
+                raise agent_help.report(
+                    f"Refusing to drop {worktree_path}: it has uncommitted "
+                    f"changes, which removing it would destroy. Nothing was "
+                    f"dropped.",
+                    "whether to remove a worktree holding uncommitted work",
+                    text=(f"Worktree has uncommitted changes: "
+                          f"{worktree_path}\n"
+                          f"Commit or discard them,"),
+                    human_remedy="or use --force.",
                 )
         except subprocess.CalledProcessError as e:
-            raise click.ClickException(f"git status check failed: {e.stderr or e}")
+            # A relayed git failure, narrowed by the site: the safety check
+            # that would have decided whether this drop is safe did not run,
+            # and a drop nobody cleared is the user's.
+            raise agent_help.relay_foreign(
+                agent_help.report(
+                    f"git status failed in {worktree_path}, so the drop's "
+                    f"uncommitted-work check never ran. Nothing was dropped.",
+                    "whether to remove a worktree whose safety check could not "
+                    "be completed",
+                    text="git status check failed:",
+                ),
+                str(e.stderr or e),
+            )
 
     cmd = ["worktree", "remove"]
     if force:
@@ -3895,8 +4905,18 @@ def drop_worktree(name_or_path: str, force: bool) -> None:
     try:
         _git_run(cmd, cwd=main_root)
     except subprocess.CalledProcessError as e:
-        raise click.ClickException(
-            f"git worktree remove failed: {e.stderr or e}"
+        # The last step, and the one that also runs under --force. A relayed
+        # git failure, narrowed by the site for the same reason as the rest of
+        # drop: the removal did not happen, and whether to pursue it is the
+        # user's.
+        raise agent_help.relay_foreign(
+            agent_help.report(
+                f"git worktree remove failed for {worktree_path}; it was NOT "
+                f"dropped.",
+                "whether to pursue removing this worktree, which git refused",
+                text="git worktree remove failed:",
+            ),
+            str(e.stderr or e),
         )
 
     click.echo(

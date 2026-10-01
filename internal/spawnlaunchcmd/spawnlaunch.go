@@ -34,8 +34,9 @@
 package spawnlaunchcmd
 
 import (
-	"fmt"
-	"os"
+	"strings"
+
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // Run dispatches on the top-level verb (`spawn-window` or `spawn-launch`),
@@ -51,15 +52,25 @@ func Run(verb string, args []string) {
 	case "spawn-layout":
 		runSpawnLayout(args)
 	default:
-		fmt.Fprintf(os.Stderr, "endless-go: unknown spawn command %q\n", verb)
-		usage(os.Stderr)
-		os.Exit(2)
+		// Nobody normally reads this: cmd/endless-go/main.go dispatches here
+		// only for the three verbs above, so a user's typo is refused there and
+		// never arrives. Reaching it means main.go routes a fourth verb this
+		// package does not implement — the two halves of one binary disagreeing
+		// about its own command set, which is Endless broken rather than
+		// anything the reader typed.
+		refusal.Faultf("endless-go: unknown spawn command %q", verb).
+			Detail(usageText()).Exit(2)
 	}
 }
 
-func usage(w *os.File) {
-	fmt.Fprintln(w, "Usage: endless-go spawn-window|spawn-layout|spawn-launch [flags]")
-	fmt.Fprintln(w, "  spawn-window  Create the tmux window that launches Claude on a task")
-	fmt.Fprintln(w, "  spawn-layout  Build the standard pane layout around an existing Claude pane")
-	fmt.Fprintln(w, "  spawn-launch  (internal) Set window options and exec claude inside the window")
+// usageText is the verb list, as a string rather than a writer, because the
+// only place it goes now is Detail — the refusal carries it to whichever
+// audience is reading instead of each caller choosing a stream.
+func usageText() string {
+	return strings.Join([]string{
+		"Usage: endless-go spawn-window|spawn-layout|spawn-launch [flags]",
+		"  spawn-window  Create the tmux window that launches Claude on a task",
+		"  spawn-layout  Build the standard pane layout around an existing Claude pane",
+		"  spawn-launch  (internal) Set window options and exec claude inside the window",
+	}, "\n") + "\n"
 }

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/sessionstate"
 )
 
@@ -328,7 +329,7 @@ func NoticeLogPath(projectRoot string) string {
 func AppendNoticeLog(projectRoot string, sessionID int64, n Notice, rendered string) {
 	path := NoticeLogPath(projectRoot)
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		fmt.Fprintf(os.Stderr, "endless: notice log mkdir: %v\n", err)
+		noticeLogFailed("mkdir", err)
 		return
 	}
 	entry := map[string]any{
@@ -342,18 +343,35 @@ func AppendNoticeLog(projectRoot string, sessionID int64, n Notice, rendered str
 	}
 	line, err := json.Marshal(entry)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless: notice log marshal: %v\n", err)
+		noticeLogFailed("marshal", err)
 		return
 	}
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless: notice log open: %v\n", err)
+		noticeLogFailed("open", err)
 		return
 	}
 	defer f.Close()
 	if _, err := f.Write(append(line, '\n')); err != nil {
-		fmt.Fprintf(os.Stderr, "endless: notice log write: %v\n", err)
+		noticeLogFailed("write", err)
 	}
+}
+
+// noticeLogFailed reports one step of AppendNoticeLog giving up.
+//
+// All four are NO-REPORT, and for the same reason: the notice itself was
+// already delivered to the session before this function ran, so the only
+// casualty is a line in the delivery log. Nothing is blocked, nothing changes
+// the hook's exit code, and there is no judgment here that belongs to the user.
+//
+// The stage name is a parameter rather than four near-identical call sites
+// because the remedy is one sentence that must not drift between them.
+func noticeLogFailed(stage string, err error) {
+	refusal.NoReport(
+		fmt.Sprintf("endless: notice log %s: %v", stage, err),
+		"The notice was still delivered and only its line in "+
+			noticeLogRelPath+" was lost; continue",
+	).Command("UserPromptSubmit").Print()
 }
 
 // ReapNoticesForEndedSessions deletes undelivered notices belonging to sessions

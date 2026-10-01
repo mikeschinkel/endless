@@ -416,9 +416,26 @@ def update_index_block() -> bool:
     text = INDEX_FILE.read_text()
     current = _current_index_block(text)
     if current is None:
-        raise SystemExit(
-            f"{INDEX_FILE} has no generated-block markers. Add a "
-            f"'{BEGIN_MARKER}' / '{END_MARKER}' pair where the table should go."
+        # Nothing normally reads this: the only caller is `python -m
+        # endless.guide_map index`, run by the justfile guide recipes inside
+        # Endless's own checkout, so it never reaches a user of the CLI.
+        # Classified NO-REPORT for the reader it does reach, because the fix is
+        # a marker pair in a checked-in doc — a small, safe, exactly-specified
+        # edit, not a judgement about anyone's data.
+        #
+        # Imported here rather than at module scope: agent_help imports
+        # `load_map` from this module, so a top-level import would close a
+        # cycle, and this module is deliberately free of CLI-runtime deps.
+        from endless import agent_help
+
+        raise agent_help.no_report(
+            f"{INDEX_FILE} has no generated-block markers, so the "
+            "cross-reference table has nowhere to go. The file was not changed.",
+            f"Add a '{BEGIN_MARKER}' / '{END_MARKER}' pair where the table "
+            "belongs, then re-run",
+            text=(f"{INDEX_FILE} has no generated-block markers. Add a "
+                  f"'{BEGIN_MARKER}' / '{END_MARKER}' pair where the table "
+                  "should go."),
         )
     new_block = assemble_index_block()
     if current == new_block:
@@ -479,4 +496,18 @@ def run_cli(argv: list[str]) -> int:
 if __name__ == "__main__":
     import sys
 
-    sys.exit(run_cli(sys.argv[1:]))
+    from endless import agent_help
+
+    # Click's handler is not installed on this path — this module is run as a
+    # script by the just recipes — so the refusal is rendered and its status
+    # passed on by hand. `passthrough_exit` is the right end for both outcomes:
+    # whatever spoke, spoke already.
+    try:
+        _code = run_cli(sys.argv[1:])
+    except agent_help.Refusal as _refusal:
+        # `info(..., err=True)` rather than `refusal.show()`: show() is Click's
+        # renderer and would prepend "Error: ", which a bare SystemExit(str)
+        # never did. The bytes a person reads here stay what they were.
+        agent_help.info(_refusal.format_message(), err=True)
+        _code = _refusal.exit_code
+    agent_help.passthrough_exit(_code)

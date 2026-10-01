@@ -82,7 +82,11 @@ def test_refuses_when_the_pane_holds_a_task(pane_holding, no_resolution):
     with pytest.raises(click.ClickException) as exc:
         session_cmd.resume_session("E-1859")
 
-    msg = str(exc.value)
+    # --force is a human_remedy (E-2159): an agent offered the bypass in the
+    # refusal takes it, and replacing a live session is the user's call. So it
+    # is `format_message()` — what a reader is actually shown — that must carry
+    # it, not the exception's bare message.
+    msg = exc.value.format_message()
     assert "E-1958" in msg                      # names what would be destroyed
     assert "endless session goto E-1859 --resume" in msg
     assert "--force" in msg

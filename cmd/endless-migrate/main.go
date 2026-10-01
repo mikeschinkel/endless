@@ -60,14 +60,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io"
 	"os"
+	"strings"
 
 	_ "modernc.org/sqlite"
 
 	"github.com/mikeschinkel/go-dt"
 
 	"github.com/mikeschinkel/endless/internal/dbcontext"
+	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/schema"
 	"github.com/mikeschinkel/endless/internal/schemachange"
 )
@@ -94,12 +95,16 @@ type result struct {
 func main() {
 	args, flags, err := dbcontext.ConsumeFlags(os.Args)
 	if err != nil {
-		errUsage(err.Error())
+		errUsage(err.Error(), dbTargetRemedy)
 	}
 
 	if len(args) < 2 {
-		usage(os.Stderr)
-		os.Exit(2)
+		// The usage page ALONE is what this has always written here, so it goes
+		// to Text rather than Detail: Detail would stack a summary line above a
+		// page no reader has ever seen one above. The summary exists for the
+		// verdict only.
+		refusal.NoReport("endless-migrate: no command given", commandRemedy).
+			Command("migrate").Text(usageText()).Exit(2)
 	}
 
 	switch args[1] {
@@ -108,12 +113,12 @@ func main() {
 		// without a database context. The reader who typed the wrong flag
 		// needs the usage text most, and making them satisfy the flag in
 		// order to read about the flag is a loop.
-		usage(os.Stdout)
+		fmt.Fprint(os.Stdout, usageText())
 		return
 	case "apply":
 		dir, err := configDir(flags)
 		if err != nil {
-			errUsage(err.Error())
+			errUsage(err.Error(), dbTargetRemedy)
 		}
 		res, err := runApply(args[2:], dir)
 		if err != nil {
@@ -124,7 +129,7 @@ func main() {
 	case "up":
 		dir, err := configDir(flags)
 		if err != nil {
-			errUsage(err.Error())
+			errUsage(err.Error(), dbTargetRemedy)
 		}
 		res, err := runUp(args[2:], dir)
 		if err != nil {
@@ -134,10 +139,34 @@ func main() {
 		return
 	}
 
-	fmt.Fprintf(os.Stderr, "endless-migrate: unknown command %q\n\n", args[1])
-	usage(os.Stderr)
-	os.Exit(2)
+	// The blank line between the message and the usage page is deliberate and
+	// is part of the bytes a person reads, which is why the whole thing is
+	// assembled into Text instead of being left to joinLines.
+	//
+	// NO-REPORT and not the version-skew CONDITIONAL endless-go's dispatcher
+	// carries: this executable is built by the land that runs it, from the same
+	// branch, and the only caller passes `apply` or `up` from code. A command
+	// it does not know came from a hand invocation, and naming a real one is
+	// the whole of the fix.
+	refusal.NoReport(
+		fmt.Sprintf("endless-migrate: unknown command %q", args[1]),
+		commandRemedy,
+	).Command("migrate").
+		Text(fmt.Sprintf("endless-migrate: unknown command %q\n\n%s",
+			args[1], usageText())).
+		Exit(2)
 }
+
+// The remedies this file's usage refusals hand an agent. They are constants
+// because each is shared by two or three call sites, and a remedy that drifts
+// between them is a remedy a reader cannot trust.
+const (
+	commandRemedy = "Re-run naming a command: `apply <change-file>` or `up`"
+
+	dbTargetRemedy = "Re-run with " + dbcontext.DBDirFlag + " <dir> to name " +
+		"the config directory outright, or " + dbcontext.DBFlag + " main for " +
+		"the project's database"
+)
 
 // errSandboxNotRoutable is the refusal for `--db sandbox`.
 //
@@ -185,7 +214,8 @@ func runApply(args []string, dir dt.DirPath) (res result, err error) {
 	var path dt.Filepath
 
 	if len(args) != 1 {
-		err = errUsage("apply requires exactly one <change-file>")
+		err = errUsage("apply requires exactly one <change-file>",
+			"Pass exactly one change file per invocation and retry")
 		goto end
 	}
 
@@ -201,7 +231,10 @@ func runApply(args []string, dir dt.DirPath) (res result, err error) {
 	}
 	defer closeDB(db)
 
-	res.Result, err = schemachange.Apply(db, res.DB, path, os.Stderr)
+	// A .go change's own log lines are its own stream, not a refusal of ours:
+	// Apply hands this writer to the change, and what the change says about
+	// its own work is already in whatever words its author chose.
+	res.Result, err = schemachange.Apply(db, res.DB, path, refusal.Passthrough())
 
 end:
 	return res, err
@@ -218,7 +251,8 @@ func runUp(args []string, dir dt.DirPath) (res upResult, err error) {
 	var db *sql.DB
 
 	if len(args) != 0 {
-		err = errUsage("up takes no arguments")
+		err = errUsage("up takes no arguments",
+			"Re-run `up` with no arguments")
 		goto end
 	}
 
@@ -256,17 +290,33 @@ func openTarget(dir dt.DirPath) (db *sql.DB, path dt.Filepath, err error) {
 func closeDB(db *sql.DB) {
 	err := db.Close()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-migrate: closing the database: %v\n", err)
+		// Nothing normally reads this line: `worktree land` captures this
+		// stream and throws it away on success, and on failure prefers the JSON
+		// error document on stdout. It is classified anyway, and as a WARN
+		// rather than a fault, because of WHEN it can happen — the migration has
+		// already committed or already rolled back, so nothing is blocked and
+		// there is nothing to retry. A fault here would tell an agent Endless
+		// broke and the outcome is unknown, when in fact the outcome is whatever
+		// the result document on stdout says it is.
+		refusal.Warn(
+			fmt.Sprintf("endless-migrate: closing the database: %v", err),
+			"Continue; the migration had already committed or rolled back, and "+
+				"the result document on stdout says which",
+		).Command("migrate").Print()
 	}
 }
 
 // errUsage is a failure in how this was invoked rather than in what it was asked
 // to do. It exits 2, as the dispatch above does, so a caller can tell "you asked
 // wrong" from "it did not work".
-func errUsage(msg string) error {
-	fmt.Fprintf(os.Stderr, "endless-migrate: %s\n\n", msg)
-	usage(os.Stderr)
-	os.Exit(2)
+func errUsage(msg, remedy string) error {
+	// Text reproduces the three pieces this has always printed in the order it
+	// printed them: the message, the blank line, the usage page. remedy and the
+	// summary are additions an agent reads and a person does not.
+	refusal.NoReport("endless-migrate: "+msg, remedy).
+		Command("migrate").
+		Text(fmt.Sprintf("endless-migrate: %s\n\n%s", msg, usageText())).
+		Exit(2)
 	return nil
 }
 
@@ -274,8 +324,16 @@ func errUsage(msg string) error {
 func emit(res any) {
 	b, err := json.Marshal(res)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-migrate: encoding the result: %v\n", err)
-		os.Exit(1)
+		// The result document is the only thing that tells the caller what
+		// happened, and a shape built two lines above out of plain strings and
+		// ints cannot normally fail to marshal — so if it did, the migration
+		// may well have taken effect with nobody told. That is not a retry: a
+		// second `apply` would report "already applied" and prove nothing.
+		refusal.Report(
+			fmt.Sprintf("endless-migrate: encoding the result: %v", err),
+			"what state the database is in; the migration ran but its result "+
+				"document could not be encoded, so nothing was reported",
+		).Command("migrate").Exit(1)
 	}
 	fmt.Println(string(b))
 }
@@ -290,41 +348,57 @@ func emitError(name string, cause error) {
 	}
 	b, err := json.Marshal(out)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-migrate: %v\n", cause)
-		os.Exit(1)
+		// The error document itself could not be built, so this line is all
+		// the caller gets about a schema change that failed after the land had
+		// already merged. The database lags the code until someone resolves
+		// the cause, and which way to resolve it is theirs to choose.
+		refusal.Report(
+			fmt.Sprintf("endless-migrate: %v", cause),
+			"how to resolve a schema change that failed to apply; the error "+
+				"document could not be encoded, so this line is the whole report",
+		).Command("migrate").Exit(1)
 	}
 	fmt.Println(string(b))
 	os.Exit(1)
 }
 
-func usage(w io.Writer) {
-	fmt.Fprintln(w, "endless-migrate — apply Endless schema changes and migrations, and nothing else.")
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Usage:")
-	fmt.Fprintln(w, "  endless-migrate [--db main | --db-dir <dir>] apply <change-file>")
-	fmt.Fprintln(w, "  endless-migrate [--db main | --db-dir <dir>] up")
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Commands:")
-	fmt.Fprintln(w, "  apply <change-file>   Apply one internal/schema/changes/<name>.{sql,go}")
-	fmt.Fprintln(w, "                        file and record it in _schema_version. Already")
-	fmt.Fprintln(w, "                        applied changes are skipped.")
-	fmt.Fprintln(w, "  up                    Apply every versioned migration this binary")
-	fmt.Fprintln(w, "                        embeds that the database lacks, then reconcile")
-	fmt.Fprintln(w, "                        the enum mirrors. A current database is a no-op.")
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "Flags:")
-	fmt.Fprintln(w, "  --db main             The project's main database, ~/.config/endless")
-	fmt.Fprintln(w, "                        (follows $HOME, ignores XDG_CONFIG_HOME).")
-	fmt.Fprintln(w, "  --db-dir <dir>        The Endless config directory holding the database")
-	fmt.Fprintln(w, "                        to migrate. Defaults to XDG_CONFIG_HOME/endless,")
-	fmt.Fprintln(w, "                        else ~/.config/endless.")
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "  --db sandbox is refused: this binary resolves its target from what you")
-	fmt.Fprintln(w, "  name, never from where you are standing, so it cannot say which sandbox")
-	fmt.Fprintln(w, "  you meant. Name one with --db-dir.")
-	fmt.Fprintln(w)
-	fmt.Fprintln(w, "This binary carries the migration set and nothing else: it serves no hook,")
-	fmt.Fprintln(w, "runs no task command, answers no query, and touches no business data outside")
-	fmt.Fprintln(w, "a migration. That is what lets `endless worktree land` run it against the")
-	fmt.Fprintln(w, "real ledger where an unlanded endless-go build may not.")
+// usageText is the usage page as a string rather than as writes to a stream.
+//
+// It is a string because its two readers want it in two different places.
+// `--help` prints it on stdout and exits 0; a usage refusal hands it to
+// refusal.Error.Text, which renders it for whichever audience is reading and
+// brackets it with a verdict for an agent. A func(io.Writer) could serve only
+// the first of those.
+func usageText() string {
+	return strings.Join([]string{
+		"endless-migrate — apply Endless schema changes and migrations, and nothing else.",
+		"",
+		"Usage:",
+		"  endless-migrate [--db main | --db-dir <dir>] apply <change-file>",
+		"  endless-migrate [--db main | --db-dir <dir>] up",
+		"",
+		"Commands:",
+		"  apply <change-file>   Apply one internal/schema/changes/<name>.{sql,go}",
+		"                        file and record it in _schema_version. Already",
+		"                        applied changes are skipped.",
+		"  up                    Apply every versioned migration this binary",
+		"                        embeds that the database lacks, then reconcile",
+		"                        the enum mirrors. A current database is a no-op.",
+		"",
+		"Flags:",
+		"  --db main             The project's main database, ~/.config/endless",
+		"                        (follows $HOME, ignores XDG_CONFIG_HOME).",
+		"  --db-dir <dir>        The Endless config directory holding the database",
+		"                        to migrate. Defaults to XDG_CONFIG_HOME/endless,",
+		"                        else ~/.config/endless.",
+		"",
+		"  --db sandbox is refused: this binary resolves its target from what you",
+		"  name, never from where you are standing, so it cannot say which sandbox",
+		"  you meant. Name one with --db-dir.",
+		"",
+		"This binary carries the migration set and nothing else: it serves no hook,",
+		"runs no task command, answers no query, and touches no business data outside",
+		"a migration. That is what lets `endless worktree land` run it against the",
+		"real ledger where an unlanded endless-go build may not.",
+	}, "\n") + "\n"
 }

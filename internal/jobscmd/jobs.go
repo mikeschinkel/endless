@@ -12,20 +12,25 @@ package jobscmd
 
 import (
 	"context"
-	"flag"
+	"errors"
 	"fmt"
 	"os"
+	"strings"
+	"syscall"
 	"text/tabwriter"
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/jobs"
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // Run dispatches the `jobs` subcommand.
 func Run(args []string) {
 	if len(args) == 0 {
-		usage(os.Stderr)
-		os.Exit(2)
+		refusal.NoReport(
+			"endless-go jobs: no command given",
+			"Re-run with a verb — list, run [--job N] or retry <name>",
+		).Command("jobs").Text(usageText()).Exit(2)
 	}
 
 	switch args[0] {
@@ -36,28 +41,40 @@ func Run(args []string) {
 	case "retry":
 		runRetry(args[1:])
 	case "-h", "--help", "help":
-		usage(os.Stdout)
+		fmt.Fprint(os.Stdout, usageText())
 	default:
-		fmt.Fprintf(os.Stderr, "endless-go jobs: unknown command %q\n", args[0])
-		usage(os.Stderr)
-		os.Exit(2)
+		// Python's jobs_cmd._run_go always passes one of the three verbs, so a
+		// name that misses was typed at this binary directly.
+		refusal.NoReport(
+			fmt.Sprintf("endless-go jobs: unknown command %q", args[0]),
+			"Pick one of the listed verbs and retry",
+		).Command("jobs").Detail(usageText()).Exit(2)
 	}
 }
 
-func usage(w *os.File) {
-	fmt.Fprintln(w, "Usage: endless-go jobs <command>")
-	fmt.Fprintln(w, "Commands:")
-	fmt.Fprintln(w, "  list            show registered jobs and their schedule state")
-	fmt.Fprintln(w, "  run [--job N]   run every due job once (or force one named job)")
-	fmt.Fprintln(w, "  retry <name>    clear a job's backoff and make it due now")
+// usageText is the verb list, printed for --help and carried as the body of
+// the two usage refusals above.
+func usageText() string {
+	return strings.Join([]string{
+		"Usage: endless-go jobs <command>",
+		"Commands:",
+		"  list            show registered jobs and their schedule state",
+		"  run [--job N]   run every due job once (or force one named job)",
+		"  retry <name>    clear a job's backoff and make it due now",
+	}, "\n") + "\n"
 }
 
 // runList renders the registry joined to its scheduling rows.
 func runList() {
 	statuses, err := jobs.Statuses()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "endless-go jobs: list:", err)
-		os.Exit(1)
+		// The registry lives in this binary; the scheduling rows live in the
+		// database. Failing here means the database could not be opened or
+		// queried, which no rerun of `jobs list` changes.
+		refusal.Report(
+			fmt.Sprintf("endless-go jobs: list: %v", err),
+			"how to repair an Endless installation whose jobs tables cannot be read",
+		).Command("jobs list").Exit(1)
 	}
 	// Say so loudly when the runner cannot execute anything here: an operator
 	// staring at "0 claimed" deserves to know the difference between "nothing was
@@ -89,24 +106,43 @@ func runList() {
 		)
 	}
 	if err = tw.Flush(); err != nil {
-		fmt.Fprintln(os.Stderr, "endless-go jobs: list:", err)
-		os.Exit(1)
+		// Two failures wearing one message, and the errno tells them apart
+		// rather than the agent: a reader that walked away — `endless-go jobs
+		// list | head` — closed the pipe, and the rows it never read are nobody's
+		// problem. Anything else is a write to a terminal or a file that failed,
+		// which is the user's to look at.
+		summary := fmt.Sprintf("endless-go jobs: list: %v", err)
+		if errors.Is(err, syscall.EPIPE) {
+			refusal.NoReport(summary,
+				"Nothing is wrong: the reader closed the pipe before the listing finished").
+				Command("jobs list").Exit(1)
+		}
+		refusal.Report(summary,
+			"why writing the listing failed, given that the rows themselves were read").
+			Command("jobs list").Exit(1)
 	}
 }
 
 // runRun fires the runner once.
 func runRun(args []string) {
-	fs := flag.NewFlagSet("run", flag.ExitOnError)
+	fs := refusal.NewFlags("run")
 	job := fs.String("job", "", "run only this job, bypassing the due check (the lease still applies)")
 	if err := fs.Parse(args); err != nil {
-		os.Exit(2)
+		// -h asked a question and got an answer; it is not a refusal.
+		fs.ExitOnHelp(err)
+		// flag.ExitOnError used to print and exit 2 from inside Parse, which is
+		// why the os.Exit(2) that stood here was dead code. NewFlags is
+		// ContinueOnError, so both are ours now; Text carries flag's own error
+		// line and usage block, unchanged.
+		refusal.NoReport(err.Error(),
+			"Only --job <name> exists here: correct the flag and retry").
+			Command("jobs run").Text(fs.Output()).Exit(2)
 	}
 
 	if *job != "" {
 		outcome, err := jobs.RunNamed(context.Background(), *job)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "endless-go jobs: run:", err)
-			os.Exit(1)
+			namedJobRefusal("run", err).Exit(1)
 		}
 		reportOutcome(outcome)
 		return
@@ -123,14 +159,35 @@ func runRun(args []string) {
 // runRetry clears a job's backoff.
 func runRetry(args []string) {
 	if len(args) != 1 {
-		fmt.Fprintln(os.Stderr, "Usage: endless-go jobs retry <name>")
-		os.Exit(2)
+		// Python's `endless jobs retry` always passes exactly one name, so a
+		// count that misses came from somebody typing the binary directly.
+		refusal.NoReport(
+			"Usage: endless-go jobs retry <name>",
+			"Pass exactly one job name and retry",
+		).Command("jobs retry").Exit(2)
 	}
 	if err := jobs.Retry(args[0]); err != nil {
-		fmt.Fprintln(os.Stderr, "endless-go jobs: retry:", err)
-		os.Exit(1)
+		namedJobRefusal("retry", err).Exit(1)
 	}
 	fmt.Printf("%s: backoff cleared, due now\n", args[0])
+}
+
+// namedJobRefusal classifies the single error `run --job` and `retry` can each
+// raise, and the sentinel decides which reading applies rather than the agent:
+// a name no job is registered under is one `endless jobs list` answers and the
+// caller retypes, while anything else reached the database and failed there,
+// which is the user's to investigate. verb names the verb for the verdict and
+// reproduces the message prefix each site has always printed.
+func namedJobRefusal(verb string, err error) *refusal.Error {
+	summary := fmt.Sprintf("endless-go jobs: %s: %v", verb, err)
+	if errors.Is(err, jobs.ErrUnknownJob) {
+		return refusal.NoReport(summary,
+			"Run `endless jobs list` and retry with a registered job name").
+			Command("jobs " + verb)
+	}
+	return refusal.Report(summary,
+		"how to repair an Endless database the job runner cannot read or write").
+		Command("jobs " + verb)
 }
 
 // reportOutcome prints one job's result. A job that was not claimed is reported

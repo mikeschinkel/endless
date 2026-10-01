@@ -45,6 +45,8 @@ from pathlib import Path
 
 import click
 
+from endless import agent_help
+
 # The filename `monitor.BackupDB` writes: `endless-<YYYYmmdd-HHMMSS>.db`.
 BACKUP_GLOB = "endless-*.db"
 
@@ -307,10 +309,14 @@ def resolve_backup(db_path: Path, arg: str | None) -> Path:
     if arg is None:
         found = list_backups(db_path)
         if not found:
-            raise click.ClickException(
-                f"no backups found in {backups_dir(db_path)} "
-                f"(expected files named {BACKUP_GLOB}). "
-                f"Pass a path explicitly: endless db restore <file>"
+            raise agent_help.report(
+                f"No backups exist in {backups_dir(db_path)}, so there is "
+                "nothing to restore from. Nothing was changed.",
+                "which backup file, if any, to restore from — none exists "
+                "where Endless writes them",
+                text=(f"no backups found in {backups_dir(db_path)} "
+                      f"(expected files named {BACKUP_GLOB}). "
+                      f"Pass a path explicitly: endless db restore <file>"),
             )
         return found[0]
     candidate = Path(arg).expanduser()
@@ -319,8 +325,17 @@ def resolve_backup(db_path: Path, arg: str | None) -> Path:
     in_dir = backups_dir(db_path) / arg
     if in_dir.exists():
         return in_dir.resolve()
-    raise click.ClickException(
-        f"backup not found: {arg} (also looked in {backups_dir(db_path)})"
+    # Inventoried CONDITIONAL — REPORT if the user named the file, NO-REPORT
+    # if an agent mistyped it — and resolved to REPORT by ED-2162's decision
+    # that `db restore` is a user-only command. Restoring is a recovery act on
+    # the user's own data, so "which backup" is never the agent's to pick even
+    # when it was the agent that typed the wrong name.
+    raise agent_help.report(
+        f"No backup named {arg!r} exists, either as a path or in "
+        f"{backups_dir(db_path)}. Nothing was changed.",
+        "which backup file to restore from",
+        text=(f"backup not found: {arg} "
+              f"(also looked in {backups_dir(db_path)})"),
     )
 
 
@@ -391,9 +406,10 @@ def _reestablish_wal(db_path: Path) -> tuple[str, str]:
 def perform_restore(db_path: Path, backup: Path, stamp: str) -> RestoreResult:
     """Park the current database, copy the backup into place, restore WAL, verify.
 
-    Raises click.ClickException if the restored file is not WAL or does not pass
+    Raises a REPORT refusal if the restored file is not WAL or does not pass
     `PRAGMA integrity_check` — naming the parked copy, because at that point
-    rolling back by hand is the user's next move.
+    rolling back by hand is the user's next move, and it is theirs because it
+    is a choice about their data rather than about this command.
     """
     mode = None
     if db_path.exists():
@@ -410,7 +426,15 @@ def perform_restore(db_path: Path, backup: Path, stamp: str) -> RestoreResult:
         undo = (f"\nThe pre-restore database is intact at {parked}; "
                 f"copy it back to {db_path} to undo this."
                 if parked is not None else "")
-        raise click.ClickException(f"restore failed: {e}{undo}") from e
+        raise agent_help.report(
+            f"The restore failed partway ({e}). {db_path} was moved aside and "
+            "the backup was NOT put in place; the pre-restore database is "
+            + (f"intact at {parked}." if parked is not None
+               else "not kept — the target did not exist before this run."),
+            "whether to roll back to the parked database — the live database "
+            "was moved aside mid-restore",
+            text=f"restore failed: {e}{undo}",
+        ) from e
 
     result = RestoreResult(aside=aside, journal_mode=journal_mode,
                            integrity=integrity)
@@ -421,11 +445,18 @@ def perform_restore(db_path: Path, backup: Path, stamp: str) -> RestoreResult:
                  if parked is not None
                  else "No pre-restore database was kept — the target did not "
                       "exist before this run.")
-        raise click.ClickException(
-            "restore completed but the result did not verify:\n"
-            f"  journal_mode: {journal_mode} (wanted wal)\n"
-            f"  integrity_check: {integrity} (wanted ok)\n"
-            f"{where}"
+        raise agent_help.report(
+            f"The restore completed but did not verify: journal_mode "
+            f"{journal_mode} (wanted wal), integrity_check {integrity} "
+            f"(wanted ok). {db_path} now holds the restored copy.",
+            "whether to keep the unverified restore or roll back to the "
+            "parked copy",
+            text=(
+                "restore completed but the result did not verify:\n"
+                f"  journal_mode: {journal_mode} (wanted wal)\n"
+                f"  integrity_check: {integrity} (wanted ok)\n"
+                f"{where}"
+            ),
         )
     return result
 
@@ -455,8 +486,14 @@ def _echo_holders(holders: list[Holder] | None) -> None:
 
 
 def run_restore(backup_arg: str | None, dry_run: bool, force: bool) -> None:
-    """Body of `endless db restore`. Echoes its report; raises ClickException
-    to refuse."""
+    """Body of `endless db restore`. Echoes its report; raises a REPORT
+    refusal to decline.
+
+    Every refusal here is REPORT, which is unusual and deliberate: restore is a
+    recovery act on the user's own data (ED-2162), so every branch — a missing
+    backup, a corrupt one, a database something still has open — turns on a
+    judgment about data the agent is not the owner of.
+    """
     from endless import config
 
     # The self-dev worktree gate normally fires at db.get_db() / the Go
@@ -469,7 +506,17 @@ def run_restore(backup_arg: str | None, dry_run: bool, force: bool) -> None:
 
     check = check_backup(backup)
     if not check.ok:
-        raise click.ClickException(f"refusing to restore: {check.problem}")
+        # Inventoried CONDITIONAL — REPORT when the intended backup is itself
+        # bad, NO-REPORT when an agent simply passed the wrong path — and
+        # resolved to REPORT for the same reason as resolve_backup's: falling
+        # back to an older backup loses more data, and how much loss is
+        # acceptable is not a question this command can answer.
+        raise agent_help.report(
+            f"The backup at {backup} is not usable: {check.problem}. "
+            "Nothing was changed.",
+            "which backup to fall back to — an older one loses more data",
+            text=f"refusing to restore: {check.problem}",
+        )
 
     holders = holders_of(file_set(db_path))
     all_backups = list_backups(db_path)
@@ -510,14 +557,24 @@ def run_restore(backup_arg: str | None, dry_run: bool, force: bool) -> None:
         why = ("could not determine what has the database open"
                if holders is None
                else f"{len(holders)} process(es) still have the database open")
-        raise click.ClickException(
-            f"refusing to restore: {why}.\n"
-            "Copying over an open database is how the 2026-08-10 recovery went "
-            "wrong: it leaves a hot journal and every reader then fails with "
-            "'database is locked'.\n"
-            "Stop the processes listed above and retry, or pass --force to "
-            "restore anyway (they will keep reading the parked copy until "
-            "they are restarted)."
+        # --force here waives a data-loss risk, so it is exactly the sentence
+        # an agent must not be handed: told about it, an agent takes it. It
+        # moves to human_remedy, which is dropped from the agent's copy and
+        # re-joined with a space for a person — and the split is made at the
+        # comma the original already had, so the human's bytes are unchanged.
+        raise agent_help.report(
+            f"Refusing to restore: {why}. Nothing was changed.",
+            "whether to stop their own sessions and monitors, or to accept "
+            "the risk of restoring over an open database",
+            text=(
+                f"refusing to restore: {why}.\n"
+                "Copying over an open database is how the 2026-08-10 recovery "
+                "went wrong: it leaves a hot journal and every reader then "
+                "fails with 'database is locked'.\n"
+                "Stop the processes listed above and retry,"
+            ),
+            human_remedy=("or pass --force to restore anyway (they will keep "
+                          "reading the parked copy until they are restarted)."),
         )
 
     result = perform_restore(db_path, backup, stamp)

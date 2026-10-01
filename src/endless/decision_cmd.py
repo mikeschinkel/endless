@@ -13,6 +13,7 @@ from pathlib import Path
 
 import click
 
+from endless import agent_help
 from endless import authority
 from endless import config
 from endless import db
@@ -79,13 +80,24 @@ def require_legal_relation_type(
     pair = (source_kind, target_kind)
     legal = LEGAL_TYPES_BY_PAIR.get(pair)
     if legal is None:
-        raise click.ClickException(
-            f"Unsupported relation pair: {source_kind}→{target_kind}"
+        # Unreachable from the four callers, each of which passes a literal pair
+        # this table has a row for. If it ever fires, the table and the
+        # dispatchers have come apart — there is no --type value that gets the
+        # caller past it, so it is Endless broken rather than a caller holding
+        # it wrong, which is what `fault` says and NO-REPORT would not.
+        raise agent_help.fault(
+            f"Unsupported relation pair: {source_kind}→{target_kind}. "
+            f"Nothing was linked.",
+            text=f"Unsupported relation pair: {source_kind}→{target_kind}",
         )
     if relation_type not in legal:
-        raise click.ClickException(
-            f"{relation_type!r} is not legal for {source_kind}→{target_kind}; "
-            f"legal types: {', '.join(legal)}."
+        raise agent_help.no_report(
+            f"{relation_type!r} is not legal for {source_kind}→{target_kind}. "
+            f"Nothing was linked.",
+            f"Re-run with --type from: {', '.join(legal)}",
+            text=f"{relation_type!r} is not legal for "
+                 f"{source_kind}→{target_kind}; "
+                 f"legal types: {', '.join(legal)}.",
         )
 
 
@@ -319,8 +331,11 @@ def detail_decision(item_id: int, agent: bool = False, as_json: bool = False):
         (item_id,),
     )
     if not row:
-        raise click.ClickException(
-            f"No decision found with id {decision_id_display(item_id)}"
+        raise agent_help.no_report(
+            f"No decision found with id {decision_id_display(item_id)}. "
+            f"Nothing was shown.",
+            "Re-check the id with `endless decision list --all` and retry",
+            text=f"No decision found with id {decision_id_display(item_id)}",
         )
     item = row[0]
     relations = _fetch_decision_relations(item_id)
@@ -548,11 +563,39 @@ def add_decision(
     from endless.event_bridge import emit_event
 
     if title.lower().startswith("record that "):
-        raise click.ClickException(
-            "Decision titles should state the decision, not narrate recording it.\n"
-            f"  Try: {title[len('record that '):]}"
+        raise agent_help.no_report(
+            "Decision titles should state the decision, not narrate "
+            "recording it. Nothing was created.",
+            f"Re-run with the title: {title[len('record that '):]}",
+            text="Decision titles should state the decision, not narrate "
+                 "recording it.\n"
+                 f"  Try: {title[len('record that '):]}",
         )
     validate_description(description)
+
+    # E-2159. The duplicate-link guards used to fire AFTER `decision.created`
+    # had been emitted: `--decides E-1 --decides E-1` left a real decision in
+    # the ledger behind a refusal that read as though nothing had happened, and
+    # the agent that believed it ran `decision add` again and recorded the
+    # decision twice. The refusal now happens before the first durable write.
+    #
+    # A repeated id in one invocation is the ONLY way those guards can trip on a
+    # decision that does not exist yet — the id they check against was minted by
+    # this call — so checking it here moves the whole refusal in front of the
+    # emit rather than narrowing what the later guards catch. `task link --to
+    # ED-N` still reaches them, against relations that really do pre-exist.
+    for flag, task_ids in (("--about", about_task_ids),
+                           ("--decides", decides_task_ids)):
+        seen: set[int] = set()
+        for tid in task_ids:
+            if tid in seen:
+                raise agent_help.no_report(
+                    f"{flag} names {task_id_display(tid)} twice. Nothing was "
+                    f"created.",
+                    f"Re-run `decision add` giving {flag} "
+                    f"{task_id_display(tid)} once",
+                )
+            seen.add(tid)
 
     proj_id, proj_name = _resolve_project(project_name)
 
@@ -629,18 +672,30 @@ def update_decision(
         (decision_id,),
     )
     if not row:
-        raise click.ClickException(
-            f"No decision found with id {decision_id_display(decision_id)}"
+        raise agent_help.no_report(
+            f"No decision found with id {decision_id_display(decision_id)}. "
+            f"Nothing was updated.",
+            "Re-check the id with `endless decision list --all` and retry",
+            text=f"No decision found with id "
+                 f"{decision_id_display(decision_id)}",
         )
 
     fields: dict = {}
     if title is not None:
         if not title.strip():
-            raise click.ClickException("--title may not be empty.")
+            raise agent_help.no_report(
+                "--title may not be empty. Nothing was updated.",
+                "Re-run with a non-empty --title",
+                text="--title may not be empty.",
+            )
         if title.lower().startswith("record that "):
-            raise click.ClickException(
-                "Decision titles should state the decision, not narrate recording it.\n"
-                f"  Try: {title[len('record that '):]}"
+            raise agent_help.no_report(
+                "Decision titles should state the decision, not narrate "
+                "recording it. Nothing was updated.",
+                f"Re-run with the title: {title[len('record that '):]}",
+                text="Decision titles should state the decision, not narrate "
+                     "recording it.\n"
+                     f"  Try: {title[len('record that '):]}",
             )
         fields["title"] = title
     if description is not None:
@@ -648,8 +703,10 @@ def update_decision(
         fields["description"] = description
 
     if not fields:
-        raise click.ClickException(
-            "Nothing to update. Specify --title and/or --description."
+        raise agent_help.no_report(
+            "Nothing to update. Nothing was updated.",
+            "Re-run with --title and/or --description",
+            text="Nothing to update. Specify --title and/or --description.",
         )
 
     emit_event(
@@ -672,6 +729,33 @@ def update_decision(
 
 
 # Accept / Reject ---------------------------------------------------------
+#
+# Every wrong-status refusal from here down is a CONDITIONAL row in E-2159's
+# refusal inventory: REPORT when the verb would reverse something already
+# settled, NO-REPORT when the decision is simply already where the verb would
+# put it, or when a different named verb does the job. The status IS the
+# condition, and the guard has just read it — so the class is decided in code
+# rather than handed to the agent as a question it would answer from the same
+# row we already have.
+#
+# The REPORT branches lean on guide/decisions.md ("verify with your user before
+# stating a decision as binding"): accepting, un-rejecting or reinstating all
+# restate what binds, and that is the user's to state.
+
+
+def _status_guard(summary: str, text: str, cur: str,
+                  remedies: dict[str, str], decision: str):
+    """The refusal to RAISE when a decision is in the wrong status for a verb.
+
+    `remedies` enumerates the statuses the agent can resolve alone, each with
+    the remedy that applies to it. Any status it does not name is REPORT, and
+    `decision` says what the user is being asked to decide.
+    """
+    remedy = remedies.get(cur)
+    if remedy is not None:
+        return agent_help.no_report(summary, remedy, text=text)
+    return agent_help.report(summary, decision, text=text)
+
 
 def accept_decision(decision_id: int):
     """Mark a decision accepted (proposed → accepted)."""
@@ -683,14 +767,24 @@ def accept_decision(decision_id: int):
         (decision_id,),
     )
     if not row:
-        raise click.ClickException(
-            f"No decision found with id {decision_id_display(decision_id)}"
+        raise agent_help.no_report(
+            f"No decision found with id {decision_id_display(decision_id)}. "
+            f"Nothing was accepted.",
+            "Re-check the id with `endless decision list --all` and retry",
+            text=f"No decision found with id "
+                 f"{decision_id_display(decision_id)}",
         )
     cur_status = row[0]["status"]
     if cur_status != "proposed":
-        raise click.ClickException(
-            f"{decision_id_display(decision_id)} status is {cur_status!r}; "
-            f"only 'proposed' decisions can be accepted."
+        disp = decision_id_display(decision_id)
+        raise _status_guard(
+            f"{disp} is {cur_status!r}, not 'proposed'; it was not accepted.",
+            f"{disp} status is {cur_status!r}; "
+            f"only 'proposed' decisions can be accepted.",
+            cur_status,
+            {"accepted": "Nothing to do — it is already accepted"},
+            "accepting a decision that was settled the other way reverses that "
+            "settlement",
         )
 
     emit_event(
@@ -711,7 +805,11 @@ def reject_decision(decision_id: int, reason: str):
     from endless.event_bridge import emit_event
 
     if not reason or not reason.strip():
-        raise click.ClickException("--reason is required and may not be empty.")
+        raise agent_help.no_report(
+            "--reason is required and may not be empty. Nothing was rejected.",
+            "Re-run with the reason the decision is being turned down",
+            text="--reason is required and may not be empty.",
+        )
 
     row = db.query(
         "SELECT d.id, d.status, p.name as project_name "
@@ -719,14 +817,24 @@ def reject_decision(decision_id: int, reason: str):
         (decision_id,),
     )
     if not row:
-        raise click.ClickException(
-            f"No decision found with id {decision_id_display(decision_id)}"
+        raise agent_help.no_report(
+            f"No decision found with id {decision_id_display(decision_id)}. "
+            f"Nothing was rejected.",
+            "Re-check the id with `endless decision list --all` and retry",
+            text=f"No decision found with id "
+                 f"{decision_id_display(decision_id)}",
         )
     cur_status = row[0]["status"]
     if cur_status != "proposed":
-        raise click.ClickException(
-            f"{decision_id_display(decision_id)} status is {cur_status!r}; "
-            f"only 'proposed' decisions can be rejected."
+        disp = decision_id_display(decision_id)
+        raise _status_guard(
+            f"{disp} is {cur_status!r}, not 'proposed'; it was not rejected.",
+            f"{disp} status is {cur_status!r}; "
+            f"only 'proposed' decisions can be rejected.",
+            cur_status,
+            {"rejected": "Nothing to do — it is already rejected"},
+            "turning down a decision that has already governed is theirs to "
+            "decide",
         )
 
     emit_event(
@@ -762,8 +870,12 @@ def _fetch_decision_for_status_change(decision_id: int) -> dict:
         (decision_id,),
     )
     if not row:
-        raise click.ClickException(
-            f"No decision found with id {decision_id_display(decision_id)}"
+        raise agent_help.no_report(
+            f"No decision found with id {decision_id_display(decision_id)}. "
+            f"Nothing changed.",
+            "Re-check the id with `endless decision list --all` and retry",
+            text=f"No decision found with id "
+                 f"{decision_id_display(decision_id)}",
         )
     return row[0]
 
@@ -779,9 +891,16 @@ def unaccept_decision(decision_id: int):
             " Use `endless decision unreject` instead."
             if cur_status == "rejected" else ""
         )
-        raise click.ClickException(
-            f"{decision_id_display(decision_id)} status is {cur_status!r}; "
-            f"only 'accepted' decisions can be unaccepted.{hint}"
+        disp = decision_id_display(decision_id)
+        raise _status_guard(
+            f"{disp} is {cur_status!r}, not 'accepted'; it was not unaccepted.",
+            f"{disp} status is {cur_status!r}; "
+            f"only 'accepted' decisions can be unaccepted.{hint}",
+            cur_status,
+            {"proposed": "Nothing to do — it is already 'proposed'",
+             "rejected": "Re-run as `endless decision unreject`"},
+            "reaching 'proposed' from a retired status means reinstating it "
+            "first, which puts a retired decision back in force",
         )
 
     emit_event(
@@ -813,9 +932,16 @@ def unreject_decision(decision_id: int):
             " Use `endless decision unaccept` instead."
             if cur_status == "accepted" else ""
         )
-        raise click.ClickException(
-            f"{decision_id_display(decision_id)} status is {cur_status!r}; "
-            f"only 'rejected' decisions can be unrejected.{hint}"
+        disp = decision_id_display(decision_id)
+        raise _status_guard(
+            f"{disp} is {cur_status!r}, not 'rejected'; it was not unrejected.",
+            f"{disp} status is {cur_status!r}; "
+            f"only 'rejected' decisions can be unrejected.{hint}",
+            cur_status,
+            {"proposed": "Nothing to do — it is already 'proposed'",
+             "accepted": "Re-run as `endless decision unaccept`"},
+            "reaching 'proposed' from a retired status means reinstating it "
+            "first, which puts a retired decision back in force",
         )
 
     emit_event(
@@ -856,10 +982,16 @@ def reconsider_decision(decision_id: int):
             f"{decision_id_display(decision_id)}` to put it back in force."
             if cur_status in _END_STATUSES else ""
         )
-        raise click.ClickException(
-            f"{decision_id_display(decision_id)} status is {cur_status!r}; "
+        disp = decision_id_display(decision_id)
+        raise _status_guard(
+            f"{disp} is {cur_status!r}; it was not reconsidered.",
+            f"{disp} status is {cur_status!r}; "
             f"only 'accepted' or 'rejected' decisions can be reconsidered."
-            f"{hint}"
+            f"{hint}",
+            cur_status,
+            {"proposed": "Nothing to do — it is already on the table"},
+            "`endless decision reinstate` would put a retired decision back in "
+            "force, which is a different outcome and theirs to choose",
         )
 
 
@@ -954,7 +1086,20 @@ def _require_governing(decision_id: int, row: dict, verb: str) -> None:
         )
     else:
         why = f"only {_GOVERNING_STATUS!r} decisions can be {verb}."
-    raise click.ClickException(f"{disp} is {cur!r} — cannot {verb} it: {why}")
+    # The end state this verb is asking for. Already being in it is a no-op the
+    # agent drops; being in the OTHER one means reinstating first, which
+    # reverses a retirement somebody recorded on purpose.
+    requested = "superseded" if verb == "supersede" else "obsolete"
+    raise _status_guard(
+        f"{disp} is {cur!r}; it was not {verb}d.",
+        f"{disp} is {cur!r} — cannot {verb} it: {why}",
+        cur,
+        {"rejected": "Nothing to retire — a rejected decision never took "
+                     "effect",
+         requested: f"Nothing to do — it is already {requested}"},
+        "settling a decision that was never accepted, or reversing a "
+        "retirement already recorded, is theirs to decide",
+    )
 
 
 def supersede_decision(old_id: int, new_id: int):
@@ -968,7 +1113,11 @@ def supersede_decision(old_id: int, new_id: int):
     from endless.event_bridge import emit_event
 
     if old_id == new_id:
-        raise click.ClickException("A decision cannot supersede itself.")
+        raise agent_help.no_report(
+            "A decision cannot supersede itself. Nothing changed.",
+            "Re-run with the intended successor in --by",
+            text="A decision cannot supersede itself.",
+        )
 
     old_row = _fetch_decision_for_status_change(old_id)
     new_row = _fetch_decision_for_status_change(new_id)
@@ -981,22 +1130,57 @@ def supersede_decision(old_id: int, new_id: int):
     # old one closed with a successor that never governs, which is strictly
     # worse than leaving it accepted.
     if new_row["status"] in ("rejected",) + _END_STATUSES:
-        raise click.ClickException(
-            f"{decision_id_display(new_id)} is {new_row['status']!r} — it "
-            f"cannot supersede anything, because it does not govern.\n"
-            f"Point {decision_id_display(old_id)} at a decision that is "
-            f"proposed or accepted."
+        # REPORT-IF, and the one guard here that genuinely cannot resolve
+        # itself: whether --by names the successor the user meant is a fact
+        # about the conversation, not about the rows. A mis-typed id is a
+        # retry; the right id pointing at a decision that does not govern is a
+        # question about whether the old one should still be retired at all.
+        raise agent_help.report_if(
+            f"{decision_id_display(new_id)} is {new_row['status']!r} and does "
+            f"not govern, so it cannot supersede "
+            f"{decision_id_display(old_id)}. Nothing changed.",
+            "the id in --by is the successor the user meant",
+            f"re-run --by with the decision that actually takes over from "
+            f"{decision_id_display(old_id)}",
+            f"whether {decision_id_display(old_id)} still governs cannot be "
+            f"settled by a successor that does not",
+            text=f"{decision_id_display(new_id)} is {new_row['status']!r} — it "
+                 f"cannot supersede anything, because it does not govern.\n"
+                 f"Point {decision_id_display(old_id)} at a decision that is "
+                 f"proposed or accepted.",
         )
 
-    try:
-        link_decision(new_id, "decision", old_id, "supersedes")
-    except click.ClickException as e:
-        if "already" in str(e).lower():
-            raise click.ClickException(
-                f"{decision_id_display(old_id)} is already superseded by "
-                f"{decision_id_display(new_id)}."
-            )
-        raise
+    # E-2159 defect fix. This used to call `link_decision` and, on ANY refusal
+    # whose text contained "already", report "ED-old is already superseded by
+    # ED-new" — without ever looking at ED-old's status. That sentence cannot be
+    # true at this line. `_require_governing` has just established that ED-old
+    # is `accepted`, so the only state that reaches an existing `supersedes` row
+    # is the one where the relation was recorded and the status never moved:
+    # the decision still governs. Telling a reader it is retired sends them away
+    # from a rule that still binds, which is the worst thing a decision log can
+    # do.
+    #
+    # Asking the table directly also retires the substring match on another
+    # function's wording — coupling that made `link_decision`'s message
+    # load-bearing for a caller it has no other reason to know about.
+    if db.exists(
+        "SELECT 1 FROM decision_relations "
+        "WHERE source_decision_id = ? AND target_kind = 'decision' "
+        "AND target_id = ? AND relation_type = 'supersedes'",
+        (new_id, old_id),
+    ):
+        disp_old = decision_id_display(old_id)
+        disp_new = decision_id_display(new_id)
+        raise agent_help.no_report(
+            f"{disp_old} already records a 'supersedes' relation from "
+            f"{disp_new}, but its status is still {old_row['status']!r} — it "
+            f"still governs. Nothing changed.",
+            f"Unlink the existing relation (`endless decision unlink "
+            f"{disp_new} --to {disp_old} --type supersedes`), then re-run "
+            f"supersede so the status moves with it",
+        )
+
+    link_decision(new_id, "decision", old_id, "supersedes")
 
     emit_event(
         kind="decision.superseded",
@@ -1023,7 +1207,11 @@ def obsolete_decision(decision_id: int, reason: str):
     from endless.event_bridge import emit_event
 
     if not reason or not reason.strip():
-        raise click.ClickException("--reason is required and may not be empty.")
+        raise agent_help.no_report(
+            "--reason is required and may not be empty. Nothing changed.",
+            "Re-run with the reason the decision stopped applying",
+            text="--reason is required and may not be empty.",
+        )
 
     row = _fetch_decision_for_status_change(decision_id)
     _require_governing(decision_id, row, "obsolete")
@@ -1066,10 +1254,18 @@ def reinstate_decision(decision_id: int):
             "rejected decision back to proposed."
             if cur_status in ("accepted", "rejected") else ""
         )
-        raise click.ClickException(
-            f"{decision_id_display(decision_id)} status is {cur_status!r}; "
+        disp = decision_id_display(decision_id)
+        raise _status_guard(
+            f"{disp} is {cur_status!r}, not "
+            f"{' or '.join(repr(s) for s in _END_STATUSES)}; it was not "
+            f"reinstated.",
+            f"{disp} status is {cur_status!r}; "
             f"only {' or '.join(repr(s) for s in _END_STATUSES)} decisions "
-            f"can be reinstated.{hint}"
+            f"can be reinstated.{hint}",
+            cur_status,
+            {"accepted": "Nothing to do — it is already in force"},
+            "putting it back in force means accepting it, or reversing a "
+            "rejection",
         )
 
     for superseder_id in superseded_by_map([decision_id]).get(decision_id, ()):
@@ -1103,20 +1299,35 @@ def link_decision(
     require_legal_relation_type("decision", target_kind, relation_type)
 
     if not db.exists("SELECT 1 FROM decisions WHERE id = ?", (source_decision_id,)):
-        raise click.ClickException(
-            f"Decision {decision_id_display(source_decision_id)} not found."
+        raise agent_help.no_report(
+            f"Decision {decision_id_display(source_decision_id)} not found. "
+            f"Nothing was linked.",
+            "Re-check the id with `endless decision list --all` and retry",
+            text=f"Decision {decision_id_display(source_decision_id)} not "
+                 f"found.",
         )
     if target_kind == "decision":
         if source_decision_id == target_id:
-            raise click.ClickException("A decision cannot link to itself.")
+            raise agent_help.no_report(
+                "A decision cannot link to itself. Nothing was linked.",
+                "Re-run with a different --to id",
+                text="A decision cannot link to itself.",
+            )
         if not db.exists("SELECT 1 FROM decisions WHERE id = ?", (target_id,)):
-            raise click.ClickException(
-                f"Decision {decision_id_display(target_id)} not found."
+            raise agent_help.no_report(
+                f"Decision {decision_id_display(target_id)} not found. "
+                f"Nothing was linked.",
+                "Re-check the id with `endless decision list --all` and retry",
+                text=f"Decision {decision_id_display(target_id)} not found.",
             )
     elif target_kind == "task":
         if not db.exists("SELECT 1 FROM live_tasks WHERE id = ?", (target_id,)):
-            raise click.ClickException(
-                f"Task {task_id_display(target_id)} not found."
+            raise agent_help.no_report(
+                f"Task {task_id_display(target_id)} not found. Nothing was "
+                f"linked.",
+                "Re-check the id with `endless task list` / `endless task "
+                "show` and retry",
+                text=f"Task {task_id_display(target_id)} not found.",
             )
 
     # Pre-check uniqueness so we get a friendly error instead of an executor
@@ -1127,9 +1338,14 @@ def link_decision(
         "AND target_id = ? AND relation_type = ?",
         (source_decision_id, target_kind, target_id, relation_type),
     ):
-        raise click.ClickException(
+        raise agent_help.no_report(
             f"{decision_id_display(source_decision_id)} is already linked to "
-            f"{id_display(target_kind, target_id)} as {relation_type!r}."
+            f"{id_display(target_kind, target_id)} as {relation_type!r}. "
+            f"Nothing was linked.",
+            "Nothing to do — the relation already exists",
+            text=f"{decision_id_display(source_decision_id)} is already linked "
+                 f"to {id_display(target_kind, target_id)} as "
+                 f"{relation_type!r}.",
         )
 
     _, proj_name = _resolve_project(None)
@@ -1170,17 +1386,27 @@ def unlink_decision(
             (source_decision_id, target_kind, target_id),
         )
         if not rows:
-            raise click.ClickException(
+            raise agent_help.no_report(
                 f"No relation: {decision_id_display(source_decision_id)} → "
-                f"{id_display(target_kind, target_id)}"
+                f"{id_display(target_kind, target_id)}. Nothing was unlinked.",
+                "Nothing to unlink — confirm with `endless decision show` if a "
+                "relation was expected",
+                text=f"No relation: "
+                     f"{decision_id_display(source_decision_id)} → "
+                     f"{id_display(target_kind, target_id)}",
             )
         if len(rows) > 1:
             types = ", ".join(r["relation_type"] for r in rows)
-            raise click.ClickException(
+            raise agent_help.no_report(
                 f"Multiple relations between "
                 f"{decision_id_display(source_decision_id)} and "
-                f"{id_display(target_kind, target_id)} ({types}). "
-                f"Specify --type <type>."
+                f"{id_display(target_kind, target_id)} ({types}). Nothing was "
+                f"unlinked.",
+                f"Re-run with --type naming one of: {types}",
+                text=f"Multiple relations between "
+                     f"{decision_id_display(source_decision_id)} and "
+                     f"{id_display(target_kind, target_id)} ({types}). "
+                     f"Specify --type <type>.",
             )
         relation_type = rows[0]["relation_type"]
     else:
@@ -1191,10 +1417,15 @@ def unlink_decision(
             "AND target_id = ? AND relation_type = ?",
             (source_decision_id, target_kind, target_id, relation_type),
         ):
-            raise click.ClickException(
+            raise agent_help.no_report(
                 f"No {relation_type!r} relation: "
                 f"{decision_id_display(source_decision_id)} → "
-                f"{id_display(target_kind, target_id)}"
+                f"{id_display(target_kind, target_id)}. Nothing was unlinked.",
+                "Nothing to unlink — confirm with `endless decision show` if a "
+                "relation was expected",
+                text=f"No {relation_type!r} relation: "
+                     f"{decision_id_display(source_decision_id)} → "
+                     f"{id_display(target_kind, target_id)}",
             )
 
     _, proj_name = _resolve_project(None)
@@ -1259,9 +1490,19 @@ def _insert_task_decision_dep(
         "AND target_type = 'decision' AND target_id = ? AND dep_type = ?",
         (source_task_id, target_decision_id, dep_type),
     ):
-        raise click.ClickException(
+        # "Nothing changed" is now true on every path that reaches here.
+        # It was not before E-2159: `decision add --decides` called this after
+        # emitting decision.created, so a repeated id produced this refusal with
+        # a decision already in the ledger. `add_decision` pre-checks its own
+        # arguments now, which leaves `task link --to ED-N` as the only caller,
+        # and there the relation really does pre-exist.
+        raise agent_help.no_report(
             f"{task_id_display(source_task_id)} is already linked to "
-            f"{decision_id_display(target_decision_id)} as {dep_type!r}."
+            f"{decision_id_display(target_decision_id)} as {dep_type!r}. "
+            f"Nothing changed.",
+            "Nothing to do — the link already exists",
+            text=f"{task_id_display(source_task_id)} is already linked to "
+                 f"{decision_id_display(target_decision_id)} as {dep_type!r}.",
         )
     db.execute(
         "INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type) "
@@ -1278,12 +1519,20 @@ def link_task_to_decision(
     """Link a task → decision (writes a task_deps row with target_type='decision')."""
     require_legal_relation_type("task", "decision", dep_type)
     if not db.exists("SELECT 1 FROM live_tasks WHERE id = ?", (source_task_id,)):
-        raise click.ClickException(
-            f"Task {task_id_display(source_task_id)} not found."
+        raise agent_help.no_report(
+            f"Task {task_id_display(source_task_id)} not found. Nothing was "
+            f"linked.",
+            "Re-check the id with `endless task list` / `endless task show` "
+            "and retry",
+            text=f"Task {task_id_display(source_task_id)} not found.",
         )
     if not db.exists("SELECT 1 FROM decisions WHERE id = ?", (target_decision_id,)):
-        raise click.ClickException(
-            f"Decision {decision_id_display(target_decision_id)} not found."
+        raise agent_help.no_report(
+            f"Decision {decision_id_display(target_decision_id)} not found. "
+            f"Nothing was linked.",
+            "Re-check the id with `endless decision list --all` and retry",
+            text=f"Decision {decision_id_display(target_decision_id)} not "
+                 f"found.",
         )
     _insert_task_decision_dep(source_task_id, target_decision_id, dep_type)
     click.echo(
@@ -1306,17 +1555,27 @@ def unlink_task_from_decision(
             (source_task_id, target_decision_id),
         )
         if not rows:
-            raise click.ClickException(
+            raise agent_help.no_report(
                 f"No relation: {task_id_display(source_task_id)} → "
-                f"{decision_id_display(target_decision_id)}"
+                f"{decision_id_display(target_decision_id)}. Nothing was "
+                f"unlinked.",
+                "Nothing to unlink — confirm with `endless task show` if a "
+                "relation was expected",
+                text=f"No relation: {task_id_display(source_task_id)} → "
+                     f"{decision_id_display(target_decision_id)}",
             )
         if len(rows) > 1:
             types = ", ".join(r["dep_type"] for r in rows)
-            raise click.ClickException(
+            raise agent_help.no_report(
                 f"Multiple relations between "
                 f"{task_id_display(source_task_id)} and "
                 f"{decision_id_display(target_decision_id)} ({types}). "
-                f"Specify --type <type>."
+                f"Nothing was unlinked.",
+                f"Re-run with --type naming one of: {types}",
+                text=f"Multiple relations between "
+                     f"{task_id_display(source_task_id)} and "
+                     f"{decision_id_display(target_decision_id)} ({types}). "
+                     f"Specify --type <type>.",
             )
         dep_type = rows[0]["dep_type"]
     else:
@@ -1328,9 +1587,14 @@ def unlink_task_from_decision(
         (source_task_id, target_decision_id, dep_type),
     )
     if result.rowcount == 0:
-        raise click.ClickException(
+        raise agent_help.no_report(
             f"No {dep_type!r} relation: {task_id_display(source_task_id)} → "
-            f"{decision_id_display(target_decision_id)}"
+            f"{decision_id_display(target_decision_id)}. Nothing was unlinked.",
+            "Nothing to unlink — confirm with `endless task show` if a "
+            "relation was expected",
+            text=f"No {dep_type!r} relation: "
+                 f"{task_id_display(source_task_id)} → "
+                 f"{decision_id_display(target_decision_id)}",
         )
     click.echo(
         click.style("•", fg="cyan")

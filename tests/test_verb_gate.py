@@ -205,8 +205,15 @@ def test_verb_add_commit_failure_raises(git_project_at_cwd, monkeypatch):
 
 
 def test_auto_register_propagates_commit_failure(git_project_at_cwd, monkeypatch):
-    """task_cmd.validate_title's auto-register path does not catch RuntimeError;
-    a commit failure surfaces as a task add failure."""
+    """A commit failure still stops the task add — but as a refusal, not a crash.
+
+    E-2159: `main_commit.commit_path` raises RuntimeError and this path caught
+    only ValueError, so a failed verb commit reached the user as a Python
+    traceback. It is now a classified refusal, and the summary has to say what
+    the file system actually holds: the verb IS registered in verbs.jsonl and
+    that file is left modified, so "nothing changed" would be false and an agent
+    that believed it would re-register on the retry.
+    """
     # Force the haiku verb-check to say YES with a definition so auto-register fires.
     monkeypatch.setattr(
         task_cmd, "_check_verb_via_haiku",
@@ -216,9 +223,20 @@ def test_auto_register_propagates_commit_failure(git_project_at_cwd, monkeypatch
         subprocess, "run", _patched_run_factory(subprocess.run),
     )
 
-    with pytest.raises(RuntimeError) as exc:
+    from endless import agent_help
+
+    with pytest.raises(agent_help.Refusal) as exc:
         task_cmd.validate_title("mull over the design")
-    assert "forced failure" in str(exc.value)
+    assert "forced failure" in exc.value.text
+    # The cause is not swallowed: the traceback is still reachable for a bug
+    # report, it just is not what a user reads.
+    assert isinstance(exc.value.__cause__, RuntimeError)
+    # The refusal says what was written, because something was.
+    assert "IS registered" in exc.value.text
+    assert "left modified" in exc.value.text
+    # ...and it does NOT also claim nothing was written, which used to sit in
+    # the same paragraph contradicting it.
+    assert "Nothing was written" not in exc.value.text
 
     # File write happened before commit failed.
     verbs_path = git_project_at_cwd / ".endless" / "verbs.jsonl"

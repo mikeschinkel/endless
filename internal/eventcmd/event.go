@@ -6,10 +6,12 @@ package eventcmd
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	_ "modernc.org/sqlite"
@@ -18,17 +20,20 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/dbprovenance"
 	"github.com/mikeschinkel/endless/internal/events"
+	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/kairos"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/schema"
 	"github.com/mikeschinkel/endless/internal/schemachange"
 )
 
 func Run(args []string) {
 	if len(args) < 1 {
-		fmt.Fprintf(os.Stderr, "Usage: endless-go event <command> [flags]\n")
-		fmt.Fprintf(os.Stderr, "Commands: emit, validate-db, rebuild-db, migrate, upgrade, apply-change, backup, reap-worktrees, commit-doc\n")
-		os.Exit(1)
+		refusal.NoReport(
+			"endless-go event: no command given",
+			"Pass one of the listed commands and retry",
+		).Command("event").Text(usageText()).Exit(1)
 	}
 
 	switch args[0] {
@@ -51,9 +56,69 @@ func Run(args []string) {
 	case "reap-worktrees":
 		runReapWorktrees(args[1:])
 	default:
-		fmt.Fprintf(os.Stderr, "Unknown command: %s\n", args[0])
-		os.Exit(1)
+		// Two readings of the same line, and this binary cannot tell them
+		// apart. Typed by hand it is a typo the agent corrects and forgets.
+		// Relayed by an `endless` command — commit-doc and migrate are the late
+		// verbs most exposed to it — it means the installed endless-go and the
+		// Python CLI calling it are different vintages, which only a reinstall
+		// fixes. No usage block: this branch has never printed one, and it is
+		// also where `event -h` lands.
+		refusal.ReportIf(
+			fmt.Sprintf("Unknown command: %s", args[0]),
+			"this came from an `endless` command rather than a verb you typed",
+			"retry with one of the commands endless-go event accepts",
+			"the installed endless-go is a different vintage from the endless CLI calling it, and only the user can reinstall a matching pair",
+		).Command("event").Exit(1)
 	}
+}
+
+// usageText is the command list as one block, so a refusal can carry it as
+// detail instead of writing it through a second, unclassified path.
+func usageText() string {
+	return strings.Join([]string{
+		"Usage: endless-go event <command> [flags]",
+		"Commands: emit, validate-db, rebuild-db, migrate, upgrade, apply-change, backup, reap-worktrees, commit-doc",
+	}, "\n") + "\n"
+}
+
+// parseFlags parses one verb's flag set and classifies what a plain
+// flag.FlagSet used to print from inside the flag package.
+//
+// refusal.NewFlags is always ContinueOnError (flag.ExitOnError printed and
+// exited before the site could say anything), so the two outcomes it used to
+// swallow are handled here instead, once, for every verb:
+//
+//   - -h: not a refusal. flag has already rendered the usage block into the
+//     captured buffer, so it is replayed verbatim and the exit stays 0.
+//   - a bad flag: NO-REPORT whichever way it was reached. Whether somebody
+//     typed it or a version-skewed `endless` relayed it, the next move is the
+//     same command spelled correctly, and nothing in it is the user's to
+//     decide. fs.Output() is flag's own error line PLUS its usage block, so a
+//     person reads exactly what they read before.
+func parseFlags(fs *refusal.Flags, command string, args []string) {
+	err := fs.Parse(args)
+	switch {
+	case err == nil:
+		return
+	case errors.Is(err, flag.ErrHelp):
+		refusal.Info(fs.Output()).Print()
+		os.Exit(0)
+	}
+	refusal.NoReport(err.Error(), "Correct the flag and retry").
+		Command(command).Text(fs.Output()).Exit(2)
+}
+
+// exitRelay ends a verb on an error raised somewhere else — internal/events,
+// monitor.DB, internal/schema — under the prefix that verb has always printed.
+//
+// refusal.From is the reason these go through one place: the site that
+// CONSTRUCTED the error already chose a class, and a print site holding only an
+// error string cannot re-derive it. Anything that never chose one becomes a
+// fault, which is the honest answer for this pipeline — an unclassified failure
+// between the ledger append and the SQL mutation is Endless breaking, not
+// something the agent can retype its way past.
+func exitRelay(command, prefix string, err error) {
+	refusal.From(err).Command(command).Text(prefix + err.Error()).Exit(1)
 }
 
 // runCommitDoc commits a single version-controlled document mirror file
@@ -62,25 +127,30 @@ func Run(args []string) {
 // worktree: the decision has no worktree of its own, so its `.md` lands on
 // main via the same main-checkout-enforcing commit path the ledger uses.
 func runCommitDoc(args []string) {
-	fs := flag.NewFlagSet("commit-doc", flag.ExitOnError)
+	fs := refusal.NewFlags("commit-doc")
 	projectRoot := fs.String("project-root", "", "Project root directory (main checkout)")
 	relPath := fs.String("path", "", "Repo-relative path of the doc file to commit")
 	subject := fs.String("subject", "", "Commit subject line")
-	fs.Parse(args)
+	parseFlags(fs, "event commit-doc", args)
 
 	if *projectRoot == "" || *relPath == "" || *subject == "" {
-		fmt.Fprintf(os.Stderr, "endless-go event commit-doc: --project-root, --path, and --subject are required\n")
-		os.Exit(1)
+		refusal.NoReport(
+			"endless-go event commit-doc: --project-root, --path, and --subject are required",
+			"Pass all three flags and retry",
+		).Command("event commit-doc").Exit(1)
 	}
 	if err := events.CommitDoc(*projectRoot, *relPath, *subject); err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go event commit-doc: error: %v\n", err)
-		os.Exit(1)
+		// The mirror commit is the degraded half of `decision add`: the decision
+		// row exists and only its .md copy on main is missing. Whether that is
+		// something the user has to hear about is decided where the error was
+		// built (commit.go), so it is relayed with the class it already carries.
+		exitRelay("event commit-doc", "endless-go event commit-doc: error: ", err)
 	}
 }
 
 func runEmit(args []string) {
 
-	fs := flag.NewFlagSet("emit", flag.ExitOnError)
+	fs := refusal.NewFlags("emit")
 	kind := fs.String("kind", "", "Event kind (e.g. task.created)")
 	project := fs.String("project", "", "Project name")
 	entityType := fs.String("entity-type", "", "Entity type (e.g. task)")
@@ -94,13 +164,43 @@ func runEmit(args []string) {
 	correlationID := fs.String("cid", "", "Correlation ID (optional)")
 	tsOverride := fs.String("ts", "", "Historical event timestamp as RFC3339 (default: now). Used by record-only backfills to stamp the real commit date.")
 
-	fs.Parse(args)
+	parseFlags(fs, "event emit", args)
 
 	if err := run(*kind, *project, *entityType, *entityID, *actorKind, *actorID,
 		*sessionID, *nodeID, *projectRoot, *payload, *correlationID, *tsOverride); err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go event: error: %v\n", err)
-		os.Exit(1)
+		// THE event-pipeline print site: every emit refusal and fault reaches a
+		// user through this one line. One message, many classes — which is why
+		// nothing is decided here.
+		exitRelay("event emit", "endless-go event: error: ", err)
 	}
+}
+
+// requiredFlag is the refusal for a flag `event emit` cannot proceed without.
+//
+// NO-REPORT even though only the Python CLI ever builds this argv, so a missing
+// flag means a CLI bug or a version-skewed pair rather than a typo: whichever it
+// is, the next move is the same command with the flag supplied, and nothing
+// about it is the user's to decide.
+func requiredFlag(name string) error {
+	return refusal.NoReport(
+		fmt.Sprintf("%s is required", name),
+		"Pass "+name+" and retry",
+	).Command("event emit")
+}
+
+// ledgerCommitRefusal is the refusal for a ledger segment that was written to
+// disk but could not be committed.
+//
+// REPORT rather than NO-REPORT because a retry is not safe. The JSONL line is
+// already appended and the SQL mutation never ran, so running the command again
+// puts a SECOND ledger line down for one intended event — and on the create path
+// the BEGIN IMMEDIATE lock is released only by process exit. Clearing the git
+// problem and reconciling what is on disk is the user's call.
+func ledgerCommitRefusal(err error) error {
+	return refusal.Report(
+		fmt.Sprintf("commit ledger segment: %s", err),
+		"how to clear the git failure and reconcile a ledger line that is on disk but uncommitted, with no matching database mutation",
+	).Command("event emit").Cause(err)
 }
 
 func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
@@ -108,37 +208,53 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 
 	// Validate required flags
 	if kindStr == "" {
-		return fmt.Errorf("--kind is required")
+		return requiredFlag("--kind")
 	}
 	if project == "" {
-		return fmt.Errorf("--project is required")
+		return requiredFlag("--project")
 	}
 	if entityTypeStr == "" {
-		return fmt.Errorf("--entity-type is required")
+		return requiredFlag("--entity-type")
 	}
 	if actorKindStr == "" {
-		return fmt.Errorf("--actor-kind is required")
+		return requiredFlag("--actor-kind")
 	}
 	if actorID == "" {
-		return fmt.Errorf("--actor-id is required")
+		return requiredFlag("--actor-id")
 	}
 	if nodeIDStr == "" {
-		return fmt.Errorf("--node-id is required")
+		return requiredFlag("--node-id")
 	}
 	if projectRoot == "" {
-		return fmt.Errorf("--project-root is required")
+		return requiredFlag("--project-root")
 	}
 
 	// Validate kind
 	evtKind := events.Kind(kindStr)
 	if !events.ValidKinds[evtKind] {
-		return fmt.Errorf("unknown event kind %q", kindStr)
+		// Python emits kinds from code and never from agent input, so the two
+		// readings are a hand-typed typo and a version-skewed relay — the same
+		// pair the unknown-command branch weighs, and for the same reason this
+		// binary cannot weigh it alone.
+		return refusal.ReportIf(
+			fmt.Sprintf("unknown event kind %q", kindStr),
+			"this came from an `endless` command rather than a kind you typed",
+			"retry with a kind this binary accepts",
+			"the installed endless-go is a different vintage from the endless CLI calling it, and only the user can reinstall a matching pair",
+		).Command("event emit")
 	}
 
 	// Parse node ID and create clock
 	nid, err := kairos.ParseNodeID(nodeIDStr)
 	if err != nil {
-		return fmt.Errorf("invalid node-id: %w", err)
+		// node_id is written by the CLI as four hex characters and never typed,
+		// so a malformed one is a hand-edited or corrupted config.json. No retry
+		// of this command changes that, and deleting it — which regenerates a
+		// fresh one — is a decision about the machine's identity in the ledger.
+		return refusal.Report(
+			fmt.Sprintf("invalid node-id: %s", err),
+			"whether to repair or remove the malformed node_id in this machine's Endless config.json (a missing one is regenerated)",
+		).Command("event emit").Cause(err)
 	}
 	clock := kairos.NewClock(nid)
 	ts := clock.Now()
@@ -148,7 +264,10 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 	if tsOverride != "" {
 		parsed, perr := time.Parse(time.RFC3339, tsOverride)
 		if perr != nil {
-			return fmt.Errorf("invalid --ts %q (want RFC3339, e.g. 2026-05-09T12:34:56Z): %w", tsOverride, perr)
+			return refusal.NoReport(
+				fmt.Sprintf("invalid --ts %q (want RFC3339, e.g. 2026-05-09T12:34:56Z): %s", tsOverride, perr),
+				"Pass an RFC3339 timestamp and retry",
+			).Command("event emit").Cause(perr)
 		}
 		ts = kairos.New(parsed, 0, nid)
 	}
@@ -230,7 +349,7 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 		if !monitor.IsSandboxActive() {
 			segRel := filepath.Join(".endless", events.LedgerDirName, writer.CurrentSegment())
 			if err := events.CommitLedgerSegment(projectRoot, segRel); err != nil {
-				return fmt.Errorf("commit ledger segment: %w", err)
+				return ledgerCommitRefusal(err)
 			}
 		}
 
@@ -310,7 +429,7 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 		if !monitor.IsSandboxActive() {
 			segRel := filepath.Join(".endless", events.LedgerDirName, writer.CurrentSegment())
 			if err := events.CommitLedgerSegment(projectRoot, segRel); err != nil {
-				return fmt.Errorf("commit ledger segment: %w", err)
+				return ledgerCommitRefusal(err)
 			}
 		}
 
@@ -426,13 +545,15 @@ func makeDerivedEmitter(clock *kairos.Clock, project, nodeIDStr, projectRoot str
 }
 
 func runValidateDB(args []string) {
-	fs := flag.NewFlagSet("validate-db", flag.ExitOnError)
+	fs := refusal.NewFlags("validate-db")
 	projectRoot := fs.String("project-root", "", "Project root directory")
-	fs.Parse(args)
+	parseFlags(fs, "event validate-db", args)
 
 	if *projectRoot == "" {
-		fmt.Fprintf(os.Stderr, "endless-go event: error: --project-root is required\n")
-		os.Exit(1)
+		refusal.NoReport(
+			"endless-go event: error: --project-root is required",
+			"Pass --project-root and retry",
+		).Command("event validate-db").Exit(1)
 	}
 
 	// Get schema from current DB
@@ -440,8 +561,7 @@ func runValidateDB(args []string) {
 	// context so validate-db in a sandbox replays the sandbox ledger.
 	tempPath, projResult, err := events.ProjectToTempDB(ledgerRoot(*projectRoot))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go event: error: %v\n", err)
-		os.Exit(1)
+		exitRelay("event validate-db", "endless-go event: error: ", err)
 	}
 	defer os.Remove(tempPath)
 
@@ -454,14 +574,12 @@ func runValidateDB(args []string) {
 	// Compare against current DB
 	currentDB, err := monitor.DB()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go event: error: %v\n", err)
-		os.Exit(1)
+		exitRelay("event validate-db", "endless-go event: error: ", err)
 	}
 
 	valResult, err := events.ValidateTasks(currentDB, tempPath)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go event: error: %v\n", err)
-		os.Exit(1)
+		exitRelay("event validate-db", "endless-go event: error: ", err)
 	}
 
 	fmt.Printf("Validation: %d tasks compared\n", valResult.TasksCompared)
@@ -487,14 +605,16 @@ func runValidateDB(args []string) {
 }
 
 func runRebuildDB(args []string) {
-	fs := flag.NewFlagSet("rebuild-db", flag.ExitOnError)
+	fs := refusal.NewFlags("rebuild-db")
 	projectRoot := fs.String("project-root", "", "Project root directory")
 	confirm := fs.Bool("confirm", false, "DISABLED (E-2062): refuses and reports what replacing the tasks table would destroy")
-	fs.Parse(args)
+	parseFlags(fs, "event rebuild-db", args)
 
 	if *projectRoot == "" {
-		fmt.Fprintf(os.Stderr, "endless-go event: error: --project-root is required\n")
-		os.Exit(1)
+		refusal.NoReport(
+			"endless-go event: error: --project-root is required",
+			"Pass --project-root and retry",
+		).Command("event rebuild-db").Exit(1)
 	}
 
 	// E-2062: refuse --confirm here, before the projection is built and before
@@ -509,8 +629,7 @@ func runRebuildDB(args []string) {
 
 	tempPath, projResult, err := events.ProjectToTempDB(ledgerRoot(*projectRoot))
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go event: error: %v\n", err)
-		os.Exit(1)
+		exitRelay("event rebuild-db", "endless-go event: error: ", err)
 	}
 
 	fmt.Printf("Projection: %d events replayed, %d tasks created, %d updated, %d deleted\n",
@@ -528,25 +647,28 @@ func runRebuildDB(args []string) {
 		return
 	}
 
-	// Replace tasks table in current DB from temp DB
+	// Everything from here down is unreachable and kept only for E-799 to
+	// repair: --confirm exits inside refuseRebuildDBConfirm above, and the dry
+	// run has already returned. Nothing normally reads these lines, so they are
+	// classified by what reaching them WOULD mean — a copy-back that got past
+	// the guard built to stop it, which is Endless broken rather than anything a
+	// caller can retype. The relayed ones stay relays: an error raised elsewhere
+	// keeps the class its own site chose even here.
 	currentDB, err := monitor.DB()
 	if err != nil {
 		os.Remove(tempPath)
-		fmt.Fprintf(os.Stderr, "endless-go event: error: %v\n", err)
-		os.Exit(1)
+		exitRelay("event rebuild-db", "endless-go event: error: ", err)
 	}
 
 	if _, err := currentDB.Exec(fmt.Sprintf("ATTACH DATABASE '%s' AS proj", tempPath)); err != nil {
 		os.Remove(tempPath)
-		fmt.Fprintf(os.Stderr, "endless-go event: error attaching temp db: %v\n", err)
-		os.Exit(1)
+		rebuildFault("endless-go event: error attaching temp db: %v", err)
 	}
 
 	tx, err := currentDB.Begin()
 	if err != nil {
 		os.Remove(tempPath)
-		fmt.Fprintf(os.Stderr, "endless-go event: error: %v\n", err)
-		os.Exit(1)
+		rebuildFault("endless-go event: error: %v", err)
 	}
 
 	// Delete current tasks for this project and insert from projection.
@@ -560,15 +682,13 @@ func runRebuildDB(args []string) {
 	if _, err := tx.Exec("DELETE FROM tasks WHERE project_id IN (SELECT id FROM projects WHERE name IN (SELECT name FROM proj.projects))"); err != nil {
 		tx.Rollback()
 		os.Remove(tempPath)
-		fmt.Fprintf(os.Stderr, "endless-go event: error clearing tasks: %v\n", err)
-		os.Exit(1)
+		rebuildFault("endless-go event: error clearing tasks: %v", err)
 	}
 
 	if _, err := tx.Exec("INSERT INTO tasks SELECT * FROM proj.tasks"); err != nil {
 		tx.Rollback()
 		os.Remove(tempPath)
-		fmt.Fprintf(os.Stderr, "endless-go event: error inserting projected tasks: %v\n", err)
-		os.Exit(1)
+		rebuildFault("endless-go event: error inserting projected tasks: %v", err)
 	}
 
 	// E-1378: also replace decisions and decision_relations from the projection.
@@ -577,15 +697,13 @@ func runRebuildDB(args []string) {
 	if _, err := tx.Exec("DELETE FROM decisions WHERE project_id IN (SELECT id FROM projects WHERE name IN (SELECT name FROM proj.projects))"); err != nil {
 		tx.Rollback()
 		os.Remove(tempPath)
-		fmt.Fprintf(os.Stderr, "endless-event: error clearing decisions: %v\n", err)
-		os.Exit(1)
+		rebuildFault("endless-event: error clearing decisions: %v", err)
 	}
 
 	if _, err := tx.Exec("INSERT INTO decisions SELECT * FROM proj.decisions"); err != nil {
 		tx.Rollback()
 		os.Remove(tempPath)
-		fmt.Fprintf(os.Stderr, "endless-event: error inserting projected decisions: %v\n", err)
-		os.Exit(1)
+		rebuildFault("endless-event: error inserting projected decisions: %v", err)
 	}
 
 	// decision_relations: same project filter, joined via decisions.project_id.
@@ -594,14 +712,12 @@ func runRebuildDB(args []string) {
 	if _, err := tx.Exec("INSERT INTO decision_relations SELECT * FROM proj.decision_relations"); err != nil {
 		tx.Rollback()
 		os.Remove(tempPath)
-		fmt.Fprintf(os.Stderr, "endless-event: error inserting projected decision_relations: %v\n", err)
-		os.Exit(1)
+		rebuildFault("endless-event: error inserting projected decision_relations: %v", err)
 	}
 
 	if err := tx.Commit(); err != nil {
 		os.Remove(tempPath)
-		fmt.Fprintf(os.Stderr, "endless-go event: error committing: %v\n", err)
-		os.Exit(1)
+		rebuildFault("endless-go event: error committing: %v", err)
 	}
 
 	currentDB.Exec("DETACH DATABASE proj")
@@ -609,15 +725,23 @@ func runRebuildDB(args []string) {
 	fmt.Printf("Rebuilt: tasks table replaced with %d projected tasks.\n", projResult.TasksCreated)
 }
 
+// rebuildFault ends the dead copy-back path. See the comment at that path's
+// head for why every failure in it is a fault and why the path exists at all.
+func rebuildFault(format string, args ...any) {
+	refusal.Faultf(format, args...).Command("event rebuild-db").Exit(1)
+}
+
 func runReapWorktrees(args []string) {
-	fs := flag.NewFlagSet("reap-worktrees", flag.ExitOnError)
+	fs := refusal.NewFlags("reap-worktrees")
 	projectRoot := fs.String("project-root", "", "Project root directory")
 	ttlOverride := fs.String("ttl", "", "TTL override (default: read from .endless/config.json, fallback 14d)")
-	fs.Parse(args)
+	parseFlags(fs, "event reap-worktrees", args)
 
 	if *projectRoot == "" {
-		fmt.Fprintf(os.Stderr, "endless-go event: reap-worktrees: --project-root is required\n")
-		os.Exit(1)
+		refusal.NoReport(
+			"endless-go event: reap-worktrees: --project-root is required",
+			"Pass --project-root and retry",
+		).Command("event reap-worktrees").Exit(1)
 	}
 
 	ttlStr := *ttlOverride
@@ -628,8 +752,23 @@ func runReapWorktrees(args []string) {
 	if ttlStr != "" {
 		parsed, err := monitor.ParseWorktreeTTL(ttlStr)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "endless-go event: reap-worktrees: parse ttl %q: %v (using default %s)\n",
-				ttlStr, err, monitor.DefaultWorktreeTTL)
+			// Nothing is blocked — the sweep runs on the default TTL — and the
+			// value is in the project's own .endless/config.json, which no
+			// retry of this command changes and no agent should be editing on
+			// its own. So it goes to the user through the errors channel rather
+			// than to whoever happened to trigger the sweep (E-2159 decision 5).
+			//
+			// Fingerprinted on the offending value, so one bad config is one
+			// incident however many sweeps read it.
+			faults.Record(faults.Fault{
+				Code:        faults.ErrCodeWorktreeTTLUnreadable,
+				Source:      "event:reap-worktrees",
+				Fingerprint: "worktree_ttl=" + ttlStr,
+				Summary: fmt.Sprintf("worktree_ttl %q did not parse; sweeping on the default %s",
+					ttlStr, monitor.DefaultWorktreeTTL),
+				Detail: fmt.Sprintf("parse ttl %q: %v", ttlStr, err),
+				Fields: map[string]any{"value": ttlStr, "default": monitor.DefaultWorktreeTTL.String()},
+			})
 		} else {
 			ttl = parsed
 		}
@@ -639,8 +778,16 @@ func runReapWorktrees(args []string) {
 	// invocation with no ambient context to inherit, and the reaper's git probes
 	// now take one (E-2128). This is where the chain terminates.
 	if err := monitor.ReapStaleWorktrees(context.Background(), *projectRoot, ttl); err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go event: reap-worktrees: %v\n", err)
-		os.Exit(1)
+		// The sweep has two callers with different stakes, and this process
+		// cannot tell them apart: `task claim` and `worktree land` run it
+		// best-effort after their own work, while the sweep verb IS the sweep.
+		// Only the agent, which holds the conversation, knows which.
+		refusal.ReportIf(
+			fmt.Sprintf("endless-go event: reap-worktrees: %v", err),
+			"the user asked for the stale-worktree sweep itself rather than reaching it through a claim or a land",
+			"carry on without it: after a claim or a land the sweep is best-effort",
+			"the sweep the user asked for did not run",
+		).Command("event reap-worktrees").Exit(1)
 	}
 }
 
@@ -659,8 +806,8 @@ func runReapWorktrees(args []string) {
 // than through this connect. The difference between the two programs is exactly
 // that handle, which is why the applying itself lives in one place.
 func runApplyChange(args []string) {
-	fs := flag.NewFlagSet("apply-change", flag.ExitOnError)
-	fs.Parse(args)
+	fs := refusal.NewFlags("apply-change")
+	parseFlags(fs, "event apply-change", args)
 
 	pos := fs.Args()
 	if len(pos) != 1 {
@@ -676,9 +823,11 @@ func runApplyChange(args []string) {
 		emitChangeErr(schemachange.Name(dt.Filepath(path)), fmt.Sprintf("open db: %v", err))
 	}
 
-	// os.Stderr for a .go change's own logs: this process's stdout is one JSON
-	// document and nothing else.
-	res, err := schemachange.Apply(db, dt.Filepath(monitor.DBPath()), dt.Filepath(path), os.Stderr)
+	// A .go change's log lines are its own output, relayed unchanged: this
+	// process's stdout is one JSON document and nothing else, so they have
+	// nowhere to go but stderr, and refusal.Passthrough is how a child's stream
+	// is handed out deliberately rather than by oversight.
+	res, err := schemachange.Apply(db, dt.Filepath(monitor.DBPath()), dt.Filepath(path), refusal.Passthrough())
 	if err != nil {
 		emitChangeErr(res.Name, err.Error())
 	}
@@ -710,20 +859,22 @@ func runApplyChange(args []string) {
 // of it is refused, and a worktree build never opens main. The explicit,
 // gate-free path is runUpgrade.
 func runMigrate() {
+	// Three relays rather than three classifications: the connect IS the
+	// migration (E-2019), so what fails here is monitor.DB's DB-context refusal,
+	// the E-1818 schema-passive gate, or a migration failure — each already
+	// classified where it was raised, and each reaching a user through
+	// event_bridge's "schema initialization failed".
 	db, err := monitor.DB()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go event migrate: %v\n", err)
-		os.Exit(1)
+		exitRelay("event migrate", "endless-go event migrate: ", err)
 	}
 	version, err := schema.DBVersion(context.Background(), db)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go event migrate: %v\n", err)
-		os.Exit(1)
+		exitRelay("event migrate", "endless-go event migrate: ", err)
 	}
 	latest, err := schema.LatestVersion()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go event migrate: %v\n", err)
-		os.Exit(1)
+		exitRelay("event migrate", "endless-go event migrate: ", err)
 	}
 	b, _ := json.Marshal(map[string]any{
 		"status":  "ok",
@@ -751,9 +902,15 @@ func runMigrate() {
 // ahead of it (ED-1570), so restoring this backup is the only way back from a
 // bad release.
 func runUpgrade() {
+	// Every failure here goes out through the package's relay funnel, so a
+	// class chosen at the source survives the trip: monitor.UpgradeTarget's own
+	// refusals — the E-1429 worktree gate, ED-1601's refusal of a worktree
+	// build aimed at main — name their own fix and stay NO-REPORT. Everything
+	// else faults, which is the right default for the RECOVERY command: if the
+	// upgrade did not happen the database is still at the version nothing can
+	// connect to, and there is no second way for the agent to ask for it.
 	fail := func(err error) {
-		fmt.Fprintf(os.Stderr, "endless-go event upgrade: %v\n", err)
-		os.Exit(1)
+		exitRelay("event upgrade", "endless-go event upgrade: ", err)
 	}
 
 	path, err := monitor.UpgradeTarget()
@@ -789,8 +946,14 @@ func runBackup() {
 	payload := map[string]any{}
 	res, err := monitor.BackupDB()
 	if err != nil && res.Path == "" {
-		fmt.Fprintf(os.Stderr, "endless-go event backup: %v\n", err)
-		os.Exit(1)
+		// Path empty means no backup exists at all, so a land that runs this
+		// before applying a schema change has nothing to fall back to. Disk,
+		// permissions or a database failure — none of them is something a retry
+		// clears, and proceeding without a backup is the user's call.
+		refusal.Report(
+			fmt.Sprintf("endless-go event backup: %v", err),
+			"how to clear a database that could not be backed up — disk, permissions or a DB failure — before any schema change is applied",
+		).Command("event backup").Exit(1)
 	}
 	if err != nil {
 		payload["warning"] = err.Error()

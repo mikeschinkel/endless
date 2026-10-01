@@ -14,17 +14,22 @@ module owning that shellout beats two spellings of it. E-1302.
 import os
 import shutil
 import subprocess
-import sys
 
 import click
+
+from endless import agent_help
 
 
 def _binary() -> str:
     """Locate the endless-go Go binary or raise a friendly error."""
     path = shutil.which("endless-go")
     if not path:
-        raise click.ClickException(
-            "endless-go binary not found on PATH."
+        # An agent cannot install a binary or edit the user's PATH, and every
+        # tmux verb here is a shellout to it, so there is no second way to try.
+        raise agent_help.report(
+            "endless-go is not on PATH, so nothing could be run.",
+            "how endless-go gets installed, or where it goes on PATH",
+            text="endless-go binary not found on PATH.",
         )
     return path
 
@@ -39,7 +44,12 @@ def run_apply(hotkey: str, status_interval: int) -> None:
     # Inherit stdio so the user sees the tmux output / errors in real time.
     result = subprocess.run(cmd)
     if result.returncode != 0:
-        sys.exit(result.returncode)
+        # The child's stderr went straight to the terminal and was never
+        # captured, so there is nothing here to classify or relay: endless-go
+        # already said what happened, with its own verdict. Anything this
+        # wrapper added would be Endless explaining an outcome it did not
+        # produce, in a second voice.
+        agent_help.passthrough_exit(result.returncode)
 
 
 def run_init(hotkey: str, status_interval: int) -> None:
@@ -55,7 +65,7 @@ def run_init(hotkey: str, status_interval: int) -> None:
     ]
     result = subprocess.run(cmd)
     if result.returncode != 0:
-        sys.exit(result.returncode)
+        agent_help.passthrough_exit(result.returncode)  # as in run_apply
 
 
 def run_status_line() -> None:
@@ -68,27 +78,54 @@ def run_status_line() -> None:
     if result.stdout:
         # No newline — `#()` substitution wants the raw bytes.
         click.echo(result.stdout, nl=False)
-    if result.returncode != 0 and result.stderr:
-        click.echo(result.stderr, err=True, nl=False)
-    sys.exit(result.returncode)
+    if result.returncode == 0:
+        return
+    if result.stderr:
+        # Captured here, unlike apply/init, so Go's own classified refusal can
+        # be passed through whole. Relay writes it verbatim: re-wording it here
+        # would put a Python verdict on top of a Go one that already says the
+        # same thing.
+        raise agent_help.relay(result.stderr, exit_code=result.returncode)
+    agent_help.passthrough_exit(result.returncode)
 
 
-def _no_task_message(pane: str | None, invoked_as: str) -> str:
-    """Diagnostic for the no-active-task exit, phrased for how we got here.
+def _no_task_refusal(pane: str | None, invoked_as: str, exit_code: int):
+    """The no-active-task refusal, phrased for how we got here.
 
     A session's task binding is keyed by the tmux pane it runs in, so "no
     task" has two very different causes and two different fixes. Saying
     which one applies is the whole value of the message — the Go side exits
     silently because tmux redraws it many times a minute.
+
+    Both are report_if and neither can be resolved here, because what decides
+    the class is what the CALLER wanted the id for, which this command never
+    sees. It is handed a pane and a spelling, not a purpose: an agent that only
+    needed an id to pass to another verb can name its task from its own
+    instructions and never bother the user, while one whose next step needs a
+    pane-bound session genuinely cannot proceed. So both branches are named and
+    the agent, which holds the conversation, picks.
     """
     if not (pane or os.environ.get("TMUX_PANE")):
-        return (
-            f"{invoked_as}: no active task — a session's task is bound to the "
-            f"tmux pane it runs in, and this shell is not inside tmux."
+        return agent_help.report_if(
+            f"{invoked_as}: no active task — this shell is not inside tmux, "
+            "and a session's task is bound to the tmux pane it runs in.",
+            "the next step needs a pane-bound session rather than just the id",
+            "name the task explicitly, from your instructions or "
+            "`endless task list`",
+            "only the user can start the session inside tmux",
+            text=(f"{invoked_as}: no active task — a session's task is bound "
+                  f"to the tmux pane it runs in, and this shell is not inside "
+                  f"tmux."),
+            exit_code=exit_code,
         )
-    return (
-        f"{invoked_as}: no active task for this session. "
-        f"Claim one with `endless task claim E-NNNN`."
+    return agent_help.report_if(
+        f"{invoked_as}: this session is inside tmux but has claimed no task.",
+        "no task was assigned to you",
+        "claim the task you were assigned with `endless task claim E-NNNN`",
+        "choosing what to work on is the user's call",
+        text=(f"{invoked_as}: no active task for this session. "
+              f"Claim one with `endless task claim E-NNNN`."),
+        exit_code=exit_code,
     )
 
 
@@ -113,5 +150,6 @@ def run_active_id(pane: str | None, invoked_as: str) -> None:
     # (which it explains). Relay its explanation when there is one rather than
     # overwriting a genuine error with a guess about panes.
     stderr = result.stderr.strip()
-    click.echo(stderr or _no_task_message(pane, invoked_as), err=True)
-    sys.exit(result.returncode or 1)
+    if stderr:
+        raise agent_help.relay(stderr, exit_code=result.returncode or 1)
+    raise _no_task_refusal(pane, invoked_as, result.returncode or 1)

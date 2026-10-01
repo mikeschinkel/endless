@@ -38,7 +38,7 @@ import sys
 
 import click
 
-from endless import db
+from endless import agent_help, db
 
 # The gate kind for a report row; mirrors gatekind.GateKindRelay.
 _RELAY_KIND = 2
@@ -135,6 +135,10 @@ def _render_markdown(content: str) -> str | None:
     from endless.event_bridge import _resolve_endless_go
     try:
         binary = _resolve_endless_go()
+    # Nobody reads this refusal: it is swallowed here and the caller prints the
+    # turn unrendered, which is the same text without color. Catching the base
+    # class keeps that true after `_resolve_endless_go` starts raising a
+    # classified Refusal — a Refusal IS a ClickException.
     except click.ClickException:
         return None
     width = shutil.get_terminal_size().columns
@@ -155,12 +159,17 @@ def session_turn(target: str | None, session_ref: str | None, paged: bool) -> No
     session_id = _resolve_session_id(session_ref)
     turns = _turns(session_id)
     if not turns:
-        click.echo(
-            f"ES-{session_id} has no reported turns yet — nothing has gone "
-            "through the minimizer.",
-            err=True,
+        # Idempotent rather than broken: the session simply has not relayed a
+        # turn yet, so there is nothing to read and nothing for the user to
+        # decide. Exit 1 is kept because a reader piping this still needs the
+        # status to say "no output".
+        raise agent_help.no_report(
+            f"ES-{session_id} has no reported turns yet, so there is no draft "
+            "to read.",
+            "Nothing has gone through the minimizer yet; continue without it",
+            text=(f"ES-{session_id} has no reported turns yet — nothing has "
+                  "gone through the minimizer."),
         )
-        raise SystemExit(1)
 
     slot = (target or "").strip().upper()
     if slot in ("A", "B"):
@@ -169,12 +178,13 @@ def session_turn(target: str | None, session_ref: str | None, paged: bool) -> No
 
     offset = _parse_offset(target)
     if offset >= len(turns):
-        click.echo(
-            f"ES-{session_id} has {len(turns)} reported turn(s); "
-            f"{offset} turns back does not exist.",
-            err=True,
+        raise agent_help.no_report(
+            f"ES-{session_id} has {len(turns)} reported turn(s), so {offset} "
+            "turns back does not exist. Nothing was read.",
+            f"Retry with an offset below {len(turns)}",
+            text=(f"ES-{session_id} has {len(turns)} reported turn(s); "
+                  f"{offset} turns back does not exist."),
         )
-        raise SystemExit(1)
 
     turn = turns[offset]
     _emit(turn[0].get("raw_draft") or "", paged=paged, render=False)
@@ -184,9 +194,13 @@ def _parse_offset(target: str | None) -> int:
     if target is None or target == "":
         return 0
     if not target.isdigit():
-        raise click.ClickException(
-            f"Not a turn: {target!r}. Pass a count of turns back (0 is the most "
-            "recent), or A / B to read a variant of the pending turn."
+        raise agent_help.no_report(
+            f"{target!r} is not a turn selector. Nothing was read.",
+            "Retry with a count of turns back (0 is the most recent), or A / B "
+            "for a variant of the pending turn",
+            text=(f"Not a turn: {target!r}. Pass a count of turns back (0 is "
+                  "the most recent), or A / B to read a variant of the pending "
+                  "turn."),
         )
     return int(target)
 
@@ -201,11 +215,12 @@ def _emit_variant(session_id: int, turn: list[dict], slot: str, paged: bool) -> 
     """
     match = [r for r in turn if (r.get("pair_slot") or "").upper() == slot]
     if not match:
-        click.echo(
+        raise agent_help.no_report(
             f"The most recent turn of ES-{session_id} was not a paired "
-            "minimization, so there is no option "
-            f"{slot} to read.",
-            err=True,
+            f"minimization, so option {slot} does not exist. Nothing was read.",
+            "Read the raw draft with a numeric offset instead",
+            text=(f"The most recent turn of ES-{session_id} was not a paired "
+                  "minimization, so there is no option "
+                  f"{slot} to read."),
         )
-        raise SystemExit(1)
     _emit(match[0].get("sanctioned_text") or "", paged=paged, render=sys.stdout.isatty() or paged)

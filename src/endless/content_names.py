@@ -22,13 +22,7 @@ import shutil
 import subprocess
 from typing import NamedTuple
 
-import click
-
-from endless import config
-
-
-class ContentNameError(click.ClickException):
-    """`endless-go task-content` could not answer."""
+from endless import agent_help, config
 
 
 class ContentName(NamedTuple):
@@ -77,11 +71,27 @@ def _fetch() -> tuple[ContentName, ...]:
             if slug:
                 names.append(ContentName(slug, label or slug))
         return tuple(names)
-    raise ContentNameError(
-        "could not read the task content vocabulary: no endless-go that knows "
-        "`task-content` was found.\n\n"
-        "`endless` and `endless-go` ship together — rebuild both with "
-        "`just install`."
+    # No TSV row — this module landed after the refusal audit — but its sibling
+    # `statuses._resolve_binary` classifies the same failure, and for the reason
+    # that applies here verbatim: by the time this line runs, every binary that
+    # could have answered has been tried, so there is no second way for an agent
+    # to run the command. What is left is an install, which happens outside the
+    # session entirely. Hence REPORT, not NO-REPORT.
+    #
+    # The `ContentNameError` subclass this used to raise is gone rather than
+    # aliased to `agent_help.Refusal` the way `StatusVocabularyError` is: that
+    # alias survives because catch sites read the name, and nothing anywhere
+    # catches this one.
+    raise agent_help.report(
+        "no endless-go that knows `task-content` was found, so the task "
+        "content vocabulary could not be read and the command did not run.",
+        "installing an endless-go that matches this endless on their own "
+        "machine — the two ship together and Endless cannot supply the "
+        "missing half",
+        text="could not read the task content vocabulary: no endless-go that "
+             "knows `task-content` was found.\n\n"
+             "`endless` and `endless-go` ship together — rebuild both with "
+             "`just install`.",
     )
 
 

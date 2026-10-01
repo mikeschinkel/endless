@@ -138,7 +138,11 @@ def test_projectless_session_errors_and_names_the_uuid(monkeypatch):
     )
     with pytest.raises(click.ClickException) as exc:
         session_cmd._resolve_resume("ES-963")
-    msg = str(exc.value)
+    # `format_message()`, not `str(...)`: E-2159 made the by-hand
+    # `claude --resume` route a `human_remedy` — an interactive launch is for
+    # the person at the terminal, never a retry for an agent — so it appears in
+    # the rendered message rather than in the exception's bare text.
+    msg = exc.value.format_message()
     assert "no registered project" in msg
     assert "claude --resume uuid-963" in msg
 
@@ -159,7 +163,7 @@ def test_worktree_creation_failure_errors_and_names_the_uuid(
     monkeypatch.setattr(task_cmd, "create_claimed_task_for_session", boom)
     with pytest.raises(click.ClickException) as exc:
         session_cmd._resolve_resume("ES-963")
-    msg = str(exc.value)
+    msg = exc.value.format_message()
     assert "carries unlanded work" in msg
     assert "claude --resume uuid-963" in msg
 

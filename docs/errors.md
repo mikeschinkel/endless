@@ -667,3 +667,82 @@ run `endless db upgrade`, which backs up first. `a worktree-built endless-go
 refused the main database` means something ran a worktree's binary against main;
 use the installed binary. Dismiss with `endless errors clear <id>` once the cause
 is gone.
+
+## WARN-0021 — output-style-inactive
+
+**Severity:** warning · **Raised by:** `endless register` and `endless-go outputstyle install` (E-2159)
+
+The output style file is in place, so every surface reports it as installed,
+while the style itself is doing nothing at all. Activation is the user's opt-in
+by design — installing never activates — so this fires on a perfectly
+successful install.
+
+It is recorded rather than printed because the only reader who can act on it is
+the user: `/config output-style` is a slash command no agent can run, and
+`--activate` is right only when the user asked for the style to be in effect.
+Printed to stderr it cost the agent a message it could do nothing with.
+
+**What to do.** Activate it when you want it in effect — `/config output-style=endless` in a Claude session, or re-run the install with `--activate`. Leave it inactive and dismiss this with `endless errors clear <id>` if you installed the style without meaning to switch to it.
+
+## WARN-0022 — worktree-ttl-unreadable
+
+**Severity:** warning · **Raised by:** the stale-worktree sweep (E-2159)
+
+`worktree_ttl` in the project's `.endless/config.json` did not parse, so the
+sweep ran on the built-in default instead. Nothing is blocked and no worktree is
+treated differently than it would have been under the default.
+
+It is the project's own configuration file, which no retry of any command
+changes and no agent should be editing on its own — which is why it is recorded
+for the user rather than printed at whoever happened to trigger the sweep.
+
+**What to do.** Fix `worktree_ttl` in the project's `.endless/config.json` — it takes a Go duration (`336h`) or a day count (`14d`). Until then every sweep uses the default, which is the same answer it gave before the value was added. Dismiss with `endless errors clear <id>` once the value parses.
+
+## WARN-0023 — unsupported-harness
+
+**Severity:** warning · **Raised by:** the `endless` CLI's root group (E-2006, E-2159)
+
+A command ran under a harness Endless does not support — Claude Code Desktop,
+or anything no detector claims. Endless supports Claude Code in the terminal
+only: its hooks do not fire the way the guide assumes, so session tracking, task
+claiming and worktree routing cannot work as documented.
+
+The agent is still told, in its own refusal, to stop invoking Endless for the
+rest of the session — that part is not a warning and does not move. What is
+recorded here is the fact for the USER, who is the only one who can change which
+harness they are running in, and who would otherwise learn it only from an
+agent's aside.
+
+**What to do.** Run Endless from Claude Code in a terminal if you want it to work as documented; its hooks do not fire on other harnesses. Nothing is wrong with the install. Dismiss with `endless errors clear <id>` — the agent has already been told to ignore Endless for that session.
+
+## WARN-0024 — report-unminimized
+
+**Severity:** warning · **Raised by:** `endless task report` (E-2159)
+
+The minimizer broke a protected-content invariant twice on one reply, so
+Endless sent the agent's draft through unminimized rather than a reply with
+mangled content. Nothing was lost: the draft is intact and the reply went out.
+
+Before this code the fallback was announced only to the agent, which under the
+report rule does not relay a no-report line — so "announced, never silently"
+had quietly become "announced to nobody who could act on it". The minimizer
+misbehaving on real drafts is exactly the signal its owner needs, and it belongs
+where the user will see it accumulate.
+
+**What to do.** Nothing, for the reply — it was sent, and intact. The signal is the minimizer itself: read the detail (`endless errors show <n> --detail`) for which invariant broke, and treat a rising occurrence count as a bug in the minimizer rather than in the drafts. Dismiss with `endless errors clear <id>`.
+
+## WARN-0025 — sigil-synonym
+
+**Severity:** warning · **Raised by:** the `UserPromptSubmit` hook's sigil recorder (E-2159)
+
+A sigil used for the first time is within a character or two of one already in
+the corpus — `$fastpath` beside `$fast-path`. Either both are deliberate and
+both keep working, or one is a typo that will quietly split one label's data
+across two names.
+
+Only the user can say which, and the question is not urgent: nothing is blocked
+and both spellings keep recording. Asked through the agent it cost a turn's
+attention on every prompt that used the new sigil; recorded here it waits until
+the user is deciding about their own vocabulary.
+
+**What to do.** Decide whether the two spellings mean the same thing. If they do, pick the one you want as canonical and use it from then on — the other keeps working, so nothing breaks while you switch. If they are genuinely different labels, nothing needs doing. Dismiss with `endless errors clear <id>` either way.

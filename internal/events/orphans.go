@@ -29,6 +29,8 @@ import (
 	"os/exec"
 	"path"
 	"strings"
+
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // LedgerCommit is one commit in `base..branch`, with the evidence for whether
@@ -102,7 +104,12 @@ func LedgerOrphans(projectRoot, base, branch string) (report *LedgerOrphanReport
 		}
 		sha, subject, found := strings.Cut(line, "\x1f")
 		if !found {
-			return nil, fmt.Errorf("unparsable git log line %q", line)
+			// `--format=%H%x1f%s` puts the separator in every line by
+			// construction, so a line without one is git output violating its own
+			// format — nothing this walk can interpret or retry around.
+			return nil, refusal.Report(
+				fmt.Sprintf("unparsable git log line %q", line),
+				"why git emitted a log line that does not match the format it was given — the ledger-orphan classification cannot proceed on it")
 		}
 		lc := LedgerCommit{
 			SHA:         sha,

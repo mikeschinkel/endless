@@ -229,16 +229,37 @@ end:
 // status: the runner exits 0 or 1 and `go run` exits 1 on a compile failure, so
 // there has never been a third code to carry.
 func applyGo(path dt.Filepath, dbPath dt.Filepath, logs io.Writer) (err error) {
+	var captured strings.Builder
+
 	cmd := exec.Command("go", "run", string(path))
 	cmd.Env = append(os.Environ(), ChangeDBEnvVar+"="+string(dbPath))
-	cmd.Stdout = logs
-	cmd.Stderr = logs
+
+	// Tee, rather than just stream. The script says WHY it failed — "apply-change:
+	// %q apply: <error>" — on its own stderr, and every caller of Apply reports
+	// the returned error rather than the stream. So a caller that captures or
+	// discards that stream reported "exit status 1" and nothing else, which is
+	// the exit code restating itself. Carrying the reason on the error means it
+	// survives whatever the caller does with the stream.
+	cmd.Stdout = io.MultiWriter(logs, &captured)
+	cmd.Stderr = io.MultiWriter(logs, &captured)
 
 	err = cmd.Run()
 	if err != nil {
-		err = doterr.NewErr(ErrRunningChangeScript, err)
+		err = doterr.NewErr(ErrRunningChangeScript, err, "output", lastLine(&captured))
 	}
 	return err
+}
+
+// lastLine is the script's final non-empty line — the one naming the phase and
+// the cause, since the runner logs one line per failure. The whole capture can
+// be a Go build log, and a refusal's summary has to stay one line.
+func lastLine(b *strings.Builder) (line string) {
+	for _, l := range strings.Split(strings.TrimSpace(b.String()), "\n") {
+		if l = strings.TrimSpace(l); l != "" {
+			line = l
+		}
+	}
+	return line
 }
 
 // rollback unwinds the open transaction and returns the error to report. A

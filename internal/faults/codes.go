@@ -523,6 +523,96 @@ var (
 			"worktree's binary against main; use the installed binary. Dismiss " +
 			"with `endless errors clear <id>` once the cause is gone.",
 	}
+
+	// ErrCodeOutputStyleInactive covers the Endless output style is installed but not active.
+	//
+	// Warning, not error: nothing is blocked and nothing a command was asked to
+	// do failed. It is here rather than on stderr because the only reader who
+	// can act on it is the user (E-2159 decision 5), and an agent shown it
+	// spends a message on something it cannot change.
+	ErrCodeOutputStyleInactive = Code{
+		ID:       "WARN-0021",
+		Slug:     "output-style-inactive",
+		Severity: SeverityWarning,
+		Title:    "The Endless output style is installed but not active",
+		Remedy: "Activate it when you want it in effect — `/config " +
+			"output-style=endless` in a Claude session, or re-run the " +
+			"install with `--activate`. Leave it inactive and dismiss this " +
+			"with `endless errors clear <id>` if you installed the style " +
+			"without meaning to switch to it.",
+	}
+
+	// ErrCodeWorktreeTTLUnreadable covers a project's worktree_ttl could not be read, so the default applies.
+	//
+	// Warning, not error: nothing is blocked and nothing a command was asked to
+	// do failed. It is here rather than on stderr because the only reader who
+	// can act on it is the user (E-2159 decision 5), and an agent shown it
+	// spends a message on something it cannot change.
+	ErrCodeWorktreeTTLUnreadable = Code{
+		ID:       "WARN-0022",
+		Slug:     "worktree-ttl-unreadable",
+		Severity: SeverityWarning,
+		Title:    "A project's worktree_ttl could not be read, so the default applies",
+		Remedy: "Fix `worktree_ttl` in the project's `.endless/config.json` — " +
+			"it takes a Go duration (`336h`) or a day count (`14d`). Until " +
+			"then every sweep uses the default, which is the same answer it " +
+			"gave before the value was added. Dismiss with `endless errors " +
+			"clear <id>` once the value parses.",
+	}
+
+	// ErrCodeUnsupportedHarness covers endless ran under an agent harness it does not support.
+	//
+	// Warning, not error: nothing is blocked and nothing a command was asked to
+	// do failed. It is here rather than on stderr because the only reader who
+	// can act on it is the user (E-2159 decision 5), and an agent shown it
+	// spends a message on something it cannot change.
+	ErrCodeUnsupportedHarness = Code{
+		ID:       "WARN-0023",
+		Slug:     "unsupported-harness",
+		Severity: SeverityWarning,
+		Title:    "Endless ran under an agent harness it does not support",
+		Remedy: "Run Endless from Claude Code in a terminal if you want it to " +
+			"work as documented; its hooks do not fire on other harnesses. " +
+			"Nothing is wrong with the install. Dismiss with `endless " +
+			"errors clear <id>` — the agent has already been told to ignore " +
+			"Endless for that session.",
+	}
+
+	// ErrCodeReportUnminimized covers a reply was sent unminimized after the minimizer broke an invariant.
+	//
+	// Warning, not error: nothing is blocked and nothing a command was asked to
+	// do failed. It is here rather than on stderr because the only reader who
+	// can act on it is the user (E-2159 decision 5), and an agent shown it
+	// spends a message on something it cannot change.
+	ErrCodeReportUnminimized = Code{
+		ID:       "WARN-0024",
+		Slug:     "report-unminimized",
+		Severity: SeverityWarning,
+		Title:    "A reply was sent unminimized after the minimizer broke an invariant",
+		Remedy: "Nothing, for the reply — it was sent, and intact. The signal " +
+			"is the minimizer itself: read the detail (`endless errors show " +
+			"<n> --detail`) for which invariant broke, and treat a rising " +
+			"occurrence count as a bug in the minimizer rather than in the " +
+			"drafts. Dismiss with `endless errors clear <id>`.",
+	}
+
+	// ErrCodeSigilSynonym covers a new sigil closely resembles one the corpus already has.
+	//
+	// Warning, not error: nothing is blocked and nothing a command was asked to
+	// do failed. It is here rather than on stderr because the only reader who
+	// can act on it is the user (E-2159 decision 5), and an agent shown it
+	// spends a message on something it cannot change.
+	ErrCodeSigilSynonym = Code{
+		ID:       "WARN-0025",
+		Slug:     "sigil-synonym",
+		Severity: SeverityWarning,
+		Title:    "A new sigil closely resembles one the corpus already has",
+		Remedy: "Decide whether the two spellings mean the same thing. If they " +
+			"do, pick the one you want as canonical and use it from then on " +
+			"— the other keeps working, so nothing breaks while you switch. " +
+			"If they are genuinely different labels, nothing needs doing. " +
+			"Dismiss with `endless errors clear <id>` either way.",
+	}
 )
 
 // catalog indexes every registered Code by ID. Built once at init from the
@@ -548,6 +638,11 @@ var catalog = buildCatalog(
 	ErrCodeHookFailed,
 	ErrCodeMonitorRestartFailed,
 	ErrCodeSchemaVersionRefused,
+	ErrCodeOutputStyleInactive,
+	ErrCodeWorktreeTTLUnreadable,
+	ErrCodeUnsupportedHarness,
+	ErrCodeReportUnminimized,
+	ErrCodeSigilSynonym,
 )
 
 // buildCatalog indexes codes by ID. It panics on a duplicate ID: a collision is

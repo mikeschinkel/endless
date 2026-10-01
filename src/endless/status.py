@@ -4,7 +4,7 @@ from pathlib import Path
 
 import click
 
-from endless import db
+from endless import agent_help, db
 from endless.project_path import project_name_for_cwd, stored
 
 
@@ -17,9 +17,21 @@ def show_status(name: str | None = None):
         cwd = Path.cwd()
         name = project_name_for_cwd(cwd)
         if not name:
-            raise click.ClickException(
-                "Not in a registered project directory. "
-                "Specify a name: endless project info <name>"
+            # Two different situations reach here and they need opposite
+            # answers: a caller standing in the wrong directory only has to
+            # name the project, while a project that was never registered is a
+            # registration the user has to want. Nothing in cwd distinguishes
+            # them — the absence of a row looks identical either way — so both
+            # branches are named and the agent, which holds the conversation,
+            # picks.
+            raise agent_help.report_if(
+                "The current directory is in no registered project and no "
+                "name was given, so there is nothing to show.",
+                "this directory's project is not registered at all",
+                "retry with its registered name from `endless project list`",
+                "registering a project is theirs to decide",
+                text=("Not in a registered project directory. "
+                      "Specify a name: endless project info <name>"),
             )
 
     row = db.query(
@@ -29,7 +41,11 @@ def show_status(name: str | None = None):
         (name,),
     )
     if not row:
-        raise click.ClickException(f"No project found with name '{name}'")
+        raise agent_help.no_report(
+            f"No registered project is named '{name}'.",
+            "Look up the registered name with `endless project list` and retry",
+            text=f"No project found with name '{name}'",
+        )
 
     p = row[0]
     # Display the STORED form, so a row still written absolute renders like

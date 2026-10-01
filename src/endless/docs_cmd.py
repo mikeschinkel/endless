@@ -5,7 +5,7 @@ from pathlib import Path
 import click
 from tabulate import tabulate
 
-from endless import db, provenance
+from endless import agent_help, db, provenance
 from endless.doc_types import DOC_TYPE_NAMES
 from endless.project_path import project_name_for_cwd
 
@@ -24,9 +24,12 @@ def _resolve_project(name: str | None) -> tuple[int, str, str]:
         cwd = Path.cwd()
         name = project_name_for_cwd(cwd)
         if not name:
-            raise click.ClickException(
-                "Not in a registered project directory. "
-                "Specify a name: endless docs <name>"
+            raise agent_help.no_report(
+                "The current directory is in no registered project, so "
+                "`endless docs` has nothing to list.",
+                "Name the project explicitly: endless docs <name>",
+                text=("Not in a registered project directory. "
+                      "Specify a name: endless docs <name>"),
             )
 
     row = db.query(
@@ -34,8 +37,10 @@ def _resolve_project(name: str | None) -> tuple[int, str, str]:
         (name,),
     )
     if not row:
-        raise click.ClickException(
-            f"No project found with name '{name}'"
+        raise agent_help.no_report(
+            f"No registered project is named '{name}'.",
+            "Find the registered name with `endless project list` and retry",
+            text=f"No project found with name '{name}'",
         )
     # E-1668: record what this invocation resolved, so the provenance trace can
     # say so when it is not the project enclosing cwd.
@@ -54,9 +59,11 @@ def list_docs(
     params: list = [project_id]
     if type_filter:
         if type_filter not in DOC_TYPE_NAMES:
-            raise click.ClickException(
-                f"Unknown doc type '{type_filter}'. "
-                f"Valid types: {', '.join(sorted(DOC_TYPE_NAMES))}"
+            raise agent_help.no_report(
+                f"'{type_filter}' is not a document type Endless tracks.",
+                f"Retry with one of {', '.join(sorted(DOC_TYPE_NAMES))}",
+                text=(f"Unknown doc type '{type_filter}'. "
+                      f"Valid types: {', '.join(sorted(DOC_TYPE_NAMES))}"),
             )
         where += " AND d.doc_type = ?"
         params.append(type_filter)

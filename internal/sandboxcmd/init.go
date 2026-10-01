@@ -1,21 +1,19 @@
 package sandboxcmd
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 func initCmd(args []string) {
-	fs := flag.NewFlagSet("init", flag.ExitOnError)
+	fs := refusal.NewFlags("init")
 	mode := fs.String("mode", "empty", "Initial state: empty | worktree | seed | clone")
 	force := fs.Bool("force", false, "Recreate the sandbox if it already exists")
-	if err := fs.Parse(args); err != nil {
-		os.Exit(2)
-	}
+	parseVerbFlags(fs, "init", args)
 	rest := fs.Args()
 
 	switch *mode {
@@ -28,32 +26,41 @@ func initCmd(args []string) {
 		initWorktree(rest, *force)
 		return
 	case "seed":
-		fmt.Fprintln(os.Stderr, "endless-go sandbox init: --mode seed not yet implemented; use --mode empty or --mode worktree")
-		os.Exit(1)
+		refusal.NoReport(
+			"endless-go sandbox init: --mode seed not yet implemented; use --mode empty or --mode worktree",
+			"Re-run with --mode empty or --mode worktree",
+		).Command("sandbox init").Exit(1)
 	case "clone":
-		fmt.Fprintln(os.Stderr, "endless-go sandbox init: --mode clone not yet implemented (see E-1087); use --mode empty or --mode worktree")
-		os.Exit(1)
+		refusal.NoReport(
+			"endless-go sandbox init: --mode clone not yet implemented (see E-1087); use --mode empty or --mode worktree",
+			"Re-run with --mode empty or --mode worktree",
+		).Command("sandbox init").Exit(1)
 	default:
-		fmt.Fprintf(os.Stderr, "endless-go sandbox init: unknown --mode %q (want: empty | worktree | seed | clone)\n", *mode)
-		os.Exit(1)
+		refusal.NoReport(
+			fmt.Sprintf("endless-go sandbox init: unknown --mode %q (want: empty | worktree | seed | clone)", *mode),
+			"Re-run with --mode empty or --mode worktree",
+		).Command("sandbox init").Exit(1)
 	}
 
 	if len(rest) != 1 {
-		fmt.Fprintln(os.Stderr, "endless-go sandbox init: expected exactly one positional arg <name>")
-		os.Exit(1)
+		refusal.NoReport(
+			"endless-go sandbox init: expected exactly one positional arg <name>",
+			"Pass exactly one sandbox name and retry",
+		).Command("sandbox init").Exit(1)
 	}
 	name := rest[0]
 	if err := validateName(name); err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go sandbox init: %v\n", err)
-		os.Exit(1)
+		relayed("init", err).Exit(1)
 	}
 
 	dir := filepath.Join(sandboxesDir(), name)
 	if _, err := os.Stat(dir); err == nil {
 		if *force {
 			if err := os.RemoveAll(dir); err != nil {
-				fmt.Fprintf(os.Stderr, "endless-go sandbox init: removing existing %s: %v\n", dir, err)
-				os.Exit(1)
+				refusal.Report(
+					fmt.Sprintf("endless-go sandbox init: removing existing %s: %v", dir, err),
+					"how to clear the filesystem error blocking removal of the existing sandbox",
+				).Command("sandbox init").Exit(1)
 			}
 		} else {
 			// Idempotent: existing sandbox with the same name is treated as a no-op.
@@ -61,14 +68,17 @@ func initCmd(args []string) {
 			return
 		}
 	} else if !os.IsNotExist(err) {
-		fmt.Fprintf(os.Stderr, "endless-go sandbox init: %v\n", err)
-		os.Exit(1)
+		// The cache directory would not answer at all, which is the user's
+		// disk rather than anything about this argv.
+		refusal.Report(
+			fmt.Sprintf("endless-go sandbox init: %v", err),
+			"how to clear the permission or I/O error on the sandbox cache directory",
+		).Command("sandbox init").Exit(1)
 	}
 
 	sb, err := Provision(name, modePersistent)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go sandbox init: %v\n", err)
-		os.Exit(1)
+		relayed("init", err).Exit(1)
 	}
 	// Close the root handle now; init does not keep the sandbox open.
 	if sb.root != nil {
@@ -98,31 +108,37 @@ func initCmd(args []string) {
 // path resolution never to.
 func initWorktree(rest []string, force bool) {
 	if len(rest) > 0 {
-		fmt.Fprintf(os.Stderr,
-			"endless-go sandbox init --mode worktree: unexpected argument %q; "+
-				"the sandbox is resolved from the current worktree and takes no name\n",
-			rest[0])
-		os.Exit(1)
+		refusal.NoReport(
+			fmt.Sprintf("endless-go sandbox init --mode worktree: unexpected argument %q; "+
+				"the sandbox is resolved from the current worktree and takes no name",
+				rest[0]),
+			"Drop the argument and retry",
+		).Command("sandbox init").Exit(1)
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go sandbox init: %v\n", err)
-		os.Exit(1)
+		// Getwd fails when the directory this process was started in has been
+		// removed underneath it, which is Endless's footing gone rather than a
+		// command anyone can retype.
+		relayed("init", err).Exit(1)
 	}
 	sandboxDir := monitor.WorktreeSandboxDir(cwd)
 	if sandboxDir == "" {
-		fmt.Fprintf(os.Stderr,
-			"endless-go sandbox init --mode worktree: %s is not inside a task "+
-				"worktree (.endless/worktrees/e-NNN), so there is no sandbox to seed\n",
-			cwd)
-		os.Exit(1)
+		refusal.NoReport(
+			fmt.Sprintf("endless-go sandbox init --mode worktree: %s is not inside a task "+
+				"worktree (.endless/worktrees/e-NNN), so there is no sandbox to seed",
+				cwd),
+			"Run it from inside a task worktree, or use --mode empty",
+		).Command("sandbox init").Exit(1)
 	}
 
 	configDir := filepath.Join(sandboxDir, "endless")
 	if force {
 		if err := os.RemoveAll(configDir); err != nil {
-			fmt.Fprintf(os.Stderr, "endless-go sandbox init: removing %s: %v\n", configDir, err)
-			os.Exit(1)
+			refusal.Report(
+				fmt.Sprintf("endless-go sandbox init: removing %s: %v", configDir, err),
+				"how to clear the filesystem error blocking removal of the seeded config directory",
+			).Command("sandbox init").Exit(1)
 		}
 	} else if _, err := os.Stat(filepath.Join(configDir, "endless.db")); err == nil {
 		// Idempotent: an already-seeded sandbox is a no-op, so the hook that
@@ -132,12 +148,16 @@ func initWorktree(rest []string, force bool) {
 	}
 
 	if err := EnsureSandboxDir(sandboxDir); err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go sandbox init: %v\n", err)
-		os.Exit(1)
+		relayed("init", err).Exit(1)
 	}
 	if err := seedFromWorktree(sandboxDir); err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go sandbox init: seeding from worktree: %v\n", err)
-		os.Exit(1)
+		// Relayed rather than classified here because the branches live in
+		// seed_worktree.go: a worktree the caller can cd out of is one thing, a
+		// failed migration or a project nobody registered is another. Until
+		// those constructions carry a class this faults, which is the safe
+		// reading — a half-seeded sandbox is not something to retry blindly,
+		// and only --force retries it at all.
+		relayed("init", fmt.Errorf("seeding from worktree: %w", err)).Exit(1)
 	}
 	fmt.Println(sandboxDir)
 }

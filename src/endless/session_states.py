@@ -23,9 +23,10 @@ output, this side would have to know which group keys exist, that ``sql_list``
 is a string and ``rank`` is an integer. That is structural knowledge of the
 registry living in two places, and it drifts the moment a group is added in Go.
 
-Deliberately light on imports: `config` for binary resolution and `click` for
-the error type, but never `db` or `session_cmd` — the CLI layer imports this at
-module scope, so anything expensive imported here is paid by every command.
+Deliberately light on imports: `config` for binary resolution, `agent_help` for
+the refusals and `click` for `StateChoice`, but never `db` or `session_cmd` —
+the CLI layer imports this at module scope, so anything expensive imported here
+is paid by every command.
 
 Failure is closed, not silent. If `endless-go` cannot be resolved or is too old
 to know `session-state`, there is no fallback to fall back TO — a hardcoded copy
@@ -37,17 +38,18 @@ import subprocess
 
 import click
 
-from endless import config
+from endless import agent_help, config
 
-
-class SessionStateVocabularyError(click.ClickException):
-    """`endless-go session-state` could not answer.
-
-    A ClickException so a call-time failure inside a command renders as a clean
-    CLI error rather than a traceback. The import-time call at the bottom of
-    this module catches it separately — click's handler is not installed yet
-    that early.
-    """
+#: What `endless-go session-state` failing is caught as, here and at every call
+#: site that handles one.
+#:
+#: It IS `agent_help.Refusal` since E-2159, not a subclass of it: the refusals
+#: below are built by the class-named factories — the only way a refusal can
+#: say whether the agent reading it must report it — and a bespoke exception
+#: type cannot. The NAME survives because it is what the catch sites read, and
+#: it says which question went unanswered where the base class's name says only
+#: that something refused. Mirrors `statuses.StatusVocabularyError`.
+SessionStateVocabularyError = agent_help.Refusal
 
 
 # The resolved binary, memoized for the process. Resolution can cost a probe
@@ -89,11 +91,20 @@ def _resolve_binary() -> str:
             return str(worktree_bin)
     found = shutil.which("endless-go")
     if found is None:
-        raise SessionStateVocabularyError(
-            "endless-go binary not found on PATH, so the session state "
-            "vocabulary cannot be read.\n\n"
-            "`endless` and `endless-go` ship together — install both with "
-            "`just install`."
+        # The remedy names what the user must END UP WITH, not how to get
+        # there. This message used to say `just install`, a recipe that exists
+        # only in Endless's own source checkout — useless advice to anyone
+        # running Endless against their own project, which is everyone this
+        # refusal is actually for.
+        raise agent_help.report(
+            "endless-go is not on PATH, and it owns the session state "
+            "vocabulary, so no session state could be read.",
+            "installing endless-go alongside endless on their own machine — "
+            "the two ship together and Endless cannot supply the missing half",
+            text=("endless-go binary not found on PATH, so the session state "
+                  "vocabulary cannot be read.\n\n"
+                  "`endless` and `endless-go` ship together — install both, "
+                  "and make sure endless-go is on PATH."),
         )
     return found
 
@@ -119,12 +130,24 @@ def _run(*args: str, allow_false: bool = False) -> tuple[str, int]:
     if result.returncode == 0 or (allow_false and result.returncode == 1):
         return result.stdout, result.returncode
     detail = result.stderr.strip() or f"exited {result.returncode}"
-    raise SessionStateVocabularyError(
-        f"could not read the session state vocabulary.\n\n"
-        f"    {' '.join(argv)}\n"
-        f"    -> {detail}\n\n"
-        "If endless-go does not know `session-state`, it predates the session "
-        "state registry — rebuild it with `just install`."
+    # REPORT rather than report_if, unlike the same helper in `statuses`: every
+    # caller in this module passes a constant group or state name, so a failure
+    # here is version skew or a bug in a Python caller — never a value the
+    # agent chose and could choose again differently.
+    #
+    # `just install` is gone from the message: it is a recipe in Endless's own
+    # checkout, not something a user of Endless has.
+    raise agent_help.report(
+        f"endless-go could not answer `session-state {' '.join(args)}`, so the "
+        "session state vocabulary is unavailable and the command did not run.",
+        "reinstalling a matching pair of endless and endless-go on their own "
+        "machine",
+        text=(f"could not read the session state vocabulary.\n\n"
+              f"    {' '.join(argv)}\n"
+              f"    -> {detail}\n\n"
+              "If endless-go does not know `session-state`, it predates the "
+              "session state registry — install the endless-go that ships "
+              "with this version of endless."),
     )
 
 

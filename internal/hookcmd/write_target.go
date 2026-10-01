@@ -8,6 +8,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/docmirror"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // E-940 (merged with E-1703) — one decision about WHERE a session may write,
@@ -53,14 +54,14 @@ type writeScope struct {
 	// landed answers the landed-suite question (E-1916 Arm 1) for a suite task.
 	// A field rather than a direct call so the decision is testable without a
 	// landings table.
-	landed func(suiteTask int64) (msg string, block bool)
+	landed func(suiteTask int64) (msg *refusal.Error, block bool)
 }
 
 // newWriteScope builds the scope for this hook call.
 func newWriteScope(projectID int64, payload claudePayload) writeScope {
 	s := writeScope{
 		exempt: exemptWriteRoots(),
-		landed: func(suiteTask int64) (string, bool) {
+		landed: func(suiteTask int64) (*refusal.Error, bool) {
 			return landedSuiteDecision(payload, landedSuiteEdit, suiteTask)
 		},
 	}
@@ -181,9 +182,9 @@ func isDeviceFile(target string) bool {
 //
 // 1 and 2 apply to every session. 3 and 4 apply only to a session that owns a
 // worktree; a session with no claimed task keeps the rules it had.
-func writeTargetDecision(s writeScope, target string) (msg string, block bool) {
+func writeTargetDecision(s writeScope, target string) (msg *refusal.Error, block bool) {
 	if target == "" {
-		return "", false
+		return nil, false
 	}
 	if docmirror.TaskDocRe.MatchString(target) || docmirror.LegacyTaskDocRe.MatchString(target) {
 		return docMirrorBlockMessage(), true
@@ -194,20 +195,20 @@ func writeTargetDecision(s writeScope, target string) (msg string, block bool) {
 		}
 	}
 	if s.worktree == "" || !filepath.IsAbs(target) {
-		return "", false
+		return nil, false
 	}
 	if pathWithin(s.worktree, target) || isDeviceFile(target) {
-		return "", false
+		return nil, false
 	}
 	for _, d := range s.gitDirs {
 		if pathWithin(d, target) {
-			return "", false
+			return nil, false
 		}
 	}
 	if s.projectRoot == "" || !pathWithin(s.projectRoot, target) {
 		for _, root := range s.exempt {
 			if pathWithin(root, target) {
-				return "", false
+				return nil, false
 			}
 		}
 	}
@@ -252,8 +253,17 @@ func resolveExisting(p string) string {
 
 // writeTargetRedirect is the containment refusal. Display paths render
 // home-relative; the worktree path is also given literally for paste.
-func writeTargetRedirect(taskID int64, worktreePath, target string) string {
-	return fmt.Sprintf(
+// NO-REPORT: re-targeting the path is the agent's own move, and the message
+// already names where the write belongs. Nothing here is the user's to decide —
+// if the write genuinely belongs in another tree, the refusal says to say so
+// rather than route around it, which is a conversation the agent opens itself.
+func writeTargetRedirect(taskID int64, worktreePath, target string) *refusal.Error {
+	return refusal.NoReport(
+		fmt.Sprintf("BLOCKED: %s is outside task E-%d's worktree; nothing was written.",
+			tildePath(target), taskID),
+		fmt.Sprintf("Re-target the path under %s, or put a scratch file in a temp "+
+			"dir ($TMPDIR, /tmp, or your scratchpad)", worktreePath),
+	).Command("PreToolUse").Text(fmt.Sprintf(
 		"BLOCKED: %s is outside your worktree.\n\n"+
 			"You have task E-%d claimed, and every edit for it must land inside its "+
 			"worktree:\n  %s\n\n"+
@@ -261,14 +271,14 @@ func writeTargetRedirect(taskID int64, worktreePath, target string) string {
 			"dir ($TMPDIR, /tmp, or your scratchpad), which is always writable.\n\n"+
 			"If this write genuinely belongs in another tree, it is not part of "+
 			"E-%d — say so rather than routing around this refusal.",
-		tildePath(target), taskID, worktreePath, taskID)
+		tildePath(target), taskID, worktreePath, taskID))
 }
 
 // writeToolDecision is the Write/Edit/NotebookEdit side of the one decision.
-func writeToolDecision(projectID int64, payload claudePayload) (msg string, block bool) {
+func writeToolDecision(projectID int64, payload claudePayload) (msg *refusal.Error, block bool) {
 	raw := extractFilePath(payload.ToolName, payload.ToolInput)
 	if raw == "" {
-		return "", false
+		return nil, false
 	}
 	return writeTargetDecision(newWriteScope(projectID, payload), resolveWriteTarget(payload.CWD, raw))
 }

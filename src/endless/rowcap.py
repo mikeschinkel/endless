@@ -25,6 +25,8 @@ explicit `--limit N` still caps a machine render — explicit is explicit.
 
 import click
 
+from endless import agent_help
+
 # Every listing surface caps at the same number, so the cap is one fact to know
 # rather than one per command. Twenty fills a screen and leaves the footer
 # visible above the prompt.
@@ -59,18 +61,32 @@ def resolve_cap(
     refusal — is the part that must not fork, which is why the number is a
     parameter here rather than a second copy of this function somewhere else.
     """
+    # Both refusals keep `exit_code=2`, the status a click.UsageError exits
+    # with, because a caller's shell may already branch on it. Neither names a
+    # command: this resolver is shared by every capped listing, so the verb that
+    # produced the mistake is the one thing it cannot know, and the default —
+    # the running command's path — is right everywhere it is used.
     if no_limit:
         if limit is not None:
-            raise click.UsageError(
-                f"--limit and {NO_LIMIT_FLAG} are mutually exclusive: "
-                f"--limit sets a cap, {NO_LIMIT_FLAG} removes it."
+            raise agent_help.no_report(
+                f"--limit and {NO_LIMIT_FLAG} contradict each other, so no "
+                "cap could be resolved. Nothing was rendered.",
+                f"Retry with either --limit N or {NO_LIMIT_FLAG}, not both",
+                text=(f"--limit and {NO_LIMIT_FLAG} are mutually exclusive: "
+                      f"--limit sets a cap, {NO_LIMIT_FLAG} removes it."),
+                exit_code=2,
             )
         return None
     if limit is not None:
         if limit < 1:
-            raise click.UsageError(
-                f"--limit must be at least 1. To render every row, "
-                f"pass {NO_LIMIT_FLAG}."
+            raise agent_help.no_report(
+                f"--limit {limit} would render no rows at all. "
+                "Nothing was rendered.",
+                f"Retry with --limit N where N >= 1, or {NO_LIMIT_FLAG} to "
+                "render every row",
+                text=(f"--limit must be at least 1. To render every row, "
+                      f"pass {NO_LIMIT_FLAG}."),
+                exit_code=2,
             )
         return limit
     if machine:
@@ -141,7 +157,18 @@ def echo_footer(hidden: int, *, agent: bool = False, err: bool = False) -> None:
     if hidden <= 0:
         return
     line = footer(hidden, agent=agent)
-    click.echo(line if (agent or err) else click.style(line, dim=True), err=err)
+    if err:
+        # On stderr the reader is whatever is parsing the payload on stdout, so
+        # the trace is a warning rather than a notice: nothing is blocked, the
+        # rows that were rendered are real, and the flag that shows the rest is
+        # named. The human's bytes are the same line they have always been.
+        agent_help.warn.no_report(
+            line,
+            f"Re-run with {NO_LIMIT_FLAG}, or a larger --limit, if the omitted "
+            "rows matter",
+        )
+        return
+    click.echo(line if agent else click.style(line, dim=True))
 
 
 def limit_options_for(default: int = DEFAULT_ROW_CAP, unit: str = "rows to render"):

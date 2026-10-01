@@ -118,8 +118,11 @@ def test_message_names_the_spelling_the_user_typed(fake_go, monkeypatch, argv):
     # the callback's name ("main") rather than "endless". What this pins is
     # the part that differs between the two spellings: the message names the
     # subcommand path the user actually typed, not a hardcoded one.
-    prefix = result.stderr.split(":", 1)[0]
-    assert prefix.endswith(" ".join(argv))
+    #
+    # E-2159 made the diagnostic a classified refusal instead of a bare echo,
+    # so Click now prints `Error: ` in front of it. The path is therefore
+    # matched where it sits rather than by splitting on the first colon.
+    assert f"main {' '.join(argv)}: no active task" in result.stderr
 
 
 @pytest.mark.parametrize("argv", SPELLINGS)

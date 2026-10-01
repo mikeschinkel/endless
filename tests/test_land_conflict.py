@@ -736,18 +736,28 @@ def test_dry_run_reports_the_predicted_conflict_and_exits_non_zero(
     tmp_path, monkeypatch, capsys
 ):
     """Automation reads the exit code. A preview that predicts a failure and
-    still exits 0 is a preview nothing can gate on."""
+    still exits 0 is a preview nothing can gate on.
+
+    E-2159 changed HOW it exits non-zero, not whether: a bare SystemExit(1)
+    became a classified refusal, so the agent reading the prediction is also
+    told whether the conflict is one it can resolve alone. Click renders it with
+    the same exit code, which is what automation reads.
+    """
+    from endless import agent_help
     from endless.worktree_cmd import land_worktree
 
     repo, branch = _supersession_repo(tmp_path)
     _run(["git", "rebase", "--abort"], repo, check=False)
     _land_against(monkeypatch, repo, branch)
 
-    with pytest.raises(SystemExit) as exc:
+    with pytest.raises(agent_help.Refusal) as exc:
         land_worktree("E-1943", dry_run=True)
 
-    assert exc.value.code == 1
-    out = capsys.readouterr().out
+    assert exc.value.exit_code == 1
+    # An unproven class needs the user: "what this branch should become" is a
+    # judgement about two people's intent, which this command does not have.
+    assert exc.value.cls == agent_help.REPORT
+    out = capsys.readouterr().out + exc.value.text
     assert "it conflicts" in out
     assert "symbol supersession (proven)" in out
     assert "BINARY_SOURCE_PATHS" in out

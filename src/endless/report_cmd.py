@@ -59,7 +59,9 @@ import subprocess
 
 import click
 
-from endless import config, internal_claude, minimizer_invariants, report_prompts
+from endless import (
+    agent_help, config, internal_claude, minimizer_invariants, report_prompts,
+)
 
 # The minimizer's model and effort. Not tunable by config, on the same principle
 # as the old ceremony gate: the WORDING is the lever, because that is where the
@@ -92,17 +94,35 @@ def _read_draft(path: str) -> str:
     """Read the agent's draft, or fail with a message that names the fix."""
     from pathlib import Path
     p = Path(path).expanduser()
+    # All three are NO-REPORT and none of them is close: the agent wrote this
+    # file moments ago, so a missing, unreadable or empty one is its own slip to
+    # correct. Reporting it would hand the user a scratch path they never chose
+    # and a turn that has not produced a reply yet.
     if not p.exists():
-        raise click.ClickException(f"Draft file not found: {p}")
+        raise agent_help.no_report(
+            f"Draft file not found: {p}. Nothing was minimized or sent.",
+            "Write the draft to that path (or correct the path) and retry",
+            text=f"Draft file not found: {p}",
+        )
     try:
         draft = p.read_text()
     except OSError as e:
-        raise click.ClickException(f"Cannot read draft file {p}: {e}")
+        raise agent_help.no_report(
+            f"Cannot read draft file {p}: {e}. Nothing was minimized or sent.",
+            "Write the draft to a readable path (.endless/tmp/ is the project "
+            "scratch dir) and retry",
+            text=f"Cannot read draft file {p}: {e}",
+        )
     if not draft.strip():
-        raise click.ClickException(
-            "The draft file is empty. Pass the reply you were about to send — "
-            "the whole reply, not an excerpt: the Stop gate compares your final "
-            "message against what this command returns."
+        raise agent_help.no_report(
+            f"The draft file {p} is empty. Nothing was minimized or sent.",
+            "Write the whole reply you were about to send to that file and "
+            "retry — the Stop gate compares your final message against what "
+            "this command returns",
+            text="The draft file is empty. Pass the reply you were about to "
+                 "send — the whole reply, not an excerpt: the Stop gate "
+                 "compares your final message against what this command "
+                 "returns.",
         )
     return draft
 
@@ -146,11 +166,32 @@ def _minimize(draft: str, user_prompt: str, context: str, minimize_text: str) ->
     if ok:
         return out
 
-    click.echo(
-        "Endless: the minimizer broke a protected-content invariant twice "
-        f"({detail}); sending your draft unminimized rather than a reply with "
-        "mangled content. Nothing was lost.",
-        err=True,
+    # A warning, not a refusal: stdout still carries a reply the agent may
+    # send, so nothing is blocked. NO-REPORT because the action it calls for is
+    # the agent's and is immediate — send what stdout gave you.
+    #
+    # The agent is told what to do with the reply in front of it — send stdout
+    # verbatim — and that is all it can do about this.
+    agent_help.warn.no_report(
+        f"The minimizer broke a protected-content invariant twice ({detail}); "
+        f"stdout is your draft unminimized. Nothing was lost.",
+        "Send stdout verbatim as your reply",
+        text="Endless: the minimizer broke a protected-content invariant twice "
+             f"({detail}); sending your draft unminimized rather than a reply "
+             "with mangled content. Nothing was lost.",
+    )
+    # ...and the fallback reaches the user, which is what makes the docstring's
+    # "announced, never silently" true again (E-2159 decision 5). Under the
+    # report rule an agent does not relay a no-report line and this stream
+    # reaches nobody else, so without this the only party who could act on a
+    # misbehaving minimizer — its owner — never heard. A rising occurrence count
+    # is the signal; one fallback is not.
+    agent_help.warn.record(
+        "WARN-0024",
+        f"a reply was sent unminimized: the minimizer broke a protected-content "
+        f"invariant twice ({detail}). Nothing was lost.",
+        source="report:minimizer",
+        detail=detail,
     )
     return draft.strip()
 
@@ -174,28 +215,48 @@ def _run_minimizer(draft: str, user_prompt: str, context: str, minimize_text: st
         result = internal_claude.run_internal_claude(
             prompt, model=_MODEL, effort=_EFFORT, timeout=_TIMEOUT)
     except subprocess.TimeoutExpired:
-        raise click.ClickException(
-            f"The minimizer timed out after {_TIMEOUT}s. Re-run the same command; "
-            "if it times out again the draft is likely too long to edit in one "
-            "pass — split the turn rather than sending the draft unminimized."
+        raise agent_help.no_report(
+            f"The minimizer timed out after {_TIMEOUT}s. Nothing was sent.",
+            "Re-run the command; if it times out again, split the turn rather "
+            "than sending the draft unminimized",
+            text=f"The minimizer timed out after {_TIMEOUT}s. Re-run the same "
+                 "command; if it times out again the draft is likely too long "
+                 "to edit in one pass — split the turn rather than sending the "
+                 "draft unminimized.",
         )
     except FileNotFoundError:
-        raise click.ClickException(
-            "`claude` is not on PATH, so the draft cannot be minimized. This "
-            "command cannot fall back to passing the draft through: that would "
-            "turn the reporting contract into a no-op without saying so."
+        # The one REPORT in this file, and the reason is the fail-closed design
+        # above: with the gate on there is no sanctioned reply the agent can
+        # send, so it cannot continue at all. Nothing it can do from here fixes
+        # a binary that is not installed.
+        raise agent_help.report(
+            "`claude` is not on PATH, so the draft cannot be minimized and "
+            "there is no pass-through fallback. Nothing was sent.",
+            "putting the `claude` CLI on the PATH Endless's subprocesses "
+            "inherit — or deciding this project should stop running the report "
+            "gate — is theirs to settle",
+            text="`claude` is not on PATH, so the draft cannot be minimized. "
+                 "This command cannot fall back to passing the draft through: "
+                 "that would turn the reporting contract into a no-op without "
+                 "saying so.",
         )
     if result.returncode != 0:
         detail = (result.stderr or "").strip().splitlines()
         tail = f" ({detail[-1]})" if detail else ""
-        raise click.ClickException(f"The minimizer failed{tail}. Re-run the command.")
+        raise agent_help.no_report(
+            f"The minimizer failed{tail}. Nothing was sent.",
+            "Re-run the command",
+            text=f"The minimizer failed{tail}. Re-run the command.",
+        )
 
     out = result.stdout.strip()
     if not out:
-        raise click.ClickException(
-            "The minimizer returned nothing. Re-run the command — an empty reply "
-            "is never the right answer, so this is a failed call rather than a "
-            "verdict that the draft was all ceremony."
+        raise agent_help.no_report(
+            "The minimizer returned nothing. Nothing was sent.",
+            "Re-run the command",
+            text="The minimizer returned nothing. Re-run the command — an "
+                 "empty reply is never the right answer, so this is a failed "
+                 "call rather than a verdict that the draft was all ceremony.",
         )
     return out
 
@@ -389,14 +450,22 @@ def show_raw() -> None:
     """
     session_id = _session_id()
     if session_id is None:
-        raise click.ClickException(
-            "No resolvable Endless session, so no draft was persisted to show."
+        raise agent_help.no_report(
+            "No resolvable Endless session, so no draft was persisted to show. "
+            "Nothing was retrieved.",
+            "Run --raw from inside the Claude session that made the report; "
+            "outside one there is nothing to retrieve",
+            text="No resolvable Endless session, so no draft was persisted to "
+                 "show.",
         )
     result = _run_go(["report-draft", "--session-id", str(session_id)])
     if result.returncode != 0:
-        raise click.ClickException(
-            "No draft persisted for this session yet — run `endless task report "
-            "--draft-file <path>` first."
+        raise agent_help.no_report(
+            "No draft persisted for this session yet. Nothing was retrieved.",
+            "Run `endless task report --draft-file <path>` first, then retry "
+            "--raw",
+            text="No draft persisted for this session yet — run `endless task "
+                 "report --draft-file <path>` first.",
         )
     click.echo(result.stdout, nl=False)
 
@@ -427,13 +496,22 @@ def report_item(item_id: int | None, draft_path: str) -> None:
     if session_id is not None and _report_gate_on():
         runs = _runs_this_turn(session_id)
         if runs >= 2:
-            raise click.ClickException(
-                "You have already used this turn's one appeal.\n"
-                "\n"
-                "  Send the output you were given, verbatim. If the minimizer "
-                "genuinely dropped something the user needs, say so in your NEXT "
-                "turn — after they have replied — rather than re-drafting until "
-                "something you prefer survives."
+            # NO-REPORT is the whole point of the budget. Reporting "I was
+            # refused a third draft" is itself a way of re-litigating the cut,
+            # in the one channel the minimizer does not read.
+            raise agent_help.no_report(
+                "You have already used this turn's one appeal. Nothing was "
+                "minimized and nothing was sent.",
+                "Send the output you were given, verbatim; if the minimizer "
+                "genuinely dropped something the user needs, raise it next "
+                "turn, after they have replied",
+                text="You have already used this turn's one appeal.\n"
+                     "\n"
+                     "  Send the output you were given, verbatim. If the "
+                     "minimizer genuinely dropped something the user needs, "
+                     "say so in your NEXT turn — after they have replied — "
+                     "rather than re-drafting until something you prefer "
+                     "survives.",
             )
 
     user_prompt = _user_prompt(session_id)

@@ -44,7 +44,7 @@ def _run_go(subcommand: str, args: list[str]) -> None:
     the failure mode it was built to prevent, so these verbs must refuse rather
     than choose.
     """
-    from endless import config
+    from endless import agent_help, config
     from endless.event_bridge import _resolve_endless_go
 
     config.require_db_context()
@@ -53,7 +53,11 @@ def _run_go(subcommand: str, args: list[str]) -> None:
         [_resolve_endless_go(), *config.go_db_context_args(), subcommand, *args],
     )
     if result.returncode != 0:
-        raise SystemExit(result.returncode)
+        # stdio is inherited, so whatever the Go side had to say — its own
+        # classified refusal included — has already reached the same terminal
+        # this process writes to. A message here would be Endless explaining,
+        # in Python's voice, an outcome Python did not produce.
+        agent_help.passthrough_exit(result.returncode)
 
 
 def jobs_list() -> None:

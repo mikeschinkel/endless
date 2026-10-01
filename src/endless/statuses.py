@@ -19,9 +19,9 @@ E-1648's `submitted`, E-1845's `untriaged` — a status was added and a site was
 missed. Python holding even one authoritative list would leave two places that
 must agree.
 
-Deliberately light on imports: `config` for binary resolution and `click` for
-the error type, but never `db` or `task_cmd` — the CLI layer imports this at
-module scope, and `task_cmd`'s 200ms import is exactly what its lazy
+Deliberately light on imports: `config` for binary resolution and
+`agent_help` for the refusals, but never `db` or `task_cmd` — the CLI layer
+imports this at module scope, and `task_cmd`'s 200ms import is exactly what its lazy
 per-command imports exist to avoid.
 
 The Python half is transitional. Endless is being ported to all-Go; when that
@@ -37,19 +37,18 @@ would be the duplicate this module exists to delete. It says so and stops.
 import shutil
 import subprocess
 
-import click
+from endless import agent_help, config
 
-from endless import config
-
-
-class StatusVocabularyError(click.ClickException):
-    """`endless-go task-status` could not answer.
-
-    A ClickException so a call-time failure inside a command renders as a clean
-    CLI error rather than a traceback. The import-time call at the bottom of
-    this module catches it separately — click's handler is not installed yet
-    that early.
-    """
+#: What `endless-go task-status` failing is caught as, here and at every call
+#: site that handles one.
+#:
+#: It IS `agent_help.Refusal` since E-2159, not a subclass of it: the refusals
+#: below are built by the class-named factories — the only way a refusal can
+#: say whether the agent reading it must report it — and a bespoke exception
+#: type cannot. The NAME survives because it is what the catch sites read, and
+#: it says which question went unanswered where the base class's name says only
+#: that something refused.
+StatusVocabularyError = agent_help.Refusal
 
 
 # The resolved binary, memoized for the process. Resolution can cost a probe
@@ -97,11 +96,20 @@ def _resolve_binary() -> str:
             return str(worktree_bin)
     found = shutil.which("endless-go")
     if found is None:
-        raise StatusVocabularyError(
-            "endless-go binary not found on PATH, so the task status "
-            "vocabulary cannot be read.\n\n"
-            "`endless` and `endless-go` ship together — install both with "
-            "`just install`."
+        # The remedy names what the user must END UP WITH, not how to get
+        # there. This message used to say `just install`, a recipe that exists
+        # only in Endless's own source checkout — useless advice to anyone
+        # running Endless against their own project, which is everyone this
+        # refusal is actually for.
+        raise agent_help.report(
+            "endless-go is not on PATH, and it owns the task status "
+            "vocabulary, so no status could be read.",
+            "installing endless-go alongside endless on their own machine — "
+            "the two ship together and Endless cannot supply the missing half",
+            text=("endless-go binary not found on PATH, so the task status "
+                  "vocabulary cannot be read.\n\n"
+                  "`endless` and `endless-go` ship together — install both, "
+                  "and make sure endless-go is on PATH."),
         )
     return found
 
@@ -127,12 +135,29 @@ def _run(*args: str, allow_false: bool = False) -> tuple[str, int]:
     if result.returncode == 0 or (allow_false and result.returncode == 1):
         return result.stdout, result.returncode
     detail = result.stderr.strip() or f"exited {result.returncode}"
-    raise StatusVocabularyError(
-        f"could not read the task status vocabulary.\n\n"
-        f"    {' '.join(argv)}\n"
-        f"    -> {detail}\n\n"
-        "If endless-go does not know `task-status`, it predates the status "
-        "registry — rebuild it with `just install`."
+    # Two different failures arrive through one channel and this side cannot
+    # tell them apart: endless-go too old to know the subcommand (the user has
+    # to fix their install) versus a group or status name that does not exist
+    # (the caller has to fix the argument). Almost every caller here passes a
+    # constant, so version skew is the common case — but "almost" is not a
+    # basis for silencing the other one, so both branches are named.
+    #
+    # `just install` is gone from the message for the same reason as above: it
+    # is a recipe in Endless's own checkout, not something a user of Endless
+    # has.
+    raise agent_help.report_if(
+        f"endless-go could not answer `task-status {' '.join(args)}`, so the "
+        "status vocabulary is unavailable and the command did not run.",
+        "endless-go is older than this endless, or cannot run at all",
+        f"retry with a group or status name endless-go knows",
+        "reinstalling a matching pair of endless and endless-go on their own "
+        "machine",
+        text=(f"could not read the task status vocabulary.\n\n"
+              f"    {' '.join(argv)}\n"
+              f"    -> {detail}\n\n"
+              "If endless-go does not know `task-status`, it predates the "
+              "status registry — install the endless-go that ships with this "
+              "version of endless."),
     )
 
 
@@ -205,7 +230,13 @@ def lifecycle() -> str:
 try:
     TASK_STATUSES = get("all")
 except StatusVocabularyError as exc:
-    raise SystemExit(f"endless: {exc.format_message()}") from exc
+    # Rendered by hand rather than raised: click's exception handler is not
+    # installed during import, so an escaping refusal would print a traceback.
+    # `info(..., err=True)` writes exactly the bytes `SystemExit(str)` did,
+    # and `exc.format_message()` is where the agent's verdict comes from — the
+    # class was chosen at the raise site above, and nothing is re-decided here.
+    agent_help.info(f"endless: {exc.format_message()}", err=True)
+    agent_help.passthrough_exit(exc.exit_code)
 
 # The shared `--status` help string. Derived, never typed: a status added in Go
 # shows up in every `--help` for free, which is the failure E-1956 fixed.

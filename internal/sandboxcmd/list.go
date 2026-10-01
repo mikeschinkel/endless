@@ -1,13 +1,14 @@
 package sandboxcmd
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"text/tabwriter"
 	"time"
+
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 type sandboxState string
@@ -27,10 +28,8 @@ type listEntry struct {
 }
 
 func listCmd(args []string) {
-	flags := flag.NewFlagSet("list", flag.ExitOnError)
-	if err := flags.Parse(args); err != nil {
-		os.Exit(2)
-	}
+	flags := refusal.NewFlags("list")
+	parseVerbFlags(flags, "list", args)
 
 	// A guard failure is not fatal to a read-only listing: classify() falls
 	// back to reporting every worktree-bound sandbox as in-use, which is the
@@ -38,14 +37,21 @@ func listCmd(args []string) {
 	// a reap of protected work.
 	guard, err := NewReapGuard(mainCheckoutRoot())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-sandbox list: %v\n", err)
+		refusal.NoReport(
+			fmt.Sprintf("endless-go sandbox list: %v", err),
+			"Nothing to do: the listing continues, with every worktree-bound sandbox shown as in-use",
+		).Command("sandbox list").Print()
 		guard = nil
 	}
 
 	entries, err := scanSandboxes(guard)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-sandbox list: %v\n", err)
-		os.Exit(1)
+		// The sandbox cache directory would not be read: the user's disk, not
+		// this argv.
+		refusal.Report(
+			fmt.Sprintf("endless-go sandbox list: %v", err),
+			"how to clear the permission or I/O error on the sandbox cache directory",
+		).Command("sandbox list").Exit(1)
 	}
 
 	w := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
@@ -75,7 +81,13 @@ func scanSandboxes(guard *ReapGuard) ([]listEntry, error) {
 		sbDir := filepath.Join(dir, ent.Name())
 		meta, err := readMeta(sbDir)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "endless-sandbox list: skipping %s: %v\n", sbDir, err)
+			// Shared with prune, so the prefix says `list` under either verb —
+			// today's wording, kept. One unreadable fragment stops neither
+			// command: it is skipped and the scan continues.
+			refusal.NoReport(
+				fmt.Sprintf("endless-go sandbox list: skipping %s: %v", sbDir, err),
+				"Nothing to do: remove the unreadable fragment with `endless-go sandbox destroy <name>` if it should not be there",
+			).Command("sandbox list").Print()
 			continue
 		}
 		size, _ := dirSize(sbDir)
@@ -94,7 +106,7 @@ func scanSandboxes(guard *ReapGuard) ([]listEntry, error) {
 //
 // Worktree-bound sandboxes (keep/persistent) used to return stateInUse
 // unconditionally, which made them permanently unreclaimable: prune only
-// removes stateOrphaned, so `endless-sandbox prune` could never touch one no
+// removes stateOrphaned, so `endless-go sandbox prune` could never touch one no
 // matter how long its worktree had been gone (E-1904). They now consult the
 // guard, and report orphaned once every protection condition is false.
 //

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/verify"
 	"github.com/mikeschinkel/go-doterr"
 	"github.com/mikeschinkel/go-dt"
@@ -220,6 +221,11 @@ func runShell(cmdStr string, root dt.DirPath, env []string) (stdout, stderr []by
 // by pointer because it is filled in after teardown is deferred; a nil env means
 // isolation never completed, so the steps (which must run isolated) are skipped.
 // Teardown failures are reported but never change the run's exit code.
+//
+// Everything here is NO-REPORT by construction: the run's verdict is already
+// decided and none of these failures changes it, so there is nothing for a user
+// to weigh in on. The kept-directory line is not a failure at all — it is the
+// confirmation --keep was asked for — so it carries no directive either.
 func teardown(root dt.DirPath, envp *[]string, steps []string, runDir dt.DirPath, keep bool) {
 	var env []string
 
@@ -231,18 +237,27 @@ func teardown(root dt.DirPath, envp *[]string, steps []string, runDir dt.DirPath
 			_, stderr, exit, err := runShell(step, root, env)
 			switch {
 			case err != nil:
-				fmt.Fprintf(os.Stderr, "endless-go verify: teardown step %d (%q) failed to start: %v\n", i, step, err)
+				refusal.NoReport(
+					fmt.Sprintf("endless-go verify: teardown step %d (%q) failed to start: %v", i, step, err),
+					"The verdict is unaffected and the isolated HOME is discarded anyway; continue",
+				).Command("verify").Print()
 			case exit != 0:
-				fmt.Fprintf(os.Stderr, "endless-go verify: teardown step %d (%q) exited %d: %s\n", i, step, exit, tail(stderr))
+				refusal.NoReport(
+					fmt.Sprintf("endless-go verify: teardown step %d (%q) exited %d: %s", i, step, exit, tail(stderr)),
+					"The verdict is unaffected; fix the teardown step if it is yours",
+				).Command("verify").Print()
 			}
 		}
 	}
 	if keep {
-		fmt.Fprintf(os.Stderr, "kept per-run dir: %s\n", displayPath(string(runDir)))
+		refusal.Infof("kept per-run dir: %s", displayPath(string(runDir))).Print()
 		return
 	}
 	if err := runDir.RemoveAll(); err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go verify: could not remove per-run dir %s: %v\n", displayPath(string(runDir)), err)
+		refusal.NoReport(
+			fmt.Sprintf("endless-go verify: could not remove per-run dir %s: %v", displayPath(string(runDir)), err),
+			"The verdict is unaffected; a temp directory is left behind",
+		).Command("verify").Print()
 	}
 }
 

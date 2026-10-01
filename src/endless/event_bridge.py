@@ -10,6 +10,7 @@ from pathlib import Path
 
 import click
 
+from endless import agent_help
 from endless import config
 
 
@@ -22,6 +23,47 @@ from endless import config
 #   - "system": cron / migrations / one-shot tools; no session expected.
 #   - "web":    web UI; attribution is via user_id, not session.
 _ATTRIBUTION_REQUIRED: frozenset[str] = frozenset({"cli", "hook"})
+
+
+def _blank_line_for_humans() -> None:
+    """The blank spacer line that has always preceded the two refusals below.
+
+    It is kept for a person: it separates the refusal from whatever the land was
+    printing when it hit, and this module must not change what a human reads.
+    It is NOT written for an agent, because a leading blank line is the one
+    thing the bracketed verdict cannot survive — `head -1` would return the
+    blank line instead of the verdict the bracket exists to guarantee.
+    """
+    if not agent_help.agent_facing():
+        agent_help.info("", err=True)
+
+
+def _child_refusal(text: str, returncode: int, what: str):
+    """The refusal to raise for a non-zero `endless-go` run. RAISE the result.
+
+    Go classifies its own refusals: `internal/refusal` decides the class at the
+    site that raises it and writes the verdict line at BOTH ends of the message.
+    So the only correct thing to do with that text here is pass it through.
+    The prefixes this used to add — "Event write failed: ", "backup failed: ",
+    "schema initialization failed: " — put Python's voice in front of Go's
+    sentinel, flattened three different Go classes under one Python wording, and
+    left an agent two directives to reconcile, one of which nobody had chosen.
+
+    `text` is Go's stderr, or for apply-change the "error" field of the JSON it
+    prints on failure — still Go's own words, just arriving on the other stream.
+
+    Silence is the one case that belongs to this side. A child that exits
+    non-zero having written nothing said nothing to relay and gave nothing to
+    classify by, which is Endless broken rather than Endless refusing — so it
+    becomes a fault naming the call that produced it, not an empty relay.
+    """
+    text = (text or "").rstrip("\n")
+    if text.strip():
+        return agent_help.relay(text, exit_code=returncode or 1)
+    return agent_help.fault(
+        f"`endless-go {what}` exited {returncode} without writing a reason.",
+        exit_code=returncode or 1,
+    )
 
 
 def _display_path(p: str) -> str:
@@ -53,24 +95,43 @@ def _resolve_endless_go(override: str | None = None) -> str:
     if override is not None:
         ov = Path(override)
         if not ov.is_file() or not os.access(ov, os.X_OK):
-            click.echo("", err=True)
-            raise click.ClickException(
-                f"The pinned endless-go binary is missing or not "
-                f"executable:\n\n    {_display_path(str(ov))}\n"
+            _blank_line_for_humans()
+            # The remedy deliberately does not name a build command. This branch
+            # is only reachable in a self-dev checkout, but shipped code cannot
+            # know what that checkout builds with, and the path is the one thing
+            # that identifies what has to exist.
+            raise agent_help.no_report(
+                f"The pinned endless-go binary is missing or not executable: "
+                f"{_display_path(str(ov))}. Nothing ran.",
+                "Rebuild the binary at that path and retry",
+                text=f"The pinned endless-go binary is missing or not "
+                     f"executable:\n\n    {_display_path(str(ov))}\n",
             )
         return str(ov)
     wt_bin = config.resolved_worktree_endless_go()
     if wt_bin is not None:
         if not wt_bin.is_file() or not os.access(wt_bin, os.X_OK):
-            click.echo("", err=True)
-            raise click.ClickException(
-                f"The worktree's endless-go binary is missing or "
-                f"not executable:\n\n    {_display_path(str(wt_bin))}\n"
+            _blank_line_for_humans()
+            raise agent_help.no_report(
+                f"The worktree's endless-go binary is missing or not "
+                f"executable: {_display_path(str(wt_bin))}. Nothing ran.",
+                "Rebuild the binary at that path and retry",
+                text=f"The worktree's endless-go binary is missing or "
+                     f"not executable:\n\n    {_display_path(str(wt_bin))}\n",
             )
         return str(wt_bin)
     found = shutil.which("endless-go")
     if not found:
-        raise click.ClickException("endless-go binary not found on PATH.")
+        # REPORT rather than NO-REPORT: every other resolution has already been
+        # tried, so there is no second way for the agent to run this command.
+        # Installing the binary or putting it on PATH happens outside the
+        # session entirely.
+        raise agent_help.report(
+            "endless-go binary not found on PATH. Nothing ran.",
+            "installing endless-go, or putting it on the PATH Endless's "
+            "subprocesses inherit, is theirs to do",
+            text="endless-go binary not found on PATH.",
+        )
     return found
 
 
@@ -168,17 +229,29 @@ def emit_event(
                 pass
 
     if actor_kind in _ATTRIBUTION_REQUIRED and not session_id:
-        raise click.ClickException(
-            "Cannot determine the Endless session for this pane.\n\n"
-            "To fix, do one of:\n"
-            "  - Run this command from a Claude session pane.\n"
-            "  - Export ENDLESS_SESSION_ID=\"$(endless session id)\".\n"
-            "  - Run `endless task bind <task-id>` from this pane to "
-            "connect it to a sibling Claude session in the same tmux "
-            "window.\n"
-            "  - Pass --no-session (accepted in any position) to file "
-            "without a Claude session binding (actor.kind=system; for "
-            "cron, scripts, plain-shell triage filings).\n"
+        # The --no-session bullet moves to `human_remedy`, which is shown to a
+        # person and withheld from an agent. It is a bypass, and the thing it
+        # bypasses is the attribution this gate exists to keep (E-1401): an
+        # agent handed that bullet takes it, files the event as actor.kind=system
+        # and the refusal has achieved nothing. A person choosing to file
+        # without a session binding — cron, a script, a plain-shell triage
+        # filing — is the case the flag was added for, and they still read it.
+        raise agent_help.no_report(
+            "Cannot determine the Endless session for this pane. No event was "
+            "written.",
+            'Export ENDLESS_SESSION_ID="$(endless session id)", or run '
+            "`endless task bind <task-id>` from this pane, and retry",
+            text="Cannot determine the Endless session for this pane.\n\n"
+                 "To fix, do one of:\n"
+                 "  - Run this command from a Claude session pane.\n"
+                 "  - Export ENDLESS_SESSION_ID=\"$(endless session id)\".\n"
+                 "  - Run `endless task bind <task-id>` from this pane to "
+                 "connect it to a sibling Claude session in the same tmux "
+                 "window.",
+            human_remedy="\n  - Pass --no-session (accepted in any position) to "
+                         "file without a Claude session binding "
+                         "(actor.kind=system; for cron, scripts, plain-shell "
+                         "triage filings).\n",
         )
 
     if project_root is None:
@@ -228,8 +301,7 @@ def emit_event(
 
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
-        error_msg = result.stderr.strip()
-        raise click.ClickException(f"Event write failed: {error_msg}")
+        raise _child_refusal(result.stderr, result.returncode, "event emit")
 
     if result.stdout.strip():
         return json.loads(result.stdout.strip())
@@ -261,8 +333,8 @@ def apply_change(path: str, endless_go_bin: str | None = None) -> dict:
             payload = json.loads(result.stdout.strip()) if result.stdout.strip() else {}
         except json.JSONDecodeError:
             payload = {}
-        msg = payload.get("error") or result.stderr.strip() or "apply-change failed"
-        raise click.ClickException(f"apply-change failed: {msg}")
+        raise _child_refusal(payload.get("error") or result.stderr,
+                             result.returncode, "event apply-change")
 
     if not result.stdout.strip():
         return {}
@@ -290,8 +362,7 @@ def init_schema(endless_go_bin: str | None = None) -> dict:
         capture_output=True, text=True,
     )
     if result.returncode != 0:
-        msg = result.stderr.strip() or "migrate failed"
-        raise click.ClickException(f"schema initialization failed: {msg}")
+        raise _child_refusal(result.stderr, result.returncode, "event migrate")
 
     if not result.stdout.strip():
         return {"status": "ok"}
@@ -318,8 +389,14 @@ def upgrade_db() -> dict:
         capture_output=True, text=True,
     )
     if result.returncode != 0:
-        msg = result.stderr.strip() or "upgrade failed"
-        raise click.ClickException(f"database upgrade failed: {msg}")
+        # The TSV has no row for this one, but its four siblings in this file
+        # all do, all say CONDITIONAL relay, and this is the same seam: Go
+        # chose the class at the site that raised it. So the prefix goes the
+        # way the others' did — `"database upgrade failed: "` in front of Go's
+        # own sentinel was Python's voice over a verdict Python did not choose,
+        # and `_child_refusal` is the one place that decides what to do with a
+        # child's words, silence included.
+        raise _child_refusal(result.stderr, result.returncode, "event upgrade")
     return json.loads(result.stdout.strip())
 
 
@@ -339,8 +416,7 @@ def backup_db(endless_go_bin: str | None = None) -> dict:
         capture_output=True, text=True,
     )
     if result.returncode != 0:
-        msg = result.stderr.strip() or "backup failed"
-        raise click.ClickException(f"backup failed: {msg}")
+        raise _child_refusal(result.stderr, result.returncode, "event backup")
 
     if not result.stdout.strip():
         return {"status": "ok"}
@@ -351,8 +427,11 @@ def _get_or_create_node_id() -> str:
     """Read node_id from config.json, or generate and persist one."""
     config_path = config.CONFIG_FILE
     if not config_path.exists():
-        raise click.ClickException(
-            f"Config not found at {config_path}. Run 'endless project scan' first."
+        raise agent_help.no_report(
+            f"Config not found at {config_path}. Nothing was written.",
+            "Run `endless project scan`, then retry",
+            text=f"Config not found at {config_path}. Run 'endless project "
+                 f"scan' first.",
         )
 
     data = json.loads(config_path.read_text())

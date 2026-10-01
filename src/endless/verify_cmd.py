@@ -17,8 +17,7 @@ import re
 import subprocess
 from pathlib import Path
 
-import click
-
+from endless import agent_help
 from endless.event_bridge import _resolve_endless_go
 from endless.task_cmd import _current_session_task_id
 
@@ -36,10 +35,13 @@ def run_verify(item_id: int | None, keep: bool) -> None:
     if resolved is None:
         resolved = _resolve_task_id()
     if resolved is None:
-        raise click.ClickException(
-            "no task id given, and neither this session nor the current "
-            "directory names one; pass an explicit task id, e.g. "
-            "`endless task verify E-101`."
+        raise agent_help.no_report(
+            "No task id was given and neither this session nor the current "
+            "directory names one, so nothing was verified.",
+            "Retry naming the task: `endless task verify E-<id>`",
+            text=("no task id given, and neither this session nor the current "
+                  "directory names one; pass an explicit task id, e.g. "
+                  "`endless task verify E-101`."),
         )
 
     task_id = f"E-{resolved}"
@@ -51,7 +53,11 @@ def run_verify(item_id: int | None, keep: bool) -> None:
     cmd.append(task_id)
 
     result = subprocess.run(cmd, cwd=_run_dir(resolved))
-    raise SystemExit(result.returncode)
+    # stdout and stderr were inherited, so the runner's own output — a passing
+    # suite, a failing check, its own classified refusal — is already on this
+    # terminal. Only its status is left to carry, and that includes zero: a
+    # suite that passed ends here too.
+    agent_help.passthrough_exit(result.returncode)
 
 
 def _resolve_task_id() -> int | None:

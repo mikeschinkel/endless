@@ -16,27 +16,30 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/docmirror"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/sessionstate"
 	"github.com/mikeschinkel/endless/internal/spawnlaunchcmd"
 )
 
-func init() {
-	// Log to both stderr and a persistent log file
-	logDir := filepath.Join(monitor.ConfigDir(), "log")
-	os.MkdirAll(logDir, 0755)
-	logFile, err := os.OpenFile(
-		filepath.Join(logDir, "hook.log"),
-		os.O_CREATE|os.O_WRONLY|os.O_APPEND,
-		0644,
-	)
-	if err != nil {
-		// Fall back to stderr only
-		log.SetOutput(os.Stderr)
-	} else {
-		log.SetOutput(io.MultiWriter(os.Stderr, logFile))
-	}
-	log.SetFlags(log.Ldate | log.Ltime)
-	log.SetPrefix("endless-go hook: ")
+// hookLogFile is the hook's persistent log, under the config directory's log/.
+const hookLogFile = "hook.log"
+
+// initLog points the standard logger at hook.log, and only at hook.log.
+//
+// Two things changed here, and both were doing damage.
+//
+// It was an init(), so it ran for EVERY endless-go subcommand — `task-status
+// get`, `markdown render`, anything — because main imports this package. A
+// command that never logs had its logger redirected, before --db was even
+// parsed, to a file chosen from a config directory nobody had resolved yet.
+//
+// And it teed to stderr, which put diagnostics in the same stream as
+// classified refusals. On a hook that exits 1 the harness shows the user only
+// the FIRST stderr line, so a stray log line displaced the actual error; on one
+// that exits 2 it was prepended to the block reason the model reads. A log line
+// a user needs to see is not a log line — it is a Warn, or a faults.Record.
+func initLog() {
+	refusal.InitLog(monitor.ConfigDir(), hookLogFile, "endless-go hook: ")
 }
 
 type claudePayload struct {
@@ -1041,7 +1044,7 @@ func sessionMayWrite(s *monitor.SessionInfo) bool {
 //
 // `session` is nil when no row could be read at all, which is the same
 // undeclared case as a row holding no task.
-func declarationRefusal(projectID int64, session *monitor.SessionInfo) string {
+func declarationRefusal(projectID int64, session *monitor.SessionInfo) *refusal.Error {
 	var msg strings.Builder
 
 	if session != nil && session.TaskID != nil {
@@ -1060,7 +1063,20 @@ func declarationRefusal(projectID int64, session *monitor.SessionInfo) string {
 				"clears this state.\nDo NOT re-claim the task — it is already yours, and " +
 				"re-claiming repairs a session\nfield by changing a task's status.\n")
 		}
-		return msg.String()
+		// REPORT, and both branches report for the same reason: nothing the
+		// agent can run clears either state. Only a message from the user does
+		// — an answer to the question that set `needs_input`, or simply the
+		// next turn. Treated as NO-REPORT the agent would retry the write, be
+		// refused again, and never say why it stopped.
+		decision := "the session state only a message from them can clear"
+		if session.State == sessionstate.NeedsInput {
+			decision = "the question this session asked and is still waiting on"
+		}
+		return refusal.Report(
+			fmt.Sprintf("BLOCKED: this session holds E-%d but is in state %q; nothing was changed.",
+				*session.TaskID, session.State),
+			decision,
+		).Command("PreToolUse").Text(msg.String())
 	}
 
 	projectName, _ := monitor.GetProjectName(projectID)
@@ -1088,15 +1104,30 @@ func declarationRefusal(projectID int64, session *monitor.SessionInfo) string {
 	msg.WriteString("  endless task claim <id>   — start working on a specific task\n")
 	msg.WriteString("  endless task show         — see all available tasks\n")
 
-	return msg.String()
+	// NO-REPORT: every remedy is a command the agent runs itself. Declaring the
+	// work is the agent's job, not a question for the user, and the candidate
+	// list is in the message.
+	return refusal.NoReport(
+		fmt.Sprintf("BLOCKED: this session has not declared a task in project %q; nothing was changed.",
+			projectName),
+		"Run `endless task claim <id>` for the task this work belongs to — "+
+			"`endless task show` lists them — then retry",
+	).Command("PreToolUse").Text(msg.String())
 }
 
-// blockToolUse writes an error to stderr and exits with code 2.
-// Claude Code interprets exit code 2 as "action blocked" and feeds stderr
-// back to Claude as context.
-func blockToolUse(message string) {
-	fmt.Fprint(os.Stderr, message)
-	os.Exit(2)
+// blockToolUse refuses the tool call: exit 2, with the refusal on stderr, which
+// is what Claude Code feeds back to the model as the block reason.
+//
+// It takes a classified refusal rather than a string because the model is the
+// only reader a block reason ever has. Every one of these is something the
+// agent either fixes itself and never mentions, or cannot fix and must stop
+// over — and until E-2159 not one of them said which.
+//
+// refusal.Block pins the agent rendering: the environment is irrelevant here,
+// since a person at the terminal never sees a block reason even when they are
+// the one typing.
+func blockToolUse(e *refusal.Error) {
+	refusal.Block(e)
 }
 
 // revisitClearVerbRe matches the user's revisit gate-clearing command so it is
@@ -1122,6 +1153,11 @@ func clearsRevisitGate(cmd string) bool {
 	return revisitClearVerbRe.MatchString(stripHeredocs(cmd))
 }
 
+// askUserQuestionTool is the harness tool the revisit gate's instruction names.
+// It is exempt from the gate for that reason and no other: see
+// revisitGateDecision.
+const askUserQuestionTool = "AskUserQuestion"
+
 // enforceRevisitGate intercepts a session whose claimed task descends from an
 // epic currently in status='revisit' (E-1542). On the session's next tool call
 // (any tool kind) it blocks and instructs Claude to surface an AskUserQuestion:
@@ -1143,6 +1179,17 @@ func enforceRevisitGate(payload claudePayload) {
 // performs no stdout/exit — the caller owns the block emission — so it is unit
 // testable against a seeded DB.
 func revisitGateDecision(payload claudePayload) (instruction string, block bool) {
+	// Never gate the tool this gate's own message tells the agent to use.
+	//
+	// The instruction says "surface this to the user as an AskUserQuestion",
+	// and the gate blocked AskUserQuestion along with everything else — so the
+	// agent could only ask in reply text, and a refusal naming an impossible
+	// remedy is a refusal that cannot be obeyed. Asking is how this gate is
+	// meant to clear; it is not work done under the reconsidered plan.
+	if payload.ToolName == askUserQuestionTool {
+		return "", false
+	}
+
 	// Never gate the user's own gate-clearing commands.
 	if payload.ToolName == "Bash" {
 		var input toolInputBash
@@ -1215,7 +1262,16 @@ func blockResponse(instruction string) preToolUseBlock {
 // back to the always-works stderr+exit-2 form.
 func blockToolUseWithDecision(instruction string) {
 	if err := json.NewEncoder(os.Stdout).Encode(blockResponse(instruction)); err != nil {
-		blockToolUse(instruction)
+		// REPORT: the gate exists precisely because a decision is owed by the
+		// user — continue under a plan whose strategy is being reconsidered,
+		// or stop. Nothing here is the agent's to resolve, which is why the
+		// instruction names AskUserQuestion.
+		blockToolUse(refusal.Report(
+			"BLOCKED: this session's task descends from an epic now in "+
+				"status=revisit. Nothing was changed.",
+			"whether to continue under the current plan or stop until the "+
+				"strategy is re-set",
+		).Command("PreToolUse").Text(instruction))
 		return
 	}
 	os.Exit(0)
@@ -1387,7 +1443,11 @@ func blockWorktreeRemovalIfApplicable(payload claudePayload) {
 	if !removesWorktree(input.Command) {
 		return
 	}
-	blockToolUse(`BLOCKED: refusing to remove a worktree.
+	blockToolUse(refusal.Report(
+		"BLOCKED: refusing to remove a worktree. Nothing was removed.",
+		"whether to remove a worktree — removal is their act, typed in their "+
+			"own shell",
+	).Command("PreToolUse").Text(`BLOCKED: refusing to remove a worktree.
 
 Removing a worktree is not something an agent session does — not ` +
 		"`endless worktree drop`" + `, not ` + "`endless worktree reap`" + `, not
@@ -1405,7 +1465,7 @@ If a branch's history has diverged from main, fix the BRANCH in place:
 Both leave the directory — and whoever is working in it — intact.
 
 If removal genuinely looks warranted, say so once and stop. Whoever is running
-this session removes it themselves; there is no flag here that lets you do it.`)
+this session removes it themselves; there is no flag here that lets you do it.`))
 }
 
 // sqliteAgainstEndless reports whether cmd runs sqlite3 against a path inside
@@ -1429,7 +1489,10 @@ func blockSqliteAgainstEndlessIfApplicable(payload claudePayload) {
 	if !sqliteAgainstEndless(input.Command) {
 		return
 	}
-	blockToolUse(
+	blockToolUse(refusal.NoReport(
+		"BLOCKED: refusing `sqlite3` against a path inside `.endless/`. The query did not run.",
+		"Re-run it as `endless sql \"<query>\"` (add --write for a mutation)",
+	).Command("PreToolUse").Text(
 		"BLOCKED: refusing `sqlite3` against a path inside `.endless/`.\n\n" +
 			"The Endless DB lives at `~/.config/endless/endless.db`. " +
 			"Running sqlite3 against speculative `.endless/...` paths " +
@@ -1438,7 +1501,7 @@ func blockSqliteAgainstEndlessIfApplicable(payload claudePayload) {
 			"Use this instead:\n" +
 			"  endless sql \"<query>\"             # read-only by default\n" +
 			"  endless sql --write \"<query>\"     # mutations require --write\n",
-	)
+	))
 }
 
 // commitRunsOnMain reports whether cmd runs `git commit` in main's working
@@ -1515,22 +1578,32 @@ func blockCommitOnMainIfApplicable(payload claudePayload) {
 		return
 	}
 
-	blockToolUse(`Direct commits to main are highly discouraged when using endless.
+	// REPORT-IF: the class turns on something this hook cannot see — whether
+	// the change belongs to a task the agent can claim, or has to land on main
+	// because the user asked for it or because work is already uncommitted
+	// there. The agent holds that conversation.
+	blockToolUse(refusal.ReportIf(
+		"BLOCKED: refusing a direct commit to main. Nothing was committed.",
+		"the user asked for this to land on main, or work is already "+
+			"uncommitted there",
+		"claim the task this work belongs to and commit in its worktree",
+		"only they can decide to commit to the integration branch directly",
+	).Command("PreToolUse").Text(`Direct commits to main are refused when using endless.
 
 main is the integration target. Make changes in a worktree on a per-task
 branch, then merge via ` + "`endless worktree land <task-id>`" + `.
 
-If you have an Endless task for this work:
+Claim the task this work belongs to; the claim creates the worktree:
   endless task claim E-NNN          # creates worktree at .endless/worktrees/e-NNN
-
-Or by hand:
-  git worktree add -b task/NNN .endless/worktrees/e-NNN main
-  cd .endless/worktrees/e-NNN
-  # ... do work, commit ...
+  # ... do work, commit there ...
   endless worktree land E-NNN
 
-Bypass (NOT recommended):
-  git commit --no-verify`)
+If there is no task for it yet, add one first with endless task add.
+Do not build the worktree by hand: git worktree add skips the provisioning
+hook, and the session ends up without the bindings the land expects.
+
+There is no flag that turns this off. If the commit genuinely belongs on main,
+say so and let your user make it.`))
 }
 
 // docMirrorBlockMessage is the refusal writeTargetDecision gives for a task
@@ -1542,14 +1615,22 @@ Bypass (NOT recommended):
 // The stems and the --<name>-file flags are read from docmirror.TaskKinds, the
 // list the recognizer itself is built from, so the message names exactly the
 // files the gate refuses — a new content kind shows up here with no edit.
-func docMirrorBlockMessage() string {
+// NO-REPORT: the remedy is entirely the agent's — write the content under
+// .endless/tmp/ and load it with the matching --<name>-file flag. The user has
+// nothing to decide about a file that is a projection of a database column.
+func docMirrorBlockMessage() *refusal.Error {
 	stems := make([]string, len(docmirror.TaskKinds))
 	var flags strings.Builder
 	for i, k := range docmirror.TaskKinds {
 		stems[i] = k.Stem
 		fmt.Fprintf(&flags, "  endless task update <id> --%s-file .endless/tmp/<file>.md\n", k.Stem)
 	}
-	return "BLOCKED: refusing a direct Write/Edit of a task document mirror " +
+	return refusal.NoReport(
+		"BLOCKED: refusing a direct Write/Edit of a task document mirror. "+
+			"Nothing was written.",
+		"Write the content under .endless/tmp/ and load it with "+
+			"`endless task update <id> --<name>-file <path>`",
+	).Command("PreToolUse").Text("BLOCKED: refusing a direct Write/Edit of a task document mirror " +
 		"(.endless/tasks/e-NNNN/{" + strings.Join(stems, ",") + "}.md). That content " +
 		"lives in the database as the task's content — one row per name — and " +
 		"the file is a projection of it that endless writes and commits on main " +
@@ -1563,7 +1644,7 @@ func docMirrorBlockMessage() string {
 		"path string itself. Use the inline forms only for short content.)\n\n" +
 		"Your task's own verify.sh in that same directory IS yours to write — " +
 		"only these .md files are the database's.\n\n" +
-		"Never hand-edit or git-commit a mirror yourself."
+		"Never hand-edit or git-commit a mirror yourself.")
 }
 
 // isInMainCheckout returns true if cwd is inside the main checkout of a git
@@ -1989,17 +2070,22 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 					*session.TaskID, wp, wp)
 			}
 		}
-		blockToolUse("Edits in main are highly discouraged when using endless.\n\n" +
-			"main is the integration target — every edit ideally should go through\n" +
-			"a worktree.\n\n" +
-			"If you do not yet have an active task, create one and start it:\n" +
-			"  endless task add \"<title>\"\n" +
-			"  endless task claim E-NNN          # auto-creates the worktree\n\n" +
-			"If you already have an active task without a worktree:\n" +
-			"  endless task claim E-NNN          # idempotent; creates if missing\n\n" +
-			"Or create the worktree by hand or via `endless pivot` (when available):\n" +
-			"  git worktree add -b task/NNN .endless/worktrees/e-NNN main" +
-			redirectHint)
+		blockToolUse(refusal.NoReport(
+			"BLOCKED: edits in the main checkout are refused; nothing was written.",
+			"Claim the task this work belongs to (`endless task add \"<title>\"` "+
+				"first if there is none) so it has a worktree, and edit there",
+		).Command("PreToolUse").Text(
+			"Edits in main are refused when using endless.\n\n" +
+				"main is the integration target — every edit ideally should go through\n" +
+				"a worktree.\n\n" +
+				"If you do not yet have an active task, create one and start it:\n" +
+				"  endless task add \"<title>\"\n" +
+				"  endless task claim E-NNN          # auto-creates the worktree\n\n" +
+				"If you already have an active task without a worktree:\n" +
+				"  endless task claim E-NNN          # idempotent; creates if missing\n\n" +
+				"Let the claim create the worktree — building one by hand with " +
+				"`git worktree add`\nskips the provisioning hook." +
+				redirectHint))
 		return
 	}
 
@@ -2012,13 +2098,40 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 		if monitor.IsWorktreeLockStale(lock) {
 			ownerHint += " [stale]"
 		}
-		blockToolUse(fmt.Sprintf(
+		// The TSV files this CONDITIONAL — REPORT when the worktree belongs to
+		// the agent's own task, NO-REPORT when it is somebody else's — and it
+		// does not need the agent's judgement: the session row says which task
+		// this session holds and the path convention says which task the
+		// worktree belongs to, so the branch is decided here.
+		ownWorktree := false
+		if wtTask := monitor.TaskIDFromWorktreePath(worktreePath); wtTask != "" &&
+			session != nil && session.TaskID != nil {
+			if n, parseErr := parseEndlessTaskID(wtTask); parseErr == nil {
+				ownWorktree = n == *session.TaskID
+			}
+		}
+		ownerBody := fmt.Sprintf(
 			"This worktree is owned by %s, not this session.\n\n"+
 				"Restart this Claude session inside this worktree (a fresh SessionStart\n"+
 				"reclaims a stale lock), or move to a different worktree.\n\n"+
 				"  endless worktree current\n"+
 				"  endless worktree list",
-			ownerHint))
+			ownerHint)
+		ownerSummary := fmt.Sprintf(
+			"BLOCKED: this worktree is locked by %s, not this session; nothing "+
+				"was written.", ownerHint)
+		if ownWorktree {
+			// Own task: only a fresh session reclaims the lock, and starting
+			// one is the user's act at their own terminal.
+			blockToolUse(refusal.Report(ownerSummary,
+				"whether to restart this Claude session inside the worktree — "+
+					"only a fresh session reclaims the lock",
+			).Command("PreToolUse").Text(ownerBody))
+		}
+		blockToolUse(refusal.NoReport(ownerSummary,
+			"Move to the worktree for your own task (`endless worktree current`, "+
+				"`endless worktree list`) and work there",
+		).Command("PreToolUse").Text(ownerBody))
 	}
 
 	// (b) Task mismatch: worktree's identity (from path convention,
@@ -2027,14 +2140,21 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 	if worktreeTaskID != "" && session != nil && session.TaskID != nil {
 		worktreeTaskNum, parseErr := parseEndlessTaskID(worktreeTaskID)
 		if parseErr == nil && worktreeTaskNum != *session.TaskID {
-			blockToolUse(fmt.Sprintf(
+			blockToolUse(refusal.NoReport(
+				fmt.Sprintf("BLOCKED: this worktree is bound to %s but your active "+
+					"task is E-%d; nothing was written.", worktreeTaskID, *session.TaskID),
+				fmt.Sprintf("Either `endless task claim %s` to switch to the task "+
+					"this worktree holds, or move to your active task's worktree "+
+					"(`endless worktree for-task E-%d`) and retry there",
+					worktreeTaskID, *session.TaskID),
+			).Command("PreToolUse").Text(fmt.Sprintf(
 				"This worktree is bound to %s, but your active task is E-%d.\n\n"+
 					"Either switch tasks (no cd needed):\n"+
 					"  endless task claim E-%d\n\n"+
 					"Or move to the worktree for your active task:\n"+
 					"  endless worktree for-task E-%d",
 				worktreeTaskID, *session.TaskID,
-				worktreeTaskNum, *session.TaskID))
+				worktreeTaskNum, *session.TaskID)))
 		}
 	}
 
@@ -2045,11 +2165,16 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 	if session != nil && session.TaskID != nil {
 		activeWP, _ := monitor.WorktreePathForTask(projectID, *session.TaskID)
 		if activeWP != "" && filepath.Clean(activeWP) != filepath.Clean(worktreePath) {
-			blockToolUse(fmt.Sprintf(
+			blockToolUse(refusal.NoReport(
+				fmt.Sprintf("BLOCKED: your active task E-%d is bound to a different "+
+					"worktree (%s); nothing was written.", *session.TaskID, activeWP),
+				fmt.Sprintf("Use absolute paths under %s, and `cd %s` in a Bash "+
+					"call, then retry", activeWP, activeWP),
+			).Command("PreToolUse").Text(fmt.Sprintf(
 				"Your active task E-%d is bound to a different worktree:\n  %s\n\n"+
 					"Use absolute paths under that directory for Read/Write/Edit,\n"+
 					"and run `cd %s` in a Bash call for shell commands.",
-				*session.TaskID, activeWP, activeWP))
+				*session.TaskID, activeWP, activeWP)))
 		}
 	}
 }
@@ -2221,8 +2346,14 @@ func unboundWorktreeInstruction(projectRoot, cwd, taskRef string) string {
 // session's owned worktree, so direct Claude to move its working directory back
 // with `/cd`. Display paths render home-relative; the literal `/cd <path>` stays
 // absolute for paste-safety.
-func cdRedirect(taskID int64, worktreePath, cwd string) string {
-	return fmt.Sprintf(
+func cdRedirect(taskID int64, worktreePath, cwd string) *refusal.Error {
+	return refusal.Report(
+		fmt.Sprintf("BLOCKED: your working directory is %s but task E-%d's worktree "+
+			"is %s; nothing was changed.",
+			tildePath(cwd), taskID, tildePath(worktreePath)),
+		"whether to move Claude's working directory — `/cd` is typed by them, "+
+			"and it prompts for workspace trust",
+	).Command("PreToolUse").Text(fmt.Sprintf(
 		"Your working directory is %s, but you have task E-%d claimed and its "+
 			"worktree is %s.\n\n"+
 			"Move Claude's working directory into the worktree so edits and shell "+
@@ -2231,7 +2362,7 @@ func cdRedirect(taskID int64, worktreePath, cwd string) string {
 			"After /cd every tool defaults to the worktree. An explicit absolute "+
 			"path still reaches another directory for reads; writes — Write/Edit "+
 			"and shell commands alike — must stay inside the worktree.",
-		tildePath(cwd), taskID, tildePath(worktreePath), worktreePath)
+		tildePath(cwd), taskID, tildePath(worktreePath), worktreePath))
 }
 
 // tildePath renders an absolute path home-relative (~/...) for display in hook

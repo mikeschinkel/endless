@@ -42,9 +42,7 @@ run the changes yet.
 import os
 from pathlib import Path
 
-import click
-
-from endless import config, db
+from endless import agent_help, config, db
 
 
 def home() -> Path:
@@ -66,9 +64,13 @@ def home() -> Path:
     """
     value = os.environ.get("HOME", "")
     if not value:
-        raise click.ClickException(
-            "Cannot determine the home directory: $HOME is unset. "
-            "Endless stores project paths relative to it."
+        raise agent_help.report(
+            "$HOME is unset, so no project path could be read or written. "
+            "Nothing was changed.",
+            "the environment Endless runs in — a guessed home would store "
+            "every project path under the wrong root",
+            text=("Cannot determine the home directory: $HOME is unset. "
+                  "Endless stores project paths relative to it."),
         )
     return Path(value).resolve()
 

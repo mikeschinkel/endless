@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // Executor functions for decision and decision_relation events (E-1378).
@@ -60,7 +62,9 @@ func execDecisionCreated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		status = "proposed"
 	}
 	if !validDecisionStatuses[status] {
-		return nil, fmt.Errorf("events: invalid decision status %q", status)
+		return nil, refusal.NoReport(
+			fmt.Sprintf("events: invalid decision status %q", status),
+			"Use proposed, accepted, rejected, superseded or obsolete, and retry")
 	}
 
 	projectID, err := resolveProjectID(db, evt.Project)
@@ -114,7 +118,9 @@ func execDecisionFieldsUpdated(db dbQuerier, evt *Event) (*ExecuteResult, error)
 	for field, value := range p.Fields {
 		col, ok := allowedDecisionFields[field]
 		if !ok {
-			return nil, fmt.Errorf("events: unknown field %q in decision.fields_updated", field)
+			return nil, internalContractRefusal(
+				fmt.Sprintf("events: unknown field %q in decision.fields_updated", field),
+				"retry naming a field `decision update` accepts")
 		}
 		setClauses = append(setClauses, col+" = ?")
 		args = append(args, value)
@@ -153,10 +159,9 @@ func execDecisionAccepted(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		var status string
 		row := db.QueryRow("SELECT status FROM decisions WHERE id = ?", evt.Entity.ID)
 		if err := row.Scan(&status); err != nil {
-			return nil, fmt.Errorf("events: accept decision %s: not found", evt.Entity.ID)
+			return nil, decisionNotFound("accept", evt.Entity.ID)
 		}
-		return nil, fmt.Errorf("events: accept decision %s: status is %q, expected proposed",
-			evt.Entity.ID, status)
+		return nil, decisionWrongStatus("accept", evt.Entity.ID, status, "proposed")
 	}
 	return &ExecuteResult{}, nil
 }
@@ -167,7 +172,7 @@ func execDecisionRejected(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return nil, fmt.Errorf("events: unmarshal decision.rejected payload: %w", err)
 	}
 	if p.Reason == "" {
-		return nil, fmt.Errorf("events: decision.rejected requires non-empty reason")
+		return nil, decisionReasonRequired("events: decision.rejected requires non-empty reason")
 	}
 
 	result, err := db.Exec(
@@ -184,10 +189,9 @@ func execDecisionRejected(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		var status string
 		row := db.QueryRow("SELECT status FROM decisions WHERE id = ?", evt.Entity.ID)
 		if err := row.Scan(&status); err != nil {
-			return nil, fmt.Errorf("events: reject decision %s: not found", evt.Entity.ID)
+			return nil, decisionNotFound("reject", evt.Entity.ID)
 		}
-		return nil, fmt.Errorf("events: reject decision %s: status is %q, expected proposed",
-			evt.Entity.ID, status)
+		return nil, decisionWrongStatus("reject", evt.Entity.ID, status, "proposed")
 	}
 	return &ExecuteResult{}, nil
 }
@@ -262,10 +266,14 @@ func execDecisionSuperseded(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return nil, fmt.Errorf("events: unmarshal decision.superseded payload: %w", err)
 	}
 	if p.BySupersedingID == 0 {
-		return nil, fmt.Errorf("events: decision.superseded requires by_superseding_id")
+		return nil, refusal.NoReport(
+			"events: decision.superseded requires by_superseding_id",
+			"Name the superseding decision and retry")
 	}
 	if fmt.Sprint(p.BySupersedingID) == evt.Entity.ID {
-		return nil, fmt.Errorf("events: decision %s cannot supersede itself", evt.Entity.ID)
+		return nil, refusal.NoReport(
+			fmt.Sprintf("events: decision %s cannot supersede itself", evt.Entity.ID),
+			"Name a different superseding decision and retry")
 	}
 
 	result, err := db.Exec(
@@ -294,7 +302,7 @@ func execDecisionObsoleted(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return nil, fmt.Errorf("events: unmarshal decision.obsoleted payload: %w", err)
 	}
 	if p.Reason == "" {
-		return nil, fmt.Errorf("events: decision.obsoleted requires non-empty reason")
+		return nil, decisionReasonRequired("events: decision.obsoleted requires non-empty reason")
 	}
 
 	result, err := db.Exec(
@@ -365,10 +373,48 @@ func requireDecisionRowAffected(
 	var status string
 	row := db.QueryRow("SELECT status FROM decisions WHERE id = ?", id)
 	if err := row.Scan(&status); err != nil {
-		return fmt.Errorf("events: %s decision %s: not found", verb, id)
+		return decisionNotFound(verb, id)
 	}
-	return fmt.Errorf("events: %s decision %s: status is %q, expected %s",
-		verb, id, status, want)
+	return decisionWrongStatus(verb, id, status, want)
+}
+
+// decisionNotFound is the refusal for an ED- id that names no decision row.
+//
+// NO-REPORT: the id is often the user's, but it is resolvable by lookup —
+// `decision list` names every one — so correcting it needs nobody. The Python
+// CLI pre-checks the same condition, so this text surfaces only on a race.
+func decisionNotFound(verb, id string) error {
+	return refusal.NoReport(
+		fmt.Sprintf("events: %s decision %s: not found", verb, id),
+		"Re-check the ED- id with `endless decision list` and retry")
+}
+
+// decisionWrongStatus is the refusal for a transition whose guard found the
+// decision in some other state.
+//
+// The class turns on WHY the transition was asked for, which this package
+// cannot see. Finding the decision already in the goal state, or being asked for
+// the matching reversal, is the agent's own business. Reaching the goal by
+// undoing an accept or reject the USER made is not: that is a judgment about the
+// user's own record of what was decided.
+func decisionWrongStatus(verb, id, status, want string) error {
+	return refusal.ReportIf(
+		fmt.Sprintf("events: %s decision %s: status is %q, expected %s",
+			verb, id, status, want),
+		"reaching the state you want means undoing an accept or reject the user made",
+		"leave the decision as it stands, or use the reversal the user actually asked for",
+		"an accept or reject is the user's judgment, and only they can reverse one",
+	)
+}
+
+// decisionReasonRequired refuses a reject or an obsolete with no reason.
+//
+// The remedy says whose words to supply, not just which flag: the reason is
+// stored on the row as the record of WHY the decision stopped applying, so an
+// agent inventing one to satisfy the guard writes fiction into the decision log.
+func decisionReasonRequired(summary string) error {
+	return refusal.NoReport(summary,
+		"Pass --reason carrying the user's own stated rationale, and retry")
 }
 
 func execDecisionDeleted(db dbQuerier, evt *Event) (*ExecuteResult, error) {
@@ -395,10 +441,14 @@ func execDecisionRelationCreated(db dbQuerier, evt *Event) (*ExecuteResult, erro
 		return nil, fmt.Errorf("events: unmarshal decision_relation.created payload: %w", err)
 	}
 	if !validRelationTargetKinds[p.TargetKind] {
-		return nil, fmt.Errorf("events: invalid decision_relation target_kind %q", p.TargetKind)
+		return nil, refusal.NoReport(
+			fmt.Sprintf("events: invalid decision_relation target_kind %q", p.TargetKind),
+			"Pass target_kind task or decision, and retry")
 	}
 	if p.RelationType == "" {
-		return nil, fmt.Errorf("events: decision_relation.created requires relation_type")
+		return nil, refusal.NoReport(
+			"events: decision_relation.created requires relation_type",
+			"Pass a relation_type and retry")
 	}
 
 	_, err := db.Exec(
@@ -429,7 +479,13 @@ func execDecisionRelationDeleted(db dbQuerier, evt *Event) (*ExecuteResult, erro
 	}
 	n, _ := result.RowsAffected()
 	if n == 0 {
-		return nil, fmt.Errorf("events: delete decision_relation: no matching row")
+		// The end state asked for is the end state that holds, so there is
+		// nothing for anyone to decide. Note the ledger line is already appended
+		// and committed by the time this fires, so a retry leaves the refused
+		// event in the ledger — another reason not to retry it.
+		return nil, refusal.NoReport(
+			"events: delete decision_relation: no matching row",
+			"Nothing to remove — the relation is already gone; carry on")
 	}
 	return &ExecuteResult{}, nil
 }

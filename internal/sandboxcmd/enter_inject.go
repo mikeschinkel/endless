@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // shellInjection describes how to launch an interactive shell so that
@@ -25,7 +27,7 @@ const _shellInjectionContent = `# >>> endless-sandbox auto-inject (E-1182) >>>
 [ -f "$HOME/%[1]s" ] && source "$HOME/%[1]s"
 eval "$(endless shell-init)"
 command -v esu >/dev/null 2>&1 || \
-    echo "endless-sandbox: warning: shell-init failed to define esu (helpers unavailable)" >&2
+    echo "endless-go sandbox enter: warning: shell-init failed to define esu (helpers unavailable)" >&2
 # <<< endless-sandbox auto-inject <<<
 `
 
@@ -43,7 +45,7 @@ func buildShellInjection(shellPath string) shellInjection {
 func buildZshInjection() shellInjection {
 	tmp, err := os.MkdirTemp("", "endless-sandbox-zdotdir-")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-sandbox: warning: create ZDOTDIR tempdir: %v (helpers unavailable)\n", err)
+		degradedShell("create ZDOTDIR tempdir", err)
 		return shellInjection{Clean: func() {}}
 	}
 	if home := os.Getenv("HOME"); home != "" {
@@ -58,7 +60,7 @@ func buildZshInjection() shellInjection {
 	rc := filepath.Join(tmp, ".zshrc")
 	if err := os.WriteFile(rc, []byte(fmt.Sprintf(_shellInjectionContent, ".zshrc")), 0o644); err != nil {
 		os.RemoveAll(tmp)
-		fmt.Fprintf(os.Stderr, "endless-sandbox: warning: write zshrc: %v (helpers unavailable)\n", err)
+		degradedShell("write zshrc", err)
 		return shellInjection{Clean: func() {}}
 	}
 	return shellInjection{
@@ -70,13 +72,13 @@ func buildZshInjection() shellInjection {
 func buildBashInjection() shellInjection {
 	f, err := os.CreateTemp("", "endless-sandbox-bashrc-*.sh")
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-sandbox: warning: create bashrc tempfile: %v (helpers unavailable)\n", err)
+		degradedShell("create bashrc tempfile", err)
 		return shellInjection{Clean: func() {}}
 	}
 	if _, err := f.WriteString(fmt.Sprintf(_shellInjectionContent, ".bashrc")); err != nil {
 		f.Close()
 		os.Remove(f.Name())
-		fmt.Fprintf(os.Stderr, "endless-sandbox: warning: write bashrc: %v (helpers unavailable)\n", err)
+		degradedShell("write bashrc", err)
 		return shellInjection{Clean: func() {}}
 	}
 	f.Close()
@@ -84,4 +86,18 @@ func buildBashInjection() shellInjection {
 		Args:  []string{"--rcfile", f.Name()},
 		Clean: func() { os.Remove(f.Name()) },
 	}
+}
+
+// degradedShell reports that the esu/esp/esf helpers could not be installed
+// into the subshell about to start.
+//
+// Nothing is blocked and there is nothing to retry differently: `enter`
+// continues, the subshell works, and only the three convenience functions are
+// missing. The only caller is enterCmd, so the verb in the prefix is always
+// `enter`.
+func degradedShell(what string, err error) {
+	refusal.NoReport(
+		fmt.Sprintf("endless-go sandbox enter: warning: %s: %v (helpers unavailable)", what, err),
+		"Nothing to do: the subshell starts without esu/esp/esf",
+	).Command("sandbox enter").Print()
 }

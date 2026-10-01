@@ -52,6 +52,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/mikeschinkel/go-cfgstore"
 	_ "modernc.org/sqlite"
@@ -66,6 +67,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/outputstylecmd"
 	"github.com/mikeschinkel/endless/internal/projectstatuscmd"
+	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/resumewindowscmd"
 	"github.com/mikeschinkel/endless/internal/sandboxcmd"
 	"github.com/mikeschinkel/endless/internal/sessionmonitorcmd"
@@ -105,12 +107,14 @@ func main() {
 	// path where it CREATES a missing config, so a fresh install — or any run
 	// under a temp HOME, which is exactly what the verify runner builds — panics.
 	//
-	// Warn level to stderr: cfgstore logs real problems (a config file it could
-	// not close), and stderr is safe for the hook, whose stdout is a single JSON
-	// document.
-	cfgstore.SetLogger(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: slog.LevelWarn,
-	})))
+	// Warn level to the LOG FILE, not to stderr. What cfgstore logs is a config
+	// file it could not close — real, worth keeping, and not something anybody
+	// asked this command for. On stderr it landed in the same stream as
+	// classified refusals, for every subcommand of this binary, where an agent
+	// reads it as output of the command it just ran. See internal/refusal's
+	// logging.go: a log line a user needs to see is not a log line.
+	cfgstore.SetLogger(slog.New(refusal.SlogHandler(
+		monitor.ConfigDir(), cfgstoreLogFile, slog.LevelWarn)))
 
 	// E-1429/E-1668: consume this binary's DB-context flags — --db main|sandbox,
 	// or the --db-dir escape — scanning os.Args wherever they appear, stripping
@@ -126,21 +130,27 @@ func main() {
 	// run from a worktree with main's binary, answered from the worktree's
 	// sandbox and said nothing. Detection may decide where to LOOK; only a flag
 	// decides that you may OPEN it.
+	// The class rides on the error. ConsumeDBFlags raises a NO-REPORT for every
+	// flag-shape mistake — a missing value, both spellings at once, an unknown
+	// --db — and a fault when the machine cannot resolve home or cwd. Deciding
+	// that HERE would mean matching on message text; deciding it there costs
+	// nothing, because the branch that knows is the branch that failed.
 	if err := monitor.ConsumeDBFlags(); err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go: %v\n", err)
-		os.Exit(2)
+		refusal.From(err).Command("endless-go").Exit(2)
 	}
 
 	if len(os.Args) < 2 {
-		usage(os.Stderr)
-		os.Exit(2)
+		refusal.NoReport(
+			"endless-go: no subcommand given",
+			"Re-run with a subcommand from the printed list",
+		).Command("endless-go").Text(usageText()).Exit(2)
 	}
 	sub := os.Args[1]
 	rest := os.Args[2:]
 
 	switch sub {
 	case "-h", "--help", "help":
-		usage(os.Stdout)
+		fmt.Fprint(os.Stdout, usageText())
 		return
 	}
 
@@ -253,11 +263,23 @@ func main() {
 	case "errors":
 		errorscmd.Run(rest)
 	default:
-		fmt.Fprintf(os.Stderr, "endless-go: unknown subcommand %q\n", sub)
-		usage(os.Stderr)
-		os.Exit(2)
+		// Two readings this binary cannot tell apart. Typed by hand, it is a
+		// name the caller fixes and retries. Relayed from an `endless` verb, it
+		// means the installed endless-go is older than the Python CLI that
+		// shelled to it — a skewed pair only the user can reinstall, and one
+		// that will keep breaking a different verb every time.
+		refusal.ReportIf(
+			fmt.Sprintf("endless-go: unknown subcommand %q", sub),
+			"an `endless` verb relayed this rather than you typing endless-go yourself",
+			"retry with a subcommand from the printed list",
+			"the installed endless-go is older than the endless CLI calling it, and only the user can reinstall a matching pair",
+		).Command("endless-go").Detail(usageText()).Exit(2)
 	}
 }
+
+// cfgstoreLogFile keeps go-cfgstore's own warnings out of hook.log, so a hook
+// transcript is the hook's and nothing else's.
+const cfgstoreLogFile = "cfgstore.log"
 
 // resolveFaultProject is the faults package's ProjectResolver (E-1960): it turns
 // a producer's explicit project id — or 0, meaning "you decide" — into the
@@ -300,7 +322,9 @@ func resolveFaultProject(explicit int64) (projectID int64, name string) {
 	return id, resolved
 }
 
-func usage(w *os.File) {
+func usageText() string {
+	var b strings.Builder
+	w := &b
 	fmt.Fprintln(w, "Usage: endless-go <subcommand> [args...]")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  event          emit|validate-db|rebuild-db|apply-change|backup|reap-worktrees")
@@ -326,4 +350,5 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "  verify         [--keep] <task-id>  (run a task's Tier-0 verification suite)")
 	fmt.Fprintln(w, "  jobs           list|run|retry  (the fire-once background job runner)")
 	fmt.Fprintln(w, "  errors         list|show|clear|codes  (machine-local fault record)")
+	return b.String()
 }

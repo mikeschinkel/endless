@@ -6,7 +6,7 @@ from pathlib import Path
 
 import click
 
-from endless import db, config
+from endless import agent_help, db, config
 from endless.project_path import resolved, stored
 from endless.suite_rules import scaffold_suite_rules
 
@@ -95,8 +95,11 @@ def register_project(
     # form is what the projects column holds (E-2011).
     project_path = resolved(project_path)
     if not project_path.is_dir():
-        raise click.ClickException(
-            f"Directory not found: {project_path}"
+        raise agent_help.no_report(
+            f"{project_path} is not a directory, so there is nothing to "
+            "register. Nothing was written.",
+            "Correct the path and retry",
+            text=f"Directory not found: {project_path}",
         )
     stored_path = stored(project_path)
 
@@ -174,12 +177,24 @@ def register_project(
 
     # Validate
     if not validate_name(name):
-        raise click.ClickException(
-            f"Invalid name: '{name}' "
-            "(must be lowercase alphanumeric, hyphens, or underscores)"
+        # With --infer the default is the directory's own name, so a directory
+        # like "My App" lands here until --name supplies an identifier.
+        raise agent_help.no_report(
+            f"'{name}' is not a valid project name. Nothing was registered.",
+            "Retry with --name set to a lowercase alphanumeric identifier "
+            "(hyphens and underscores allowed)",
+            text=(f"Invalid name: '{name}' "
+                  "(must be lowercase alphanumeric, hyphens, or underscores)"),
         )
     if status not in ("active", "paused", "archived", "idea"):
-        raise click.ClickException(f"Invalid status: {status}")
+        # Effectively unreachable from the CLI: --status is a click.Choice over
+        # this same set, and a stored status can only be one of them. It stays
+        # as the guard for a direct caller of this function.
+        raise agent_help.no_report(
+            f"'{status}' is not a project status. Nothing was registered.",
+            "Retry with --status active, paused, archived or idea",
+            text=f"Invalid status: {status}",
+        )
 
     # Write .endless/config.json — merge over any existing config so re-running
     # never clobbers keys endless doesn't manage here (e.g. self_dev, matchers)

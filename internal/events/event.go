@@ -9,6 +9,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/agentenv"
 	"github.com/mikeschinkel/endless/internal/kairos"
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // Version is the current event envelope schema version.
@@ -463,31 +464,74 @@ var validActorKinds = map[ActorKind]bool{
 	ActorTriager: true, // E-1859; historical only since E-1993
 }
 
+// internalContractRefusal classifies a message that can mean exactly two things
+// and cannot say which from inside this package.
+//
+// Every one of them names a value only the Python CLI ever supplies — an event
+// kind, a field name, a payload shape. Typed by hand into endless-go it is a
+// typo the agent fixes and forgets. Arriving through an `endless` command it
+// means the installed endless-go and the CLI calling it are different vintages,
+// which no retry fixes and only a reinstall does. The agent knows how the
+// command was reached; this package does not, so it names both branches rather
+// than guessing.
+func internalContractRefusal(summary, remedy string) error {
+	return refusal.ReportIf(
+		summary,
+		"this came from an `endless` command rather than a value you typed",
+		remedy,
+		"the installed endless-go is a different vintage from the endless CLI calling it, and only the user can reinstall a matching pair",
+	)
+}
+
+// brokenEnvelope refuses an envelope invariant this binary itself maintains: V
+// is stamped by the emitting command, TS comes from the kairos clock or an
+// already-parsed --ts, and Payload is never nil. Reaching one means the install
+// is producing events it cannot describe.
+//
+// REPORT rather than Fault, though it is Endless breaking either way: a fault
+// says "tell the user and do not retry", and this needs more than that — the
+// install itself is the thing to look at, and there is a decision about it that
+// belongs to whoever owns the machine.
+func brokenEnvelope(summary string) error {
+	return refusal.Report(summary,
+		"an Endless install that is building malformed event envelopes — it needs reporting or repairing, not retrying")
+}
+
 // Validate checks that the event envelope is well-formed.
 func (e *Event) Validate() error {
 	if e.V != Version {
-		return fmt.Errorf("events: unsupported version %d, want %d", e.V, Version)
+		return brokenEnvelope(fmt.Sprintf("events: unsupported version %d, want %d", e.V, Version))
 	}
 	if _, err := kairos.Parse(e.TS); err != nil {
-		return fmt.Errorf("events: invalid ts: %w", err)
+		return brokenEnvelope(fmt.Sprintf("events: invalid ts: %s", err))
 	}
 	if !KnownKind(e.Kind) {
-		return fmt.Errorf("events: unknown kind %q", e.Kind)
+		return internalContractRefusal(
+			fmt.Sprintf("events: unknown kind %q", e.Kind),
+			"retry with a kind this binary knows")
 	}
 	if !validEntityTypes[e.Entity.Type] {
-		return fmt.Errorf("events: unknown entity type %q", e.Entity.Type)
+		return internalContractRefusal(
+			fmt.Sprintf("events: unknown entity type %q", e.Entity.Type),
+			"retry with an entity type this binary knows")
 	}
 	if e.Entity.ID == "" {
-		return fmt.Errorf("events: entity id is empty")
+		return internalContractRefusal(
+			"events: entity id is empty",
+			"retry with the entity id supplied")
 	}
 	if !validActorKinds[e.Actor.Kind] {
-		return fmt.Errorf("events: unknown actor kind %q", e.Actor.Kind)
+		return internalContractRefusal(
+			fmt.Sprintf("events: unknown actor kind %q", e.Actor.Kind),
+			"retry with an actor kind this binary knows")
 	}
 	if e.Actor.ID == "" {
-		return fmt.Errorf("events: actor id is empty")
+		return internalContractRefusal(
+			"events: actor id is empty",
+			"retry with the actor id supplied")
 	}
 	if e.Payload == nil {
-		return fmt.Errorf("events: payload is nil")
+		return brokenEnvelope("events: payload is nil")
 	}
 	return nil
 }

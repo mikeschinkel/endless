@@ -13,7 +13,6 @@ package sessionstatuscmd
 
 import (
 	"context"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -28,6 +27,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/liveview"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/sessionmonitorcmd"
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
@@ -182,7 +182,7 @@ func noTaskHintFor(kind monitor.PaneStatusKind) string {
 }
 
 func Run(args []string) {
-	fs := flag.NewFlagSet("session-status", flag.ContinueOnError)
+	fs := refusal.NewFlags("session-status")
 	all := fs.Bool("all", false, "include done-work (terminal-status) rows")
 	monitorMode := fs.Bool("monitor", false, "live dashboard: redraw every 2s until interrupted (Ctrl-C)")
 	tree := fs.Bool("tree", false, "render do/plan tasks as an IDs-only implementation-order tree")
@@ -195,15 +195,34 @@ func Run(args []string) {
 	asJSON := fs.Bool("json", false, "emit the row set as JSON instead of the table; every row carries its hidden state")
 	graphOnly := fs.Bool("graph", false, "render only the ordering graph (=> blocks, -> should precede, | same relation, <> must not run concurrently)")
 	if err := fs.Parse(args); err != nil {
-		os.Exit(2)
+		// No ExitOnHelp: this set was already ContinueOnError, so `-h` has
+		// always landed here and exited 2 with the usage block on stderr. The
+		// bytes and the status are both left as they were.
+		//
+		// Text carries flag's own error line and the usage block beneath it,
+		// which is exactly what stderr held before this was classified.
+		refusal.NoReport(err.Error(), "Fix the flag and retry").
+			Command("session-status").Text(fs.Output()).Exit(2)
 	}
 
 	// Mutually exclusive by design, not by precedence: "show everything" and
 	// "show only the hidden subset" are contradictory requests, and silently
 	// picking one would hide the other's rows without saying so.
 	if *showHidden && *onlyHidden {
-		fmt.Fprintln(os.Stderr, "session-status: --show-hidden and --only-hidden are mutually exclusive")
-		os.Exit(2)
+		// NO-REPORT: the Python verb rejects the pair with its own
+		// ClickException before it ever reaches here, so the only reader is
+		// whoever ran endless-go directly, and the fix is to drop one flag.
+		//
+		// The summary drops the "session-status: " prefix that Text keeps, for
+		// the same reason Verdict strips "endless-go <verb>: ": the verdict
+		// already opens with the verb, and printing it twice in the one line
+		// whose whole value is density is noise.
+		refusal.NoReport(
+			"--show-hidden and --only-hidden are mutually exclusive",
+			"Pass only one of the two flags and retry",
+		).Command("session-status").
+			Text("session-status: --show-hidden and --only-hidden are mutually exclusive").
+			Exit(2)
 	}
 	hm := hiddenOmit
 	switch {
@@ -293,12 +312,10 @@ func Run(args []string) {
 	if *asJSON {
 		a, err := nextAnchor()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "session-status:", err)
-			os.Exit(1)
+			statusFailed(err).Exit(1)
 		}
 		if err := renderJSON(os.Stdout, a, *all); err != nil {
-			fmt.Fprintln(os.Stderr, "session-status:", err)
-			os.Exit(1)
+			statusFailed(err).Exit(1)
 		}
 		return
 	}
@@ -308,12 +325,10 @@ func Run(args []string) {
 	if *graphOnly {
 		a, err := nextAnchor()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "session-status:", err)
-			os.Exit(1)
+			statusFailed(err).Exit(1)
 		}
 		if err := renderGraphOnly(os.Stdout, a, *all, detectCols(*cols), colorEnabled()); err != nil {
-			fmt.Fprintln(os.Stderr, "session-status:", err)
-			os.Exit(1)
+			statusFailed(err).Exit(1)
 		}
 		return
 	}
@@ -330,17 +345,14 @@ func Run(args []string) {
 	if *tree {
 		a, err := nextAnchor()
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "session-status:", err)
-			os.Exit(1)
+			statusFailed(err).Exit(1)
 		}
 		rows, err := monitor.SessionStatusRows(a.focal, a.parentSession, true)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, "session-status:", err)
-			os.Exit(1)
+			statusFailed(err).Exit(1)
 		}
 		if err := renderTree(os.Stdout, rows, a.focal, a.hint); err != nil {
-			fmt.Fprintln(os.Stderr, "session-status:", err)
-			os.Exit(1)
+			statusFailed(err).Exit(1)
 		}
 		return
 	}
@@ -388,9 +400,33 @@ func Run(args []string) {
 // end — before this, the surface whose job is to say something is wrong said
 // only that it could not say anything.
 func die(err error, cols int, color bool) {
-	fmt.Fprintln(os.Stderr, "session-status:", err)
+	statusFailed(err).Print()
 	faultrow.Render(os.Stdout, detectCols(cols), color, faults.AllProjects)
 	os.Exit(1)
+}
+
+// statusFailed is this package's ONE classification of a failure on its way to
+// stderr — die's line, and the seven one-shot exits in Run that die's fault row
+// does not apply to.
+//
+// From rather than a class chosen here, because the class belongs to whatever
+// broke. Almost everything that reaches this funnel is monitor failing to read
+// session or task state, and that is Endless broken: the dashboard whose job is
+// to say what is going on cannot say anything, nobody can retry their way out
+// of it, and the user has to hear about it. From faults exactly those.
+//
+// The exception is why this is From and not Fault. In headless --task/--session
+// mode with no --db inside a self_dev worktree, the error is monitor's E-1429
+// DB-context refusal, which names its own fix (pass --db) and is NO-REPORT.
+// Deciding "fault" here would overwrite that with a verdict about the
+// dashboard, when what happened is that the caller did not say which database.
+//
+// Text re-applies the "session-status: " prefix every one of these lines has
+// always carried, so a person's bytes are unchanged while the verdict — which
+// already opens with the verb — stays free of it.
+func statusFailed(err error) *refusal.Error {
+	return refusal.From(err).Command("session-status").
+		Text("session-status: " + err.Error())
 }
 
 // anchor is the set of ids the view pins itself to, resolved as ONE unit. The

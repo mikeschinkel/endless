@@ -1,12 +1,13 @@
 package spawnlaunchcmd
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // runSpawnWindow is the outer orchestrator — the only spawn verb Python calls.
@@ -20,8 +21,7 @@ import (
 // E-2074 removed the --attach mode, which opened a window onto a live
 // background agent; background agents no longer exist.
 func runSpawnWindow(args []string) {
-	fs := flag.NewFlagSet("spawn-window", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
+	fs := refusal.NewFlags("spawn-window")
 	var (
 		claudeBin  = fs.String("claude-bin", "", "Resolved real claude binary path")
 		handoff    = fs.String("handoff-file", "", "Path to the rendered handoff file")
@@ -37,18 +37,21 @@ func runSpawnWindow(args []string) {
 		targetSess = fs.String("target-session", "", "tmux session id to open the window in, instead of the spawner's own")
 	)
 	if err := fs.Parse(args); err != nil {
-		os.Exit(2)
+		// Text carries flag's own error line and usage block, which is what
+		// stderr held before this was classified.
+		refusal.NoReport(err.Error(), "Fix the flag and retry").
+			Command("spawn-window").Text(fs.Output()).Exit(2)
 	}
 
 	if *windowName == "" {
-		fail("spawn-window: --window-name is required")
+		missingFlag("--window-name")
 	}
 
 	if *claudeBin == "" {
-		fail("spawn-window: --claude-bin is required")
+		missingFlag("--claude-bin")
 	}
 	if *handoff == "" {
-		fail("spawn-window: --handoff-file is required")
+		missingFlag("--handoff-file")
 	}
 
 	spec := LaunchSpec{
@@ -67,13 +70,20 @@ func runSpawnWindow(args []string) {
 
 	specPath, err := writeSpecFile(spec)
 	if err != nil {
-		fail("spawn-window: %v", err)
+		// The launch spec goes to a temp file, so this is an unwritable or full
+		// filesystem — nothing the agent can route around by calling spawn
+		// differently, and nothing was created.
+		spawnWindowReport(fmt.Sprintf("spawn-window: %v", err),
+			"whether to free space or repair the temp directory Endless could not write the launch spec to; no window was created").
+			Exit(1)
 	}
 
 	self, err := os.Executable()
 	if err != nil {
 		_ = os.Remove(specPath)
-		fail("spawn-window: resolve self: %v", err)
+		spawnWindowReport(fmt.Sprintf("spawn-window: resolve self: %v", err),
+			"whether to reinstall endless-go, which could not resolve the path of its own running binary").
+			Exit(1)
 	}
 
 	// Resolve the landing session BEFORE the window is asked for, so a spawn
@@ -85,7 +95,11 @@ func runSpawnWindow(args []string) {
 	target, err := resolveTarget(*targetSess)
 	if err != nil {
 		_ = os.Remove(specPath)
-		fail("spawn-window: %v", err)
+		// spawnerSession classified its own failures (see tmux_driver.go); Text
+		// re-applies the `spawn-window:` prefix this site has always printed, so
+		// the class travels up and the bytes do not change.
+		refusal.From(err).Command("spawn-window").
+			Text(fmt.Sprintf("spawn-window: %v", err)).Exit(1)
 	}
 
 	// new-window reports the window's only pane, which is claude because
@@ -100,13 +114,20 @@ func runSpawnWindow(args []string) {
 		// The window was never created, so spawn-launch will not run to delete
 		// the spec file; remove it here.
 		_ = os.Remove(specPath)
-		fail("spawn-window: %v", err)
+		// tmux printed its own refusal just above this (runTmuxOut passes its
+		// stderr through), and why a tmux server refuses a new window is not
+		// something a retry answers.
+		spawnWindowReport(fmt.Sprintf("spawn-window: %v", err),
+			"whether tmux refusing to create the window is something they can clear; the spec file was removed and nothing was launched").
+			Exit(1)
 	}
 
 	// The spawn itself has succeeded by now — claude is running in the window.
 	// A missing pane id costs the layout, never the session.
 	if claudePane == "" {
-		fmt.Fprintln(os.Stderr, "spawn-window: layout skipped (no pane id)")
+		refusal.NoReport("spawn-window: layout skipped (no pane id)",
+			"Continue; Claude is running in the window, without the side panes").
+			Command("spawn-window").Print()
 		return
 	}
 	// Runs from THIS process, after new-window returns, because pane 0 is
@@ -188,7 +209,19 @@ func gitRevParse(dir, arg string) (string, error) {
 	return strings.TrimSpace(string(out)), nil
 }
 
-func fail(format string, a ...any) {
-	fmt.Fprintf(os.Stderr, format+"\n", a...)
-	os.Exit(1)
+// missingFlag refuses a required flag the Python caller always passes. Only a
+// direct `endless-go spawn-window` invocation can omit one, so the reader is
+// whoever typed it and the fix is to type it again with the flag.
+func missingFlag(name string) {
+	refusal.NoReport(fmt.Sprintf("spawn-window: %s is required", name),
+		fmt.Sprintf("Pass %s and retry", name)).
+		Command("spawn-window").Exit(1)
+}
+
+// spawnWindowReport is the shape every spawn-window fault takes: the spawn did
+// not happen, the cause is outside Endless (a filesystem, a tmux server, an
+// install), and the agent has no second way to ask for the same window. So each
+// one names what the user has to decide rather than a retry.
+func spawnWindowReport(summary, decision string) *refusal.Error {
+	return refusal.Report(summary, decision).Command("spawn-window")
 }

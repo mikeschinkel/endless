@@ -14,32 +14,41 @@ import (
 	"strings"
 
 	"github.com/mikeschinkel/endless/internal/mdterm"
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // Run dispatches the `markdown` subcommand's inner verbs.
+//
+// Nothing written here normally reaches anybody: both Python callers
+// (task_cmd._render_markdown_field, session_turn_cmd._render_markdown) capture
+// this process's output and fall back to plain text on any non-zero exit. The
+// reader is whoever invoked the filter by hand, which is why the argument
+// errors are NO-REPORT — retype the flag — and the I/O failures are faults.
 func Run(args []string) {
 	if len(args) == 0 {
-		usage(os.Stderr)
-		os.Exit(2)
+		refusal.NoReport(
+			"endless-go markdown: no command given",
+			"Pass `render` and retry",
+		).Command("markdown").Text(usageText()).Exit(2)
 	}
 	switch args[0] {
 	case "render":
 		width, err := parseWidth(args[1:])
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(2)
+			refusal.NoReport(err.Error(), "Correct the argument and retry").
+				Command("markdown render").Exit(2)
 		}
 		err = runRender(os.Stdin, os.Stdout, width)
 		if err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			refusal.Fault(err).Command("markdown render").Exit(1)
 		}
 	case "-h", "--help", "help":
-		usage(os.Stdout)
+		fmt.Fprint(os.Stdout, usageText())
 	default:
-		fmt.Fprintf(os.Stderr, "endless-go markdown: unknown command %q\n", args[0])
-		usage(os.Stderr)
-		os.Exit(2)
+		refusal.NoReport(
+			fmt.Sprintf("endless-go markdown: unknown command %q", args[0]),
+			"Pass `render` and retry",
+		).Command("markdown").Detail(usageText()).Exit(2)
 	}
 }
 
@@ -98,8 +107,10 @@ end:
 	return err
 }
 
-func usage(w *os.File) {
-	fmt.Fprintln(w, "Usage: endless-go markdown <command>")
-	fmt.Fprintln(w, "Commands:")
-	fmt.Fprintln(w, "  render [--width N]   read markdown on stdin, write colorized ANSI to stdout")
+func usageText() string {
+	return strings.Join([]string{
+		"Usage: endless-go markdown <command>",
+		"Commands:",
+		"  render [--width N]   read markdown on stdin, write colorized ANSI to stdout",
+	}, "\n") + "\n"
 }

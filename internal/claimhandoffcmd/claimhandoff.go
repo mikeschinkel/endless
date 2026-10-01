@@ -22,7 +22,6 @@ package claimhandoffcmd
 
 import (
 	"database/sql"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -33,6 +32,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/agentenv"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
 	"github.com/mikeschinkel/endless/internal/templatecmd"
 )
@@ -41,18 +41,41 @@ import (
 // claim handoff for the task to stdout. The id may carry an `E-` prefix.
 func Run(args []string) {
 	if err := run(args, os.Stdout); err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go claim-handoff: %v\n", err)
-		os.Exit(1)
+		// One print site for every failure, with the class riding on the error
+		// rather than being guessed at here: the two argv refusals in run and
+		// the missing-worktree refusal below name their own, and refusal.From
+		// faults everything else. Faulting the rest is the right reading — a
+		// database that will not open, a task row that is not there, a template
+		// that will not render are all Endless broken in the middle of a claim
+		// the user already made, and none of them is a command to retype.
+		//
+		// No row in the refusal inventory covers this verb; it landed after
+		// that audit, so these classes come from the rule itself.
+		refusal.From(err).
+			Command("claim-handoff").
+			Text(fmt.Sprintf("endless-go claim-handoff: %v", err)).
+			Exit(1)
 	}
 }
 
 func run(args []string, stdout io.Writer) error {
 	if len(args) != 1 || strings.HasPrefix(args[0], "-") {
-		return errors.New("usage: endless-go claim-handoff <task-id>")
+		// Both of these are the invocation, not the state of anything: the only
+		// caller is `endless task claim`, which passes the id it just claimed,
+		// so a wrong arity or an unparseable id means a hand-run command or a
+		// skew between the two halves. The retry is the same command with one
+		// task id, and the user has nothing to decide.
+		return refusal.NoReport(
+			"usage: endless-go claim-handoff <task-id>",
+			"Re-run with exactly one task id",
+		)
 	}
 	taskID, err := strconv.ParseInt(strings.TrimPrefix(strings.ToUpper(args[0]), "E-"), 10, 64)
 	if err != nil || taskID <= 0 {
-		return fmt.Errorf("invalid task id %q", args[0])
+		return refusal.NoReport(
+			fmt.Sprintf("invalid task id %q", args[0]),
+			"Re-run with the claimed task's id, as E-NNNN or NNNN",
+		)
 	}
 	out, err := Render(taskID)
 	if err != nil {
@@ -175,7 +198,16 @@ func claimHandoffVars(projectID, taskID int64) (map[string]any, error) {
 		// The claim creates the worktree, so a missing one means the claim did
 		// not get that far (refused by a gate, or errored). Rendering a handoff
 		// that points at a nonexistent directory would be worse than silence.
-		return nil, fmt.Errorf("task %d has no worktree", taskID)
+		//
+		// NO-REPORT because this is a SYMPTOM of a refusal the agent has
+		// already read: whatever stopped the claim printed its own classified
+		// message, and that one says whether the user is needed. Reporting the
+		// missing handoff as well would tell the user the same thing twice,
+		// once in a form that names nothing they can act on.
+		return nil, refusal.NoReport(
+			fmt.Sprintf("task %d has no worktree", taskID),
+			"Act on the claim's own refusal; there is no handoff to render until the claim creates the worktree",
+		)
 	}
 
 	return map[string]any{

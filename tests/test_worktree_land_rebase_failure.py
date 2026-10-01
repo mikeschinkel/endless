@@ -18,7 +18,7 @@ from pathlib import Path
 
 from endless.worktree_cmd import (
     _git_said,
-    _rebase_failure_message,
+    _rebase_failure_refusal,
     _rebase_in_progress,
 )
 
@@ -67,12 +67,14 @@ def _attempt_rebase(repo: Path):
         )
         return None, pre_existing
     except subprocess.CalledProcessError as e:
-        msg = _rebase_failure_message(
+        # E-2159: the helper returns the classified refusal; its `.text` is
+        # the message these tests are about.
+        refusal = _rebase_failure_refusal(
             repo, "main",
             phase="rebasing your branch onto main",
             stderr=e.stderr, pre_existing=pre_existing,
         )
-        return msg, pre_existing
+        return refusal.text, pre_existing
 
 
 # ─── the non-conflict failure: git's words, no invented conflict ───────────────

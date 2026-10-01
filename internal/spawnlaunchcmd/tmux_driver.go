@@ -6,6 +6,8 @@ import (
 	"os/exec"
 	"strconv"
 	"strings"
+
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // tmux_driver.go isolates every tmux invocation behind pure argv builders plus
@@ -80,19 +82,31 @@ func sessionTarget(id string) string {
 // An unresolvable target is an error, never a silent fall back to an untargeted
 // new-window: landing in an unknown session is the defect, so a spawn that
 // cannot say where it belongs refuses instead of guessing.
+//
+// Every failure here is carried as a classified refusal rather than a bare
+// error, because the site that PRINTS them (runSpawnWindow) handles any error
+// generically and would otherwise have to re-derive a class it cannot see. All
+// three are the user's to decide: an agent cannot put itself inside a tmux
+// pane, and it cannot make a tmux server answer a pane query it just refused.
 func spawnerSession() (string, error) {
 	pane := os.Getenv("TMUX_PANE")
 	if pane == "" {
-		return "", fmt.Errorf(
-			"cannot tell which tmux session to open the window in: " +
-				"$TMUX_PANE is unset. Run this from inside a tmux pane")
+		return "", refusal.Report(
+			"cannot tell which tmux session to open the window in: "+
+				"$TMUX_PANE is unset. Run this from inside a tmux pane",
+			"whether to start or attach tmux and rerun from a pane")
 	}
 	id, err := tmuxRunOut(sessionIDArgs(pane)...)
 	if err != nil {
-		return "", fmt.Errorf("resolve session of pane %s: %w", pane, err)
+		return "", refusal.Report(
+			fmt.Sprintf("resolve session of pane %s: %v", pane, err),
+			"whether tmux failing to map a live pane to its session is something they can clear").
+			Cause(err)
 	}
 	if id == "" {
-		return "", fmt.Errorf("pane %s reported no session id", pane)
+		return "", refusal.Report(
+			fmt.Sprintf("pane %s reported no session id", pane),
+			"whether tmux answering a pane query with nothing is something they can clear")
 	}
 	return sessionTarget(id), nil
 }
@@ -188,7 +202,7 @@ var (
 func runTmux(args ...string) error {
 	cmd := exec.Command("tmux", args...)
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = refusal.Passthrough()
 	if err := cmd.Run(); err != nil {
 		return fmt.Errorf("tmux %v: %w", args, err)
 	}
@@ -201,7 +215,7 @@ func runTmux(args ...string) error {
 // pane-id echo never leaks into the spawner's terminal.
 func runTmuxOut(args ...string) (string, error) {
 	cmd := exec.Command("tmux", args...)
-	cmd.Stderr = os.Stderr
+	cmd.Stderr = refusal.Passthrough()
 	out, err := cmd.Output()
 	if err != nil {
 		return "", fmt.Errorf("tmux %v: %w", args, err)

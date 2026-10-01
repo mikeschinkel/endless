@@ -6,9 +6,7 @@ import sqlite3
 from pathlib import Path
 from typing import NamedTuple
 
-import click
-
-from endless import config, event_bridge, provenance, statuses
+from endless import agent_help, config, event_bridge, provenance, statuses
 from endless.config import ensure_config_dir
 
 _conn: sqlite3.Connection | None = None
@@ -505,10 +503,14 @@ def _migrate_v5(conn: sqlite3.Connection):
         conn.commit()
     except sqlite3.IntegrityError as e:
         conn.rollback()
+        # _backup_db writes beside the database, under the resolved config
+        # directory — never ~/.endless, which this message named for years and
+        # which Endless has never written anything to. Derived from the same
+        # expression _backup_db uses so the two cannot drift apart again.
         raise RuntimeError(
             "task_deps active-voice migration aborted: UNIQUE collision after swap. "
             "Two tasks may have mirrored relations (A blocks B AND B blocks A as separate rows). "
-            f"Backup at ~/.endless/backups/. Original error: {e}"
+            f"Backup at {config.DB_PATH.parent / 'backups'}/. Original error: {e}"
         )
 
 
@@ -651,7 +653,7 @@ def _sql_excerpt(sql: str, limit: int = 160) -> str:
 
 def _schema_error_hint(
     err: sqlite3.OperationalError, sql: str
-) -> click.ClickException | None:
+) -> agent_help.Refusal | None:
     """Diagnose a failed statement, or None to let the error through unchanged.
 
     E-2036: one missing column used to be reported as an uninitialized
@@ -671,14 +673,29 @@ def _schema_error_hint(
 
 def _incomplete_schema_hint(
     conn: sqlite3.Connection, missing: _MissingObject, sql: str
-) -> click.ClickException:
-    """Build the message for a schema'd database missing one table or column.
+) -> agent_help.Refusal:
+    """Build the refusal for a schema'd database missing one table or column.
 
     Two outcomes, because they need opposite fixes. An outstanding change file
     names the object: the database lags the code, and the fix is to apply that
     file. None does: the object exists nowhere, so the query is wrong or the
     change that adds it was never written — and saying "out of date" there
     would send the reader after a migration that does not exist.
+
+    Three classes come out of those two outcomes, and the third one is why the
+    class is decided HERE rather than handed to the agent as a question:
+
+    - A change file that ADDS the object, against a sandbox database — the
+      per-worktree scratch copy that exists to be experimented on — is
+      NO-REPORT. Applying it costs nothing anyone would mourn.
+    - The same file against the MAIN database is REPORT. Change files include
+      destructive one-offs normally applied at land time, and whether to run
+      one over the user's own rows is not a call any agent should make on their
+      behalf. It is also the safe default in a project with no sandbox at all.
+    - No change file adds it: the query and the schema disagree, which is
+      Endless being wrong about its own database. `fault` rather than `report`
+      — there is no decision for the user to make, only a defect to report or
+      an upgrade to install.
     """
     def line(label: str, value: str) -> str:
         return f"    {label:<15} {value}"
@@ -723,16 +740,60 @@ def _incomplete_schema_hint(
             "it was never written"
         )
     lines.append(line("query:", _sql_excerpt(sql)))
-    return click.ClickException("\n".join(lines))
+    text = "\n".join(lines)
+    where = config.tilde(config.DB_PATH)
+
+    if not (named_by and adds_it):
+        summary = (
+            f"The query needs {missing.kind} {missing.label}, which the "
+            f"database at {where} does not have and no pending schema change "
+            "adds. The statement did not run."
+        )
+        # A change file that only MENTIONS the object lands here too: it is a
+        # lead, not a fix, so applying it would not add the object and there is
+        # nothing an agent can act on in either shape of this branch.
+        return agent_help.fault(summary, text=text)
+
+    summary = (
+        f"The database at {where} is missing {missing.kind} {missing.label}; "
+        f"{config.tilde(named_by[0])} adds it and has not been applied here. "
+        "The statement did not run."
+    )
+    if config.db_context_is_sandbox():
+        return agent_help.no_report(
+            summary,
+            f"Apply it — `endless db apply-change {config.tilde(named_by[0])}` "
+            "— then retry",
+            text=text,
+        )
+    return agent_help.report(
+        summary,
+        "whether to apply a pending schema change to their own Endless "
+        "database, which some change files rewrite data to do",
+        text=text,
+    )
 
 
-def _missing_schema_hint() -> click.ClickException:
-    """Build a ClickException explaining why the resolved DB has no schema.
+def _missing_schema_hint() -> agent_help.Refusal:
+    """Build the refusal explaining why the resolved DB has no schema.
 
     The user sees this when XDG_CONFIG_HOME points somewhere endless wasn't
     initialized (e.g., a sandbox subshell, a stale env override, or a worktree's
     own .endless/ — see E-1158, E-1162). Names the resolved path, the resolution
     mechanism, and the file's state so the user can spot the problem.
+
+    XDG_CONFIG_HOME decides the class, and it is read here rather than named to
+    the agent as a question, because the environment variable IS the answer:
+
+    - Set: something in this invocation's own environment redirected the
+      lookup — an `endless-go sandbox` subshell, a test fixture, a stale export.
+      NO-REPORT. Whoever set it can unset it and call again, and the user never
+      had a database at that path to have an opinion about.
+    - Unset: this is the user's real config directory, holding a file that
+      exists and carries no schema. Whether to restore it from a backup or
+      replace it is a judgement about their own data, and the suggestion the
+      message has always printed cannot be followed by anyone — `project
+      register` opens the same file through get_db and lands right back here.
     """
     xdg = os.environ.get("XDG_CONFIG_HOME")
     if xdg:
@@ -751,11 +812,26 @@ def _missing_schema_hint() -> click.ClickException:
             file_state = "exists but cannot be stat'd"
     else:
         file_state = "does not exist"
-    return click.ClickException(
+    text = (
         f"endless database is uninitialized at {config.DB_PATH}\n"
         f"    {mechanism}\n"
         f"    db file: {file_state}\n"
         f"{suggestion}"
+    )
+    if xdg:
+        return agent_help.no_report(
+            f"The database at {config.DB_PATH} has no endless schema; the path "
+            f"came from XDG_CONFIG_HOME={xdg}. Nothing was read or written.",
+            "Re-run without that override — unset XDG_CONFIG_HOME, or leave "
+            "the `endless-go sandbox` subshell",
+            text=text,
+        )
+    return agent_help.report(
+        f"The database in the config directory, {config.DB_PATH}, "
+        f"{file_state}. Nothing was read or written.",
+        "whether to restore that database from a backup or start a new one — "
+        "it is the file holding all of their Endless state",
+        text=text,
     )
 
 

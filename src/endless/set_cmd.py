@@ -5,7 +5,7 @@ from pathlib import Path
 
 import click
 
-from endless import db, config
+from endless import agent_help, db, config
 from endless.register import validate_name
 from endless.resolve_name import resolve_project
 from endless.models import VALID_STATUSES
@@ -50,13 +50,19 @@ def set_field(expression: str, path_hint: str | None = None):
         # Try local pattern (field=value in current dir)
         m = LOCAL_PATTERN.match(expression)
         if not m:
-            raise click.ClickException(
-                "Invalid format. Use:\n"
-                "  endless project set <field>=<value>        "
-                "(in a project directory)\n"
-                "  endless project set <name>.<field>=<value>  "
-                "(from anywhere)\n"
-                + _fields_help()
+            raise agent_help.no_report(
+                f"'{expression}' is not a `project set` expression. "
+                "Nothing was changed.",
+                "Retry as <field>=<value> from inside the project, or "
+                "<name>.<field>=<value> from anywhere",
+                text=(
+                    "Invalid format. Use:\n"
+                    "  endless project set <field>=<value>        "
+                    "(in a project directory)\n"
+                    "  endless project set <name>.<field>=<value>  "
+                    "(from anywhere)\n"
+                    + _fields_help()
+                ),
             )
         field, value = m.group(1), m.group(2)
 
@@ -64,15 +70,23 @@ def set_field(expression: str, path_hint: str | None = None):
         cwd = Path.cwd()
         name = project_name_for_cwd(cwd)
         if not name:
-            raise click.ClickException(
-                "Not in a registered project directory. "
-                "Use: endless project set <name>.<field>=<value>"
+            raise agent_help.no_report(
+                "The current directory is not in a registered project, so "
+                "<field>=<value> has nothing to apply to. Nothing was changed.",
+                "Name the project explicitly: "
+                "endless project set <name>.<field>=<value>",
+                text=("Not in a registered project directory. "
+                      "Use: endless project set <name>.<field>=<value>"),
             )
         project = resolve_project(name, path_hint)
 
     if field not in SETTABLE_FIELDS:
-        raise click.ClickException(
-            f"Unknown field '{field}'.\n" + _fields_help()
+        raise agent_help.no_report(
+            f"'{field}' is not a field `project set` writes. "
+            "Nothing was changed.",
+            f"Retry with one of {', '.join(sorted(SETTABLE_FIELDS))}, or edit "
+            "the project's .endless/config.json for the other keys",
+            text=f"Unknown field '{field}'.\n" + _fields_help(),
         )
 
     project_path = resolved(project["path"])
@@ -80,15 +94,20 @@ def set_field(expression: str, path_hint: str | None = None):
 
     # Validate specific fields
     if field == "name" and not validate_name(value):
-        raise click.ClickException(
-            f"Invalid name: '{value}' "
-            "(must be lowercase alphanumeric, hyphens, "
-            "or underscores)"
+        raise agent_help.no_report(
+            f"'{value}' is not a valid project name. Nothing was changed.",
+            "Retry with a lowercase alphanumeric name (hyphens and "
+            "underscores allowed)",
+            text=(f"Invalid name: '{value}' "
+                  "(must be lowercase alphanumeric, hyphens, "
+                  "or underscores)"),
         )
     if field == "status" and value not in VALID_STATUSES:
-        raise click.ClickException(
-            f"Invalid status: '{value}' "
-            f"(must be: {', '.join(VALID_STATUSES)})"
+        raise agent_help.no_report(
+            f"'{value}' is not a project status. Nothing was changed.",
+            f"Retry with one of {', '.join(VALID_STATUSES)}",
+            text=(f"Invalid status: '{value}' "
+                  f"(must be: {', '.join(VALID_STATUSES)})"),
         )
 
     # Update DB

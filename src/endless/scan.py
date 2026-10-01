@@ -5,7 +5,7 @@ from pathlib import Path
 
 import click
 
-from endless import db
+from endless import agent_help, db
 from endless.project_path import resolved
 
 
@@ -44,8 +44,11 @@ def run_scan(project_name: str | None = None, docs_only: bool = False):
             (project_name,),
         )
         if not rows:
-            raise click.ClickException(
-                f"No project found with name '{project_name}'"
+            raise agent_help.no_report(
+                f"No registered project is named '{project_name}'. "
+                "Nothing was scanned.",
+                "Find the registered name with `endless project list` and retry",
+                text=f"No project found with name '{project_name}'",
             )
     else:
         rows = db.query(

@@ -556,7 +556,11 @@ def test_goto_resume_revisit_refuses_a_decision(
     with pytest.raises(click.ClickException) as exc:
         session_cmd.session_goto("E-1748", resume=True, revisit=True)
 
-    msg = str(exc.value)
+    # The revival route is a human_remedy (E-2159): it undoes the decision this
+    # refusal protects, so it renders for a person and not for an agent. That
+    # makes `format_message()` — what a reader is actually shown — the thing to
+    # assert on, rather than the exception's bare message.
+    msg = exc.value.format_message()
     assert f"is '{status}'" in msg
     assert "task update E-1748 --status revisit" in msg
     assert ft.new_windows == []

@@ -6,6 +6,8 @@ from pathlib import Path
 
 import click
 
+from endless import agent_help
+
 HOOK_COMMENT = "# Endless: project activity monitor (prompt hook)"
 HOOK_CODE = """\
 _endless_prompt_hook() {
@@ -35,8 +37,14 @@ def setup_prompt_hook():
     # Check binary exists
     hook_bin = _find_endless_hook()
     if not hook_bin:
-        raise click.ClickException(
-            "endless-go binary not found on PATH."
+        # Installing a binary and editing PATH are the user's machine, not
+        # something an agent can retry its way into. Same message and same
+        # class at setup_claude_hook and _run_outputstyle below.
+        raise agent_help.report(
+            "endless-go is not on PATH, so the prompt hook cannot be set up. "
+            "Nothing was installed.",
+            "how endless-go gets installed, or where it goes on PATH",
+            text="endless-go binary not found on PATH.",
         )
 
     click.echo(
@@ -69,8 +77,16 @@ def setup_prompt_hook():
         target_str = click.prompt("Path")
         target = Path(target_str).expanduser()
         if not target.exists():
-            raise click.ClickException(
-                f"File not found: {target}"
+            # Inventoried CONDITIONAL — REPORT if the user typed the path,
+            # NO-REPORT if an agent supplied it — and resolved to REPORT by
+            # ED-2162's decision that `setup` is a user-only command. The path
+            # came off an interactive prompt, which only the user was at, and
+            # which of their dotfiles is the startup file is theirs to say.
+            raise agent_help.report(
+                f"No file at {target}, so the prompt hook has nowhere to go. "
+                "Nothing was installed.",
+                "which file is their ZSH startup file",
+                text=f"File not found: {target}",
             )
 
     # Check if already installed
@@ -134,7 +150,14 @@ def remove_prompt_hook():
     target = Path(target_str).expanduser()
 
     if not target.exists():
-        raise click.ClickException(f"File not found: {target}")
+        # REPORT for the same reason as the install path's: an interactive
+        # prompt, a user-only command (ED-2162), and their own dotfiles.
+        raise agent_help.report(
+            f"No file at {target}, so there was nothing to remove the prompt "
+            "hook from. Nothing was changed.",
+            "which file holds the Endless prompt hook",
+            text=f"File not found: {target}",
+        )
 
     if not _file_contains_hook(target):
         click.echo(
@@ -216,8 +239,11 @@ def install_shell_helpers():
         target_str = click.prompt("Path")
         target = Path(target_str).expanduser()
         if not target.exists():
-            raise click.ClickException(
-                f"File not found: {target}"
+            raise agent_help.report(
+                f"No file at {target}, so the shell helpers have nowhere to "
+                "go. Nothing was installed.",
+                "which file is their ZSH startup file",
+                text=f"File not found: {target}",
             )
 
     # Check if already installed
@@ -281,7 +307,12 @@ def remove_shell_helpers():
     target = Path(target_str).expanduser()
 
     if not target.exists():
-        raise click.ClickException(f"File not found: {target}")
+        raise agent_help.report(
+            f"No file at {target}, so there was nothing to remove the shell "
+            "helpers from. Nothing was changed.",
+            "which file holds the Endless session shell helpers",
+            text=f"File not found: {target}",
+        )
 
     if not _file_contains_shell_helpers(target):
         click.echo(
@@ -468,8 +499,11 @@ def _repair_missing_hook_events(settings: dict, hook_bin: str) -> list[str]:
 def setup_claude_hook():
     hook_bin = _find_endless_hook()
     if not hook_bin:
-        raise click.ClickException(
-            "endless-go binary not found on PATH."
+        raise agent_help.report(
+            "endless-go is not on PATH, so the Claude hook cannot be set up. "
+            "Nothing was installed.",
+            "how endless-go gets installed, or where it goes on PATH",
+            text="endless-go binary not found on PATH.",
         )
 
     click.echo(
@@ -621,7 +655,12 @@ def _run_outputstyle(args: list[str], cwd: "Path | None" = None) -> int:
     if go_bin is None or not go_bin.exists():
         found = shutil.which("endless-go")
         if not found:
-            raise click.ClickException("endless-go binary not found on PATH.")
+            raise agent_help.report(
+                "endless-go is not on PATH, so the output style cannot be "
+                "installed or removed. Nothing was changed.",
+                "how endless-go gets installed, or where it goes on PATH",
+                text="endless-go binary not found on PATH.",
+            )
         go_bin = Path(found)
     try:
         result = subprocess.run(
@@ -629,8 +668,43 @@ def _run_outputstyle(args: list[str], cwd: "Path | None" = None) -> int:
             cwd=str(cwd) if cwd else None,
         )
     except (FileNotFoundError, OSError) as e:
-        raise click.ClickException(f"endless-go failed: {e}")
+        # Not a fault: nothing in Endless is broken. The binary resolved and
+        # then would not execute — a damaged or wrong-architecture install, or
+        # a permission bit — and repairing it is work on the user's machine
+        # that no retry of this command reaches.
+        raise agent_help.report(
+            f"endless-go resolved to {go_bin} but could not be executed "
+            f"({e}). Nothing was changed.",
+            "how to repair the endless-go install — the binary is present but "
+            "will not run",
+            text=f"endless-go failed: {e}",
+        )
     return result.returncode
+
+
+def _outputstyle_failed(verb: str, code: int):
+    """The generic tail after a streamed `endless-go outputstyle` failure.
+
+    `_run_outputstyle` inherits stdio, so endless-go's own classified refusal
+    has already gone to the terminal and was never captured — there is nothing
+    here to relay, and re-wording a message this side never saw would be a
+    guess. What this tail can honestly do is tell the agent that the verdict
+    that governs is the one printed just above it, which is why it is report_if
+    rather than a class asserted blind.
+
+    It stays a raised refusal rather than a passthrough exit because
+    `register._scaffold_output_style` catches ClickException to demote a failed
+    scaffold to a warning; a SystemExit would sail past that and abort
+    `endless register` over a best-effort step.
+    """
+    return agent_help.report_if(
+        f"endless-go outputstyle {verb} failed (exit {code}); the output style "
+        "may not have been changed.",
+        "the endless-go refusal printed just above says to stop and ask",
+        "follow the remedy that refusal names",
+        "its verdict is the one that governs, not this tail",
+        text=f"endless-go outputstyle {verb} failed",
+    )
 
 
 def setup_output_style(activate: bool = False, project: str | None = None,
@@ -645,7 +719,7 @@ def setup_output_style(activate: bool = False, project: str | None = None,
         args.extend(["--project", project])
     code = _run_outputstyle(args, cwd=cwd)
     if code != 0:
-        raise click.ClickException("endless-go outputstyle install failed")
+        raise _outputstyle_failed("install", code)
 
 
 def remove_output_style(project: str | None = None) -> None:
@@ -655,4 +729,4 @@ def remove_output_style(project: str | None = None) -> None:
         args.extend(["--project", project])
     code = _run_outputstyle(args)
     if code != 0:
-        raise click.ClickException("endless-go outputstyle remove failed")
+        raise _outputstyle_failed("remove", code)

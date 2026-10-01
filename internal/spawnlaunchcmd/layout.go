@@ -1,10 +1,10 @@
 package spawnlaunchcmd
 
 import (
-	"flag"
 	"fmt"
-	"os"
 	"os/exec"
+
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // layout.go owns the canonical Endless working layout — the three-pane
@@ -29,17 +29,24 @@ import (
 // failed is a lost session. buildLayoutAround reports what went wrong on
 // stderr, same as it does inside spawn.
 func runSpawnLayout(args []string) {
-	fs := flag.NewFlagSet("spawn-layout", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
+	fs := refusal.NewFlags("spawn-layout")
 	var (
 		pane = fs.String("pane", "", "tmux pane id the layout is built around")
 		cwd  = fs.String("cwd", "", "Working directory the window belongs to")
 	)
 	if err := fs.Parse(args); err != nil {
-		os.Exit(2)
+		// Nothing normally reads this: the only caller is Python's
+		// build_pane_layout, which passes a fixed flag list and discards what
+		// this process writes. Classified anyway, and as NO-REPORT, because the
+		// one way to reach it is a hand-typed `endless-go spawn-layout` with a
+		// bad flag — a typo the reader fixes and retries without involving the
+		// user. Text carries flag's own error line and usage block, which is
+		// what stderr held before this was classified.
+		refusal.NoReport(err.Error(), "Fix the flag and retry").
+			Command("spawn-layout").Text(fs.Output()).Exit(2)
 	}
 	if *pane == "" {
-		fail("spawn-layout: --pane is required")
+		missingFlag("--pane")
 	}
 	buildLayoutAround(*pane, *cwd)
 }
@@ -70,18 +77,41 @@ func buildLayoutAround(anchor, cwd string) {
 
 	shellPane, err := tmuxRunOut(splitWindowArgs(anchor, true, false, paneDir, 0, nil)...)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "layout: shell pane: %v\n", err)
+		layoutDegraded("shell pane", err,
+			"Continue; the Claude pane is up and the side panes are best-effort")
 		return
 	}
 
 	if _, err = tmuxRunOut(splitWindowArgs(shellPane, false, true, paneDir, 0, MonitorCommand())...); err != nil {
-		fmt.Fprintf(os.Stderr, "layout: monitor pane: %v\n", err)
+		layoutDegraded("monitor pane", err,
+			"Continue; the window has two panes instead of three")
 		// Fall through: a 2-pane window still wants focus back on the anchor.
 	}
 
 	if err = tmuxRun(selectPaneArgs(anchor)...); err != nil {
-		fmt.Fprintf(os.Stderr, "layout: focus anchor pane: %v\n", err)
+		layoutDegraded("focus anchor pane", err,
+			"Continue; the focus failure is cosmetic")
 	}
+}
+
+// layoutDegraded reports one best-effort split or focus call giving up.
+//
+// All three are NO-REPORT for the same reason the function is best-effort: the
+// anchor pane — the session the caller is really there to start — is already
+// running, and what is lost is a convenience pane or where the cursor sits.
+// There is no judgment here that belongs to the user, and the remedy is always
+// "carry on with the window you got".
+//
+// The command is "layout" rather than either caller's verb, because that is
+// what the message has always called itself and buildLayoutAround serves both
+// `spawn-window` and `spawn-layout`. Text keeps the "layout: " prefix a person
+// reads; the summary drops it, so the verdict — which already opens with the
+// command — does not say the word twice.
+func layoutDegraded(stage string, err error, remedy string) {
+	refusal.NoReport(fmt.Sprintf("%s: %v", stage, err), remedy).
+		Command("layout").
+		Text(fmt.Sprintf("layout: %s: %v", stage, err)).
+		Print()
 }
 
 // MonitorCommand is the argv run in the layout's monitor pane. `endless session

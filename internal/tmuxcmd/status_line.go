@@ -3,7 +3,6 @@ package tmuxcmd
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"flag"
 	"fmt"
 	"os"
 	"strings"
@@ -12,6 +11,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // faultFingerprint groups status-line failures by CAUSE rather than by message
@@ -33,10 +33,16 @@ func faultFingerprint(err error) string {
 // shells; useful for direct invocation but NOT populated for tmux's #()
 // substitution context).
 func runStatusLine(args []string) {
-	fs := flag.NewFlagSet("status-line", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
+	fs := refusal.NewFlags("status-line")
 	paneArg := fs.String("pane", "", "Tmux pane ID (overrides TMUX_PANE env)")
 	if err := fs.Parse(args); err != nil {
+		// Nothing normally reads this either: tmux substitutes this verb through
+		// #() with a fixed --pane and discards its stderr, and the Python wrapper
+		// relays stderr only on a non-zero exit, which this verb never takes. The
+		// one reader who can see it typed the flag, so it stays theirs to fix —
+		// and the placeholder still goes out, because a blank cell flickers.
+		refusal.NoReport(err.Error(), "Correct the flag and retry").
+			Command("tmux status-line").Text(fs.Output()).Print()
 		fmt.Print(placeholder())
 		return
 	}

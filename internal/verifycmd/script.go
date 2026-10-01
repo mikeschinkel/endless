@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 
+	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/verify"
 	"github.com/mikeschinkel/go-doterr"
 	"github.com/mikeschinkel/go-dt"
@@ -175,7 +176,10 @@ func execScript(script dt.Filepath, root dt.DirPath, env []string) (exit int, er
 	cmd.Dir = string(root)
 	cmd.Env = env
 	cmd.Stdout = os.Stdout
-	cmd.Stderr = os.Stderr
+	// The suite's own stream, not Endless's: its live pass/fail lines and its
+	// _guard.sh refusals are already classified by whoever wrote them, and a
+	// reader watching a two-minute suite has to see them as they happen.
+	cmd.Stderr = refusal.Passthrough()
 
 	err = cmd.Run()
 	switch {

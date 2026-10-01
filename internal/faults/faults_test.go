@@ -591,6 +591,11 @@ func TestCatalog_NumbersAreNeverReused(t *testing.T) {
 		"0018": "hook-failed",
 		"0019": "monitor-restart-failed",
 		"0020": "schema-version-refused",
+		"0021": "output-style-inactive",
+		"0022": "worktree-ttl-unreadable",
+		"0023": "unsupported-harness",
+		"0024": "report-unminimized",
+		"0025": "sigil-synonym",
 	}
 
 	for _, code := range faults.Codes() {

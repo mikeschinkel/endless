@@ -22,11 +22,13 @@
 package verifycmd
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"os"
 	"strings"
 
+	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/verify"
 	"github.com/mikeschinkel/go-doterr"
 	"github.com/mikeschinkel/go-dt"
@@ -50,24 +52,146 @@ func Run(args []string) {
 	var code int
 	var err error
 
-	fs := flag.NewFlagSet("verify", flag.ExitOnError)
+	fs := refusal.NewFlags("verify")
 	keep = fs.Bool("keep", false,
 		"Keep the per-run temp dir (isolated HOME/XDG + intermediates) for debugging")
 	if err = fs.Parse(args); err != nil {
-		os.Exit(2)
+		// flag.ExitOnError used to print and exit from inside the flag package,
+		// which is why there was nothing to classify at this line before. Both
+		// of its exits are reproduced here, with flag's own text in both cases
+		// so a person reads exactly what they read before: 0 for -h, which is a
+		// notice and not a refusal, and 2 for a flag that has to be retyped.
+		if errors.Is(err, flag.ErrHelp) {
+			refusal.Info(fs.Output()).Print()
+			os.Exit(0)
+		}
+		refusal.NoReport(err.Error(), "Correct the flag and retry").
+			Command("verify").Text(fs.Output()).Exit(2)
 	}
 	rest = fs.Args()
 	if len(rest) != 1 {
-		fmt.Fprintln(os.Stderr, "Usage: endless-go verify [--keep] <task-id>")
-		os.Exit(2)
+		// run_verify always passes exactly one id, so a wrong count is somebody
+		// invoking the binary by hand.
+		refusal.NoReport(
+			"Usage: endless-go verify [--keep] <task-id>",
+			"Pass exactly one task id and retry",
+		).Command("verify").Exit(2)
 	}
 
 	code, err = run(rest[0], *keep)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go verify: %v\n", err)
-		os.Exit(1)
+		classify(err).Exit(1)
 	}
 	os.Exit(code)
+}
+
+// classify names the class of every error `run` can return, at the one place
+// they all pass through.
+//
+// Doing it here rather than at each construction is what the shape of this
+// package allows: the errors are doterr sentinels whose rendering — the
+// sentinel chain plus the key=value tail — is what a person reads, and the
+// sentinel is also what says which failure happened. So the switch resolves the
+// inventory's CONDITIONAL relay row in code instead of handing the agent a
+// question, for everything except the four that genuinely turn on WHO wrote the
+// thing that failed. Nothing this process can see answers that, so those stay
+// ReportIf and the agent, which holds the conversation, decides.
+//
+// The default is a fault, and deliberately: errors from internal/verify carry
+// no class yet, and "nobody decided" has to read as Endless failing rather than
+// as a quiet invitation to retry. When that package is converted its rows will
+// arrive already classified and belong above this line, not below it.
+func classify(err error) *refusal.Error {
+	var foreign *ForeignLandedSuite
+
+	// The message a person has always read, prefix and all.
+	msg := fmt.Sprintf("endless-go verify: %v", err)
+
+	switch {
+	case errors.As(err, &foreign):
+		// The refusal says what to run instead, so there is nothing to
+		// escalate — and it is multi-line, so the verdict carries a compression
+		// of it while Text keeps the paragraphs a person reads.
+		return refusal.NoReport(
+			fmt.Sprintf("endless-go verify: refusing to run %s's verification suite — it has landed, and it is not yours",
+				foreign.Requested),
+			"Verify your own task instead, or run from your task's worktree",
+		).Command("verify").Text(msg)
+
+	case errors.Is(err, ErrNoSuiteForTask):
+		return refusal.NoReport(msg,
+			"Re-check the task id, or author verify.sh or verify.toml in the directory named above").
+			Command("verify")
+
+	case errors.Is(err, ErrTierNotSupported):
+		return refusal.ReportIf(msg,
+			"the user wrote the needs this manifest declares",
+			"restate the manifest without needs and retry",
+			"running the suite weaker than it asked for is theirs to allow",
+		).Command("verify")
+
+	case errors.Is(err, ErrSeedNotSupported):
+		return refusal.ReportIf(msg,
+			"the user wrote the seed this manifest declares",
+			"restate the manifest without seed and retry",
+			"dropping it weakens the proof they asked for",
+		).Command("verify")
+
+	case errors.Is(err, ErrScriptStart):
+		return refusal.NoReport(msg,
+			"Make verify.sh executable and give it a valid shebang, then retry").
+			Command("verify")
+
+	case errors.Is(err, ErrSetupStep):
+		return refusal.ReportIf(msg,
+			"the step failed because a tool the user has to install is missing",
+			"fix the setup step and retry",
+			"installing that tool is theirs to do",
+		).Command("verify")
+
+	case errors.Is(err, ErrCheckFailedNoResults):
+		return refusal.ReportIf(msg,
+			"the captured stderr names a tool the user has to install",
+			"fix the build error or the check command and retry",
+			"installing that tool is theirs to do",
+		).Command("verify")
+
+	case errors.Is(err, ErrProjectRootNotFound):
+		return refusal.ReportIf(msg,
+			"this project was never initialized for Endless",
+			"cd into the project checkout and retry",
+			"initializing a project is theirs to choose",
+		).Command("verify")
+
+	case errors.Is(err, ErrResolvingRoot):
+		return refusal.Report(msg,
+			"what to do about a working directory that can no longer be resolved").
+			Command("verify")
+
+	case errors.Is(err, ErrMakingRunDir):
+		return refusal.Report(msg,
+			"whether to free space or point TMPDIR at a writable directory").
+			Command("verify")
+
+	case errors.Is(err, ErrIsolatingEnv):
+		return refusal.Report(msg,
+			"what to do about a temp directory Endless just created and cannot write into").
+			Command("verify")
+
+	case errors.Is(err, ErrWritingCTRF):
+		return refusal.Report(msg,
+			"whether to fix the cache directory — the suite ran, but its verdict could not be written").
+			Command("verify")
+
+	case errors.Is(err, verify.ErrNoResultStream):
+		// The script path's stat/read of the TAP file in the run dir. The
+		// driver path shares this sentinel with a condition of its own
+		// (internal/verify's row); it is left as that package's to resolve.
+		return refusal.Report(msg,
+			"what to do about a result stream the run directory would not yield").
+			Command("verify")
+	}
+	return refusal.Faultf("%s", msg).Cause(err).Command("verify")
 }
 
 // run orchestrates one verification. It returns an exit code (0 all-pass,

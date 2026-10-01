@@ -23,6 +23,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // LedgerCommitSubject is the exact `git log --format=%s` value for ledger
@@ -362,8 +364,14 @@ func prefixOnly(paths []string) []string {
 func ensureGitRepo(projectRoot string) error {
 	out, err := runGitOutput(projectRoot, "rev-parse", "--is-inside-work-tree")
 	if err != nil || strings.TrimSpace(out) != "true" {
-		return fmt.Errorf("project root %q is not a git work tree: %s",
-			projectRoot, strings.TrimSpace(out))
+		// The likeliest first-run failure in a project that is not under git at
+		// all, and putting a project under version control is a choice about the
+		// project, not a flag this command can be given differently.
+		return refusal.Report(
+			fmt.Sprintf("project root %q is not a git work tree: %s",
+				projectRoot, strings.TrimSpace(out)),
+			"whether to put this project under git — Endless keeps its ledger in the repository and has nowhere to write without one",
+		)
 	}
 	return nil
 }
@@ -393,11 +401,18 @@ func ensureMainCheckout(projectRoot string, paths []string) error {
 	gd := strings.TrimSpace(gitDir)
 	cd := strings.TrimSpace(commonDir)
 	if gd != cd {
-		return fmt.Errorf(
-			"refusing auto-commit: projectRoot %q resolves to a linked worktree "+
-				"(git-dir=%q, common-dir=%q, paths=%v). Auto-commits must land on "+
-				"main, not on a task branch.",
-			projectRoot, gd, cd, paths,
+		// The project root Endless resolved is wrong — registered at a worktree
+		// path, or reached through the unregistered-project cwd fallback. The
+		// ledger line is already appended when this is hit from an emit, and a
+		// project registration is not something a retry reaches.
+		return refusal.Report(
+			fmt.Sprintf(
+				"refusing auto-commit: projectRoot %q resolves to a linked worktree "+
+					"(git-dir=%q, common-dir=%q, paths=%v). Auto-commits must land on "+
+					"main, not on a task branch.",
+				projectRoot, gd, cd, paths,
+			),
+			"how this project is registered — Endless resolved its root to a linked worktree, and only the user can point it at the main checkout",
 		)
 	}
 	return nil
@@ -537,9 +552,15 @@ func ledgerTreeSharedWithTaskBranch(projectRoot, curRef string) (bool, error) {
 	}
 	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
 	if len(lines) != len(specs) {
-		return false, fmt.Errorf(
-			"cat-file --batch-check returned %d lines for %d revisions",
-			len(lines), len(specs))
+		// git documents one output line per input revision, so a mismatch is an
+		// invariant broken beneath us. Nothing here can compensate for it, and
+		// the amend decision this check feeds is not one to guess at.
+		return false, refusal.Report(
+			fmt.Sprintf(
+				"cat-file --batch-check returned %d lines for %d revisions",
+				len(lines), len(specs)),
+			"why git's cat-file output no longer matches the revisions it was given — the ledger amend check cannot proceed on output it does not understand",
+		)
 	}
 
 	headTree := batchCheckOID(lines[0])
@@ -576,8 +597,7 @@ func runGit(projectRoot string, args ...string) error {
 	debugLogGit(projectRoot, args)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("git %s: %w: %s",
-			strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		return gitFailure(args, err, string(out))
 	}
 	return nil
 }
@@ -592,8 +612,7 @@ func runGitOutput(projectRoot string, args ...string) (string, error) {
 	debugLogGit(projectRoot, args)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
-		return "", fmt.Errorf("git %s: %w: %s",
-			strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		return "", gitFailure(args, err, string(out))
 	}
 	return string(out), nil
 }
@@ -613,10 +632,27 @@ func runGitInput(projectRoot, stdin string, args ...string) (string, error) {
 	debugLogGit(projectRoot, args)
 	out, err := cmd.Output()
 	if err != nil {
-		return "", fmt.Errorf("git %s: %w: %s",
-			strings.Join(args, " "), err, strings.TrimSpace(errBuf.String()))
+		return "", gitFailure(args, err, errBuf.String())
 	}
 	return string(out), nil
+}
+
+// gitFailure is the one classification for every relayed git failure, and it is
+// REPORT whichever way git failed.
+//
+// The two shapes the inventory separates — an environment problem (no commit
+// identity configured, a repository hook rejecting the commit, permissions) and
+// a genuine fault — land on the same answer, so there is nothing for an agent to
+// branch on. Endless auto-commits the ledger on every write; a git that will not
+// commit stops the ledger, no retry of the endless command changes git's mind,
+// and in a foreign project the cause is usually that project's own setup. The
+// underlying error is kept as the cause so errors.Is/As still reach it.
+func gitFailure(args []string, err error, stderr string) error {
+	return refusal.Report(
+		fmt.Sprintf("git %s: %s: %s",
+			strings.Join(args, " "), err, strings.TrimSpace(stderr)),
+		"how to clear a git failure Endless cannot work around — a missing commit identity, a rejecting hook, or permissions on the repository",
+	).Cause(err)
 }
 
 // sanitizedGitEnv returns os.Environ() with every variable in
@@ -651,9 +687,12 @@ func debugLogGit(projectRoot string, args []string) {
 	if os.Getenv("ENDLESS_DEBUG_GIT") != "1" {
 		return
 	}
-	fmt.Fprintf(os.Stderr,
-		"[endless-debug-git] -C %s %s (parent GIT_DIR=%q GIT_WORK_TREE=%q)\n",
+	// A trace, not a refusal: nothing is blocked and there is nothing to decide,
+	// so it carries no directive. The Python caller discards it on success and
+	// embeds it in "Event write failed" when the emit fails.
+	refusal.Infof(
+		"[endless-debug-git] -C %s %s (parent GIT_DIR=%q GIT_WORK_TREE=%q)",
 		projectRoot, strings.Join(args, " "),
 		os.Getenv("GIT_DIR"), os.Getenv("GIT_WORK_TREE"),
-	)
+	).Print()
 }

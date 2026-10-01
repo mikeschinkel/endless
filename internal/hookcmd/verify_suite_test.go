@@ -215,7 +215,7 @@ func TestLandedSuiteRefusal(t *testing.T) {
 	edit := landedSuiteRefusal(landedSuiteEdit, 101, mine)
 	run := landedSuiteRefusal(landedSuiteRun, 101, mine)
 
-	for name, msg := range map[string]string{"edit": edit, "run": run} {
+	for name, msg := range map[string]string{"edit": edit.Error(), "run": run.Error()} {
 		t.Run(name, func(t *testing.T) {
 			// Claude Code shows stderr from an exit-2 hook to the agent; the
 			// BLOCKED prefix is how every other gate in this file announces
@@ -256,23 +256,23 @@ func TestLandedSuiteRefusal(t *testing.T) {
 		})
 	}
 
-	if strings.Contains(edit, "pass OR fail") {
+	if strings.Contains(edit.Error(), "pass OR fail") {
 		t.Error("the edit refusal reuses the run refusal's reason")
 	}
-	if !strings.Contains(edit, "rewrites that record") {
+	if !strings.Contains(edit.Error(), "rewrites that record") {
 		t.Error("the edit refusal does not say what an edit costs")
 	}
-	if !strings.Contains(run, "says nothing about your work") {
+	if !strings.Contains(run.Error(), "says nothing about your work") {
 		t.Error("the run refusal does not say what a landed result is worth")
 	}
 
 	// A session that holds nothing still gets a usable message rather than a
 	// dangling "yours: ".
 	none := landedSuiteRefusal(landedSuiteRun, 101, suiteCaller{})
-	if !strings.Contains(none, "yours:     nothing") {
+	if !strings.Contains(none.Error(), "yours:     nothing") {
 		t.Errorf("no-task refusal does not say so:\n%s", none)
 	}
-	if strings.Contains(none, "endless task verify E-0") {
+	if strings.Contains(none.Error(), "endless task verify E-0") {
 		t.Error("no-task refusal names a nonexistent task")
 	}
 }
@@ -421,7 +421,7 @@ func TestLandedSuiteDecisions(t *testing.T) {
 				t.Errorf("%s of a landed foreign suite was allowed", tool)
 				continue
 			}
-			if !strings.Contains(msg, "refusing to edit E-101") {
+			if !strings.Contains(msg.Error(), "refusing to edit E-101") {
 				t.Errorf("%s: wrong refusal:\n%s", tool, msg)
 			}
 		}
@@ -449,7 +449,7 @@ func TestLandedSuiteDecisions(t *testing.T) {
 		if !block {
 			t.Fatal("a direct run of a landed foreign suite was allowed")
 		}
-		if !strings.Contains(msg, "refusing to run E-101") {
+		if !strings.Contains(msg.Error(), "refusing to run E-101") {
 			t.Errorf("wrong refusal:\n%s", msg)
 		}
 		if _, block = landedSuiteRunDecision(bash("cat .endless/tasks/e-101/verify.sh")); block {

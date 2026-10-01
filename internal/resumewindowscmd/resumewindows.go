@@ -32,6 +32,7 @@
 package resumewindowscmd
 
 import (
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -43,40 +44,91 @@ import (
 	"strings"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // Run is the `endless-go resume-windows` entry point.
+//
+// run takes both streams as writers so the whole command is driven from a test
+// against buffers, which is why real stderr arrives through Passthrough: the
+// writes below it are classified (see emit), and this is the one sanctioned way
+// to name the stream from outside internal/refusal.
 func Run(args []string) {
-	os.Exit(run(args, os.Stdout, os.Stderr))
+	os.Exit(run(args, os.Stdout, refusal.Passthrough()))
 }
 
+// emit writes one classified message to this command's stderr.
+//
+// run takes its stderr as a writer — the usage refusals are tested against a
+// buffer — so these go through Render rather than Print: Print owns os.Stderr,
+// and a test must not. Render is the same text Print would have written, for
+// whichever reader the environment says is there.
+func emit(w io.Writer, e *refusal.Error) {
+	fmt.Fprintln(w, e.Render())
+}
+
+// None of the refusals in run has a row in the refusal inventory: this
+// subcommand landed after that audit, so each class comes from the one question
+// — can the agent continue without asking the user? The usage refusals are
+// NO-REPORT (the retry is the same command spelled correctly, and nothing has
+// been touched yet); the tmux failure is REPORT, because a tmux server that
+// will not answer is in the user's hands and not in another invocation's.
 func run(args []string, stdout, stderr io.Writer) int {
-	fs := flag.NewFlagSet("resume-windows", flag.ContinueOnError)
-	fs.SetOutput(stderr)
+	fs := refusal.NewFlags("resume-windows")
 	session := fs.String("tmux-session", "", "resume the windows of this tmux session")
 	all := fs.Bool("all-tmux-sessions", false, "resume the windows of every tmux session")
 	dryRun := fs.Bool("dry-run", false, "print what would be done, and do nothing")
 	if err := fs.Parse(args); err != nil {
+		// This set was already ContinueOnError, so flag wrote its own text and
+		// run chose the code — help and a bad flag alike returned 2. Only the
+		// class is added: fs.Output() is flag's error line plus its usage block,
+		// replayed verbatim, and `-h` keeps the status it has always had rather
+		// than becoming an exit 0 this task has no mandate to introduce.
+		if errors.Is(err, flag.ErrHelp) {
+			emit(stderr, refusal.Info(fs.Output()))
+			return 2
+		}
+		emit(stderr, refusal.NoReport(err.Error(), "Correct the flag and retry").
+			Command("resume-windows").Text(fs.Output()))
 		return 2
 	}
 	if fs.NArg() > 0 {
-		fmt.Fprintf(stderr, "resume-windows: unexpected argument %q\n", fs.Arg(0))
+		emit(stderr, refusal.NoReport(
+			fmt.Sprintf("resume-windows: unexpected argument %q", fs.Arg(0)),
+			"Name the scope with --tmux-session NAME or --all-tmux-sessions and retry",
+		).Command("resume-windows"))
 		return 2
 	}
 	if (*session == "") == !*all {
-		fmt.Fprintln(stderr, "resume-windows: give exactly one of --tmux-session NAME or --all-tmux-sessions")
+		emit(stderr, refusal.NoReport(
+			"resume-windows: give exactly one of --tmux-session NAME or --all-tmux-sessions",
+			"Re-run with exactly one of the two scope flags",
+		).Command("resume-windows"))
 		return 2
 	}
 
 	windows, err := listWindows()
 	if err != nil {
-		fmt.Fprintf(stderr, "resume-windows: %v\n", err)
+		// tmux itself would not answer: no server, or a server this process
+		// cannot reach. Starting or attaching a tmux session is the user's to do
+		// — there is no form of this command that works without one — and
+		// nothing has been resumed, so there is nothing half-done to undo.
+		emit(stderr, refusal.Report(
+			fmt.Sprintf("resume-windows: %v", err),
+			"what to do about a tmux server that will not list its windows",
+		).Command("resume-windows").Cause(err))
 		return 1
 	}
 	if *session != "" {
 		windows = inSession(windows, *session)
 		if len(windows) == 0 {
-			fmt.Fprintf(stderr, "resume-windows: no tmux session named %q\n", *session)
+			// The named session is not on the server. NO-REPORT: the scope was
+			// an argument, and the agent can ask tmux what the sessions are
+			// called and retry, or cover them all.
+			emit(stderr, refusal.NoReport(
+				fmt.Sprintf("resume-windows: no tmux session named %q", *session),
+				"Re-run with a session tmux lists, or with --all-tmux-sessions",
+			).Command("resume-windows"))
 			return 1
 		}
 	}

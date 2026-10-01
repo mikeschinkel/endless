@@ -2,7 +2,6 @@ package sandboxcmd
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // SeedSandboxHook is the project's sandbox-seeding hook, relative to the
@@ -25,29 +25,38 @@ import (
 // on an older branch may lack the hook, or carry a stale copy of it.
 const SeedSandboxHook = ".endless/hooks/seed-sandbox.sh"
 
+// resetCmd is `endless-go sandbox reset`. Its refusals have no row in the
+// refusal inventory — this verb landed after that audit — so each class comes
+// from the rule: can the agent continue without asking the user?
 func resetCmd(args []string) {
-	fs := flag.NewFlagSet("reset", flag.ExitOnError)
-	if err := fs.Parse(args); err != nil {
-		os.Exit(2)
-	}
+	fs := refusal.NewFlags("reset")
+	parseVerbFlags(fs, "reset", args)
 	if fs.NArg() > 0 {
-		fmt.Fprintf(os.Stderr,
-			"endless-go sandbox reset: unexpected argument %q; "+
-				"the sandbox is resolved from the current worktree and takes no name\n",
-			fs.Arg(0))
-		os.Exit(1)
+		// A name was passed to the one sandbox verb that takes none, which the
+		// message has always said; the retry is the same command without it.
+		refusal.NoReport(
+			fmt.Sprintf("endless-go sandbox reset: unexpected argument %q; "+
+				"the sandbox is resolved from the current worktree and takes no name",
+				fs.Arg(0)),
+			"Re-run `sandbox reset` with no arguments, from inside the worktree whose sandbox you mean",
+		).Command("sandbox reset").Exit(1)
 	}
 	cwd, err := os.Getwd()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go sandbox reset: %v\n", err)
-		os.Exit(1)
+		relayed("reset", err).Exit(1)
 	}
 	// Hook output goes to stderr so stdout carries only the sandbox path,
-	// which keeps $(endless sandbox reset) usable.
-	sandboxDir, err := Reset(cwd, os.Stderr)
+	// which keeps $(endless sandbox reset) usable. Passthrough says the hook's
+	// text is the project's own: see the comment on runSeedHook.
+	sandboxDir, err := Reset(cwd, refusal.Passthrough())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go sandbox reset: %v\n", err)
-		os.Exit(1)
+		// relayed is this package's one print site (dispatch.go): the class
+		// travels on the error, so the cwd refusal below stays NO-REPORT and
+		// the two hook refusals stay REPORT, while the clear/mkdir failures —
+		// which never chose a class — come out as faults. That is the right
+		// reading of them: a sandbox tree that will not be removed or recreated
+		// is Endless's own tooling broken, not a command anybody mistyped.
+		relayed("reset", err).Exit(1)
 	}
 	fmt.Println(sandboxDir)
 }
@@ -73,9 +82,16 @@ func Reset(dir string, out io.Writer) (string, error) {
 	worktree := monitor.WorktreeRoot(dir)
 	sandboxDir := monitor.WorktreeSandboxDir(dir)
 	if worktree == "" || sandboxDir == "" {
-		return "", fmt.Errorf(
-			"%s is not inside a task worktree (.endless/worktrees/e-NNN), so there is no sandbox to reset",
-			dir)
+		// The caller is in the wrong directory, and that is the whole of it:
+		// every caller that has a sandbox to reset can name one by running from
+		// inside its worktree, so the agent moves and retries. Classified HERE,
+		// on the returned value, because the print site holds only an error
+		// string and refusal.From would otherwise read this as Endless failing.
+		return "", refusal.NoReport(
+			fmt.Sprintf("%s is not inside a task worktree (.endless/worktrees/e-NNN), so there is no sandbox to reset",
+				dir),
+			"Re-run from inside the task worktree whose sandbox you mean",
+		)
 	}
 	if err := os.RemoveAll(sandboxDir); err != nil {
 		return "", fmt.Errorf("clearing sandbox %s: %w", sandboxDir, err)
@@ -102,14 +118,33 @@ func runSeedHook(projectRoot, worktree, sandboxDir string, out io.Writer) error 
 		return fmt.Errorf("seed-sandbox hook %s: %w", hook, err)
 	}
 	if info.Mode()&0o111 == 0 {
-		return fmt.Errorf("seed-sandbox hook %s is not executable; run: chmod +x %s", hook, hook)
+		// REPORT, and the chmod is deliberately not in the summary. The hook
+		// lives in the project's MAIN checkout, which a task session must not
+		// edit, so "run chmod and retry" is not a retry available to the agent
+		// — it is a change to the project the user owns. Text keeps the line a
+		// person has always read, naming the command for them; the verdict the
+		// agent reads is the summary alone, which says what is wrong and
+		// nothing it could act on by itself.
+		return refusal.Report(
+			fmt.Sprintf("seed-sandbox hook %s is not executable", hook),
+			"whether to make their project's seed-sandbox hook executable",
+		).Text(fmt.Sprintf("seed-sandbox hook %s is not executable; run: chmod +x %s", hook, hook))
 	}
 	cmd := exec.Command(hook, worktree, sandboxDir)
 	cmd.Dir = worktree
 	cmd.Stdout = out
 	cmd.Stderr = out
 	if err := cmd.Run(); err != nil {
-		return fmt.Errorf("seed-sandbox hook %s failed: %w", hook, err)
+		// The hook is the project's script, not Endless's code, so this is
+		// neither a fault nor something the agent can retype its way past: the
+		// same hook will fail the same way on every retry, and seeding is not
+		// optional (a suite run against a half-seeded sandbox reports the wrong
+		// failure). The hook's own output has already gone to out, above the
+		// reader's eyes, which is where the diagnosis is.
+		return refusal.Report(
+			fmt.Sprintf("seed-sandbox hook %s failed: %v", hook, err),
+			"how to fix their project's seed-sandbox hook — it ran and exited non-zero",
+		).Cause(err)
 	}
 	return nil
 }

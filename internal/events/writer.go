@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // MaxEventLineBytes is the maximum allowed size for a single JSONL event line.
@@ -71,8 +73,12 @@ func NewWriter(projectRoot string, nodeHex string) (*Writer, error) {
 // Returns an error if the line exceeds MaxEventLineBytes.
 func (w *Writer) Append(line []byte) error {
 	if len(line) > MaxEventLineBytes {
-		return fmt.Errorf("events: JSONL line is %d bytes, exceeds %d byte limit (kind may contain oversized payload)",
-			len(line), MaxEventLineBytes)
+		// Checked before the append, so nothing is on disk and the create lock is
+		// rolled back — which is what makes this one retryable at all.
+		return refusal.NoReport(
+			fmt.Sprintf("events: JSONL line is %d bytes, exceeds %d byte limit (kind may contain oversized payload)",
+				len(line), MaxEventLineBytes),
+			"Shrink the oversized field — long plan or analysis content belongs outside the event — and retry")
 	}
 
 	// Rotate if current segment is full

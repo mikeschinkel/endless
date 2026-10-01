@@ -9,6 +9,7 @@ import json
 
 import click
 
+from endless import agent_help
 from endless import matchers
 from endless import provenance
 from endless import rowcap
@@ -21,13 +22,23 @@ def add_verb(
     machine_only: bool = False,
 ) -> None:
     if not definition or not definition.strip():
-        raise click.ClickException(
-            f"Adding a verb requires --definition. Define what action '{value}' names.\n"
-            f"  Example: endless verb add '{value}' --definition \"to deliberate over\"\n"
-            f"  If you cannot write a 'to ___' definition, the word is probably not a verb."
+        raise agent_help.no_report(
+            f"`verb add {value!r}` was given no --definition. "
+            "No verb was registered.",
+            f"Retry with --definition \"to ...\" naming the action {value!r} "
+            "means, or drop the word if no such definition exists",
+            text=(
+                f"Adding a verb requires --definition. Define what action '{value}' names.\n"
+                f"  Example: endless verb add '{value}' --definition \"to deliberate over\"\n"
+                f"  If you cannot write a 'to ___' definition, the word is probably not a verb."
+            ),
         )
     if not value or not value.strip():
-        raise click.ClickException("Verb value is required.")
+        raise agent_help.no_report(
+            "Verb value is required. No verb was registered.",
+            "Retry with the verb as the argument",
+            text="Verb value is required.",
+        )
 
     try:
         wrote_project, wrote_machine = matchers.add_verb(
@@ -35,9 +46,35 @@ def add_verb(
             category=list(category), machine_only=machine_only,
         )
     except ValueError as e:
-        raise click.ClickException(str(e))
+        # Unreachable in practice — both of matchers.add_verb's ValueErrors are
+        # the two checks just above — but classified anyway, because "nothing
+        # normally reads this" is a statement about today's call sites and the
+        # class has to survive a new one.
+        raise agent_help.no_report(
+            f"{e}. No verb was registered.",
+            "Retry with both a verb value and --definition",
+            text=str(e),
+        )
     except RuntimeError as e:
-        raise click.ClickException(str(e))
+        # CONDITIONAL in the inventory, and it stays one: the verb IS on disk
+        # (matchers commits only after the file write succeeded), so what is
+        # left is a git failure on main whose nature this command cannot see
+        # from one attempt. A lock that has since cleared and a conflict the
+        # user is mid-way through look identical from here.
+        #
+        # The re-run trap is why the summary says the write landed: a plain
+        # `verb add` of the same value now prints "Already present" and never
+        # reaches the commit, so an agent that retries blind concludes it
+        # succeeded while verbs.jsonl is still dirty on main.
+        raise agent_help.report_if(
+            "The verb is written to .endless/verbs.jsonl but git could not "
+            f"commit it on main: {e}",
+            "git is failing for a reason on main only the user can clear — a "
+            "conflict, a hook, or a lock they are holding",
+            "remove and re-add the verb, which forces the commit to be retried",
+            "the verb is registered on disk and left uncommitted on main",
+            text=str(e),
+        )
 
     where = []
     if wrote_project:
@@ -97,12 +134,21 @@ def update_verb(
     machine_only: bool = False,
 ) -> None:
     if not value or not value.strip():
-        raise click.ClickException("Verb value is required.")
+        raise agent_help.no_report(
+            "Verb value is required. Nothing was updated.",
+            "Retry with the verb as the argument",
+            text="Verb value is required.",
+        )
     if definition is None and not category:
-        raise click.ClickException(
-            "Nothing to update. Pass --definition and/or --category.\n"
-            f"  Example: endless verb update '{value}' --category investigation\n"
-            "  What you omit is left exactly as it is — that is the point of update."
+        raise agent_help.no_report(
+            f"`verb update {value!r}` named no field to change. "
+            "Nothing was updated.",
+            "Retry with --definition and/or --category",
+            text=(
+                "Nothing to update. Pass --definition and/or --category.\n"
+                f"  Example: endless verb update '{value}' --category investigation\n"
+                "  What you omit is left exactly as it is — that is the point of update."
+            ),
         )
 
     try:
@@ -112,15 +158,37 @@ def update_verb(
             machine_only=machine_only,
         )
     except matchers.UnknownVerbError:
-        raise click.ClickException(
-            f"No verb matched: value={value!r}\n"
-            f"  Register it first: endless verb add '{value}' --definition \"...\"\n"
-            f"  Or run 'endless verb list' to see what is registered."
+        raise agent_help.no_report(
+            f"No verb matched value={value!r}, so there was nothing to update. "
+            "Nothing was changed.",
+            "Run `endless verb list` and retry with the registered spelling, "
+            "or register the verb first with `endless verb add`",
+            text=(
+                f"No verb matched: value={value!r}\n"
+                f"  Register it first: endless verb add '{value}' --definition \"...\"\n"
+                f"  Or run 'endless verb list' to see what is registered."
+            ),
         )
     except ValueError as e:
-        raise click.ClickException(str(e))
+        raise agent_help.no_report(
+            f"{e}. Nothing was updated.",
+            "Correct the --definition or --category value and retry",
+            text=str(e),
+        )
     except RuntimeError as e:
-        raise click.ClickException(str(e))
+        # Same shape as add_verb's, with the re-run trap one step worse: a
+        # plain re-run of an update that already landed on disk prints "Already
+        # set (no change)" and never commits, so the remedy has to be a change
+        # that forces a rewrite rather than the same command again.
+        raise agent_help.report_if(
+            "The update is written to .endless/verbs.jsonl but git could not "
+            f"commit it on main: {e}",
+            "git is failing for a reason on main only the user can clear — a "
+            "conflict, a hook, or a lock they are holding",
+            "re-apply a change that forces a rewrite, which retries the commit",
+            "the updated verb is on disk and left uncommitted on main",
+            text=str(e),
+        )
 
     fields = ", ".join(result.fields)
     if not result.layers:
@@ -145,7 +213,13 @@ def update_verb(
 def remove_verb(value: str, machine_only: bool) -> None:
     pr, mr = matchers.remove_verb(value=value, machine_only=machine_only)
     if pr == 0 and mr == 0:
-        raise click.ClickException(f"No verb matched: value={value!r}")
+        raise agent_help.no_report(
+            f"No verb matched value={value!r}. Nothing was removed — if the "
+            "goal was that the verb not be registered, it already is not.",
+            "Run `endless verb list` and retry with the registered spelling, "
+            "or treat the goal as already met",
+            text=f"No verb matched: value={value!r}",
+        )
     where = []
     if pr:
         where.append(f"project ({pr})")

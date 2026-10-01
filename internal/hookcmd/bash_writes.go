@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // E-940 — the Bash half of the write-target gate. One rule: a Bash command may
@@ -1299,14 +1300,14 @@ func blockBashWriteTargetsIfApplicable(projectID int64, payload claudePayload) {
 }
 
 // bashWriteDecision is the side-effect-free core of the Bash gate.
-func bashWriteDecision(projectID int64, payload claudePayload) (msg string, block bool) {
+func bashWriteDecision(projectID int64, payload claudePayload) (msg *refusal.Error, block bool) {
 	var input toolInputBash
 	if err := json.Unmarshal(payload.ToolInput, &input); err != nil || input.Command == "" {
-		return "", false
+		return nil, false
 	}
 	scope := newWriteScope(projectID, payload)
 	if scope.worktree == "" {
-		return "", false
+		return nil, false
 	}
 	gitWrites := monitor.IsCheckEnabled(projectID, gitWritesCheck)
 	return bashWritesRefusal(scope, bashWriteTargets(input.Command, payload.CWD, gitWrites))
@@ -1315,7 +1316,11 @@ func bashWriteDecision(projectID int64, payload claudePayload) (msg string, bloc
 // bashWritesRefusal judges each target in order; the first refusal wins. The
 // message is the one a Write to that path gets, prefixed with the construct
 // that was recognized.
-func bashWritesRefusal(scope writeScope, writes []bashWrite) (msg string, block bool) {
+// NO-REPORT throughout. Every one of these refusals names a path the agent
+// re-targets itself, or a suite it simply leaves alone; none of them is a
+// judgement the user has to make. The remedy is in the message the gate has
+// always printed, which is why it goes in as Text unchanged.
+func bashWritesRefusal(scope writeScope, writes []bashWrite) (msg *refusal.Error, block bool) {
 	for _, w := range writes {
 		target := resolveWriteTarget("", w.Path)
 		body, block := writeTargetDecision(scope, target)
@@ -1330,7 +1335,12 @@ func bashWritesRefusal(scope writeScope, writes []bashWrite) (msg string, block 
 				`  "checks": {"%s": false}`+"\nin .endless/config.json — and say so, so the trial "+
 				"hears about it.", gitWritesCheck)
 		}
-		return b.String(), true
+		return refusal.NoReport(
+			fmt.Sprintf("BLOCKED: `%s` would write %s, outside your worktree; "+
+				"nothing was written.", w.Construct, tildePath(target)),
+			"Re-target the path under your task's worktree, or use a temp dir "+
+				"for a scratch file",
+		).Command("PreToolUse").Text(b.String()), true
 	}
-	return "", false
+	return nil, false
 }

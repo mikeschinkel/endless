@@ -35,6 +35,24 @@ var allowedEndlessDeps = map[string]bool{
 	// only reason either is here.
 	"github.com/mikeschinkel/endless/internal/schema":            true,
 	"github.com/mikeschinkel/endless/internal/schema/migrations": true,
+
+	// E-2159. The executable refuses things — a relative --db path, a database
+	// that is not there — and every refusal Endless writes must now say whether
+	// the agent reading it has to report it. That is internal/refusal's job, and
+	// it brings internal/agentenv with it for the one question it asks: is a
+	// person or an agent reading this?
+	//
+	// Admitted rather than worked around because both ARE leaves, in the same
+	// sense internal/dbcontext is. Between them they import os, io, fmt, log,
+	// strings, errors and path/filepath, and nothing else — no database handle,
+	// no schema, no task or session surface. The property this test defends is
+	// "carries no code that expects a schema", and neither of them does, so
+	// there is nothing here to move into a leaf package: they already are one.
+	//
+	// The loop below is over `go list -deps`, which is transitive, so this pair
+	// cannot smuggle a fourth package in later without failing right here.
+	"github.com/mikeschinkel/endless/internal/refusal":  true,
+	"github.com/mikeschinkel/endless/internal/agentenv": true,
 }
 
 // TestMigrateExecutable_LinksNothingButTheMigrationMachinery is the guard on

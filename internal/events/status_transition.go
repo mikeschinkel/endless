@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
 	"github.com/mikeschinkel/endless/internal/tasktype"
 )
@@ -50,13 +51,31 @@ func ValidateStatusTransition(from, to taskstatus.Status, tt tasktype.TaskType) 
 	if len(reachable) == 0 {
 		// A terminal status with no outbound edge for this type. Naming an
 		// empty list would read as a rendering bug, so say what is true.
-		return fmt.Errorf(
-			"events: %q is not a legal status change from %q — %q is a terminal status for a %s task, with no transition out of it",
-			to, from, from, tt)
+		//
+		// Whether that is the agent's problem depends on why the change was
+		// asked for: a reopen route the agent may take settles it alone, and
+		// when none does, the only thing left is the user deciding the work is
+		// not finished after all. This validator sees neither, so it names both.
+		return refusal.ReportIf(
+			fmt.Sprintf(
+				"events: %q is not a legal status change from %q — %q is a terminal status for a %s task, with no transition out of it",
+				to, from, from, tt),
+			"no reopen route open to you moves this task out of its terminal status",
+			"take the reopen route that does apply and retry",
+			"reopening work the lifecycle treats as finished is the user's call",
+		)
 	}
-	return fmt.Errorf(
-		"events: %q is not a legal status change from %q for a %s task (see docs/status-lifecycle.mmd); reachable from %q: %s",
-		to, from, tt, from, strings.Join(reachable, ", "))
+	// The reachable list is the agent's next move when the statuses on it are
+	// ones it may set. It does not mark which are the user's — `ready` means
+	// human-approved — so the branch is named rather than guessed.
+	return refusal.ReportIf(
+		fmt.Sprintf(
+			"events: %q is not a legal status change from %q for a %s task (`endless guide` has the lifecycle); reachable from %q: %s",
+			to, from, tt, from, strings.Join(reachable, ", ")),
+		"every route to the status you want runs through one only the user may set, such as the human-approved `ready`",
+		"move through a reachable status you may set yourself, and retry",
+		"approving that step is the user's to give",
+	)
 }
 
 // ValidateStatusActor refuses a work-progress status the acting agent has no
@@ -100,16 +119,36 @@ func ValidateStatusActor(db dbQuerier, taskID int64, to taskstatus.Status, actor
 		// does not depend on this session, and returning here let any session
 		// id without a row set an unclaimed task to `unverified` (E-2197).
 		held, err := sessionHeldTask(db, actor.SessionID)
-		switch {
-		case err != nil:
-		case held == nil:
-			return fmt.Errorf(
-				"events: session %s has not claimed any task, so it may not set task %d to %q; claim it first (endless task claim E-%d)",
-				actor.SessionID, taskID, to, taskID)
-		case *held != taskID:
-			return fmt.Errorf(
-				"events: session %s holds task %d, so it may not set task %d to %q; a session owns one task for its lifetime — spawn a session on E-%d instead (endless task spawn E-%d)",
-				actor.SessionID, *held, taskID, to, taskID, taskID)
+		// An unreadable sessions row is not evidence of a mistake, and
+		// referential integrity is not this validator's job — the same stance
+		// ValidateNoParentCycle takes on an unreadable ancestor. So it SKIPS
+		// the two held-task rules and falls through to the never-claimed rule
+		// below; it must not RETURN, which is the early exit E-2197 removed
+		// after it let a never-claimed task reach `unverified`.
+		if err == nil && held == nil {
+			// The claim is a commitment — sessions.task_id is write-once — but
+			// claiming the task this session is already working on is the
+			// documented next step, not a choice to put to the user.
+			return refusal.NoReport(
+				fmt.Sprintf(
+					"events: session %s has not claimed any task, so it may not set task %d to %q; claim it first (endless task claim E-%d)",
+					actor.SessionID, taskID, to, taskID),
+				fmt.Sprintf("Run `endless task claim E-%d` from this session, then retry", taskID))
+		}
+		if err == nil && held != nil && *held != taskID {
+			// Spawning is the prescribed route and costs only a new window. It
+			// stops being the answer when the work is already DONE in this
+			// session, because then the status reports something no session
+			// claimed — and only a person, who is exempt from this guard, can
+			// record that.
+			return refusal.ReportIf(
+				fmt.Sprintf(
+					"events: session %s holds task %d, so it may not set task %d to %q; a session owns one task for its lifetime — spawn a session on E-%d instead (endless task spawn E-%d)",
+					actor.SessionID, *held, taskID, to, taskID, taskID),
+				fmt.Sprintf("the work on E-%d was already done in this session rather than still waiting to be done", taskID),
+				fmt.Sprintf("spawn a session on E-%d with `endless task spawn E-%d` and set the status from there", taskID, taskID),
+				"recording a status for work this session did not claim is the user's to do, since only a person is exempt from this guard",
+			)
 		}
 	}
 
@@ -119,9 +158,11 @@ func ValidateStatusActor(db dbQuerier, taskID int64, to taskstatus.Status, actor
 			return nil
 		}
 		if !claimed {
-			return fmt.Errorf(
-				"events: task %d has never been claimed by any session, so %q would report implementation nobody did; claim it first (endless task claim E-%d)",
-				taskID, to, taskID)
+			return refusal.NoReport(
+				fmt.Sprintf(
+					"events: task %d has never been claimed by any session, so %q would report implementation nobody did; claim it first (endless task claim E-%d)",
+					taskID, to, taskID),
+				fmt.Sprintf("Claim the task from the session doing the work — `endless task claim E-%d` — then retry", taskID))
 		}
 	}
 	return nil
@@ -129,15 +170,21 @@ func ValidateStatusActor(db dbQuerier, taskID int64, to taskstatus.Status, actor
 
 // sessionHeldTask returns the task a session holds, or nil when it holds none.
 // The error is reserved for a row that cannot be read at all.
+//
+// Nothing prints these: ValidateStatusActor discards them and returns nil,
+// because an unreadable row is not evidence of a mistake. They are classified as
+// faults anyway, for what reaching one WOULD mean if a future caller did surface
+// it — a sessions row this binary cannot read is Endless broken, not a caller
+// who typed something wrong. Same for taskEverClaimed below.
 func sessionHeldTask(db dbQuerier, sessionIDStr string) (*int64, error) {
 	sessionID, err := strconv.ParseInt(sessionIDStr, 10, 64)
 	if err != nil {
-		return nil, fmt.Errorf("events: unparseable session id %q: %w", sessionIDStr, err)
+		return nil, refusal.Faultf("events: unparseable session id %q: %s", sessionIDStr, err).Cause(err)
 	}
 	var held sql.NullInt64
 	if err := db.QueryRow("SELECT task_id FROM sessions WHERE id = ?", sessionID).
 		Scan(&held); err != nil {
-		return nil, fmt.Errorf("events: read session %d: %w", sessionID, err)
+		return nil, refusal.Faultf("events: read session %d: %s", sessionID, err).Cause(err)
 	}
 	if !held.Valid {
 		return nil, nil
@@ -152,7 +199,7 @@ func taskEverClaimed(db dbQuerier, taskID int64) (bool, error) {
 	var n int
 	if err := db.QueryRow("SELECT COUNT(*) FROM sessions WHERE task_id = ?", taskID).
 		Scan(&n); err != nil {
-		return false, fmt.Errorf("events: count sessions holding task %d: %w", taskID, err)
+		return false, refusal.Faultf("events: count sessions holding task %d: %s", taskID, err).Cause(err)
 	}
 	return n > 0, nil
 }

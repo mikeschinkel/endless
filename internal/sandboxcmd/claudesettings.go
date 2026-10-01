@@ -2,7 +2,6 @@ package sandboxcmd
 
 import (
 	"encoding/json"
-	"flag"
 	"fmt"
 	"io"
 	"os"
@@ -10,6 +9,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // The two Claude Code settings files this package touches, relative to a
@@ -60,16 +61,13 @@ func (o repairOutcome) changed() bool {
 // ever set the bit, so a downstream project would be reading a command about a
 // state it can never reach.
 func claudeSettingsRepairCmd(args []string) {
-	fs := flag.NewFlagSet("claude-settings-repair", flag.ExitOnError)
+	fs := refusal.NewFlags("claude-settings-repair")
 	all := fs.Bool("all", false, "repair every worktree under the main checkout")
-	if err := fs.Parse(args); err != nil {
-		os.Exit(2)
-	}
+	parseVerbFlags(fs, "claude-settings-repair", args)
 
 	targets, err := repairTargets(*all, fs.Args())
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-sandbox claude-settings-repair: %v\n", err)
-		os.Exit(1)
+		relayed("claude-settings-repair", err).Exit(1)
 	}
 
 	var repaired, failed int
@@ -77,7 +75,7 @@ func claudeSettingsRepairCmd(args []string) {
 		outcome, err := repairWorktreeClaudeSettings(wt)
 		if err != nil {
 			failed++
-			fmt.Fprintf(os.Stderr, "  %s: %v\n", wt, err)
+			reportRepairFailure(wt, err)
 			continue
 		}
 		if !outcome.changed() {
@@ -97,6 +95,31 @@ func claudeSettingsRepairCmd(args []string) {
 	}
 }
 
+// reportRepairFailure prints one worktree's failure and keeps the sweep going.
+//
+// The class genuinely cannot be settled here. git's own text is the only
+// evidence, and the two readings need opposite handling: another process
+// holding index.lock clears itself, while a git failure or a settings file
+// somebody hand-edited into invalid JSON needs the person who edited it.
+// Sniffing for "index.lock" would decide it, but git translates its messages,
+// so that test answers differently depending on the user's locale — a worse
+// failure than naming both branches and letting the agent, which can read the
+// text, choose.
+//
+// The line is indented, and that indentation is part of what a person reads, so
+// it is pinned with Text rather than rebuilt from the summary — Text preserves
+// leading whitespace exactly, which is the whole reason it exists.
+func reportRepairFailure(worktree string, err error) {
+	refusal.ReportIf(
+		fmt.Sprintf("endless-go sandbox claude-settings-repair: %s: %v", worktree, err),
+		"the failure is not another git process's transient index.lock",
+		"wait for the other git process to finish and run the repair again",
+		"only the user can repair a broken git state or a settings file they edited by hand",
+	).Command("sandbox claude-settings-repair").
+		Text(fmt.Sprintf("  %s: %v", worktree, err)).
+		Print()
+}
+
 func salvageSuffix(o repairOutcome) string {
 	if len(o.Salvaged) == 0 {
 		return ""
@@ -109,7 +132,10 @@ func salvageSuffix(o repairOutcome) string {
 // worktree containing cwd when neither is supplied.
 func repairTargets(all bool, paths []string) ([]string, error) {
 	if all && len(paths) > 0 {
-		return nil, fmt.Errorf("--all takes no positional arguments")
+		return nil, refusal.NoReport(
+			"--all takes no positional arguments",
+			"Drop either --all or the worktree paths and retry",
+		)
 	}
 	if len(paths) > 0 {
 		out := make([]string, 0, len(paths))
@@ -130,7 +156,10 @@ func repairTargets(all bool, paths []string) ([]string, error) {
 	if !all {
 		top, err := runGit(cwd, "rev-parse", "--show-toplevel")
 		if err != nil {
-			return nil, fmt.Errorf("cwd %s is not inside a git worktree", cwd)
+			return nil, refusal.NoReport(
+				fmt.Sprintf("cwd %s is not inside a git worktree", cwd),
+				"cd into a worktree or pass its path and retry",
+			)
 		}
 		return []string{top}, nil
 	}

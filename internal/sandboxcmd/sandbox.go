@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 type sandboxMode string
@@ -53,18 +54,27 @@ func generateName() (string, error) {
 
 // validateName rejects names that would escape sandboxesDir() or break the
 // filesystem: empty, "." / "..", anything containing path separators.
+//
+// The refusals are classified here rather than at the four print sites because
+// the class is a property of the name, not of the verb that carried it: every
+// one of these is a string the caller chose and can choose again, so it stays
+// NO-REPORT wherever it surfaces — printed directly by destroy and init, or
+// relayed through Provision by run, enter and init.
 func validateName(name string) error {
+	const plainName = "Pass a plain sandbox name — non-empty, not . or .., no path separators — and retry"
 	if name == "" {
-		return fmt.Errorf("sandbox name cannot be empty")
+		return refusal.NoReport("sandbox name cannot be empty", plainName)
 	}
 	if name == "." || name == ".." {
-		return fmt.Errorf("invalid sandbox name %q", name)
+		return refusal.NoReport(fmt.Sprintf("invalid sandbox name %q", name), plainName)
 	}
 	if name != filepath.Base(name) {
-		return fmt.Errorf("sandbox name %q must not contain path separators", name)
+		return refusal.NoReport(
+			fmt.Sprintf("sandbox name %q must not contain path separators", name), plainName)
 	}
 	if strings.ContainsAny(name, `/\`) {
-		return fmt.Errorf("sandbox name %q must not contain path separators", name)
+		return refusal.NoReport(
+			fmt.Sprintf("sandbox name %q must not contain path separators", name), plainName)
 	}
 	return nil
 }
@@ -92,9 +102,25 @@ func Provision(name string, mode sandboxMode) (*Sandbox, error) {
 	if _, err := os.Stat(dir); err == nil {
 		// Distinguish a real sandbox (has meta) from a stale fragment.
 		if _, mErr := os.Stat(filepath.Join(dir, metaFilename)); mErr == nil {
-			return nil, fmt.Errorf("sandbox %q already exists; use 'endless-sandbox destroy %s' first", name, name)
+			// A real sandbox with real contents. Whether it may go is not
+			// something this package can see: the name may be the agent's own
+			// throwaway, or it may be where the user kept something. Both
+			// branches are named, and the agent — which holds the conversation
+			// — decides.
+			return nil, refusal.ReportIf(
+				fmt.Sprintf("sandbox %q already exists; use 'endless-go sandbox destroy %s' first", name, name),
+				"that sandbox holds state the user asked for and destroying it is the only way forward",
+				"provision under a different name, or destroy it if it is your own throwaway",
+				"a destroyed sandbox does not come back",
+			)
 		}
-		return nil, fmt.Errorf("stale sandbox directory at %s (no %s — likely an interrupted enter); run 'endless-sandbox destroy %s' to remove it", dir, metaFilename, name)
+		// A directory with no meta file is the wreckage of an interrupted
+		// enter, not anybody's state: destroying it loses nothing, so there is
+		// nothing here for the user to weigh in on.
+		return nil, refusal.NoReport(
+			fmt.Sprintf("stale sandbox directory at %s (no %s — likely an interrupted enter); run 'endless-go sandbox destroy %s' to remove it", dir, metaFilename, name),
+			fmt.Sprintf("Run `endless-go sandbox destroy %s` and retry", name),
+		)
 	} else if !os.IsNotExist(err) {
 		return nil, fmt.Errorf("checking sandbox dir %s: %w", dir, err)
 	}
@@ -148,7 +174,14 @@ func Load(name string) (*Sandbox, error) {
 	dir := filepath.Join(sandboxesDir(), name)
 	if _, err := os.Stat(dir); err != nil {
 		if os.IsNotExist(err) {
-			return nil, fmt.Errorf("sandbox %q does not exist", name)
+			// Nothing normally reads this: enter — the only caller — discards
+			// Load's error and provisions the sandbox instead. Classified
+			// NO-REPORT for the day something else calls Load, because a name
+			// that is not there yet is a name the caller can create or correct.
+			return nil, refusal.NoReport(
+				fmt.Sprintf("sandbox %q does not exist", name),
+				"Create it with `endless-go sandbox init <name>`, or pass an existing name",
+			)
 		}
 		return nil, fmt.Errorf("checking sandbox dir %s: %w", dir, err)
 	}

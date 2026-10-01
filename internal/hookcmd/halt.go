@@ -102,6 +102,45 @@ func hookEventContext(err error) (event, session string) {
 // is no way to know whether 2 would block a tool call or trap a Stop, so it
 // stays non-blocking. Guessing in the blocking direction is the one mistake
 // that can hang a session.
+// hookReader says who actually reads this failure's stderr, which is a property
+// of the harness event and the exit path and NOT of who is at the keyboard.
+//
+// Claude Code routes hook output three different ways, and asking "is an agent
+// present?" gets the wrong answer on two of them:
+//
+//   - PreToolUse and PostToolUse at exit 2 — stderr is fed back to the MODEL as
+//     the block reason or as tool feedback.
+//   - UserPromptSubmit and SessionStart at exit 2, and the stop events at exit
+//     1 — the harness shows the PERSON a notice. The model is told nothing.
+//   - Everything else, and every exit 0 — the output reaches NOBODY. The async
+//     events (SessionEnd, Notification, StopFailure) are discarded outright, and
+//     `hook prompt` runs from a zsh precmd redirected to /dev/null.
+//
+// So a hook failure on an async event must not be printed at all. The log file
+// keeps it; printing it would only mean writing a refusal into a stream that is
+// closed.
+func hookReader(err error) string {
+	var ee *eventError
+	if !errors.As(err, &ee) {
+		// Raised before the payload could be parsed — unreadable stdin,
+		// malformed JSON. The harness shows the user the first stderr line.
+		return readerHuman
+	}
+	switch ee.event {
+	case "PreToolUse", "PostToolUse":
+		return readerAgent
+	case "UserPromptSubmit", "SessionStart", "Stop", "SubagentStop":
+		return readerHuman
+	}
+	return readerNobody
+}
+
+const (
+	readerAgent  = "agent"
+	readerHuman  = "human"
+	readerNobody = "nobody"
+)
+
 func hookExitCode(err error) int {
 	var ee *eventError
 	if !errors.As(err, &ee) {
@@ -114,9 +153,13 @@ func hookExitCode(err error) int {
 }
 
 // haltNotice is the instruction half of a blocked hook failure, and only that
-// half: the error itself is already on stderr, because Run logs it and the log
-// writer includes stderr. This adds what the error cannot say — that the agent
-// must stop, and what a person has to do to clear it.
+// half: the error itself is printed beside it by Run. It adds what the error
+// cannot say — that the agent must stop, and what a person has to do to clear
+// it.
+//
+// It used to rely on the standard logger teeing to stderr to get the error in
+// front of a reader. That tee is gone (E-2159): diagnostics go to the log file,
+// and Run prints the classified refusal itself.
 //
 // Deliberately generic about the remedy. Endless is a binary installed on
 // somebody's machine against a database somewhere else on it, and the fix is

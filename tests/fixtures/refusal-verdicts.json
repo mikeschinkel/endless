@@ -1,0 +1,50 @@
+[
+  {
+    "note": "The class an agent must NOT report. The remedy is an instruction the agent can carry out alone, so the directive tells it to do that and say nothing — 'now or in your summary' because the leak that opened E-2155 was a handoff, not a turn.",
+    "class": "no-report",
+    "command": "task add",
+    "summary": "title 107>100 chars. Nothing was created.",
+    "remedy": "Move the long form to --analysis and retry",
+    "verdict": "[Endless] task add: title 107>100 chars. Nothing was created. Move the long form to --analysis and retry. Handle this yourself: do not mention this refusal to the user, now or in your summary."
+  },
+  {
+    "note": "The class an agent must report. 'decision' names what is being decided, not what to do about it — the agent is handing a question to the user, so the phrasing has to survive being read aloud as one.",
+    "class": "report",
+    "command": "worktree drop",
+    "summary": "E-101's worktree is in use by a live session.",
+    "decision": "whether to remove a worktree a live session is using",
+    "verdict": "[Endless] worktree drop: E-101's worktree is in use by a live session. This needs the user: whether to remove a worktree a live session is using. Stop and ask; do not work around it."
+  },
+  {
+    "note": "The class the command cannot resolve, because it turns on what the user asked for. Both branches are named with their consequence, and the agent — which holds the conversation — decides.",
+    "class": "report-if",
+    "command": "task remove",
+    "summary": "E-101 has 3 children.",
+    "condition": "the user did not ask for the subtree to go",
+    "remedy": "retry with --cascade",
+    "decision": "removal cannot be undone",
+    "verdict": "[Endless] task remove: E-101 has 3 children. If the user did not ask for the subtree to go, stop and ask — removal cannot be undone; otherwise retry with --cascade and do not mention this refusal."
+  },
+  {
+    "note": "Endless itself broke. This is also where an unclassified error lands, so forgetting to classify fails towards 'tell the user' rather than towards silence.",
+    "class": "fault",
+    "command": "session list",
+    "summary": "endless-go returned no output.",
+    "verdict": "[Endless] session list: endless-go returned no output. Endless itself failed: tell the user, and do not retry more than once."
+  },
+  {
+    "note": "Nothing is blocked, so there is nothing to stop and ask about — but the agent should not narrate it either. A warning the USER needs to act on does not belong here at all; it goes to the errors channel.",
+    "class": "warn",
+    "command": "register",
+    "summary": "The Endless output style is installed but not active.",
+    "remedy": "Run `/output-style endless` in this session",
+    "verdict": "[Endless] register: The Endless output style is installed but not active. Run `/output-style endless` in this session. Nothing is blocked. Handle this yourself; do not mention it unless the user asks."
+  },
+  {
+    "note": "Neither a refusal nor a warning: a progress notice with nothing to decide and nothing to report. It carries no verdict, and renders identically for both audiences — its class exists so the site still had to choose one.",
+    "class": "info",
+    "command": "sandbox prune",
+    "summary": "Pruning 3 orphaned ephemeral sandboxes older than 168h0m0s: e-101, e-102, e-103",
+    "verdict": "Pruning 3 orphaned ephemeral sandboxes older than 168h0m0s: e-101, e-102, e-103"
+  }
+]

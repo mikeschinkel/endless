@@ -22,6 +22,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/processkind"
+	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/sessionstate"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
@@ -65,9 +66,7 @@ func execSessionStatusRecorded(db dbQuerier, evt *Event) (*ExecuteResult, error)
 		// pool deadlocks because Execute's transaction is already holding it.
 		sessionID, err = liveSessionByProcessTx(db, p.Process)
 		if err != nil {
-			return nil, fmt.Errorf(
-				"events: no live session for process %q: %w", p.Process, err,
-			)
+			return nil, noLiveSessionForProcess(p.Process, err)
 		}
 	}
 
@@ -129,9 +128,10 @@ func sessionIDFromSentinel(db dbQuerier, process string) (int64, bool, error) {
 	}
 	id, err := strconv.ParseInt(raw, 10, 64)
 	if err != nil {
-		return 0, false, fmt.Errorf(
-			"events: malformed session id sentinel %q: %w", process, err,
-		)
+		return 0, false, refusal.NoReport(
+			fmt.Sprintf("events: malformed session id sentinel %q: %s", process, err),
+			"Pass a numeric session id and retry",
+		).Cause(err)
 	}
 	var got int64
 	err = db.QueryRow(
@@ -139,9 +139,11 @@ func sessionIDFromSentinel(db dbQuerier, process string) (int64, bool, error) {
 		id,
 	).Scan(&got)
 	if err == sql.ErrNoRows {
-		return 0, false, fmt.Errorf(
-			"events: session id %d is not a live session", id,
-		)
+		// Note this fires after the ledger line is appended and committed, so a
+		// retry with the right id leaves the refused event in the ledger.
+		return 0, false, refusal.NoReport(
+			fmt.Sprintf("events: session id %d is not a live session", id),
+			"Pass the current session's id — `endless session id` prints it — and retry")
 	}
 	if err != nil {
 		return 0, false, fmt.Errorf(
@@ -149,6 +151,21 @@ func sessionIDFromSentinel(db dbQuerier, process string) (int64, bool, error) {
 		)
 	}
 	return got, true, nil
+}
+
+// noLiveSessionForProcess is the refusal shared by every executor that resolves
+// its session from a process handle: session_status.recorded here, and the two
+// session-task membership verbs.
+//
+// Only reached when the caller sent a raw pane id instead of the __session_id
+// sentinel, or when the tmux-server lookup itself failed. Either way the remedy
+// is in the caller's hands — run it where the session lives, or name the session
+// outright — so nothing about it is the user's to decide.
+func noLiveSessionForProcess(process string, err error) error {
+	return refusal.NoReport(
+		fmt.Sprintf("events: no live session for process %q: %s", process, err),
+		"Run this from the live session's own pane, or pass --session-id, and retry",
+	).Cause(err)
 }
 
 // liveSessionByProcessTx is the in-transaction equivalent of

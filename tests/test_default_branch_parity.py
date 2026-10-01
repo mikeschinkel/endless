@@ -22,7 +22,7 @@ from pathlib import Path
 
 import pytest
 
-from endless import worktree_cmd
+from endless import agent_help, worktree_cmd
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
@@ -88,7 +88,10 @@ def _python_resolution(repo: Path) -> tuple[str, str]:
     """Return (base, error) as the Python resolver reports them."""
     try:
         return worktree_cmd._default_base_branch(repo), ""
-    except worktree_cmd.DefaultBranchUnresolved as exc:
+    except agent_help.Refusal as exc:
+        # E-2159 retired the DefaultBranchUnresolved subclass: a refusal now
+        # names its class through the factory that built it, and what this test
+        # needs is only "the Python resolver refused".
         return "", str(exc)
 
 
@@ -155,5 +158,5 @@ def test_python_resolver_never_falls_back_to_main(tmp_path):
     differs, every probe built on the result exits 128 forever.
     """
     repo = _make_repo(tmp_path / "repo", "develop")
-    with pytest.raises(worktree_cmd.DefaultBranchUnresolved):
+    with pytest.raises(agent_help.Refusal):
         worktree_cmd._default_base_branch(repo)

@@ -2,29 +2,33 @@ package sandboxcmd
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"os/signal"
 	"syscall"
+
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 func enterCmd(args []string) {
-	fs := flag.NewFlagSet("enter", flag.ExitOnError)
+	fs := refusal.NewFlags("enter")
 	clone := fs.Bool("clone", false, "Deep-clone live state (deferred; see E-1087)")
-	if err := fs.Parse(args); err != nil {
-		os.Exit(2)
-	}
+	parseVerbFlags(fs, "enter", args)
 	rest := fs.Args()
 	if len(rest) != 1 {
-		fmt.Fprintln(os.Stderr, "endless-sandbox enter: expected exactly one positional arg <name>")
-		os.Exit(1)
+		refusal.NoReport(
+			"endless-go sandbox enter: expected exactly one positional arg <name>",
+			"Pass exactly one sandbox name and retry",
+		).Command("sandbox enter").Exit(1)
 	}
 	name := rest[0]
 
 	if *clone {
-		fmt.Fprintln(os.Stderr, "endless-sandbox: warning: --clone deep-copy not yet implemented (see E-1087); sandbox starts empty")
+		refusal.NoReport(
+			"endless-go sandbox enter: warning: --clone deep-copy not yet implemented (see E-1087); sandbox starts empty",
+			"Nothing to do: the subshell starts in an empty sandbox; drop --clone next time",
+		).Command("sandbox enter").Print()
 	}
 
 	sb, err := Load(name)
@@ -32,8 +36,7 @@ func enterCmd(args []string) {
 		// Not loaded → provision as keep-mode (named, persistent).
 		sb, err = Provision(name, modeKeep)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "endless-sandbox enter: %v\n", err)
-			os.Exit(1)
+			relayed("enter", err).Exit(1)
 		}
 	}
 
@@ -60,7 +63,9 @@ func enterCmd(args []string) {
 	sup.Env = append(sup.Env, inject.Env...)
 	sup.Stdin = os.Stdin
 	sup.Stdout = os.Stdout
-	sup.Stderr = os.Stderr
+	// The subshell is the user's own shell: everything it writes is its
+	// output, not Endless's.
+	sup.Stderr = refusal.Passthrough()
 
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, syscall.SIGINT, syscall.SIGTERM, syscall.SIGHUP)
@@ -69,8 +74,13 @@ func enterCmd(args []string) {
 	if err := sup.Run(); err != nil {
 		var exitErr *exec.ExitError
 		if !errors.As(err, &exitErr) {
-			fmt.Fprintf(os.Stderr, "endless-sandbox enter: %v\n", err)
-			os.Exit(1)
+			// The subshell never started. $SHELL, or the controlling terminal
+			// this verb claims for it, is the user's environment — and `enter`
+			// is an interactive verb an agent has no use for anyway.
+			refusal.Report(
+				fmt.Sprintf("endless-go sandbox enter: %v", err),
+				"how to fix the $SHELL or controlling-terminal environment the subshell could not start in",
+			).Command("sandbox enter").Exit(1)
 		}
 	}
 	if sup.ProcessState != nil {

@@ -1,9 +1,8 @@
 package verifycmd
 
 import (
-	"os"
-
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/sandboxcmd"
 	"github.com/mikeschinkel/go-doterr"
 	"github.com/mikeschinkel/go-dt"
@@ -23,7 +22,12 @@ func resetSandbox(root dt.DirPath) (err error) {
 	if monitor.WorktreeRoot(string(root)) == "" {
 		goto end
 	}
-	_, err = sandboxcmd.Reset(string(root), os.Stderr)
+	// The seed hook's output is the PROJECT's, not Endless's: it is whatever a
+	// given project's seed-sandbox.sh prints, and nothing here can classify
+	// text it has never seen. Passthrough is how that is said out loud — the
+	// child's stderr is its own, and it reaches the reader unchanged, exactly
+	// as it did when this line named os.Stderr.
+	_, err = sandboxcmd.Reset(string(root), refusal.Passthrough())
 	if err != nil {
 		err = doterr.NewErr(ErrResettingSandbox, err, "worktree", root)
 	}

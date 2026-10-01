@@ -98,11 +98,22 @@ def test_compose_notes_appends_to_existing_unrelated_notes():
     assert "Reason text." in out
 
 
-def test_compose_notes_refuses_when_justification_section_already_present():
-    existing = "## Justification\n\nOlder reason.\n"
-    with pytest.raises(click.ClickException) as exc:
-        task_cmd._compose_justification_notes(existing, "Newer reason.")
-    assert "already contains" in exc.value.message
+def test_compose_notes_replaces_an_existing_justification_section():
+    """E-2159 turned a dead end into a remedy.
+
+    This used to refuse: a research task that already carried a `## Justification`
+    section was refused WITHOUT --justification and refused WITH it, and no
+    command edited notes — so the refusal's own remedy could not be carried out.
+    A NO-REPORT class whose remedy is impossible teaches an agent that the class
+    means nothing. The section is replaced instead.
+    """
+    existing = "Pre-existing line.\n\n## Justification\n\nOlder reason.\n"
+    out = task_cmd._compose_justification_notes(existing, "Newer reason.")
+    assert "Newer reason." in out
+    assert "Older reason." not in out
+    # Everything around the section survives, and only one section remains.
+    assert out.startswith("Pre-existing line.")
+    assert out.count("## Justification") == 1
 
 
 def test_compose_notes_returns_none_when_no_justification():
@@ -210,18 +221,22 @@ def test_update_set_research_with_justification_writes_notes(seeded_project_at_c
     assert "Cross-system comparison required." in notes
 
 
-def test_update_refuses_when_justification_section_already_present(seeded_project_at_cwd):
+def test_update_replaces_an_existing_justification_section(seeded_project_at_cwd):
+    """The end-to-end half of the same fix: the remedy the gate names works.
+
+    Before E-2159 this pair of commands had no way through — the gate demanded
+    --justification and the composer refused it, leaving the task permanently
+    un-updatable as research.
+    """
     epic = _add_task("Epic", status="underway", task_type="epic")
     tid = _add_task(
         "Research the existing thing", task_type="research", parent_id=epic,
         notes="## Justification\n\nOlder reason.\n",
     )
-    with pytest.raises(click.ClickException) as exc:
-        task_cmd.update_plan(
-            tid, task_type="research",
-            justification="Newer reason.",
-        )
-    assert "already contains" in exc.value.message
+    task_cmd.update_plan(tid, task_type="research", justification="Newer reason.")
+    notes, _ = _notes_and_type(tid)
+    assert "Newer reason." in notes
+    assert "Older reason." not in notes
 
 
 def test_update_gate_does_not_fire_when_type_not_in_update(seeded_project_at_cwd):

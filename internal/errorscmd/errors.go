@@ -66,12 +66,13 @@
 package errorscmd
 
 import (
-	"flag"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strconv"
 	"strings"
+	"syscall"
 	"text/tabwriter"
 
 	"github.com/mattn/go-runewidth"
@@ -79,13 +80,19 @@ import (
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/liveview"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // Run dispatches the `errors` subcommand.
 func Run(args []string) {
 	if len(args) == 0 {
-		usage(os.Stderr)
-		os.Exit(2)
+		// The usage block has always been printed with nothing above it, so it
+		// is pinned as the human rendering and the summary exists only to give
+		// the agent's verdict a line to carry.
+		refusal.NoReport(
+			"endless-go errors: no command given",
+			"Rerun with a command — list, show, clear, codes, record or raise",
+		).Command("errors").Text(usageText()).Exit(2)
 	}
 
 	switch args[0] {
@@ -102,15 +109,21 @@ func Run(args []string) {
 	case "raise":
 		runRaise(args[1:])
 	case "-h", "--help", "help":
-		usage(os.Stdout)
+		fmt.Fprint(os.Stdout, usageText())
 	default:
-		fmt.Fprintf(os.Stderr, "endless-go errors: unknown command %q\n", args[0])
-		usage(os.Stderr)
-		os.Exit(2)
+		// Nothing relays a verb into this dispatcher: the Python CLI spells each
+		// one out, so an unknown command is something a caller typed, and typing
+		// a listed one is the whole of the remedy.
+		refusal.NoReport(
+			fmt.Sprintf("endless-go errors: unknown command %q", args[0]),
+			"Rerun with a command from the usage list",
+		).Command("errors").Detail(usageText()).Exit(2)
 	}
 }
 
-func usage(w *os.File) {
+func usageText() string {
+	var b strings.Builder
+	w := &b
 	fmt.Fprintln(w, "Usage: endless-go errors <command>")
 	fmt.Fprintln(w, "Commands:")
 	fmt.Fprintln(w, "  list [--all] [--detail]           list uncleared errors (--all includes cleared)")
@@ -135,6 +148,51 @@ func usage(w *os.File) {
 	fmt.Fprintln(w, "has no id. `list` prints those from the log beneath the table. `clear` with")
 	fmt.Fprintln(w, "no id dismisses them along with the rows; `clear --log` dismisses only them,")
 	fmt.Fprintln(w, "and is the form that works when the database is the thing that broke.")
+	return b.String()
+}
+
+// parseFlags parses one verb's flags and, when the flag package rejects them,
+// ends the process where flag.ExitOnError used to.
+//
+// Every flag set in this file was ExitOnError, which printed and exited from
+// INSIDE the flag package — before the call site had any chance to say whether
+// an agent reading the line has to report it, which is the hole E-2159 closes.
+// refusal.NewFlags is always ContinueOnError, so flag's two exits are spelled
+// out here instead, each with the class it always deserved: `-h` asked a
+// question and got its answer (INFO, exit 0, which is what ExitOnHelp does),
+// and a bad flag is a typo the caller retypes (NO-REPORT, exit 2).
+//
+// fs.Output() is flag's own text — its error line and the usage block below it
+// — so what a person reads is byte for byte what they read before.
+func parseFlags(fs *refusal.Flags, command string, args []string) {
+	err := fs.Parse(args)
+	if err == nil {
+		return
+	}
+	fs.ExitOnHelp(err)
+	refusal.NoReport(err.Error(), "Correct the flag and retry").
+		Command(command).Text(fs.Output()).Exit(2)
+}
+
+// storeFailure renders a fault-store read or write that failed, keeping the
+// line a person has always read and the class the error itself chose.
+//
+// Which class that is depends on where the failure came from, and the error is
+// where that knowledge lives — not here. Inside a self-dev worktree with no
+// --db, every one of these calls fails with the E-1429 gate's refusal instead
+// of a database error, and that one is NO-REPORT: thread --db main|sandbox and
+// run it again, which an agent does alone and a user never needs to hear about.
+// Deciding the class at this funnel would overwrite that with a verdict about
+// the fault store, which is not what broke.
+//
+// So From keeps whichever class the error carries — the gate's NO-REPORT once
+// internal/monitor names it — and faults everything that never chose one. That
+// is the right reading of a genuine read failure underneath: a fault record
+// this process cannot open is Endless broken, not a command misused, and the
+// failure mode of a new unclassified error here is "tell the user" rather than
+// silence.
+func storeFailure(command, prefix string, err error) *refusal.Error {
+	return refusal.From(err).Command(command).Text(prefix + err.Error())
 }
 
 // runRaise records a synthetic fault so the fault row, the store and the detail log
@@ -157,14 +215,12 @@ func usage(w *os.File) {
 // `errors clear` dismiss incidents in the real record from a worktree with no
 // flag, which is the failure the gate exists to prevent.
 func runRaise(args []string) {
-	fs := flag.NewFlagSet("raise", flag.ExitOnError)
+	fs := refusal.NewFlags("raise")
 	severity := fs.String("severity", "warning", "severity to raise: warning or error")
 	summary := fs.String("summary", "", "incident summary (defaults to the code's title)")
 	source := fs.String("source", "manual:raise", "source subsystem to attribute it to")
 	repeat := fs.Int("repeat", 1, "record this many occurrences (they collapse into one incident)")
-	if err := fs.Parse(args); err != nil {
-		os.Exit(2)
-	}
+	parseFlags(fs, "errors raise", args)
 
 	var code faults.Code
 	switch *severity {
@@ -173,18 +229,27 @@ func runRaise(args []string) {
 	case "error":
 		code = faults.ErrCodeTestError
 	default:
-		fmt.Fprintf(os.Stderr, "endless-go errors: raise: unknown severity %q (want warning or error)\n", *severity)
-		os.Exit(2)
+		refusal.NoReport(
+			fmt.Sprintf("endless-go errors: raise: unknown severity %q (want warning or error)", *severity),
+			"Pass --severity warning or --severity error and retry",
+		).Command("errors raise").Exit(2)
 	}
 
 	if *repeat < 1 {
-		fmt.Fprintln(os.Stderr, "endless-go errors: raise: --repeat must be at least 1")
-		os.Exit(2)
+		refusal.NoReport(
+			"endless-go errors: raise: --repeat must be at least 1",
+			"Pass --repeat with a count of 1 or more and retry",
+		).Command("errors raise").Exit(2)
 	}
 
 	if !faults.Bound() {
-		fmt.Fprintln(os.Stderr, "endless-go errors: raise: the fault store is not bound")
-		os.Exit(1)
+		// A fault rather than the inventory's REPORT, because nothing here is
+		// the user's to decide: cmd/endless-go/main.go binds the fault store for
+		// every subcommand, so a store that is not bound means the binary that
+		// reached this line is not the one main.go assembles. That is Endless
+		// broken, and it is the only way this branch can be reached at all.
+		refusal.Faultf("endless-go errors: raise: the fault store is not bound").
+			Command("errors raise").Exit(1)
 	}
 
 	for i := 0; i < *repeat; i++ {
@@ -205,8 +270,8 @@ func runRaise(args []string) {
 	// that was. The match below is exact enough without the scope.
 	incidents, err := faults.List(faults.AllProjects, false, 0)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "endless-go errors: raise: recorded, but could not read it back:", err)
-		os.Exit(1)
+		storeFailure("errors raise",
+			"endless-go errors: raise: recorded, but could not read it back: ", err).Exit(1)
 	}
 	for _, incident := range incidents {
 		if incident.Code != code.ID || incident.Source != *source {
@@ -218,20 +283,21 @@ func runRaise(args []string) {
 		return
 	}
 
-	fmt.Fprintln(os.Stderr, "endless-go errors: raise: the fault did not land")
-	os.Exit(1)
+	// Record swallows write failures by contract, so this read-back is the only
+	// signal there is — and a fault store that accepted a write and cannot show
+	// it back is broken in a way no retry and no user decision reaches.
+	refusal.Faultf("endless-go errors: raise: the fault did not land").
+		Command("errors raise").Exit(1)
 }
 
 // runList lists incidents within scope.
 func runList(args []string) {
-	fs := flag.NewFlagSet("list", flag.ExitOnError)
+	fs := refusal.NewFlags("list")
 	all := fs.Bool("all", false, "include cleared errors")
 	detail := fs.Bool("detail", false, "print each occurrence's full captured detail")
 	project := fs.String("project", "", "scope to this project instead of the one you are in")
 	allProjects := fs.Bool("all-projects", false, "cover every project on the machine")
-	if err := fs.Parse(args); err != nil {
-		os.Exit(2)
-	}
+	parseFlags(fs, "errors list", args)
 
 	scoped := resolveScope("list", *project, *allProjects)
 
@@ -243,7 +309,11 @@ func runList(args []string) {
 		// so the log is the only place it exists. Print those before exiting,
 		// rather than exiting on the error and leaving the user with no way to
 		// read a report that was successfully recorded.
-		fmt.Fprintln(os.Stderr, "endless-go errors: list:", err)
+		//
+		// Printed rather than exited on, because the unindexed half below has to
+		// run between the two: Exit would end the process with the one thing
+		// this branch exists to show still unprinted.
+		storeFailure("errors list", "endless-go errors: list: ", err).Print()
 		printUnindexed()
 		os.Exit(1)
 	}
@@ -263,7 +333,7 @@ func runList(args []string) {
 
 	if *detail {
 		for _, incident := range incidents {
-			printDetails(incident.ID)
+			printDetails(incident.ID, "errors list")
 		}
 	}
 
@@ -598,32 +668,44 @@ func runShow(args []string) {
 	// being a rule each caller has to remember.
 	flags, positionals = splitArgs(args)
 
-	fs := flag.NewFlagSet("show", flag.ExitOnError)
+	fs := refusal.NewFlags("show")
 	detail := fs.Bool("detail", false, "print each occurrence's full captured detail")
 	idFlag := fs.Int64("id", 0, "the error to show (positional `<id>` is the documented spelling)")
-	fs.Usage = func() { showUsage(os.Stderr) }
-	if err := fs.Parse(flags); err != nil {
-		os.Exit(2)
-	}
+	// Into the flag set's own capture buffer, not to stderr: parseFlags hands
+	// the whole of it — flag's error line and this block below it — to the
+	// refusal that classifies them, so a person still reads `show`'s usage
+	// rather than a list of its defaults.
+	//
+	// fs.Writer() and not fs.Output(): Output returns the captured TEXT, which
+	// is what the refusal wants later; the sink flag writes into is Writer.
+	fs.Usage = func() { fmt.Fprint(fs.Writer(), showUsageText()) }
+	parseFlags(fs, "errors show", flags)
 
 	if len(positionals) > 1 {
-		fmt.Fprintln(os.Stderr,
-			"endless-go errors: show: one id at a time; `errors list` shows them together")
-		os.Exit(2)
+		refusal.NoReport(
+			"endless-go errors: show: one id at a time; `errors list` shows them together",
+			"Retry with a single id, or run `endless errors list` to see them together",
+		).Command("errors show").Exit(2)
 	}
 
 	id = *idFlag
 	if len(positionals) == 1 {
 		parsed, err := strconv.ParseInt(positionals[0], 10, 64)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "endless-go errors: show: %q is not an error id\n", positionals[0])
-			os.Exit(2)
+			refusal.NoReport(
+				fmt.Sprintf("endless-go errors: show: %q is not an error id", positionals[0]),
+				"Retry with the numeric id `endless errors list` printed",
+			).Command("errors show").Exit(2)
 		}
 		id = parsed
 	}
 	if id <= 0 {
-		showUsage(os.Stderr)
-		os.Exit(2)
+		// `show`'s usage block, alone, is what this has always printed, so it is
+		// pinned as the human text and the summary carries only the verdict.
+		refusal.NoReport(
+			"endless-go errors: show: no id given",
+			"Name one error's id — `endless errors list` prints them — and retry",
+		).Command("errors show").Text(showUsageText()).Exit(2)
 	}
 
 	showOne(id, *detail)
@@ -672,7 +754,9 @@ func splitArgs(args []string) (flags, positionals []string) {
 //
 // It deliberately does not mention --id: that alias exists for callers who
 // already type it, not for anyone learning the command today.
-func showUsage(w *os.File) {
+func showUsageText() string {
+	var b strings.Builder
+	w := &b
 	fmt.Fprintln(w, "Usage: endless-go errors show <id> [--detail]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Prints ONE error in full — the whole summary, its remedy, and where it")
@@ -680,6 +764,7 @@ func showUsage(w *os.File) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "To see which errors exist, list them:")
 	fmt.Fprintln(w, "  endless errors list")
+	return b.String()
 }
 
 // scoping is a resolved scope together with what a surface must SAY about it.
@@ -717,9 +802,10 @@ func (s scoping) wide() bool {
 // than leaving the PROJECT column's appearance to be decoded.
 func resolveScope(verb, project string, allProjects bool) (s scoping) {
 	if project != "" && allProjects {
-		fmt.Fprintf(os.Stderr,
-			"endless-go errors: %s: --project and --all-projects are opposites; pass one\n", verb)
-		os.Exit(2)
+		refusal.NoReport(
+			fmt.Sprintf("endless-go errors: %s: --project and --all-projects are opposites; pass one", verb),
+			"Retry with exactly one of --project <name> or --all-projects",
+		).Command("errors " + verb).Exit(2)
 	}
 	if allProjects {
 		return scoping{scope: faults.AllProjects, asked: true}
@@ -727,8 +813,20 @@ func resolveScope(verb, project string, allProjects bool) (s scoping) {
 	if project != "" {
 		id, name, err := monitor.ProjectByName(project)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "endless-go errors: %s: %v\n", verb, err)
-			os.Exit(2)
+			// The inventory left this one to the agent to decide; the error
+			// answers it here instead. A name no projects row carries is
+			// ErrNoProject — a typo whoever typed it looks up and retries —
+			// while anything else is the database unable to answer, which
+			// storeFailure renders with the class the failure itself chose.
+			// Either way the exit stays 2, as it always has.
+			if errors.Is(err, monitor.ErrNoProject) {
+				refusal.NoReport(
+					fmt.Sprintf("endless-go errors: %s: %v", verb, err),
+					"Look the name up with `endless project list` and retry",
+				).Command("errors " + verb).Exit(2)
+			}
+			storeFailure("errors "+verb,
+				fmt.Sprintf("endless-go errors: %s: ", verb), err).Exit(2)
 		}
 		return scoping{scope: faults.ProjectScope(id), project: name}
 	}
@@ -888,21 +986,27 @@ func printFooter(incidents []faults.Incident) {
 func showOne(id int64, detail bool) {
 	incident, ok, err := faults.Get(id)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "endless-go errors: show:", err)
+		failure := storeFailure("errors show", "endless-go errors: show: ", err)
 		// An id addresses a table row, so there is no fallback for `show`
 		// itself. Name the one that exists rather than leaving a dead end: any
 		// fault recorded while the store was unreadable is unindexed and is
 		// listed, without ids, by `list` (E-1887).
+		//
+		// A second body line rather than a second message, so the two arrive as
+		// one classified refusal — the pointer is part of what this failure
+		// says, not a separate verdict about it.
 		if faults.UnindexedCount() > 0 {
-			fmt.Fprintln(os.Stderr,
-				"endless-go errors: occurrences were recorded outside the database; "+
+			failure = failure.Detail(
+				"endless-go errors: occurrences were recorded outside the database; " +
 					"`endless errors list` shows them")
 		}
-		os.Exit(1)
+		failure.Exit(1)
 	}
 	if !ok {
-		fmt.Fprintf(os.Stderr, "endless-go errors: no error with id %d\n", id)
-		os.Exit(1)
+		refusal.NoReport(
+			fmt.Sprintf("endless-go errors: no error with id %d", id),
+			"List the ids with `endless errors list --all-projects --all` and retry with one of them",
+		).Command("errors show").Exit(1)
 	}
 
 	fmt.Printf("Error:       %d\n", incident.ID)
@@ -925,7 +1029,7 @@ func showOne(id int64, detail bool) {
 	printRemedy(incident)
 
 	if detail {
-		printDetails(incident.ID)
+		printDetails(incident.ID, "errors show")
 	}
 }
 
@@ -1014,10 +1118,21 @@ func indentWrapped(text, prefix string, width int) (out string) {
 // printDetails prints every logged occurrence for one incident. The detail lives
 // in the JSONL log rather than the DB, so the table stays bounded by distinct
 // fingerprint count while diagnosis loses nothing.
-func printDetails(id int64) {
+//
+// command is the verb that asked for the detail — `errors list --detail` or
+// `errors show --detail` — so a verdict about an unreadable detail log names the
+// command its reader actually ran.
+func printDetails(id int64, command string) {
 	details, err := faults.Details(id)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "endless-go errors: detail:", err)
+		// Degraded, not refused. The incident rows are already on screen and
+		// the caller goes on to exit 0: only the per-occurrence capture is
+		// missing, and a diagnostics surface that failed over its own footnote
+		// would be worse than one that prints what it has.
+		refusal.NoReport(
+			"endless-go errors: detail: "+err.Error(),
+			"Nothing is blocked: the listing stands, without the per-occurrence detail",
+		).Command(command).Print()
 		return
 	}
 	if len(details) == 0 {
@@ -1045,20 +1160,20 @@ func printDetails(id int64) {
 func runClear(args []string) {
 	var ids []int64
 
-	fs := flag.NewFlagSet("clear", flag.ExitOnError)
+	fs := refusal.NewFlags("clear")
 	project := fs.String("project", "", "scope to this project instead of the one you are in")
 	allProjects := fs.Bool("all-projects", false, "cover every project on the machine")
 	logOnly := fs.Bool("log", false,
 		"dismiss ONLY the occurrences waiting in the log, leaving every table row open")
-	if err := fs.Parse(args); err != nil {
-		os.Exit(2)
-	}
+	parseFlags(fs, "errors clear", args)
 
 	for _, arg := range fs.Args() {
 		id, err := strconv.ParseInt(arg, 10, 64)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "endless-go errors: clear: %q is not an error id\n", arg)
-			os.Exit(2)
+			refusal.NoReport(
+				fmt.Sprintf("endless-go errors: clear: %q is not an error id", arg),
+				"Pass integer ids, with any flags before them, and retry",
+			).Command("errors clear").Exit(2)
 		}
 		ids = append(ids, id)
 	}
@@ -1067,11 +1182,17 @@ func runClear(args []string) {
 	// question: an id names a TABLE row, and --log is the half of the record
 	// that has no rows in it. Picking one silently would dismiss something the
 	// user did not name.
+	//
+	// No inventory row: --log postdates the audit (E-1887). It classes like
+	// every other mutually-exclusive flag pair here — the caller names one of
+	// the two halves and runs it again, and which half they meant is a question
+	// about the argv they just typed, not about anything only a user knows.
 	if *logOnly && len(ids) > 0 {
-		fmt.Fprintln(os.Stderr,
+		refusal.NoReport(
 			"endless-go errors: clear: --log dismisses the log, which holds no ids; "+
-				"pass one or the other")
-		os.Exit(2)
+				"pass one or the other",
+			"Retry with either --log or the ids, not both",
+		).Command("errors clear").Exit(2)
 	}
 
 	// The log's watermark moves FIRST on both forms that touch it (E-1887).
@@ -1102,8 +1223,7 @@ func runClear(args []string) {
 
 	cleared, err := faults.Clear(resolveScope("clear", *project, *allProjects).scope, ids, clearedBy())
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "endless-go errors: clear:", err)
-		os.Exit(1)
+		storeFailure("errors clear", "endless-go errors: clear: ", err).Exit(1)
 	}
 	fmt.Printf("cleared %d error(s)\n", cleared)
 }
@@ -1117,7 +1237,16 @@ func runClear(args []string) {
 func clearLog() {
 	unindexed, err := faults.ClearUnindexed()
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "endless-go errors: clear: the log watermark:", err)
+		// No inventory row: the log half of `clear` postdates the audit
+		// (E-1887). It goes through the same funnel as the table half, which
+		// faults it — and a fault is the honest reading. The watermark is a file
+		// Endless owns, nothing the caller passed chooses whether it can be
+		// rewritten, and failing to move it means the only acknowledgement an
+		// unindexed occurrence has is unavailable, so the notice will come back
+		// on the next listing. Not fatal, because on the bare form the table
+		// half still has work to do.
+		storeFailure("errors clear",
+			"endless-go errors: clear: the log watermark: ", err).Print()
 		return
 	}
 	// Said even when it is zero on the explicit form: a user who typed --log
@@ -1136,8 +1265,21 @@ func runCodes() {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\n", code.ID, code.Severity, code.Slug, code.Title)
 	}
 	if err := tw.Flush(); err != nil {
-		fmt.Fprintln(os.Stderr, "endless-go errors: codes:", err)
-		os.Exit(1)
+		// The inventory left this branch to the agent; the error answers it
+		// here instead. A reader that closed the pipe first — `endless errors
+		// codes | head` — is EPIPE, and nothing is wrong: the caller already has
+		// what it asked for. Any other write failure is the machine unable to
+		// take this process's output, which is not something a retry settles.
+		if errors.Is(err, syscall.EPIPE) {
+			refusal.NoReport(
+				"endless-go errors: codes: "+err.Error(),
+				"Nothing to fix: the reader closed the pipe before the catalog ended",
+			).Command("errors codes").Exit(1)
+		}
+		refusal.Report(
+			"endless-go errors: codes: "+err.Error(),
+			"what to do about a machine that could not accept this command's output",
+		).Command("errors codes").Exit(1)
 	}
 }
 
@@ -1167,31 +1309,38 @@ func clearedBy() string {
 // --code must name a catalog entry, so this cannot invent classifications that
 // have no docs/errors.md section; an unknown ID is a usage error.
 func runRecord(args []string) {
-	fs := flag.NewFlagSet("record", flag.ExitOnError)
+	fs := refusal.NewFlags("record")
 	codeID := fs.String("code", "", "catalog code ID, e.g. ERR-0008 or WARN-0009")
 	summary := fs.String("summary", "", "short summary shown in lists and the fault row")
 	source := fs.String("source", "", "subsystem raising it, e.g. job:minimizer")
 	detail := fs.String("detail", "", "long capture; goes to the detail log, never the DB")
 	fingerprint := fs.String("fingerprint", "", "grouping key (defaults to the summary)")
-	if err := fs.Parse(args); err != nil {
-		os.Exit(2)
-	}
+	parseFlags(fs, "errors record", args)
 	if *codeID == "" || *summary == "" {
-		fmt.Fprintln(os.Stderr, "endless-go errors: record: --code and --summary are required")
-		os.Exit(2)
+		refusal.NoReport(
+			"endless-go errors: record: --code and --summary are required",
+			"Pass both --code and --summary and retry",
+		).Command("errors record").Exit(2)
 	}
 
 	code, ok := faults.LookupCode(*codeID)
 	if !ok {
-		fmt.Fprintf(os.Stderr, "endless-go errors: record: unknown code %q\n", *codeID)
-		os.Exit(2)
+		refusal.NoReport(
+			fmt.Sprintf("endless-go errors: record: unknown code %q", *codeID),
+			"Pick a code from `endless errors codes` and retry",
+		).Command("errors record").Exit(2)
 	}
 
 	if !faults.Bound() {
 		// Not an error: a caller with no fault store bound (a test DB, a
 		// sandbox) still did its own work. Say so and exit clean rather
-		// than failing the caller for a diagnostic side effect.
-		fmt.Fprintln(os.Stderr, "endless-go errors: record: the fault store is not bound; nothing recorded")
+		// than failing the caller for a diagnostic side effect. Nothing is
+		// blocked and nothing the caller asked for was lost, so there is
+		// nothing here for an agent to carry to the user.
+		refusal.NoReport(
+			"endless-go errors: record: the fault store is not bound; nothing recorded",
+			"Nothing to do: the diagnostic side effect was skipped and the command succeeded",
+		).Command("errors record").Print()
 		return
 	}
 

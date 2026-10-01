@@ -1,11 +1,12 @@
 package tmuxcmd
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // runApply issues a batch of tmux commands against the running server
@@ -15,15 +16,28 @@ import (
 //
 // Reverses when the tmux server exits.
 func runApply(args []string) {
-	fs := flag.NewFlagSet("apply", flag.ExitOnError)
+	fs := refusal.NewFlags("apply")
 	binary := fs.String("binary", "", "Override path to endless-tmux binary (default: argv[0])")
 	prefixKey := fs.String("hotkey", "e", "Prefix-table key to bind for the popup menu")
 	interval := fs.Int("status-interval", 2, "tmux status-interval (seconds) for status-line refresh")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		// -h asked a question and got an answer; it is not a refusal.
+		fs.ExitOnHelp(err)
+		// NewFlags is ContinueOnError, so the exit flag.ExitOnError used to take
+		// from inside Parse is ours. `endless tmux apply` passes only flags this
+		// verb defines (tmux_cmd.py), so a flag that misses was typed.
+		refusal.NoReport(err.Error(), "Correct the flag and retry").
+			Command("tmux apply").Text(fs.Output()).Exit(2)
+	}
 
 	if os.Getenv("TMUX") == "" {
-		fmt.Fprintln(os.Stderr, "endless-tmux apply: not inside a tmux session ($TMUX is empty)")
-		os.Exit(1)
+		// Only the user can start or attach to their own tmux; an agent has no
+		// session to run this in. Unreachable through `tmux init`, which checks
+		// $TMUX before it gets here.
+		refusal.Report(
+			"endless-go tmux apply: not inside a tmux session ($TMUX is empty)",
+			"running `endless tmux apply` from inside their own tmux session",
+		).Command("tmux apply").Exit(1)
 	}
 
 	binPath := *binary
@@ -42,8 +56,17 @@ func runApply(args []string) {
 	steps := buildApplySteps(binPath, *prefixKey, *interval)
 	for _, step := range steps {
 		if err := runTmux(step...); err != nil {
-			fmt.Fprintf(os.Stderr, "endless-tmux apply: %v\n  args: %s\n", err, strings.Join(step, " "))
-			os.Exit(1)
+			// tmux printed its own reason just above (runTmux passes its stderr
+			// through), and the steps before this one are already applied, so the
+			// server is half-configured. Whether this tmux version or server
+			// state can take the option is the user's to judge; summary
+			// compresses the two printed lines into the one the verdict carries.
+			refusal.Report(
+				fmt.Sprintf("endless-go tmux apply: %v (args: %s)", err, strings.Join(step, " ")),
+				"why tmux rejected this option or binding, with the earlier steps already applied",
+			).Command("tmux apply").
+				Text(fmt.Sprintf("endless-go tmux apply: %v\n  args: %s", err, strings.Join(step, " "))).
+				Exit(1)
 		}
 	}
 
@@ -124,6 +147,10 @@ type menuItem struct {
 
 func runTmux(args ...string) error {
 	cmd := exec.Command("tmux", args...)
-	cmd.Stderr = os.Stderr
+	// tmux's own stderr, verbatim, and its class travels with the caller rather
+	// than with this function: a failed apply step raises the refusal above,
+	// while retireNavHooks and the refresh-client redraw discard their errors
+	// entirely, so what tmux says there blocks nothing.
+	cmd.Stderr = refusal.Passthrough()
 	return cmd.Run()
 }

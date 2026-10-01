@@ -20,9 +20,7 @@ through to the tty.
 import shutil
 import subprocess
 
-import click
-
-from endless import rowcap
+from endless import agent_help, rowcap
 
 
 # `project status` caps PER GROUP rather than per render (see
@@ -44,7 +42,16 @@ group_limit_options = rowcap.limit_options_for(
 def _go_binary() -> str:
     go_bin = shutil.which("endless-go")
     if not go_bin:
-        raise click.ClickException("endless-go binary not found on PATH.")
+        # REPORT, even though inside Endless's own checkout an agent could
+        # build the binary: everywhere else this runs, endless-go is part of
+        # the install and putting it on PATH is the user's machine to change.
+        raise agent_help.report(
+            "endless-go is not on PATH, and this view is rendered entirely by "
+            "it. Nothing was shown.",
+            "installing endless-go, or putting it on PATH, on their own "
+            "machine",
+            text="endless-go binary not found on PATH.",
+        )
     return go_bin
 
 
@@ -60,7 +67,10 @@ def _run(args: list[str]) -> None:
     except KeyboardInterrupt:
         return
     if result.returncode != 0:
-        raise SystemExit(result.returncode)
+        # Stdio is inherited, so the Go side's own classified refusal has
+        # already been written to this terminal. Only the status is left to
+        # carry.
+        agent_help.passthrough_exit(result.returncode)
 
 
 def project_status_resolve(

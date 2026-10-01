@@ -29,6 +29,7 @@ import (
 	"text/template"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // The `all:` prefix is required so leading-underscore partials (e.g.
@@ -60,52 +61,88 @@ var handoffPartialNames = []string{closePartialName, mechanicsPartialName}
 // Run dispatches `endless-go template <verb> [args]`.
 func Run(args []string) {
 	if len(args) < 1 {
-		usage(os.Stderr)
-		os.Exit(2)
+		refusal.NoReport(
+			"endless-go template: no command given",
+			"Pass `render` and retry",
+		).Command("template").Text(usageText()).Exit(2)
 	}
 	switch args[0] {
 	case "render":
 		if err := runRender(args[1:], os.Stdin, os.Stdout); err != nil {
-			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			// Every way render can fail arrives here, so the class travels with
+			// the error rather than being guessed at this one site: the flag and
+			// argument refusals below chose theirs, the E-1429 DB-context refusal
+			// chose NO-REPORT back in monitor, and an I/O, JSON or database
+			// failure nobody classified is a fault — which is what From makes of
+			// anything that reaches it unclassified.
+			refusal.From(err).Command("template render").Exit(1)
 		}
 	case "-h", "--help", "help":
-		usage(os.Stdout)
+		fmt.Fprint(os.Stdout, usageText())
 	default:
-		fmt.Fprintf(os.Stderr, "endless-go template: unknown command %q\n", args[0])
-		usage(os.Stderr)
-		os.Exit(2)
+		// Every endless-go that has `template` at all knows `render`, so this is
+		// somebody invoking the binary directly with a name that misses.
+		refusal.NoReport(
+			fmt.Sprintf("endless-go template: unknown command %q", args[0]),
+			"Use `render` and retry",
+		).Command("template").Detail(usageText()).Exit(2)
 	}
 }
 
-func usage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: endless-go template <command> [flags] [args]")
-	fmt.Fprintln(w, "Commands:")
-	fmt.Fprintln(w, "  render [--project <name>] <name>   read JSON vars on stdin, render template to stdout")
-	fmt.Fprintln(w, "  render --file <path>               render an arbitrary file as a template instead")
+// usageText is the command list, printed for --help and carried as the body of
+// the two usage refusals above.
+func usageText() string {
+	return strings.Join([]string{
+		"Usage: endless-go template <command> [flags] [args]",
+		"Commands:",
+		"  render [--project <name>] <name>   read JSON vars on stdin, render template to stdout",
+		"  render --file <path>               render an arbitrary file as a template instead",
+	}, "\n") + "\n"
 }
 
 func runRender(args []string, stdin io.Reader, stdout io.Writer) error {
-	fs := flag.NewFlagSet("render", flag.ContinueOnError)
+	fs := refusal.NewFlags("render")
 	projectName := fs.String("project", "", "registered project name (overrides cwd-based resolution)")
 	filePath := fs.String("file", "", "render this file as a template instead of a named template")
 	if err := fs.Parse(args); err != nil {
-		return err
+		// This used to print twice: flag wrote its error line and usage block to
+		// stderr itself, and then Run printed the returned error underneath. Now
+		// flag's text is captured, and Text prints it once.
+		//
+		// The TSV's other reading — `endless guide` relaying an endless-go too
+		// old to know --file — is unreachable from this source: the binary that
+		// prints this is the binary that defines --file. What is left is a flag
+		// somebody typed wrong, which the typist corrects.
+		text := fs.Output()
+		if errors.Is(err, flag.ErrHelp) {
+			// `-h` is the one parse failure flag does not name in its own output;
+			// that line was Run's print of the returned error, kept here so a
+			// person reads what they always read.
+			text += err.Error()
+		}
+		return refusal.NoReport(err.Error(), "Correct the flag and retry").
+			Command("template render").Text(text)
 	}
 	rest := fs.Args()
 
 	if *filePath != "" {
 		if len(rest) != 0 {
-			return errors.New("--file renders one file: pass no template name with it")
+			return refusal.NoReport(
+				"--file renders one file: pass no template name with it",
+				"Drop the positional template name and retry")
 		}
 		if *projectName != "" {
-			return errors.New("--file and --project are exclusive: --file names an exact file, so there is no override chain for --project to root")
+			return refusal.NoReport(
+				"--file and --project are exclusive: --file names an exact file, so there is no override chain for --project to root",
+				"Drop one of the two flags and retry")
 		}
 		return renderFile(*filePath, stdin, stdout)
 	}
 
 	if len(rest) != 1 {
-		return errors.New("usage: endless-go template render [--project <name>] <name> | --file <path>")
+		return refusal.NoReport(
+			"usage: endless-go template render [--project <name>] <name> | --file <path>",
+			"Pass exactly one template name, or --file <path>, and retry")
 	}
 	name := normalizeName(rest[0])
 
@@ -237,10 +274,22 @@ func projectRootByName(name string) (string, error) {
 	var path string
 	err = db.QueryRow("SELECT path FROM projects WHERE name = ?", name).Scan(&path)
 	if err != nil {
-		return "", fmt.Errorf("project not found: %s", name)
+		// Two callers pass --project, and only one of them reads what is printed
+		// here: the triage job passes a name it read from this same database,
+		// but it captures this output and fails open, leaving the task
+		// untriaged. The reader is therefore always somebody who typed the name
+		// at `endless internal template render`, and a name is the one thing
+		// they can correct.
+		return "", refusal.NoReport(
+			fmt.Sprintf("project not found: %s", name),
+			"Check `endless project list` and retry with a registered project name")
 	}
 	if strings.TrimSpace(path) == "" {
-		return "", fmt.Errorf("project %s has no registered path", name)
+		// The row exists and its path column is empty, which nothing the caller
+		// typed produced and no other spelling of the name avoids.
+		return "", refusal.Report(
+			fmt.Sprintf("project %s has no registered path", name),
+			"how to repair a projects row whose path is empty")
 	}
 	// The column is STORED form — `~/...` for a project under $HOME — and
 	// filepath.Abs would turn that into `<cwd>/~/...` (E-2011).
@@ -253,7 +302,9 @@ func projectRootByName(name string) (string, error) {
 func projectRootFromCwd() (string, error) {
 	root, err := monitor.ProjectRootFromCwd()
 	if errors.Is(err, monitor.ErrNoProjectContext) {
-		return "", errors.New("template render requires a project context — cd into a project or pass --project <name>")
+		return "", refusal.NoReport(
+			"template render requires a project context — cd into a project or pass --project <name>",
+			"cd into the project, or pass --project <name>, and retry")
 	}
 	return root, err
 }
@@ -280,9 +331,33 @@ func normalizeName(raw string) string {
 func embeddedContent(name string) ([]byte, error) {
 	data, err := embedded.ReadFile("templates/" + name + ".tmpl")
 	if err != nil {
-		return nil, fmt.Errorf("unknown template %q", name)
+		return nil, unknownTemplateRefusal(name)
 	}
 	return data, nil
+}
+
+// computedNamePrefixes are the template namespaces Endless fills in itself:
+// `handoff/<type>` from a task's type, `triage/<name>` from the triager's own
+// constant. A name under neither was supplied by whoever ran the command.
+var computedNamePrefixes = []string{"handoff/", "triage/"}
+
+// unknownTemplateRefusal classifies a name with no embedded template, and the
+// name answers which reading applies without asking the agent. A miss under a
+// prefix Endless computes means this binary does not ship a template its own
+// code asks for — a fault no caller can retype their way out of, however the
+// name reached here. Any other name was typed, and a name is exactly what the
+// typist can correct.
+func unknownTemplateRefusal(name string) *refusal.Error {
+	for _, prefix := range computedNamePrefixes {
+		if strings.HasPrefix(name, prefix) {
+			return refusal.Faultf("unknown template %q", name).
+				Command("template render")
+		}
+	}
+	return refusal.NoReport(
+		fmt.Sprintf("unknown template %q", name),
+		"Pass a template name Endless ships and retry").
+		Command("template render")
 }
 
 // materializeIfMissing writes the embedded template content to
@@ -334,13 +409,26 @@ func commitMaterialized(projectRoot, name string) {
 		return
 	}
 	if err := runGit(projectRoot, "add", "--", relPath); err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go template: auto-commit skipped: %v\n", err)
+		autoCommitSkipped(err).Print()
 		return
 	}
 	msg := "Endless: materialize handoff template " + name
 	if err := runGit(projectRoot, "commit", "-m", msg, "--", relPath); err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go template: auto-commit skipped: %v\n", err)
+		autoCommitSkipped(err).Print()
 	}
+}
+
+// autoCommitSkipped classifies a failed auto-commit of a just-materialized
+// template. The render already succeeded and its output is on stdout; all that
+// is left behind is an untracked (or staged-but-uncommitted) file in the user's
+// working tree, which nothing downstream waits on — so the agent carries on.
+// The guide, handoff and triage callers read stdout only on exit 0 and discard
+// this entirely; `endless internal template render` passes it through.
+func autoCommitSkipped(err error) *refusal.Error {
+	return refusal.NoReport(
+		fmt.Sprintf("endless-go template: auto-commit skipped: %v", err),
+		"Nothing is blocked: the template rendered, and the file can be committed by hand").
+		Command("template render")
 }
 
 // isGitWorkTree reports whether projectRoot is inside a git work tree.
@@ -444,15 +532,27 @@ func render(name, content string, partials []string, vars map[string]any) (strin
 			continue
 		}
 		if _, err := tmpl.Parse(partial); err != nil {
-			return "", fmt.Errorf("parse partial for %s: %w", name, err)
+			return "", templateRefusal(fmt.Sprintf("parse partial for %s: %v", name, err), err)
 		}
 	}
 	if _, err := tmpl.Parse(content); err != nil {
-		return "", fmt.Errorf("parse template %s: %w", name, err)
+		return "", templateRefusal(fmt.Sprintf("parse template %s: %v", name, err), err)
 	}
 	var buf strings.Builder
 	if err := tmpl.Execute(&buf, vars); err != nil {
-		return "", fmt.Errorf("execute template %s: %w", name, err)
+		return "", templateRefusal(fmt.Sprintf("execute template %s: %v", name, err), err)
 	}
 	return buf.String(), nil
+}
+
+// templateRefusal classifies template text that will not parse or execute. The
+// failing file may be the embedded copy or the project's own .local.tmpl /
+// .tmpl override, and nothing here can tell which — but either way it is
+// content somebody has to fix or remove, and no rerun renders it. Cause keeps
+// text/template's own error reachable through errors.Is/As, where the %w wrap
+// this replaced used to put it.
+func templateRefusal(summary string, cause error) *refusal.Error {
+	return refusal.Report(summary,
+		"how to fix or remove the template that will not render").
+		Command("template render").Cause(cause)
 }

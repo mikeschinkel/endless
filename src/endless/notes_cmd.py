@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 from tabulate import tabulate
 
+from endless import agent_help
 from endless import db
 from endless import provenance
 from endless.project_path import project_name_for_cwd
@@ -17,9 +18,12 @@ def _resolve_project(name: str | None) -> tuple[int, str]:
         cwd = Path.cwd()
         name = project_name_for_cwd(cwd)
         if not name:
-            raise click.ClickException(
-                "Not in a registered project directory. "
-                "Specify a name: endless notes <name>"
+            raise agent_help.no_report(
+                "The current directory is in no registered project, so "
+                "`endless notes` has nothing to work on.",
+                "Name the project explicitly: endless notes <name>",
+                text=("Not in a registered project directory. "
+                      "Specify a name: endless notes <name>"),
             )
 
     row = db.query(
@@ -27,8 +31,10 @@ def _resolve_project(name: str | None) -> tuple[int, str]:
         (name,),
     )
     if not row:
-        raise click.ClickException(
-            f"No project found with name '{name}'"
+        raise agent_help.no_report(
+            f"No registered project is named '{name}'.",
+            "Find the registered name with `endless project list` and retry",
+            text=f"No project found with name '{name}'",
         )
     # E-1668: record what this invocation resolved, so the provenance trace can
     # say so when it is not the project enclosing cwd.
@@ -149,7 +155,11 @@ def resolve_note(note_id: int):
         (note_id,),
     )
     if not row:
-        raise click.ClickException(f"No note found with id {note_id}")
+        raise agent_help.no_report(
+            f"No note has id {note_id}. Nothing was resolved.",
+            "List the notes with `endless notes` to get a real id, then retry",
+            text=f"No note found with id {note_id}",
+        )
 
     if row[0]["resolved"]:
         click.echo(

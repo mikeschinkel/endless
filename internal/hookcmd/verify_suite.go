@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/verify"
 )
 
@@ -154,25 +155,25 @@ func blockLandedSuiteRunIfApplicable(payload claudePayload) {
 // payload in, refusal out — on this side of the exit means the plumbing to the
 // predicate (which field of which tool input, and what a malformed one means)
 // is tested too, and not just the predicate it eventually reaches.
-func landedSuiteRunDecision(payload claudePayload) (msg string, block bool) {
+func landedSuiteRunDecision(payload claudePayload) (msg *refusal.Error, block bool) {
 	var input toolInputBash
 	// A tool input that will not parse is not a run: the harness hands this
 	// hook one shape per tool, and a payload it cannot read is a question the
 	// gate has no answer to rather than a refusal it should risk.
 	if err := json.Unmarshal(payload.ToolInput, &input); err != nil {
-		return "", false
+		return nil, false
 	}
 	return landedSuiteDecision(payload, landedSuiteRun,
 		suiteTaskFromCommand(input.Command))
 }
 
-func landedSuiteDecision(payload claudePayload, act landedSuiteAct, taskID int64) (msg string, block bool) {
+func landedSuiteDecision(payload claudePayload, act landedSuiteAct, taskID int64) (msg *refusal.Error, block bool) {
 	if taskID == 0 {
-		return "", false
+		return nil, false
 	}
 	mine, foreign := foreignLandedSuite(payload, taskID)
 	if !foreign {
-		return "", false
+		return nil, false
 	}
 	return landedSuiteRefusal(act, taskID, mine), true
 }
@@ -285,7 +286,11 @@ const (
 
 // landedSuiteRefusal composes the block message. Pure, so the shape is testable
 // without a database and without exiting the process.
-func landedSuiteRefusal(act landedSuiteAct, taskID int64, mine suiteCaller) string {
+// NO-REPORT throughout. Every one of these refusals names a path the agent
+// re-targets itself, or a suite it simply leaves alone; none of them is a
+// judgement the user has to make. The remedy is in the message the gate has
+// always printed, which is why it goes in as Text unchanged.
+func landedSuiteRefusal(act landedSuiteAct, taskID int64, mine suiteCaller) *refusal.Error {
 	var b strings.Builder
 
 	switch act {
@@ -337,5 +342,15 @@ func landedSuiteRefusal(act landedSuiteAct, taskID int64, mine suiteCaller) stri
 		"    suite, where it is protected after the task that wrote it is done.\n\n")
 	fmt.Fprintf(&b, "The rules for this directory, in full: %s/CLAUDE.md\n", verify.SuitesDir)
 
-	return b.String()
+	verb := "edit"
+	if act == landedSuiteRun {
+		verb = "run"
+	}
+	return refusal.NoReport(
+		fmt.Sprintf("BLOCKED: refusing to %s E-%d's verification suite — it has "+
+			"landed, and it is not yours. Nothing was %s.",
+			verb, taskID, map[landedSuiteAct]string{landedSuiteRun: "run"}[act]+"written"),
+		"Leave it alone — put the coverage in your own task's suite, or in the "+
+			"project's test suite",
+	).Command("PreToolUse").Text(b.String())
 }

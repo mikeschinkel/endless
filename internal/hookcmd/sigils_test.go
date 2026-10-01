@@ -1,7 +1,6 @@
 package hookcmd
 
 import (
-	"strings"
 	"testing"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
@@ -197,51 +196,73 @@ func labelsEqual(got, want []monitor.ReportLabel) bool {
 	return true
 }
 
-// TestDriftNotice_AsksRatherThanMerges pins the half of ED-1555 that keeps an
+// TestDriftPair_AsksRatherThanMerges pins the half of ED-1555 that keeps an
 // open vocabulary usable. Auto-merging would silently rewrite what the user
 // said, and the pair it would get wrong ("$CUT" vs "$CUTS") is exactly the pair
 // that is closest.
-func TestDriftNotice_AsksRatherThanMerges(t *testing.T) {
+//
+// E-2159 moved WHERE the question goes — the errors channel, not the agent's
+// context, since only the user can answer it and nothing is blocked either way
+// — so these assert the pair the matcher found rather than a message. The
+// matching rules are unchanged, which is what this still guards.
+func TestDriftPair_AsksRatherThanMerges(t *testing.T) {
 	known := []string{"BLOAT", "GOOD"}
 
-	notice := driftNotice([]monitor.ReportLabel{{Token: "BLOATED"}}, known)
-	for _, want := range []string{"$BLOATED", "$BLOAT", "same thing"} {
-		if !strings.Contains(notice, want) {
-			t.Errorf("notice missing %q: %s", want, notice)
-		}
+	fresh, near, found := driftPair([]monitor.ReportLabel{{Token: "BLOATED"}}, known)
+	if !found {
+		t.Fatal("a near-collision raised no question")
+	}
+	if fresh != "BLOATED" || near != "BLOAT" {
+		t.Errorf("pair = ($%s, $%s), want ($BLOATED, $BLOAT)", fresh, near)
 	}
 
 	// A token already in use is not "near" — it IS the token, and there is
 	// nothing to ask.
-	if got := driftNotice([]monitor.ReportLabel{{Token: "BLOAT"}}, known); got != "" {
-		t.Errorf("an established token raised a merge question: %s", got)
+	if _, _, got := driftPair([]monitor.ReportLabel{{Token: "BLOAT"}}, known); got {
+		t.Error("an established token raised a merge question")
 	}
 	// Nothing close enough: a distinct word is the user adding vocabulary, which
 	// is the behavior the design wants, not a mistake to query.
-	if got := driftNotice([]monitor.ReportLabel{{Token: "JARGON"}}, known); got != "" {
-		t.Errorf("an unrelated token raised a merge question: %s", got)
+	if _, _, got := driftPair([]monitor.ReportLabel{{Token: "JARGON"}}, known); got {
+		t.Error("an unrelated token raised a merge question")
 	}
 	// The very first label of all has nothing to be near.
-	if got := driftNotice([]monitor.ReportLabel{{Token: "CUT"}}, nil); got != "" {
-		t.Errorf("the first token ever raised a merge question: %s", got)
+	if _, _, got := driftPair([]monitor.ReportLabel{{Token: "CUT"}}, nil); got {
+		t.Error("the first token ever raised a merge question")
 	}
 }
 
-// TestDriftNotice_AtMostOne pins the noise bound. A prompt introducing three new
-// words is a user in flow; interrupting them three times to audit their
-// vocabulary is how a helpful question becomes something the agent suppresses.
-func TestDriftNotice_AtMostOne(t *testing.T) {
+// TestDriftPair_AtMostOne pins the noise bound. A prompt introducing three new
+// words is a user in flow; three incidents auditing their vocabulary is how a
+// useful signal becomes a list nobody reads.
+func TestDriftPair_AtMostOne(t *testing.T) {
 	known := []string{"BLOAT", "CUT"}
-	notice := driftNotice([]monitor.ReportLabel{{Token: "BLOATED"}, {Token: "CUTS"}}, known)
-	if strings.Count(notice, "Endless:") != 1 {
-		t.Errorf("expected exactly one question, got: %s", notice)
+	fresh, _, found := driftPair(
+		[]monitor.ReportLabel{{Token: "BLOATED"}, {Token: "CUTS"}}, known)
+	if !found {
+		t.Fatal("two near-collisions raised none")
+	}
+	if fresh != "BLOATED" {
+		t.Errorf("reported $%s; the FIRST fresh token with a neighbour wins", fresh)
 	}
 }
 
 // A pick is not vocabulary. `$A` and `$B` are the loop's own words, so they must
 // never be offered up as tokens the user might want to merge.
-func TestDriftNotice_IgnoresPicks(t *testing.T) {
-	if got := driftNotice([]monitor.ReportLabel{{Token: "B"}}, []string{"A"}); got != "" {
-		t.Errorf("a pick raised a merge question: %s", got)
+func TestDriftPair_IgnoresPicks(t *testing.T) {
+	if _, _, got := driftPair([]monitor.ReportLabel{{Token: "B"}}, []string{"A"}); got {
+		t.Error("a pick raised a merge question")
+	}
+}
+
+// TestDriftNoticeStaysOutOfTheTurn is the E-2159 half: vocabulary drift costs
+// the agent nothing. A question only the user can answer, about their own
+// labels, with nothing blocked either way, has no business in the context.
+func TestDriftNoticeStaysOutOfTheTurn(t *testing.T) {
+	// recordDrift's own return says it FOUND one; what matters here is that
+	// nothing it does produces text for the turn. The fault store is unbound in
+	// tests, so Record is a no-op and this exercises the call path only.
+	if !recordDrift([]monitor.ReportLabel{{Token: "BLOATED"}}, []string{"BLOAT"}) {
+		t.Fatal("recordDrift did not see the collision driftPair sees")
 	}
 }

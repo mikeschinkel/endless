@@ -2,7 +2,6 @@ package tmuxcmd
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
@@ -11,6 +10,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // runShowMenu invokes `tmux display-menu` with a title and items
@@ -27,14 +27,18 @@ import (
 // Invoked from bindings via `run-shell '<binPath> tmux show-menu
 // --pane=#{pane_id} --position=center'`.
 func runShowMenu(args []string) {
-	fs := flag.NewFlagSet("show-menu", flag.ContinueOnError)
-	fs.SetOutput(os.Stderr)
+	fs := refusal.NewFlags("show-menu")
 	paneArg := fs.String("pane", "", "Tmux pane ID (overrides TMUX_PANE env)")
 	position := fs.String("position", "center", "Menu position: center | mouse")
 	mouseX := fs.String("mouse-x", "", "Numeric x coordinate (mouse position; required when position=mouse)")
 	mouseY := fs.String("mouse-y", "", "Numeric y coordinate (mouse position; required when position=mouse)")
 	if err := fs.Parse(args); err != nil {
-		os.Exit(2)
+		// Nothing normally reads this: the only caller is a tmux key or mouse
+		// binding, whose run-shell has no -E and so discards stderr, showing the
+		// exit status alone in view mode. Classed for the one reader who can see
+		// it at all — somebody invoking the verb by hand, who fixes the flag.
+		refusal.NoReport(err.Error(), "Correct the flag and retry").
+			Command("tmux show-menu").Text(fs.Output()).Exit(2)
 	}
 
 	pane := *paneArg
@@ -44,8 +48,12 @@ func runShowMenu(args []string) {
 
 	info, err := monitor.GetTaskForPane(pane)
 	if err != nil && !errors.Is(err, monitor.ErrNoTask) {
-		fmt.Fprintf(os.Stderr, "endless-tmux show-menu: %v\n", err)
-		os.Exit(1)
+		// Unread for the same reason, and — unlike status-line, which records a
+		// fault for exactly this failure — recorded nowhere, so this text is the
+		// only trace it leaves. If anybody does read it, Endless being unable to
+		// answer for a pane is Endless broken, not a menu they can reopen.
+		refusal.Faultf("endless-go tmux show-menu: %v", err).
+			Command("tmux show-menu").Cause(err).Exit(1)
 	}
 
 	binPath, _ := os.Executable()
@@ -58,10 +66,15 @@ func runShowMenu(args []string) {
 	tmuxArgs := buildDisplayMenuArgs(title, *position, *mouseX, *mouseY, items)
 
 	cmd := exec.Command("tmux", tmuxArgs...)
-	cmd.Stderr = os.Stderr
+	// display-menu's own complaint about the argv we built, verbatim, ahead of
+	// the refusal below.
+	cmd.Stderr = refusal.Passthrough()
 	if err := cmd.Run(); err != nil {
-		fmt.Fprintf(os.Stderr, "endless-tmux show-menu: tmux display-menu failed: %v\n", err)
-		os.Exit(1)
+		// Also discarded by run-shell and also recorded nowhere. A menu this
+		// binary assembled that tmux then refused is our argv being wrong, which
+		// is a fault whoever reads it has to hear about.
+		refusal.Faultf("endless-go tmux show-menu: tmux display-menu failed: %v", err).
+			Command("tmux show-menu").Cause(err).Exit(1)
 	}
 }
 

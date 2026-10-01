@@ -1,6 +1,10 @@
 package events
 
-import "fmt"
+import (
+	"fmt"
+
+	"github.com/mikeschinkel/endless/internal/refusal"
+)
 
 // ValidPhases is the closed set of recognized task-phase values.
 // Anything outside this set is rejected at the events boundary so it
@@ -17,7 +21,9 @@ var ValidPhases = map[string]bool{
 // Empty string is rejected.
 func ValidatePhase(s string) error {
 	if !ValidPhases[s] {
-		return fmt.Errorf("events: invalid phase %q (valid: urgent, now, next, later, maybe)", s)
+		return refusal.NoReport(
+			fmt.Sprintf("events: invalid phase %q (valid: urgent, now, next, later, maybe)", s),
+			"Pick one of the listed phases and retry")
 	}
 	return nil
 }
@@ -30,9 +36,14 @@ func ValidatePhase(s string) error {
 // field-update, and move. A nil parentID (root task) is always allowed.
 func ValidateMaybeParentless(phase string, parentID *int64) error {
 	if phase == "maybe" && parentID != nil {
-		return fmt.Errorf("events: a maybe-phase task cannot have a parent " +
-			"(maybe = uncommitted, parent-child = scope binding); promote it " +
-			"or use a relates_to relation instead")
+		// The remedy names the relates_to half only. Promoting the task is the
+		// other way out, and it raises the user's commitment level for work they
+		// filed as uncommitted — not a change an agent makes on its own.
+		return refusal.NoReport(
+			"events: a maybe-phase task cannot have a parent "+
+				"(maybe = uncommitted, parent-child = scope binding); promote it "+
+				"or use a relates_to relation instead",
+			"Link it with a relates_to relation instead of --parent, and retry")
 	}
 	return nil
 }

@@ -19,13 +19,14 @@
 package worktreecmd
 
 import (
-	"flag"
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/mikeschinkel/endless/internal/dbprovenance"
 	"github.com/mikeschinkel/endless/internal/events"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // Exit codes. `in-use` reports its verdict through the status code so a shell
@@ -39,8 +40,10 @@ const (
 
 func Run(args []string) {
 	if len(args) < 1 {
-		usage(os.Stderr)
-		os.Exit(exitUsage)
+		refusal.NoReport(
+			"endless-go worktree: no verb given",
+			"Pass a verb — in-use or ledger-orphans — and retry",
+		).Command("worktree").Text(usageText()).Exit(exitUsage)
 	}
 	switch args[0] {
 	case "in-use":
@@ -48,11 +51,20 @@ func Run(args []string) {
 	case "ledger-orphans":
 		os.Exit(runLedgerOrphans(args[1:]))
 	case "-h", "--help", "help":
-		usage(os.Stdout)
+		fmt.Fprint(os.Stdout, usageText())
 	default:
-		fmt.Fprintf(os.Stderr, "endless-go worktree: unknown verb %q\n", args[0])
-		usage(os.Stderr)
-		os.Exit(exitUsage)
+		// Two readings, and this binary cannot tell them apart. Typed directly,
+		// it is a typo the agent fixes and forgets. Relayed by `endless worktree
+		// drop`, it means the installed endless-go is older than the Python CLI
+		// that called it — a mismatched pair the user has to reinstall, and one
+		// that silently disables the guard standing between a live session and
+		// its own working directory.
+		refusal.ReportIf(
+			fmt.Sprintf("endless-go worktree: unknown verb %q", args[0]),
+			"this came from `endless worktree drop` rather than from a verb you typed",
+			"retry with in-use or ledger-orphans",
+			"the installed endless-go is older than the endless CLI calling it, and only the user can reinstall a matching pair",
+		).Command("worktree").Detail(usageText()).Exit(exitUsage)
 	}
 }
 
@@ -75,15 +87,23 @@ type inUseJSON struct {
 // only the live-process probe applies. Every endless-managed e-NNN worktree
 // has one and the caller passes it.
 func runInUse(args []string) int {
-	fs := flag.NewFlagSet("in-use", flag.ContinueOnError)
+	fs := refusal.NewFlags("in-use")
 	dir := fs.String("dir", "", "worktree directory to inspect (required)")
 	taskID := fs.Int64("task", 0, "owning task id; 0 skips the session probe")
 	asJSON := fs.Bool("json", false, "emit the verdict as JSON")
 	if err := fs.Parse(args); err != nil {
+		// A fault, not a usage error, and that is not a formality: the only
+		// caller is `endless worktree drop`, which builds this argv itself. A
+		// flag it got wrong means Endless is broken — and the guard standing
+		// between a removal and a live session's working directory just failed
+		// open-looking, which the user has to hear about.
+		refusal.Faultf("endless-go worktree in-use: %s", err).
+			Command("worktree in-use").Text(fs.Output()).Print()
 		return exitUsage
 	}
 	if *dir == "" {
-		fmt.Fprintln(os.Stderr, "endless-go worktree in-use: --dir is required")
+		refusal.Faultf("endless-go worktree in-use: --dir is required").
+			Command("worktree in-use").Print()
 		return exitUsage
 	}
 
@@ -117,7 +137,13 @@ func report(asJSON bool, out inUseJSON) int {
 		fmt.Fprintln(os.Stdout, out.Reason)
 	}
 	if out.Error != "" {
-		fmt.Fprintf(os.Stderr, "endless-go worktree in-use: %s\n", out.Error)
+		// Undetermined, and WorktreeInUse fails closed, so the caller is about
+		// to refuse a removal it cannot justify. Only the user can decide to
+		// proceed past a guard that could not answer.
+		refusal.Report(
+			fmt.Sprintf("endless-go worktree in-use: %s", out.Error),
+			"whether to remove a worktree Endless could not prove is idle",
+		).Command("worktree in-use").Print()
 		return exitUndetermined
 	}
 	if out.InUse {
@@ -141,41 +167,56 @@ func report(asJSON bool, out inUseJSON) int {
 // internal/events, and the behind-base bug is what a second copy of a git
 // predicate costs.
 func runLedgerOrphans(args []string) int {
-	fs := flag.NewFlagSet("ledger-orphans", flag.ContinueOnError)
+	fs := refusal.NewFlags("ledger-orphans")
 	repo := fs.String("repo", "", "repository or worktree directory (required)")
 	base := fs.String("base", "", "base revision the branch would land on (required)")
 	branch := fs.String("branch", "", "branch revision to classify (required)")
 	if err := fs.Parse(args); err != nil {
+		ledgerOrphansFault("%s", err).Text(fs.Output()).Print()
 		return exitUsage
 	}
 	for name, val := range map[string]string{
 		"--repo": *repo, "--base": *base, "--branch": *branch,
 	} {
 		if val == "" {
-			fmt.Fprintf(os.Stderr,
-				"endless-go worktree ledger-orphans: %s is required\n", name)
+			ledgerOrphansFault("%s is required", name).Print()
 			return exitUsage
 		}
 	}
 
 	rpt, err := events.LedgerOrphans(*repo, *base, *branch)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go worktree ledger-orphans: %s\n", err)
+		ledgerOrphansFault("%s", err).Print()
 		return exitUndetermined
 	}
 	if err = dbprovenance.EncodeIndent(os.Stdout, rpt, "  "); err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go worktree ledger-orphans: %s\n", err)
+		ledgerOrphansFault("%s", err).Print()
 		return exitUndetermined
 	}
 	return exitNotInUse
 }
 
-func usage(w *os.File) {
-	fmt.Fprintln(w, "Usage: endless-go worktree <verb> [flags]")
-	fmt.Fprintln(w, "Verbs:")
-	fmt.Fprintln(w, "  in-use --dir <path> [--task <id>] [--json]")
-	fmt.Fprintln(w, "         exit 0 not in use, 3 in use (reason on stdout), 1 undetermined")
-	fmt.Fprintln(w, "  ledger-orphans --repo <path> --base <rev> --branch <rev>")
-	fmt.Fprintln(w, "         JSON on stdout: which commits in base..branch hold ledger")
-	fmt.Fprintln(w, "         content the base branch provably already has")
+// ledgerOrphansFault classifies every way this verb can fail, and they are all
+// the same way: its sole caller — `endless worktree diagnose`, through
+// land_conflict.ledger_orphans — builds the argv, captures the output and
+// treats any non-zero exit as "no answer". So nothing here is a usage error
+// somebody can retype, and nothing here is a decision anybody makes. A git
+// failure or a bad flag is Endless unable to say which of a branch's commits
+// the base already holds, which is a fault whether or not this particular text
+// ever reaches a reader.
+func ledgerOrphansFault(format string, args ...any) *refusal.Error {
+	return refusal.Faultf("endless-go worktree ledger-orphans: "+format, args...).
+		Command("worktree ledger-orphans")
+}
+
+func usageText() string {
+	return strings.Join([]string{
+		"Usage: endless-go worktree <verb> [flags]",
+		"Verbs:",
+		"  in-use --dir <path> [--task <id>] [--json]",
+		"         exit 0 not in use, 3 in use (reason on stdout), 1 undetermined",
+		"  ledger-orphans --repo <path> --base <rev> --branch <rev>",
+		"         JSON on stdout: which commits in base..branch hold ledger",
+		"         content the base branch provably already has",
+	}, "\n") + "\n"
 }

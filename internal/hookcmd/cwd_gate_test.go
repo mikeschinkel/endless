@@ -66,7 +66,7 @@ func TestTildePath(t *testing.T) {
 func TestCdRedirect(t *testing.T) {
 	wt := "/Users/dev/repo/.endless/worktrees/e-42"
 	cwd := "/Users/dev/repo"
-	msg := cdRedirect(42, wt, cwd)
+	msg := cdRedirect(42, wt, cwd).Error()
 
 	if !strings.Contains(msg, "/cd "+wt) {
 		t.Errorf("expected literal absolute `/cd %s` in message, got:\n%s", wt, msg)

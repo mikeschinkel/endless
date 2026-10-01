@@ -18,7 +18,7 @@ import subprocess
 
 import click
 
-from endless import agent_env, config, provenance
+from endless import agent_env, agent_help, config, provenance
 from endless.event_bridge import emit_event
 
 USER = "user"
@@ -31,13 +31,23 @@ def question_id_display(qid: int) -> str:
 
 def _go(args: list[str]) -> dict | list:
     """Run an `endless-go session-query` read and return its decoded JSON."""
-    from endless.event_bridge import _resolve_endless_go
+    from endless.event_bridge import _child_refusal, _resolve_endless_go
 
     config.require_db_context()
     cmd = [_resolve_endless_go(), *config.go_db_context_args(), "session-query", *args]
     result = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
     if result.returncode != 0:
-        raise click.ClickException(result.stderr.strip() or f"{args[0]} failed")
+        # No TSV row: `endless question` landed after the refusal audit. But
+        # nothing here needs classifying anyway — endless-go classified this at
+        # the site that raised it and wrote its verdict at both ends of its
+        # stderr, so relaying is the whole job. event_bridge's `_child_refusal`
+        # is reused rather than copied because it also owns the one case that
+        # does belong to this side: a child that exits non-zero having written
+        # nothing said nothing to relay and nothing to classify by, which is
+        # Endless broken. That fault line replaces the old `"<verb> failed"`
+        # placeholder, which named the verb and told a reader nothing else.
+        raise _child_refusal(result.stderr, result.returncode,
+                             f"session-query {args[0]}")
     return json.loads(result.stdout)
 
 
@@ -52,7 +62,13 @@ def ask_questions(task_id: int, questions: tuple[str, ...]) -> None:
     """Ask one series of questions on a task."""
     texts = [q.strip() for q in questions]
     if not texts or any(not q for q in texts):
-        raise click.ClickException("Every question must be non-empty.")
+        # No TSV row (post-audit command). NO-REPORT: the caller composed these
+        # strings, so a blank one is its own to fix, and this runs before the
+        # emit — no series was allocated and no row was written, so a retry
+        # cannot duplicate anything.
+        raise agent_help.no_report(
+            "Every question must be non-empty.",
+            "Drop the empty argument, or give it text, and retry")
     tgt = _target(task_id=task_id)
     out = emit_event(
         kind="task.questions_asked",
@@ -81,10 +97,19 @@ def resolve_answerer(by: str | None) -> str:
     if by is not None:
         return by.strip()
     if agent_env.present():
-        raise click.ClickException(
-            "--by is required when an agent answers. Pass --by user when relaying "
-            "the user's answer, or --by ES-<n> (your own session) when answering "
-            "as a peer."
+        # No TSV row (post-audit command), and the clearest NO-REPORT in this
+        # file: it is reachable only when an agent is the caller, and the thing
+        # it asks for is the one fact the agent already has — whether it is
+        # relaying the user's words or settling the question itself. Asking the
+        # user which of those they are watching would be absurd. Nothing was
+        # recorded, so the remedy is simply the same command with --by.
+        raise agent_help.no_report(
+            "--by is required when an agent answers; nothing was recorded.",
+            "Retry with --by user when relaying the user's answer, or "
+            "--by ES-<n> (your own session) when answering as a peer",
+            text="--by is required when an agent answers. Pass --by user when "
+                 "relaying the user's answer, or --by ES-<n> (your own "
+                 "session) when answering as a peer.",
         )
     return USER
 
@@ -92,7 +117,12 @@ def resolve_answerer(by: str | None) -> str:
 def answer_question(question_id: int, answer: str, by: str | None) -> None:
     """Record an answer to one open question."""
     if not answer or not answer.strip():
-        raise click.ClickException("The answer must be non-empty.")
+        # No TSV row (post-audit command). NO-REPORT, and checked before the
+        # emit: the answer is an argument the caller supplies, and a blank one
+        # is a malformed invocation rather than a question about the answer.
+        raise agent_help.no_report(
+            "The answer must be non-empty.",
+            "Retry with the answer text as the argument")
     answerer = resolve_answerer(by)
     tgt = _target(question_id=question_id)
     emit_event(
@@ -126,7 +156,14 @@ def resolve_questions(verb: str, question_ids: tuple[int, ...], reason: str) -> 
     asker cannot tell what to ask instead.
     """
     if not reason or not reason.strip():
-        raise click.ClickException("--reason is required and may not be empty.")
+        # No TSV row (post-audit command). NO-REPORT: the reason is the
+        # caller's own account of why it is closing the question, so it is the
+        # caller who has to supply it. Raised before the loop, so no question
+        # in the batch has moved.
+        raise agent_help.no_report(
+            "--reason is required and may not be empty.",
+            "Retry with --reason naming why the question is being closed "
+            "without an answer")
     status, done = RESOLUTIONS[verb]
     for qid in question_ids:
         tgt = _target(question_id=qid)

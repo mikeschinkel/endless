@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 )
 
@@ -146,7 +147,10 @@ func parseTaskDisplayID(raw string) (int64, error) {
 	s = strings.TrimPrefix(s, "e-")
 	id, err := strconv.ParseInt(s, 10, 64)
 	if err != nil {
-		return 0, fmt.Errorf("events: malformed task id %q (expected E-NNN)", raw)
+		return 0, refusal.NoReport(
+			fmt.Sprintf("events: malformed task id %q (expected E-NNN)", raw),
+			"Use the E-NNN form and retry",
+		).Cause(err)
 	}
 	return id, nil
 }

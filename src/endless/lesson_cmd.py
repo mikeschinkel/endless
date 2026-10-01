@@ -32,7 +32,7 @@ from datetime import date
 
 import click
 
-from endless import main_commit
+from endless import agent_help, main_commit
 from endless.project_path import project_name_for_cwd, project_root
 
 # Repo-relative, on the main checkout. Not a worktree copy — see the module
@@ -126,33 +126,51 @@ def _render_entry(summary: str, text: str, project: str | None, today: str) -> s
 def write_lesson(summary: str, text: str | None) -> None:
     """Append one lesson to the project's log on main and commit it there.
 
-    Raises ClickException for every condition the caller can act on: an empty
-    or over-long summary, missing detail, no registered project, or a failed
-    git commit. On a failed commit the append has already happened and is left
-    on disk — an append-only record must not lose content to a git error, and
-    the message says the file is dirty so the user can commit it by hand.
+    Raises a classified refusal for every condition the caller can act on: an
+    empty or over-long summary, missing detail, no registered project, or a
+    failed git commit. The first four are the caller's own invocation and are
+    NO-REPORT; the commit failure is the one the user has to hear about,
+    because the append has already happened and is left on disk — an
+    append-only record must not lose content to a git error, and both ways out
+    of that state are ones only the user may take.
     """
     summary = (summary or "").strip()
     if not summary:
-        raise click.ClickException("A lesson needs a one-line summary.")
+        raise agent_help.no_report(
+            "A lesson needs a one-line summary. Nothing was written.",
+            "Retry with a non-empty summary argument",
+            text="A lesson needs a one-line summary.",
+        )
 
     if len(summary) > SUMMARY_LIMIT:
-        raise click.ClickException(
-            f"Summary is too long: {len(summary)} characters, over the "
-            f"{SUMMARY_LIMIT} limit.\n"
-            f"  The summary is the lesson's one-line rule. At this length it is "
-            f"the lesson — move the explanation into --text, which has no cap."
+        raise agent_help.no_report(
+            f"The summary is {len(summary)} characters, over the "
+            f"{SUMMARY_LIMIT} limit. Nothing was written.",
+            "Shorten the summary to the one-line rule and move the "
+            "explanation into --text, then retry",
+            text=(
+                f"Summary is too long: {len(summary)} characters, over the "
+                f"{SUMMARY_LIMIT} limit.\n"
+                f"  The summary is the lesson's one-line rule. At this length it is "
+                f"the lesson — move the explanation into --text, which has no cap."
+            ),
         )
     subject = _subject_for(summary)
 
     if not text or not text.strip():
-        raise click.ClickException(
-            "A lesson needs its detail: pass --text (or --text-file).\n"
-            f"  Example: endless lesson write {summary!r} \\\n"
-            f"             --text \"- **What went wrong**: ...\\n"
-            f"- **Why**: ...\\n- **Rule**: ...\"\n"
-            "  The summary alone is a label, not a lesson — the rule that "
-            "replaces the mistake is the part worth keeping."
+        raise agent_help.no_report(
+            "A lesson needs its detail, not just a summary. Nothing was "
+            "written.",
+            "Retry with --text (or --text-file) carrying what went wrong, why, "
+            "and the rule that replaces it",
+            text=(
+                "A lesson needs its detail: pass --text (or --text-file).\n"
+                f"  Example: endless lesson write {summary!r} \\\n"
+                f"             --text \"- **What went wrong**: ...\\n"
+                f"- **Why**: ...\\n- **Rule**: ...\"\n"
+                "  The summary alone is a label, not a lesson — the rule that "
+                "replaces the mistake is the part worth keeping."
+            ),
         )
 
     # strict: an unresolvable project is fatal here — there is no machine-layer
@@ -160,10 +178,20 @@ def write_lesson(summary: str, text: str | None) -> None:
     # registered project", "--db unset in a worktree") is the actionable one.
     root = project_root(strict=True)
     if root is None:
-        raise click.ClickException(
-            "The project resolved but has no path on record; nowhere to write "
-            f"{LESSONS_REL_PATH}.\n"
-            "  Repair the registry row: endless project scan"
+        # An invariant violation — a registry row with no path — but NOT a
+        # fault: the message names a repair the agent can run itself, and after
+        # `endless project scan` the same command succeeds. A fault would tell
+        # the agent to stop and tell the user about a state it can fix in one
+        # command.
+        raise agent_help.no_report(
+            "The resolved project has no path on record, so there is nowhere "
+            f"to write {LESSONS_REL_PATH}. Nothing was written.",
+            "Run `endless project scan` to repair the registry row, then retry",
+            text=(
+                "The project resolved but has no path on record; nowhere to write "
+                f"{LESSONS_REL_PATH}.\n"
+                "  Repair the registry row: endless project scan"
+            ),
         )
 
     log_path = root / LESSONS_REL_PATH
@@ -186,11 +214,25 @@ def write_lesson(summary: str, text: str | None) -> None:
     try:
         main_commit.commit_path(root, LESSONS_REL_PATH, subject, text)
     except RuntimeError as e:
-        raise click.ClickException(
-            f"{e}\n"
-            f"  The lesson IS written to {log_path} — only the commit failed. "
-            f"Commit that one path by hand, or re-run once git is happy "
-            f"(a re-run appends a second copy)."
+        # Not relay_foreign: git's own stderr is already inside `e`, which
+        # main_commit.commit_path builds from it, and attaching it a second
+        # time as detail would print it twice and change what a person reads.
+        #
+        # Both ways out of this state are the user's. Committing on main by
+        # hand is the thing ED-1199 lets THIS command do and nothing else, and
+        # a re-run appends a second copy of a lesson that is already on disk —
+        # so the two sentences that offer them move to human_remedy, out of
+        # what the agent is handed, and the human's bytes are unchanged.
+        raise agent_help.report(
+            "git could not commit the lesson on main. The lesson IS written "
+            f"to {log_path} and left uncommitted; nothing was lost.",
+            "whether to commit .endless/LESSONS.md on main by hand, or to "
+            "re-run and accept a duplicate entry",
+            text=(f"{e}\n"
+                  f"  The lesson IS written to {log_path} — only the commit "
+                  f"failed."),
+            human_remedy=("Commit that one path by hand, or re-run once git is "
+                          "happy (a re-run appends a second copy)."),
         )
 
     click.echo(

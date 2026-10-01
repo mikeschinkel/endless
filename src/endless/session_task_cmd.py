@@ -37,7 +37,7 @@ import re
 
 import click
 
-from endless import event_bridge
+from endless import agent_help, event_bridge
 from endless.task_cmd import _current_endless_session_id, _resolve_project
 
 
@@ -100,8 +100,18 @@ def _emit(kind: str, task_refs: tuple[str, ...],
     )
 
     if result is None:
-        raise click.ClickException(
-            "`endless-go event` returned no output; nothing to display."
+        # The TSV says class REPORT, kind fault, and `fault` is how that pair
+        # is rendered: its directive already says tell the user and do not
+        # retry. The retry prohibition is the load-bearing part here. A silent
+        # emit is not a refusal — the event may well have been applied and only
+        # its rendering lost — so an agent that treats the silence as "it did
+        # not happen" and runs the verb again can enroll the same tasks twice.
+        # The summary says that unknown outcome out loud for exactly that
+        # reason; the human's line is unchanged.
+        raise agent_help.fault(
+            f"`endless-go event` returned no output for {kind}, so whether the "
+            "event was applied is unknown — do not re-run it.",
+            text="`endless-go event` returned no output; nothing to display.",
         )
 
     markdown = result.get("markdown", "")
@@ -134,16 +144,21 @@ def _canonical_ids(task_refs: tuple[str, ...], verb: str) -> list[str]:
     `verb` prefixes both refusals so they name the command the user typed.
     """
     if not task_refs:
-        raise click.ClickException(f"{verb}: name at least one task id")
+        # Both refusals here are the TSV's NO-REPORT usage/validation rows, and
+        # both run before `_emit`, so no event exists to have half-landed — the
+        # one-line message is the whole verdict and goes through verbatim.
+        raise agent_help.no_report(
+            f"{verb}: name at least one task id",
+            "Retry naming one or more E-NNN task ids")
 
     seen: set[str] = set()
     out: list[str] = []
     for raw in task_refs:
         m = _TASK_ID_RE.match(raw.strip())
         if not m:
-            raise click.ClickException(
-                f"{verb}: malformed task id {raw!r} (expected E-NNN)"
-            )
+            raise agent_help.no_report(
+                f"{verb}: malformed task id {raw!r} (expected E-NNN)",
+                "Retry with E-NNN ids")
         cid = f"E-{m.group(1)}"
         if cid not in seen:
             seen.add(cid)

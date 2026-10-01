@@ -128,7 +128,11 @@ def test_reopen_refuses_declined_obsolete_and_names_the_route(
             monkeypatch, _target(task_status=status),
             intent="reopen", override=".landed",
         )
-    msg = str(exc.value)
+    # The revival route is a human_remedy (E-2159): it undoes the decision this
+    # refusal protects, so it renders for a person and not for an agent. That
+    # makes `format_message()` — what a reader is actually shown — the thing to
+    # assert on, rather than the exception's bare message.
+    msg = exc.value.format_message()
     assert f"is '{status}'" in msg
     assert "deliberate decision" in msg
     assert "endless task update E-10 --status revisit" in msg

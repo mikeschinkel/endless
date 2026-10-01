@@ -18,6 +18,12 @@
 //	0  true, or the verb succeeded
 //	1  false (`has` only)
 //	2  usage error — unknown verb, group, status, or wrong arity
+//
+// Nothing written to stderr here is read where it was written. statuses.py._run
+// captures it and relays it verbatim inside a StatusVocabularyError, and the
+// registry is loaded at import time — so a refusal from this binary can abort
+// every `endless` command, which is why the vocabulary and arity failures below
+// are faults rather than things a reader is invited to retype.
 package taskstatuscmd
 
 import (
@@ -25,19 +31,24 @@ import (
 	"os"
 	"strings"
 
+	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
 
 // Run dispatches the `task-status` subcommand's inner verbs.
 func Run(args []string) {
 	if len(args) == 0 {
-		usage(os.Stderr)
-		os.Exit(2)
+		// The Python caller always names a verb, so a bare invocation is
+		// somebody running the binary by hand — retype it and move on.
+		refusal.NoReport(
+			"endless-go task-status: no verb given",
+			"Pass a verb and retry",
+		).Command("task-status").Text(usageText()).Exit(2)
 	}
 	verb, rest := args[0], args[1:]
 	switch verb {
 	case "-h", "--help", "help":
-		usage(os.Stdout)
+		fmt.Fprint(os.Stdout, usageText())
 	case "groups":
 		requireArgs(verb, rest, 0)
 		for _, slug := range taskstatus.AllGroupSlugs() {
@@ -91,60 +102,79 @@ func Run(args []string) {
 		requireArgs(verb, rest, 0)
 		fmt.Print(taskstatus.RenderMermaid())
 	default:
-		fmt.Fprintf(os.Stderr, "endless-go task-status: unknown command %q\n", verb)
-		usage(os.Stderr)
-		os.Exit(2)
+		// Not a typo an agent can correct: statuses.py picks the verb, so an
+		// unknown one means the installed endless-go predates the endless CLI
+		// calling it. Only the user can reinstall the two as a matching pair,
+		// and until they do, the registry fails to load and every `endless`
+		// command fails with it.
+		refusal.Report(
+			fmt.Sprintf("endless-go task-status: unknown command %q", verb),
+			"whether to reinstall endless and endless-go together as a matching pair",
+		).Command("task-status").Detail(usageText()).Exit(2)
 	}
 }
 
 // requireArgs exits 2 with a usage message when a verb's arity is wrong.
+//
+// A fault rather than a usage refusal, because of who can reach it: the Python
+// wrapper builds this argv itself, so wrong arity is the two halves of Endless
+// disagreeing about a verb's shape, not something anybody mistyped.
 func requireArgs(verb string, args []string, want int) {
 	if len(args) == want {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "endless-go task-status %s: expected %d argument(s), got %d\n",
-		verb, want, len(args))
-	usage(os.Stderr)
-	os.Exit(2)
+	refusal.Faultf("endless-go task-status %s: expected %d argument(s), got %d",
+		verb, want, len(args)).
+		Command("task-status " + verb).Detail(usageText()).Exit(2)
 }
 
 // mustGroup resolves a group name or exits 2 naming every valid group.
+//
+// The message is built in internal/taskstatus, which names no class, so From
+// faults it — and a fault is the honest reading: Python asked for a group Go
+// does not define, which is Python/Go drift rather than a name anybody chose.
+// From rather than Fault so that classifying the constructor later takes effect
+// here without a second edit.
 func mustGroup(slug string) taskstatus.Group {
 	g, err := taskstatus.ParseGroup(slug)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
+		refusal.From(err).Command("task-status").Exit(2)
 	}
 	return g
 }
 
 // mustStatus validates a status or exits 2 naming the vocabulary.
+//
+// Also a fault: the status reaching here came from the database or from Python
+// (task_cmd.py hands `has` a status it read), so one outside the vocabulary is
+// the stored data and the registry having drifted apart.
 func mustStatus(s string) taskstatus.Status {
 	if err := taskstatus.Validate(s); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
+		refusal.From(err).Command("task-status").Exit(2)
 	}
 	return s
 }
 
-func usage(w *os.File) {
-	fmt.Fprintln(w, "Usage: endless-go task-status <verb> [args...]")
-	fmt.Fprintln(w, "Verbs:")
-	fmt.Fprintln(w, "  groups                  list every group name, one per line")
-	fmt.Fprintln(w, "  get <group>             the group's members, one per line, in group order")
-	fmt.Fprintln(w, "  has <group> <status>    exit 0 if a member, 1 if not")
-	fmt.Fprintln(w, "  sql-list <group>        'a','b' — for a SQL IN / NOT IN clause")
-	fmt.Fprintln(w, "  rank <group> <status>   index within an ordered group, -1 when absent")
-	fmt.Fprintln(w, "  label <status>          human display string")
-	fmt.Fprintln(w, "  glyph <status>          semantic glyph (no color)")
-	fmt.Fprintln(w, "  transitions             the lifecycle edge table, TSV: from to actor types label")
-	fmt.Fprintln(w, "  lifecycle               the generated mermaid body of docs/status-lifecycle.mmd")
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Groups:")
-	// Derived from the registry, never typed: a group added in Go shows up here
-	// for free, which is the class of omission E-1891 exists to end.
-	fmt.Fprintln(w, "  "+strings.Join(taskstatus.AllGroupSlugs(), ", "))
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Statuses:")
-	fmt.Fprintln(w, "  "+strings.Join(taskstatus.Get(taskstatus.All), ", "))
+func usageText() string {
+	return strings.Join([]string{
+		"Usage: endless-go task-status <verb> [args...]",
+		"Verbs:",
+		"  groups                  list every group name, one per line",
+		"  get <group>             the group's members, one per line, in group order",
+		"  has <group> <status>    exit 0 if a member, 1 if not",
+		"  sql-list <group>        'a','b' — for a SQL IN / NOT IN clause",
+		"  rank <group> <status>   index within an ordered group, -1 when absent",
+		"  label <status>          human display string",
+		"  glyph <status>          semantic glyph (no color)",
+		"  transitions             the lifecycle edge table, TSV: from to actor types label",
+		"  lifecycle               the generated mermaid body of docs/status-lifecycle.mmd",
+		"",
+		"Groups:",
+		// Derived from the registry, never typed: a group added in Go shows up
+		// here for free, which is the class of omission E-1891 exists to end.
+		"  " + strings.Join(taskstatus.AllGroupSlugs(), ", "),
+		"",
+		"Statuses:",
+		"  " + strings.Join(taskstatus.Get(taskstatus.All), ", "),
+	}, "\n") + "\n"
 }

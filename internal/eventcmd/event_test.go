@@ -454,9 +454,16 @@ func TestEventRebuildDB_ConfirmRefusesAndDestroysNothing(t *testing.T) {
 		"and 1 report_judgments, 1 report_labels",
 		"1 sessions bindings",
 		"task_deps",
-		"E-799",
-		"ED-1560",
+		// E-2159 removed the task and decision ids this text used to cite.
+		// The refusal reaches somebody running Endless against their own
+		// project, whose ledger holds neither, so an id here points into a
+		// ledger they cannot open. What the ids stood for is now stated.
+		"does not yet reproduce every event faithfully",
+		"a task binding is never cleared",
 	} {
+		if bytes.Contains(out, []byte("E-799")) || bytes.Contains(out, []byte("ED-1560")) {
+			t.Errorf("refusal cites an Endless-development id; got:\n%s", out)
+		}
 		if !bytes.Contains(out, []byte(want)) {
 			t.Errorf("refusal does not mention %q; got:\n%s", want, out)
 		}

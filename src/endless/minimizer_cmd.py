@@ -26,7 +26,8 @@ import json
 
 import click
 
-from endless import db, minimizer_judge, minimizer_optimizer, minimizer_store
+from endless import (agent_help, db, minimizer_judge, minimizer_optimizer,
+                     minimizer_store)
 
 _BUCKETS = (
     ("<256", 0, 256),
@@ -261,7 +262,12 @@ def show(variant_hash: str) -> None:
     """Print one variant in full — all three axes, not just the prompt."""
     v = minimizer_store.get_variant(variant_hash)
     if v is None:
-        raise click.ClickException(f"No such variant: {variant_hash}")
+        raise agent_help.no_report(
+            f"No variant is stored under hash {variant_hash}.",
+            "List the stored hashes with `endless minimizer variants`, then "
+            "retry with one of them",
+            text=f"No such variant: {variant_hash}",
+        )
     click.echo()
     click.echo(click.style(f"Variant {v['hash']}", bold=True))
     click.echo(f"  task type:        {v['task_type'] or '(untyped)'}")
@@ -281,18 +287,46 @@ def show(variant_hash: str) -> None:
 
 
 def rollback(task_type: str | None) -> None:
-    """Point a champion back at its parent."""
+    """Point a champion back at its parent.
+
+    Two ways to decline, and they are opposite kinds of thing, so the class is
+    decided from the store rather than from the declined message: a champion
+    with no parent is simply the seed — there is no earlier pointer and nothing
+    went wrong — while a parent hash that is recorded and absent means the
+    variant store has lost a row it still references.
+    """
     bucket = task_type if task_type is not None else minimizer_store.NO_TASK_TYPE
     ok, message = minimizer_optimizer.rollback(bucket)
-    click.echo(message)
-    if not ok:
-        raise SystemExit(1)
+    if ok:
+        click.echo(message)
+        return
+    if minimizer_store.champion(bucket).get("parent_hash"):
+        raise agent_help.report(
+            f"The champion for {bucket or '(untyped)'} names a parent that is "
+            "not in the variant store, so it cannot be rolled back. Nothing "
+            "was changed.",
+            "whether to reseed from the shipped default, which discards the "
+            "lineage the loop has learned and is deliberately a manual act",
+            text=message,
+        )
+    raise agent_help.no_report(
+        f"The champion for {bucket or '(untyped)'} is the seed, so there is no "
+        "earlier prompt to roll back to. Nothing was changed.",
+        "Nothing to undo: report the outcome as the answer and continue",
+        text=message,
+    )
 
 
 def reseed(task_type: str | None) -> None:
     """Adopt the current shipped default as champion."""
     bucket = task_type if task_type is not None else minimizer_store.NO_TASK_TYPE
     changed, message = minimizer_optimizer.reseed(bucket)
-    click.echo(message)
-    if not changed:
-        raise SystemExit(1)
+    if changed:
+        click.echo(message)
+        return
+    raise agent_help.no_report(
+        f"The champion for {bucket or '(untyped)'} is already the shipped "
+        "default, so there was nothing to adopt. Nothing was changed.",
+        "Nothing to do: report the outcome as the answer and continue",
+        text=message,
+    )

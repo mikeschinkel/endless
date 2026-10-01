@@ -10,6 +10,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/kairos"
 	"github.com/mikeschinkel/endless/internal/rating"
+	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/schema"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
 	"github.com/mikeschinkel/endless/internal/tasktype"
@@ -36,7 +37,9 @@ func ProjectToTempDB(projectRoot string) (string, *ProjectResult, error) {
 	}
 
 	if len(events) == 0 {
-		return "", nil, fmt.Errorf("projector: no events found in %s", projectRoot)
+		return "", nil, refusal.NoReport(
+			fmt.Sprintf("projector: no events found in %s", projectRoot),
+			"Point --project-root at a project that has a .endless/db-ledger, and retry")
 	}
 
 	// Create temp DB

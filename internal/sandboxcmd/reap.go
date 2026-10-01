@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // ReapSandboxForWorktree destroys the dev sandbox bound to a reaped worktree.
@@ -47,7 +49,8 @@ func ReapSandboxForWorktree(worktreeName string) (err error) {
 
 	protected, reason = guard.Protected(worktreeName)
 	if protected {
-		fmt.Fprintf(os.Stderr, "reap sandbox: sparing %s: %s\n", worktreeName, reason)
+		sparedSandbox(fmt.Sprintf("reap sandbox: sparing %s: %s", worktreeName, reason),
+			"Nothing to do: a protected sandbox was correctly kept")
 		goto end
 	}
 
@@ -56,8 +59,9 @@ func ReapSandboxForWorktree(worktreeName string) (err error) {
 	// the DB out from under a live writer.
 	writers = findLiveWriters(dir)
 	if len(writers) > 0 {
-		fmt.Fprintf(os.Stderr, "reap sandbox: sparing %s: %d process(es) still have files open in it\n",
-			worktreeName, len(writers))
+		sparedSandbox(fmt.Sprintf("reap sandbox: sparing %s: %d process(es) still have files open in it",
+			worktreeName, len(writers)),
+			"Nothing to do: the worktree is reaped and the sandbox is left for a later sweep")
 		goto end
 	}
 
@@ -68,7 +72,25 @@ func ReapSandboxForWorktree(worktreeName string) (err error) {
 
 end:
 	if err != nil {
-		err = fmt.Errorf("reap sandbox %q: %w", worktreeName, err)
+		// Classified at construction because the print site is a log line in
+		// monitor's sweep, which cannot know that a sandbox left behind blocks
+		// nothing: the worktree is already reaped, and the next sweep retries
+		// this directory. Cause keeps errors.Is/As working for anything the
+		// caller matches on.
+		err = refusal.NoReport(
+			fmt.Sprintf("reap sandbox %q: %v", worktreeName, err),
+			"Nothing to do: the worktree is reaped and a later sweep retries the sandbox",
+		).Command("event reap-worktrees").Cause(err)
 	}
 	return err
+}
+
+// sparedSandbox reports one sandbox the sweep deliberately left alone.
+//
+// It runs inside `endless-go event reap-worktrees`, whose stderr the Python
+// land / drop / task paths inherit, so an agent does read these lines — and
+// must not pass them on. Nothing is blocked: sparing a protected or busy
+// sandbox is the guard working, not failing.
+func sparedSandbox(summary, remedy string) {
+	refusal.NoReport(summary, remedy).Command("event reap-worktrees").Print()
 }

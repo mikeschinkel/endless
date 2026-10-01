@@ -6,6 +6,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
@@ -187,22 +188,32 @@ func labelsFrom(token, rest string) (labels []monitor.ReportLabel) {
 
 // --- vocabulary drift --------------------------------------------------------
 
-// mergeQuestion asks, in band, whether a newly-seen token means the same thing
-// as one the user already uses.
+// recordMergeQuestion records that a newly-seen token closely resembles one the
+// user already uses.
 //
-// It ASKS rather than merges. Auto-merging two tokens would silently rewrite
-// what the user said, and the case it would get wrong — `$CUT` (you cut too
-// much) versus `$CUTS` (cut more) — is exactly the case where the two words are
-// closest. The user may answer or ignore; either way the drift is now visible,
-// which is the whole gain over enforcing a vocabulary nobody can recall.
-func mergeQuestion(fresh, near string) string {
-	return fmt.Sprintf(
-		"Endless: `$%s` is new, and the corpus already has `$%s`. Ask the user "+
-			"whether they mean the same thing — if so they can keep using either, "+
-			"but say which one they intend as the canonical spelling. Then carry on "+
-			"with the turn.",
-		fresh, near,
-	)
+// It still ASKS rather than merges. Auto-merging two tokens would silently
+// rewrite what the user said, and the case it would get wrong — `$CUT` (you cut
+// too much) versus `$CUTS` (cut more) — is exactly the case where the two words
+// are closest.
+//
+// What changed in E-2159 is WHO is asked. This used to be injected into the
+// agent's context, so a question only the user can answer cost a turn's
+// attention on every prompt that used the new sigil, and the agent had to
+// relay it. It is the user's own vocabulary, nothing is blocked, and both
+// spellings keep recording either way — so it waits on the session-status badge
+// until they are thinking about it (decision 5).
+//
+// Fingerprinted on the pair, so one near-collision is one incident however many
+// prompts use the new token.
+func recordMergeQuestion(fresh, near string) {
+	faults.Record(faults.Fault{
+		Code:        faults.ErrCodeSigilSynonym,
+		Source:      "hook:sigils",
+		Fingerprint: fresh + "~" + near,
+		Summary: fmt.Sprintf("$%s is new and the corpus already has $%s; they may be the same label",
+			fresh, near),
+		Fields: map[string]any{"fresh": fresh, "near": near},
+	})
 }
 
 // nearestToken returns the known token closest to fresh within an edit distance
@@ -306,7 +317,10 @@ func applySigils(payload claudePayload) string {
 		if err != nil {
 			log.Printf("reading known label tokens: %v", err)
 		}
-		notice = driftNotice(scan.Labels, known)
+		// Recorded, not injected: the question is the user's to answer and
+		// costs the agent nothing. `notice` stays empty here — nothing about
+		// vocabulary drift belongs in the turn.
+		recordDrift(scan.Labels, known)
 		if found, err := monitor.RecordReportLabels(session.ID, scan.Labels); err != nil {
 			log.Printf("recording report labels: %v", err)
 		} else if !found {
@@ -316,26 +330,38 @@ func applySigils(payload claudePayload) string {
 	return notice
 }
 
-// driftNotice returns the merge question for the FIRST fresh token that has a
-// near neighbour, or "".
+// recordDrift records the near-collision for the FIRST fresh token that has a
+// near neighbour, and reports whether it found one.
 //
-// First and only one. A prompt introducing three new words is a user in flow,
-// and interrupting them three times to audit their vocabulary is how a helpful
-// question becomes noise the agent learns to suppress.
-func driftNotice(labels []monitor.ReportLabel, known []string) string {
+// First and only one, for the same reason it was ever only one: a prompt
+// introducing three new words is a user in flow, and three incidents auditing
+// their vocabulary is how a useful signal becomes a list nobody reads.
+func recordDrift(labels []monitor.ReportLabel, known []string) bool {
+	fresh, near, found := driftPair(labels, known)
+	if found {
+		recordMergeQuestion(fresh, near)
+	}
+	return found
+}
+
+// driftPair is recordDrift's side-effect-free core: the first fresh token with a
+// near neighbour, and that neighbour. Separated so the matching rules — nearest
+// within an edit distance of two, picks excluded, at most one per prompt — are
+// testable without a bound fault store, the same split revisitGateDecision uses.
+func driftPair(labels []monitor.ReportLabel, known []string) (fresh, near string, found bool) {
 	if len(known) == 0 {
-		return ""
+		return "", "", false
 	}
 	for _, l := range labels {
 		switch l.Token {
 		case directiveA, directiveB:
 			continue
 		}
-		if near := nearestToken(l.Token, known); near != "" {
-			return mergeQuestion(l.Token, near)
+		if n := nearestToken(l.Token, known); n != "" {
+			return l.Token, n, true
 		}
 	}
-	return ""
+	return "", "", false
 }
 
 // stageReportTurn records the prompting message and resets the per-turn gate

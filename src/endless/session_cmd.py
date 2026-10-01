@@ -8,8 +8,29 @@ from pathlib import Path
 
 import click
 
-from endless import db, provenance, rowcap, session_states, statuses
+from endless import agent_help, db, provenance, rowcap, session_states, statuses
 from endless.project_path import match_project_path, resolved
+
+
+def _refuse_on_stderr(refusal) -> None:
+    """Print a classified refusal and exit, the way this file's shell-captured
+    verbs have always printed one (E-2159).
+
+    `session cd`, `session id`, `session goto`, `session back` and the companion
+    resolver they share are wrapped by the shell — `cd "$(endless session cd)"`,
+    `eval "$(endless session use)"` — so their diagnostics went to stderr by
+    hand and exited, rather than being raised. Raising the refusal instead would
+    hand it to Click's renderer, which prepends `Error: ` — bytes these messages
+    have never carried, in commands whose output a shell is parsing.
+
+    So the refusal is built (which is what names its class and gives an agent
+    the verdict and the directive) and then rendered by hand, exactly as
+    `guide_map` and `statuses` do on the paths where Click's handler is not the
+    one printing. `passthrough_exit` is the right end: whatever spoke, spoke
+    already.
+    """
+    agent_help.info(refusal.format_message(), err=True)
+    agent_help.passthrough_exit(refusal.exit_code)
 
 
 def _format_tool_content(content: str, tool_name: str | None = None, mode: str = "truncated") -> str:
@@ -101,12 +122,21 @@ def _resolve_session(value: str) -> dict:
         (value + "%",),
     )
     if not row:
-        raise click.ClickException(f"No session found matching '{value}'")
+        # The ref usually comes from the user, but an unknown one is still the
+        # agent's to fix: the listings are right there, and "I mistyped a ref"
+        # is not a decision anybody has to make.
+        raise agent_help.no_report(
+            f"No session found matching '{value}'",
+            "Re-check the ref with `endless session list --all` (or "
+            "--all-projects) and retry with a listed id",
+        )
     if len(row) > 1:
         matches = ", ".join(r["session_id"][:12] for r in row[:5])
-        raise click.ClickException(
+        raise agent_help.no_report(
             f"Ambiguous session prefix '{value}' — matches: {matches}. "
-            "Use more characters."
+            "Use more characters.",
+            "Retry with a longer UUID prefix, or with the integer / ES- id of "
+            "the intended match",
         )
     return dict(row[0])
 
@@ -124,7 +154,13 @@ def _resume_target(ref: str) -> dict:
 
     go_bin = shutil.which("endless-go")
     if not go_bin:
-        raise click.ClickException("endless-go binary not found on PATH.")
+        # An agent cannot install Endless's own binary into somebody else's
+        # project, and nothing in the message names an install route, so there
+        # is no retry to make: the user has to put endless-go on PATH.
+        raise agent_help.report(
+            "endless-go binary not found on PATH.",
+            "how to install endless-go or get it onto PATH",
+        )
     config.require_db_context()
     try:
         result = subprocess.run(
@@ -133,13 +169,26 @@ def _resume_target(ref: str) -> dict:
             capture_output=True, text=True, timeout=5,
         )
     except (FileNotFoundError, subprocess.SubprocessError) as e:
-        raise click.ClickException(f"endless-go failed: {e}")
+        # A `fault` rather than the TSV's REPORT: the binary was found and then
+        # could not be spawned, or blew the 5s timeout, which is Endless's own
+        # half failing to run. `fault`'s directive is what the inventory's note
+        # asked for — one retry is plausible for a TimeoutExpired, and then the
+        # user hears about it.
+        raise agent_help.fault(f"endless-go failed: {e}")
     if result.returncode != 0:
-        raise click.ClickException(result.stderr.strip() or "endless-go failed")
+        # Go classified this at the site that raised it and its verdict is
+        # already at both ends of the text, so there is nothing to decide here:
+        # relay the bytes and pass the status on.
+        raise agent_help.relay(
+            result.stderr.strip() or "endless-go failed",
+            exit_code=result.returncode,
+        )
     try:
         return json_mod.loads(result.stdout)
     except ValueError:
-        raise click.ClickException("endless-go returned malformed output")
+        # Endless's Go side emitted non-JSON where its own contract says JSON —
+        # version skew or a bug, either way Endless being broken.
+        raise agent_help.fault("endless-go returned malformed output")
 
 
 def _try_resume_target(ref: str) -> dict | None:
@@ -206,26 +255,48 @@ def _require_transcript(uuid: str, label: str, verb: str) -> None:
     """
     if transcript_path(uuid) is not None:
         return
-    raise click.ClickException(
-        f"{label}'s Claude transcript is gone — no {uuid}.jsonl under "
-        f"{_short_path(str(claude_projects_dir()))}, so there is nothing for "
-        f"`claude --resume` to open.\n"
-        f"  It may still be recoverable: check a backup, a snapshot, or "
-        f"another machine, and\n"
-        f"  put the file back under that directory. Nothing here deletes it, "
-        f"and once you give up\n"
-        f"  on it the conversation is gone for good.\n"
-        f"  To give up and start a fresh session on this task instead:\n"
-        f"      {verb} --new-transcript"
+    # REPORT, and `--new-transcript` is `human_remedy` rather than part of the
+    # message an agent reads. The flag is the give-up route, and giving up is
+    # the one thing here that cannot be undone: an agent handed that spelling
+    # takes it, which spends the user's recovery decision on their behalf —
+    # exactly the outcome the refusal exists to prevent. The human keeps the
+    # sentence they have always been shown.
+    raise agent_help.report(
+        f"{label}'s Claude transcript is gone — {uuid}.jsonl is not under "
+        f"{_short_path(str(claude_projects_dir()))}, so there is nothing to "
+        f"resume. Nothing was launched.",
+        "whether the transcript can still be recovered (a backup, a snapshot, "
+        "another machine) or the conversation is to be abandoned, which cannot "
+        "be undone",
+        text=(
+            f"{label}'s Claude transcript is gone — no {uuid}.jsonl under "
+            f"{_short_path(str(claude_projects_dir()))}, so there is nothing "
+            f"for `claude --resume` to open.\n"
+            f"  It may still be recoverable: check a backup, a snapshot, or "
+            f"another machine, and\n"
+            f"  put the file back under that directory. Nothing here deletes "
+            f"it, and once you give up\n"
+            f"  on it the conversation is gone for good."
+        ),
+        human_remedy=(
+            f"\n  To give up and start a fresh session on this task instead:\n"
+            f"      {verb} --new-transcript"
+        ),
     )
 
 
 def _require_claude() -> str:
-    """Absolute path to the `claude` binary, or a ClickException if it's absent."""
+    """Absolute path to the `claude` binary, or a refusal if it's absent."""
     import shutil
     claude = shutil.which("claude")
     if not claude:
-        raise click.ClickException("`claude` not found on PATH.")
+        # Installing Claude Code, or fixing the PATH that hides it, is the
+        # user's machine to change — there is no second invocation that gets
+        # past this.
+        raise agent_help.report(
+            "`claude` not found on PATH.",
+            "how to install Claude Code or get it onto PATH",
+        )
     return claude
 
 
@@ -313,26 +384,47 @@ def _auto_task_for_taskless_session(target: dict) -> tuple[str, int]:
     uuid = target.get("session_id") or ""
     project_path = target.get("project_path") or ""
     if not project_path:
-        raise click.ClickException(
+        # The by-hand route is `human_remedy`: `claude --resume` is an
+        # interactive launch, so it is a route for the person sitting at the
+        # terminal and not a retry an agent can make. Registering the project
+        # is theirs to decide too.
+        raise agent_help.report(
             f"session {eid} belongs to no registered project, so there is "
-            f"nowhere to create a task or a worktree for it.\n"
-            f"Resume it by hand, without a worktree:\n"
-            f"    claude --resume {uuid}"
+            f"nowhere to create a task or a worktree to resume it into. "
+            f"Nothing was created.",
+            "whether to register the session's project, or to resume the "
+            "conversation by hand in a terminal",
+            text=(f"session {eid} belongs to no registered project, so there "
+                  f"is nowhere to create a task or a worktree for it."),
+            human_remedy=(f"\nResume it by hand, without a worktree:\n"
+                          f"    claude --resume {uuid}"),
         )
     root = Path(project_path)
     rows = db.query(
         "SELECT name FROM projects WHERE id = ?", (target.get("project_id"),)
     )
     if not rows:
-        raise click.ClickException(
-            f"session {eid}'s project (id {target.get('project_id')}) is not in "
-            f"the database, so there is nowhere to create a task for it.\n"
-            f"Resume it by hand, without a worktree:\n"
-            f"    claude --resume {uuid}"
+        # `sessions.project_id` points at a projects row that is not there —
+        # a broken invariant, so the inventory calls the kind a fault. Raised
+        # as REPORT rather than `fault` because the user has a real choice to
+        # make (repair the row, or resume the conversation by hand) and because
+        # `fault` takes no `human_remedy`, which is where the interactive
+        # `claude --resume` route has to live.
+        raise agent_help.report(
+            f"session {eid}'s project (id {target.get('project_id')}) has no "
+            f"row in the database, so there is nowhere to create a task for "
+            f"it. Nothing was created.",
+            "whether to repair the project row this session points at, or to "
+            "resume the conversation by hand in a terminal",
+            text=(f"session {eid}'s project (id {target.get('project_id')}) is "
+                  f"not in the database, so there is nowhere to create a task "
+                  f"for it."),
+            human_remedy=(f"\nResume it by hand, without a worktree:\n"
+                          f"    claude --resume {uuid}"),
         )
 
     title = _TASKLESS_RESUME_TITLE
-    click.echo(
+    agent_help.info(
         click.style("•", fg="cyan")
         + f" session ES-{eid} never claimed a task — creating one to resume into",
         err=True,
@@ -347,12 +439,38 @@ def _auto_task_for_taskless_session(target: dict) -> tuple[str, int]:
             session_id=eid,
         )
     except click.ClickException as e:
-        raise click.ClickException(
+        # The inventory left this CONDITIONAL — the class depends on what went
+        # wrong inside `create_claimed_task_for_session` — but the condition is
+        # resolvable here rather than being handed to the agent as a question:
+        # if the inner failure was itself classified, it already answered
+        # "can an agent clear this alone?", and the only honest thing to do is
+        # inherit that answer. An unclassified inner failure falls back to
+        # REPORT, which is the safe direction: the title and description are
+        # generated here, so nothing an agent passed can be at fault.
+        inner = e if isinstance(e, agent_help.Refusal) else None
+        # A classified inner failure renders its own verdict and directive from
+        # `format_message`, so the HUMAN half of it (`text`) is what belongs
+        # inside this message — nesting one verdict inside another would give
+        # the agent two directives for one refusal.
+        human = inner.text if inner is not None else e.format_message()
+        summary = (
             f"could not give session {eid} a task worktree to resume into: "
-            f"{e.format_message()}\n"
-            f"Resume it by hand, without a worktree:\n"
-            f"    claude --resume {uuid}"
+            f"{' '.join(human.split())}. Nothing was resumed."
         )
+        text = (f"could not give session {eid} a task worktree to resume into: "
+                f"{human}")
+        by_hand = (f"\nResume it by hand, without a worktree:\n"
+                   f"    claude --resume {uuid}")
+        if inner is not None and inner.cls == agent_help.NO_REPORT:
+            raise agent_help.no_report(
+                summary, inner.remedy, text=text, human_remedy=by_hand
+            ) from None
+        raise agent_help.report(
+            summary,
+            "whether the condition that stopped the worktree being created "
+            "can be cleared, or the conversation is to be resumed by hand",
+            text=text, human_remedy=by_hand,
+        ) from None
     return str(wt_path), task_id
 
 
@@ -436,18 +554,35 @@ def _resolve_resume(
     # maybe-parent, and db gates.
     task_status = target.get("task_status") or ""
     if intent == "reopen" and task_status in _REOPEN_REFUSED:
-        raise click.ClickException(
-            f"E-{task} is '{task_status}' — a deliberate decision, not "
-            f"dormant work.\n"
-            f"Reviving it is an explicit act:\n"
-            f"    endless task update E-{task} --status revisit\n"
-            f"Then resume without --reopen."
+        # The revive route is `human_remedy`. `endless task update E-N --status
+        # revisit` is the exact command that waives the decision this refusal
+        # is protecting, so naming it to an agent turns a REPORT into a
+        # one-line workaround — which is how the message read before E-2159.
+        raise agent_help.report(
+            f"E-{task} is '{task_status}', a deliberate decision not to do the "
+            f"work, so --reopen was refused. Nothing was reopened and no "
+            f"worktree was rebuilt.",
+            "whether to revive a task that was deliberately declined or made "
+            "obsolete",
+            text=(f"E-{task} is '{task_status}' — a deliberate decision, not "
+                  f"dormant work."),
+            human_remedy=(f"\nReviving it is an explicit act:\n"
+                          f"    endless task update E-{task} --status revisit\n"
+                          f"Then resume without --reopen."),
         )
 
     if not uuid:
-        raise click.ClickException(
+        # Genuinely CONDITIONAL, and the condition is one this command cannot
+        # see: whether the ref came from the user or from the agent's own
+        # choice. A session with no harness UUID has nothing to resume either
+        # way, so the branches differ only in who picks the next target.
+        raise agent_help.report_if(
             f"session {eid} has no Claude UUID to resume "
-            "(a background agent that never started?)."
+            "(a background agent that never started?).",
+            "the user named this session or task to resume",
+            "pick another target from `endless session list` and retry",
+            "nothing resumable exists under that ref, so the next course is "
+            "theirs to choose",
         )
 
     if worktree and os.path.isdir(worktree):
@@ -468,13 +603,26 @@ def _resolve_resume(
 
     # The task's worktree is gone (dropped after landing).
     if intent is None:
-        raise click.ClickException(
-            f"{label}'s worktree is gone (dropped after landing). Recover it "
-            f"from the surviving transcript:\n"
-            f"  endless session resume {ref} --review   "
-            f"inspect the landed result (read-mostly, detached)\n"
-            f"  endless session resume {ref} --reopen   "
-            f"continue work on it (working branch)"
+        # Both routes stay in the message — neither is a bypass, they are the
+        # two things recovery can mean — but which one is correct depends on
+        # something only the asker knows, so the condition is named rather than
+        # guessed. `--review` is read-only and always safe; `--reopen` rebuilds
+        # a working branch and can flip a done task to `revisit`, which is the
+        # half that is not an agent's to choose unprompted.
+        raise agent_help.report_if(
+            f"{label}'s worktree is gone (it was dropped after landing), so "
+            f"the resume has nowhere to go. Nothing was rebuilt.",
+            "continuing the landed work was not what the user asked for",
+            "retry with --review to inspect it read-only, or with --reopen "
+            "when continuing the work is what was asked for",
+            "--reopen rebuilds a working branch and can flip a done task back "
+            "to revisit",
+            text=(f"{label}'s worktree is gone (dropped after landing). "
+                  f"Recover it from the surviving transcript:\n"
+                  f"  endless session resume {ref} --review   "
+                  f"inspect the landed result (read-mostly, detached)\n"
+                  f"  endless session resume {ref} --reopen   "
+                  f"continue work on it (working branch)"),
         )
 
     worktree = _recover_dropped_worktree(target, intent, override, decision_out)
@@ -506,8 +654,10 @@ def _resolve_recovery_base(
             cwd=project_root, check=False,
         )
         if res.returncode != 0:
-            raise click.ClickException(
-                f"base ref {override!r} does not resolve to a commit in this repo."
+            raise agent_help.no_report(
+                f"base ref {override!r} does not resolve to a commit in this repo.",
+                f"Retry with a sha or branch that exists (check `git log`), or "
+                f"with a bare --{intent} for the default .landed base",
             )
         return override
 
@@ -518,11 +668,65 @@ def _resolve_recovery_base(
     if _branch_exists(branch, project_root):
         return branch
 
-    raise click.ClickException(
-        f"E-{task_id} never landed and its branch {branch} is gone, so there is "
-        f"no base commit to rebuild from. Pass one explicitly: "
-        f"`endless session resume E-{task_id} --{intent}=<sha-or-branch>`."
+    # The inventory left this CONDITIONAL on "can the base be located?", and
+    # the decision on it was to resolve that in code rather than hand the
+    # question to the agent. The code CAN resolve it: the local branch is gone,
+    # but a remote-tracking copy of it is a base an agent can pass without
+    # anybody deciding anything. With nothing on any remote either, the work
+    # may genuinely be lost, and where it lives is then something only the user
+    # knows.
+    #
+    # Both branches print the same `text`, because which class this is says
+    # nothing about what a person should read.
+    text = (f"E-{task_id} never landed and its branch {branch} is gone, so "
+            f"there is no base commit to rebuild from. Pass one explicitly: "
+            f"`endless session resume E-{task_id} "
+            f"--{intent}=<sha-or-branch>`.")
+    remote = _remote_copy_of_branch(branch, project_root)
+    if remote:
+        raise agent_help.no_report(
+            f"E-{task_id} never landed and its local branch {branch} is gone, "
+            f"so no base was resolved and nothing was rebuilt. {remote} still "
+            f"has it.",
+            f"Retry with --{intent}={remote}",
+            text=text,
+        )
+    raise agent_help.report(
+        f"E-{task_id} never landed, its branch {branch} is gone, and no remote "
+        f"has a copy of it, so there is no base to rebuild from. Nothing was "
+        f"rebuilt.",
+        "where this task's work survives, if anywhere — nothing reachable from "
+        "this repo has it",
+        text=text,
     )
+
+
+def _remote_copy_of_branch(branch: str, project_root) -> str | None:
+    """The first remote-tracking ref that still carries `branch`, or None.
+
+    Used only to classify the no-base refusal above, which is why it answers
+    with the ref name rather than a commit: the ref is what the caller would
+    pass back as `--review=`/`--reopen=`, and resolving it to a sha here would
+    be resolving it twice.
+
+    Answers None on any failure. A git invocation that did not run is not
+    evidence that the branch is gone from every remote, and the refusal that
+    reads this one is the more cautious of the two.
+    """
+    from endless.worktree_cmd import _git_run
+
+    try:
+        res = _git_run(
+            ["for-each-ref", "--format=%(refname:short)",
+             f"refs/remotes/*/{branch}"],
+            cwd=project_root, check=False,
+        )
+    except OSError:
+        return None
+    if res.returncode != 0:
+        return None
+    refs = [line.strip() for line in res.stdout.splitlines() if line.strip()]
+    return refs[0] if refs else None
 
 
 def _emit_task_status_change(
@@ -581,10 +785,12 @@ def _recover_dropped_worktree(
     project_root = _project_root()
 
     if task_type == "epic":
-        raise click.ClickException(
+        raise agent_help.no_report(
             f"E-{task_id} is an epic — a container with no worktree or session "
             f"of its own, so there is nothing to reopen. Pick a child task "
-            f"(`endless task show E-{task_id}`) and resume that instead."
+            f"(`endless task show E-{task_id}`) and resume that instead.",
+            f"Run `endless task show E-{task_id}` and resume the child task "
+            f"that holds the work",
         )
 
     base = _resolve_recovery_base(
@@ -846,13 +1052,23 @@ def _require_window_claim(ref: str, rebind: bool) -> None:
         held = _live_window_claiming(target_task)
         if held is not None:
             window, eid = held
-            raise click.ClickException(
+            # No inventory row — the gate postdates it (E-2168). NO-REPORT for
+            # the same reason the clobber gate is: the invariant is absolute,
+            # and the route that honours it (go to the window that already has
+            # the task) needs nobody's permission. Closing the other window is
+            # the one route that destroys live work, so it stays human-only.
+            raise agent_help.no_report(
                 f"tmux window {window} is LIVE on E-{target_task} "
-                f"(session {eid}). Rebinding this window onto it would leave "
-                f"two windows working one task at the same time.\n"
-                f"  Go to the window that already has it:\n"
-                f"      endless session goto E-{target_task}\n"
-                f"  Or close that window first, then rebind."
+                f"(session {eid}), so this window was not rebound onto it — "
+                f"that would leave two windows working one task.",
+                f"Run `endless session goto E-{target_task}` to work in the "
+                f"window that already has it",
+                text=(f"tmux window {window} is LIVE on E-{target_task} "
+                      f"(session {eid}). Rebinding this window onto it would "
+                      f"leave two windows working one task at the same time.\n"
+                      f"  Go to the window that already has it:\n"
+                      f"      endless session goto E-{target_task}"),
+                human_remedy="\n  Or close that window first, then rebind.",
             )
 
     if claimed is None or claimed == target_task or rebind:
@@ -861,15 +1077,30 @@ def _require_window_claim(ref: str, rebind: bool) -> None:
         f"E-{target_task}" if target_task is not None
         else "the task this resume would mint"
     )
-    raise click.ClickException(
-        f"This tmux window claims E-{claimed}, not {label}. `session resume` "
-        f"rewrites the window's `@endless_task_id`, and taking a window over "
-        f"from the task it claims should be a decision, not a side effect.\n"
-        f"  A tmux crash restores a window's layout and name but not its "
-        f"`@endless_*` options, so a stale claim is what recovery looks like:\n"
-        f"      endless session resume {ref} --rebind\n"
-        f"  To leave this window's claim alone, open a new window instead:\n"
-        f"      endless session goto {ref} --resume"
+    # No inventory row — the gate postdates it (E-2168). NO-REPORT, with
+    # `--rebind` moved out of what an agent reads: the docstring above calls
+    # the flag "the permission", and a permission named in a refusal is a
+    # permission an agent grants itself. The route that takes nothing over —
+    # open a new window — is the agent's, and it is the whole remedy it needs.
+    raise agent_help.no_report(
+        f"This tmux window claims E-{claimed}, not {label}, so the resume was "
+        f"refused. The window's claim was not rewritten and nothing was "
+        f"launched.",
+        f"Run `endless session goto {ref} --resume` to open the target in a "
+        f"new window and leave this window's claim alone",
+        text=(f"This tmux window claims E-{claimed}, not {label}. `session "
+              f"resume` rewrites the window's `@endless_task_id`, and taking "
+              f"a window over from the task it claims should be a decision, "
+              f"not a side effect.\n"
+              f"  To leave this window's claim alone, open a new window "
+              f"instead:\n"
+              f"      endless session goto {ref} --resume"),
+        human_remedy=(
+            f"\n  A tmux crash restores a window's layout and name but not "
+            f"its `@endless_*` options, so a stale claim is what recovery "
+            f"looks like:\n"
+            f"      endless session resume {ref} --rebind"
+        ),
     )
 
 
@@ -904,14 +1135,27 @@ def _require_lone_pane(
     panes = _tmux_window_pane_ids()
     if panes is None or len(panes) <= 1:
         return
-    raise click.ClickException(
-        f"This tmux window holds {len(panes)} panes. `{verb}` takes over the "
-        f"current pane and lays out the window around it, which would resize "
-        f"the panes you arranged.\n"
-        f"  If the panes are yours, open the session in a NEW window:\n"
-        f"      endless session goto {ref} --resume\n"
-        f"  If they are debris a tmux crash restored, take this window over:\n"
-        f"      endless session resume {ref} --no-sibling-panes"
+    # `--no-sibling-panes` is `human_remedy`: whether the panes in this window
+    # are debris or work somebody is in the middle of is the one thing the
+    # command cannot see and an agent cannot judge, so the flag that asserts
+    # "debris" is not an agent's to pass. The NEW-window route costs nothing
+    # and is always correct, which makes this NO-REPORT rather than a question.
+    raise agent_help.no_report(
+        f"This tmux window holds {len(panes)} panes, so `{verb}` was refused "
+        f"— it takes over this pane and would resize them. Nothing was "
+        f"launched.",
+        f"Run `endless session goto {ref} --resume` to open the session in a "
+        f"new window",
+        text=(f"This tmux window holds {len(panes)} panes. `{verb}` takes "
+              f"over the current pane and lays out the window around it, "
+              f"which would resize the panes you arranged.\n"
+              f"  If the panes are yours, open the session in a NEW window:\n"
+              f"      endless session goto {ref} --resume"),
+        human_remedy=(
+            f"\n  If they are debris a tmux crash restored, take this window "
+            f"over:\n"
+            f"      endless session resume {ref} --no-sibling-panes"
+        ),
     )
 
 
@@ -1023,8 +1267,9 @@ def resume_session(
     (E-2104) — see `_bind_pane_window_options`.
     """
     if review is not None and reopen is not None:
-        raise click.ClickException(
-            "--review and --reopen are mutually exclusive."
+        raise agent_help.no_report(
+            "--review and --reopen are mutually exclusive.",
+            "Retry with only one of the two flags",
         )
 
     # E-1968: refuse to clobber a pane that holds live work. Checked BEFORE
@@ -1035,12 +1280,21 @@ def resume_session(
         held = _current_pane_task()
         if held is not None and _resume_replaces_other_work(ref, held[1]):
             _eid, held_task = held
-            raise click.ClickException(
-                f"This pane is working E-{held_task}. `session resume` execs "
-                f"in place, so it would replace that session.\n"
-                f"  Open the target in a NEW window instead:\n"
-                f"      endless session goto {ref} --resume\n"
-                f"  Or pass --force to replace this pane."
+            # `--force` is `human_remedy`. It waives the protection of a LIVE
+            # session's work, which is the decision this gate exists to make
+            # somebody take; an agent offered the flag takes it. Only the
+            # new-window route is offered as the agent's remedy.
+            raise agent_help.no_report(
+                f"This pane is working E-{held_task}, so the resume was "
+                f"refused — it execs in place and would replace that live "
+                f"session. Nothing was launched.",
+                f"Run `endless session goto {ref} --resume` to open the "
+                f"target in a new window",
+                text=(f"This pane is working E-{held_task}. `session resume` "
+                      f"execs in place, so it would replace that session.\n"
+                      f"  Open the target in a NEW window instead:\n"
+                      f"      endless session goto {ref} --resume"),
+                human_remedy="\n  Or pass --force to replace this pane.",
             )
 
     # E-2168: refuse to silently take a window over from the task it claims.
@@ -1075,7 +1329,9 @@ def resume_session(
 
     pane = os.environ.get("TMUX_PANE", "")
     if new_transcript:
-        click.echo(
+        # A progress notice, not a refusal: nothing is being decided and
+        # nothing is being withheld, so it carries no verdict and no directive.
+        agent_help.info(
             f"• Starting a FRESH session on {label} in "
             f"{_short_path(worktree)} — session {eid}'s transcript "
             f"({uuid[:8]}…) is not being resumed.",
@@ -1089,7 +1345,7 @@ def resume_session(
         # SessionStart bind reads to attach the new session to this task.
         bind_uuid = ""
     else:
-        click.echo(
+        agent_help.info(
             f"• Resuming session {eid} ({label}) in {_short_path(worktree)} "
             f"→ claude --resume {uuid[:8]}…",
             err=True,
@@ -1135,30 +1391,50 @@ def resume_tmux_windows(
 
     from endless import config
 
+    # No inventory rows in this function — the sweep postdates the audit
+    # (E-2196). All four argument rules are the invocation being malformed,
+    # which the caller rewrites and re-runs, so all four are NO-REPORT.
+    # `exit_code=2` on each because the `click.UsageError` they replace exited
+    # 2, and a status that silently became 1 changes what a script reading it
+    # concludes.
     if tmux_session is not None and all_tmux_sessions:
-        raise click.UsageError(
-            "--tmux-session and --all-tmux-sessions are mutually exclusive.")
+        raise agent_help.no_report(
+            "--tmux-session and --all-tmux-sessions are mutually exclusive.",
+            "Retry with only one of the two flags",
+            exit_code=2)
     if ref is not None:
-        raise click.UsageError(
+        raise agent_help.no_report(
             f"REF ({ref}) resumes one session in this pane; --tmux-session / "
-            f"--all-tmux-sessions resume every task window. Give one or the other.")
+            f"--all-tmux-sessions resume every task window. Give one or the other.",
+            "Retry with either the REF or the sweep flag, not both",
+            exit_code=2)
     if tmux_session == "":
-        raise click.UsageError("--tmux-session needs a tmux session name.")
+        raise agent_help.no_report(
+            "--tmux-session needs a tmux session name.",
+            "Retry with `--tmux-session <name>`, or with --all-tmux-sessions",
+            exit_code=2)
     extra = [flag for flag, on in (other_flags or {}).items() if on]
     if extra:
-        raise click.UsageError(
+        raise agent_help.no_report(
             f"{', '.join(extra)} applies to a single REF, not to "
-            f"--tmux-session / --all-tmux-sessions.")
+            f"--tmux-session / --all-tmux-sessions.",
+            f"Retry without {', '.join(extra)}, or resume a single REF",
+            exit_code=2)
     config.require_db_context()
     if config.db_context_is_sandbox():
-        raise click.ClickException(
+        # The remedy is a context change the caller can make on its own, so
+        # NO-REPORT: `--db main` is already what the message says to do.
+        raise agent_help.no_report(
             "--tmux-session / --all-tmux-sessions act on real tmux windows and "
             "resume real sessions, so they do not run against a sandbox "
-            "database. Re-run with --db main.")
+            "database. Re-run with --db main.",
+            "Re-run the sweep with --db main")
 
     go_bin = shutil.which("endless-go")
     if not go_bin:
-        raise click.ClickException("endless-go binary not found on PATH.")
+        raise agent_help.report(
+            "endless-go binary not found on PATH.",
+            "how to install endless-go or get it onto PATH")
     argv = [go_bin, *config.go_db_context_args(), "resume-windows"]
     argv += (["--tmux-session", tmux_session] if tmux_session is not None
              else ["--all-tmux-sessions"])
@@ -1166,7 +1442,11 @@ def resume_tmux_windows(
         argv.append("--dry-run")
     code = subprocess.run(argv).returncode
     if code != 0:
-        sys.exit(code)
+        # The sweep inherited this process's stderr, so whatever it had to say
+        # it has already said, with its own classification. Ending on its
+        # status adds nothing in Endless's voice to an outcome Endless did not
+        # produce.
+        agent_help.passthrough_exit(code)
 
 
 def show_history(
@@ -1318,14 +1598,23 @@ def session_monitor_restart(
     import shutil
     import subprocess
 
+    # No inventory rows here either — the verb postdates the audit (E-2194).
+    # Same answers as the sweep above: a malformed invocation the caller
+    # rewrites (NO-REPORT, exit 2, the status the UsageError carried), and a
+    # missing binary nobody but the user can install.
     if tmux_session is not None and all_tmux_sessions:
-        raise click.UsageError(
-            "--tmux-session and --all-tmux-sessions are mutually exclusive."
+        raise agent_help.no_report(
+            "--tmux-session and --all-tmux-sessions are mutually exclusive.",
+            "Retry with only one of the two flags",
+            exit_code=2,
         )
 
     go_bin = shutil.which("endless-go")
     if not go_bin:
-        raise click.ClickException("endless-go binary not found on PATH.")
+        raise agent_help.report(
+            "endless-go binary not found on PATH.",
+            "how to install endless-go or get it onto PATH",
+        )
 
     args = [go_bin, "session-monitor", "restart"]
     if tmux_session is not None:
@@ -1336,7 +1625,9 @@ def session_monitor_restart(
         args.append("--dry-run")
     result = subprocess.run(args)
     if result.returncode != 0:
-        raise SystemExit(result.returncode)
+        # The restart inherited this process's streams, so it has already said
+        # whatever it had to say, classified at the Go site that said it.
+        agent_help.passthrough_exit(result.returncode)
 
 
 def session_status_resolve(
@@ -1374,13 +1665,17 @@ def session_status_resolve(
     import subprocess
 
     if show_hidden and only_hidden:
-        raise click.ClickException(
-            "--show-hidden and --only-hidden are mutually exclusive."
+        raise agent_help.no_report(
+            "--show-hidden and --only-hidden are mutually exclusive.",
+            "Retry with only one of the two flags",
         )
 
     go_bin = shutil.which("endless-go")
     if not go_bin:
-        raise click.ClickException("endless-go binary not found on PATH.")
+        raise agent_help.report(
+            "endless-go binary not found on PATH.",
+            "how to install endless-go or get it onto PATH",
+        )
 
     args = [go_bin, "session-status"]
     if show_all:
@@ -1402,7 +1697,11 @@ def session_status_resolve(
     except KeyboardInterrupt:
         return
     if result.returncode != 0:
-        raise SystemExit(result.returncode)
+        # `session-status` draws straight to the inherited terminal — Python
+        # never sees its stderr, so there is nothing here to wrap and no class
+        # to choose. Whatever Go printed carries its own verdict; this passes
+        # the status on and adds no second voice.
+        agent_help.passthrough_exit(result.returncode)
 
 
 # Fixed-width state glyphs for `session list` (E-1914), read from the registry
@@ -1472,11 +1771,15 @@ def _current_project_name() -> str:
     try:
         _project_id, name = _resolve_project(None)
     except click.ClickException:
-        raise click.ClickException(
-            "Not in a registered project directory, so there is no current "
-            "project to default to.\n"
-            "Use 'endless session list --all-projects' for every project, "
-            "or '--project <name>' for one."
+        raise agent_help.no_report(
+            "Not in a registered project directory, so `session list` had no "
+            "current project to default to. Nothing was listed.",
+            "Retry with --all-projects for every project, or with --project "
+            "<name> for one",
+            text=("Not in a registered project directory, so there is no "
+                  "current project to default to.\n"
+                  "Use 'endless session list --all-projects' for every "
+                  "project, or '--project <name>' for one."),
         ) from None
     return name
 
@@ -1505,8 +1808,9 @@ def list_sessions(
     # contradictory requests, and silently honoring one would answer a question
     # the user did not ask.
     if project_name and all_projects:
-        raise click.ClickException(
-            "--project and --all-projects are mutually exclusive."
+        raise agent_help.no_report(
+            "--project and --all-projects are mutually exclusive.",
+            "Retry with only one of the two flags",
         )
     if not project_name and not all_projects:
         project_name = _current_project_name()
@@ -1865,10 +2169,15 @@ def _resolve_hide_session(session_value: str | None) -> int:
 
     session_id = _current_endless_session_id()
     if session_id is None:
-        raise click.ClickException(
-            "No current Endless session, so there is nothing to hide the task "
-            "FOR — hiding is per-session.\n"
-            "Name the session explicitly: endless session hide ES-<id> --task <task-id>"
+        raise agent_help.no_report(
+            "No current Endless session resolved, so there was nothing to "
+            "hide the task FOR. Nothing was hidden.",
+            "Retry naming the session explicitly — an ES- id from `endless "
+            "session list` or `endless session id`",
+            text=("No current Endless session, so there is nothing to hide "
+                  "the task FOR — hiding is per-session.\n"
+                  "Name the session explicitly: endless session hide ES-<id> "
+                  "--task <task-id>"),
         )
     return session_id
 
@@ -1887,11 +2196,19 @@ def _resolve_hide_tasks(task_refs: list[str]) -> list[int]:
         try:
             task_id = int(ref)
         except ValueError:
-            raise click.ClickException(
-                f"Malformed task id '{raw}' (expected E-NNN or NNN)."
+            # The whole set is validated before anything is applied, so a typo
+            # in the third id leaves the first two unhidden — which is what
+            # lets both of these be plain NO-REPORT retries.
+            raise agent_help.no_report(
+                f"Malformed task id '{raw}' (expected E-NNN or NNN).",
+                "Retry with a well-formed task id",
             ) from None
         if not db.query("SELECT id FROM live_tasks WHERE id = ?", (task_id,)):
-            raise click.ClickException(f"No task found with id E-{task_id}")
+            raise agent_help.no_report(
+                f"No task found with id E-{task_id}",
+                "Check the id with `endless task show` or `endless task list` "
+                "and retry with one that exists",
+            )
         if task_id not in task_ids:
             task_ids.append(task_id)
     return task_ids
@@ -2185,11 +2502,21 @@ def _emit_resolution_status(c: dict, target_path: str, target: str = "auto") -> 
     if target == "auto":
         wt = c.get("worktree_path") or ""
         if wt and not os.path.isdir(wt):
-            click.echo(
+            # A warning, not a refusal: the fallback already happened and the
+            # path on stdout is a real directory, so nothing is blocked and
+            # there is nothing to retry. It stays on this command's stderr
+            # rather than going to the errors channel because it is about the
+            # resolution the caller just asked for, not a condition the user
+            # has to go and fix.
+            agent_help.warn.no_report(
                 f"! worktree {_short_path(wt)} no longer exists; falling back to cwd",
-                err=True,
+                "The path printed on stdout is the cwd; pass --target to "
+                "choose one explicitly",
             )
-    click.echo(f"• Session {eid} → {_short_path(target_path)}", err=True)
+    # A progress notice. Shell-captured commands print nothing to stdout but
+    # the path, so this line is the only confirmation anything happened — and
+    # it carries no verdict, because nothing was refused.
+    agent_help.info(f"• Session {eid} → {_short_path(target_path)}", err=True)
 
 
 def _session_project_root(c: dict) -> str:
@@ -2209,9 +2536,18 @@ def _session_project_root(c: dict) -> str:
     return str(resolved(rows[0]["path"])) if rows[0]["path"] else ""
 
 
-def _resolve_target(c: dict, target: str) -> str | None:
-    """Resolve the cd target for the given --target choice. Returns None
-    on error (with the error message already emitted to stderr). (E-1050.)
+def _resolve_target(c: dict, target: str) -> str:
+    """Resolve the cd target for the given --target choice. (E-1050.)
+
+    Every failure here is the `--target` choice being wrong for this session —
+    a retry with a different one is the whole remedy, and nothing has been
+    changed — so all four are NO-REPORT.
+
+    E-2159 moved the exit here too. The message used to be printed in this
+    function and the `SystemExit(1)` raised by the caller off a None return,
+    which meant the one thing the exit needed to know (which refusal it was
+    ending on) lived in the other function. Refusing where the refusal is
+    built is the same behavior with the verdict attached.
     """
     if target == "auto":
         return _target_path(c)
@@ -2220,20 +2556,31 @@ def _resolve_target(c: dict, target: str) -> str | None:
     if target == "worktree":
         wt = c.get("worktree_path") or ""
         if not wt:
-            click.echo("Session has no worktree bound.", err=True)
-            return None
+            _refuse_on_stderr(agent_help.no_report(
+                "Session has no worktree bound.",
+                "Retry `endless session cd` with --target auto, cwd or project",
+            ))
         if not os.path.isdir(wt):
-            click.echo(f"Worktree {_short_path(wt)} no longer exists.", err=True)
-            return None
+            _refuse_on_stderr(agent_help.no_report(
+                f"Worktree {_short_path(wt)} no longer exists.",
+                "Retry with --target auto, cwd or project",
+            ))
         return wt
     if target == "project":
         root = _session_project_root(c)
         if not root:
-            click.echo("Could not determine project root for session.", err=True)
-            return None
+            _refuse_on_stderr(agent_help.no_report(
+                "Could not determine project root for session.",
+                "Retry with --target auto or cwd, or with --target project "
+                "and no ref for the project root enclosing cwd",
+            ))
         return root
-    click.echo(f"Unknown --target value: {target}", err=True)
-    return None
+    # Unreachable from the CLI — click.Choice on --target rejects an unknown
+    # value first — and kept because this helper is also called in-process.
+    _refuse_on_stderr(agent_help.no_report(
+        f"Unknown --target value: {target}",
+        "Retry with auto, worktree, project or cwd",
+    ))
 
 
 def _format_companion_row(c: dict) -> str:
@@ -2250,34 +2597,47 @@ def _resolve_companion(
     list_hint: str = "endless session list",
 ) -> dict:
     """Match a session-ref against live companion records, or auto-resolve
-    in tmux. Raises SystemExit(1) with a stderr error on miss/ambiguity/
-    no-tmux-no-arg. Returns the matched companion dict on success.
+    in tmux. Refuses on stderr and exits 1 on miss/ambiguity/no-tmux-no-arg.
+    Returns the matched companion dict on success.
+
+    The refusals print through `_refuse_on_stderr` rather than being raised:
+    every caller is a shell-wrapped verb (`session cd`, `session use`, `session
+    history`, `session turn`), and Click's renderer would prepend `Error: ` to
+    bytes these commands have never carried.
     """
     if session_ref:
         matches = _match_companions(live, session_ref)
         if len(matches) == 1:
             return matches[0]
         if not matches:
-            click.echo(
+            _refuse_on_stderr(agent_help.no_report(
                 f"No Claude session matches '{session_ref}'. "
                 f"Run `{list_hint}` to see candidates.",
-                err=True,
-            )
-            raise SystemExit(1)
-        click.echo(f"Ambiguous: '{session_ref}' matches multiple sessions:", err=True)
-        for c in matches:
-            click.echo("  " + _format_companion_row(c), err=True)
-        raise SystemExit(1)
+                f"Run `{list_hint}` and retry with one of the ids it lists",
+            ))
+        # A header plus one echo per row became one refusal carrying one
+        # multi-line message. That is what lets the verdict bracket the whole
+        # of it: a header and its rows written as separate echoes are separate
+        # writes, and nothing can be said about where the list ends.
+        _refuse_on_stderr(agent_help.no_report(
+            f"'{session_ref}' matches {len(matches)} live sessions, so "
+            f"nothing was resolved.",
+            "Retry with the integer id, or with a longer UUID prefix, from "
+            "the listed rows",
+            text="\n".join(
+                [f"Ambiguous: '{session_ref}' matches multiple sessions:"]
+                + ["  " + _format_companion_row(c) for c in matches]
+            ),
+        ))
 
     # No arg: tmux-sibling auto-resolution.
     window_panes = _tmux_window_pane_ids()
     if window_panes is None:
-        click.echo(
+        _refuse_on_stderr(agent_help.no_report(
             "Outside tmux, an explicit session id is required. "
             f"Run `{list_hint}` to see candidates.",
-            err=True,
-        )
-        raise SystemExit(1)
+            f"Run `{list_hint}` and retry passing an explicit session id",
+        ))
 
     my_pane = os.environ.get("TMUX_PANE", "")
     siblings = [
@@ -2288,17 +2648,32 @@ def _resolve_companion(
     if len(siblings) == 1:
         return siblings[0]
     if not siblings:
-        click.echo(
+        # An agent calling from its own Claude pane has that pane excluded, so
+        # the no-arg default rarely resolves for one — which is exactly why the
+        # remedy is "name the session", not "run it from somewhere else".
+        _refuse_on_stderr(agent_help.no_report(
             "No sibling Claude pane in this tmux window. "
             f"Run `{list_hint}` to see all candidates project-wide.",
-            err=True,
-        )
-        raise SystemExit(1)
-    click.echo("Multiple sibling Claude panes in this window:", err=True)
-    for c in siblings:
-        click.echo("  " + _format_companion_row(c), err=True)
-    click.echo("Specify one by id or UUID prefix.", err=True)
-    raise SystemExit(1)
+            f"Run `{list_hint}` and retry passing an explicit session id",
+        ))
+    # CONDITIONAL in the inventory, and it stays one: which pane is meant turns
+    # on why the caller asked. An agent that wanted a particular session knows
+    # its id and simply retries with it; a caller relaying "the other pane" for
+    # the user has nothing here to choose between, and guessing would answer
+    # about a session nobody named.
+    _refuse_on_stderr(agent_help.report_if(
+        f"{len(siblings)} sibling Claude panes in this window, so nothing was "
+        f"resolved.",
+        "the request was about 'the other pane' and nothing distinguishes the "
+        "listed candidates",
+        "retry with the id or UUID prefix of the session you want",
+        "which of the listed panes is meant is theirs to say",
+        text="\n".join(
+            ["Multiple sibling Claude panes in this window:"]
+            + ["  " + _format_companion_row(c) for c in siblings]
+            + ["Specify one by id or UUID prefix."]
+        ),
+    ))
 
 
 def session_cd_resolve(
@@ -2323,8 +2698,13 @@ def session_cd_resolve(
 
     if show_all:
         if not live:
-            click.echo("No live Claude sessions in this project.", err=True)
-            raise SystemExit(1)
+            # An empty listing, which exits 1 so a shell wrapper can tell
+            # "nothing to cd to" from a path. Nothing is wrong and nothing can
+            # be retried into existence, so there is nothing to report either.
+            _refuse_on_stderr(agent_help.no_report(
+                "No live Claude sessions in this project.",
+                "There is nothing to list; continue without a live session",
+            ))
         click.echo(f"{'ID':<5} {'Pane':<6} {'UUID':<14} CWD")
         for c in live:
             click.echo(_format_companion_row(c))
@@ -2340,16 +2720,16 @@ def session_cd_resolve(
     # in a *different* project resolves to that project's root.
     if target == "project" and session_ref is None:
         click.echo(str(project_root))
-        click.echo(
+        agent_help.info(
             f"• cwd → {_short_path(str(project_root))} (project root)",
             err=True,
         )
         return
 
     c = _resolve_companion(session_ref, live, list_hint="endless session cd --all")
+    # `_resolve_target` refuses and exits on its own (E-2159), so a path
+    # arriving here is a path.
     target_path = _resolve_target(c, target)
-    if target_path is None:
-        raise SystemExit(1)
     click.echo(target_path)
     _emit_resolution_status(c, target_path, target=target)
 
@@ -2372,35 +2752,47 @@ def session_id_resolve() -> None:
         click.echo(eid)
         return
 
+    # Four one-line refusals that used to share one echo and one exit. Each is
+    # NO-REPORT and each has its own remedy, which is the reason they are built
+    # separately now: the shared `msg` could carry what went wrong but not what
+    # to do about it, and "export ENDLESS_SESSION_ID" is not the answer to a
+    # value that is already set and malformed.
     env_id = os.environ.get("ENDLESS_SESSION_ID")
     pane = os.environ.get("TMUX_PANE")
     if env_id and not env_id.isdigit():
-        msg = (
+        refusal = agent_help.no_report(
             f"ENDLESS_SESSION_ID={env_id!r} is not an integer; "
-            "the resolver only accepts digit strings."
+            "the resolver only accepts digit strings.",
+            "Retry with ENDLESS_SESSION_ID unset, or set to a digit id from "
+            "`endless session list`",
         )
     elif not pane:
-        msg = (
+        refusal = agent_help.no_report(
             "No current Endless session: not in a tmux pane and "
             "ENDLESS_SESSION_ID is unset. Run from a Claude pane or "
-            "export ENDLESS_SESSION_ID=<id>."
+            "export ENDLESS_SESSION_ID=<id>.",
+            "Retry with ENDLESS_SESSION_ID=<id> on the call, taking the id "
+            "from `endless session list`",
         )
     else:
         _, n = _find_sibling_claude_session()
         if n == 0:
-            msg = (
+            refusal = agent_help.no_report(
                 "No current Endless session: this pane is not a Claude "
                 "pane and no sibling Claude pane was found in this tmux "
-                "window."
+                "window.",
+                "Retry with ENDLESS_SESSION_ID=<id> on the call, taking the "
+                "id from `endless session list`",
             )
         else:
-            msg = (
+            refusal = agent_help.no_report(
                 f"Ambiguous Endless session: {n} sibling Claude panes "
                 "in this tmux window. Run `endless session id` from the "
-                "intended Claude pane, or export ENDLESS_SESSION_ID=<id>."
+                "intended Claude pane, or export ENDLESS_SESSION_ID=<id>.",
+                "Retry with ENDLESS_SESSION_ID=<id> naming the intended "
+                "session",
             )
-    click.echo(msg, err=True)
-    raise SystemExit(1)
+    _refuse_on_stderr(refusal)
 
 
 def session_show_resolve(session_ref: str | None, as_json: bool = False) -> None:
@@ -2426,8 +2818,17 @@ def session_show_resolve(session_ref: str | None, as_json: bool = False) -> None
         (eid,),
     )
     if not rows:
-        click.echo(f"Session E-{eid} not found in database.", err=True)
-        raise SystemExit(1)
+        # A broken invariant: `list-live` just reported this session, so a
+        # `sessions` row for it has to exist. The inventory's class column says
+        # REPORT and its kind says fault; `fault` is the one that fits, because
+        # there is nothing here for the user to decide — only something for
+        # them to diagnose, which is exactly what fault's directive says.
+        #
+        # The `E-` prefix is wrong (a session is `ES-`) and is left wrong: the
+        # bytes a person reads are not this task's to change.
+        _refuse_on_stderr(agent_help.fault(
+            f"Session E-{eid} not found in database."
+        ))
     r = rows[0]
 
     task_info = None
@@ -2485,6 +2886,15 @@ def session_show_resolve(session_ref: str | None, as_json: bool = False) -> None
 
 # Module-level constant; tests patch this to a smaller value.
 _USE_EXTENSION_TIMEOUT_SEC = 5
+
+# The agent-facing remedy shared by every `use.sh` warning (E-2159). One
+# constant because it is one answer: the activation block is emitted either
+# way, so there is nothing to retry and nothing to report — only the
+# extension's own output is missing.
+_USE_EXTENSION_SKIPPED = (
+    "Continue with the default activation block; the extension's output is "
+    "absent"
+)
 
 
 def session_use_resolve(session_ref: str | None) -> None:
@@ -2556,25 +2966,37 @@ def _run_use_extension(path: Path, extra_env: dict[str, str]) -> str | None:
     import stat
     import subprocess
 
+    # Every warning in this function is NO-REPORT and blocks nothing: the
+    # default activation block is emitted either way, so the extension's output
+    # is the only thing lost. They stay on this command's stderr rather than
+    # going to the errors channel because they are about the script this
+    # invocation just declined to run.
     try:
         st = path.stat()
     except OSError as e:
-        click.echo(f"warning: cannot stat {path}: {e}", err=True)
+        agent_help.warn.no_report(
+            f"warning: cannot stat {path}: {e}", _USE_EXTENSION_SKIPPED)
         return None
 
     if not stat.S_ISREG(st.st_mode):
-        click.echo(f"warning: ignoring {path}: not a regular file", err=True)
+        agent_help.warn.no_report(
+            f"warning: ignoring {path}: not a regular file", _USE_EXTENSION_SKIPPED)
         return None
 
+    # The next two are security refusals of a project-authored script, so their
+    # remedies deliberately do NOT name `chmod`/`chown`. Making an untrusted
+    # script trusted enough to execute is the user's call, and an agent handed
+    # the command would take it to get the output it was after.
     if st.st_mode & 0o002:
-        click.echo(f"warning: ignoring {path}: world-writable", err=True)
+        agent_help.warn.no_report(
+            f"warning: ignoring {path}: world-writable",
+            _USE_EXTENSION_SKIPPED + "; whether to trust this script is not an agent's call")
         return None
 
     if st.st_uid != os.geteuid():
-        click.echo(
+        agent_help.warn.no_report(
             f"warning: ignoring {path}: owned by different user (uid {st.st_uid})",
-            err=True,
-        )
+            _USE_EXTENSION_SKIPPED + "; whether to trust this script is not an agent's call")
         return None
 
     full_env = os.environ.copy()
@@ -2589,26 +3011,31 @@ def _run_use_extension(path: Path, extra_env: dict[str, str]) -> str | None:
             timeout=_USE_EXTENSION_TIMEOUT_SEC,
         )
     except subprocess.TimeoutExpired:
-        click.echo(
+        agent_help.warn.no_report(
             f"warning: {path} timed out after {_USE_EXTENSION_TIMEOUT_SEC}s; skipping",
-            err=True,
-        )
+            _USE_EXTENSION_SKIPPED)
         return None
     except OSError as e:
-        click.echo(f"warning: cannot run {path}: {e}", err=True)
+        agent_help.warn.no_report(
+            f"warning: cannot run {path}: {e}", _USE_EXTENSION_SKIPPED)
         return None
 
     if result.stderr:
-        # Pass extension's stderr through to the user's terminal as warnings.
+        # Pass the extension's stderr through verbatim. `info` rather than a
+        # warning or a relay: the lines are a foreign, project-authored
+        # script's own words, nothing here is refused, and Endless has no basis
+        # for attaching a verdict to output it did not produce and cannot
+        # classify. The inventory left the class CONDITIONAL for that reason;
+        # an unprefixed notice is the one rendering that claims nothing.
         for line in result.stderr.rstrip().split("\n"):
             if line:
-                click.echo(f"  [{path.name}] {line}", err=True)
+                agent_help.info(f"  [{path.name}] {line}", err=True)
 
     if result.returncode != 0:
-        click.echo(
+        agent_help.warn.no_report(
             f"warning: {path} exited {result.returncode}; using its partial output",
-            err=True,
-        )
+            "Continue with the default activation block plus the extension's "
+            "partial output")
 
     return result.stdout
 
@@ -2846,10 +3273,16 @@ def _goto_session(matches: list[dict], ref: str) -> tuple[str, str]:
     if not matches:
         raise _GotoNotLive(ref, f"No live session matches '{ref}'.")
     if len(matches) > 1:
-        click.echo(f"Ambiguous: '{ref}' matches multiple sessions:", err=True)
-        for c in matches:
-            click.echo("  " + _format_companion_row(c), err=True)
-        raise SystemExit(1)
+        _refuse_on_stderr(agent_help.no_report(
+            f"'{ref}' matches {len(matches)} live sessions, so goto resolved "
+            f"nothing and focus did not move.",
+            "Retry with the integer / ES- id, or a longer UUID prefix, from "
+            "the listed rows",
+            text="\n".join(
+                [f"Ambiguous: '{ref}' matches multiple sessions:"]
+                + ["  " + _format_companion_row(c) for c in matches]
+            ),
+        ))
     c = matches[0]
     eid = c.get("endless_session_id", "")
     pane = c.get("pane_id") or ""
@@ -2887,12 +3320,12 @@ def _resolve_goto_target(ref: str, live: list[dict]) -> tuple[str, str]:
         sess_matches = [c for c in live if c.get("endless_session_id") == n]
         task_matches = [c for c in live if c.get("task_id") == n]
         if sess_matches and task_matches:
-            click.echo(
+            _refuse_on_stderr(agent_help.no_report(
                 f"'{raw}' is ambiguous: it matches both session {n} and the "
                 f"live session on task {task_id_display(n)}. "
-                f"Write 'E-{n}' for the task.", err=True,
-            )
-            raise SystemExit(1)
+                f"Write 'E-{n}' for the task.",
+                f"Retry with E-{n} for the task, or ES-{n} for the session",
+            ))
         if sess_matches:
             return _goto_session(sess_matches, raw)
         if task_matches:
@@ -2940,9 +3373,10 @@ def _apply_revisit_intent(ref: str, revisit: bool, no_revisit: bool) -> None:
     work is an explicit act, not a navigation side effect.
     """
     if revisit and no_revisit:
-        raise click.ClickException(
+        raise agent_help.no_report(
             "--revisit and --no-revisit are mutually exclusive: one reopens "
-            "the task, the other leaves its status alone. Pick one."
+            "the task, the other leaves its status alone. Pick one.",
+            "Retry with only one of the two flags",
         )
     target = _try_resume_target(ref)
     if target is None:
@@ -2953,22 +3387,43 @@ def _apply_revisit_intent(ref: str, revisit: bool, no_revisit: bool) -> None:
         return
 
     if revisit and status in _REOPEN_REFUSED:
-        raise click.ClickException(
-            f"E-{task} is '{status}' — a deliberate decision, not dormant "
-            f"work.\n"
-            f"Reviving it is an explicit act:\n"
-            f"    endless task update E-{task} --status revisit\n"
-            f"Then go there with --no-revisit."
+        # Same shape, and the same `human_remedy`, as `_resolve_resume`'s
+        # refusal of `--reopen`: the revive command waives the very decision
+        # being protected, so it is not offered to an agent.
+        raise agent_help.report(
+            f"E-{task} is '{status}', a deliberate decision not to do the "
+            f"work, so --revisit was refused. The task's status is unchanged "
+            f"and no window was opened.",
+            "whether to revive a task that was deliberately declined or made "
+            "obsolete",
+            text=(f"E-{task} is '{status}' — a deliberate decision, not "
+                  f"dormant work."),
+            human_remedy=(f"\nReviving it is an explicit act:\n"
+                          f"    endless task update E-{task} --status revisit\n"
+                          f"Then go there with --no-revisit."),
         )
 
     if status not in _REOPEN_TO_REVISIT:
         return
 
     if not revisit and not no_revisit:
-        raise click.ClickException(
-            f"E-{task} is '{status}'. Say what you intend:\n"
-            f"  --revisit      reopen it and continue work\n"
-            f"  --no-revisit   just read the session; leave the status alone"
+        # The gate exists precisely because the command cannot tell reading
+        # settled work from picking it back up, so the condition is named
+        # rather than resolved: `--no-revisit` costs nothing and changes
+        # nothing, while `--revisit` flips a done task's status.
+        raise agent_help.report_if(
+            f"E-{task} is '{status}', so `goto --resume` needs to be told "
+            f"whether this reopens the work. Nothing was changed and no "
+            f"window was opened.",
+            "reopening this settled work was not what the user asked for",
+            "retry with --no-revisit to read the session without touching its "
+            "status, or with --revisit when continuing the work is what was "
+            "asked for",
+            "flipping a done task to revisit is theirs to decide",
+            text=(f"E-{task} is '{status}'. Say what you intend:\n"
+                  f"  --revisit      reopen it and continue work\n"
+                  f"  --no-revisit   just read the session; leave the status "
+                  f"alone"),
         )
     if no_revisit:
         return
@@ -3028,12 +3483,24 @@ def _resume_new_window_pane(
     # opens somewhere unexplained is the defect being fixed.
     target = _spawner_session_target()
     if target is None:
-        click.echo(
-            "Could not tell which tmux session to open the window in "
-            "(no resolvable $TMUX_PANE). Run this from inside a tmux pane.",
-            err=True,
-        )
-        raise SystemExit(1)
+        # REPORT: an agent cannot move its own process into a tmux pane, so
+        # there is no retry that gets past this. This summary and the tmux one
+        # further down both say what has ALREADY been applied —
+        # `_apply_revisit_intent`'s status flip above, and the container task
+        # and worktree `_resolve_resume` may have minted — because an agent
+        # that cannot tell whether those landed will run the resume again and
+        # mint a second one.
+        _refuse_on_stderr(agent_help.report(
+            "Could not tell which tmux session to open the window in (no "
+            "resolvable $TMUX_PANE), so no window was opened — but any "
+            "--revisit status flip, container task and worktree this resume "
+            "implied have already been applied.",
+            "running this from inside a tmux pane, which an agent cannot do "
+            "for them",
+            text=("Could not tell which tmux session to open the window in "
+                  "(no resolvable $TMUX_PANE). Run this from inside a tmux "
+                  "pane."),
+        ))
     args = ["new-window", "-d", "-t", target, "-c", worktree]
     task = decision.get("task_id")
     if task is not None:
@@ -3041,8 +3508,17 @@ def _resume_new_window_pane(
     args += ["-P", "-F", "#{pane_id}", cmd]
     res = _tmux_run(args)
     if not res or res.returncode != 0 or not res.stdout.strip():
-        click.echo("Could not open a new tmux window to resume.", err=True)
-        raise SystemExit(1)
+        # tmux's own stderr is captured and discarded by `_tmux_run`, so there
+        # is nothing to relay and nothing a retry would change: somebody has to
+        # go and look at tmux.
+        _refuse_on_stderr(agent_help.report(
+            "Could not open a new tmux window to resume, so nothing was "
+            "launched — but any --revisit status flip, container task and "
+            "worktree this resume implied have already been applied.",
+            "why tmux refused to open a window; its own error was not "
+            "captured",
+            text="Could not open a new tmux window to resume.",
+        ))
     pane = res.stdout.strip()
     # The window is brand new, so it carries no `@endless_*` identity at all
     # until we write one (E-2104) — same omission `session resume` had on the
@@ -3060,19 +3536,22 @@ def _resume_new_window_pane(
 def _fail_not_live(nl: _GotoNotLive) -> None:
     """Print `nl`'s not-live error and exit. When the ref is resumable, point the
     user at `--resume`; otherwise fall back to the `session list` hint (E-1797)."""
+    # Both branches are NO-REPORT: goto resolved a target that is not live,
+    # focus did not move, and the next invocation is the whole remedy. The
+    # non-resumable branch deliberately does NOT name `--resume` — there is
+    # nothing to resume — which is why the two have separate remedies rather
+    # than one shared one.
     if _try_resume_target(nl.ref) is not None:
-        click.echo(
+        _refuse_on_stderr(agent_help.no_report(
             f"{nl.base} It isn't live — run "
             f"`endless session goto {nl.ref} --resume` "
             f"to resume it in a new window.",
-            err=True,
-        )
-    else:
-        click.echo(
-            f"{nl.base} Run `endless session list` to see candidates.",
-            err=True,
-        )
-    raise SystemExit(1)
+            f"Re-run as `endless session goto {nl.ref} --resume`",
+        ))
+    _refuse_on_stderr(agent_help.no_report(
+        f"{nl.base} Run `endless session list` to see candidates.",
+        "Run `endless session list` and retry goto with a live target",
+    ))
 
 
 def session_goto(
@@ -3100,27 +3579,33 @@ def session_goto(
     up on when the target is live and simply being focused.
     """
     if new_transcript and not resume:
-        raise click.ClickException(
+        raise agent_help.no_report(
             "--new-transcript applies only with --resume (it says what to do "
             "when the target's transcript cannot be opened). A live target is "
-            "just focused."
+            "just focused.",
+            "Retry adding --resume, or drop --new-transcript",
         )
     if revisit and not resume:
-        raise click.ClickException(
+        raise agent_help.no_report(
             "--revisit applies only with --resume (it says what reopening the "
-            "target session is for). A live target is just focused."
+            "target session is for). A live target is just focused.",
+            "Retry adding --resume, or drop --revisit",
         )
     if no_revisit and not resume:
-        raise click.ClickException(
+        raise agent_help.no_report(
             "--no-revisit applies only with --resume (it says what reopening "
-            "the target session is for). A live target is just focused."
+            "the target session is for). A live target is just focused.",
+            "Retry adding --resume, or drop --no-revisit",
         )
     if not _in_tmux():
-        click.echo(
+        # goto moves the attached person's tmux focus, so there is no version
+        # of this an agent can run instead: starting or attaching tmux for them
+        # is not its call, and a focus change nobody is looking at is not one.
+        _refuse_on_stderr(agent_help.report(
             "session goto requires tmux (no $TMUX in this environment).",
-            err=True,
-        )
-        raise SystemExit(1)
+            "running Endless inside tmux, which is where pane navigation "
+            "means anything",
+        ))
     live = _live_sessions(_project_root_for_cwd())
     try:
         target_pane, label = _resolve_goto_target(target_ref, live)
@@ -3139,12 +3624,15 @@ def session_goto(
     if not _tmux_switch_client(target_pane):
         if token:  # target closed between resolution and switch — undo the push
             _backstack_pop(key)
-        click.echo(
+        # The back-stack push is undone just above, so this really does leave
+        # nothing behind — which is what makes a plain re-run the remedy: goto
+        # re-resolves live panes from scratch.
+        _refuse_on_stderr(agent_help.no_report(
             f"Could not switch to pane {target_pane} (it may have closed).",
-            err=True,
-        )
-        raise SystemExit(1)
-    click.echo(f"• goto {label}", err=True)
+            "Re-run goto, which re-resolves live panes, or check `endless "
+            "session list` for a target that is still there",
+        ))
+    agent_help.info(f"• goto {label}", err=True)
 
 
 def session_back() -> None:
@@ -3153,11 +3641,13 @@ def session_back() -> None:
     when the stack is empty. See the module section header (E-1681).
     """
     if not _in_tmux():
-        click.echo(
+        # Same answer as `session goto`'s, for the same reason: this verb moves
+        # an attached person's focus, and an agent cannot put them in tmux.
+        _refuse_on_stderr(agent_help.report(
             "session back requires tmux (no $TMUX in this environment).",
-            err=True,
-        )
-        raise SystemExit(1)
+            "running Endless inside tmux, which is where pane navigation "
+            "means anything",
+        ))
     live = _live_sessions(_project_root_for_cwd())
     key = _backstack_key()
 
@@ -3167,7 +3657,7 @@ def session_back() -> None:
             break
         pane = _resolve_session_token_to_pane(live, token)
         if pane and _tmux_switch_client(pane):
-            click.echo(f"• back → {_token_label(token, pane)}", err=True)
+            agent_help.info(f"• back → {_token_label(token, pane)}", err=True)
             return
         # Stale or unswitchable token: it's already popped, so drop and retry.
 
@@ -3175,8 +3665,12 @@ def session_back() -> None:
     if spawner:
         pane, label = spawner
         if _tmux_switch_client(pane):
-            click.echo(f"• back → {label}", err=True)
+            agent_help.info(f"• back → {label}", err=True)
             return
 
-    click.echo("no previous session", err=True)
-    raise SystemExit(1)
+    # Exits 1 so a keybinding can tell "went back" from "had nowhere to go",
+    # but nothing is wrong: an empty back-stack is a state, not a failure.
+    _refuse_on_stderr(agent_help.no_report(
+        "no previous session",
+        "There is nothing to go back to; continue from here",
+    ))

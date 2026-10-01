@@ -5,7 +5,7 @@ from pathlib import Path
 import click
 from tabulate import tabulate
 
-from endless import config
+from endless import agent_help, config
 from endless.project_path import match_project_path
 from endless.models import Signal
 from endless.signals import detect_signals, count_git_subdirs
@@ -160,15 +160,33 @@ def run_discover(
     if discover_path:
         p = Path(discover_path).expanduser().resolve()
         if not p.is_dir():
-            raise click.ClickException(
-                f"Directory not found: {discover_path}"
+            raise agent_help.no_report(
+                f"{p} is not a directory, so there is nothing to scan. "
+                "Nothing was registered.",
+                "Correct the path and retry",
+                text=f"Directory not found: {discover_path}",
             )
         roots = [p]
     else:
         roots = config.get_roots()
 
     if not roots:
-        raise click.ClickException("No roots to scan")
+        # Two ways to have no roots, and they need opposite answers. If the
+        # user pointed at a directory in the conversation, naming it as the
+        # path argument is the whole fix. If they did not, the set of
+        # directories Endless may go looking through is theirs to choose — no
+        # CLI writes it, the ~/Projects default exists on few machines, and
+        # discover ends in registration prompts about their own directories.
+        raise agent_help.report_if(
+            "No scan roots are configured and no directory was named, so "
+            "discover had nothing to look at. Nothing was registered.",
+            "the user has not said which directories Endless may scan",
+            "retry naming the directory as the argument: "
+            "endless discover <path>",
+            "which directories to go looking through, and what to register "
+            "out of them, is theirs to choose",
+            text="No roots to scan",
+        )
 
     if reset:
         click.echo(

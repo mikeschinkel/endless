@@ -154,7 +154,12 @@ def test_missing_endless_go_fails_closed_with_an_actionable_message(monkeypatch)
         statuses.get("all")
     message = str(exc.value)
     assert "endless-go" in message
-    assert "just install" in message
+    # What the reader must END UP WITH, never how to get there (E-2159). This
+    # used to assert `just install`, a recipe that exists only in Endless's own
+    # source checkout and is unrunnable for anyone using Endless on their own
+    # project — which is everyone this message is for.
+    assert "install both" in message
+    assert "just install" not in message
 
 
 def test_stale_endless_go_names_the_command_that_failed(monkeypatch, tmp_path):
@@ -172,7 +177,10 @@ def test_stale_endless_go_names_the_command_that_failed(monkeypatch, tmp_path):
     message = str(exc.value)
     assert "task-status get all" in message
     assert "unknown subcommand" in message
-    assert "just install" in message
+    # As above: name the outcome (a matching endless-go), not Endless's own
+    # justfile recipe.
+    assert "install the endless-go that ships with this version" in message
+    assert "just install" not in message
 
 
 # --- binary resolution -----------------------------------------------------

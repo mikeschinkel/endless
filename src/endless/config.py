@@ -754,16 +754,28 @@ def require_db_context():
     """Enforce the self-dev worktree gate at a DB-access choke point.
 
     No-op when a --db choice was resolved (RESOLVED_CONFIG_DIR set) or when not
-    inside a gated worktree. Otherwise raises click.ClickException with the
-    locked refusal message. Imported lazily so config.py stays click-free.
+    inside a gated worktree. Otherwise raises the locked refusal. Imported
+    lazily so config.py stays click-free.
+
+    NO-REPORT: the caller has two valid answers and the message names both, so
+    an agent picks one and calls again. It does not name a command either — this
+    gate fires from `db.get_db`, `jobs`, `event_bridge`, `db_restore`,
+    `worktree`, `report`, `triage` and `session`, so the verb that hit it is the
+    one thing this function cannot know.
     """
     if RESOLVED_CONFIG_DIR is not None:
         return
     if gated_worktree_root() is None:
         return
-    import click
+    from endless import agent_help
 
-    raise click.ClickException(WORKTREE_DB_REFUSAL)
+    raise agent_help.no_report(
+        "This is a self-dev worktree, so --db must say which database to use. "
+        "Nothing was read or written.",
+        "Retry with --db main to manage the project, or --db sandbox to "
+        "exercise endless itself",
+        text=WORKTREE_DB_REFUSAL,
+    )
 
 
 def db_context_is_sandbox() -> bool:

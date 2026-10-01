@@ -30,6 +30,8 @@ from pathlib import Path
 
 import click
 
+from endless import agent_help
+
 
 @dataclass(frozen=True)
 class Kind:
@@ -155,13 +157,23 @@ def commit_on_main(project_root: Path, rel_path: str, subject: str) -> None:
     inheriting its main-checkout enforcement, its index.lock retry and its
     GIT_DIR-family env stripping instead of re-implementing them in Python.
     Warns and skips on any failure.
+
+    All three warnings are NO-REPORT, and the reason is the same for each: the
+    database column was written before this was called and is the source of
+    truth, the file on disk is derived from it, and the `doc-mirrors` sweep
+    rewrites any mirror whose bytes differ from its column. An uncommitted
+    mirror is therefore a delay, not a loss — there is nothing for the user to
+    decide and nothing for the agent to carry into a handoff.
     """
     binary = shutil.which("endless-go")
     if not binary:
-        click.echo(
-            "  warning: endless-go not found on PATH; "
-            f"{rel_path} not committed to main.",
-            err=True,
+        agent_help.warn.no_report(
+            f"endless-go is not on PATH, so {rel_path} was not committed to "
+            "main. The database row was written and is authoritative.",
+            "Nothing to do here: the doc-mirrors sweep commits the file once "
+            "endless-go is reachable",
+            text=("  warning: endless-go not found on PATH; "
+                  f"{rel_path} not committed to main."),
         )
         return
     try:
@@ -171,13 +183,22 @@ def commit_on_main(project_root: Path, rel_path: str, subject: str) -> None:
             capture_output=True, text=True,
         )
     except OSError as e:
-        click.echo(f"  warning: endless-go event commit-doc: {e}", err=True)
+        agent_help.warn.no_report(
+            f"endless-go could not be started, so {rel_path} was not committed "
+            "to main. The database row was written and is authoritative.",
+            "Nothing to do here: the doc-mirrors sweep commits the file on a "
+            "later run",
+            text=f"  warning: endless-go event commit-doc: {e}",
+        )
         return
     if result.returncode != 0:
-        click.echo(
-            f"  warning: could not commit {rel_path} to main: "
-            f"{(result.stderr or '').strip()}",
-            err=True,
+        agent_help.warn.no_report(
+            f"{rel_path} was written but not committed to main. The database "
+            "row was written and is authoritative.",
+            "Nothing to do here: the doc-mirrors sweep commits the file on a "
+            "later run",
+            text=(f"  warning: could not commit {rel_path} to main: "
+                  f"{(result.stderr or '').strip()}"),
         )
 
 

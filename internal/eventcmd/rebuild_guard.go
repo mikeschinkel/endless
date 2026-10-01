@@ -3,10 +3,10 @@ package eventcmd
 import (
 	"database/sql"
 	"fmt"
-	"io"
-	"os"
+	"strings"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // E-2062: `endless-go event rebuild-db --confirm` is refused on purpose.
@@ -135,10 +135,16 @@ func countRebuildLoss(db *sql.DB) rebuildLoss {
 	return loss
 }
 
-// writeRebuildRefusal renders the refusal. Separate from the exit so tests can
+// rebuildRefusalText renders the refusal. Separate from the exit so tests can
 // read it, and so the message stays one block of text instead of a trail of
 // Fprintf calls through the command body.
-func writeRebuildRefusal(w io.Writer, loss rebuildLoss) {
+//
+// It returns the text rather than writing it, because the writing now belongs
+// to internal/refusal: the block is what a PERSON reads, byte for byte, and it
+// is handed to Text() so classifying the refusal adds a verdict for an agent
+// without moving a single character of it.
+func rebuildRefusalText(loss rebuildLoss) string {
+	w := &strings.Builder{}
 	fmt.Fprint(w, "rebuild-db --confirm is disabled: it would destroy data the ledger cannot\nrestore.\n\n")
 
 	if !loss.Counted {
@@ -154,7 +160,7 @@ func writeRebuildRefusal(w io.Writer, loss rebuildLoss) {
 		row(num(loss.SessionGates), "session_gates rows",
 			fmt.Sprintf("(and %d report_judgments, %d report_labels)",
 				loss.ReportJudgments, loss.ReportLabels))
-		row(num(loss.SessionBindings), "sessions bindings", "(violates ED-1560)")
+		row(num(loss.SessionBindings), "sessions bindings", "(a task binding is never cleared)")
 		if loss.HasSessionStatuses {
 			row(num(loss.SessionStatuses), "session_statuses rows", "(task attribution nulled)")
 		}
@@ -162,17 +168,24 @@ func writeRebuildRefusal(w io.Writer, loss rebuildLoss) {
 		fmt.Fprintln(w)
 	}
 
+	// No task ids. This text reaches somebody running Endless against their own
+	// project, whose ledger has no E-799 and no E-2062 in it — an id here is at
+	// best noise and at worst a cross-reference into a ledger they cannot open.
+	// The facts the ids stood for are stated instead.
 	fmt.Fprint(w, `The copy-back restores only tasks, decisions and decision_relations, so nothing
 above is put back: the counted rows are destroyed or orphaned by the cascade,
-and task_deps is simply never written. The projection feeding the copy-back is
-also unreliable while Endless task E-1041 is open.
+and task_deps is simply never written. The projection feeding the copy-back
+does not yet reproduce every event faithfully, which is the other half of why
+this is refused.
 
-Repairing this is Endless task E-799. Do not remove the write-once trigger on
-sessions.task_id, or its `+"`ON DELETE SET NULL`"+`, to make this command run:
-that converts a loud refusal into silent data loss. See "Sequencing" in E-2062.
+Rebuilding the database from its ledger is not something Endless can currently
+do safely, and no flag here makes it safe. Do not remove the write-once trigger
+on sessions.task_id, or its `+"`ON DELETE SET NULL`"+`, to get this command to
+run: that converts a loud refusal into silent data loss.
 
 The dry run — this command without --confirm — is unaffected.
 `)
+	return w.String()
 }
 
 // refuseRebuildDBConfirm prints the refusal and exits non-zero. It never
@@ -182,6 +195,12 @@ The dry run — this command without --confirm — is unaffected.
 // error is reported inside the refusal rather than short-circuiting to the
 // generic "error:" exit, so the reason the command stopped is always the
 // same reason.
+//
+// REPORT, not NO-REPORT and not a conditional: `rebuild-db --confirm` is a
+// user-only command. There is no way for an agent to reach the rebuild it asked
+// for — the repair is E-799 and nothing here substitutes for it — so the only
+// move left belongs to whoever wanted the database rebuilt. Saying that plainly
+// beats handing the agent a branch it would resolve by trying something else.
 func refuseRebuildDBConfirm() {
 	loss := rebuildLoss{}
 	db, err := monitor.DB()
@@ -190,6 +209,8 @@ func refuseRebuildDBConfirm() {
 	} else {
 		loss = countRebuildLoss(db)
 	}
-	writeRebuildRefusal(os.Stderr, loss)
-	os.Exit(1)
+	refusal.Report(
+		"rebuild-db --confirm is disabled: it would destroy data the ledger cannot restore",
+		"what to do instead of a rebuild Endless cannot currently perform safely",
+	).Command("event rebuild-db").Text(rebuildRefusalText(loss)).Exit(1)
 }

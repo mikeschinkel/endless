@@ -5,7 +5,7 @@ from pathlib import Path
 
 import click
 
-from endless import db, config
+from endless import agent_help, db, config
 from endless.project_path import resolved
 
 
@@ -21,8 +21,11 @@ def unregister_project(name: str):
         (name,),
     )
     if not row:
-        raise click.ClickException(
-            f"No project found with name '{name}'"
+        raise agent_help.no_report(
+            f"No registered project is named '{name}'. "
+            "Nothing was unregistered.",
+            "Find the registered name with `endless project list` and retry",
+            text=f"No project found with name '{name}'",
         )
 
     project_path = resolved(row[0]["path"])
@@ -75,8 +78,10 @@ def purge_project(name: str):
         (name,),
     )
     if not row:
-        raise click.ClickException(
-            f"No project found with name '{name}'"
+        raise agent_help.no_report(
+            f"No registered project is named '{name}'. Nothing was purged.",
+            "Find the registered name with `endless project list` and retry",
+            text=f"No project found with name '{name}'",
         )
 
     project_path = resolved(row[0]["path"])

@@ -25,7 +25,7 @@ invariant, never through the `endless` CLI.
 
 from pathlib import Path
 
-from endless import statuses
+from endless import agent_help, statuses
 
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 
@@ -61,13 +61,29 @@ def assemble_canonical() -> str:
     Requires the markers to already be present — they are placed once by hand,
     exactly as guide_map requires of index.md.
     """
+    # Nothing normally reads either of these: this module is reached through
+    # `just lifecycle-index` / `just lifecycle-check` and the pytest invariant
+    # inside Endless's own checkout, never through the `endless` CLI. They are
+    # classified for the reader they do reach, and the two differ:
     if not CANONICAL.is_file():
-        raise SystemExit(f"{CANONICAL} is missing; it is the canonical artifact.")
+        # A checked-in artifact that is simply not there is the checkout being
+        # wrong about itself, with no remedy this can name — `fault`.
+        raise agent_help.fault(
+            f"{CANONICAL} is missing, so the lifecycle diagram cannot be "
+            "assembled. Nothing was written.",
+            text=f"{CANONICAL} is missing; it is the canonical artifact.",
+        )
     text = CANONICAL.read_text()
     if BEGIN_MARKER not in text or END_MARKER not in text:
-        raise SystemExit(
-            f"{CANONICAL} has no generated-block markers. Add a "
-            f"'{BEGIN_MARKER}' / '{END_MARKER}' pair around the diagram."
+        # The file IS there and the fix is an exactly-specified edit to it —
+        # small, safe, and no judgement about anyone's data — so NO-REPORT.
+        raise agent_help.no_report(
+            f"{CANONICAL} has no generated-block markers, so the rendered "
+            "diagram has nowhere to go. Nothing was written.",
+            f"Add a '{BEGIN_MARKER}' / '{END_MARKER}' pair around the diagram, "
+            "then re-run",
+            text=(f"{CANONICAL} has no generated-block markers. Add a "
+                  f"'{BEGIN_MARKER}' / '{END_MARKER}' pair around the diagram."),
         )
     preamble = text[: text.index(BEGIN_MARKER)]
     return f"{preamble}{BEGIN_MARKER}\n{rendered_block()}{END_MARKER}\n"
@@ -106,7 +122,11 @@ def update() -> list[str]:
     for doc in COPIES:
         path = _REPO_ROOT / doc
         if not path.is_file():
-            raise SystemExit(f"{doc} is missing; it must embed the canonical file.")
+            raise agent_help.fault(
+                f"{doc} is missing, so the copy it must embed cannot be "
+                f"rewritten. {len(changed)} file(s) were already updated.",
+                text=f"{doc} is missing; it must embed the canonical file.",
+            )
         if _replace_embedded_block(path, canonical):
             changed.append(doc)
 
@@ -153,4 +173,15 @@ def run_cli(argv: list[str]) -> int:
 if __name__ == "__main__":
     import sys
 
-    sys.exit(run_cli(sys.argv[1:]))
+    # Click's handler is not installed on this path — this module is run as a
+    # script by the just recipes — so the refusal is rendered and its status
+    # passed on by hand, exactly as guide_map does.
+    try:
+        _code = run_cli(sys.argv[1:])
+    except agent_help.Refusal as _refusal:
+        # `info(..., err=True)` rather than `refusal.show()`: show() is Click's
+        # renderer and would prepend "Error: ", which a bare SystemExit(str)
+        # never did. The bytes a person reads here stay what they were.
+        agent_help.info(_refusal.format_message(), err=True)
+        _code = _refusal.exit_code
+    agent_help.passthrough_exit(_code)

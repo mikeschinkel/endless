@@ -22,6 +22,13 @@
 //	0  true, or the verb succeeded
 //	1  false (`has` only)
 //	2  usage error — unknown verb, group, state, or wrong arity
+//
+// Nothing written to stderr here is read where it was written.
+// session_states.py._run captures it and relays it verbatim inside a
+// SessionStateVocabularyError, and the registry is loaded at import time — so a
+// refusal from this binary can abort every `endless` command, which is why the
+// vocabulary and arity failures below are faults rather than things a reader is
+// invited to retype.
 package sessionstatecmd
 
 import (
@@ -29,19 +36,24 @@ import (
 	"os"
 	"strings"
 
+	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/sessionstate"
 )
 
 // Run dispatches the `session-state` subcommand's inner verbs.
 func Run(args []string) {
 	if len(args) == 0 {
-		usage(os.Stderr)
-		os.Exit(2)
+		// The Python caller always names a verb, so a bare invocation is
+		// somebody running the binary by hand — retype it and move on.
+		refusal.NoReport(
+			"endless-go session-state: no verb given",
+			"Pass a verb and retry",
+		).Command("session-state").Text(usageText()).Exit(2)
 	}
 	verb, rest := args[0], args[1:]
 	switch verb {
 	case "-h", "--help", "help":
-		usage(os.Stdout)
+		fmt.Fprint(os.Stdout, usageText())
 	case "groups":
 		requireArgs(verb, rest, 0)
 		for _, slug := range sessionstate.AllGroupSlugs() {
@@ -92,60 +104,80 @@ func Run(args []string) {
 			fmt.Printf("%s\t%s\t%s\n", t.From, t.To, t.Trigger)
 		}
 	default:
-		fmt.Fprintf(os.Stderr, "endless-go session-state: unknown command %q\n", verb)
-		usage(os.Stderr)
-		os.Exit(2)
+		// Not a typo an agent can correct: session_states.py picks the verb, so
+		// an unknown one means the installed endless-go predates the endless CLI
+		// calling it. Only the user can reinstall the two as a matching pair,
+		// and until they do, the registry fails to load and every `endless`
+		// command fails with it.
+		refusal.Report(
+			fmt.Sprintf("endless-go session-state: unknown command %q", verb),
+			"whether to reinstall endless and endless-go together as a matching pair",
+		).Command("session-state").Detail(usageText()).Exit(2)
 	}
 }
 
 // requireArgs exits 2 with a usage message when a verb's arity is wrong.
+//
+// A fault rather than a usage refusal, because of who can reach it: the Python
+// wrapper builds this argv itself, so wrong arity is the two halves of Endless
+// disagreeing about a verb's shape, not something anybody mistyped.
 func requireArgs(verb string, args []string, want int) {
 	if len(args) == want {
 		return
 	}
-	fmt.Fprintf(os.Stderr, "endless-go session-state %s: expected %d argument(s), got %d\n",
-		verb, want, len(args))
-	usage(os.Stderr)
-	os.Exit(2)
+	refusal.Faultf("endless-go session-state %s: expected %d argument(s), got %d",
+		verb, want, len(args)).
+		Command("session-state " + verb).Detail(usageText()).Exit(2)
 }
 
 // mustGroup resolves a group name or exits 2 naming every valid group.
+//
+// The message is built in internal/sessionstate, which names no class, so From
+// faults it — and a fault is the honest reading: Python asked for a group Go
+// does not define, which is Python/Go drift rather than a name anybody chose.
+// From rather than Fault so that classifying the constructor later takes effect
+// here without a second edit.
 func mustGroup(slug string) sessionstate.Group {
 	g, err := sessionstate.ParseGroup(slug)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
+		refusal.From(err).Command("session-state").Exit(2)
 	}
 	return g
 }
 
 // mustState validates a state or exits 2 naming the vocabulary.
+//
+// Also a fault: the state reaching here came from the database or from Python
+// (task_cmd.py hands `has` a value it read), so one outside the vocabulary is
+// the stored data and the registry having drifted apart.
 func mustState(s string) sessionstate.State {
 	if err := sessionstate.Validate(s); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(2)
+		refusal.From(err).Command("session-state").Exit(2)
 	}
 	return s
 }
 
-func usage(w *os.File) {
-	fmt.Fprintln(w, "Usage: endless-go session-state <verb> [args...]")
-	fmt.Fprintln(w, "Verbs:")
-	fmt.Fprintln(w, "  groups                 list every group name, one per line")
-	fmt.Fprintln(w, "  get <group>            the group's members, one per line, in group order")
-	fmt.Fprintln(w, "  has <group> <state>    exit 0 if a member, 1 if not")
-	fmt.Fprintln(w, "  sql-list <group>       'a','b' — for a SQL IN clause")
-	fmt.Fprintln(w, "  rank <group> <state>   index within an ordered group, -1 when absent")
-	fmt.Fprintln(w, "  label <state>          human display string")
-	fmt.Fprintln(w, "  glyph <state>          semantic glyph (no color); "+
-		sessionstate.UnknownGlyph+" for a state outside the vocabulary")
-	fmt.Fprintln(w, "  transitions            the writer table, TSV: from to trigger")
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "Groups:")
-	// Derived from the registry, never typed: a group added in Go shows up here
-	// for free, which is the class of omission this package exists to end.
-	fmt.Fprintln(w, "  "+strings.Join(sessionstate.AllGroupSlugs(), ", "))
-	fmt.Fprintln(w, "")
-	fmt.Fprintln(w, "States:")
-	fmt.Fprintln(w, "  "+strings.Join(sessionstate.Get(sessionstate.All), ", "))
+func usageText() string {
+	return strings.Join([]string{
+		"Usage: endless-go session-state <verb> [args...]",
+		"Verbs:",
+		"  groups                 list every group name, one per line",
+		"  get <group>            the group's members, one per line, in group order",
+		"  has <group> <state>    exit 0 if a member, 1 if not",
+		"  sql-list <group>       'a','b' — for a SQL IN clause",
+		"  rank <group> <state>   index within an ordered group, -1 when absent",
+		"  label <state>          human display string",
+		"  glyph <state>          semantic glyph (no color); " +
+			sessionstate.UnknownGlyph + " for a state outside the vocabulary",
+		"  transitions            the writer table, TSV: from to trigger",
+		"",
+		"Groups:",
+		// Derived from the registry, never typed: a group added in Go shows up
+		// here for free, which is the class of omission this package exists to
+		// end.
+		"  " + strings.Join(sessionstate.AllGroupSlugs(), ", "),
+		"",
+		"States:",
+		"  " + strings.Join(sessionstate.Get(sessionstate.All), ", "),
+	}, "\n") + "\n"
 }

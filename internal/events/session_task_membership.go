@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 )
 
@@ -175,12 +176,17 @@ func execSessionTasksRemoved(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	}
 	if len(claimed) > 0 {
 		sort.Strings(claimed)
-		return nil, fmt.Errorf(
-			"events: session_tasks.removed refuses this session's claimed task(s): %s "+
-				"(a claim cannot be dropped; `session hide --task` suppresses it "+
-				"from the listing)",
-			strings.Join(claimed, ", "),
-		)
+		// The whole call is refused before any row is touched, and the message
+		// already names both ways forward, so there is nothing here to put to the
+		// user.
+		return nil, refusal.NoReport(
+			fmt.Sprintf(
+				"events: session_tasks.removed refuses this session's claimed task(s): %s "+
+					"(a claim cannot be dropped; `session hide --task` suppresses it "+
+					"from the listing)",
+				strings.Join(claimed, ", "),
+			),
+			"Drop the claimed id from the request, or use `endless session hide --task` instead, and retry")
 	}
 
 	var removed, absent []int64
@@ -232,14 +238,14 @@ func membershipRequest(db dbQuerier, evt *Event, kind string) (int64, []int64, e
 	if !ok {
 		sessionID, err = liveSessionByProcessTx(db, p.Process)
 		if err != nil {
-			return 0, nil, fmt.Errorf(
-				"events: no live session for process %q: %w", p.Process, err,
-			)
+			return 0, nil, noLiveSessionForProcess(p.Process, err)
 		}
 	}
 
 	if len(p.TaskIDs) == 0 {
-		return 0, nil, fmt.Errorf("events: %s names no tasks", kind)
+		return 0, nil, refusal.NoReport(
+			fmt.Sprintf("events: %s names no tasks", kind),
+			"Pass at least one task id and retry")
 	}
 	seen := make(map[int64]bool, len(p.TaskIDs))
 	taskIDs := make([]int64, 0, len(p.TaskIDs))
@@ -270,9 +276,13 @@ func requireLiveTasks(db dbQuerier, taskIDs []int64, kind string) error {
 	}
 	if len(missing) > 0 {
 		sort.Strings(missing)
-		return fmt.Errorf(
-			"events: %s references unknown task(s): %s", kind, strings.Join(missing, ", "),
-		)
+		// Fires after the ledger line is appended and committed, so a retry with
+		// corrected ids leaves the refused event in the ledger behind it.
+		return refusal.NoReport(
+			fmt.Sprintf(
+				"events: %s references unknown task(s): %s", kind, strings.Join(missing, ", "),
+			),
+			"Re-check the ids with `endless task list` or `endless task show`, and retry")
 	}
 	return nil
 }

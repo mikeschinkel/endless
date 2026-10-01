@@ -2,11 +2,12 @@ package tmuxcmd
 
 import (
 	"crypto/rand"
-	"flag"
 	"fmt"
 	"os"
 	"os/exec"
 	"strings"
+
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // runInit is the target for `set-hook -g session-created "run-shell
@@ -25,15 +26,29 @@ import (
 // the same way (idempotent: first call does work, subsequent calls
 // no-op until the next server restart).
 func runInit(args []string) {
-	fs := flag.NewFlagSet("init", flag.ExitOnError)
+	fs := refusal.NewFlags("init")
 	binary := fs.String("binary", "", "Override path to endless binary passed to `apply` (default: argv[0])")
 	prefixKey := fs.String("hotkey", "e", "Prefix-table key passed to `apply`")
 	interval := fs.Int("status-interval", 2, "tmux status-interval passed to `apply`")
-	fs.Parse(args)
+	if err := fs.Parse(args); err != nil {
+		// -h asked a question and got an answer; it is not a refusal.
+		fs.ExitOnHelp(err)
+		// NewFlags is ContinueOnError, so the exit flag.ExitOnError used to take
+		// from inside Parse is ours to take here. Both callers — the
+		// session-created hook and a manual run — pass flags this verb defines,
+		// so a flag that misses was typed.
+		refusal.NoReport(err.Error(), "Correct the flag and retry").
+			Command("tmux init").Text(fs.Output()).Exit(2)
+	}
 
 	if os.Getenv("TMUX") == "" {
-		fmt.Fprintln(os.Stderr, "endless-go tmux init: not inside a tmux session ($TMUX is empty)")
-		os.Exit(1)
+		// Only the user can start or attach to their own tmux, so there is no
+		// retry an agent can make. Never fires from the session-created hook,
+		// where $TMUX is set by definition: this is the manual path.
+		refusal.Report(
+			"endless-go tmux init: not inside a tmux session ($TMUX is empty)",
+			"running `endless tmux init` from inside their own tmux session",
+		).Command("tmux init").Exit(1)
 	}
 
 	existing := strings.TrimSpace(readServerOption("@server_uuid"))
@@ -41,14 +56,22 @@ func runInit(args []string) {
 		// Server already initialized this lifetime. Quiet no-op so the
 		// session-created hook firing for every subsequent session
 		// doesn't spam stderr.
-		fmt.Fprintf(os.Stderr, "endless-go tmux init: server already initialized (@server_uuid=%s)\n", existing)
+		//
+		// Nothing is broken and nothing is left to do — the gate did its job —
+		// so an agent that reads it carries straight on.
+		refusal.NoReport(
+			fmt.Sprintf("endless-go tmux init: server already initialized (@server_uuid=%s)", existing),
+			"Nothing to do: this tmux server is already initialized",
+		).Command("tmux init").Print()
 		return
 	}
 
 	uuid, err := newUUID()
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go tmux init: generate uuid: %v\n", err)
-		os.Exit(1)
+		// crypto/rand failed. Nothing about the invocation is wrong and no retry
+		// changes it: the machine could not produce random bytes.
+		refusal.Faultf("endless-go tmux init: generate uuid: %v", err).
+			Command("tmux init").Cause(err).Exit(1)
 	}
 
 	// This used to call runReset(nil) first, and that call was the trigger for
@@ -73,8 +96,14 @@ func runInit(args []string) {
 	runApply(applyArgs)
 
 	if err := setServerOption("@server_uuid", uuid); err != nil {
-		fmt.Fprintf(os.Stderr, "endless-go tmux init: set @server_uuid: %v\n", err)
-		os.Exit(1)
+		// tmux printed its own reason just above (setServerOption passes its
+		// stderr through). apply already ran and re-running init is safe — the
+		// gate is still open and apply is idempotent — but why this server
+		// refused a set-option is the user's to look into.
+		refusal.Report(
+			fmt.Sprintf("endless-go tmux init: set @server_uuid: %v", err),
+			"why their tmux server refused the @server_uuid option",
+		).Command("tmux init").Exit(1)
 	}
 
 	fmt.Printf("endless-go tmux init: server initialized (@server_uuid=%s)\n", uuid)
@@ -94,7 +123,9 @@ func readServerOption(name string) string {
 
 func setServerOption(name, value string) error {
 	cmd := exec.Command("tmux", "set-option", "-g", name, value)
-	cmd.Stderr = os.Stderr
+	// tmux's own diagnostic, verbatim: it names the option and the version
+	// constraint that the caller's refusal cannot.
+	cmd.Stderr = refusal.Passthrough()
 	return cmd.Run()
 }
 

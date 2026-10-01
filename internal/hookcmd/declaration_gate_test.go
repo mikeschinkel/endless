@@ -101,7 +101,7 @@ func TestDeclarationRefusal_UndeclaredSession(t *testing.T) {
 			if name == "row holding no task" {
 				s = &monitor.SessionInfo{State: "working"}
 			}
-			msg := declarationRefusal(1, s)
+			msg := declarationRefusal(1, s).Error()
 			for _, want := range []string{
 				"has not declared a task in project 'proj'",
 				"endless task claim <id>",
@@ -131,7 +131,7 @@ func TestDeclarationRefusal_DeclaredButNotActing(t *testing.T) {
 	msg := declarationRefusal(1, &monitor.SessionInfo{
 		State:  "needs_input",
 		TaskID: ptrInt64(2093),
-	})
+	}).Error()
 
 	for _, want := range []string{
 		"holds E-2093",
@@ -162,7 +162,7 @@ func TestDeclarationRefusal_DescribesTheStateItChecked(t *testing.T) {
 	msg := declarationRefusal(1, &monitor.SessionInfo{
 		State:  "ended",
 		TaskID: ptrInt64(2093),
-	})
+	}).Error()
 	if !strings.Contains(msg, "state 'ended'") {
 		t.Errorf("refusal does not name the state it refused\n--- message ---\n%s", msg)
 	}

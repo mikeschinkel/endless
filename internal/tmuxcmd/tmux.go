@@ -22,12 +22,17 @@ package tmuxcmd
 import (
 	"fmt"
 	"os"
+	"strings"
+
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 func Run(args []string) {
 	if len(args) < 1 {
-		usage(os.Stderr)
-		os.Exit(2)
+		refusal.NoReport(
+			"endless-go tmux: no command given",
+			"Re-run with one of the listed subcommands",
+		).Command("tmux").Text(usageText()).Exit(2)
 	}
 
 	switch args[0] {
@@ -50,18 +55,30 @@ func Run(args []string) {
 	// hooks an older `apply` installed will invoke it until the server
 	// restarts; `apply` now retires those hooks (see retireNavHooks).
 	case "-h", "--help", "help":
-		usage(os.Stdout)
+		fmt.Fprint(os.Stdout, usageText())
 	default:
-		fmt.Fprintf(os.Stderr, "endless-go tmux: unknown command %q\n", args[0])
-		usage(os.Stderr)
-		os.Exit(2)
+		// Two readers, and only one of them is a person. A tmux server started
+		// before E-2081 still fires `tmux record-nav` from the focus-change
+		// hooks an older apply installed, on every pane switch; run-shell
+		// discards that stderr and shows only the non-zero exit in view mode.
+		// Either way the fix is the same verb list, so the class does not turn
+		// on which reader got here.
+		refusal.NoReport(
+			fmt.Sprintf("endless-go tmux: unknown command %q", args[0]),
+			"Re-run with one of the listed subcommands",
+		).Command("tmux").Detail(usageText()).Exit(2)
 	}
 }
 
-func usage(w *os.File) {
-	fmt.Fprintf(w, "Usage: endless-go tmux <command> [flags]\n")
-	fmt.Fprintf(w, "Commands:\n")
-	fmt.Fprintf(w, "  init         Init the current tmux server (apply, gated by @server_uuid)\n")
-	fmt.Fprintf(w, "  apply        Configure the running tmux server (ephemeral)\n")
-	fmt.Fprintf(w, "  status-line  Print one styled line for status-format[1]\n")
+// usageText is the command list, printed for --help and carried as the body of
+// the two usage refusals above. It advertises init/apply/status-line only:
+// active-id and show-menu are plumbing for the menus, not verbs a user types.
+func usageText() string {
+	return strings.Join([]string{
+		"Usage: endless-go tmux <command> [flags]",
+		"Commands:",
+		"  init         Init the current tmux server (apply, gated by @server_uuid)",
+		"  apply        Configure the running tmux server (ephemeral)",
+		"  status-line  Print one styled line for status-format[1]",
+	}, "\n") + "\n"
 }
