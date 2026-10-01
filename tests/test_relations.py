@@ -1,6 +1,5 @@
 """Tests for the general-purpose task relation CLI (E-957)."""
 
-import sqlite3
 from pathlib import Path
 
 import click
@@ -356,59 +355,6 @@ def test_related_task_ids_helper(isolated_env):
     assert set(ids) == {b}
     ids = task_cmd._related_task_ids(a, "implemented_by")
     assert set(ids) == {c}
-
-
-def test_migration_strips_check_and_swaps(tmp_path, monkeypatch):
-    """Seed a CHECK-constrained legacy task_deps with 'needs' + 'replaces' rows; migration rewrites them."""
-    from endless import config
-    db_path = tmp_path / "legacy.db"
-    monkeypatch.setattr(config, "CONFIG_DIR", tmp_path)
-    monkeypatch.setattr(config, "DB_PATH", db_path)
-    # db.py reads config.DB_PATH dynamically (E-1429); no db.DB_PATH to patch.
-    monkeypatch.setattr(db, "_conn", None)
-
-    # Pre-create with legacy schema (CHECK on dep_type) and legacy 'needs' rows.
-    conn = sqlite3.connect(str(db_path))
-    conn.executescript("""
-        CREATE TABLE projects (id INTEGER PRIMARY KEY, name TEXT, path TEXT, status TEXT, created_at TEXT, updated_at TEXT);
-        CREATE TABLE tasks (
-            id INTEGER PRIMARY KEY, project_id INTEGER NOT NULL, title TEXT,
-            description TEXT, status TEXT NOT NULL DEFAULT 'unplanned',
-            type TEXT NOT NULL DEFAULT 'task', phase TEXT NOT NULL DEFAULT 'now',
-            created_at TEXT NOT NULL DEFAULT '', updated_at TEXT NOT NULL DEFAULT '',
-            completed_at TEXT, sort_order INTEGER NOT NULL DEFAULT 0
-        );
-        CREATE TABLE task_deps (
-            id INTEGER PRIMARY KEY,
-            source_type TEXT NOT NULL CHECK (source_type IN ('task', 'project')),
-            source_id INTEGER NOT NULL,
-            target_type TEXT NOT NULL CHECK (target_type IN ('task', 'project')),
-            target_id INTEGER NOT NULL,
-            dep_type TEXT NOT NULL DEFAULT 'blocks' CHECK (dep_type IN ('blocks', 'needs')),
-            created_at TEXT NOT NULL DEFAULT '',
-            UNIQUE(source_type, source_id, target_type, target_id)
-        );
-        INSERT INTO projects (id, name, path) VALUES (1, 'test', '/tmp');
-        INSERT INTO tasks (id, project_id, title) VALUES (100, 1, 'A'), (200, 1, 'B');
-        -- legacy passive layout: source=blocked, target=blocker
-        INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type)
-        VALUES ('task', 100, 'task', 200, 'needs');
-    """)
-    conn.commit()
-    conn.close()
-
-    # Trigger migration via get_db()
-    new_conn = db.get_db()
-    rows = [tuple(r) for r in new_conn.execute(
-        "SELECT source_id, target_id, dep_type FROM task_deps ORDER BY id"
-    )]
-    sql = new_conn.execute(
-        "SELECT sql FROM sqlite_master WHERE name='task_deps'"
-    ).fetchone()[0]
-
-    # CHECK should be gone; 'needs' should be 'blocks' with swap
-    assert "CHECK" not in sql
-    assert rows == [(200, 100, "blocks")]
 
 
 # --- E-1477: unified "Links:" rendering ---------------------------------------

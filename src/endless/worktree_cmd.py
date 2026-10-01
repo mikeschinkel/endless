@@ -3522,15 +3522,15 @@ def _run_migrate(migrate_bin: str, args: list[str], what: str) -> dict:
 LAND_SETTINGS_FILENAME = "land.toml"
 _LAND_SETTINGS_KEYS: dict[str, set[str]] = {}
 
-# Keys a land once understood, each with the task that retired it. Refused
-# like any unknown key, but by name: a branch cut before the retirement still
-# carries one, and "unknown key" would read as a typo rather than as a setting
-# that no longer has anything to do.
+# Keys a land once understood, each with why it went. Refused like any unknown
+# key, but by name: a branch cut before the retirement still carries one, and
+# "unknown key" would read as a typo rather than as a setting that no longer
+# has anything to do. (`schema_order` was retired by E-2158; the message names
+# no task id because the people reading it cannot open this project's ledger.)
 _RETIRED_LAND_SETTINGS = {
     ("self_dev", "schema_order"): (
-        "E-2158",
         "goose migrations are the only schema step a land runs, so there is "
-        "nothing left to order",
+        "nothing left to order"
     ),
 }
 
@@ -3553,7 +3553,7 @@ def _check_land_settings(worktree_path: Path, canonical: str, self_dev: bool) ->
     understand — unreadable TOML, a setting at the top level, an unknown table
     or key — refuses, naming the file and the offender. A typo in a landing
     instruction must not be silently ignored. A retired key is refused by name,
-    with the task that retired it. Called before the ff-merge, so the refusal
+    saying why it went. Called before the ff-merge, so the refusal
     leaves base and the database untouched.
 
     `[self_dev]` is known only on a self_dev project. Everywhere else no table
@@ -3601,11 +3601,10 @@ def _check_land_settings(worktree_path: Path, canonical: str, self_dev: bool) ->
                 f"{known_tables}"
             )
         for key in value:
-            retired = _RETIRED_LAND_SETTINGS.get((table, key))
-            if retired:
-                task, why = retired
+            why = _RETIRED_LAND_SETTINGS.get((table, key))
+            if why:
                 raise refuse(
-                    f"sets [{table}].{key}, which {task} retired: {why}. "
+                    f"sets [{table}].{key}, which is retired: {why}. "
                     f"Delete the key (and the file, if nothing else is in "
                     f"it); {known_tables}"
                 )

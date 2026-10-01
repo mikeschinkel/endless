@@ -212,7 +212,8 @@ def test_missing_or_empty_land_toml_lands(landable):
 
 def test_retired_schema_order_is_refused_by_name(landable):
     """A branch cut before E-2158 still carries the key. "Unknown key" would
-    read as a typo; the refusal says it was retired, by whom, and what to do."""
+    read as a typo; the refusal says it was retired, why, and what to do —
+    naming no task id, which a user's project could not resolve."""
     wt = landable["worktree"]
     _write_land_toml(wt, '[self_dev]\nschema_order = "changes-first"\n')
     with pytest.raises(click.ClickException) as ei:
@@ -220,8 +221,9 @@ def test_retired_schema_order_is_refused_by_name(landable):
     msg = ei.value.message
     assert "land.toml" in msg
     assert "schema_order" in msg
-    assert "retired" in msg
-    assert "E-2158" in msg
+    assert "is retired" in msg
+    assert "nothing left to order" in msg
+    assert "E-2158" not in msg
     assert "Delete the key" in msg
     assert "Nothing has been merged or migrated" in msg
 

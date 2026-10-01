@@ -22,7 +22,7 @@
 #       byte-for-byte schema-identical. A goose database at user_version 0
 #       migrates normally.
 #   C5  land.toml: absent or empty lands; `[self_dev] schema_order` is refused
-#       before the merge as retired by E-2158; any other key is refused.
+#       before the merge by name as retired; any other key is refused.
 #   C6  Python: a missing column names `endless db upgrade`; a Python read
 #       runs no migration ladder.
 #   C7  END TO END: a real self_dev land against a main database held at 00010
@@ -233,7 +233,7 @@ assert_contains "fixed: the landing is recorded in the same run" "landings=1" "$
 
 land retired
 assert_contains "retired: the land is refused, naming the retired key" \
-    "schema_order, which E-2158 retired" "${OUT}"
+    "schema_order, which is retired" "${OUT}"
 assert_contains "retired: refused before the merge" "main_advanced=no" "${OUT}"
 assert_contains "retired: the database was not migrated" "db_version=10" "${OUT}"
 assert_contains "retired: nothing was recorded" "landings=0" "${OUT}"

@@ -520,7 +520,7 @@ silently ignored. Fix the file on the branch, commit, and land again.
 This project is self_dev. Settings that only mean something to Endless landing
 itself belong under a `[self_dev]` table, but none exists today — so every key
 is refused, and a `[self_dev] schema_order` left on an older branch is refused
-by name as retired (E-2158). Delete it.
+by name as retired. Delete it.
 
 In a self_dev land, step 3 is followed by one schema step, behind one database
 backup: `endless-migrate up` brings the database to the newest goose migration
