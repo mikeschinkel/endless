@@ -63,14 +63,28 @@ One case remains uncovered and is accepted: a task that produced work, landed
 none of it, and had its worktree reaped reads as never started. Nothing of it
 survives to point at, so there is nothing to render from.
 
-## The pre-May rows stay wrong
+## Amended during implementation: evidence depends on task type
 
-About ninety finished tasks from April 2026 and earlier have no landing row and
-will keep showing ⊙. Leave them. Backfilling landing records from git history is
-a much larger job with its own task — E-1715, "Research backfilling historical
-task landing records" — and this change must not absorb it. Say so in a comment
-where the rule is written, so the next reader knows it was considered rather
-than missed.
+The rule above, applied to every row, would turn two sets of rows that are blank
+today into ⊙: completed research and brainstorm tasks, which have no code and
+correctly have no landing row, and finished pre-May code tasks, which are
+`Shipped` and so currently render blank. (The original text below said those
+"keep showing ⊙". That was wrong: they render blank today.) Mike chose option 3:
+
+    epic                    DescendantShipped           (E-2198, unchanged)
+    research, brainstorm    taskstatus.Shipped(status)  (unchanged)
+    todo, bugfix, other     Landed                      (E-2199)
+
+`◆` still catches the Unsettled half of the union before this split is reached.
+
+## The pre-May rows read ⊙
+
+About ninety finished code-bearing tasks from April 2026 and earlier have no
+landing row, so they now read ⊙, which is an accepted consequence of option 3.
+Backfilling landing records from git history is a much larger job with its own
+task, E-1715, "Research backfilling historical task landing records", and this
+change must not absorb it. Say so in a comment where the rule is written, so the
+next reader knows it was considered rather than missed.
 
 ## The label does not change
 
@@ -82,30 +96,26 @@ column.
 
 ## Where the change goes
 
-`unsettledMark` in `internal/sessionstatuscmd/session_status.go`, and only
-there. It already receives a `SessionStatusRow` carrying both fields, so this is
-a change to one switch and to the comment block above it, with no new query, no
-new cache, and nothing added to `internal/monitor`.
-
-The comment block above `unsettledMark` is load-bearing — it records why the
-split was decided by status, why `task_landings` was not consulted, and the
-mis-signal this task removes. Rewrite it to state the new rule and why the
-evidence is now trustworthy, including the measurement above. Do not delete the
-E-2087 history; it explains why the obvious source was once wrong.
-
-E-2198 already landed a change to this same function, deriving an epic's glyph
-from its children. It is orthogonal and must be preserved: it governs which
-ROWS consult children, this task governs what counts as evidence for a row that
-does its own work. Read what it left before editing, and extend it rather than
-replacing the switch wholesale.
+The per-type dispatch already lives in `monitor.SessionStatusRow.HasShippedWork`,
+which E-2198 added. Putting a second dispatch in `unsettledMark` would split the
+rule across two places, so the method takes the per-type rule and is renamed
+`HasWorkProduct`, because a landed `underway` task has not "shipped". There is
+still no new query and no new cache: `Landed` is already on the row.
+`unsettledMark` keeps its switch and calls the renamed method. Its comment block
+is rewritten to state the new rule, the 2026-09-30 measurement, the E-2087
+history and the accepted consequences. The guide's paragraph on ⊙
+(`docs/guide/orchestration.md`) is updated to match.
 
 ## Acceptance
 
 - A task that landed work and is still `underway` renders blank, not ⊙.
 - A task with an unsettled worktree still renders ◆.
-- A task with no landing row and no unsettled worktree still renders ⊙.
+- A todo or bugfix with no landing row and no unsettled worktree renders ⊙,
+  whatever its status.
+- A research or brainstorm task at `unreviewed` or `completed` renders blank
+  without a landing row.
 - A task whose unsettled verdict is unknown still renders `~`.
 - The legend still derives its entry by calling `unsettledMark`.
-- Pre-May-2026 rows are untouched and a comment says why.
+- Pre-May-2026 code rows read ⊙, and a comment says why (E-1715).
 - E-2198's epic behaviour is preserved.
 - `just test` and `just test-go` pass.
