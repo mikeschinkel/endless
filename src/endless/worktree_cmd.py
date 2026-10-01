@@ -4070,12 +4070,13 @@ def land_worktree(
                 "one, which changes what is being inspected",
                 text=detached,
             )
+        working_branch = (
+            companion.get("branch") or task_branch(int(canonical[2:]))
+        )
         raise agent_help.no_report(
             f"{canonical}'s worktree is on a detached HEAD although its "
-            f"companion names {companion.get('branch') or task_branch(int(canonical[2:]))}. "
-            f"Nothing was landed.",
-            f"Check out {task_branch(int(canonical[2:]))} in that worktree and "
-            f"retry the land",
+            f"companion names {working_branch}. Nothing was landed.",
+            f"Check out {working_branch} in that worktree and retry the land",
             text=detached,
         )
     worktree_path = Path(target["path"])

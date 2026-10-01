@@ -1054,7 +1054,7 @@ func TestEventEmit_QuestionResolvedRefusalWritesNoLedger(t *testing.T) {
 	}
 	for _, bad := range []string{
 		`{"status":"withdrawn","reason":"moot"}`, // invalid is terminal
-		`{"status":"superseded"}`,                 // no reason
+		`{"status":"superseded"}`,                // no reason
 		`{"status":"answered","answer":"x","answered_by":"someone"}`,
 	} {
 		if out, err := resolve(bad); err == nil {
