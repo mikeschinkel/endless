@@ -1,0 +1,1 @@
+E-1444's --no-session already unblocks terminal writes; per-human attribution belongs to the multi-developer work (E-1829), where it should be designed around who wrote, not which harness.
