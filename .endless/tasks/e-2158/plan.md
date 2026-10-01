@@ -124,3 +124,20 @@ tests listed by the measurement.
   naming the object.
 - Python connect no longer runs a migration ladder: a user_version-0 database
   is not modified by a Python read.
+
+## Scope grown during implementation (Mike, 2026-10-01)
+
+- Deleted the Go functions that existed only for `.go` change files to call, and
+  their tests: `events.RepairClaimBindings`, `monitor.RepairMisboundSessions`,
+  `monitor.RepairProjectPaths` (with `projectRefColumns`/`mergeProjectRow`), and
+  `monitor.AdoptPaneBindings`/`ObserveLocalTmux`.
+- Deleted `internal/schema/schema_test.go`'s two `TestSchema_AppliesToDBPredating*`
+  tests and their `dropStmts` helper: they guarded schema.sql surviving the
+  connect `apply-change` made before its change script, a trap that existed
+  only under that mechanism.
+- The pre-v6 refusal sits in `newProvider`, not only `MigrateContext`: goose's
+  first version read (`DBVersion`, which every connect and `up` call first)
+  creates `goose_db_version`, so a check that waited for Migrate would pass the
+  database it is meant to refuse and would have modified it.
+- The new migration is 00011 (the next free number on main), not 00002.
+
