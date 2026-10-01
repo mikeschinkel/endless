@@ -6999,3 +6999,7 @@ TaskWorktreeUnsettledDetail, which fills the ◆ column, runs a live git status 
 ### [2026-09-30] A verify suite that drives a Claude hook must set CLAUDE_CODE_ENTRYPOINT=cli
 The hook's agent gate (E-1962) exits silently before touching the database unless CLAUDE_CODE_ENTRYPOINT=cli. An agent's own shell runs inside Claude Code and has it; Mike's terminal does not. So a suite that pipes a payload into 'endless-go hook claude' passes for the agent and fails for Mike, and its 'hook is silent' assertions pass vacuously. Set CLAUDE_CODE_ENTRYPOINT=cli on the hook invocation, and re-run the suite with the Claude variables unset (env -u CLAUDE_CODE_ENTRYPOINT -u CLAUDECODE ...) before handing it over. (E-2020)
 - **Project**: endless
+
+### [2026-10-01] Don't pre-warn about failures the tooling will report loudly itself
+Leave out of a handoff any risk that a later step will surface with its own clear error (for example a goose duplicate-migration refusal at land or test time). Mention a risk only if it would fail silently, or if acting on it early saves real work.
+- **Project**: endless
