@@ -7003,3 +7003,7 @@ The hook's agent gate (E-1962) exits silently before touching the database unles
 ### [2026-10-01] Don't pre-warn about failures the tooling will report loudly itself
 Leave out of a handoff any risk that a later step will surface with its own clear error (for example a goose duplicate-migration refusal at land or test time). Mention a risk only if it would fail silently, or if acting on it early saves real work.
 - **Project**: endless
+
+### [2026-10-01] Don't explain accepted workflow events
+When something the workflow treats as routine happens (for example, a migration number clash fixed by renumbering on rebase), don't hand Mike a paragraph explaining it. That spends his attention on something already accepted, which works against Endless's goal of letting a human do more with less time and mental energy. Mention it in a few words at most, or not at all if nothing needs his decision. Save explanation for things he has to act on or decide.
+- **Project**: endless
