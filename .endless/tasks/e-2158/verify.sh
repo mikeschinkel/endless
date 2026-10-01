@@ -86,11 +86,7 @@ fi
 section "B1. The mechanism is gone (C1)"
 
 for d in internal/schema/changes internal/schemachange; do
-    if [[ -e "${d}" ]]; then
-        report_fail "${d} does not exist" "absent" "present"
-    else
-        report_pass "${d} does not exist"
-    fi
+    assert_eq "${d} tracks no files" "" "$(git ls-files -- "${d}")"
 done
 
 hits=$(git grep -n -E 'schema/changes|schemachange|apply-change|apply_change|_schema_version|change file|change-file|ENDLESS_AUTO_MIGRATE|_migrate_v[0-9]' \
