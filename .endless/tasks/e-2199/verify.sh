@@ -1,5 +1,4 @@
 #!/usr/bin/env bash
-source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 # ── DO NOT EDIT ─────────────────────────────────────────────────────
 # This suite belongs to E-2199 and records what was true when E-2199
 # landed. Edit it only if you ARE E-2199. If your change breaks an
@@ -29,6 +28,8 @@ source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 #   database or config.
 #
 # Exit 0 all-passed, 1 on any failure, 2 on a setup problem.
+
+source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 
