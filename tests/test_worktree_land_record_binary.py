@@ -104,7 +104,7 @@ def _patch_land(monkeypatch, main, wt, calls, *, build=None, swap=None):
     def record(*a, **kw):
         calls.append(("record", kw.get("endless_go_bin")))
 
-    monkeypatch.setattr(worktree_cmd, "_apply_branch_schema_changes", migrate)
+    monkeypatch.setattr(worktree_cmd, "_migrate_landed_schema", migrate)
     monkeypatch.setattr(worktree_cmd, "_record_landing", record)
     monkeypatch.setattr(
         worktree_cmd, "_clear_land_schema_faults",
