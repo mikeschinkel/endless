@@ -1,0 +1,1 @@
+Decided in the E-1883 brainstorm: cross-project reads use ATTACH, whose default limit is 10 files. Unneeded until a user exceeds it.
