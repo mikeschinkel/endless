@@ -48,6 +48,15 @@ def captured_emit(isolated_env, monkeypatch):
         "VALUES ('sample', '/tmp/sample', 'active', datetime('now'), datetime('now'))"
     )
 
+    # Import task_cmd and session_cmd BEFORE subprocess.run is stubbed. Their
+    # module bodies ask endless-go for the status vocabulary, so a first import inside the stub
+    # (as _force_resolver's would be) records those lookups as if they were the
+    # event emit. This used to be hidden: db.get_db() ran a Python migration
+    # ladder on every connect, which happened to warm the same lookups first.
+    # E-2158 deleted that ladder.
+    import endless.session_cmd  # noqa: F401
+    import endless.task_cmd  # noqa: F401
+
     # shutil.which("endless-go") must return SOMETHING truthy so we proceed
     # to the subprocess call (which we then intercept).
     monkeypatch.setattr(event_bridge.shutil, "which", lambda _name: "/fake/endless-go")

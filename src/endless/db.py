@@ -177,8 +177,8 @@ def _incomplete_schema_hint(missing: _MissingObject, sql: str) -> agent_help.Ref
     forward on its own (E-2020), so a database still missing an object by the
     time Python reads it means Endless is wrong about its own schema — there is
     no decision for the user and nothing for an agent to route around. (Until
-    E-2158 a pending change file could add the object, and its sandbox-or-main
-    split decided the class; goose has no pending files to find.)
+    E-2158 a pending per-ticket script could add the object, and its
+    sandbox-or-main split decided the class; goose has no pending files.)
     """
     def line(label: str, value: str) -> str:
         return f"    {label:<15} {value}"
