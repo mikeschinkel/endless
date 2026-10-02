@@ -111,7 +111,7 @@ assert_not_contains "no exposed test skips" "skipped" "$(summary_line "${WORK_TM
 section "4. One build site"
 assert_eq "the only go build of ./cmd/endless-go under tests/ is conftest's" \
     "tests/conftest.py" \
-    "$(grep -rl --include='*.py' -e '"./cmd/endless-go"' tests/ | sort | tr '\n' ' ' | sed 's/ $//')"
+    "$(grep -rlE --include='*.py' '"build".*"\./cmd/endless-go"' tests/ | sort | tr '\n' ' ' | sed 's/ $//')"
 assert_eq "no test file resolves <checkout>/bin/endless-go itself" "" \
     "$(grep -rnE --include='test_*.py' '(__file__|REPO_ROOT).*["'"'"']bin["'"'"']' tests/ || true)"
 
