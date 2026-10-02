@@ -1,0 +1,1 @@
+Deferred by Mike's answer to the slug-uniqueness brainstorm's fork question: forks are refused for now, with a message saying they are not yet supported. A fork inherits the upstream's committed name, identity and ledger, so replay must map the old identity to the new one after the fork point.
