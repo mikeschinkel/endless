@@ -124,3 +124,32 @@ No mitigation for the cold cache is in scope.
      `go build` of `./cmd/endless-go` under `tests/` is `endless_go_bin`.
   5. The count from §2 is recorded in the outcome, and the suite asserts the
      instrumented run found no route outside those the fixture covers.
+
+
+## 7. Grown scope — the sixth route (found by §2)
+
+Inside a self-dev worktree, `config.worktree_endless_go()` names
+`<checkout>/bin/endless-go` by absolute path, and `endless.statuses`,
+`endless.session_states`, `endless.content_names` and `task_cmd`'s
+session-query probe prefer it over PATH. `endless.statuses` reads its
+vocabulary AT IMPORT, and `endless.db` imports it — so conftest's own top-level
+`from endless import db` ran the binary before any fixture existed.
+
+Covered by moving the build from a session fixture to `pytest_sessionstart`
+(before collection), and in it:
+
+  - prepend the build's directory to the process PATH (replaces
+    `isolated_env`'s per-test prepend; covers collection-time PATH lookups too);
+  - wrap `config.worktree_endless_go` so an answer naming this checkout's own
+    `bin/endless-go` becomes the session build — any other answer (a worktree a
+    test builds under tmp_path) passes through, so the resolver stays testable;
+  - conftest imports `endless.db` lazily, inside the fixtures that use it.
+
+`endless_go_bin` stays a session fixture, returning that build. A failed build
+or missing `go` ends the session via `pytest.exit` rather than `pytest.fail`.
+
+Verification change: §6.1's full suite and §6.2's poisoned run are ONE run — the
+FULL suite with bin/ and PATH poisoned by a logging exit-99 binary, required to
+pass with an empty poison log. That is strictly stronger than poisoning only the
+exposed files, and it is the §6.5 assertion stated directly. A durable
+`tests/test_endless_go_bin.py` pins the routing past this task's land.
