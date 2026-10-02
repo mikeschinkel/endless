@@ -7011,3 +7011,11 @@ When something the workflow treats as routine happens (for example, a migration 
 ### [2026-10-01] Name whose config dir is meant
 When writing about Endless storage locations, say "the machine's config dir" rather than a bare "the config dir" — with both machine-level and project-level .endless/ locations in play, an unqualified "config dir" is ambiguous about which one is meant.
 - **Project**: endless
+
+### [2026-10-01] A session implements its own task only — staleness is not what makes another task off-limits
+Closing a plan for E-1562, I wrote: 'my worktree is 4,646 commits behind, so E-1562 needs its own session on a fresh worktree.' Mike: 'Your worktree's task is E-1668, so you should not be implementing E-1562 even if you had zero commits.'
+
+The reason I gave was true and irrelevant, and giving it implied the opposite rule — that a current worktree WOULD have let me implement another task. One session, one task is not a freshness optimisation. It is what makes a branch's diff mean one thing, what lets a land be reverted without taking unrelated work with it, and what keeps the task the session is claimed against an honest record of what the session did.
+
+The rule: when declining to do work that is not this session's, say the actual reason — it belongs to another task. Mention staleness only as a separate operational fact, never as the reason.
+- **Project**: endless
