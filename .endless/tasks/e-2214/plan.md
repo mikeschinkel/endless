@@ -27,7 +27,10 @@ order they would be considered:
 - Hoist per-test setup to per-module or per-session where tests do not mutate it.
 - Reuse one built binary across tests instead of rebuilding or re-invoking.
 - Cache or share the fixture database where tests only read it.
-- Parallelise — last, and only if shared state allows it (see the question below).
+- Parallelise — last, and only if shared state allows it. A test-only dependency
+  (`pytest-xdist`) is approved for this if measurement shows parallelism is the
+  biggest win; it is not installed today, and it needs per-worker database
+  isolation, so treat it as a real change rather than a flag.
 
 ## Report progress live, regardless of the above
 
@@ -39,10 +42,17 @@ at all. Whatever the fix (`-p no:cacheprovider`, line buffering, a reporter
 plugin, `--tb=line` with incremental flush), the test is that a run killed
 part-way still says where it was and what failed.
 
+## How much faster is enough
+
+There is no fixed target, and none should be invented. Determine what can be
+achieved WITHOUT reducing test scope, then deliver meaningful improvement against
+that ceiling. The ceiling is the finding; the improvement is measured against it.
+
 ## Out of scope
 
 Deleting, skipping, marking slow, or weakening tests to make the number smaller.
-If a test is genuinely redundant that is its own task with its own argument.
+Removing a test requires convincing Mike it is truly unnecessary, argued on its
+own merits as its own task — never as a way to make this number look better.
 
 ## Verification
 
