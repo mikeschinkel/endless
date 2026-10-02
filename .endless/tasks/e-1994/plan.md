@@ -106,3 +106,32 @@ question, though it may share the challenge model call.
   edits, and stays suppressed when the session itself made the change.
 - A user-started session gets no stop-and-wait clause.
 - `just test` and `just test-go` pass.
+
+
+## Decided while implementing (Mike, 2026-10-01)
+
+- **Trigger goes through the job runner.** Attaching a plan (the executor's
+  unplanned→submitted inference, at creation or on update) sets
+  `tasks.prime_requested`. A registered `prime` job — sibling of E-1814's
+  auto-spawn job, reusing its target resolution and spawn seam — starts at most
+  one primed session per interval via `endless task prime E-N --auto`.
+  `task update` never opens a window itself.
+- **Eligibility is opt-in.** Project config `prime.enabled` (default off, the
+  kill switch) and `prime.cap` (default 3, outstanding primed sessions per
+  project). Only `now`/`urgent` tasks no session ever bound, nothing
+  non-terminal blocking, no open question.
+- **Status stays `submitted`/`ready` while primed.** `task prime` creates the
+  worktree and the session binds from its cwd, but nothing flips status. The
+  resumed session's `task claim` is what moves it to `underway`: claim's
+  "already yours" branch now still starts the task when its status is pre-work.
+- **Framing = the `context` slot.** Brainstorm and research tasks with a
+  non-empty context pass the plan gate; todo, bugfix and epic still need a plan.
+- **Where the challenge lives:** `task update --plan-file` (Python), when the
+  task had no plan and the updating session is the one bound to it — the only
+  way that happens is a drafting prime, since claim and spawn refuse planless
+  tasks. One-shot via `internal_claude.run_internal_claude`; a failed challenge
+  refuses the attach and prints the objections.
+- **`primed` state:** written by `endless session primed` (the handoff's last
+  step), preserved by Stop, moved to `working` by the next UserPromptSubmit,
+  which also runs the drift check — plan-cited paths missing from the worktree
+  are named.
