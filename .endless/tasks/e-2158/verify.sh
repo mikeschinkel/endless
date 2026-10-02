@@ -25,7 +25,7 @@
 #       before the merge by name as retired; any other key is refused.
 #   C6  Python: a missing column names `endless db upgrade`; a Python read
 #       runs no migration ladder.
-#   C7  END TO END: a real self_dev land against a main database held at 00010
+#   C7  END TO END: a real self_dev land against a main database held at 00012
 #       (with _schema_version) migrates and records in one run; the same land
 #       carrying the retired key is refused with main and the DB untouched.
 #
@@ -193,10 +193,10 @@ else
     report_fail "a goose database at user_version 0 migrates normally" "exit 0" "${out}"
 fi
 
-section "C3. A real land against a main database held at 00010 (C7)"
+section "C3. A real land against a main database held at 00012 (C7)"
 
 # stage_behind_db <home> — a main database under <home>, built by a copy of
-# this tree's endless-go OUTSIDE the worktree path, then held at 00010 with the
+# this tree's endless-go OUTSIDE the worktree path, then held at 00012 with the
 # retired _schema_version table restored.
 stage_behind_db() {
     local home="$1" db="$1/.config/endless/endless.db"
@@ -207,11 +207,11 @@ stage_behind_db() {
         || setup_error "could not build the scratch main database"
     sqlite3 "${db}" "CREATE TABLE _schema_version (name TEXT PRIMARY KEY,
                          applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')));
-                     DELETE FROM goose_db_version WHERE version_id >= 11;" \
-        || setup_error "could not hold the scratch database at 00010"
+                     DELETE FROM goose_db_version WHERE version_id >= 13;" \
+        || setup_error "could not hold the scratch database at 00012"
     printf '{}\n' >"${home}/.config/endless/config.json"
-    [[ "$(sqlite3 "${db}" 'SELECT max(version_id) FROM goose_db_version')" == 10 ]] \
-        || setup_error "the scratch database is not at 00010"
+    [[ "$(sqlite3 "${db}" 'SELECT max(version_id) FROM goose_db_version')" == 12 ]] \
+        || setup_error "the scratch database is not at 00012"
 }
 
 land() {
@@ -227,7 +227,7 @@ assert_contains "fixed: the database starts with _schema_version" \
     "schema_version_before=yes" "${OUT}"
 assert_contains "fixed: the land completes" "outcome=landed" "${OUT}"
 assert_contains "fixed: main advances" "main_advanced=yes" "${OUT}"
-assert_contains "fixed: the database reaches 00011" "db_version=11" "${OUT}"
+assert_contains "fixed: the database reaches 00013" "db_version=13" "${OUT}"
 assert_contains "fixed: _schema_version is gone" "schema_version_after=no" "${OUT}"
 assert_contains "fixed: the landing is recorded in the same run" "landings=1" "${OUT}"
 
@@ -235,7 +235,7 @@ land retired
 assert_contains "retired: the land is refused, naming the retired key" \
     "schema_order, which is retired" "${OUT}"
 assert_contains "retired: refused before the merge" "main_advanced=no" "${OUT}"
-assert_contains "retired: the database was not migrated" "db_version=10" "${OUT}"
+assert_contains "retired: the database was not migrated" "db_version=12" "${OUT}"
 assert_contains "retired: nothing was recorded" "landings=0" "${OUT}"
 
 summary

@@ -4,11 +4,11 @@ Run by verify.sh under the runner's temp HOME, never by hand. Usage:
 
     land_e2e.py <worktree-root> <scratch-dir> <mode>
 
-The main database is staged one migration behind this tree: at 00010, with the
-retired _schema_version table still present. This tree's 00011 drops it.
+The main database is staged one migration behind this tree: at 00012, with the
+retired _schema_version table still present. This tree's 00013 drops it.
 
 mode "fixed" lands a branch with no land.toml and expects one run to migrate
-the database to 00011 (dropping _schema_version) and record the landing.
+the database to 00013 (dropping _schema_version) and record the landing.
 
 mode "retired" lands a branch whose land.toml still carries
 `[self_dev] schema_order` and expects the land refused BEFORE the merge, naming
