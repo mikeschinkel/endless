@@ -5711,8 +5711,8 @@ def db_restore(backup, dry_run, force):
 def db_move_section(from_name, to_name, heading, project, dry_run):
     """Move every `## <heading>` section out of one task content into another.
 
-    For text written under a heading before its content kind existed — E-1562
-    moved research justifications out of notes with
+    For text written under a heading before its content kind existed — for
+    example, research justifications once written into notes move with
     `--from notes --to justification`. Each task's move is one ordinary
     task.fields_updated event, stamped just after the source was last written,
     so a rebuild replays it like any other change. Repeatable: a second run finds
