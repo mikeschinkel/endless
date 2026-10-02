@@ -1,0 +1,1 @@
+E-2159 removed the --no-verify line from the commit-on-main gate in internal/hookcmd/claude.go as part of classifying every refusal, which is the whole of what this task asked for. The removal is a deletion with no replacement bypass.
