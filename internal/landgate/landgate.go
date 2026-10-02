@@ -51,10 +51,13 @@ import (
 // root. It sits beside post-worktree-create.sh and post-land/.
 const HookPath = ".endless/hooks/pre-land.sh"
 
-// Sources name which half of the gate refused.
+// Sources name what refused. The caller classifies by it: a migration
+// collision is the agent's to fix, a hook's veto may or may not be, and a hook
+// that cannot run is fixed on main, which is the user's.
 const (
-	SourceMigrations = "migrations"
-	SourceHook       = "hook"
+	SourceMigrations        = "migrations"
+	SourceHook              = "hook"
+	SourceHookNotExecutable = "hook_not_executable"
 )
 
 // Args is what the gate needs to know about one land.
@@ -303,7 +306,7 @@ func runHook(a Args) (v Verdict, err error) {
 	if info.Mode()&0o111 == 0 {
 		return Verdict{
 			Refused: true,
-			Source:  SourceHook,
+			Source:  SourceHookNotExecutable,
 			Summary: fmt.Sprintf("cannot land %s: the project's pre-land hook "+
 				"is not executable, so it could not be asked. Nothing was merged.", a.Task),
 			Block: fmt.Sprintf("The project gates every land through %s, and that "+

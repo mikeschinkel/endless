@@ -76,6 +76,8 @@ def _patch_land(monkeypatch, main, wt, calls, *, rebuild=None):
         ("_dedup_worktree_verbs_against_main", lambda w, r: False),
         ("_drop_orphan_amendable_commits", lambda w, b: (0, "")),
         ("_ledger_touching_commits", lambda w, b: []),
+        # E-2184's gate shells to the installed endless-go; not this test's subject.
+        ("_refuse_if_land_gated", lambda r, w, b, c: None),
         ("_guard_modified_worktree", lambda w, b, c: None),
         ("_resolve_project", lambda arg: (None, "p")),
         ("_reap_stale_worktrees", lambda root: None),

@@ -14,7 +14,6 @@ import os
 import subprocess
 from pathlib import Path
 
-import click
 import pytest
 
 from endless import agent_env, agent_help
@@ -22,7 +21,8 @@ from endless.worktree_cmd import (
     LAND_GATE_BLOCK_END,
     LAND_GATE_BLOCK_START,
     _refuse_if_land_gated,
-    render_land_gate_refusal,
+    land_gate_refusal,
+    land_gate_text,
 )
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -31,7 +31,14 @@ ENDLESS_GO = REPO_ROOT / "bin" / "endless-go"
 
 @pytest.fixture(autouse=True)
 def _pin_agent_view(monkeypatch):
+    """Every audience source agent_help consults, pinned to "a person".
+
+    ENDLESS_AUDIENCE is read once at import, so an agent running this suite
+    (`endless task verify` from a session) would otherwise leak into it.
+    """
     monkeypatch.setattr(agent_help, "_AGENT_VIEW", False)
+    monkeypatch.setattr(agent_help, "_AGENT_FORMAT", False)
+    monkeypatch.setattr(agent_help, "_AMBIENT_AUDIENCE", False)
 
 
 @pytest.fixture
@@ -39,30 +46,48 @@ def as_agent(monkeypatch):
     monkeypatch.setenv(agent_env.ENTRYPOINT_VAR, agent_env.CLI_ENTRYPOINT)
 
 
-# ─── the renderer ───────────────────────────────────────────────────────────
+# ─── the renderer and the classes ───────────────────────────────────────────
 
 
-def test_human_gets_the_summary_then_the_marked_block():
-    out = render_land_gate_refusal("cannot land E-1: collision", "step one\nstep two\n")
+def test_text_is_the_summary_then_the_marked_block():
+    out = land_gate_text("cannot land E-1: collision", "step one\nstep two\n")
     lines = out.split("\n")
     assert lines[0] == "cannot land E-1: collision"
     assert lines[2] == LAND_GATE_BLOCK_START
     assert lines[3:5] == ["step one", "step two"]
     assert lines[5] == LAND_GATE_BLOCK_END
-    assert out.count("cannot land E-1: collision") == 1
-
-
-def test_agent_gets_the_verdict_at_both_ends(as_agent):
-    out = render_land_gate_refusal("cannot land E-1: collision", "fix it\n")
-    lines = out.split("\n")
-    assert lines[0] == "[Endless] worktree land: cannot land E-1: collision"
-    assert lines[-1] == "Error: " + lines[0]
-    assert LAND_GATE_BLOCK_START in out and "fix it" in out
 
 
 def test_no_block_means_no_markers():
-    out = render_land_gate_refusal("cannot land E-1: nope", "")
-    assert LAND_GATE_BLOCK_START not in out
+    assert land_gate_text("cannot land E-1: nope", "") == "cannot land E-1: nope"
+
+
+def _verdict(source):
+    return {"refused": True, "source": source,
+            "summary": "cannot land E-1: collision", "block": "fix it\n"}
+
+
+def test_a_person_sees_the_text_unchanged():
+    r = land_gate_refusal(_verdict("migrations"), "E-1")
+    assert r.format_message() == land_gate_text("cannot land E-1: collision", "fix it\n")
+
+
+def test_agent_gets_the_verdict_at_both_ends(as_agent):
+    msg = land_gate_refusal(_verdict("migrations"), "E-1").format_message()
+    lines = msg.split("\n")
+    assert lines[0].startswith("[Endless]")
+    assert "cannot land E-1: collision" in lines[0]
+    assert lines[-1] == "Error: " + lines[0]
+    assert LAND_GATE_BLOCK_START in msg and "fix it" in msg
+
+
+@pytest.mark.parametrize("source, cls", [
+    ("migrations", agent_help.NO_REPORT),
+    ("hook", agent_help.REPORT_IF),
+    ("hook_not_executable", agent_help.REPORT),
+])
+def test_each_source_has_its_class(source, cls):
+    assert land_gate_refusal(_verdict(source), "E-1").cls == cls
 
 
 # ─── the seam, end to end ───────────────────────────────────────────────────
@@ -124,7 +149,7 @@ def test_collision_is_refused_with_the_rename(repos):
     main, wt = repos
     _commit(wt, "branch", {"db/migrations/00002_branch.sql": "x\n"})
     _commit(main, "main", {"db/migrations/00002_main.sql": "x\n"})
-    with pytest.raises(click.ClickException) as ei:
+    with pytest.raises(agent_help.Refusal) as ei:
         _gate(main, wt)
     msg = ei.value.message
     assert msg.startswith("cannot land E-1:")
@@ -146,7 +171,7 @@ def test_gate_that_cannot_answer_refuses(repos, tmp_path, on_path):
     broken.write_text("#!/bin/sh\necho boom >&2\nexit 1\n")
     broken.chmod(0o755)
     on_path(broken)
-    with pytest.raises(click.ClickException) as ei:
+    with pytest.raises(agent_help.Refusal) as ei:
         _gate(main, wt)
-    assert "could not decide" in ei.value.message
+    # endless-go's own stderr is relayed, not reworded.
     assert "boom" in ei.value.message

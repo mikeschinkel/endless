@@ -44,7 +44,8 @@ else
 fi
 if out=$(uv run --quiet pytest -q tests/test_worktree_land_migration_gate.py \
         tests/test_worktree_land_schema_apply.py \
-        tests/test_worktree_land_migrate_exec.py 2>&1); then
+        tests/test_worktree_land_migrate_exec.py \
+        tests/test_worktree_land_record_binary.py 2>&1); then
     report_pass "pytest land gate seam + the land tests that stub it"
 else
     report_fail "pytest land gate seam + the land tests that stub it" "exit 0" "${out}"

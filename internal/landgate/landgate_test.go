@@ -248,7 +248,7 @@ func TestCheck_NonExecutableHookRefuses(t *testing.T) {
 	f := newFixture(t, `{"name":"p"}`)
 	writeHook(t, f, "#!/bin/sh\nexit 0\n", 0o644)
 	v := f.check()
-	if !v.Refused || !strings.Contains(v.Block, "chmod +x") {
+	if !v.Refused || v.Source != SourceHookNotExecutable || !strings.Contains(v.Block, "chmod +x") {
 		t.Fatalf("got %+v", v)
 	}
 }

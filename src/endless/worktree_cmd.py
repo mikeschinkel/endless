@@ -1599,26 +1599,52 @@ LAND_GATE_BLOCK_START = "──── paste this to the agent ────"
 LAND_GATE_BLOCK_END = "──── end ────"
 
 
-def render_land_gate_refusal(summary: str, block: str) -> str:
-    """Render a land-gate refusal: one plain line, then the marked block (E-2184).
+def land_gate_text(summary: str, block: str) -> str:
+    """A land-gate refusal's text: one plain line, then the marked block (E-2184).
 
     ONE renderer for both halves of the gate — the built-in migration check and
     a project's pre-land hook both reduce to a one-line summary and a block, so
-    a hook's refusal reads exactly like Endless's own.
-
-    `agent_error` adds the repeated verdict at both ends when an agent is
-    reading, as `task show`/`task add` refusals do, so `| head` and `| tail`
-    each still carry the verdict. A person gets the summary once.
+    a hook's refusal reads exactly like Endless's own. The verdict an agent
+    reads at both ends is added by agent_help.Refusal, from `summary`.
     """
-    from endless.agent_help import agent_error
+    if not block.strip():
+        return summary
+    return (
+        f"{summary}\n\n{LAND_GATE_BLOCK_START}\n{block.rstrip()}\n"
+        f"{LAND_GATE_BLOCK_END}"
+    )
 
-    guidance = summary
-    if block.strip():
-        guidance += (
-            f"\n\n{LAND_GATE_BLOCK_START}\n{block.rstrip()}\n"
-            f"{LAND_GATE_BLOCK_END}"
+
+def land_gate_refusal(verdict: dict, canonical: str) -> agent_help.Refusal:
+    """Classify a refused land-gate verdict (E-2159) by what refused.
+
+    - A migration collision is the agent's to fix: every step is in the block.
+    - A hook's veto may or may not be: only its own words say whether the fix
+      is in the worktree or needs the user, so the agent is told to read them.
+    - A hook that cannot run is fixed on main, which is the user's checkout.
+    """
+    summary = verdict.get("summary") or f"cannot land {canonical}: the land gate refused."
+    text = land_gate_text(summary, verdict.get("block") or "")
+    source = verdict.get("source")
+    if source == "migrations":
+        return agent_help.no_report(
+            summary,
+            "follow the steps between the markers in the worktree, then land again",
+            text=text,
         )
-    return agent_error(summary, guidance, command="worktree land")
+    if source == "hook_not_executable":
+        return agent_help.report(
+            summary,
+            "making the project's pre-land hook on main executable",
+            text=text,
+        )
+    return agent_help.report_if(
+        summary,
+        "the hook's explanation does not name a fix you can make in the worktree",
+        "make the fix it names and land again",
+        "whether to land past the project's own pre-land rule",
+        text=text,
+    )
 
 
 def _land_gate(
@@ -1638,7 +1664,8 @@ def _land_gate(
 
     Fails CLOSED. A gate that could not run has not said yes, and the migration
     collision it exists to catch is silent in git and loud only after main has
-    advanced.
+    advanced. endless-go classifies its own failures (E-2159), so its stderr is
+    relayed as-is; only a failure it said nothing about is classified here.
 
     Must run BEFORE anything rebases the branch onto base — Step 3.7 can, and
     Step 4 does. Afterwards the merge-base is base's tip, base has "gained"
@@ -1646,9 +1673,11 @@ def _land_gate(
     """
     binary = shutil.which("endless-go")
     if not binary:
-        raise click.ClickException(
+        raise agent_help.report(
             f"cannot land {canonical}: endless-go is not on PATH, so the land "
-            f"gate (migration collisions, pre-land hook) cannot run."
+            f"gate (migration collisions, pre-land hook) cannot run. Nothing "
+            f"was merged.",
+            "installing endless-go",
         )
     r = subprocess.run(
         [binary, "worktree", "land-gate",
@@ -1656,15 +1685,17 @@ def _land_gate(
          "--base", base_branch, "--task", canonical],
         capture_output=True, text=True, check=False,
     )
+    if r.returncode != 0 and r.stderr.strip():
+        raise agent_help.relay(r.stderr, exit_code=r.returncode)
     try:
         verdict = json.loads(r.stdout) if r.returncode == 0 else None
     except ValueError:
         verdict = None
-    if verdict is None:
-        raise click.ClickException(
+    if not isinstance(verdict, dict):
+        raise agent_help.fault(
             f"cannot land {canonical}: the land gate could not decide, so "
-            f"nothing was merged.\n\n"
-            f"{(r.stderr or r.stdout).strip() or f'exit {r.returncode}'}"
+            f"nothing was merged (endless-go exit {r.returncode}, no verdict).",
+            detail=r.stdout.strip(),
         )
     return verdict
 
@@ -1674,10 +1705,8 @@ def _refuse_if_land_gated(
 ) -> None:
     verdict = _land_gate(main_root, worktree_path, base_branch, canonical)
     if verdict.get("refused"):
-        raise click.ClickException(render_land_gate_refusal(
-            verdict.get("summary") or f"cannot land {canonical}: the land gate refused.",
-            verdict.get("block") or "",
-        ))
+        raise land_gate_refusal(verdict, canonical)
+
 
 def _read_verbs_list(path: Path) -> list[dict]:
     """Read a verbs.jsonl file as a list of dicts (E-1268).
