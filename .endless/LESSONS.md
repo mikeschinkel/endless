@@ -7007,3 +7007,7 @@ Leave out of a handoff any risk that a later step will surface with its own clea
 ### [2026-10-01] Don't explain accepted workflow events
 When something the workflow treats as routine happens (for example, a migration number clash fixed by renumbering on rebase), don't hand Mike a paragraph explaining it. That spends his attention on something already accepted, which works against Endless's goal of letting a human do more with less time and mental energy. Mention it in a few words at most, or not at all if nothing needs his decision. Save explanation for things he has to act on or decide.
 - **Project**: endless
+
+### [2026-10-01] Name whose config dir is meant
+When writing about Endless storage locations, say "the machine's config dir" rather than a bare "the config dir" — with both machine-level and project-level .endless/ locations in play, an unqualified "config dir" is ambiguous about which one is meant.
+- **Project**: endless
