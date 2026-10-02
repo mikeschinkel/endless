@@ -7027,3 +7027,11 @@ The cost was not the wrong belief, it was handing him a blocker I had invented �
 
 Before putting any command on Mike's list because 'only the user may run it', find the code that would stop an agent from running it. A field named for an actor, a comment saying a choice is the user's, and a lifecycle diagram are all declarations of intent. An enforcement site is a read of that value with a refusal attached. If no site reads it, the only real question left is the judgment itself, which is usually one query away from being answered.
 - **Project**: endless
+
+### [2026-10-02] Report a task's state from a live query, never from what you assume a command did
+I told Mike that E-2213 was 'filed and sitting at unplanned — it needs approval before anything can claim it.' It was at `submitted` with a 4006-character plan, because I had filed it with --plan-file and that loads the plan at creation. He acted on what I said and replied 'E-2213 needs a plan first.' My bad information cost him a decision he did not need to make.
+
+I had the evidence and ignored it: `task add` printed a line confirming it had written the plan to .endless/tasks/e-2213/plan.md, in the output I was reading. I reported the status I expected from the default filing path instead of the one the command had just told me it produced.
+
+Any claim about a task's status, phase, plan or links goes through `endless task show <id> --agent --db main` in the same turn as the claim. This is the same discipline the /whats-left report demands for a different reason — state moves under you between turns — and the two failure modes meet here: never report a status from memory, and never report one from inference about a command's effect either. Read the command's own output before summarising it.
+- **Project**: endless
