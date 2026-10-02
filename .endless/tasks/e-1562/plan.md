@@ -112,3 +112,39 @@ remaining E-1992 slots will each need the same shape.
      the same justification and notes content the live apply produced — the
      property the one-map design exists to guarantee.
   8. Display order: `task show` renders Justification before Context.
+
+## As built (2026-10-02)
+
+Recorded where the implementation went beyond or settled what the plan left
+open.
+
+  - The move's timestamp is one microsecond after the LAST ledger write of the
+    task's notes, not the event that first wrote the justification. The ledger
+    replays in timestamp order, and 18 of the 29 tasks had their notes
+    rewritten (heading still present) after the justification was filed; a
+    move stamped at the first write would be undone by that rewrite on every
+    rebuild. Checked against copies of the real database and ledger: 29 moves,
+    no heading left, 9 notes rows kept, 20 deleted, and the rebuild agrees for
+    28 of the 29. E-715 already failed to rebuild before the move (it is one of
+    the main ledger's existing projection errors), so the move leaves it no
+    worse.
+  - All 29 move, including the five that are not research or brainstorm today
+    (E-715, E-971, E-995, E-1813, E-1921) — owner decision 2026-10-02. The type
+    gate governs new writes only.
+  - The backfill is `endless db move-section --from <name> --to <name>
+    [--heading] [--dry-run]`. Go plans it (`endless-go session-query
+    section-moves`, internal/events PlanSectionMoves + SplitSection); Python
+    emits one task.fields_updated per task as actor system. A task already
+    holding the target is skipped and listed, never overwritten. Repeatable.
+  - It runs on main from `.endless/hooks/post-land/e-1562.sh` after the land
+    rebuilds the installed binary.
+  - The research gate reads the stored justification when the update gives
+    none, so a task retyped away from research and back need not restate it;
+    a `--clear justification` in the same call fails the gate.
+  - `task show --justification`; `--all-fields` includes it. Every kind declared
+    up to and including Context renders after the description.
+  - `epic update` does not offer `--clear justification`; `task update` does.
+  - Folded in: a content emptied by `task update` (or by the move) now removes
+    its mirror file on main instead of leaving stale text behind, and
+    `endless-go event commit-doc` takes a repeated `--path` so the move commits
+    all its mirror changes as one commit.
