@@ -7035,3 +7035,7 @@ I had the evidence and ignored it: `task add` printed a line confirming it had w
 
 Any claim about a task's status, phase, plan or links goes through `endless task show <id> --agent --db main` in the same turn as the claim. This is the same discipline the /whats-left report demands for a different reason — state moves under you between turns — and the two failure modes meet here: never report a status from memory, and never report one from inference about a command's effect either. Read the command's own output before summarising it.
 - **Project**: endless
+
+### [2026-10-02] Call the session-status view the monitor, not a board
+Mike's term for what session status / session monitor show is 'monitor' (e.g. 'shows on E-101's monitor'), not 'board'. Use 'monitor' in replies, plans and docs.
+- **Project**: endless
