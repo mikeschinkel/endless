@@ -9,7 +9,7 @@
 #
 # Before: default resolution honoured XDG_CONFIG_HOME while `--db main` ignored
 # it (two databases for one user who set it), and Endless SET the variable to
-# route child processes (triagejob, minimizerjob, triage.py spawn_detached).
+# route child processes (jobs.ChildEnv, used by minimizerjob and autospawnjob).
 #
 # After: XDG_CONFIG_HOME is the user's own setting. The default and `--db main`
 # are one rule ($XDG_CONFIG_HOME/endless, else ~/.config/endless) in Go and
@@ -38,7 +38,8 @@ section "1. Unit gate (fail fast)"
 # world (E-1908) — ~9 minutes, long enough to time out its own 10s signal test.
 if go test \
         ./internal/dbcontext/ \
-        ./internal/triagejob/ \
+        ./internal/autospawnjob/ \
+        ./internal/jobs/ \
         ./internal/minimizerjob/ \
         ./internal/verifycmd/ \
         >"${TMP}/go.log" 2>&1 \
@@ -54,11 +55,11 @@ else
     summary
 fi
 
-if uv run pytest -q tests/test_triage.py tests/test_suite_guard.py \
+if uv run pytest -q tests/test_db_error_diagnostic.py tests/test_suite_guard.py \
         >"${TMP}/py.log" 2>&1; then
-    report_pass "pytest: triage spawn routing, suite guard"
+    report_pass "pytest: missing-schema refusal class, suite guard"
 else
-    report_fail "pytest: triage spawn routing, suite guard" "exit 0" \
+    report_fail "pytest: missing-schema refusal class, suite guard" "exit 0" \
         "$(tail -25 "${TMP}/py.log")"
     summary
 fi
@@ -114,10 +115,12 @@ assert_eq "the only setters left" \
     "internal/sandboxcmd/sandbox.go internal/verifycmd/env.go " \
     "${setters}"
 
-assert_not_contains "triagejob no longer builds a child env" \
-    "childEnv" "$(cat internal/triagejob/triagejob.go)"
-assert_not_contains "minimizerjob no longer builds a child env" \
-    "childEnv" "$(cat internal/minimizerjob/minimizerjob.go)"
+assert_eq "jobs.ChildEnv (the XDG child router) is gone" \
+    "" "$(git grep -l 'ChildEnv' -- 'internal/*.go' | tr '\n' ' ')"
+assert_contains "minimizerjob routes its child by flag" \
+    "monitor.ChildDBRoute()" "$(cat internal/minimizerjob/minimizerjob.go)"
+assert_contains "autospawnjob routes its child by flag" \
+    "monitor.ChildDBRoute()" "$(cat internal/autospawnjob/autospawnjob.go)"
 assert_not_contains "ForceRealDB (the XDG escape hatch) is gone" \
     "func ForceRealDB" "$(cat internal/monitor/db.go)"
 
