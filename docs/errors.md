@@ -746,3 +746,49 @@ attention on every prompt that used the new sigil; recorded here it waits until
 the user is deciding about their own vocabulary.
 
 **What to do.** Decide whether the two spellings mean the same thing. If they do, pick the one you want as canonical and use it from then on — the other keeps working, so nothing breaks while you switch. If they are genuinely different labels, nothing needs doing. Dismiss with `endless errors clear <id>` either way.
+
+## WARN-0026 — create-hook-not-executable
+
+**Severity:** warning · **Raised by:** worktree creation — `endless task claim`, `endless task spawn` (E-2213)
+
+The project ships a `.endless/hooks/post-worktree-create.sh` bootstrap, but the
+file is not executable, so a new worktree was created without running it. The
+worktree itself is fine; whatever the hook installs or builds is not there yet.
+
+The warning still prints for whoever ran the command. It is recorded here too
+because the fix is a mode change on a file tracked in the main checkout, which
+is the user's to make and commit — an agent working in one worktree is told only
+how to finish that worktree's bootstrap. Fingerprinted on the hook, so every
+worktree created before it is fixed is one incident.
+
+**What to do.** Make the hook executable on main — `chmod +x .endless/hooks/post-worktree-create.sh`, then commit the mode change — so later worktrees run it. A worktree created while it was skipped is usable but not bootstrapped; finish it with `sh .endless/hooks/post-worktree-create.sh <worktree>`. Dismiss with `endless errors clear <id>` once the hook runs.
+
+## WARN-0027 — post-land-not-executable
+
+**Severity:** warning · **Raised by:** `endless worktree land` (E-2213)
+
+A task committed a one-time `.endless/hooks/post-land/<task>.sh` to run after it
+landed, but the file is not executable, so it was skipped. The land itself
+succeeded and is not undone; the step the script carries — typically removing
+files a newly un-ignored path left behind — has not happened.
+
+It is recorded here as well as printed because the land is often driven by an
+agent whose reply scrolls away, and a skipped one-time step is easy to lose
+there and hard to notice later.
+
+**What to do.** Run the skipped step yourself from the main checkout — `sh .endless/hooks/post-land/<task>.sh <main checkout>`; the script is required to be idempotent, so running it late is safe, and the incident's summary names the script. Commit future post-land scripts executable (`git update-index --chmod=+x <script>`). Dismiss with `endless errors clear <id>` once it has run.
+
+## WARN-0028 — stale-companion
+
+**Severity:** warning · **Raised by:** commands that read a worktree's companion — `endless worktree list`, `endless worktree current`, `endless task handoff` (E-1301, E-2213)
+
+A worktree's `.endless/worktree.json` still carries the legacy `task_id` key,
+and it names a different task than the worktree's directory does. The directory
+name is authoritative, so every command answers correctly; the companion is
+simply wrong, and stays wrong until someone edits it.
+
+Printed, the warning reached only whoever ran that one command, and it repeated
+on every command that read the companion. Recorded here it is one incident per
+worktree, waiting for the person who owns the file.
+
+**What to do.** Remove the legacy `task_id` key from the worktree's `.endless/worktree.json` (the incident's summary names it); nothing reads it any more, and the path-derived task is already the one in use. Dismiss with `endless errors clear <id>` once the key is gone.

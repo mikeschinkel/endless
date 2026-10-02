@@ -154,6 +154,28 @@ def test_non_executable_warns_and_does_not_run(tmp_path, capsys):
     assert not sentinel.exists()
 
 
+def test_non_executable_reaches_the_errors_channel(tmp_path, capsys,
+                                                   monkeypatch):
+    """E-2213: the skipped one-time step is recorded as WARN-0027, naming the
+    task and the script, and the ⚠ line a person reads is kept."""
+    from endless import agent_help
+    recorded = []
+    monkeypatch.setattr(
+        agent_help.warn, "record",
+        lambda code, summary, **kw: recorded.append((code, summary)),
+    )
+    main_root = tmp_path / "main"
+    main_root.mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    _write_script(main_root, "E-1799", "#!/usr/bin/env bash\n",
+                  executable=False)
+    _run_post_land_script(worktree, main_root, "E-1799", "sha", "main")
+    assert "not executable" in capsys.readouterr().err
+    assert [c[0] for c in recorded] == ["WARN-0027"]
+    assert "E-1799" in recorded[0][1] and "e-1799.sh" in recorded[0][1]
+
+
 # ---------------------------------------------------------------------------
 # call site
 # ---------------------------------------------------------------------------

@@ -596,6 +596,9 @@ func TestCatalog_NumbersAreNeverReused(t *testing.T) {
 		"0023": "unsupported-harness",
 		"0024": "report-unminimized",
 		"0025": "sigil-synonym",
+		"0026": "create-hook-not-executable",
+		"0027": "post-land-not-executable",
+		"0028": "stale-companion",
 	}
 
 	for _, code := range faults.Codes() {

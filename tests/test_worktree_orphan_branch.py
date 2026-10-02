@@ -21,7 +21,7 @@ from pathlib import Path
 import click
 import pytest
 
-from endless import db, worktree_cmd
+from endless import agent_help, db, worktree_cmd
 from endless.worktree_cmd import create_task_worktree, task_branch
 
 
@@ -162,6 +162,32 @@ def test_empty_delta_orphan_recreates_fresh(project_with_task, monkeypatch):
 
 # --- refusal paths: actionable errors, branch preserved ---------------------
 
+def _as_human(monkeypatch):
+    monkeypatch.setattr(agent_help, "_AGENT_VIEW", False)
+    monkeypatch.setattr(agent_help, "_AGENT_FORMAT", False)
+    # Read once at import, so an ambient ENDLESS_AUDIENCE=agent (the verify
+    # runner exports one) is already latched and deleting the variable is not
+    # enough on its own.
+    monkeypatch.setattr(agent_help, "_AMBIENT_AUDIENCE", False)
+    monkeypatch.delenv(agent_help.AUDIENCE_VAR, raising=False)
+
+
+def _renders(refusal, monkeypatch):
+    """(what a person reads, what an agent reads) — both as Click prints them.
+
+    E-2213: the closing `git branch -D` on the two orphan refusals that guard
+    real work is a destructive escape, so it lives in `human_remedy`. Pinned in
+    both directions: a person still reads it, byte for byte where it was, and an
+    agent is never offered it.
+    """
+    _as_human(monkeypatch)
+    human = refusal.format_message()
+    monkeypatch.setattr(agent_help, "_AGENT_FORMAT", True)
+    agent = refusal.format_message()
+    _as_human(monkeypatch)
+    return human, agent
+
+
 def test_mirror_mismatch_raises_and_names_the_adopt_command(project_with_task,
                                                             monkeypatch):
     p = project_with_task
@@ -172,11 +198,13 @@ def test_mirror_mismatch_raises_and_names_the_adopt_command(project_with_task,
     with pytest.raises(click.ClickException) as exc:
         create_task_worktree(p["tid"], p["root"])
 
-    msg = str(exc.value)
-    assert plan_rel in msg
-    assert f"show {p['branch']}:{plan_rel}" in msg
-    assert f"endless task update E-{p['tid']} --plan-file" in msg
-    assert f"branch -D {p['branch']}" in msg
+    human, agent = _renders(exc.value, monkeypatch)
+    for msg in (human, agent):
+        assert plan_rel in msg
+        assert f"show {p['branch']}:{plan_rel}" in msg
+        assert f"endless task update E-{p['tid']} --plan-file" in msg
+    assert human.endswith(f"branch -D {p['branch']}")
+    assert "branch -D" not in agent
     # branch preserved (error before any delete); no worktree created
     assert p["branch"] in _branches(p["root"])
     assert not _worktree_dir(p).exists()
@@ -224,11 +252,13 @@ def test_real_work_orphan_raises(project_with_task, monkeypatch):
     with pytest.raises(click.ClickException) as exc:
         create_task_worktree(p["tid"], p["root"])
 
-    msg = str(exc.value)
-    assert "no document mirror accounts for" in msg
-    assert "src/foo.py" in msg
-    assert "git -C" in msg and f"log main..{p['branch']}" in msg
-    assert f"branch -D {p['branch']}" in msg
+    human, agent = _renders(exc.value, monkeypatch)
+    for msg in (human, agent):
+        assert "no document mirror accounts for" in msg
+        assert "src/foo.py" in msg
+        assert "git -C" in msg and f"log main..{p['branch']}" in msg
+    assert human.endswith(f"branch -D {p['branch']}")
+    assert "branch -D" not in agent
     assert p["branch"] in _branches(p["root"])  # preserved, not auto-discarded
 
 

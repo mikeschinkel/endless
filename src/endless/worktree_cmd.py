@@ -309,14 +309,24 @@ def _warn_if_companion_disagrees(worktree_path: Path, companion: dict | None) ->
         # Nothing is blocked and nothing is wrong with the answer: the
         # path-derived id is used and the command finishes. The warning exists
         # so a stale companion stops being invisible, which is why it is
-        # no_report rather than record — it is about the worktree the reader
-        # just asked about, not a standing condition of the project.
+        # no_report for the reader of this command.
         agent_help.warn.no_report(
             f"endless: stale companion in {worktree_path}/.endless/worktree.json: "
             f"task_id={legacy!r} disagrees with path-derived {from_path!r}; "
             f"using {from_path!r}.",
             f"The path-derived {from_path} is what was used, so continue; the "
             f"legacy task_id key can be removed from the companion",
+        )
+        # ...and recorded, because the disagreement is a standing condition of
+        # that worktree that repeats on every command reading the companion
+        # until someone edits the file (E-2213). Fingerprinted on the
+        # worktree, so it is one incident however many commands hit it.
+        agent_help.warn.record(
+            "WARN-0028",
+            f"stale companion {_tilde(worktree_path)}/.endless/worktree.json: "
+            f"task_id={legacy} disagrees with path-derived {from_path}",
+            source="worktree:companion",
+            fingerprint=f"companion={worktree_path}",
         )
 
 
@@ -2213,7 +2223,13 @@ def _delete_orphan_branch(branch: str, project_root: Path) -> None:
 
 def _orphan_real_work_msg(
     task_id: int, branch: str, base: str, real_work: list[str], project_root: Path,
-) -> str:
+) -> tuple[str, str]:
+    """The refusal's (text, human_remedy).
+
+    The discard command is the human remedy (E-2213): the branch holds commits
+    nothing else has a copy of, so `branch -D` is irreversible loss, and a
+    refusal that names it is one an agent will take.
+    """
     root = _tilde(project_root)
     shown = "\n  ".join(real_work[:20])
     more = "" if len(real_work) <= 20 else f"\n  ... and {len(real_work) - 20} more"
@@ -2222,15 +2238,21 @@ def _orphan_real_work_msg(
         f"files no document mirror accounts for:\n  {shown}{more}\n\n"
         f"Inspect:\n"
         f"  git -C {root} log {base}..{branch}\n"
-        f"  git -C {root} diff {base}...{branch}\n"
-        f"Resume that work manually, or discard it and retry:\n"
+        f"  git -C {root} diff {base}...{branch}"
+    ), (
+        f"\nResume that work manually, or discard it and retry:\n"
         f"  git -C {root} branch -D {branch}"
     )
 
 
 def _orphan_mirror_mismatch_msg(
     task_id: int, branch: str, mismatched: list[str], project_root: Path,
-) -> str:
+) -> tuple[str, str]:
+    """The refusal's (text, human_remedy).
+
+    The discard command is the human remedy (E-2213): the branch is the only
+    place the differing text exists, so `branch -D` erases it.
+    """
     root = _tilde(project_root)
     rel = mismatched[0]
     more = (
@@ -2249,8 +2271,9 @@ def _orphan_mirror_mismatch_msg(
         f"Adopt it into the database, then retry:\n"
         f"  git -C {root} show {branch}:{rel} > .endless/tmp/E-{task_id}.md\n"
         f"  endless task update E-{task_id} --plan-file .endless/tmp/E-{task_id}.md\n"
-        f"    (--analysis-file / --outcome-file for those kinds)\n"
-        f"Or keep the database's version and discard the branch:\n"
+        f"    (--analysis-file / --outcome-file for those kinds)"
+    ), (
+        f"\nOr keep the database's version and discard the branch:\n"
         f"  git -C {root} branch -D {branch}"
     )
 
@@ -2312,19 +2335,20 @@ def _check_orphan_mirrors(
         # character-count viability rule, and nothing replaced it because
         # nothing could. Definite REPORT.
         #
-        # The closing `git branch -D` is a destructive escape and would belong
-        # in `human_remedy` on its own merits; it stays in the message because
-        # tests/test_worktree_orphan_branch.py asserts on it (see the report
-        # for E-2159).
+        # The closing `git branch -D` is a destructive escape, so it is the
+        # human remedy: a person reads it where it always was, and an agent is
+        # never offered it (E-2213).
+        text, human_remedy = _orphan_mirror_mismatch_msg(
+            task_id, branch, mismatched, project_root,
+        )
         raise agent_help.report(
             f"E-{task_id}: {len(mismatched)} document mirror(s) on branch "
             f"{branch} differ from the database's copy. The claim stopped; "
             f"nothing was created or deleted.",
             "which copy of the task's documents governs — adopting the "
             "branch's or keeping the database's discards the other",
-            text=_orphan_mirror_mismatch_msg(
-                task_id, branch, mismatched, project_root,
-            ),
+            text=text,
+            human_remedy=human_remedy,
         )
     if unreadable:
         # Not "the database says discard this" — "the database could not be
@@ -2390,18 +2414,19 @@ def _handle_orphan_branch(
     real_work = [f for f in unique if not doc_mirror.is_mirror_path(f)]
     if real_work:
         # Commits nothing else holds. Keep-or-discard is the user's, and the
-        # discard half is irreversible. (The closing `git branch -D` would
-        # belong in `human_remedy`; it stays in the message because
-        # tests/test_worktree_orphan_branch.py asserts on it.)
+        # discard half is irreversible, which is why the closing `git branch -D`
+        # is the human remedy and never reaches an agent (E-2213).
+        text, human_remedy = _orphan_real_work_msg(
+            task_id, branch, base, real_work, project_root,
+        )
         raise agent_help.report(
             f"E-{task_id}: orphan branch {branch} holds {len(real_work)} "
             f"file(s) of real work beyond {base}. No worktree was created and "
             f"the branch was left exactly as it was.",
             "whether to resume the prior work on that branch or discard it "
             "permanently",
-            text=_orphan_real_work_msg(
-                task_id, branch, base, real_work, project_root,
-            ),
+            text=text,
+            human_remedy=human_remedy,
         )
     if mirrors:
         _check_orphan_mirrors(task_id, branch, mirrors, project_root)
@@ -2683,6 +2708,17 @@ def _run_post_worktree_create_hook(project_root: Path, worktree_path: Path) -> N
                 f"        cd {_tilde(worktree_path)} && {_tilde(hook)} {_tilde(worktree_path)}"
             ),
         )
+        # ...and recorded, because only the user can clear it: the hook is
+        # tracked on main, and the agent was told above to leave its mode alone
+        # (E-2213). Fingerprinted on the hook, so every worktree created before
+        # it is fixed is one incident.
+        agent_help.warn.record(
+            "WARN-0026",
+            f"post-worktree-create hook {_tilde(hook)} is not executable; "
+            f"{_tilde(worktree_path)} was created without running it",
+            source="worktree:post-create-hook",
+            fingerprint=f"hook={hook}",
+        )
         return
     click.echo(
         click.style("•", fg="cyan")
@@ -2799,6 +2835,16 @@ def _run_post_land_script(
                 f"        chmod +x {_tilde(script)}\n"
                 f"        {rerun}"
             ),
+        )
+        # ...and recorded: the step the script carries has still not happened,
+        # and a land is often driven by an agent whose reply scrolls away
+        # (E-2213).
+        agent_help.warn.record(
+            "WARN-0027",
+            f"{canonical}'s post-land script {_tilde(script)} is not "
+            f"executable, so it was skipped; the land itself succeeded",
+            source="worktree:post-land",
+            fingerprint=f"script={script}",
         )
         return
     click.echo(

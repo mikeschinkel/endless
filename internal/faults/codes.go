@@ -614,6 +614,63 @@ var (
 			"If they are genuinely different labels, nothing needs doing. " +
 			"Dismiss with `endless errors clear <id>` either way.",
 	}
+	// ErrCodeCreateHookNotExecutable covers the project's post-worktree-create hook is not executable, so it was skipped.
+	//
+	// Warning, not error: the worktree was created and is usable; only its
+	// project-specific bootstrap did not run. It is here as well as on stderr
+	// because only the user can make the hook executable — the file is tracked
+	// on main — and an agent shown it spends a message on something it cannot
+	// change (E-2213).
+	ErrCodeCreateHookNotExecutable = Code{
+		ID:       "WARN-0026",
+		Slug:     "create-hook-not-executable",
+		Severity: SeverityWarning,
+		Title:    "The project's post-worktree-create hook is not executable, so it was skipped",
+		Remedy: "Make the hook executable on main — `chmod +x " +
+			".endless/hooks/post-worktree-create.sh`, then commit the mode " +
+			"change — so later worktrees run it. A worktree created while it " +
+			"was skipped is usable but not bootstrapped; finish it with `sh " +
+			".endless/hooks/post-worktree-create.sh <worktree>`. Dismiss with " +
+			"`endless errors clear <id>` once the hook runs.",
+	}
+
+	// ErrCodePostLandNotExecutable covers a task's post-land script is not executable, so it was skipped.
+	//
+	// Warning, not error: the land itself succeeded and cannot be unwound. It
+	// is here as well as on stderr because the script is now on main, so
+	// making it executable for good needs a commit only the user lands, and
+	// the one-time step it carries still has to happen (E-2213).
+	ErrCodePostLandNotExecutable = Code{
+		ID:       "WARN-0027",
+		Slug:     "post-land-not-executable",
+		Severity: SeverityWarning,
+		Title:    "A task's post-land script is not executable, so it was skipped",
+		Remedy: "Run the skipped step yourself from the main checkout — `sh " +
+			".endless/hooks/post-land/<task>.sh <main checkout>`; the script " +
+			"is required to be idempotent, so running it late is safe, and " +
+			"the incident's summary names the script. Commit future post-land scripts " +
+			"executable (`git update-index --chmod=+x <script>`). Dismiss with " +
+			"`endless errors clear <id>` once it has run.",
+	}
+
+	// ErrCodeStaleCompanion covers a worktree's companion names a different task than its path.
+	//
+	// Warning, not error: the path-derived task wins and every command answers
+	// correctly. It is here as well as on stderr because the disagreement is a
+	// standing condition of that worktree — it repeats on every command that
+	// reads the companion until someone edits the file — and the reader of any
+	// one command is not the one who owns it (E-2213).
+	ErrCodeStaleCompanion = Code{
+		ID:       "WARN-0028",
+		Slug:     "stale-companion",
+		Severity: SeverityWarning,
+		Title:    "A worktree's companion names a different task than its path",
+		Remedy: "Remove the legacy `task_id` key from the worktree's " +
+			"`.endless/worktree.json` (the incident's summary names it); nothing " +
+			"reads it any more, and the path-derived task is already the one " +
+			"in use. Dismiss with `endless errors clear <id>` once the key is " +
+			"gone.",
+	}
 )
 
 // catalog indexes every registered Code by ID. Built once at init from the
@@ -644,6 +701,9 @@ var catalog = buildCatalog(
 	ErrCodeUnsupportedHarness,
 	ErrCodeReportUnminimized,
 	ErrCodeSigilSynonym,
+	ErrCodeCreateHookNotExecutable,
+	ErrCodePostLandNotExecutable,
+	ErrCodeStaleCompanion,
 )
 
 // buildCatalog indexes codes by ID. It panics on a duplicate ID: a collision is

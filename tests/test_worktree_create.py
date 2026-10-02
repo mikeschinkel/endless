@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from endless import agent_help
 from endless.worktree_cmd import (
     _check_plan_file_committed,
     _default_base_branch,
@@ -186,6 +187,35 @@ def test_warn_if_companion_disagrees_silent_when_companion_none(capsys):
     assert captured.err == ""
 
 
+@pytest.fixture
+def recorded(monkeypatch):
+    """Capture what reaches the errors channel instead of spawning endless-go."""
+    calls = []
+    monkeypatch.setattr(
+        agent_help.warn, "record",
+        lambda code, summary, **kw: calls.append((code, summary, kw)),
+    )
+    return calls
+
+
+def test_companion_disagreement_reaches_the_errors_channel(capsys, recorded):
+    """E-2213: a stale companion is a standing condition of that worktree, so
+    it is recorded as WARN-0028 as well as printed, one incident per worktree."""
+    p = Path("/x/.endless/worktrees/e-100")
+    _warn_if_companion_disagrees(p, {"task_id": "E-1186"})
+    assert "stale companion" in capsys.readouterr().err
+    assert [c[0] for c in recorded] == ["WARN-0028"]
+    code, summary, kw = recorded[0]
+    assert "E-1186" in summary and "E-100" in summary
+    assert kw["fingerprint"] == f"companion={p}"
+
+
+def test_companion_agreement_records_nothing(recorded):
+    _warn_if_companion_disagrees(
+        Path("/x/.endless/worktrees/e-100"), {"task_id": "E-100"})
+    assert recorded == []
+
+
 # ---------------------------------------------------------------------------
 # _run_post_worktree_create_hook (E-986)
 # ---------------------------------------------------------------------------
@@ -258,3 +288,18 @@ def test_non_executable_hook_warns_and_does_not_run(tmp_path, capsys):
     err = capsys.readouterr().err
     assert "not executable" in err
     assert not sentinel.exists()
+
+
+def test_non_executable_hook_reaches_the_errors_channel(tmp_path, capsys,
+                                                        recorded):
+    """E-2213: only the user can make a tracked hook executable, so the skip is
+    recorded as WARN-0026 and the ⚠ line a person reads is kept."""
+    project = tmp_path / "proj"
+    project.mkdir()
+    worktree = tmp_path / "wt"
+    worktree.mkdir()
+    _write_hook(project, "#!/usr/bin/env bash\n", executable=False)
+    _run_post_worktree_create_hook(project, worktree)
+    assert "not executable" in capsys.readouterr().err
+    assert [c[0] for c in recorded] == ["WARN-0026"]
+    assert "post-worktree-create" in recorded[0][1]
