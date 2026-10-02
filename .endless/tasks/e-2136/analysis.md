@@ -66,6 +66,40 @@ determines the rules:
 Auto-selecting agent output when an agent invokes a command, plus the
 counterpart flag that forces the human view. Its own task, after E-1504.
 
+## `session status` is the reference list-shaped command (folded in from E-2190, Mike 2026-10-02)
+
+E-2190 ("Add an --agent format to session status") is superseded by this task:
+`session status` is built here, in TOON, as the first list-shaped command, so
+the shape rules are tested on the hardest list while they are decided — it is
+glyph-heavy and every row carries per-viewer state. Decided:
+
+1. **Python renders it** from `endless-go session-status --json`, consistent
+   with "only the Python implementation is on the path". Go does not grow an
+   agent renderer.
+2. **Every row, flags explicit.** The agent view emits every row the JSON
+   carries — including those the table omits — with `hidden`,
+   `owned_elsewhere`, `duplicate_work`, `focused`, `relation`, `is_focal`, and
+   the frame's `viewer_session`, `focal` and `focus`. `--show-hidden` /
+   `--only-hidden` do not apply to it (they shape a drawing, not data).
+3. **`--monitor --agent` is refused**: the agent view is a snapshot; the
+   refusal names `session status --agent`.
+4. **Relations as one edges section, no per-row ids.** A separate table of
+   `{from, kind, to}` among the tasks on the board, `kind` one of `blocks`,
+   `precedes`, `conflicts` (E-2164's relations; `conflicts` both declared and
+   detected). Per-row blocking counts are dropped from the agent view — the
+   edges carry them. Nothing is repeated.
+5. **Name the other session.** Each row carries `owner: ES-NNNN` when another
+   live session owns it, and `also_on: [ES-…]` listing the other live sessions
+   behind `duplicate_work`. This needs ONE Go change: E-2188's
+   `monitor.AnnotateSessionStatusOwnership` returns the owner's and the other
+   sessions' ids rather than booleans only, and `session-status --json` gains
+   `owner` and `also_on`. That is data in the internal JSON, not an agent
+   renderer, so it does not contradict point 1.
+
+Also carried over from E-2190: titles untruncated (rule 5 above), and every
+glyph-encoded signal becomes a field (rule 6 above) — the claimed task, focus,
+duplicate, owned elsewhere, hidden, relation and blocking.
+
 ## From the description
 
 Only the stable Python implementation is needed: Go's JSON is internal plumbing consumed by Python, not read by an agent, so TOON's in-development Go implementation blocks nothing.
