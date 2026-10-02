@@ -230,6 +230,7 @@ func TestParseTSAcceptsBothStoredSpellings(t *testing.T) {
 func TestClassifyLiveSession(t *testing.T) {
 	live := func(r *monitor.ProjectStatusRow) { r.LiveSession = true }
 	prompted := func(r *monitor.ProjectStatusRow) { r.LiveSession, r.Prompted = true, true }
+	primed := func(r *monitor.ProjectStatusRow) { r.LiveSession, r.Primed = true, true }
 	cases := []struct {
 		r    monitor.ProjectStatusRow
 		want taskrow.Action
@@ -242,6 +243,10 @@ func TestClassifyLiveSession(t *testing.T) {
 		{row(1, "submitted", 0), taskrow.Review},
 		{row(1, "ready", 0), taskrow.Do},
 		{row(1, "unplanned", 0), taskrow.Plan},
+		// E-1994: a primed session on an unstarted task is the row's news.
+		{with(row(1, "submitted", 0), primed), taskrow.Primed},
+		{with(row(1, "ready", 0), primed), taskrow.Primed},
+		{with(row(1, "unplanned", 0), primed), taskrow.Primed},
 	}
 	for _, c := range cases {
 		if got := classify(c.r); got != c.want {

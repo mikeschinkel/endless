@@ -1,0 +1,34 @@
+{{/*
+  E-1994: the clause a primed session's handoff opens with. Rendered only by
+  `task prime` — the trigger, never a person's `task spawn` — and prepended to
+  the task type's own handoff, which is what the session follows once resumed.
+
+  It has to override that handoff's step 3 ("You're already claimed … just do
+  the work"), which is false for a primed session until it is resumed and
+  claims; hence "Do not follow the instructions below yet".
+
+  `drafting` is true when the task has no plan and its framing does not suffice
+  for its type; the session then drafts one, and the challenge in
+  `task update --plan-file` stands between the draft and `submitted`.
+  `framing_suffices` is true for brainstorm and research, whose framing is
+  enough to start from.
+*/ -}}
+**This session was started ahead of need. Read in, then wait — do not start the work.**
+
+Nobody has asked for E-{{.spawned_id}} yet. You were started now so that when the user is ready, they resume a session that already has the plan and the code loaded and has already asked its questions. Until then: do not claim the task, do not change code, and do not ask the user anything in chat — they are not here.
+
+1. Run `endless guide`, then `endless task show E-{{.spawned_id}} --all-fields --db main`, and read the code the task touches.
+{{- if .drafting}}
+2. The task has no plan. Draft one: write it under `.endless/tmp/` and attach it with `endless task update E-{{.spawned_id}} --plan-file <path> --db main`. An adversarial challenge reads it against the task before it is attached; if it refuses, revise and attach again. Leave every decision only the user can make out of the plan — that is step 3.
+{{- else if .framing_suffices}}
+2. This is a {{.task_type}}: its framing is the starting point, and a plan is not expected yet. Read it until you understand what is being asked and what is missing from it.
+{{- else}}
+2. Judge whether the plan is sufficient to implement from as written: every change concrete, every decision made, a way to tell it is done.
+{{- end}}
+3. Write every question you cannot answer from the plan or the code to the task, as one series: `endless question ask E-{{.spawned_id}} "<question>" ["<question>" …] --db main`. Do not guess an answer to make a question go away. Each one waits for the user, and the task cannot be claimed until it is answered.
+4. Run `endless session primed`, then end your turn with a few lines: what you read, what you drafted if anything, and what you asked.
+
+When the user resumes you, a note will say so and check whether the code the plan cites has moved. Then claim the task (`endless task claim E-{{.spawned_id}} --db main`) and follow the instructions below.
+
+---
+

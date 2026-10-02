@@ -469,8 +469,12 @@ func execTaskCreated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 	// A client older than E-1993 still files at `untriaged`; it lands where a
 	// rebuild of the same event would put it.
 	status := currentStatus(p.Status, strings.TrimSpace(plan) != "")
+	// primeRequested (E-1994) rides the same inference: a plan attached is the
+	// moment the `prime` job may start the task's session ahead of need.
+	primeRequested := 0
 	if isPreJudgmentStatus(status) && strings.TrimSpace(plan) != "" {
 		status = "submitted"
+		primeRequested = 1
 	}
 
 	complexityID, riskID, err := p.ratingIDs()
@@ -479,10 +483,10 @@ func execTaskCreated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 	}
 
 	_, err = db.Exec(
-		`INSERT INTO tasks (id, project_id, phase, title, description, status, type_id, sort_order, parent_id, complexity_id, risk_id, created_at, updated_at)
-		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+		`INSERT INTO tasks (id, project_id, phase, title, description, status, type_id, sort_order, parent_id, complexity_id, risk_id, prime_requested, created_at, updated_at)
+		 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 		taskID, projectID, p.Phase, p.Title, p.Description, status, int(typeID),
-		sortOrder, p.ParentID, complexityID, riskID, ts, ts,
+		sortOrder, p.ParentID, complexityID, riskID, primeRequested, ts, ts,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("events: insert task: %w", err)
@@ -780,7 +784,10 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 				if err := db.QueryRow("SELECT status FROM tasks WHERE id = ?",
 					taskID).Scan(&currentStatus); err == nil {
 					if isPreJudgmentStatus(currentStatus) {
-						setClauses = append(setClauses, "status = ?")
+						// E-1994: the attach is also the `prime` job's cue.
+						// Never cleared — the job stops asking once a
+						// session binds — so it needs no matching reset.
+						setClauses = append(setClauses, "status = ?", "prime_requested = 1")
 						args = append(args, taskstatus.Submitted)
 						newStatus = taskstatus.Submitted
 						hasNewStatus = true

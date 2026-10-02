@@ -273,8 +273,19 @@ func windowOptionCommands(target string, spec LaunchSpec) [][]string {
 	if spec.AutoSpawned {
 		cmds = append(cmds, setOptionArgs(target, AutoSpawnedOption, "1"))
 	}
+	if spec.PrimeDraft {
+		cmds = append(cmds, setOptionArgs(target, PrimeDraftOption, spec.TaskID))
+	}
 	return cmds
 }
+
+// PrimeDraftOption marks a window `task prime` opened to DRAFT a task's plan
+// (E-1994); its value is that task's id. `task update --plan-file` reads it
+// back to know the plan it is attaching was drafted by the session that will
+// implement it, and so must pass the challenge first. Keyed to the task id for
+// markAutoSpawned's reason: the option outlives the session, and only a session
+// in that window working that same task is the drafter.
+const PrimeDraftOption = "@endless_prime_draft"
 
 // AutoSpawnedOption is the window option marking a window the auto-spawn job
 // opened. Exported because SessionStart (internal/hookcmd) reads it back.

@@ -139,7 +139,16 @@ func partition(rows []monitor.ProjectStatusRow, key sortKey) [listCount][]monito
 // at a higher urgency. Every other status keeps its own glyph whether or not a
 // session is still open on it, so an `unverified` task whose session is idle
 // still reads ☑.
+//
+// The one exception is ◇ primed, below.
 func classify(r monitor.ProjectStatusRow) taskrow.Action {
+	// E-1994: a primed session holds a task nobody has started, so the row's
+	// status (submitted, ready, unplanned) would describe the plan and hide the
+	// session waiting on it. The resume's claim moves the task to underway,
+	// where the rule below takes over.
+	if r.Primed && r.Status != string(taskstatus.Underway) {
+		return taskrow.Primed
+	}
 	if r.Status == string(taskstatus.Underway) && r.LiveSession {
 		if r.Prompted {
 			return taskrow.Waiting

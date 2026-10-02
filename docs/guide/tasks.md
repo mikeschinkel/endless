@@ -84,9 +84,11 @@ What a task needs is a plan **before anyone starts it**. `task claim` and `task 
 - has **no `plan`**, or
 - has **any open question** (see [Open questions](#open-questions) below).
 
+The plan requirement is **type-aware**. A `brainstorm` or `research` task whose framing is written — a non-empty `context` — passes without a plan: a brainstorm draws its plan out of the requester, and research's shape is its result. A `todo`, `bugfix` or `epic` needs a plan whatever its context says.
+
 Those two are the **whole** gate. Approval is not part of it: a `submitted` task with a plan and no open questions can be claimed or spawned without `task approve`. Approving records that a human reviewed the plan and moves the task from ⚑ review to ▶ do on the board; it does not unlock anything.
 
-The refusal says how to proceed: write the plan, attach it (`task update <id> --plan-file <path>`, which moves the task to `submitted`); answer or close each open question. There is no grandfathering — an older task meets the gate exactly as a new one does, which is how it finds out it needs a plan.
+The refusal says how to proceed: write the plan, attach it (`task update <id> --plan-file <path>`, which moves the task to `submitted`); answer or close each open question. Or let a session do the first part: `task prime <id>` starts one that reads the task in, drafts the plan, asks its questions, and waits (see **Primed sessions** in `endless guide orchestration`). There is no grandfathering — an older task meets the gate exactly as a new one does, which is how it finds out it needs a plan.
 
 **"Plan drafted, N questions open" is a complete, filed state, not a failure.** When you plan a task and hit questions only your user can answer, do not decide them to make the plan look finished. Attach the plan you have, ask the questions with `endless question ask <id> "…"`, and stop. The task is parked until they are answered, `task show` says so prominently, and the questions are recorded durably instead of scrolling away in chat. Filing is the way to ask, not the opposite of asking. A question you can put to a live user in the conversation, ask there instead: rows are for when nobody is there to answer.
 

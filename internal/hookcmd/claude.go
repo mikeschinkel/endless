@@ -597,6 +597,13 @@ func composeSessionStartContext(taskListCtx string, channelOn bool) string {
 func handleUserPromptSubmit(projectID int64, payload claudePayload, sigilNotice string) error {
 	var parts []string
 
+	// E-1994: a primed session being resumed. Leads with what changed while it
+	// waited, because everything after it in the injection assumes it is
+	// working the task again.
+	if note := resumePrimedSession(payload); note != "" {
+		parts = append(parts, note)
+	}
+
 	// E-1953: a refused label leads. The user believes they just taught the
 	// minimizer something; if the notice were buried under a task list the agent
 	// would skip it and the correction would be lost twice over.

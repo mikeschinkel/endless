@@ -108,6 +108,9 @@ INTERNAL_MODEL_DEFAULTS: dict[str, str] = {
     # E-2203: complexity and risk for a submitted task nobody rated — a
     # judgment over a whole plan, so not the lookup model.
     "rater": "sonnet",
+    # E-1994: does a plan a primed session drafted for itself survive an
+    # adversarial read? A judgment over a whole plan, so not the lookup model.
+    "plan_challenge": "sonnet",
 }
 
 

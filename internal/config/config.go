@@ -77,7 +77,31 @@ type EndlessConfig struct {
 	// ProjectStatus holds display preferences for `project status` and
 	// `project monitor`. Layered per list and per attribute.
 	ProjectStatus ProjectStatus `json:"project_status,omitzero"`
+
+	// Prime configures the prime job (E-1994): starting a task's session ahead
+	// of need when a plan is attached. Project-only, for AutoSpawn.Enabled's
+	// reason. Its cadence, tmux target and placement are AutoSpawn's: both jobs
+	// start sessions nobody asked for, and the user's one setting governs both.
+	Prime Prime `json:"prime,omitzero"`
 }
+
+// Prime is the "prime" object. Both fields are PROJECT-ONLY and never
+// inherited from the CLI layer: a primed session is a live process and a tmux
+// window per task, so opting in is that project's decision, read with
+// LoadProject.
+type Prime struct {
+	// Enabled opts the project in. Absent or false is off — the kill switch.
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Cap is how many primed sessions may be outstanding in the project at
+	// once: live sessions bound to a task nobody has started yet. Zero means
+	// DefaultPrimeCap. Each is a live process; tens are comfortable.
+	Cap int `json:"cap,omitempty"`
+}
+
+// DefaultPrimeCap is the cap on outstanding primed sessions per project when
+// none is configured.
+const DefaultPrimeCap = 3
 
 // ProjectStatus is the "project_status" object.
 type ProjectStatus struct {

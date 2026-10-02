@@ -35,6 +35,10 @@ type LaunchSpec struct {
 	// AutoSpawned marks a window the auto-spawn job opened (E-1814); it becomes
 	// the @endless_auto_spawned window option.
 	AutoSpawned bool `json:"auto_spawned,omitempty"`
+
+	// PrimeDraft marks a window `task prime` opened to draft a planless task's
+	// plan (E-1994); it becomes the @endless_prime_draft window option.
+	PrimeDraft bool `json:"prime_draft,omitempty"`
 }
 
 // writeSpecFile marshals spec to a fresh temp file and returns its path. The

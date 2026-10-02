@@ -118,15 +118,15 @@ func TestSQLListEmitsQuotedCommaList(t *testing.T) {
 	if code != 0 {
 		t.Fatalf("sql-list live exited %d: %s", code, stderr)
 	}
-	if got, want := strings.TrimSpace(stdout), "'working','prompted','idle','needs_input'"; got != want {
+	if got, want := strings.TrimSpace(stdout), "'working','prompted','idle','needs_input','primed'"; got != want {
 		t.Errorf("sql-list live = %q, want %q", got, want)
 	}
 }
 
 func TestRankEmitsIndexAndSentinel(t *testing.T) {
 	stdout, _, code := run(t, "rank", "display-order", "ended")
-	if code != 0 || strings.TrimSpace(stdout) != "4" {
-		t.Errorf("rank display-order ended = %q (exit %d), want \"4\"", stdout, code)
+	if code != 0 || strings.TrimSpace(stdout) != "5" {
+		t.Errorf("rank display-order ended = %q (exit %d), want \"5\"", stdout, code)
 	}
 	stdout, _, code = run(t, "rank", "may-write", "ended")
 	if code != 0 || strings.TrimSpace(stdout) != "-1" {

@@ -759,6 +759,58 @@ Foreground flow:
 5. Launches Claude as the tmux window's *command* through the `endless-go spawn-window` launcher: the launcher creates a window named `E-NNNN` — the task id and nothing else, since a tab is narrow and the project and title are things you already know — at the spawn-created worktree (or `--worktree <path>`), sets the window variables `@endless_spawned_by`, `@endless_task_id`, `@endless_project_id` in-process **before** exec, then execs `claude --permission-mode auto` with the handoff as its positional prompt argument. The handoff text never touches a command line or the session environment, and there is no send-keys, no readiness sleep, and no plan-mode step.
 6. The spawned Claude's `SessionStart` hook binds the session to the task **from its working directory** — the launcher opened the window at the worktree, and `.endless/worktrees/e-NNNN` names the task. No status flip; spawn already did it.
 
+### Primed sessions (`endless task prime`)
+
+A primed session is a task's implementation session started **before anyone
+needs it**. It reads the plan and the code, writes what it cannot answer to the
+task as open questions, and then **stays live and waits**. When you are ready,
+you resume that same session — context loaded, questions already asked — instead
+of starting a cold one.
+
+```bash
+endless task prime <id>             # read in now, then wait (window opens detached)
+endless task prime <id> --model <m> # pass a --model through to claude
+```
+
+Two things start one:
+
+- **Attaching a plan** (`unplanned → submitted`) on a project that opted in to
+  the `prime` job — see **Prime** in `endless guide reference`. This is the
+  normal route; nobody types anything.
+- **The no-plan refusal.** `task claim` and `task spawn` refuse a planless task
+  and name `task prime` as one way forward. On a task with no plan the session
+  **drafts** one, and the draft passes an adversarial challenge before it is
+  attached — a one-shot headless model call, so the agent that will implement the
+  plan is not also its only reviewer. A refused draft is not attached; the
+  session revises it, or asks the question the challenge turned on.
+
+What differs from `task spawn`:
+
+| | `task spawn` | `task prime` |
+|---|---|---|
+| Status | pre-claims → `underway` | unchanged — still `submitted`/`ready`/`unplanned` |
+| Plan gate | refuses without a plan | drafts one (open questions still refuse) |
+| Window | takes focus | opens detached |
+| Handoff | the type's handoff | the type's handoff, prefixed with *read in, ask, then wait* |
+
+The session ends its read-in with `endless session primed`, which sets its state
+to `primed` (◇ in `session list` and `project status`). The `Stop` hook leaves
+that state alone, so a primed session sitting quietly for a week is
+distinguishable from a hung one. The clause applies only to sessions `task prime`
+started — a session you spawn or claim yourself never gets it.
+
+**Resuming.** Switch to the window (`tmux select-window -t E-<id>`, or `session
+goto E-<id>`) and type. Your message moves the session back to `working`, and the
+hook tells it two things: claim the task now — `task claim` from the session that
+already holds the task starts it, flipping it to `underway`, and still refuses
+while a question it asked is open — and whether the paths the plan cites still
+exist. The plan cannot have drifted behind the session's back (it is the thing
+that edits the plan, and anyone else's edit reaches it as a change notice); the
+code can, and the drift check names every cited path that is gone.
+
+**Cost.** Each primed session is a live process and a tmux window — comfortable
+in the tens. The `prime` job's `cap` bounds how many a project holds at once.
+
 ### What binds a session to a task
 
 **The working directory, and nothing else.** A `claude` started inside

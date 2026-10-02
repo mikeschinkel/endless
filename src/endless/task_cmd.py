@@ -5005,7 +5005,33 @@ def _open_questions_for_show(item_id: int) -> list[dict]:
         return []
 
 
-def _require_spawnable(item_id: int, verb: str) -> None:
+# E-1994: the task types whose deliverable is findings rather than code, for
+# which the framing in the `context` slot is enough to start from. A brainstorm
+# is requester-led — the session is meant to draw the plan out of the person,
+# not to arrive with one — and research is an investigation whose shape is its
+# result. A todo, bugfix or epic still needs a plan: their framing describes
+# what is wanted, not how it will be built.
+_FRAMING_SUFFICES_TYPES = frozenset({"brainstorm", "research"})
+
+
+def _has_sufficient_framing(task_type: str | None, content: dict) -> bool:
+    """Whether a task with no plan is still startable on its framing (E-1994)."""
+    return (
+        task_type in _FRAMING_SUFFICES_TYPES
+        and bool((content.get("context") or "").strip())
+    )
+
+
+def _task_type_slug(item_id: int) -> str:
+    rows = db.query(
+        "SELECT COALESCE(tt.slug, '') AS slug FROM live_tasks t "
+        "LEFT JOIN task_types tt ON tt.id = t.type_id WHERE t.id = ?",
+        (item_id,),
+    )
+    return rows[0]["slug"] if rows else ""
+
+
+def _require_spawnable(item_id: int, verb: str, require_plan: bool = True) -> None:
     """Refuse to claim or spawn a task that has no plan or has open questions.
 
     E-1993. Filing stays cheap — a task may be filed with no plan and with
@@ -5019,12 +5045,19 @@ def _require_spawnable(item_id: int, verb: str) -> None:
     """
     tid = task_id_display(item_id)
     problems: list[str] = []
-    plan = (db.task_content(item_id).get("plan") or "").strip()
-    if not plan:
+    content = db.task_content(item_id)
+    plan = (content.get("plan") or "").strip()
+    # E-1994: type-aware sufficiency. A brainstorm or research task whose
+    # framing is written (the `context` slot) is startable without a plan.
+    framed = _has_sufficient_framing(_task_type_slug(item_id), content)
+    if require_plan and not plan and not framed:
         problems.append(
             f"{tid} has no plan. A session works from the plan; the description\n"
             f"  only says what the task is. Write the plan and attach it:\n"
             f"      endless task update {tid} --plan-file <path>   (→ submitted)\n"
+            f"  Or have a session read the task in and draft one now, then wait for\n"
+            f"  you — its plan is challenged before it is attached:\n"
+            f"      endless task prime {tid}\n"
             f"  A question the plan cannot settle without the user is not a reason\n"
             f"  to guess: ask it, and the task parks until it is answered:\n"
             f"      endless question ask {tid} \"<question>\""
@@ -5063,7 +5096,7 @@ def _require_spawnable(item_id: int, verb: str) -> None:
     if questions:
         raise agent_help.report(
             f"Cannot {verb} {tid}: it is parked on {len(questions)} open "
-            f"question(s)" + ("" if plan else " and has no plan")
+            f"question(s)" + ("" if plan or framed or not require_plan else " and has no plan")
             + f". {NOTHING_CHANGED}",
             "the answers to the open questions, which are the user's to give",
             text=message,
@@ -5073,7 +5106,8 @@ def _require_spawnable(item_id: int, verb: str) -> None:
     raise agent_help.no_report(
         f"Cannot {verb} {tid}: it has no plan. {NOTHING_CHANGED}",
         f"Write the plan, attach it with endless task update {tid} "
-        f"--plan-file <path>, then {verb} it again",
+        f"--plan-file <path>, then {verb} it again — or start a session that "
+        f"drafts it and waits: endless task prime {tid}",
         text=message,
     )
 
@@ -5180,7 +5214,15 @@ def claim_item(item_id: int, unattended: bool = False, force: bool = False):
     # removed the last status rule here, "a background session may only claim
     # `ready` work", along with background agents.
 
-    if _check_task_ownership(item_id, target_session):
+    # E-1994: a primed session already holds its task — it bound from its
+    # worktree at SessionStart — but nobody started the task: it is still
+    # pre-work. The resumed session's claim is what starts it, so it takes the
+    # full path below (the spawnable gate, then the status flip) instead of the
+    # "already claimed" report. Only `underway` is genuinely a re-claim.
+    owns = _check_task_ownership(item_id, target_session)
+    if owns and current_status != "underway":
+        owns = False
+    if owns:
         from endless.worktree_cmd import create_task_worktree, _project_root
         # A re-claim by the session that already owns the task. Nothing to
         # change, so this reports rather than updates — but it reports in the
@@ -5715,6 +5757,83 @@ def reopen_item(item_id: int) -> None:
     _reopen_task_core(item_id)
 
 
+def _prime_draft_window_task() -> str | None:
+    """The task id on this pane's window's @endless_prime_draft option, if any."""
+    import subprocess
+    pane = os.environ.get("TMUX_PANE")
+    if not pane:
+        return None
+    try:
+        out = subprocess.run(
+            ["tmux", "display-message", "-p", "-t", pane, "#{@endless_prime_draft}"],
+            capture_output=True, text=True, timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    value = out.stdout.strip() if out.returncode == 0 else ""
+    return value or None
+
+
+def _drafting_session_holds(item_id: int) -> bool:
+    """Whether the calling session is the one `task prime` started to draft
+    `item_id`'s plan (E-1994).
+
+    Two facts, both required. The window carries `@endless_prime_draft` set to
+    this task — `task prime` marks a window that way only when it starts a
+    session to draft a planless task — and the calling session is bound to the
+    task. The marker is what makes it the drafter and not merely bound: `task
+    bind` can attach any session to a planless task, and that session's user is
+    the separation the challenge stands in for. The binding is what keeps a
+    later, unrelated session in a reused window from being challenged.
+    """
+    if _prime_draft_window_task() != str(item_id):
+        return False
+    eid = _current_endless_session_id()
+    if eid is None:
+        return False
+    rows = db.query("SELECT task_id FROM sessions WHERE id = ?", (eid,))
+    return bool(rows) and rows[0]["task_id"] == item_id
+
+
+def _challenge_drafted_plan(item_id: int, row: dict, plan: str) -> None:
+    """Refuse a self-drafted plan the adversarial challenge does not pass (E-1994).
+
+    The plan is attached only once a one-shot headless model call, reading it
+    against the task, passes it. Without this the drafting session would author
+    the plan and then execute it with only the user's approval between — and a
+    self-authored plan is self-consistent, so a bad one is the kind its author
+    reads straight past. See endless.plan_challenge, which fails closed.
+    """
+    if not _drafting_session_holds(item_id):
+        return
+    from endless import config, plan_challenge
+    verdict = plan_challenge.challenge(
+        task_id=item_id,
+        title=row.get("title") or "",
+        task_type=row.get("type") or "",
+        description=row.get("description") or "",
+        context=row.get("context") or "",
+        plan=plan,
+        model=config.internal_model("plan_challenge"),
+    )
+    if verdict.passed:
+        click.echo(f"Plan challenge: passed for {task_id_display(item_id)}.")
+        return
+    lines = "\n".join(f"  - {o}" for o in verdict.objections)
+    tid = task_id_display(item_id)
+    # NO_REPORT: revising a draft is the drafting session's own work. An
+    # objection only the user can settle becomes a question on the task, which
+    # parks it — that is the report, made durably rather than in chat.
+    raise agent_help.no_report(
+        f"The plan drafted for {tid} did not pass its challenge. {NOTHING_CHANGED}",
+        f"Revise the plan against the objections and attach it again; ask any "
+        f"objection only the user can settle with endless question ask {tid} "
+        f"\"<question>\" instead of deciding it",
+        text=(f"The plan you drafted for {tid} did not pass its challenge:\n"
+              f"{lines}\n{NOTHING_CHANGED}"),
+    )
+
+
 def update_plan(
     item_id: int,
     status: str | None = None,
@@ -5926,6 +6045,12 @@ def update_plan(
     # approval were judged against. It is not the spec any more — the plan is —
     # so that reset is gone rather than retargeted.
     plan_attached = plan is not None and plan.strip() != ""
+
+    # E-1994: a plan a primed session drafted for its own task is challenged
+    # before it lands. Refuses with the objections, writing nothing.
+    if plan_attached and not (row[0]["plan"] or "").strip():
+        _challenge_drafted_plan(item_id, row[0], plan)
+
     plan_changed = (
         plan is not None
         and plan.strip() != (row[0]["plan"] or "").strip()
@@ -7219,7 +7344,9 @@ def render_handoff(spawned_id: int, title: str,
                    worktree_path: str | None = None,
                    branch: str | None = None,
                    task_type: str | None = None,
-                   parent_id: int | None = None) -> str:
+                   parent_id: int | None = None,
+                   primed: bool = False,
+                   drafting: bool = False) -> str:
     """Render the spawn handoff for a task by invoking `endless-go template render`.
 
     The handoff is mostly boilerplate (orient, read the guide + plan, default
@@ -7243,6 +7370,12 @@ def render_handoff(spawned_id: int, title: str,
     a FRESH session, summarizing the prior session's outcome and last status
     snapshot. Reopening now resumes the prior session's actual transcript
     (`session goto <ref> --resume --revisit`), which needs no summary of itself.
+
+    `primed` (E-1994) prepends `handoff/prime` — read in, ask, then wait — to
+    the type's own handoff, which the session follows once resumed. Only
+    `task prime` passes it, so a session a person started never gets the
+    stop-and-wait clause. `drafting` tells that clause the task has no plan to
+    read and the session is to draft one.
     """
     import json
     import subprocess
@@ -7273,26 +7406,34 @@ def render_handoff(spawned_id: int, title: str,
         # instructions at all — they would cost every spawned session a per-turn
         # model round trip that nothing enforces and nothing reads.
         "report_gate": _report_gate_on(),
+        "drafting": drafting,
+        "framing_suffices": effective_type in _FRAMING_SUFFICES_TYPES,
     }
-    template_name = f"handoff/{effective_type}"
     binary = _resolve_endless_go()
-    result = subprocess.run(
-        [binary, "template", "render", template_name],
-        input=json.dumps(vars_payload),
-        capture_output=True, text=True, check=False,
-    )
-    if result.returncode != 0:
-        # endless-go classified this itself (internal/templatecmd goes through
-        # internal/refusal), so its stderr already carries a verdict at both
-        # ends and is relayed verbatim. A missing template or a Python/Go skew
-        # is Endless broken, and Go says so in its own words.
-        if result.stderr.strip():
-            raise agent_help.relay(result.stderr, exit_code=result.returncode)
-        raise agent_help.fault(
-            f"endless-go template render exited {result.returncode} and said "
-            f"nothing."
+
+    def _render(template_name: str) -> str:
+        result = subprocess.run(
+            [binary, "template", "render", template_name],
+            input=json.dumps(vars_payload),
+            capture_output=True, text=True, check=False,
         )
-    return result.stdout
+        if result.returncode != 0:
+            # endless-go classified this itself (internal/templatecmd goes
+            # through internal/refusal), so its stderr already carries a verdict
+            # at both ends and is relayed verbatim. A missing template or a
+            # Python/Go skew is Endless broken, and Go says so in its own words.
+            if result.stderr.strip():
+                raise agent_help.relay(result.stderr, exit_code=result.returncode)
+            raise agent_help.fault(
+                f"endless-go template render exited {result.returncode} and said "
+                f"nothing."
+            )
+        return result.stdout
+
+    body = _render(f"handoff/{effective_type}")
+    if primed:
+        return _render("handoff/prime") + body
+    return body
 
 
 def _report_gate_on() -> bool:
@@ -7685,6 +7826,142 @@ def spawn_plan(item_id: int, project_name: str | None = None,
         click.echo(f"      tmux switch-client -t ={tmux_session}:{window_name}")
     else:
         click.echo(f"      tmux select-window -t {window_name}")
+
+
+# Statuses a task may be primed from (E-1994): nobody has started it. A task
+# already `underway` has a session, and a settled one is finished.
+_PRIMEABLE_STATUSES: frozenset[str] = frozenset(
+    {"unplanned", "submitted", "ready", "revisit"}
+)
+
+
+def prime_task(item_id: int, permission_mode: str = "auto",
+               model: str | None = None, auto: bool = False,
+               target_session: str | None = None,
+               placement: str = "first") -> None:
+    """Start a session that reads a task in now and waits for its user (E-1994).
+
+    `task spawn`'s launch path with three differences, each the point:
+
+      - Nothing is claimed and the status does not move. The worktree is
+        created and the session binds itself from it at SessionStart, as any
+        session does; the user's resume and its `task claim` start the task.
+      - The plan gate is relaxed: a task with no plan is primed to DRAFT one,
+        which is the read-in's most useful case. The open-question gate holds —
+        a task waiting on a person is already waiting.
+      - The handoff opens with `handoff/prime` (read in, ask, `session primed`,
+        wait), and the window opens without taking focus (`--no-refocus`):
+        nobody is meant to look yet. `placement` is where its tab lands, as for
+        `task spawn`; the prime job passes auto_spawn's setting.
+
+    Reached from the `prime` job (`--auto`, `--target-session`) when a plan is
+    attached, and from a person following claim's or spawn's no-plan refusal.
+    """
+    import shutil
+    import subprocess
+    import tempfile
+
+    if not shutil.which("tmux"):
+        raise agent_help.report(
+            "tmux is not installed",
+            "installing tmux — the only surface a primed session can run in — "
+            "or forgoing priming",
+        )
+    if not target_session and not os.environ.get("TMUX"):
+        raise agent_help.report(
+            "Not in a tmux session. endless task prime requires tmux.",
+            "whether to run inside tmux so a session can be primed",
+        )
+
+    rows = db.query(
+        "SELECT p.id, p.title, p.status, p.project_id, p.parent_id, "
+        "COALESCE(tt.slug, '') AS type_slug "
+        "FROM live_tasks p LEFT JOIN task_types tt ON tt.id = p.type_id "
+        "WHERE p.id = ?",
+        (item_id,),
+    )
+    if not rows:
+        raise agent_help.no_report(
+            f"No task found with id {item_id}", _NO_SUCH_ID_REMEDY
+        )
+    item = rows[0]
+    tid = task_id_display(item_id)
+    if item["status"] not in _PRIMEABLE_STATUSES:
+        # NO_REPORT: started work already has its session; priming a second
+        # would read in without that session's reasoning.
+        raise agent_help.no_report(
+            f"{tid} is '{item['status']}' — only a task nobody has started can be "
+            f"primed ({', '.join(sorted(_PRIMEABLE_STATUSES))}). Nothing was primed.",
+            f"Resume the session that holds it instead: endless session goto {tid} --resume",
+        )
+
+    # The same two refusals spawn makes, for spawn's reason: a session that
+    # holds or once held this task has the reasoning a new one would lack.
+    _check_task_ownership(item_id, current_eid=None)
+    _check_prior_claim(item_id, item["status"])
+    _require_spawnable(item_id, "prime", require_plan=False)
+
+    content = db.task_content(item_id)
+    drafting = (
+        not (content.get("plan") or "").strip()
+        and not _has_sufficient_framing(item["type_slug"] or None, content)
+    )
+
+    from endless.worktree_cmd import create_task_worktree, _project_root
+    wt_path, _created = create_task_worktree(item_id, _project_root())
+
+    handoff_text = render_handoff(
+        item_id, item["title"],
+        worktree_path=str(wt_path),
+        branch=_branch_for_worktree(str(wt_path)),
+        task_type=item["type_slug"] or None,
+        parent_id=item["parent_id"],
+        primed=True,
+        drafting=drafting,
+    )
+    handoff_file = tempfile.NamedTemporaryFile(
+        mode="w", suffix=".md", prefix="endless-prime-", delete=False,
+    )
+    handoff_file.write(handoff_text)
+    handoff_file.close()
+
+    spawner_id = "prime" if auto else (
+        _current_endless_session_id() or f"pid-{os.getpid()}"
+    )
+    window_name = tmux_window_name(item_id)
+    from endless.event_bridge import _resolve_endless_go
+    spawn_cmd = [
+        _resolve_endless_go(), "spawn-window",
+        "--claude-bin", _claude_binary(),
+        "--handoff-file", handoff_file.name,
+        "--permission-mode", permission_mode,
+        "--task-id", str(item_id),
+        "--project-id", str(item["project_id"]),
+        "--spawned-by", str(spawner_id),
+        "--window-name", window_name,
+        "--cwd", str(wt_path),
+        # Nobody is meant to look yet: the window never takes focus.
+        "--no-refocus",
+        "--placement", placement,
+    ]
+    if drafting:
+        spawn_cmd += ["--prime-draft"]
+    if model:
+        spawn_cmd += ["--model", model]
+    if target_session:
+        spawn_cmd += ["--target-session", target_session]
+    subprocess.run(spawn_cmd, check=True)
+
+    click.echo(f"Priming a session on {tid}{' (drafting its plan)' if drafting else ''}:")
+    click.echo("")
+    _echo_labeled_rows([
+        ("Window", window_name),
+        ("Git worktree", config.tilde(wt_path)),
+        ("Status", f"{item['status']} (unchanged until you resume it and it claims)"),
+    ])
+    click.echo("")
+    click.echo("  It reads in, asks its questions, then holds as `primed`. When ready:")
+    click.echo(f"      tmux select-window -t {window_name}")
 
 
 def search_tasks(

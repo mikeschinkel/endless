@@ -334,6 +334,12 @@ ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
 -- approve (ED-1538). They are declared after `removed` because that is where
 -- ALTER TABLE ADD COLUMN puts them on a migrated database (00008), and the two
 -- shapes must match.
+--
+-- prime_requested (E-1994) is 1 once a plan has been attached to the task —
+-- the executor's unplanned→submitted inference sets it, at creation or on
+-- update — and is never cleared. It asks the `prime` job to start the task's
+-- session ahead of need; the job stops asking once any session has bound to the
+-- task, so nothing has to reset it. Declared last for 00014's ADD COLUMN.
 CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY,
     project_id INTEGER NOT NULL,
@@ -351,6 +357,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     removed INTEGER NOT NULL DEFAULT 0,
     complexity_id INTEGER REFERENCES complexity_levels(id),
     risk_id INTEGER REFERENCES risk_levels(id),
+    prime_requested INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE SET NULL
 );
@@ -524,8 +531,8 @@ CREATE INDEX IF NOT EXISTS idx_session_notices_undelivered
 -- rather than a 2-element array so json_extract(changes,'$.status.after') reads as
 -- what it is, and so a third key can be added later without a breaking change.
 --
--- Freeform fields (description here; plan/analysis/notes through the
--- task_content triggers below) carry the single character '…' (U+2026) in place
+-- Freeform fields (plan/analysis/notes, through the task_content triggers
+-- below) carry the single character '…' (U+2026) in place
 -- of content — the notice says a field CHANGED without reproducing it, while
 -- still distinguishing added / cleared / emptied / edited.
 --
@@ -556,14 +563,20 @@ CREATE INDEX IF NOT EXISTS idx_session_notices_undelivered
 --
 -- Ratings (E-1813) render as their slugs, not their ids, so a notice reads
 -- "complexity: — → low" and stays readable if a level is later relabelled.
+--
+-- Description is NOT watched (E-1994, matching E-1993): the description says
+-- what a task is and the plan is its spec, so the plan — through the
+-- task_content triggers below — is what a session holding the task is told
+-- about. A description edit changing nothing a session works from, telling it
+-- anyway trains it to skim the line that matters.
+--
 -- Keep this body byte-identical (modulo whitespace) to the copy in
--- internal/schema/migrations/00008_ratings_replace_tier.go.
+-- internal/schema/migrations/00014_prime.go.
 CREATE TRIGGER IF NOT EXISTS tasks_notify_sessions AFTER UPDATE ON tasks
 WHEN OLD.status        IS NOT NEW.status
   OR OLD.phase         IS NOT NEW.phase
   OR OLD.complexity_id IS NOT NEW.complexity_id
   OR OLD.risk_id       IS NOT NEW.risk_id
-  OR OLD.description   IS NOT NEW.description
 BEGIN
     INSERT INTO session_notices
         (session_id, task_id, changes, changed_at, changed_by_session)
@@ -589,16 +602,6 @@ BEGIN
                            'before', (SELECT slug FROM risk_levels WHERE id = OLD.risk_id),
                            'after',  (SELECT slug FROM risk_levels WHERE id = NEW.risk_id))
                  WHERE OLD.risk_id IS NOT NEW.risk_id
-                UNION ALL
-                SELECT 'description',
-                       json_object(
-                           'before', CASE WHEN OLD.description IS NULL THEN NULL
-                                          WHEN OLD.description = ''   THEN ''
-                                          ELSE '…' END,
-                           'after',  CASE WHEN NEW.description IS NULL THEN NULL
-                                          WHEN NEW.description = ''   THEN ''
-                                          ELSE '…' END)
-                 WHERE OLD.description IS NOT NEW.description
            )),
            strftime('%Y-%m-%dT%H:%M:%S', 'now'),
            NEW.changed_by_session

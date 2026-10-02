@@ -152,6 +152,8 @@ func TestTableIsPinned(t *testing.T) {
 		{sessionstate.Idle, sessionstate.Working},
 		{sessionstate.AnyState, sessionstate.Prompted},
 		{sessionstate.Prompted, sessionstate.Working},
+		{sessionstate.Working, sessionstate.Primed},
+		{sessionstate.Primed, sessionstate.Working},
 		{sessionstate.AnyState, sessionstate.Idle},
 		{sessionstate.AnyState, sessionstate.Ended},
 		{sessionstate.Ended, sessionstate.Idle},

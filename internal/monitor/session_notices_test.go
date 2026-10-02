@@ -128,7 +128,7 @@ func TestNoticeTrigger_OneRowPerUpdateEvent(t *testing.T) {
 	snNoticeFixture(t, db)
 
 	if _, err := db.Exec(
-		"UPDATE tasks SET status='underway', complexity_id=3, description='hello' WHERE id=500",
+		"UPDATE tasks SET status='underway', complexity_id=3, phase='next' WHERE id=500",
 	); err != nil {
 		t.Fatalf("update: %v", err)
 	}
@@ -141,7 +141,7 @@ func TestNoticeTrigger_OneRowPerUpdateEvent(t *testing.T) {
 	if err := json.Unmarshal([]byte(got[0][1].(string)), &changes); err != nil {
 		t.Fatalf("changes is not JSON: %v", err)
 	}
-	for _, field := range []string{"status", "complexity", "description"} {
+	for _, field := range []string{"status", "complexity", "phase"} {
 		if _, ok := changes[field]; !ok {
 			t.Errorf("changes should carry %q, got %v", field, changes)
 		}
@@ -180,42 +180,62 @@ func TestNoticeTrigger_FreeformNeverLeaksContent(t *testing.T) {
 	}
 }
 
-// TestNoticeTrigger_FreeformTransitions pins the four transitions the elision
-// sentinel preserves. Content is never carried, but whether it arrived, left,
-// or merely changed still is — which is the whole reason a bare "changed" flag
-// was not enough.
+// TestNoticeTrigger_FreeformTransitions pins the transitions the elision
+// sentinel preserves, on the plan — the freeform field a session works from
+// (E-1994). Content is never carried, but whether it arrived, left, or merely
+// changed still is — which is the whole reason a bare "changed" flag was not
+// enough. Each step's notice is delivered before the next, so the content
+// triggers' same-second merge does not fold two steps into one row.
 func TestNoticeTrigger_FreeformTransitions(t *testing.T) {
 	db := withTestDB(t)
 	snNoticeFixture(t, db)
 
 	steps := []struct {
-		set  any
-		want string
+		apply func()
+		want  string
 	}{
-		{"content", "added"},    // NULL   → content
-		{nil, "cleared"},        // content → NULL
-		{"content", "added"},    // NULL   → content
-		{"", "emptied"},         // content → ""
-		{"content", "added"},    // ""     → content
-		{"different", "edited"}, // content → content
+		{func() { setTaskContent(t, db, 500, "plan", "content") }, "added"},
+		{func() { setTaskContent(t, db, 500, "plan", "different") }, "edited"},
+		{func() {
+			if _, err := db.Exec("DELETE FROM task_content WHERE task_id=500 AND name='plan'"); err != nil {
+				t.Fatalf("delete plan: %v", err)
+			}
+		}, "cleared"},
+		{func() { setTaskContent(t, db, 500, "plan", "content") }, "added"},
 	}
-	for _, step := range steps {
-		before := len(snNotices(t, db))
-		if _, err := db.Exec("UPDATE tasks SET description=? WHERE id=500", step.set); err != nil {
-			t.Fatalf("set description=%v: %v", step.set, err)
+	for i, step := range steps {
+		if _, err := db.Exec("UPDATE session_notices SET notified = 1"); err != nil {
+			t.Fatalf("deliver: %v", err)
 		}
+		before := len(snNotices(t, db))
+		step.apply()
 		rows := snNotices(t, db)
 		if len(rows) == before {
-			t.Fatalf("set description=%v: expected a notice", step.set)
+			t.Fatalf("step %d (%s): expected a notice", i, step.want)
 		}
 		var changes map[string]noticeChange
 		if err := json.Unmarshal([]byte(rows[before][1].(string)), &changes); err != nil {
 			t.Fatalf("changes not JSON: %v", err)
 		}
-		if got := freeformVerb(changes["description"]); got != step.want {
-			t.Errorf("set description=%v: want %q, got %q (%v)",
-				step.set, step.want, got, changes["description"])
+		if got := freeformVerb(changes["plan"]); got != step.want {
+			t.Errorf("step %d: want %q, got %q (%v)", i, step.want, got, changes["plan"])
 		}
+	}
+}
+
+// TestNoticeTrigger_DescriptionIsNotWatched pins E-1994's retargeting. The plan
+// is the spec (E-1993); the description only says what the task is, so editing
+// it changes nothing a session holding the task works from, and telling it
+// anyway is the noise that trains an agent to skim the line that matters.
+func TestNoticeTrigger_DescriptionIsNotWatched(t *testing.T) {
+	db := withTestDB(t)
+	snNoticeFixture(t, db)
+
+	if _, err := db.Exec("UPDATE tasks SET description='rewritten' WHERE id=500"); err != nil {
+		t.Fatalf("update: %v", err)
+	}
+	if got := snNotices(t, db); len(got) != 0 {
+		t.Errorf("a description edit wrote notices: %v", got)
 	}
 }
 

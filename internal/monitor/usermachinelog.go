@@ -52,6 +52,8 @@ const (
 	SessionLogWake       SessionLogReason = "wake"        // WakeSession: idle -> working on a hook event
 	SessionLogPrompt     SessionLogReason = "prompt"      // PromptSession: any -> prompted on a permission prompt
 	SessionLogResume     SessionLogReason = "resume"      // ResumeFromPrompt: prompted -> working on the next activity
+	SessionLogPrime      SessionLogReason = "prime"       // PrimeSession: working -> primed at the end of a read-in
+	SessionLogUnprime    SessionLogReason = "unprime"     // ResumeFromPrimed: primed -> working when the user resumes
 )
 
 // sessionLogEntry is one line in the diagnostic log. The top-level `kind`

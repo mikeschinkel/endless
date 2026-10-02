@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 
@@ -417,6 +418,11 @@ func EnsureClaudeSessionID(sessionID, process string, projectID int64) (int64, e
 }
 
 // IdleSession marks a session as idle (between turns, still alive).
+//
+// Every state but `primed` (E-1994). A read-in primes itself from inside its
+// last turn, so the Stop that ends that turn arrives after PrimeSession and
+// would otherwise overwrite the one state that tells a primed session from a
+// hung one. A primed row keeps its state and only its last_activity moves.
 func IdleSession(sessionID string) error {
 	db, err := DB()
 	if err != nil {
@@ -426,13 +432,16 @@ func IdleSession(sessionID string) error {
 	snap := SnapshotSession(sessionID)
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 	_, err = db.Exec(
-		"UPDATE sessions SET state=?, last_activity=? WHERE session_id=?",
-		sessionstate.Idle, now, sessionID,
+		`UPDATE sessions
+		    SET state = CASE WHEN state = ? THEN state ELSE ? END,
+		        last_activity = ?
+		  WHERE session_id = ?`,
+		sessionstate.Primed, sessionstate.Idle, now, sessionID,
 	)
 	if err != nil {
 		return err
 	}
-	if snap.Found { // only record a transition that actually had a prior row
+	if snap.Found && snap.State != sessionstate.Primed { // only record a transition that actually happened
 		LogSessionTxn(SessionTxn{
 			SessionGUID: sessionID,
 			OldState:    snap.State,
@@ -539,6 +548,90 @@ func ResumeFromPrompt(sessionID string) error {
 		Caller:      "monitor.ResumeFromPrompt",
 	})
 	return nil
+}
+
+// ErrNotPrimable is PrimeSession's refusal: the session is not mid-turn on a
+// task, so there is no read-in for it to be ending.
+var ErrNotPrimable = errors.New("session is not working on a task")
+
+// PrimeSession marks a session primed: its read-in is done and it is holding,
+// alive, for its user (E-1994).
+//
+// Run by `endless session primed` from inside the read-in's last turn, which
+// is why the WHERE clause demands `working` and a task: a session can only be
+// working when it runs a command, and a read-in is always of a task. Anything
+// else — an unbound session, a session already primed — matches no row and is
+// refused with ErrNotPrimable rather than written silently.
+func PrimeSession(sessionID string) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	snap := SnapshotSession(sessionID)
+	now := time.Now().UTC().Format("2006-01-02T15:04:05")
+	res, err := db.Exec(
+		`UPDATE sessions SET state=?, last_activity=?
+		  WHERE session_id=? AND state=? AND task_id IS NOT NULL`,
+		sessionstate.Primed, now, sessionID, sessionstate.Working,
+	)
+	if err != nil {
+		return fmt.Errorf("prime session: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("prime session: %w", err)
+	}
+	if n == 0 {
+		return fmt.Errorf("prime session %s (state %q): %w", sessionID, snap.State, ErrNotPrimable)
+	}
+	LogSessionTxn(SessionTxn{
+		SessionGUID: sessionID,
+		OldState:    snap.State,
+		NewState:    sessionstate.Primed,
+		OldTaskID:   snap.TaskID,
+		NewTaskID:   snap.TaskID,
+		Reason:      SessionLogPrime,
+		Caller:      "monitor.PrimeSession",
+	})
+	return nil
+}
+
+// ResumeFromPrimed clears `primed` when the user resumes the session, and
+// reports whether it did (E-1994). Called from UserPromptSubmit, before any tool
+// in the resumed turn can run — which is why `primed` can stay out of
+// sessionstate.MayWrite without ever refusing a resumed session's write.
+//
+// Narrow for ResumeFromPrompt's reason: the WHERE clause is the whole rule, so
+// it undoes only what PrimeSession wrote and a second call is a no-op. The
+// caller uses `resumed` to run the drift check exactly once, on the resume.
+func ResumeFromPrimed(sessionID string) (resumed bool, err error) {
+	db, err := DB()
+	if err != nil {
+		return false, err
+	}
+	snap := SnapshotSession(sessionID)
+	now := time.Now().UTC().Format("2006-01-02T15:04:05")
+	res, err := db.Exec(
+		"UPDATE sessions SET state=?, last_activity=? WHERE session_id=? AND state=?",
+		sessionstate.Working, now, sessionID, sessionstate.Primed,
+	)
+	if err != nil {
+		return false, fmt.Errorf("resume primed session: %w", err)
+	}
+	n, err := res.RowsAffected()
+	if err != nil || n == 0 {
+		return false, nil
+	}
+	LogSessionTxn(SessionTxn{
+		SessionGUID: sessionID,
+		OldState:    snap.State,
+		NewState:    sessionstate.Working,
+		OldTaskID:   snap.TaskID,
+		NewTaskID:   snap.TaskID,
+		Reason:      SessionLogUnprime,
+		Caller:      "monitor.ResumeFromPrimed",
+	})
+	return true, nil
 }
 
 // EndSession marks a session as ended. Also NULLs `process` so reused

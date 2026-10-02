@@ -148,7 +148,7 @@ func TestPromptedMayWrite(t *testing.T) {
 // or adds one is deliberate rather than incidental.
 func TestAwaitsHumanIsEveryPausedState(t *testing.T) {
 	got := sessionstate.Get(sessionstate.AwaitsHuman)
-	want := []string{sessionstate.Prompted, sessionstate.Idle, sessionstate.NeedsInput}
+	want := []string{sessionstate.Prompted, sessionstate.Idle, sessionstate.NeedsInput, sessionstate.Primed}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("AwaitsHuman = %v, want %v", got, want)
 	}
@@ -232,7 +232,7 @@ func TestGlyphsAreDistinct(t *testing.T) {
 
 func TestGetReturnsMembersInGroupOrder(t *testing.T) {
 	got := sessionstate.Get(sessionstate.DisplayOrder)
-	want := []string{"prompted", "working", "needs_input", "idle", "ended"}
+	want := []string{"prompted", "working", "needs_input", "idle", "primed", "ended"}
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("Get(DisplayOrder) = %v, want %v", got, want)
 	}
@@ -332,7 +332,7 @@ func TestRank(t *testing.T) {
 	if got, want := sessionstate.Rank(sessionstate.DisplayOrder, sessionstate.Working), 1; got != want {
 		t.Errorf("Rank(DisplayOrder, working) = %d, want %d", got, want)
 	}
-	if got, want := sessionstate.Rank(sessionstate.DisplayOrder, sessionstate.Ended), 4; got != want {
+	if got, want := sessionstate.Rank(sessionstate.DisplayOrder, sessionstate.Ended), 5; got != want {
 		t.Errorf("Rank(DisplayOrder, ended) = %d, want %d", got, want)
 	}
 	if got := sessionstate.Rank(sessionstate.MayWrite, sessionstate.Ended); got != sessionstate.NoRank {
@@ -418,19 +418,20 @@ func TestParseGroupRejectsUnknown(t *testing.T) {
 func TestGroupMembershipIsPinned(t *testing.T) {
 	want := map[string][]string{
 		// the vocabulary, in lifecycle order
-		"all": {"working", "prompted", "idle", "needs_input", "ended"},
+		"all": {"working", "prompted", "idle", "needs_input", "primed", "ended"},
 		// was `state != 'ended'`, 29 sites
-		"live": {"working", "prompted", "idle", "needs_input"},
+		"live": {"working", "prompted", "idle", "needs_input", "primed"},
 		// was hookcmd's `switch s.State { case stateWorking, stateIdle: }`;
 		// `prompted` joined it by decision, not by default (E-2091)
 		"may-write": {"working", "prompted", "idle"},
 		// every state in which the session has paused for input (E-2091),
 		// blocked-mid-turn first
-		"awaits-human": {"prompted", "idle", "needs_input"},
+		// — and a primed session holding for its user (E-1994)
+		"awaits-human": {"prompted", "idle", "needs_input", "primed"},
 		// was session_cmd.py's `CASE s.state WHEN 'working' THEN 0 ...`;
 		// `prompted` sorts above `working` because it is the row that wants a
 		// person (E-2091)
-		"display-order": {"prompted", "working", "needs_input", "idle", "ended"},
+		"display-order": {"prompted", "working", "needs_input", "idle", "primed", "ended"},
 	}
 	for _, g := range sessionstate.AllGroups() {
 		slug := sessionstate.GroupSlug(g)
@@ -459,6 +460,7 @@ func TestLabelsAndGlyphsArePinned(t *testing.T) {
 		sessionstate.Prompted:   {"Prompted", "⚠"},
 		sessionstate.Idle:       {"Idle", "‖"},
 		sessionstate.NeedsInput: {"Needs Input", "?"},
+		sessionstate.Primed:     {"Primed", "◇"},
 		sessionstate.Ended:      {"Ended", "␥"},
 	}
 	for _, s := range sessionstate.Get(sessionstate.All) {
@@ -493,8 +495,26 @@ func TestLegendRendersAsSessionListPrintsIt(t *testing.T) {
 		parts = append(parts, sessionstate.Glyph(s)+" "+strings.ToLower(sessionstate.Label(s)))
 	}
 	got := strings.Join(parts, "   ")
-	want := "⟳ working   ⚠ prompted   ‖ idle   ? needs input   ␥ ended"
+	want := "⟳ working   ⚠ prompted   ‖ idle   ? needs input   ◇ primed   ␥ ended"
 	if got != want {
 		t.Errorf("session list legend = %q, want %q", got, want)
+	}
+}
+
+// TestPrimedIsLiveAwaitingAndRefusedWrites pins E-1994's classification of
+// `primed` on its own. Live, because a primed session can still receive a
+// message and be resumed — liveness is the point of priming. Awaiting a human,
+// because nothing happens until someone resumes it. Refused writes, because the
+// resume clears it to `working` before any tool in that turn runs, so a write
+// while primed is a session acting that nobody resumed.
+func TestPrimedIsLiveAwaitingAndRefusedWrites(t *testing.T) {
+	if !sessionstate.Has(sessionstate.Live, sessionstate.Primed) {
+		t.Error("primed is not Live: a primed session would vanish from every live view")
+	}
+	if !sessionstate.Has(sessionstate.AwaitsHuman, sessionstate.Primed) {
+		t.Error("primed does not await a human")
+	}
+	if sessionstate.Has(sessionstate.MayWrite, sessionstate.Primed) {
+		t.Error("primed may write: a session nobody resumed would be admitted to act")
 	}
 }

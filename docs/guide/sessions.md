@@ -119,10 +119,11 @@ A session row carries a **state**, and it moves on its own:
 | `prompted`    | Claude Code is asking your user to approve a tool call, and you are blocked mid-turn until they answer. Set by the `Notification` hook; cleared by your next activity — the approved tool completing, or their next message. |
 | `idle`        | Between turns. Set by the `Stop` hook at the end of every turn; the next hook event of the next turn puts a session that holds a task back to `working`. |
 | `needs_input` | You asked your user something and the answer has not arrived. Only their next message ends it — no command clears it. |
+| `primed`      | You were started ahead of need, read the task in, asked your questions, and are holding for your user. Set by `endless session primed`, the last step of a read-in; kept through the `Stop` that ends that turn; cleared to `working` by your user's next message, which also re-checks the paths your plan cites. See **Primed sessions** in `endless guide orchestration`. |
 | `ended`       | The session is over. An incoming hook event revives it to `idle`, because an event is proof it is alive. |
 
-The three states in which a session is **waiting on a person** — `prompted`,
-`idle` and `needs_input` — are one group, `awaits-human`. Waiting means it has
+The four states in which a session is **waiting on a person** — `prompted`,
+`idle`, `needs_input` and `primed` — are one group, `awaits-human`. Waiting means it has
 paused for input, whether or not it asked a question; a finished turn and a
 question are the same fact for this purpose. Ask that group rather than listing
 states: `endless-go session-state get awaits-human`.
@@ -151,6 +152,8 @@ Exactly two things are refused, and each says which one it is:
 - **A session in `needs_input`.** It *has* declared its task; it is waiting on a
   person. The refusal says so and names no command, because there is none to
   run: your user's next message clears it.
+  A `primed` session is refused the same way, and never meets it in practice:
+  your user's message that resumes it clears the state before any tool runs.
 
 Neither refusal offers `--force`, and neither should be answered with one.
 Repairing a session field by demoting a task's status is not a fix.

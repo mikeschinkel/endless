@@ -52,7 +52,7 @@ type State = string
 
 // The closed vocabulary, in lifecycle order — a turn in progress, that turn
 // blocked on a person, the pause between turns, a question asked and not yet
-// answered, and the terminal.
+// answered, a read-in holding for its user, and the terminal.
 //
 // Four members for the whole life of the table, and now five. Twelve
 // session-related schema changes touched none of them: sessions churned through
@@ -77,7 +77,22 @@ const (
 
 	Idle       State = "idle"
 	NeedsInput State = "needs_input"
-	Ended      State = "ended"
+
+	// Primed means the session was started ahead of need (E-1994): it read the
+	// plan and the code, recorded what it could not answer, and is now holding,
+	// alive, until the user resumes it. Written by `endless session primed`
+	// (monitor.PrimeSession) as the read-in's last step, kept through the Stop
+	// that ends that turn, and cleared to `working` by the user's next prompt
+	// (monitor.ResumeFromPrimed).
+	//
+	// Distinct from Idle because the two read the same from outside and mean
+	// different things: an idle session finished a turn somebody asked for, a
+	// primed one finished a read-in nobody is waiting on yet. Without its own
+	// state a primed session sitting quietly for a week is indistinguishable
+	// from a hung one.
+	Primed State = "primed"
+
+	Ended State = "ended"
 )
 
 // Group names one curated set of states. Adding a Group means adding exactly
@@ -117,6 +132,12 @@ const (
 	// cosmetic and self-correcting. Under the other reading a missed clear
 	// refuses the session's next write and tells it there is no command to
 	// run — which is the failure E-2093 spent a task cleaning up after.
+	//
+	// `primed` is refused (E-1994), and unlike `idle` the refusal can never
+	// meet a mid-turn write: the user's next prompt clears it to `working` in
+	// UserPromptSubmit, before any tool in that turn runs. A write while still
+	// primed would be a session acting with no one having resumed it, which is
+	// the one thing a primed session promised not to do.
 	MayWrite
 
 	// AwaitsHuman is the states in which a session is waiting on a PERSON,
@@ -152,11 +173,11 @@ const (
 // read back with Rank. Unordered groups are written in lifecycle order for
 // readability only.
 var groups = map[Group][]State{
-	All:          {Working, Prompted, Idle, NeedsInput, Ended},
-	Live:         {Working, Prompted, Idle, NeedsInput},
+	All:          {Working, Prompted, Idle, NeedsInput, Primed, Ended},
+	Live:         {Working, Prompted, Idle, NeedsInput, Primed},
 	MayWrite:     {Working, Prompted, Idle},
-	AwaitsHuman:  {Prompted, Idle, NeedsInput},
-	DisplayOrder: {Prompted, Working, NeedsInput, Idle, Ended},
+	AwaitsHuman:  {Prompted, Idle, NeedsInput, Primed},
+	DisplayOrder: {Prompted, Working, NeedsInput, Idle, Primed, Ended},
 }
 
 // groupSlugs is the CLI-facing name of each Group. The Python client passes
@@ -178,6 +199,7 @@ var labels = map[State]string{
 	Prompted:   "Prompted",
 	Idle:       "Idle",
 	NeedsInput: "Needs Input",
+	Primed:     "Primed",
 	Ended:      "Ended",
 }
 
@@ -195,11 +217,15 @@ var labels = map[State]string{
 // `project status` gives its waiting rank, so the two surfaces teach one symbol
 // rather than two. TestGlyphsAreSingleWidth holds the column rule for every
 // member, which is what a borrowed glyph most needs checking against.
+//
+// ◇ for `primed` (E-1994) is new: an empty diamond — read in, not yet begun —
+// beside the ◆ `session status` uses for work product still outstanding.
 var glyphs = map[State]string{
 	Working:    "⟳",
 	Prompted:   "⚠",
 	Idle:       "‖",
 	NeedsInput: "?",
+	Primed:     "◇",
 	Ended:      "␥",
 }
 

@@ -43,6 +43,13 @@ const (
 	Waiting
 	// Doing: a live session holds the task.
 	Doing
+	// Primed: a live session read the task in ahead of need and is holding for
+	// the user (E-1994). The task itself has not started — it is still
+	// `submitted`, `ready` or `unplanned` — so without this a primed task reads
+	// as one more plan to approve, and the session waiting on it is invisible.
+	// Ranked right after Doing: a session is there, and it wants nothing until
+	// the user is ready. ◇ is U+25C7, the session state's own glyph.
+	Primed
 	// Do: a `ready` task — reviewed, waiting to start.
 	Do
 	// Review: a `submitted` task — a plan waiting for the owner's review. Its
@@ -96,6 +103,7 @@ var meta = [...]struct{ icon, label string }{
 	From:    {"↩", "from"},
 	Waiting: {"⚠", "waiting"},
 	Doing:   {"⟳", "doing"},
+	Primed:  {"◇", "primed"},
 	Do:      {"▶", "do"},
 	Review:  {"⚑", "approve"},
 	Plan:    {"✎", "plan"},

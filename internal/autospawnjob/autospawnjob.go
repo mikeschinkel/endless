@@ -142,7 +142,7 @@ func (job) Run(ctx context.Context) (err error) {
 		goto end
 	}
 
-	err = spawn(ctx, pick, target, s.placement)
+	err = runEndless(ctx, pick, spawnArgs(pick.taskID, target, s.placement))
 	if err != nil {
 		goto end
 	}
@@ -493,8 +493,9 @@ func describeTarget(setting, target string) string {
 	return ""
 }
 
-// spawn shells `endless --no-session task spawn E-N --auto` from the
-// project's directory.
+// runEndless shells one `endless` command for pick — the auto-spawn job's
+// `--no-session task spawn E-N --auto`, or the prime job's `task prime` — from
+// the project's directory.
 //
 // The Python CLI owns the spawn — the gates, the pre-claim, the worktree, the
 // handoff — so the job runs exactly what a person would, plus the two hidden
@@ -508,7 +509,7 @@ func describeTarget(setting, target string) string {
 //
 // Output is captured, never inherited: jobs.Job forbids writing to the
 // trigger's terminal. It rides along in the error on failure.
-func spawn(ctx context.Context, pick candidate, target, placement string) (err error) {
+func runEndless(ctx context.Context, pick candidate, args []string) (err error) {
 	var bin string
 	var cmd *exec.Cmd
 	var out []byte
@@ -530,18 +531,18 @@ func spawn(ctx context.Context, pick candidate, target, placement string) (err e
 		err = fmt.Errorf("the runner's database is not main (%v)", dbArgs)
 	}
 	if err != nil {
-		err = fmt.Errorf("spawning E-%d: %w", pick.taskID, err)
+		err = fmt.Errorf("%s E-%d: %w", args[2], pick.taskID, err)
 		goto end
 	}
 
 	ctx, cancel = context.WithTimeout(ctx, spawnTimeout)
 	defer cancel()
-	cmd = exec.CommandContext(ctx, bin, spawnArgs(pick.taskID, target, placement)...)
+	cmd = exec.CommandContext(ctx, bin, args...)
 	cmd.Dir = pick.projectPath
 
 	out, err = cmd.CombinedOutput()
 	if err != nil {
-		err = fmt.Errorf("spawning E-%d: %w: %s", pick.taskID, err, tail(string(out)))
+		err = fmt.Errorf("%s E-%d: %w: %s", args[2], pick.taskID, err, tail(string(out)))
 	}
 
 end:

@@ -137,9 +137,29 @@ var transitions = []Transition{
 		Trigger: "`PostToolUse` (the approved tool completed) and `UserPromptSubmit` (the user typed instead) → monitor.ResumeFromPrompt",
 	},
 	{
+		// E-1994: a read-in ends its last turn by priming itself, from inside
+		// that turn — so the session is `working` when it asks, and only then.
+		From:    Working,
+		To:      Primed,
+		Trigger: "`session primed` → monitor.PrimeSession",
+	},
+	{
+		// The user resuming a primed session. Narrow for ResumeFromPrompt's
+		// reason: it undoes only the state its own feature wrote.
+		From:    Primed,
+		To:      Working,
+		Trigger: "`UserPromptSubmit` → monitor.ResumeFromPrimed",
+	},
+	{
+		// Every state but `primed` (E-1994): the Stop that ends the read-in's
+		// last turn arrives AFTER `session primed` wrote its state, and idling
+		// it there would erase the only thing telling a primed session from a
+		// hung one. Kept as AnyState because the UPDATE still reads nothing
+		// else — the exclusion is one WHERE clause, not a discrimination
+		// among the states it leaves.
 		From:    AnyState,
 		To:      Idle,
-		Trigger: "`Stop` → monitor.IdleSession",
+		Trigger: "`Stop` → monitor.IdleSession (except from `primed`)",
 	},
 	{
 		From:    AnyState,

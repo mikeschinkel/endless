@@ -72,6 +72,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/sandboxcmd"
 	"github.com/mikeschinkel/endless/internal/sessionmonitorcmd"
 	"github.com/mikeschinkel/endless/internal/sessionquerycmd"
+	"github.com/mikeschinkel/endless/internal/sessionprimecmd"
 	"github.com/mikeschinkel/endless/internal/sessionstatecmd"
 	"github.com/mikeschinkel/endless/internal/sessionstatuscmd"
 	"github.com/mikeschinkel/endless/internal/spawnlaunchcmd"
@@ -170,7 +171,7 @@ func main() {
 	// Other subcommands stay on whatever --db/--db-dir (or absence of one)
 	// ConsumeDBFlags already established above.
 	switch sub {
-	case "hook", "tmux":
+	case "hook", "tmux", "session-prime":
 		// An explicit --db/--db-dir wins over the main pin (E-1429: a
 		// per-invocation flag is trustworthy; the env-driven pin is the
 		// fallback). Production invokers of these binaries never pass one,
@@ -188,6 +189,12 @@ func main() {
 		// The coherence problem that motivated it is solved by REQUIRING --db
 		// (see errors_cmd in cli.py), not by choosing a database on the user's
 		// behalf.
+		//
+		// `session-prime` (E-1994) is typed, but by a session about ITSELF, and
+		// it writes the one row that session's own hooks write — which are
+		// pinned here. Pinning it is coherence with `hook`, not a choice made on
+		// anyone's behalf: a primed state written to a sandbox would never be
+		// read by the hook that clears it.
 		if !monitor.HasExplicitDBContext() {
 			monitor.PinMainDB()
 		}
@@ -256,6 +263,8 @@ func main() {
 		taskcontentcmd.Run(rest)
 	case "session-state":
 		sessionstatecmd.Run(rest)
+	case "session-prime":
+		sessionprimecmd.Run(rest)
 	case "verify":
 		verifycmd.Run(rest)
 	case "jobs":
@@ -347,6 +356,7 @@ func usageText() string {
 	fmt.Fprintln(w, "  task-status    groups|get|has|sql-list|rank|label|glyph  (the task status vocabulary)")
 	fmt.Fprintln(w, "  task-content   names  (the task content-kind vocabulary)")
 	fmt.Fprintln(w, "  session-state  groups|get|has|sql-list|rank|label|glyph  (the session state vocabulary)")
+	fmt.Fprintln(w, "  session-prime  mark the calling Claude session primed (the end of a read-in)")
 	fmt.Fprintln(w, "  verify         [--keep] <task-id>  (run a task's Tier-0 verification suite)")
 	fmt.Fprintln(w, "  jobs           list|run|retry  (the fire-once background job runner)")
 	fmt.Fprintln(w, "  errors         list|show|clear|codes  (machine-local fault record)")

@@ -1474,6 +1474,29 @@ def session_cmd():
     pass
 
 
+@session_cmd.command("primed")
+def session_primed():
+    """Mark this session primed: read in, and holding for its user.
+
+    The last step of a read-in started by `task prime`. Run it from
+    the session's own Bash tool, then end the turn. The session stays alive and
+    shows as primed until the user resumes it.
+    """
+    import subprocess
+    from endless.event_bridge import _resolve_endless_go
+    # No --db: endless-go pins this to the database the session's own hooks
+    # write, which is the only one the resume hook reads it back from.
+    result = subprocess.run([_resolve_endless_go(), "session-prime"],
+                            capture_output=True, text=True)
+    if result.returncode != 0:
+        if result.stderr.strip():
+            raise agent_help.relay(result.stderr, exit_code=result.returncode)
+        raise agent_help.fault(
+            f"endless-go session-prime exited {result.returncode} and said nothing."
+        )
+    click.echo(result.stdout.rstrip())
+
+
 @session_cmd.command("show")
 @click.argument("session_ref", required=False, default=None)
 @output_options(agent=False)
@@ -3956,6 +3979,35 @@ def task_spawn(item_id, project, permission_mode, model, session_name,
                no_refocus=no_refocus,
                placement=chosen[0] if chosen else "first",
                tmux_session=tmux_session)
+
+
+@task_cmd.command("prime")
+@click.argument("item_id", type=TASK_ID)
+@click.option("--permission-mode", "permission_mode", default="auto",
+              help="claude --permission-mode for the primed session (default: auto).")
+@click.option("--model", default=None,
+              help="claude --model for the primed session (optional).")
+# The prime job's own flags (E-1994), hidden for task spawn's reason: --auto
+# says the job asked rather than a person, and --target-session names the tmux
+# session the window opens in.
+@click.option("--auto", "auto", is_flag=True, hidden=True)
+@click.option("--target-session", "target_session", default=None, hidden=True)
+@click.option("--placement", "placement", default="first", hidden=True,
+              type=click.Choice(["first", "last", "left", "right"]))
+def task_prime(item_id, permission_mode, model, auto, target_session, placement):
+    """Start a session that reads a task in now and waits for you.
+
+    The session reads the plan and the code — drafting a plan first when the
+    task has none — writes every question it cannot answer to the task, then
+    marks itself primed and holds. Resume it when you are ready; its context
+    is already loaded and its questions already asked.
+
+    The task is not claimed and its status does not change: resuming the
+    session and running `task claim` is what starts it.
+    """
+    from endless.task_cmd import prime_task
+    prime_task(item_id, permission_mode=permission_mode, model=model,
+               auto=auto, target_session=target_session, placement=placement)
 
 
 @task_cmd.command("reopen")

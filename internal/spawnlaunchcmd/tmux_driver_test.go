@@ -239,3 +239,20 @@ func TestWindowOptionCommands_AutoSpawned(t *testing.T) {
 		t.Errorf("AutoSpawnedOption = %q", AutoSpawnedOption)
 	}
 }
+
+// TestWindowOptionCommands_PrimeDraft pins E-1994's marker: a drafting prime
+// window carries its task id, and no other window carries the option at all.
+func TestWindowOptionCommands_PrimeDraft(t *testing.T) {
+	got := windowOptionCommands("%42", LaunchSpec{TaskID: "77", PrimeDraft: true})
+	want := []string{"set-option", "-w", "-t", "%42", PrimeDraftOption, "77"}
+	if !reflect.DeepEqual(got[len(got)-1], want) {
+		t.Errorf("last option = %v, want %v", got[len(got)-1], want)
+	}
+	for _, c := range windowOptionCommands("%42", LaunchSpec{TaskID: "77"}) {
+		for _, a := range c {
+			if a == PrimeDraftOption {
+				t.Errorf("a non-drafting window set %s: %v", PrimeDraftOption, c)
+			}
+		}
+	}
+}

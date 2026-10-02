@@ -47,6 +47,9 @@ type ProjectStatusRow struct {
 	// permission prompt (E-2091) — the same fact as LiveSession at a higher
 	// urgency.
 	Prompted bool
+	// Primed is true when one of those live sessions is `primed` (E-1994): it
+	// read the task in ahead of need and is holding for the user.
+	Primed bool
 }
 
 // ErrNoProject is returned when a project cannot be resolved — by name because
@@ -196,7 +199,8 @@ func ProjectStatusRows(projectID int64, phases []string) ([]ProjectStatusRow, er
 		       COALESCE(ty.slug, ''), COALESCE(t.updated_at, ''),
 		       EXISTS(SELECT 1 FROM task_landings tl WHERE tl.task_id = t.id),
 		       EXISTS(SELECT 1 ` + liveHolder + `),
-		       EXISTS(SELECT 1 ` + liveHolder + ` AND s.state = '` + string(sessionstate.Prompted) + `')
+		       EXISTS(SELECT 1 ` + liveHolder + ` AND s.state = '` + string(sessionstate.Prompted) + `'),
+		       EXISTS(SELECT 1 ` + liveHolder + ` AND s.state = '` + string(sessionstate.Primed) + `')
 		  FROM live_tasks t
 		  LEFT JOIN task_types ty ON ty.id = t.type_id
 		 WHERE t.project_id = ?
@@ -213,7 +217,7 @@ func ProjectStatusRows(projectID int64, phases []string) ([]ProjectStatusRow, er
 		r := ProjectStatusRow{ProjectID: projectID}
 		if err = rows.Scan(
 			&r.TaskID, &r.Title, &r.Status, &r.Phase, &r.TypeSlug, &r.TaskUpdated,
-			&r.Landed, &r.LiveSession, &r.Prompted,
+			&r.Landed, &r.LiveSession, &r.Prompted, &r.Primed,
 		); err != nil {
 			return nil, fmt.Errorf("project status tasks: %w", err)
 		}

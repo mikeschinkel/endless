@@ -38,6 +38,7 @@ func runSpawnWindow(args []string) {
 		tmuxSess   = fs.String("tmux-session", "", "tmux session NAME to open the window in; refused if it does not exist")
 		placement  = fs.String("placement", string(PlaceFirst), "Where the window's tab lands: first, last, left or right (of the session's active window)")
 		noRefocus  = fs.Bool("no-refocus", false, "Open the window without making it the session's current window")
+		primeDraft = fs.Bool("prime-draft", false, "Mark the window @endless_prime_draft=<task-id>: its session drafts the task's plan (E-1994)")
 	)
 	if err := fs.Parse(args); err != nil {
 		// Text carries flag's own error line and usage block, which is what
@@ -80,6 +81,7 @@ func runSpawnWindow(args []string) {
 		WindowName:     *windowName,
 		Cwd:            *cwd,
 		AutoSpawned:    *auto,
+		PrimeDraft:     *primeDraft,
 	}
 
 	specPath, err := writeSpecFile(spec)

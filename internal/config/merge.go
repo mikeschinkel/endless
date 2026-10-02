@@ -117,6 +117,9 @@ func (c *EndlessConfig) Merge(other cfgstore.RootConfig) cfgstore.RootConfig {
 		out.AutoSpawn.Placement = o.AutoSpawn.Placement
 	}
 
+	// Prime: project-only, never inherited — see Prime.
+	out.Prime = c.Prime
+
 	return &out
 }
 
