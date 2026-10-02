@@ -127,6 +127,7 @@ def decision_doc_subject(action: str, decision_id: int) -> str:
 
 def write_to_main(
     main_root: Path, rel_path: str, content: str, subject: str, label: str,
+    commit: bool = True,
 ) -> Path | None:
     """Write one mirror into the main checkout and commit it there.
 
@@ -138,6 +139,9 @@ def write_to_main(
     settled for `land`). A commit that does not happen is repaired by the
     `doc-mirrors` sweep, which rewrites any mirror whose bytes differ from its
     column.
+
+    `commit=False` leaves the file uncommitted, for a caller that commits many
+    as one (commit_paths_on_main).
     """
     target = main_root / rel_path
     target.parent.mkdir(parents=True, exist_ok=True)
@@ -146,7 +150,33 @@ def write_to_main(
         click.style("✓", fg="green")
         + f" Wrote {label} to {_display_path(target)}"
     )
-    commit_on_main(main_root, rel_path, subject)
+    if commit:
+        commit_on_main(main_root, rel_path, subject)
+    return target
+
+
+def remove_from_main(
+    main_root: Path, rel_path: str, subject: str, label: str,
+    commit: bool = True,
+) -> Path | None:
+    """Remove one mirror from the main checkout and commit the removal there.
+
+    The counterpart of write_to_main for content that no longer exists:
+    task_content holds no empty rows, so an emptied content has nothing to
+    mirror, and a file left behind would show text the database no longer has.
+    Returns the removed path, or None when there was no file. Best-effort on the
+    commit, for write_to_main's reason; `commit=False` as there.
+    """
+    target = main_root / rel_path
+    if not target.exists():
+        return None
+    target.unlink()
+    click.echo(
+        click.style("✓", fg="green")
+        + f" Removed {label} at {_display_path(target)}"
+    )
+    if commit:
+        commit_on_main(main_root, rel_path, subject)
     return target
 
 
@@ -165,6 +195,18 @@ def commit_on_main(project_root: Path, rel_path: str, subject: str) -> None:
     mirror is therefore a delay, not a loss — there is nothing for the user to
     decide and nothing for the agent to carry into a handoff.
     """
+    commit_paths_on_main(project_root, [rel_path], subject)
+
+
+def commit_paths_on_main(project_root: Path, rel_paths: list[str], subject: str) -> None:
+    """Commit several mirrors — written or removed — as ONE commit on main.
+
+    For a bulk act (E-1562's content move): a commit apiece would bury every
+    other commit on main. Same Go path and failure handling as commit_on_main.
+    """
+    if not rel_paths:
+        return
+    rel_path = ", ".join(rel_paths) if len(rel_paths) <= 3 else f"{len(rel_paths)} mirrors"
     binary = shutil.which("endless-go")
     if not binary:
         agent_help.warn.no_report(
@@ -179,7 +221,8 @@ def commit_on_main(project_root: Path, rel_path: str, subject: str) -> None:
     try:
         result = subprocess.run(
             [binary, "event", "commit-doc", "--project-root", str(project_root),
-             "--path", rel_path, "--subject", subject],
+             *(arg for p in rel_paths for arg in ("--path", p)),
+             "--subject", subject],
             capture_output=True, text=True,
         )
     except OSError as e:

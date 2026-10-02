@@ -125,20 +125,29 @@ func exitRelay(command, prefix string, err error) {
 // the Python decision-body mirror when `decision add` runs outside any task
 // worktree: the decision has no worktree of its own, so its `.md` lands on
 // main via the same main-checkout-enforcing commit path the ledger uses.
+//
+// --path may repeat. Several paths are ONE commit (events.CommitDocPaths): a
+// bulk content move (E-1562) touches dozens of mirrors in one act, and a commit
+// apiece would bury every other commit on main.
 func runCommitDoc(args []string) {
 	fs := refusal.NewFlags("commit-doc")
 	projectRoot := fs.String("project-root", "", "Project root directory (main checkout)")
-	relPath := fs.String("path", "", "Repo-relative path of the doc file to commit")
+	var relPaths stringList
+	fs.Var(&relPaths, "path", "Repo-relative path of a doc file to commit (repeatable; several are one commit)")
 	subject := fs.String("subject", "", "Commit subject line")
 	parseFlags(fs, "event commit-doc", args)
 
-	if *projectRoot == "" || *relPath == "" || *subject == "" {
+	if *projectRoot == "" || len(relPaths) == 0 || *subject == "" {
 		refusal.NoReport(
 			"endless-go event commit-doc: --project-root, --path, and --subject are required",
 			"Pass all three flags and retry",
 		).Command("event commit-doc").Exit(1)
 	}
-	if err := events.CommitDoc(*projectRoot, *relPath, *subject); err != nil {
+	commit := func() error { return events.CommitDocPaths(*projectRoot, relPaths, *subject) }
+	if len(relPaths) == 1 {
+		commit = func() error { return events.CommitDoc(*projectRoot, relPaths[0], *subject) }
+	}
+	if err := commit(); err != nil {
 		// The mirror commit is the degraded half of `decision add`: the decision
 		// row exists and only its .md copy on main is missing. Whether that is
 		// something the user has to hear about is decided where the error was
@@ -946,4 +955,14 @@ func runBackup() {
 	payload["path"] = res.Path
 	payload["pruned"] = res.Pruned
 	_ = dbprovenance.Encode(os.Stdout, payload)
+}
+
+// stringList is a repeatable string flag.
+type stringList []string
+
+func (l *stringList) String() string { return strings.Join(*l, ",") }
+
+func (l *stringList) Set(v string) error {
+	*l = append(*l, v)
+	return nil
 }

@@ -20,7 +20,9 @@ def _content(item_id: int) -> dict:
 
 
 def test_context_is_a_content_name_rendered_first():
-    assert content_names.slugs()[0] == "context"
+    # E-1562: only Justification precedes it, and only research and brainstorm
+    # tasks carry one, so on an implementation task Context is still first.
+    assert content_names.slugs()[:2] == ("justification", "context")
     assert content_names.label("context") == "Context"
 
 

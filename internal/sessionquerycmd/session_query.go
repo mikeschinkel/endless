@@ -17,6 +17,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/dbprovenance"
 	"github.com/mikeschinkel/endless/internal/docmirror"
+	"github.com/mikeschinkel/endless/internal/events"
 	"github.com/mikeschinkel/endless/internal/gatekind"
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/refusal"
@@ -119,6 +120,10 @@ func Run(args []string) {
 		if err := runRaterRelease(args[1:]); err != nil {
 			fail("rater-release", err)
 		}
+	case "section-moves":
+		if err := runSectionMoves(args[1:]); err != nil {
+			fail("section-moves", err)
+		}
 	case "resume-target":
 		if err := runResumeTarget(args[1:]); err != nil {
 			fail("resume-target", err)
@@ -197,6 +202,9 @@ func usageText() string {
 		"                                    exit 1 when none exists",
 		"  report-prompt --session-id <id>   print the message that prompted the turn in flight (E-1953)",
 		"  report-runs --session-id <id>     print how many times `task report` produced output this turn (E-1953)",
+		"  section-moves --project <name> --from <name> --to <name> [--heading <text>]",
+		"                                    JSON {moves[], skips[]}: the task.fields_updated payloads that move",
+		"                                    each `## <heading>` section of --from into --to (E-1562); writes nothing",
 	}, "\n") + "\n"
 }
 
@@ -254,6 +262,61 @@ func relayed(verb string, err error) *refusal.Error {
 // with the exit 1 Run has always used.
 func fail(verb string, err error) {
 	relayed(verb, err).Exit(1)
+}
+
+// runSectionMoves plans moving a `## <heading>` section out of one content into
+// another for every task in a project (E-1562), and prints the plan as JSON.
+// It writes nothing: the Python caller emits each move as an ordinary
+// task.fields_updated event, so the move goes through the one write pipeline.
+// The heading defaults to the target's label — `--to justification` moves
+// `## Justification`.
+func runSectionMoves(args []string) error {
+	fs := refusal.NewFlags("section-moves")
+	project := fs.String("project", "", "project name, whose ledger is read (required)")
+	fromSlug := fs.String("from", "", "content name holding the sections: "+strings.Join(taskcontent.Slugs(), "|"))
+	toSlug := fs.String("to", "", "content name to move them into: "+strings.Join(taskcontent.Slugs(), "|"))
+	heading := fs.String("heading", "", "section heading (default: the --to label)")
+	if err := parseFlags(fs, "section-moves", args); err != nil {
+		return err
+	}
+	if *project == "" {
+		return refusal.NoReport("--project is required", "Pass --project and retry")
+	}
+	names := strings.Join(taskcontent.Slugs(), "|")
+	from, err := taskcontent.Parse(*fromSlug)
+	if err != nil {
+		return refusal.NoReport("--from: "+err.Error(), "Pass --from "+names+" and retry").Cause(err)
+	}
+	to, err := taskcontent.Parse(*toSlug)
+	if err != nil {
+		return refusal.NoReport("--to: "+err.Error(), "Pass --to "+names+" and retry").Cause(err)
+	}
+	if *heading == "" {
+		*heading = to.String()
+	}
+	// The ledger is read from the project's registered path — the same root
+	// the emit that applies each move writes to.
+	projectID, _, err := monitor.ProjectByName(*project)
+	if err != nil {
+		return err
+	}
+	root, err := monitor.ProjectPath(projectID)
+	if err != nil {
+		return err
+	}
+	db, err := monitor.DB()
+	if err != nil {
+		return err
+	}
+	ledger, err := events.ReadAllEvents(root)
+	if err != nil {
+		return err
+	}
+	plan, err := events.PlanSectionMoves(db, ledger, *project, from, to, *heading)
+	if err != nil {
+		return err
+	}
+	return dbprovenance.EncodeIndent(os.Stdout, plan, "  ")
 }
 
 // runRelayCheckpoint records the verbatim-relay checkpoint written by `endless

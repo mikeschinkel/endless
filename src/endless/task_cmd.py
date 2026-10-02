@@ -772,7 +772,9 @@ def _display_path(p: Path) -> str:
     return s.replace(home, "~", 1) if s.startswith(home) else s
 
 
-def _mirror_task_doc(task_id: int, name: str, content: str) -> Path | None:
+def _mirror_task_doc(
+    task_id: int, name: str, content: str, commit: bool = True,
+) -> Path | None:
     """Mirror one task content row onto the project's MAIN checkout.
 
     Each content name (plan, outcome, reason, analysis, notes) lands at
@@ -794,7 +796,12 @@ def _mirror_task_doc(task_id: int, name: str, content: str) -> Path | None:
     the main checkout is real state — the same reason a sandbox emit skips the
     ledger auto-commit (E-1729).
 
-    Returns the written path, or None when nothing was written.
+    Empty content removes the mirror instead (E-1562): an emptied content has
+    no row, so a file left behind would show text the database no longer has.
+    `commit=False` leaves the change uncommitted, for a bulk caller that commits
+    every mirror it touched as one (doc_mirror.commit_paths_on_main).
+
+    Returns the written or removed path, or None when nothing changed.
     """
     if config.db_context_is_sandbox():
         return None
@@ -804,11 +811,17 @@ def _mirror_task_doc(task_id: int, name: str, content: str) -> Path | None:
         return None
 
     rel_path = doc_mirror.task_doc_path(task_id, kind.stem)
+    if not content.strip():
+        return doc_mirror.remove_from_main(
+            main_root, rel_path,
+            doc_mirror.task_doc_subject("remove", kind.label, task_id),
+            kind.label, commit=commit,
+        )
     action = "update" if (main_root / rel_path).exists() else "add"
     return doc_mirror.write_to_main(
         main_root, rel_path, content,
         doc_mirror.task_doc_subject(action, kind.label, task_id),
-        kind.label,
+        kind.label, commit=commit,
     )
 
 
@@ -2403,25 +2416,33 @@ _RESEARCH_GATE_MSG = (
     "research can't be inline in a do-task."
 )
 
-# The remedy every research-gate refusal names. It says the replacement out
-# loud because this remedy used to be impossible to carry out: a task whose
-# notes already carried a `## Justification` section was refused HERE without
-# --justification and refused by `_compose_justification_notes` with it, and no
-# command edits notes — so a task that had ever been research could never be
-# made research again. The composer replaces the section now (E-2159), which is
-# what turns this sentence into something an agent can actually do.
+# The remedy every research-gate refusal names. E-2159 made re-justifying
+# possible by replacing a `## Justification` notes section; E-1562 made the
+# justification its own content, so writing it again is an ordinary write.
 _RESEARCH_GATE_REMEDY = (
-    "Add --justification (it replaces any '## Justification' section the notes "
-    "already carry), or file the work as a do-task, or parent it under an "
-    "underway epic, and retry"
+    "Add --justification (it replaces any justification the task already "
+    "carries), or file the work as a do-task, or parent it under an underway "
+    "epic, and retry"
 )
 
-_JUSTIFICATION_HEADING_RE = re.compile(r"(?m)^##\s+Justification\b")
+# E-1562, decision 2: the word exists because of the research gate. A todo
+# carrying one would mean something narrower with nothing to say which, so it is
+# refused on every other type. Brainstorm is ungated but may still say why.
+_JUSTIFIABLE_TYPES = ("research", "brainstorm")
 
-# Where the justification section ENDS: the next heading at the same level or
-# above, or the end of the notes. Replacing a section means replacing its body
-# and nothing else, so a later `## Plan` has to survive untouched.
-_SECTION_END_RE = re.compile(r"(?m)^#{1,2}\s+")
+
+def _require_justifiable_type(task_type: str | None) -> None:
+    """Refuse, NO-REPORT, `--justification` on a task that is not (or is not
+    becoming) research or brainstorm. Clearing one is not refused: that is how
+    a task retyped away from research sheds it."""
+    if task_type not in _JUSTIFIABLE_TYPES:
+        raise agent_help.no_report(
+            f"--justification applies only to research and brainstorm tasks "
+            f"(this one is {task_type or 'untyped'}): it says why the work "
+            f"cannot be inline in a do-task.",
+            "Pass --type research or --type brainstorm with it, or drop "
+            "--justification, and retry",
+        )
 
 
 def _research_gate_check(parent_id: int | None, justification: str | None) -> None:
@@ -2434,7 +2455,7 @@ def _research_gate_check(parent_id: int | None, justification: str | None) -> No
     NO-REPORT on every branch: each one names something the caller can do in
     the next call — write the justification, re-file the work as a do-task, or
     parent it under the epic it belongs to. Nothing here is the user's to
-    decide, which is only true because the remedy now works (see
+    decide, which is only true because the remedy works (see
     `_RESEARCH_GATE_REMEDY`).
     """
     if justification:
@@ -2454,6 +2475,93 @@ def _research_gate_check(parent_id: int | None, justification: str | None) -> No
         )
     if row[0]["type_slug"] != "epic" or row[0]["status"] != "underway":
         raise agent_help.no_report(_RESEARCH_GATE_MSG, _RESEARCH_GATE_REMEDY)
+
+
+def move_sections(
+    from_name: str,
+    to_name: str,
+    heading: str | None = None,
+    project_name: str | None = None,
+    dry_run: bool = False,
+) -> None:
+    """Move every `## <heading>` section out of one content into another (E-1562).
+
+    Before a content kind exists its text gets written into another under a
+    heading — every research justification lived in notes under
+    `## Justification` until E-1562. This moves what is already there, for each
+    task in the project, as one ordinary `task.fields_updated` per task: the
+    target content, and the source with the section removed ("" when the
+    section was all it held, which deletes the row).
+
+    Go plans it (`session-query section-moves`), including the timestamp: just
+    after the source's last ledger write, so the history reads as when the text
+    was written and a rebuild replays the move after every write it depends on.
+    This emits the plan through the one write pipeline. Repeatable: a second run
+    finds nothing left to move. A task already holding target content is listed
+    and left alone.
+    """
+    import json
+
+    from endless.event_bridge import _resolve_endless_go, emit_event
+
+    _, proj_name = _resolve_project(project_name)
+    args = ["section-moves", "--project", proj_name, "--from", from_name, "--to", to_name]
+    if heading:
+        args += ["--heading", heading]
+    config.require_db_context()
+    result = subprocess.run(
+        [_resolve_endless_go(), *config.go_db_context_args(), "session-query", *args],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise click.ClickException(
+            result.stderr.strip() or f"section-moves exited {result.returncode}")
+    plan = json.loads(result.stdout)
+    moves, skips = plan.get("moves") or [], plan.get("skips") or []
+
+    # Every event first, then every mirror, then ONE mirror commit: consecutive
+    # ledger commits fold into one, and the mirrors would otherwise cost a
+    # commit apiece on main.
+    verb = "Would move" if dry_run else "Moved"
+    if not dry_run:
+        for move in moves:
+            emit_event(
+                kind="task.fields_updated",
+                project=proj_name,
+                entity_type="task",
+                entity_id=str(move["task_id"]),
+                payload={"fields": move["fields"]},
+                actor_kind="system",
+                ts=move["ts"] or None,
+            )
+    touched: list[Path] = []
+    main_root = None
+    for move in moves:
+        task_id = int(move["task_id"])
+        fields = move["fields"]
+        if not dry_run:
+            main_root = main_root or _main_root_for_task(task_id)
+            for name, content in fields.items():
+                path = _mirror_task_doc(task_id, name, content, commit=False)
+                if path is not None:
+                    touched.append(path)
+        left = "nothing left" if not fields[from_name].strip() else "the rest kept"
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" {verb} {task_id_display(task_id)}: {from_name} → {to_name} ({from_name}: {left})"
+        )
+    for skip in skips:
+        click.echo(
+            click.style("⚠", fg="yellow")
+            + f" Skipped {task_id_display(int(skip['task_id']))}: {skip['reason']}"
+        )
+    if touched and main_root is not None:
+        doc_mirror.commit_paths_on_main(
+            main_root,
+            [str(p.relative_to(main_root)) for p in touched],
+            f"Endless: move {from_name} sections to {to_name} for {len(moves)} tasks",
+        )
+    click.echo(f"{verb} {len(moves)}, skipped {len(skips)}.")
 
 
 def _reject_maybe_with_parent(phase: str | None, parent_id: int | None) -> None:
@@ -2479,58 +2587,6 @@ def _reject_maybe_with_parent(phase: str | None, parent_id: int | None) -> None:
             "Promote the phase (--phase now/next/later), or use a relates_to "
             "link instead of --parent, and retry",
         )
-
-
-def _compose_justification_notes(
-    existing_notes: str | None,
-    justification: str | None,
-) -> str | None:
-    """Return notes carrying a '## Justification' section for `justification`.
-
-    - If `justification` is empty/None, returns None (no notes change).
-    - If the existing notes already carry a '## Justification' heading, that
-      section's BODY is REPLACED and everything around it is preserved.
-    - Otherwise the section is appended, preserving any existing content.
-
-    E-2159 made the replacement happen. This used to refuse a collision — "notes
-    already contains a '## Justification' section; clear or edit it manually
-    before re-justifying" — and that refusal had no remedy anyone could carry
-    out. `task update --type research` demands --justification (see
-    `_research_gate_check`), this rejected it, and no command edits notes: a
-    task that had ever been research could never become research again, and the
-    refusal named a manual edit the CLI does not offer. A class that tells an
-    agent to handle something itself has to leave it something it can do.
-
-    Re-justifying is the ordinary act of a task being re-scoped, so that is the
-    one that works. The replaced body is not lost — every notes write is a
-    ledger event, so the previous justification is recoverable from the record
-    rather than from a refusal.
-    """
-    if not justification:
-        return None
-    section = "## Justification\n\n" + justification.strip() + "\n"
-    if existing_notes and _JUSTIFICATION_HEADING_RE.search(existing_notes):
-        return _replace_justification_section(existing_notes, section)
-    if not existing_notes:
-        return section
-    return existing_notes.rstrip() + "\n\n" + section
-
-
-def _replace_justification_section(notes: str, section: str) -> str:
-    """Swap the existing '## Justification' section for `section`.
-
-    The old section runs from its heading to the next heading at the same level
-    or above (`_SECTION_END_RE`), or to the end of the notes. Everything before
-    the heading and everything from the next heading onward is preserved
-    verbatim, so re-justifying a task never costs it the rest of its notes.
-    """
-    match = _JUSTIFICATION_HEADING_RE.search(notes)
-    before = notes[: match.start()].rstrip()
-    rest = notes[match.end():]
-    end = _SECTION_END_RE.search(rest)
-    after = rest[end.start():].strip("\n") if end else ""
-    out = (before + "\n\n" if before else "") + section
-    return out + ("\n" + after + "\n" if after else "")
 
 
 def add_item(
@@ -2590,9 +2646,11 @@ def add_item(
 
     # E-1544: research-gate. Justification (when present) accepted-and-stored
     # even if parent is epic+underway (gate only governs *requiring* it).
+    # E-1562: stored as its own content, never composed into notes.
     if task_type == "research":
         _research_gate_check(parent_id, justification)
-    notes_value = _compose_justification_notes(None, justification)
+    if justification:
+        _require_justifiable_type(task_type)
 
     plan_content: str | None = plan
 
@@ -2609,8 +2667,8 @@ def add_item(
         payload["context"] = context
     if analysis is not None:
         payload["analysis"] = analysis
-    if notes_value is not None:
-        payload["notes"] = notes_value
+    if justification:
+        payload["justification"] = justification
     for axis, value in (("complexity", complexity), ("risk", risk)):
         value = ratings.normalize(value)
         if value and value != ratings.NONE:
@@ -2638,8 +2696,8 @@ def add_item(
         _mirror_task_doc(item_id, "context", context)
     if analysis is not None and analysis.strip():
         _mirror_task_doc(item_id, "analysis", analysis)
-    if notes_value is not None and notes_value.strip():
-        _mirror_task_doc(item_id, "notes", notes_value)
+    if justification:
+        _mirror_task_doc(item_id, "justification", justification)
 
     return item_id
 
@@ -6207,13 +6265,11 @@ def update_plan(
 
     if outcome is not None:
         _add("outcome", outcome)
-        if outcome.strip():
-            _mirror_task_doc(item_id, "outcome", outcome)
+        _mirror_task_doc(item_id, "outcome", outcome)
 
     if reason is not None:
         _add("reason", reason)
-        if reason.strip():
-            _mirror_task_doc(item_id, "reason", reason)
+        _mirror_task_doc(item_id, "reason", reason)
 
     if task_type is not None:
         valid_types = ("todo", "bugfix", "research", "epic", "brainstorm")
@@ -6234,35 +6290,43 @@ def update_plan(
     # being set in this update (regardless of the task's current type).
     # Effective parent = the new --parent if changing, else the existing
     # parent_id from the row. PARENT_NONE (0) means "make root" → None.
+    #
+    # E-1562: the gate reads the justification row, not prose. One given in
+    # this update wins; otherwise the stored one satisfies it — so a task that
+    # was research before can be retyped to research again without restating
+    # why, and `--clear justification` in the same call leaves nothing to pass.
     if task_type == "research":
         if parent_id is not None:
             effective_parent = None if parent_id == PARENT_NONE else parent_id
         else:
             effective_parent = row[0]["parent_id"]
-        _research_gate_check(effective_parent, justification)
+        effective_justification = (
+            justification if justification is not None
+            else row[0].get("justification")
+        )
+        _research_gate_check(effective_parent, effective_justification)
 
-    # --notes replaces the notes; --justification composes its heading into
-    # whichever notes this update ends with — the new ones when both are given.
-    new_notes = notes
-    if justification:
-        composed = _compose_justification_notes(
-            notes if notes is not None else row[0]["notes"], justification)
-        if composed is not None:
-            new_notes = composed
-    if new_notes is not None:
-        _add("notes", new_notes)
-        if new_notes.strip():
-            _mirror_task_doc(item_id, "notes", new_notes)
+    # E-1562: justification is its own content. Writing it replaces the row —
+    # an ordinary write, so rewording one is not a collision — and "" (from
+    # `--clear justification`) deletes it, on any type.
+    if justification is not None:
+        if justification.strip():
+            _require_justifiable_type(
+                task_type if task_type is not None else row[0]["type"])
+        _add("justification", justification)
+        _mirror_task_doc(item_id, "justification", justification)
+
+    if notes is not None:
+        _add("notes", notes)
+        _mirror_task_doc(item_id, "notes", notes)
 
     if context is not None:
         _add("context", context)
-        if context.strip():
-            _mirror_task_doc(item_id, "context", context)
+        _mirror_task_doc(item_id, "context", context)
 
     if analysis is not None:
         _add("analysis", analysis)
-        if analysis.strip():
-            _mirror_task_doc(item_id, "analysis", analysis)
+        _mirror_task_doc(item_id, "analysis", analysis)
 
     if not fields:
         raise agent_help.no_report(
@@ -7268,14 +7332,20 @@ def _render_detail_human(
 
     # Context is the description's other half — why the task exists — so when
     # it is shown (--context, --all-fields) it renders directly after it, ahead
-    # of the structure below (E-1993).
+    # of the structure below (E-1993). Every kind the vocabulary declares before
+    # it renders there too, in order: Justification, on a research or
+    # brainstorm task, is why the work could not be inline (E-1562).
     #
     # `.get`, not `[...]`: the item carries one key per name the vocabulary
     # declares, and the vocabulary comes from whichever endless-go answered. In
     # a worktree branched before `context` existed that is an older binary, so
     # there is no key — and no context to show.
-    _echo_large_section(content_names.label("context"), brief_text(item.get("context"), brief),
-                        "context" in show_content, color)
+    content_slugs = content_names.slugs()
+    leading = (content_slugs[:content_slugs.index("context") + 1]
+               if "context" in content_slugs else ())
+    for slug in leading:
+        _echo_large_section(content_names.label(slug), brief_text(item.get(slug), brief),
+                            slug in show_content, color)
 
     if open_questions:
         from endless.question_cmd import question_id_display
@@ -7302,8 +7372,8 @@ def _render_detail_human(
         else:
             click.echo("(none)")
 
-    for slug in content_names.slugs():
-        if slug == "context":
+    for slug in content_slugs:
+        if slug in leading:
             continue  # rendered after the description, above
         _echo_large_section(content_names.label(slug), brief_text(item[slug], brief),
                             slug in show_content, color)

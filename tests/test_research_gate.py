@@ -1,10 +1,13 @@
 """Tests for E-1544: research-creation gate with parent-epic exemption
 and --justification requirement (per ED-1504).
 
-The gate logic lives in task_cmd._research_gate_check; storage shape in
-task_cmd._compose_justification_notes. Both are exercised here at the
+The gate logic lives in task_cmd._research_gate_check, exercised here at the
 function level for granular coverage, plus end-to-end via task_cmd.add_item
 and task_cmd.update_plan against a real isolated DB.
+
+E-1562: the justification is its own task content row, not a `## Justification`
+heading composed into notes, so a task can be re-justified and retyped to
+research again.
 """
 
 import click
@@ -34,6 +37,10 @@ def _add_task(
             (cur.lastrowid, notes),
         )
     return cur.lastrowid
+
+
+def _justification(task_id: int) -> str | None:
+    return db.task_content(task_id).get("justification")
 
 
 def _notes_and_type(task_id: int) -> tuple[str | None, str]:
@@ -82,45 +89,6 @@ def test_gate_refuses_when_parent_not_found(seeded_project_at_cwd):
     assert "not found" in exc.value.message
 
 
-def test_compose_notes_empty_existing_returns_section():
-    out = task_cmd._compose_justification_notes(None, "Needs cross-system check.")
-    assert out is not None
-    assert "## Justification" in out
-    assert "Needs cross-system check." in out
-
-
-def test_compose_notes_appends_to_existing_unrelated_notes():
-    out = task_cmd._compose_justification_notes(
-        "Pre-existing notes line.", "Reason text.",
-    )
-    assert out.startswith("Pre-existing notes line.")
-    assert "## Justification" in out
-    assert "Reason text." in out
-
-
-def test_compose_notes_replaces_an_existing_justification_section():
-    """E-2159 turned a dead end into a remedy.
-
-    This used to refuse: a research task that already carried a `## Justification`
-    section was refused WITHOUT --justification and refused WITH it, and no
-    command edited notes — so the refusal's own remedy could not be carried out.
-    A NO-REPORT class whose remedy is impossible teaches an agent that the class
-    means nothing. The section is replaced instead.
-    """
-    existing = "Pre-existing line.\n\n## Justification\n\nOlder reason.\n"
-    out = task_cmd._compose_justification_notes(existing, "Newer reason.")
-    assert "Newer reason." in out
-    assert "Older reason." not in out
-    # Everything around the section survives, and only one section remains.
-    assert out.startswith("Pre-existing line.")
-    assert out.count("## Justification") == 1
-
-
-def test_compose_notes_returns_none_when_no_justification():
-    assert task_cmd._compose_justification_notes("anything", None) is None
-    assert task_cmd._compose_justification_notes("anything", "") is None
-
-
 # ---------- add_item integration ----------
 
 def test_add_research_with_epic_underway_parent_no_justification(seeded_project_at_cwd):
@@ -142,9 +110,8 @@ def test_add_research_with_epic_underway_parent_and_justification(seeded_project
         justification="Needs benchmark across 3 datasets.",
     )
     notes, _ = _notes_and_type(new_id)
-    assert notes is not None
-    assert "## Justification" in notes
-    assert "Needs benchmark across 3 datasets." in notes
+    assert notes in (None, "")
+    assert _justification(new_id) == "Needs benchmark across 3 datasets."
 
 
 def test_add_research_with_non_epic_parent_refused(seeded_project_at_cwd):
@@ -177,8 +144,8 @@ def test_add_research_with_no_parent_and_justification(seeded_project_at_cwd):
         justification="Standalone investigation; no anchor epic yet.",
     )
     notes, _ = _notes_and_type(new_id)
-    assert "## Justification" in notes
-    assert "Standalone investigation" in notes
+    assert notes in (None, "")
+    assert _justification(new_id) == "Standalone investigation; no anchor epic yet."
 
 
 def test_add_non_research_no_justification_works(seeded_project_at_cwd):
@@ -216,27 +183,155 @@ def test_update_set_research_with_justification_writes_notes(seeded_project_at_c
     )
     notes, t = _notes_and_type(tid)
     assert t == "research"
-    assert notes is not None
-    assert "## Justification" in notes
-    assert "Cross-system comparison required." in notes
+    assert notes in (None, "")
+    assert _justification(tid) == "Cross-system comparison required."
 
 
-def test_update_replaces_an_existing_justification_section(seeded_project_at_cwd):
-    """The end-to-end half of the same fix: the remedy the gate names works.
+# ---------- E-1562: justification is typed content ----------
 
-    Before E-2159 this pair of commands had no way through — the gate demanded
-    --justification and the composer refused it, leaving the task permanently
-    un-updatable as research.
-    """
-    epic = _add_task("Epic", status="underway", task_type="epic")
-    tid = _add_task(
-        "Research the existing thing", task_type="research", parent_id=epic,
-        notes="## Justification\n\nOlder reason.\n",
+def test_retype_research_todo_research_with_new_justification(seeded_project_at_cwd):
+    """THE DEFECT E-1562 exists for: a task that had ever been research could
+    never be retyped to research again, because its notes already held the
+    heading and --justification refused the collision."""
+    tid = task_cmd.add_item(
+        "Investigate the thing", task_type="research",
+        justification="First reason.",
     )
-    task_cmd.update_plan(tid, task_type="research", justification="Newer reason.")
+    task_cmd.update_plan(tid, task_type="todo", title="Fix the thing")
+    task_cmd.update_plan(
+        tid, task_type="research", title="Investigate the thing",
+        justification="Second reason.",
+    )
+    _, t = _notes_and_type(tid)
+    assert t == "research"
+    assert _justification(tid) == "Second reason."
+
+
+def test_justification_rewords_in_place(seeded_project_at_cwd):
+    tid = task_cmd.add_item(
+        "Investigate the thing", task_type="research",
+        justification="Older reason.",
+    )
+    task_cmd.update_plan(tid, justification="Newer reason.")
+    assert _justification(tid) == "Newer reason."
+
+
+def test_stored_justification_satisfies_the_gate_on_retype(seeded_project_at_cwd):
+    """The gate reads the row: retyping back to research needs no restatement
+    when the justification is still stored."""
+    tid = task_cmd.add_item(
+        "Investigate the thing", task_type="research",
+        justification="Still true.",
+    )
+    task_cmd.update_plan(tid, task_type="brainstorm")
+    task_cmd.update_plan(tid, task_type="research")
+    assert _justification(tid) == "Still true."
+
+
+def test_cleared_justification_does_not_satisfy_the_gate(seeded_project_at_cwd):
+    tid = task_cmd.add_item(
+        "Investigate the thing", task_type="research",
+        justification="Will be cleared.",
+    )
+    task_cmd.update_plan(tid, task_type="brainstorm")
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.update_plan(tid, task_type="research", justification="")
+    assert "--type research requires --justification" in exc.value.message
+
+
+def test_clear_justification_deletes_the_row(seeded_project_at_cwd):
+    tid = task_cmd.add_item(
+        "Investigate the thing", task_type="research",
+        justification="Going away.",
+    )
+    task_cmd.update_plan(tid, justification="")
+    assert _justification(tid) is None
+
+
+def test_justification_refused_on_todo_add(seeded_project_at_cwd):
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.add_item("Fix the thing", task_type="todo",
+                          justification="Not a research task.")
+    assert "research and brainstorm" in exc.value.message
+
+
+def test_justification_refused_on_todo_update(seeded_project_at_cwd):
+    tid = _add_task("Fix the thing")
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.update_plan(tid, justification="Not a research task.")
+    assert "research and brainstorm" in exc.value.message
+    assert _justification(tid) is None
+
+
+def test_justification_refused_when_retyping_to_todo(seeded_project_at_cwd):
+    tid = task_cmd.add_item(
+        "Investigate the thing", task_type="research", justification="Why.",
+    )
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd.update_plan(tid, task_type="todo", title="Fix the thing",
+                             justification="Still why.")
+    assert "research and brainstorm" in exc.value.message
+
+
+def test_justification_accepted_on_brainstorm(seeded_project_at_cwd):
+    new_id = task_cmd.add_item(
+        "Explore the options", task_type="brainstorm",
+        justification="Needs the requester in the loop.",
+    )
+    assert _justification(new_id) == "Needs the requester in the loop."
+
+
+def test_justification_leaves_notes_alone(seeded_project_at_cwd):
+    tid = _add_task("Investigate the thing", notes="Unrelated notes.\n")
+    task_cmd.update_plan(tid, task_type="research", justification="Why.")
     notes, _ = _notes_and_type(tid)
-    assert "Newer reason." in notes
-    assert "Older reason." not in notes
+    assert notes == "Unrelated notes.\n"
+    assert _justification(tid) == "Why."
+
+
+def test_no_heading_composer_survives():
+    assert not hasattr(task_cmd, "_compose_justification_notes")
+    assert not hasattr(task_cmd, "_JUSTIFICATION_HEADING_RE")
+
+
+# ---------- E-1562: moving existing `## Justification` sections ----------
+
+def test_move_sections_moves_and_prunes(seeded_project_at_cwd):
+    only = _seeded_notes("Investigate one", "## Justification\n\nOnly this.\n")
+    mixed = _seeded_notes(
+        "Investigate two",
+        "## Justification\n\nWhy two.\n\n## From the description\n\nKept prose.\n",
+    )
+    plain = _seeded_notes("Investigate three", "No section here.\n")
+
+    task_cmd.move_sections("notes", "justification")
+
+    assert _justification(only) == "Only this."
+    assert _notes_and_type(only)[0] is None
+    assert _justification(mixed) == "Why two."
+    assert _notes_and_type(mixed)[0] == "## From the description\n\nKept prose.\n"
+    assert _justification(plain) is None
+    assert _notes_and_type(plain)[0] == "No section here.\n"
+
+    # Repeatable: nothing is left to move the second time.
+    task_cmd.move_sections("notes", "justification")
+    assert _justification(mixed) == "Why two."
+
+
+def test_move_sections_dry_run_writes_nothing(seeded_project_at_cwd):
+    tid = _seeded_notes("Investigate one", "## Justification\n\nWhy.\n")
+    task_cmd.move_sections("notes", "justification", dry_run=True)
+    assert _justification(tid) is None
+    assert "## Justification" in _notes_and_type(tid)[0]
+
+
+def _seeded_notes(title: str, notes: str) -> int:
+    """A research task whose notes carry `notes`, written the way E-1544 wrote
+    them: through the event pipeline, so the ledger holds the write."""
+    epic = _add_task("Epic", status="underway", task_type="epic")
+    tid = task_cmd.add_item(title, task_type="research", parent_id=epic)
+    task_cmd.update_plan(tid, notes=notes)
+    return tid
 
 
 def test_update_gate_does_not_fire_when_type_not_in_update(seeded_project_at_cwd):

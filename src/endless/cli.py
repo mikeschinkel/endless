@@ -2565,6 +2565,9 @@ def task_list(project, show_all, status, phase, complexity, risk, parent_id, rel
 @click.argument("item_ids", type=TASK_ID, nargs=-1, required=True)
 @click.option("--no-description", is_flag=True,
               help="Hide description")
+@click.option("--justification", "show_justification", is_flag=True,
+              help="Show the justification field — why a research or brainstorm "
+                   "task cannot be inline (renders directly after the description)")
 @click.option("--context", "show_context", is_flag=True,
               help="Show the context field — why the task exists (renders "
                    "directly after the description)")
@@ -2583,8 +2586,8 @@ def task_list(project, show_all, status, phase, complexity, risk, parent_id, rel
 @click.option("--notes", "show_notes", is_flag=True,
               help="Show the full notes field")
 @click.option("--all-fields", "all_fields", is_flag=True,
-              help="Show every content section (description, context, analysis, plan, "
-                   "outcome, reason, notes, children)")
+              help="Show every content section (description, justification, context, "
+                   "analysis, plan, outcome, reason, notes, children)")
 @click.option("--brief", "brief", is_flag=False, flag_value=str(BRIEF_CHARS),
               default=None, type=BRIEF_LEN, metavar="[N]",
               help=f"Preview every long field instead of its full body, cut to "
@@ -2597,13 +2600,14 @@ def task_list(project, show_all, status, phase, complexity, risk, parent_id, rel
               help="Page colorized output through less (wheel-scrollable)")
 @click.option("--no-color", is_flag=True,
               help="Disable ANSI color even on a TTY")
-def task_show(item_ids, no_description, show_context, show_analysis, show_plan_field,
+def task_show(item_ids, no_description, show_justification, show_context, show_analysis, show_plan_field,
               show_children, show_outcome, show_reason, show_notes, all_fields,
               brief, agent, as_json, paged, no_color):
     """Show detail for one or more tasks."""
     from endless.task_cmd import detail_item
     show_content = _shown_content(
-        all_fields, context=show_context, analysis=show_analysis, plan=show_plan_field,
+        all_fields, justification=show_justification, context=show_context,
+        analysis=show_analysis, plan=show_plan_field,
         outcome=show_outcome, reason=show_reason, notes=show_notes)
     from endless.unlanded import reconcile_quietly
     if all_fields:
@@ -3198,7 +3202,11 @@ def _guard_content_rules(content, name, allow_paths, whole_value_checked=False):
 # trail claiming it was intended. Clearing is instead an explicit, field-named
 # act (`--clear <field>`, below) that a failed pipeline cannot reach by accident.
 
-CLEARABLE_CONTENT_FIELDS = ("description", "context", "plan", "analysis", "outcome", "reason", "notes")
+CLEARABLE_CONTENT_FIELDS = ("description", "justification", "context", "plan", "analysis", "outcome", "reason", "notes")
+
+# An epic is never research or brainstorm, so `epic update` neither writes nor
+# clears a justification (E-1562); `task update --clear justification` does.
+EPIC_CLEARABLE_CONTENT_FIELDS = tuple(f for f in CLEARABLE_CONTENT_FIELDS if f != "justification")
 
 
 def _describe_empty_file(content):
@@ -3342,8 +3350,8 @@ def _apply_clear_flags(clear_fields, resolved):
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
 @click.option("--justification", default=None,
-              help="Justification text for --type research (stored under '## Justification' in notes). "
-                   "Required for --type research unless --parent is an underway epic.")
+              help="Why the work cannot be inline in a do-task (research and brainstorm "
+                   "only). Required for --type research unless --parent is an underway epic.")
 @click.option("--blocks", "blocks_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) this new task blocks (repeatable)")
 @click.option("--blocked-by", "blocked_by_ids", type=TASK_ID, multiple=True,
@@ -3396,6 +3404,7 @@ def task_add(title, description, description_file, plan_text, plan_file, context
     plan_text = _resolve_content_flag(plan_text, plan_file, "plan", allow_paths)
     context_text = _resolve_content_flag(context_text, context_file, "context", allow_paths)
     analysis_text = _resolve_content_flag(analysis_text, analysis_file, "analysis", allow_paths)
+    justification = _resolve_content_flag(justification, None, "justification", allow_paths)
     new_id = add_item(title, description=description, plan=plan_text,
                       context=context_text, analysis=analysis_text,
                       phase=phase, project_name=project, after=after, parent_id=parent,
@@ -3487,8 +3496,10 @@ def task_add(title, description, description_file, plan_text, plan_file, context
 @click.option("--notes-file", default=None,
               help="Load the notes from a file")
 @click.option("--justification", default=None,
-              help="Justification text when setting --type research (stored under '## Justification' in notes). "
-                   "Required unless the effective parent is an underway epic.")
+              help="Why the work cannot be inline in a do-task (research and brainstorm "
+                   "only) — replaces any stored one. Setting --type research needs one, "
+                   "given here or already stored, unless the effective parent is an "
+                   "underway epic.")
 @click.option("--allow-path", "allow_paths", multiple=True,
               help="Regex matching an absolute path to permit in inline content "
                    "(repeatable; escape hatch for the path gate).")
@@ -3525,6 +3536,7 @@ def task_update(item_ids, status, title, description, description_file, plan_tex
     from endless.task_cmd import update_plan, link_tasks
     resolved = _apply_clear_flags(clear_fields, {
         "description": _resolve_content_flag(description, description_file, "description", allow_paths, clearable=True),
+        "justification": _resolve_content_flag(justification, None, "justification", allow_paths, clearable=True),
         "plan": _resolve_content_flag(plan_text, plan_file, "plan", allow_paths, clearable=True),
         "context": _resolve_content_flag(context_text, context_file, "context", allow_paths, clearable=True),
         "analysis": _resolve_content_flag(analysis_text, analysis_file, "analysis", allow_paths, clearable=True),
@@ -3533,6 +3545,7 @@ def task_update(item_ids, status, title, description, description_file, plan_tex
         "notes": _resolve_content_flag(notes_text, notes_file, "notes", allow_paths, clearable=True),
     })
     description = resolved["description"]
+    justification = resolved["justification"]
     plan_text = resolved["plan"]
     context_text = resolved["context"]
     analysis_text = resolved["analysis"]
@@ -4678,7 +4691,7 @@ def epic_show(item_ids, no_description, show_context, show_analysis, show_plan_f
               help="Regex matching an absolute path to permit in inline content "
                    "(repeatable; escape hatch for the path gate).")
 @click.option("--clear", "clear_fields", multiple=True,
-              type=click.Choice(CLEARABLE_CONTENT_FIELDS),
+              type=click.Choice(EPIC_CLEARABLE_CONTENT_FIELDS),
               help="Erase a content field, naming it (repeatable). --<field>-file "
                    "refuses an empty file, so this is the deliberate way to empty "
                    "description or any content field. Conflicts with the same "
@@ -5681,6 +5694,33 @@ def db_restore(backup, dry_run, force):
     # explicit --db, enforced by require_db_context() in run_restore.
     from endless.db_restore import run_restore
     run_restore(backup, dry_run, force)
+
+
+@db_cmd.command("move-section")
+@click.option("--from", "from_name", required=True,
+              help="Content holding the sections (e.g. notes)")
+@click.option("--to", "to_name", required=True,
+              help="Content to move them into (e.g. justification)")
+@click.option("--heading", default=None,
+              help="Section heading, without the '## ' (default: the --to label, "
+                   "e.g. Justification)")
+@click.option("--project", default=None,
+              help="Project name (default: detect from cwd)")
+@click.option("--dry-run", is_flag=True,
+              help="List what would move, and emit nothing")
+def db_move_section(from_name, to_name, heading, project, dry_run):
+    """Move every `## <heading>` section out of one task content into another.
+
+    For text written under a heading before its content kind existed — E-1562
+    moved research justifications out of notes with
+    `--from notes --to justification`. Each task's move is one ordinary
+    task.fields_updated event, stamped just after the source was last written,
+    so a rebuild replays it like any other change. Repeatable: a second run finds
+    nothing left to move.
+    """
+    from endless.task_cmd import move_sections
+    move_sections(from_name, to_name, heading=heading, project_name=project,
+                  dry_run=dry_run)
 
 
 @db_cmd.command("path")

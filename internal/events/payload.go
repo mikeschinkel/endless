@@ -32,12 +32,16 @@ type TaskCreatedPayload struct {
 	// more; `omitempty` keeps it out of every payload this struct marshals.
 	LegacyText string `json:"text,omitempty"`
 
-	Context  string `json:"context,omitempty"`
-	Analysis string `json:"analysis,omitempty"`
-	Notes    string `json:"notes,omitempty"`
-	Phase    string `json:"phase"`
-	Status   string `json:"status"`
-	Type     string `json:"type"`
+	// Justification is why a research or brainstorm task cannot be inline in
+	// a do-task (E-1562). Before E-1562 it rode inside Notes under a
+	// `## Justification` heading, and historical events still carry it there.
+	Justification string `json:"justification,omitempty"`
+	Context       string `json:"context,omitempty"`
+	Analysis      string `json:"analysis,omitempty"`
+	Notes         string `json:"notes,omitempty"`
+	Phase         string `json:"phase"`
+	Status        string `json:"status"`
+	Type          string `json:"type"`
 	// Complexity and Risk are rating slugs (internal/rating) or absent for an
 	// unrated task. Historical payloads carry a `tier` key instead (E-1813
 	// removed tasks.tier); it decodes into nothing, deliberately — tier values

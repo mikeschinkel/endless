@@ -12,14 +12,15 @@ Every task has one short name, one short description, and a set of long-form con
 |---------------|----------------|--------------------------------------------------------------------------------------------------|----------------------------------------------------|
 | `title`       | ≤ 60 chars     | The task name: WHAT, recognizable rather than descriptive. Verb-first (see Verbs below). | Positional arg on `task add`; `--title` on update. |
 | `description` | ≤ 256 chars, one line | WHAT the task will do, starting with the title's verb. Shown by default in `task list` / `task show`. It describes the task; it is never a spec. | `--description` (inline) / `--description-file <path>` on `task add` / `task update`. |
+| `justification` | Short        | **Research and brainstorm only:** why the work cannot be inline in a do-task. Required by `--type research` unless the parent is an underway epic (see **Research-type gate**); refused on every other type. Shown with `task show --justification`, directly after the description and before context. | `--justification` (inline) on `task add` / `task update`; writing it again rewords it; `--clear justification` on `task update`. |
 | `context`     | Long-form      | Why the task exists: how things work today, what prompted the task, and the evidence for it (logs, counts, repro). Never how the work will be done. Shown with `task show --context`, directly after the description. | `--context` (inline) / `--context-file <path>` on `task add` / `task update`. |
 | `analysis`    | Long-form      | Design and investigation toward a plan: the how, rationale and rejected alternatives, scope, acceptance ideas, open design questions. Shown with `task show --analysis`. | `--analysis` (inline) / `--analysis-file <path>` on `task add` / `task update`. |
 | `plan`        | Long-form      | The work to do: approach, the files and functions it touches, verification steps. **Required before a task can be claimed or spawned.** Name files and functions, never line numbers — see **No time-frozen specifics** below. Shown with `task show --plan`. **On a research task, `plan` instead holds the research *request* — see the Research-task field model below.** | `--plan` (inline) / `--plan-file <path>` on `task add` / `task update`. |
-| `notes`       | Freeform       | Catch-all: history, progress, dated updates, who said what. Use sparingly. `--justification` composes its `## Justification` heading in here. Shown with `task show --notes`. | `--notes` (inline) / `--notes-file <path>` on `task update`. |
+| `notes`       | Freeform       | Catch-all: history, progress, dated updates, who said what. Use sparingly. Shown with `task show --notes`. | `--notes` (inline) / `--notes-file <path>` on `task update`. |
 | `outcome`     | Short to long  | The result — the deliverable. **Required** when completing a `research`/`brainstorm` task (the outcome IS the deliverable). Optional on `confirm`/`assume`. Shown with `task show --outcome`. | `--outcome` (inline) / `--outcome-file <path>` on `task confirm` / `task assume` / `task update`. |
 | `reason`      | Short          | Why the task ended. **Required** on every abandonment — `declined`, `obsolete` and `superseded` alike — given with that command; one already stored does not count. Kept apart from `outcome` so abandoning findings work never overwrites the findings. Shown with `task show --reason`. | `--reason` (inline) / `--reason-file <path>` on `task update` / `task decline`; `--outcome` given *with* an abandonment status, and on `task supersede`, is stored as the reason. |
 
-`context`, `analysis`, `plan`, `outcome`, `reason` and `notes` are **content**: each is one row per task in the database under that name, and the name is also the CLI flag, the `task show` heading and the mirror file (`.endless/tasks/e-NNNN/<name>.md`). `title` and `description` are columns on the task itself.
+`justification`, `context`, `analysis`, `plan`, `outcome`, `reason` and `notes` are **content**: each is one row per task in the database under that name, and the name is also the CLI flag, the `task show` heading and the mirror file (`.endless/tasks/e-NNNN/<name>.md`). `title` and `description` are columns on the task itself.
 
 **The limits are enforced on write.** `task add` and `task update` refuse a title over 60 characters, a description over 256 characters, containing a newline, or not starting with the title's verb, and a task, decision or session id (`E-NNN`, `ED-NNN`, `ES-NNN`) in either — and the refusal names where the text belongs instead. A limit applies to the field being written: an update that does not touch an older, longer title or description is not refused, and nothing is ever truncated. Ids are fine in every content slot.
 
@@ -370,7 +371,7 @@ Four near-identical "document X in the guide" tasks are the anti-pattern; foldin
 `--type research` discourages casual use: a research task is justified only when its findings can't be inlined as a do-task. The CLI enforces this:
 
 - **Exempt:** `--parent <id>` where `<id>` is an `--type epic --status underway` task. No `--justification` required.
-- **Otherwise:** `--justification "<reason>"` is required and stored under a `## Justification` heading in the task's notes.
+- **Otherwise:** `--justification "<reason>"` is required and stored as the task's `justification` content.
 
 ```bash
 # Exempt: parent is an underway epic
@@ -381,7 +382,7 @@ endless task add "Compare X vs Y" --type research \
     --justification "Needs benchmarks across 3 datasets before plan."
 ```
 
-The same gate fires on `endless task update --type research <id>` (promoting an existing task to research). Setting `--justification` twice on a task whose notes already contain a `## Justification` heading is refused; clear or hand-edit notes first.
+The same gate fires on `endless task update --type research <id>` (promoting an existing task to research). There a justification the task already stores satisfies it — a task retyped away from research and back need not restate why — unless the same call clears it. `--justification` again rewords it in place; `--clear justification` removes it. `--justification` is refused on any type but research and brainstorm.
 
 ### Research-task field model
 

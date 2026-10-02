@@ -30,14 +30,19 @@ import (
 type Name int
 
 // The constants are declared in DISPLAY order, and All returns them that way:
-// `task show` renders a task's content sections in this order. Context comes
-// first because it is background — why the task exists, how things work today,
-// the evidence — and renders directly after the description (E-1993). Analysis
+// `task show` renders a task's content sections in this order. Justification
+// comes first: only research and brainstorm tasks carry one — why the work
+// cannot be inline in a do-task (E-1562) — and those deliver findings rather
+// than being implemented, so it never displaces Context from its place on an
+// implementation task. Context follows because it is background — why the task
+// exists, how things work today, the evidence — and every kind declared up to
+// and including it renders directly after the description (E-1993). Analysis
 // precedes Plan because it is the pre-plan design content (E-999); Outcome is
 // the deliverable and Reason why the task ended, so they follow the work they
 // describe.
 const (
-	Context Name = iota + 1
+	Justification Name = iota + 1
+	Context
 	Analysis
 	Plan
 	Outcome
@@ -46,28 +51,30 @@ const (
 )
 
 // all is the canonical set in display order.
-var all = []Name{Context, Analysis, Plan, Outcome, Reason, Notes}
+var all = []Name{Justification, Context, Analysis, Plan, Outcome, Reason, Notes}
 
 // slugs is the stored token per kind: task_content.name, the CLI flag, and the
 // mirror file stem.
 var slugs = map[Name]string{
-	Context:  "context",
-	Analysis: "analysis",
-	Plan:     "plan",
-	Outcome:  "outcome",
-	Reason:   "reason",
-	Notes:    "notes",
+	Justification: "justification",
+	Context:       "context",
+	Analysis:      "analysis",
+	Plan:          "plan",
+	Outcome:       "outcome",
+	Reason:        "reason",
+	Notes:         "notes",
 }
 
 // labels is the human display string per kind — the heading a task's section
 // renders under.
 var labels = map[Name]string{
-	Context:  "Context",
-	Analysis: "Analysis",
-	Plan:     "Plan",
-	Outcome:  "Outcome",
-	Reason:   "Reason",
-	Notes:    "Notes",
+	Justification: "Justification",
+	Context:       "Context",
+	Analysis:      "Analysis",
+	Plan:          "Plan",
+	Outcome:       "Outcome",
+	Reason:        "Reason",
+	Notes:         "Notes",
 }
 
 // String returns the human label ("Plan"), the heading a section renders

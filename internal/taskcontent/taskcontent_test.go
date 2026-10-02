@@ -22,7 +22,7 @@ func TestParse_RoundTripsEverySlug(t *testing.T) {
 }
 
 func TestParse_RejectsUnknown(t *testing.T) {
-	for _, s := range []string{"", "Plan", "text", "description", "justification"} {
+	for _, s := range []string{"", "Plan", "text", "description", "Justification"} {
 		if _, err := taskcontent.Parse(s); err == nil {
 			t.Errorf("Parse(%q) accepted an unknown name", s)
 		}
@@ -59,7 +59,7 @@ func TestString_IsTheCapitalizedSlug(t *testing.T) {
 // Display order is part of the contract: `task show` renders sections in it.
 func TestAll_IsDisplayOrder(t *testing.T) {
 	got := strings.Join(taskcontent.Slugs(), ",")
-	if want := "context,analysis,plan,outcome,reason,notes"; got != want {
+	if want := "justification,context,analysis,plan,outcome,reason,notes"; got != want {
 		t.Errorf("Slugs() = %s, want %s", got, want)
 	}
 }

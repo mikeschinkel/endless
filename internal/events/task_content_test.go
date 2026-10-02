@@ -169,7 +169,7 @@ func TestTaskContent_UnknownFieldStillRefused(t *testing.T) {
 		t.Fatalf("seed: %v", err)
 	}
 	evt := taskEvent(t, events.KindTaskFieldsUpdated, 710, "5WYM00000900",
-		events.TaskFieldsUpdatedPayload{Fields: map[string]any{"justification": "x"}})
+		events.TaskFieldsUpdatedPayload{Fields: map[string]any{"bogus": "x"}})
 	if _, err := events.Execute(&evt, nil); err == nil {
 		t.Fatal("an unknown field was accepted")
 	}
