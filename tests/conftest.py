@@ -2,12 +2,91 @@
 
 import json
 import os
+import shutil
 import sqlite3
+import subprocess
+import tempfile
 from pathlib import Path
 
 import pytest
 
-from endless import config, db
+# Only config at import. `endless.db` imports `endless.statuses`, which reads
+# the status vocabulary from endless-go AT IMPORT — so importing it here would
+# run the binary before pytest_sessionstart has built and routed the fresh one.
+# Fixtures import db locally instead, as they already do the CLI modules.
+from endless import config
+
+REPO_ROOT = Path(__file__).resolve().parent.parent
+
+# E-1921: the one endless-go every test runs, built from THIS checkout by
+# pytest_sessionstart. Never `<checkout>/bin/endless-go` and never whatever is
+# on PATH: both belong to whoever built or installed last, and a test that ran
+# one of them is how E-1917 chased a bogus "tasks has 19 columns but 18 values"
+# failure produced by a copy of main's binary.
+_ENDLESS_GO_BIN: Path | None = None
+
+
+def pytest_sessionstart(session):
+    """Build endless-go once, before collection, and route every lookup to it.
+
+    Before collection rather than in a fixture because collection already runs
+    the binary: importing `endless.db` (and so every test module) reads the
+    status vocabulary from it, and inside a self-dev worktree those readers ask
+    `config.worktree_endless_go()` — `<checkout>/bin/endless-go` by absolute
+    path, which no fixture can reach in time and PATH does not influence.
+
+    A failed build ends the session. There is deliberately no fallback to
+    `bin/` or PATH: a fallback is the stale binary this exists to remove, and
+    testing Python against a binary that no longer matches its source is the
+    bug, not an inconvenience.
+    """
+    global _ENDLESS_GO_BIN
+    go = shutil.which("go")
+    if go is None:
+        pytest.exit("E-1921: `go` is not on PATH, so the suite cannot build the "
+                    "endless-go it runs.", returncode=pytest.ExitCode.TESTS_FAILED)
+    out_dir = Path(tempfile.mkdtemp(prefix="endless-go-test-"))
+    session.config.add_cleanup(lambda: shutil.rmtree(out_dir, ignore_errors=True))
+    out = out_dir / "endless-go"
+    build = subprocess.run(
+        [go, "build", "-o", str(out), "./cmd/endless-go"],
+        cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+    )
+    if build.returncode != 0:
+        pytest.exit(f"E-1921: could not build endless-go from {REPO_ROOT}:\n"
+                    f"{build.stderr}", returncode=pytest.ExitCode.TESTS_FAILED)
+    _ENDLESS_GO_BIN = out
+
+    # Every PATH lookup — event_bridge, land_conflict, the vocabulary readers'
+    # fallback — finds the fresh build first. Set on the process, not per test,
+    # so it already holds during collection; each test's monkeypatch restores to
+    # this value, and isolated_env inherits it without listing anything.
+    os.environ["PATH"] = f"{out_dir}{os.pathsep}{os.environ.get('PATH', '')}"
+
+    # And the one lookup that bypasses PATH. Only an answer naming this
+    # checkout's own bin/ is redirected; a worktree a test builds under tmp_path
+    # resolves exactly as production would, so the resolver stays testable.
+    checkout_bin = (REPO_ROOT / "bin" / "endless-go").resolve()
+    real_worktree_endless_go = config.worktree_endless_go
+
+    def worktree_endless_go(cwd: Path | None = None) -> Path | None:
+        found = real_worktree_endless_go(cwd)
+        if found is not None and found.resolve() == checkout_bin:
+            return out
+        return found
+
+    config.worktree_endless_go = worktree_endless_go
+
+
+@pytest.fixture(scope="session")
+def endless_go_bin() -> Path:
+    """The endless-go built from this checkout for this session (E-1921).
+
+    A test that runs the binary itself takes this rather than resolving one: no
+    test may find `bin/endless-go` or PATH on its own.
+    """
+    assert _ENDLESS_GO_BIN is not None, "pytest_sessionstart did not build endless-go"
+    return _ENDLESS_GO_BIN
 
 
 @pytest.fixture(autouse=True)
@@ -21,6 +100,8 @@ def isolated_env(tmp_path, monkeypatch):
     - tmp projects root with a sample project
     - fresh DB with schema applied
     """
+    from endless import db
+
     config_dir = tmp_path / ".config" / "endless"
     config_dir.mkdir(parents=True)
 
@@ -142,12 +223,6 @@ def isolated_env(tmp_path, monkeypatch):
     # such test would make every later test in the interpreter an agent's.
     monkeypatch.setattr(_agent_help, "_AGENT_VIEW", False)
     monkeypatch.setattr(_agent_help, "_AGENT_FORMAT", False)
-
-    # Prepend this worktree's bin/ to PATH so subprocesses (e.g. endless-event
-    # invoked by event_bridge.emit_event) find the locally-built binary, not
-    # the globally-installed one symlinked from a sibling worktree.
-    bin_dir = Path(__file__).resolve().parent.parent / "bin"
-    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ.get('PATH', '')}")
 
     # Reset DB connection so it creates a fresh one
     monkeypatch.setattr(db, "_conn", None)
@@ -288,7 +363,7 @@ def seeded_project_at_cwd(isolated_env, monkeypatch):
     succeeds in any test that triggers worktree creation (e.g. E-1216's
     auto-create-worktree on `task update --text`).
     """
-    import subprocess
+    from endless import db
 
     proj_dir = isolated_env["projects_root"]
     monkeypatch.chdir(proj_dir)

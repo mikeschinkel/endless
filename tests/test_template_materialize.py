@@ -19,11 +19,7 @@ def project_root(tmp_path):
     return tmp_path
 
 
-def _bin() -> str:
-    return str(Path(__file__).resolve().parent.parent / "bin" / "endless-go")
-
-
-def _run_render(cwd: Path, name: str = "handoff/todo", vars_payload: dict | None = None) -> subprocess.CompletedProcess:
+def _run_render(binary: Path, cwd: Path, name: str = "handoff/todo", vars_payload: dict | None = None) -> subprocess.CompletedProcess:
     payload = vars_payload if vars_payload is not None else {
         "spawned_id": 4242,
         "title": "Materialize test",
@@ -32,48 +28,48 @@ def _run_render(cwd: Path, name: str = "handoff/todo", vars_payload: dict | None
         "child_count": 0,
     }
     return subprocess.run(
-        [_bin(), "template", "render", name],
+        [str(binary), "template", "render", name],
         cwd=cwd,
         input=json.dumps(payload),
         capture_output=True, text=True, check=False,
     )
 
 
-def test_first_render_materializes_template_file(project_root):
+def test_first_render_materializes_template_file(project_root, endless_go_bin):
     dst = project_root / ".endless" / "templates" / "handoff" / "todo.md.tmpl"
     assert not dst.exists()
 
-    result = _run_render(project_root)
+    result = _run_render(endless_go_bin, project_root)
     assert result.returncode == 0, result.stderr
     assert dst.exists(), "materialized template file did not appear"
     assert dst.read_text().startswith("You're a worktree-bound")
 
 
-def test_gitignore_untouched_by_render(project_root):
+def test_gitignore_untouched_by_render(project_root, endless_go_bin):
     gi = project_root / ".gitignore"
     gi.write_text("# preserved\n")
 
-    result = _run_render(project_root)
+    result = _run_render(endless_go_bin, project_root)
     assert result.returncode == 0, result.stderr
     assert gi.read_text() == "# preserved\n"
 
 
-def test_user_edits_persist_across_renders(project_root):
+def test_user_edits_persist_across_renders(project_root, endless_go_bin):
     tmpl_dir = project_root / ".endless" / "templates" / "handoff"
     tmpl_dir.mkdir(parents=True)
     custom = "USER OVERRIDE {{.spawned_id}}\n"
     (tmpl_dir / "todo.md.tmpl").write_text(custom)
 
-    result = _run_render(project_root)
+    result = _run_render(endless_go_bin, project_root)
     assert result.returncode == 0, result.stderr
     assert "USER OVERRIDE 4242" in result.stdout
     # File untouched.
     assert (tmpl_dir / "todo.md.tmpl").read_text() == custom
 
 
-def test_delete_to_restore(project_root):
+def test_delete_to_restore(project_root, endless_go_bin):
     # First render to materialize.
-    r1 = _run_render(project_root)
+    r1 = _run_render(endless_go_bin, project_root)
     assert r1.returncode == 0, r1.stderr
     dst = project_root / ".endless" / "templates" / "handoff" / "todo.md.tmpl"
     embedded = dst.read_text()
@@ -81,19 +77,19 @@ def test_delete_to_restore(project_root):
     # Modify, delete, re-render → embedded restored.
     dst.write_text("MODIFIED\n")
     dst.unlink()
-    r2 = _run_render(project_root)
+    r2 = _run_render(endless_go_bin, project_root)
     assert r2.returncode == 0, r2.stderr
     assert dst.exists()
     assert dst.read_text() == embedded
 
 
-def test_local_tmpl_overrides_committed(project_root):
+def test_local_tmpl_overrides_committed(project_root, endless_go_bin):
     tmpl_dir = project_root / ".endless" / "templates" / "handoff"
     tmpl_dir.mkdir(parents=True)
     (tmpl_dir / "todo.md.tmpl").write_text("COMMITTED\n")
     (tmpl_dir / "todo.md.local.tmpl").write_text("LOCAL_WINS\n")
 
-    result = _run_render(project_root)
+    result = _run_render(endless_go_bin, project_root)
     assert result.returncode == 0, result.stderr
     assert "LOCAL_WINS" in result.stdout
     assert "COMMITTED" not in result.stdout

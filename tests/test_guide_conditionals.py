@@ -14,9 +14,7 @@ loud, and the fact that the two branches actually differ.
 
 import json
 import re
-import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 
 import pytest
@@ -32,50 +30,9 @@ _ACTION_RE = re.compile(r"\{\{-?\s*(.*?)\s*-?\}\}")
 _CONDITION_RE = re.compile(r"^(?:if|else if)\s+\.(\w+)$")
 
 
-_BUILT_BIN: str | None = None
-
-
-def _go_bin() -> str:
-    """The endless-go this repo built, or one built on demand.
-
-    Deliberately never skips. These tests are the guard that stops a later task
-    from dropping a `{{if .report_gate}}` wrapper while rewriting the section
-    around it — E-1975 rewrites exactly those sections — and a guard that
-    silently skips in a worktree where nobody ran `just build` is not a guard.
-    A few seconds of `go build` is the cheaper failure.
-    """
-    global _BUILT_BIN
-    root = Path(__file__).resolve().parent.parent
-    local = root / "bin" / "endless-go"
-    if local.is_file():
-        return str(local)
-    found = shutil.which("endless-go")
-    if found and _supports_render_file(found):
-        return found
-    if _BUILT_BIN is None:
-        target = Path(tempfile.mkdtemp(prefix="endless-guide-test-")) / "endless-go"
-        build = subprocess.run(
-            ["go", "build", "-o", str(target), "./cmd/endless-go"],
-            cwd=root, capture_output=True, text=True, check=False,
-        )
-        if build.returncode != 0:
-            pytest.fail(f"could not build endless-go for the guide tests:\n{build.stderr}")
-        _BUILT_BIN = str(target)
-    return _BUILT_BIN
-
-
-def _supports_render_file(binary: str) -> bool:
-    """Whether an installed endless-go is new enough to know `render --file`."""
+def _render(binary: Path, path: Path, **conditions: bool) -> str:
     result = subprocess.run(
-        [binary, "template", "render", "--file", "/nonexistent"],
-        input="{}", capture_output=True, text=True, check=False,
-    )
-    return "not defined: -file" not in (result.stderr or "")
-
-
-def _render(path: Path, **conditions: bool) -> str:
-    result = subprocess.run(
-        [_go_bin(), "template", "render", "--file", str(path)],
+        [str(binary), "template", "render", "--file", str(path)],
         input=json.dumps(conditions),
         capture_output=True, text=True, check=False,
     )
@@ -111,9 +68,9 @@ def test_every_condition_is_in_the_registry(path):
 
 @pytest.mark.parametrize("path", GUIDE_FILES, ids=lambda p: p.name)
 @pytest.mark.parametrize("gate", [True, False], ids=["gate-on", "gate-off"])
-def test_no_markers_survive_rendering(path, gate):
+def test_no_markers_survive_rendering(endless_go_bin, path, gate):
     """Whatever the conditions, the reader gets markdown, not template source."""
-    assert "{{" not in _render(path, report_gate=gate)
+    assert "{{" not in _render(endless_go_bin, path, report_gate=gate)
 
 
 # Commands that exist only because the report channel does. On a gate-off
@@ -127,7 +84,7 @@ CHANNEL_ONLY_COMMANDS = (
 )
 
 
-def test_gate_off_never_instructs_the_reader_to_run_task_report():
+def test_gate_off_never_instructs_the_reader_to_run_task_report(endless_go_bin):
     """The defect E-2030 exists to close, stated as an assertion.
 
     Scoped to the INVOCATION, not the name. The gate-off guide still says
@@ -136,13 +93,13 @@ def test_gate_off_never_instructs_the_reader_to_run_task_report():
     runnable: a `--draft-file` invocation, or an imperative pointing at one.
     """
     for path in GUIDE_FILES:
-        rendered = _render(path, report_gate=False)
+        rendered = _render(endless_go_bin, path, report_gate=False)
         for phrase in ("run `endless task report", "then:\n\n```bash\nendless task report"):
             assert phrase not in rendered, \
                 f"{path.name}: gate-off guide still tells the reader to run the command"
 
 
-def test_gate_off_teaches_no_channel_only_command():
+def test_gate_off_teaches_no_channel_only_command(endless_go_bin):
     """Wider than the report channel: everything downstream of it goes too.
 
     E-1975 shipped `endless minimizer` and `endless session turn`, both of which
@@ -151,29 +108,30 @@ def test_gate_off_teaches_no_channel_only_command():
     defect as step 7, one layer out.
     """
     for path in GUIDE_FILES:
-        rendered = _render(path, report_gate=False)
+        rendered = _render(endless_go_bin, path, report_gate=False)
         for command in CHANNEL_ONLY_COMMANDS:
             assert command not in rendered, \
                 f"{path.name}: gate-off guide still teaches `{command}`"
 
 
-def test_gate_on_keeps_every_channel_only_command():
+def test_gate_on_keeps_every_channel_only_command(endless_go_bin):
     """The other half of told-iff-gated, and the guard against over-cutting.
 
     A `{{if}}` wrapped one section too wide would pass the test above by
     deleting documentation a gate-ON project needs.
     """
-    rendered = "".join(_render(p, report_gate=True) for p in GUIDE_FILES)
+    rendered = "".join(_render(endless_go_bin, p, report_gate=True) for p in GUIDE_FILES)
     for command in CHANNEL_ONLY_COMMANDS:
         assert command in rendered, \
             f"gate-on guide lost `{command}` — a conditional cut too wide"
 
 
-def test_the_two_branches_actually_differ():
+def test_the_two_branches_actually_differ(endless_go_bin):
     """Guards against a gate that resolves but changes nothing."""
     changed = [
         p.name for p in GUIDE_FILES
-        if _render(p, report_gate=True) != _render(p, report_gate=False)
+        if _render(endless_go_bin, p, report_gate=True)
+        != _render(endless_go_bin, p, report_gate=False)
     ]
     assert "index.md" in changed
     assert "tasks.md" in changed
@@ -181,14 +139,14 @@ def test_the_two_branches_actually_differ():
 
 
 @pytest.mark.parametrize("gate", [True, False], ids=["gate-on", "gate-off"])
-def test_topic_table_stays_contiguous(gate):
+def test_topic_table_stays_contiguous(endless_go_bin, gate):
     """A blank line inside a markdown table ends the table early.
 
     The two minimizer topic rows are conditional, and the obvious spelling —
     `{{if .x}}row{{end}}` on its own line — leaves the row's newline outside both
     actions, so a false condition renders a blank line mid-table.
     """
-    lines = _render(GUIDE_DIR / "index.md", report_gate=gate).splitlines()
+    lines = _render(endless_go_bin, GUIDE_DIR / "index.md", report_gate=gate).splitlines()
     start = lines.index("| Topic | Section | Covers |")
     body = lines[start + 2:]
     end = next(i for i, line in enumerate(body) if not line.startswith("|"))
@@ -222,12 +180,12 @@ def test_retired_pre_summarize_criteria_stay_gone():
 
 
 @pytest.mark.parametrize("report_gate", [True, False], ids=["gate-on", "gate-off"])
-def test_land_toml_self_dev_settings_are_taught_only_to_self_dev(report_gate):
+def test_land_toml_self_dev_settings_are_taught_only_to_self_dev(endless_go_bin, report_gate):
     """E-2192. `[self_dev]` in land.toml does nothing on someone else's project,
     so a reader there must not be taught it — and a self_dev reader must be."""
     path = GUIDE_DIR / "orchestration.md"
-    on = _render(path, report_gate=report_gate, self_dev=True)
-    off = _render(path, report_gate=report_gate, self_dev=False)
+    on = _render(endless_go_bin, path, report_gate=report_gate, self_dev=True)
+    off = _render(endless_go_bin, path, report_gate=report_gate, self_dev=False)
     assert "schema_order" in on
     assert "schema_order" not in off
     assert "[self_dev]" not in off

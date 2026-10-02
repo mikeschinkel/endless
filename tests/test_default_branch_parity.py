@@ -27,22 +27,6 @@ from endless import agent_help, worktree_cmd
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
-@pytest.fixture(scope="session")
-def endless_go(tmp_path_factory) -> Path:
-    """Build endless-go from THIS checkout.
-
-    Built rather than found on PATH on purpose: a globally installed binary
-    belongs to whatever landed last, and a parity test that silently compared
-    today's Python against last month's Go would assert nothing.
-    """
-    out = tmp_path_factory.mktemp("go-bin") / "endless-go"
-    subprocess.run(
-        ["go", "build", "-o", str(out), "./cmd/endless-go"],
-        cwd=str(REPO_ROOT), check=True, capture_output=True, text=True,
-    )
-    return out
-
-
 def _git(repo: Path, *args: str) -> None:
     subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
 
@@ -72,10 +56,10 @@ def _write_project_config(repo: Path, default_branch: str) -> None:
         json.dumps({"name": "fixture", "default_branch": default_branch}))
 
 
-def _go_resolution(endless_go: Path, repo: Path) -> tuple[str, str]:
+def _go_resolution(endless_go_bin: Path, repo: Path) -> tuple[str, str]:
     """Return (base, base_error) as the Go resolver reports them."""
     res = subprocess.run(
-        [str(endless_go), "session-query", "worktree-unsettled", str(repo)],
+        [str(endless_go_bin), "session-query", "worktree-unsettled", str(repo)],
         capture_output=True, text=True, check=True,
     )
     # E-1668: session-query wraps array payloads so an empty result can still
@@ -121,7 +105,7 @@ CASES = [
     CASES, ids=[c[0] for c in CASES],
 )
 def test_go_and_python_resolvers_agree(
-    endless_go, tmp_path, name, branch, init_default, project_default, expected
+    endless_go_bin, tmp_path, name, branch, init_default, project_default, expected
 ):
     repo = _make_repo(tmp_path / "repo", branch)
     if init_default:
@@ -129,7 +113,7 @@ def test_go_and_python_resolvers_agree(
     if project_default:
         _write_project_config(repo, project_default)
 
-    go_base, go_err = _go_resolution(endless_go, repo)
+    go_base, go_err = _go_resolution(endless_go_bin, repo)
     py_base, py_err = _python_resolution(repo)
 
     assert go_base == py_base, (

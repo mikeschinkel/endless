@@ -39,9 +39,6 @@ from endless.land_conflict import (
     CLASS_SYMBOL_SUPERSESSION,
 )
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-ENDLESS_GO = REPO_ROOT / "bin" / "endless-go"
-
 
 # ── fixtures / helpers ─────────────────────────────────────────────────────
 
@@ -499,12 +496,10 @@ def test_already_landed_is_proven_from_git_cherry(tmp_path):
     assert any("rebase --continue" in line for line in cl.evidence)
 
 
-@pytest.mark.skipif(not ENDLESS_GO.exists(),
-                    reason="bin/endless-go not built (just build)")
-def test_orphaned_ledger_base_is_detected_by_content(tmp_path, monkeypatch):
+def test_orphaned_ledger_base_is_detected_by_content(tmp_path, monkeypatch, endless_go_bin):
     """The detector is Go's, shelled out — one implementation of ED-1553's rule,
     not a Python copy that drifts from it."""
-    monkeypatch.setenv("PATH", f"{ENDLESS_GO.parent}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("PATH", f"{endless_go_bin.parent}{os.pathsep}{os.environ['PATH']}")
     repo, branch = _ledger_orphan_repo(tmp_path)
     ev = _capture(repo, branch=branch, task_id="E-5000")
 
@@ -514,10 +509,8 @@ def test_orphaned_ledger_base_is_detected_by_content(tmp_path, monkeypatch):
     assert any("rebase --onto main" in step for step in cl.prescription)
 
 
-@pytest.mark.skipif(not ENDLESS_GO.exists(),
-                    reason="bin/endless-go not built (just build)")
-def test_ledger_orphans_reports_a_prefix_run_as_contiguous(tmp_path, monkeypatch):
-    monkeypatch.setenv("PATH", f"{ENDLESS_GO.parent}{os.pathsep}{os.environ['PATH']}")
+def test_ledger_orphans_reports_a_prefix_run_as_contiguous(tmp_path, monkeypatch, endless_go_bin):
+    monkeypatch.setenv("PATH", f"{endless_go_bin.parent}{os.pathsep}{os.environ['PATH']}")
     repo, branch = _ledger_orphan_repo(tmp_path)
     ev = _capture(repo, branch=branch, task_id="E-5000")
 

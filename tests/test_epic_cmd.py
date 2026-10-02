@@ -2,8 +2,8 @@
 
 `endless epic` is a thin wrapper over the task machinery with type=epic
 pinned. `epic add` / `epic update` go through the event path (the Go
-`endless-go event` binary, exercised here via the bin/ on PATH the
-isolated_env fixture sets up), so those tests run under
+`endless-go event` binary — the session's fresh build, first on PATH since
+conftest's pytest_sessionstart), so those tests run under
 `seeded_project_at_cwd` where cwd resolves to a registered project.
 
 `epic list` / `epic show` are read-only renderers — those tests insert
