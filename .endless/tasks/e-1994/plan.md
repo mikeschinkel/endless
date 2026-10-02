@@ -135,3 +135,25 @@ question, though it may share the challenge model call.
   step), preserved by Stop, moved to `working` by the next UserPromptSubmit,
   which also runs the drift check — plan-cited paths missing from the worktree
   are named.
+
+## As built — scope that grew during implementation
+
+- **The drafter needs an explicit marker.** "The session bound to a planless
+  task" was not enough: `task bind` can bind any session to one. `task prime`
+  on a planless task opens the window with `@endless_prime_draft=<task id>`
+  (spawn-window `--prime-draft`); the challenge runs only when that marker and
+  the session's binding both name the task.
+- **Primed windows open detached without the auto-spawn marker.** New
+  spawn-window `--detached` flag, so a resumed primed task never counts against
+  the auto-spawn cap.
+- **`session primed` is pinned to the main database** in endless-go, beside
+  `hook`: it writes the row the session's own hooks write.
+- **Claim's re-claim branch now starts a pre-work task** its session already
+  holds (any status but `underway`), which is how a resumed primed session
+  begins work. A session re-claiming its own `revisit` task likewise flips it.
+- **Description edits no longer notify** (migration 00013 rebuilds
+  `tasks_notify_sessions`); plan, analysis and notes still do via the
+  task_content triggers.
+- `project status` gains a `◇ primed` rank between idle and doing.
+- Drift check lives in `internal/plancite` (a heuristic tuned to miss rather
+  than cry wolf: backticked tokens, or bare tokens with a file extension).
