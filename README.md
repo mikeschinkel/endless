@@ -1,4 +1,4 @@
-# Endless — Manage endless Claude Code sessions without going insane
+# Manage endless Claude Code sessions without going insane
 
 Endless lets one developer run many Claude Code sessions at once — each tracked by
 an Endless "task" and with its own Git worktree and its own config/DB sandbox, so
