@@ -1,0 +1,1 @@
+Folded into E-2136: session status becomes E-2136's first list-shaped TOON command, with E-2190's decisions (Python renders from --json, every row with explicit flags, --monitor --agent refused, an edges section for blocks/precedes/conflicts, owner and also_on session ids) recorded in E-2136's analysis.
