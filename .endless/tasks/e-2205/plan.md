@@ -17,3 +17,13 @@ Tests:
 - Build failure before migration: the database version is unchanged and the message names the re-run.
 - `just go`: the result is atomic. No bin/endless-go.next is left on success or failure, and the old binary survives a failed build.
 - Verify suite: an isolated self-dev land that adds a migration while a loop polls the binary's status line, asserting no ERR-0020 is recorded.
+
+
+
+Grown scope (asked and decided mid-implementation, "Land clears its own"):
+
+4. Building first and swapping by rename shrinks the window from a compile to tens of milliseconds, but not to zero: a status-line process that starts on the old binary just before the migration commits reads the new version and records ERR-0020. Measured at a poll every ~160 ms, 2 of 10 fixed lands still recorded one. So after the landing is recorded, the land clears exactly that incident: the fingerprint naming both versions (from `endless-migrate up`'s from/to, built Go-side by monitor.DatabaseAheadFingerprint so it cannot drift from what RecordSchemaRefusal records), first seen at or after the moment the land began migrating. It goes through a new hidden `endless-go errors clear-land-schema` verb (faults.ClearFingerprintSince), with a matching hidden Python passthrough for CLI parity. It never fails the land, and it leaves alone an incident opened before the window.
+
+5. The swap is an in-process os.replace rather than spawning `just go-swap` (~28 ms saved, all of it exposure). `just go-swap` stays as the second half of `just go`.
+
+6. ERR-0020's remedy text (codes.go, docs/errors.md) now says a self-dev land clears the one it causes.
