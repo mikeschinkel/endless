@@ -1,0 +1,3 @@
+Each `session monitor` pane is its own `endless-go session-status --monitor` process. In the 2026-10-03 incident, each one used 1.6–4.8% CPU with 16–23 threads and 100–250 idle wake-ups per second. That is hundreds of times what its 2-second redraw ticker should cause, so something in each process spins regardless of git or database work. `fseventsd` ran at about 103% CPU alongside a steady stream of `git -C <worktree> status --porcelain` processes.
+
+Visibility gating (the sibling task) makes hidden panes skip work. But a gated pane is only free if its idle loop truly sleeps, so this task comes first.
