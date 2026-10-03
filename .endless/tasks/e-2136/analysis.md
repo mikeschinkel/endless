@@ -1,105 +1,169 @@
-## Why this is separate from E-1504, and blocks it
+## What this task is
 
-E-1504 sweeps 31 commands to offer an agent-facing text view. If the format is
-not settled first, those 31 renderings get written twice — once ad hoc, once in
-TOON. The format is the cheap thing to get right early and the expensive thing
-to change late, so it lands first and E-1504 writes against it.
+The Agent Folio Format writer, plus the first two commands rendered through it:
+`task show` (detail-shaped) and `session status` (list-shaped). Design is in the
+private briefs `brief-2028-09-12-agent-folio-format.md` and
+`brief-2028-09-12-agent-facing-output-endless.md`.
 
-Discussed in session 539 alongside E-1504 ("two tasks, peers"); E-1504 was filed
-and this one never was.
+The motivating failure is observed, not theoretical: sessions call `task show`,
+see that an analysis exists behind a pointer, and proceed without fetching it —
+confirmed by asking a session directly. The design invariant that follows is
+**every wrong guess must cost tokens, never silent incorrectness**, so the agent
+view inlines content rather than pointing at it.
 
-## Only the Python implementation is on the path
+Scope settled with Mike 2026-10-03: the folio writer, `task show`, and
+`session status`. Nothing else.
 
-The agent-facing CLI is Python. Go owns database access and its JSON output —
-`endless-go session-query worktree-unsettled`, `session-status --json` — is
-internal plumbing consumed by Python, not by an agent reading output. So the
-stable Python implementation is all this needs, and TOON's in-development Go
-implementation is NOT a blocker for any agent-facing surface.
+## Three reversals, recorded because earlier sections asserted the opposite
 
-If Go ever emits agent-facing output directly, that is its own task and can use
-whichever Go implementation is mature by then.
+1. **This task does not block E-1504.** It was filed as E-1504's blocker so the
+   31 renderings would not be written twice. E-1504 was then narrowed to the
+   flag surface alone — rename, `--format`, the two `--json` gaps — and has
+   LANDED (`assumed`). The renderings it shed are this task's and E-2141's.
 
-## Where TOON actually wins, and where it does not
+2. **Go, not Python.** An earlier section claimed "only the Python
+   implementation is on the path", and the E-2190 fold-in built on it to decide
+   that Python renders `session status` and Go grows no agent renderer. Reversed
+   2026-10-03. What forced it: children are a TOON part inside a folio, so a
+   Go-written folio needs TOON — and a Python-rendered `session status` needs
+   TOON too. The literal reading of the two earlier decisions implements TOON
+   twice. Both formats now live in Go; Python shells for both views.
 
-Sorting the 31 commands by output shape splits them cleanly, and the split
-determines the rules:
+   Secondary, and NOT the deciding reason: E-1063 (port the CLI entirely to Go)
+   is `urgent`/`underway` and E-894 (move task display reads to Go) is
+   `urgent`/`ready`, so a Python renderer would be rewritten shortly. Mike's
+   point stands that Endless's porting state must not drive the FORMAT's design;
+   it is allowed to drive where Endless writes the code.
 
-- **List-shaped** — `task list`, `task search`, `task next`, `task recent`,
-  `task active`, `task landed`, `task unsettled`, `decision list`, `epic list`,
-  `session status`, `session list`, `session search`, `session history`,
-  `worktree list`, `verb list`, `phrase list`, `project status`. Arrays of
-  uniform objects: TOON declares the fields once and emits one row per record
-  instead of repeating every key on every row. This is the whole reason to adopt
-  it.
-- **Detail-shaped** — `task show`, `decision show`, `epic show`, `session show`,
-  `worktree show`, `worktree current`, `worktree diagnose`. One object dominated
-  by long free-text fields (description, analysis, plan). TOON's tabular saving
-  does not apply; the win here is small and the format must simply not make
-  prose worse.
+3. **Lists are not all in scope.** An earlier section split 31 commands into
+   list- and detail-shaped and claimed both halves here. `session status` is in
+   scope as the reference list; the remaining list-shaped commands are E-2141's.
 
-## What the plan has to settle
+## Why these two commands
 
-1. **Dependency or in-house emitter.** Endless has three Python runtime
-   dependencies today (click, inquirerpy, tabulate). Adding a fourth for TOON is
-   a real posture change; writing a small emitter avoids it but owns the format's
-   edge cases. Decide deliberately, not by reflex.
-2. **How prose fields render.** A task description is multi-line text inside a
-   record. Whatever TOON does with embedded newlines has to be legible and
-   unambiguous when a title or description contains delimiters.
-3. **Empty and default fields.** The `session status` JSON emits
-   `blocked_by_n: 0`, `replaced_by: []`, `duplicates: []`, `hidden: false` on
-   every row. Omitting defaults is the single largest saving across 31 commands,
-   but in a tabular format the field list is declared once, so "omit" means
-   something different than it does per-record. Resolve this explicitly.
-4. **Shared key vocabulary.** `status`, `phase`, `owner` should mean the same
-   thing in every command's output so the vocabulary is learned once.
-5. **No truncation.** The human view cuts titles at terminal width. For an agent
-   that is unrecoverable loss costing a second call, so agent output carries full
-   values regardless of length.
-6. **Glyph-encoded signals become explicit fields.** `session status` encodes
-   ownership as `●` versus `⟳` and nothing else; an agent view without an
-   explicit ownership field cannot tell this session's work from another
-   session's. That failure is recorded on E-1504.
+`task show` is where the observed failure lives, so it is where inlining has to
+be proven. `session status` is the hardest list — glyph-heavy, every row
+carrying per-viewer state — so the tabular rules get tested where they are most
+likely to break rather than on `verb list`.
+
+## Formats: which, where, why
+
+- **Container: Agent Folio Format.** Each part is a header block, a blank line,
+  then exactly `Length` bytes. Content parts carry raw bytes, so prose is never
+  escaped or indented into a structured envelope. That is the property that
+  makes it worth a bespoke format: YAML block scalars solve escaping by
+  indenting, and the dedent then has to be correct at every downstream use —
+  written to a file, quoted into a handoff, diffed, matched against a fixture —
+  where a silent off-by-two breaks a code block rather than erroring.
+- **Structured parts: YAML.** `go.yaml.in/yaml/v4`. An earlier draft of this
+  plan proposed dropping YAML in favour of TOON everywhere; reversed, because
+  TOON's scalar syntax and YAML's are effectively identical for a flat map, so
+  the swap saved no bytes and gave up the familiarity of the front-matter idiom
+  every agent has already seen. The brief's Decision 5 was right.
+- **Tabular parts: TOON.** A TOON library, pinned to an exact version rather
+  than hand-rolled: a title containing a comma needs quoting, and three titles
+  written in the session that planned this have one.
+- **Content parts: raw bytes**, normally `text/markdown`.
+- **`--json` is untouched** and remains the exact, lossless, script-facing
+  contract.
+
+## Children are their own part, not nested
+
+A `children` part typed `text/toon`, one row per child, columns
+`id,type,phase,status,title`, titles untruncated. Relations are not repeated
+here — the edges section carries them.
+
+Its own part rather than a nested sequence for a reason Mike raised: a part
+declares its own `Type`, so the children format can become `application/json`
+or `application/yaml` later with no change to anything that reads the container.
+Nested inside the structured part there is no `Type` to switch, and changing it
+would change the whole record.
+
+TOON is right here rather than YAML because this is the one place in a detail
+record where the tabular saving applies: five column names declared once instead
+of five keys repeated per child.
+
+## A record with no content parts still gets a folio
+
+Always the container, never a bare document. A task carrying only a description
+pays the `@meta` part and one header block for it; the alternative makes the
+command's output shape vary with its data, so one command produces two different
+things and a reader has to branch on which arrived.
+
+## Field vocabulary, decided 2026-10-03
+
+The agent view does not inherit the internal JSON's field names. Decided against
+the real field set rather than reactively at the third collision, because
+renaming a vocabulary that agents and scripts have learned is the expensive kind
+of change.
+
+| Internal JSON | Agent view | Why |
+|---|---|---|
+| `owned_elsewhere`, `duplicate_work`, `owner`, `also_on` | `ownership: {owner, elsewhere, duplicate, also_on}` | Four fields on one concept |
+| frame `viewer_session`, frame `focus` | `viewer: {session, focus}` | `viewer_session` is already a compound, and the frame's `focus` is the viewer's, not the board's; cwd, pane or project land here next |
+| frame `focal` vs `focus`; row `is_focal` vs `focused` | frame `focal` + `viewer.focus`; row `is_focal` + `is_session_focus` | Two concepts under four names, two of them one letter apart. Keeps "focus", matching `sessions.focus_task_id` and the guide |
+| row `unsettled` + `unsettled_known` | `settled: yes \| no \| unknown` | Two booleans encoding a tri-state, an artifact of how E-2128 carried "not computed yet" |
+| row `project_id` | `project` (name) | An integer id is unusable to an agent that knows the project by name |
+| row `is_parent`, `is_from` | unchanged, flat | Only two, and NOT mutually exclusive — a task can be both parent and spawner (E-1694) — so neither an enum nor a mapping fits |
+| row `blocked_by_n`, `blocks_n` | dropped | The edges section carries them |
+
+**The rule, for fields added later:** underscore for a one-off compound; a
+prefix repeated across three or more fields is a mapping trying to exist. Two is
+a judgment call, three is the signal.
+
+**Dropped from the detail view entirely:** `children_count`,
+`children_by_type`, and the `*_chars` sizes. They are artifacts of a
+pointer-based view — with children as a part and content inlined, a count is the
+row count and a size is visible. The inventory-with-sizes is what `task meta` is
+for, which is not this task.
+
+## `session status` specifics (from E-2190, Mike 2026-10-02, amended)
+
+E-2190 is superseded by this task. Its decisions hold except where the Go
+reversal above changes them:
+
+1. ~~Python renders it~~ — **reversed, see above.** Go renders it; Python shells
+   `endless-go` for the agent view. Go reads the same data
+   `session-status --json` exposes.
+2. **Every row, flags explicit.** The agent view emits every row the data
+   carries, including those the table omits, with the vocabulary above —
+   `hidden`, `ownership`, `is_session_focus`, `relation`, `is_focal`, and the
+   frame's `focal` and `viewer`. `--show-hidden` / `--only-hidden` do not apply
+   to it: they shape a drawing, not data.
+3. **`--monitor --agent` is refused**, and the refusal names
+   `session status --agent`. The agent view is a snapshot.
+4. **Relations as one edges section, no per-row ids.** A table of
+   `{from, kind, to}` among the tasks on the board, `kind` one of `blocks`,
+   `precedes`, `conflicts` (E-2164's relations, both declared and detected).
+   Nothing is repeated per row.
+5. **Name the other session.** `ownership.owner` is the owning session's id when
+   another live session owns the row; `ownership.also_on` lists the other live
+   sessions behind `ownership.duplicate`. This needs ONE Go data change:
+   `monitor.AnnotateSessionStatusOwnership` returns ids rather than booleans
+   only, and the internal JSON gains them. That is data, not a renderer.
+
+Also carried over: titles untruncated, and every glyph-encoded signal becomes a
+field — claimed, focus, duplicate, owned elsewhere, hidden, relation, blocking.
 
 ## Not in scope
 
-Auto-selecting agent output when an agent invokes a command, plus the
-counterpart flag that forces the human view. Its own task, after E-1504.
+- **Caller detection** and the counterpart flag that forces the human view. The
+  brief's invariant says no correct agent workflow requires a flag, so this is
+  needed — but it is a behavioural change touching every hook and script that
+  shells `endless`, and it is unfiled. Without it the agent view happens only
+  when something passes `--agent`.
+- **`task meta`** — the metadata view with the content inventory.
+- **The remaining list-shaped commands** — E-2141.
+- **A user-facing folio reader.** Filed as a brainstorm; the internal reader
+  here is test-only.
+- **The human view**, which is unchanged throughout.
 
-## `session status` is the reference list-shaped command (folded in from E-2190, Mike 2026-10-02)
+## The open question the briefs call decisive
 
-E-2190 ("Add an --agent format to session status") is superseded by this task:
-`session status` is built here, in TOON, as the first list-shaped command, so
-the shape rules are tested on the hardest list while they are decided — it is
-glyph-heavy and every row carries per-viewer state. Decided:
-
-1. **Python renders it** from `endless-go session-status --json`, consistent
-   with "only the Python implementation is on the path". Go does not grow an
-   agent renderer.
-2. **Every row, flags explicit.** The agent view emits every row the JSON
-   carries — including those the table omits — with `hidden`,
-   `owned_elsewhere`, `duplicate_work`, `focused`, `relation`, `is_focal`, and
-   the frame's `viewer_session`, `focal` and `focus`. `--show-hidden` /
-   `--only-hidden` do not apply to it (they shape a drawing, not data).
-3. **`--monitor --agent` is refused**: the agent view is a snapshot; the
-   refusal names `session status --agent`.
-4. **Relations as one edges section, no per-row ids.** A separate table of
-   `{from, kind, to}` among the tasks on the board, `kind` one of `blocks`,
-   `precedes`, `conflicts` (E-2164's relations; `conflicts` both declared and
-   detected). Per-row blocking counts are dropped from the agent view — the
-   edges carry them. Nothing is repeated.
-5. **Name the other session.** Each row carries `owner: ES-NNNN` when another
-   live session owns it, and `also_on: [ES-…]` listing the other live sessions
-   behind `duplicate_work`. This needs ONE Go change: E-2188's
-   `monitor.AnnotateSessionStatusOwnership` returns the owner's and the other
-   sessions' ids rather than booleans only, and `session-status --json` gains
-   `owner` and `also_on`. That is data in the internal JSON, not an agent
-   renderer, so it does not contradict point 1.
-
-Also carried over from E-2190: titles untruncated (rule 5 above), and every
-glyph-encoded signal becomes a field (rule 6 above) — the claimed task, focus,
-duplicate, owned elsewhere, hidden, relation and blocking.
-
-## From the description
-
-Only the stable Python implementation is needed: Go's JSON is internal plumbing consumed by Python, not read by an agent, so TOON's in-development Go implementation blocks nothing.
+**Does inlined content actually get read?** Unverified. If an inlined analysis
+is skipped too, the problem is handoff framing rather than output shape, and the
+format work does not help. The brief's test: put a discriminating fact in the
+field — something the implementation cannot be correct without and that a
+session could not produce from the title — and run the same task shape with it
+inlined versus behind a pointer. `task show` being in scope here is what makes
+that measurable.
