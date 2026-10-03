@@ -661,8 +661,8 @@ interactive `endless` command meeting the same refusal prints it.
 **What to do.** Read the summary: it names which of three cases this is.
 `database is at schema vN, endless-go carries vM` means the binary is older than
 the database — upgrade endless (in a self-dev checkout, `just build` in the main
-checkout); during a land the condition ends when the land rebuilds the binary.
-`migrating the database ... did not complete` means a forward migration failed —
+checkout); a self-dev land clears the one its own migration causes, so one that
+stays open is real. `migrating the database ... did not complete` means a forward migration failed —
 run `endless db upgrade`, which backs up first. `a worktree-built endless-go
 refused the main database` means something ran a worktree's binary against main;
 use the installed binary. Dismiss with `endless errors clear <id>` once the cause

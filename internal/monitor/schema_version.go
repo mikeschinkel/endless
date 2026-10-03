@@ -106,6 +106,22 @@ func (e *SchemaRefusal) Summary() string {
 		e.DBVersion, e.BinaryVersion)
 }
 
+// Fingerprint is what a recorded refusal is grouped on: the kind and the
+// summary, so every event that trips over the same mismatch lands on one
+// incident.
+func (e *SchemaRefusal) Fingerprint() string {
+	return e.Kind + ":" + e.Summary()
+}
+
+// DatabaseAheadFingerprint is the fingerprint a database-ahead refusal at these
+// versions is recorded under, for a caller that must find that incident again
+// without a refusal in hand (E-2205: a land clearing the ERR-0020 its own
+// migration caused).
+func DatabaseAheadFingerprint(dbVersion, binaryVersion int64) string {
+	r := SchemaRefusal{Kind: "database-ahead", DBVersion: dbVersion, BinaryVersion: binaryVersion}
+	return r.Fingerprint()
+}
+
 // worktreeBuildRefusal is raised before the database is opened.
 func worktreeBuildRefusal(path string) *SchemaRefusal {
 	exe := executablePath()
@@ -256,7 +272,7 @@ func RecordSchemaRefusal(surface string, err error) bool {
 	faults.Record(faults.Fault{
 		Code:        faults.ErrCodeSchemaVersionRefused,
 		Source:      "connect",
-		Fingerprint: refusal.Kind + ":" + refusal.Summary(),
+		Fingerprint: refusal.Fingerprint(),
 		Summary:     refusal.Summary(),
 		Detail:      refusal.Error(),
 		Fields: map[string]any{

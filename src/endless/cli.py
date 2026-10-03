@@ -4853,6 +4853,26 @@ def errors_record(code, summary, source, detail, fingerprint):
     impl(code, summary, source, detail, fingerprint)
 
 
+@errors_cmd.command("clear-land-schema", hidden=True)
+@click.option("--db-version", "db_version", type=int, required=True,
+              help="The version the land migrated the database to")
+@click.option("--binary-version", "binary_version", type=int, required=True,
+              help="The version the replaced binary carried")
+@click.option("--since", required=True,
+              help="When the land began migrating, %Y-%m-%dT%H:%M:%S UTC")
+@click.option("--by", default="", help="Who is clearing it, recorded on the row")
+def errors_clear_land_schema(db_version, binary_version, since, by):
+    """Clear the ERR-0020 a self-dev land's own migration caused.
+
+    Hidden because the land is its only caller: it migrates the database, swaps
+    in the matching binary a moment later, and clears the one incident a reader
+    recorded in between — exactly that fingerprint, first seen since the land
+    began migrating, so nothing older is swept up with it.
+    """
+    from endless.jobs_cmd import errors_clear_land_schema as impl
+    impl(db_version, binary_version, since, by)
+
+
 @errors_cmd.command("codes")
 def errors_codes():
     """Print the documented error catalog (see docs/errors.md)."""

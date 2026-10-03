@@ -187,8 +187,9 @@ land task_id="":
     # re-run fixes.
     # Binary selection is enforced inside `endless worktree land` itself. It
     # rebuilds the worktree's endless-go after the rebase (a compile check), and
-    # since E-2020 records the landing with the INSTALLED binary, rebuilt from
-    # the advanced main right after the migration — a worktree build never opens
+    # since E-2020 records the landing with the INSTALLED binary, built from the
+    # advanced main before the migration and swapped in right after it (E-2205)
+    # — a worktree build never opens
     # the main database (ED-1601). The pre-land worktree rebuild that stood here
     # (E-1709) fed the E-1664 arrangement that recorded with the worktree binary;
     # it has no consumer now, and was a build of pre-rebase source besides.
@@ -593,8 +594,28 @@ lifecycle-check:
     uv run python -m endless.lifecycle_map check
 
 # Build just the Go binary
-go:
-    go build -o bin/endless-go ./cmd/endless-go
+# Build endless-go atomically (E-2205): compile to bin/endless-go.next, then
+# rename it over bin/endless-go. A rename within one directory is atomic, so a
+# reader polling the binary — the tmux status line runs it about once a second,
+# the Claude hooks on every tool call — sees the old binary or the new one,
+# never a missing, half-written or mixed one. A failed build leaves the old
+# binary in place and no .next behind.
+#
+# The two halves are separate recipes because a self-dev land runs them apart:
+# it builds before migrating the database and swaps right after, so no reader
+# ever meets a database newer than the binary (ERR-0020). The build command is
+# defined once, in go-build-next.
+go: go-build-next go-swap
+
+# Build endless-go to bin/endless-go.next without touching bin/endless-go.
+go-build-next:
+    go build -o bin/endless-go.next ./cmd/endless-go || { rm -f bin/endless-go.next; exit 1; }
+
+# Rename bin/endless-go.next over bin/endless-go — the atomic half of `just go`.
+# The land performs this same rename in-process (_swap_main_binary), because
+# spawning `just` would widen the window it exists to close.
+go-swap:
+    mv -f bin/endless-go.next bin/endless-go
 
 # Build just the land-time migration-only executable (ED-1571, E-2088).
 #

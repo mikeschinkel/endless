@@ -167,6 +167,16 @@ def errors_record(code: str, summary: str, source: str, detail: str,
     _run_go("errors", args)
 
 
+def errors_clear_land_schema(db_version: int, binary_version: int, since: str,
+                             by: str) -> None:
+    """Clear the ERR-0020 a self-dev land's own migration caused (E-2205)."""
+    args = ["clear-land-schema", "--db-version", str(db_version),
+            "--binary-version", str(binary_version), "--since", since]
+    if by:
+        args += ["--by", by]
+    _run_go("errors", args)
+
+
 def errors_codes() -> None:
     """Print the documented error catalog."""
     _run_go("errors", ["codes"])

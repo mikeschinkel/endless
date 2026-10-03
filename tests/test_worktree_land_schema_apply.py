@@ -153,12 +153,11 @@ def _patch_land(monkeypatch, main, worktree, *, self_dev=True):
     monkeypatch.setattr(
         worktree_cmd, "_rebuild_worktree_binary", lambda wt, canon: None
     )
-    # E-2020: Step 5.6 rebuilds the main checkout's endless-go with `just go`;
-    # a throwaway repo has no justfile. Its ordering is pinned in
-    # test_worktree_land_record_binary.py.
-    monkeypatch.setattr(
-        worktree_cmd, "_rebuild_main_binary", lambda root, canon, base: None
-    )
+    # E-2020, E-2205: Steps 5.2 and 5.6 build and swap the main checkout's
+    # endless-go with `just`; a throwaway repo has no justfile. Their ordering
+    # is pinned in test_worktree_land_record_binary.py.
+    for name in ("_build_main_binary_next", "_swap_main_binary"):
+        monkeypatch.setattr(worktree_cmd, name, lambda root, canon, base: None)
     # Step 4.6 (ED-1571) shells out to `just migrate-bin` and then looks for the
     # binary it built; same treatment, same reason.
     monkeypatch.setattr(

@@ -8,9 +8,12 @@ binary is now refused main outright, so the land:
 
   1. resolves the main checkout's `bin/endless-go` as the recording binary,
      refusing BEFORE the merge when it cannot be rebuilt (no `just`);
-  2. rebuilds it at Step 5.6 — after the migration, before the record;
-  3. reports a failed rebuild as post-merge and re-runnable, with nothing
-     recorded.
+  2. builds it to the side at Step 5.2 — after the merge, BEFORE the
+     migration — and swaps it in at Step 5.6, right after the migration and
+     before the record (E-2205: the compile no longer holds the old binary in
+     place against a migrated database, where every reader recorded ERR-0020);
+  3. reports a failed build as post-merge, pre-migration and re-runnable, and
+     a failed swap as post-migration and re-runnable, with nothing recorded.
 """
 
 import subprocess
@@ -20,12 +23,14 @@ import pytest
 
 from endless import worktree_cmd
 from endless.worktree_cmd import (
-    _rebuild_main_binary,
+    _build_main_binary_next,
     _resolve_land_endless_go,
+    _swap_main_binary,
     land_worktree,
 )
 
 CANON = "E-2020"
+UP_MIGRATED = {"status": "migrated", "from": 11, "to": 12, "db": "/x/endless.db"}
 
 
 def _git(cmd, cwd):
@@ -60,7 +65,7 @@ def landable(tmp_path):
     return main, wt
 
 
-def _patch_land(monkeypatch, main, wt, calls, *, rebuild=None):
+def _patch_land(monkeypatch, main, wt, calls, *, build=None, swap=None):
     monkeypatch.setattr("endless.config.default_db_to_main", lambda: None)
     monkeypatch.setattr("endless.config.project_is_self_dev", lambda root: True)
     monkeypatch.setattr(worktree_cmd, "_project_root", lambda: main)
@@ -94,6 +99,7 @@ def _patch_land(monkeypatch, main, wt, calls, *, rebuild=None):
 
     def migrate(*a, **kw):
         calls.append(("migrate", None))
+        return UP_MIGRATED
 
     def record(*a, **kw):
         calls.append(("record", kw.get("endless_go_bin")))
@@ -101,8 +107,16 @@ def _patch_land(monkeypatch, main, wt, calls, *, rebuild=None):
     monkeypatch.setattr(worktree_cmd, "_apply_branch_schema_changes", migrate)
     monkeypatch.setattr(worktree_cmd, "_record_landing", record)
     monkeypatch.setattr(
-        worktree_cmd, "_rebuild_main_binary",
-        rebuild or (lambda m, c, b: calls.append(("rebuild", str(m)))),
+        worktree_cmd, "_clear_land_schema_faults",
+        lambda up, since, c, bin_: calls.append(("clear", (up, bin_))),
+    )
+    monkeypatch.setattr(
+        worktree_cmd, "_build_main_binary_next",
+        build or (lambda m, c, b: calls.append(("build", str(m)))),
+    )
+    monkeypatch.setattr(
+        worktree_cmd, "_swap_main_binary",
+        swap or (lambda m, c, b: calls.append(("swap", str(m)))),
     )
 
 
@@ -126,7 +140,7 @@ def test_non_self_dev_records_with_the_global(tmp_path, monkeypatch):
     assert _resolve_land_endless_go(tmp_path / "wt", tmp_path / "main") is None
 
 
-def test_migrate_then_rebuild_then_record_with_the_installed_binary(
+def test_build_then_migrate_then_swap_then_record_with_the_installed_binary(
         landable, monkeypatch):
     main, wt = landable
     calls = []
@@ -134,58 +148,159 @@ def test_migrate_then_rebuild_then_record_with_the_installed_binary(
 
     land_worktree(CANON, dry_run=False)
 
-    assert [c[0] for c in calls] == ["migrate", "rebuild", "record"]
-    assert dict(calls)["rebuild"] == str(main)
+    # E-2205: the build precedes the migration and nothing builds after it —
+    # the only step between migrating and recording is the swap.
+    assert [c[0] for c in calls] == ["build", "migrate", "swap", "record", "clear"]
+    assert dict(calls)["build"] == str(main)
+    # The clear gets the migration's versions and the recording binary.
+    assert dict(calls)["clear"] == (UP_MIGRATED, str(main / "bin" / "endless-go"))
+    assert dict(calls)["swap"] == str(main)
     assert dict(calls)["record"] == str(main / "bin" / "endless-go")
     assert "/.endless/worktrees/" not in dict(calls)["record"]
 
 
-def test_a_failed_rebuild_is_post_merge_and_records_nothing(landable, monkeypatch):
+def test_a_failed_build_stops_before_the_migration(landable, monkeypatch):
     main, wt = landable
     calls = []
 
     def broken(m, c, b):
-        raise click.ClickException("rebuild broke")
+        raise click.ClickException("build broke")
 
-    _patch_land(monkeypatch, main, wt, calls, rebuild=broken)
+    _patch_land(monkeypatch, main, wt, calls, build=broken)
     before = _head(main, "main")
 
     with pytest.raises(click.ClickException):
         land_worktree(CANON, dry_run=False)
 
-    assert _head(main, "main") != before, "main advanced before the rebuild"
-    assert [c[0] for c in calls] == ["migrate"]
+    assert _head(main, "main") != before, "main advanced before the build"
+    assert calls == [], "nothing migrated, swapped or recorded"
 
 
-def test_rebuild_failure_message_is_rerunnable(tmp_path, monkeypatch):
+def test_a_failed_swap_is_post_migration_and_records_nothing(landable, monkeypatch):
+    main, wt = landable
+    calls = []
+
+    def broken(m, c, b):
+        raise click.ClickException("swap broke")
+
+    _patch_land(monkeypatch, main, wt, calls, swap=broken)
+
+    with pytest.raises(click.ClickException):
+        land_worktree(CANON, dry_run=False)
+
+    assert [c[0] for c in calls] == ["build", "migrate"]
+
+
+class _Failed:
+    returncode = 1
+    stderr = "compile error"
+    stdout = ""
+
+
+class _Ok:
+    returncode = 0
+    stderr = stdout = ""
+
+
+def test_build_failure_message_says_nothing_migrated_and_names_the_rerun(
+        tmp_path, monkeypatch):
     monkeypatch.setattr("endless.config.project_is_self_dev", lambda root: True)
-
-    class Result:
-        returncode = 1
-        stderr = "compile error"
-        stdout = ""
-
-    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: Result())
+    monkeypatch.setattr(subprocess, "run", lambda *a, **kw: _Failed())
     with pytest.raises(click.ClickException) as exc:
-        _rebuild_main_binary(tmp_path, CANON, "main")
+        _build_main_binary_next(tmp_path, CANON, "main")
     msg = exc.value.message
     assert "compile error" in msg
+    assert "Neither the database migration nor the landing record" in msg
+    assert f"just land {CANON}" in msg
+
+
+def test_swap_failure_message_is_rerunnable(tmp_path, monkeypatch):
+    monkeypatch.setattr("endless.config.project_is_self_dev", lambda root: True)
+    # No bin/endless-go.next: the rename fails.
+    with pytest.raises(click.ClickException) as exc:
+        _swap_main_binary(tmp_path, CANON, "main")
+    msg = exc.value.message
+    assert "endless-go.next" in msg
+    assert "migrated the database" in msg
     assert "not recorded yet" in msg
     assert f"just land {CANON}" in msg
 
 
-def test_rebuild_runs_just_go_in_the_main_checkout(tmp_path, monkeypatch):
+def test_swap_renames_the_built_binary_over_the_installed_one(tmp_path, monkeypatch):
+    monkeypatch.setattr("endless.config.project_is_self_dev", lambda root: True)
+    (tmp_path / "bin").mkdir()
+    (tmp_path / "bin" / "endless-go").write_text("old\n")
+    (tmp_path / "bin" / "endless-go.next").write_text("new\n")
+
+    _swap_main_binary(tmp_path, CANON, "main")
+
+    assert (tmp_path / "bin" / "endless-go").read_text() == "new\n"
+    assert not (tmp_path / "bin" / "endless-go.next").exists()
+
+
+def test_build_runs_go_build_next_in_the_main_checkout(tmp_path, monkeypatch):
     monkeypatch.setattr("endless.config.project_is_self_dev", lambda root: True)
     seen = {}
 
-    class Result:
-        returncode = 0
-        stderr = stdout = ""
-
     def run(cmd, cwd=None, **kw):
         seen["cmd"], seen["cwd"] = cmd, cwd
-        return Result()
+        return _Ok()
 
     monkeypatch.setattr(subprocess, "run", run)
-    _rebuild_main_binary(tmp_path, CANON, "main")
-    assert seen == {"cmd": ["just", "go"], "cwd": str(tmp_path)}
+    _build_main_binary_next(tmp_path, CANON, "main")
+    assert seen == {"cmd": ["just", "go-build-next"], "cwd": str(tmp_path)}
+
+
+@pytest.mark.parametrize("fn", [_build_main_binary_next, _swap_main_binary])
+def test_build_and_swap_do_nothing_outside_self_dev(tmp_path, monkeypatch, fn):
+    monkeypatch.setattr("endless.config.project_is_self_dev", lambda root: False)
+
+    def run(*a, **kw):
+        raise AssertionError("ran a build outside self_dev")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    fn(tmp_path, CANON, "main")  # no bin/ at all: a swap attempt would raise
+
+
+# --- E-2205: the land clears the ERR-0020 its own migration caused ----------
+
+def test_clear_names_both_versions_the_window_and_the_land(monkeypatch):
+    seen = {}
+
+    def clear(db_version, binary_version, since, by, endless_go_bin=None):
+        seen.update(db=db_version, binary=binary_version, since=since, by=by,
+                    bin=endless_go_bin)
+        return 1
+
+    monkeypatch.setattr("endless.event_bridge.clear_land_schema_faults", clear)
+    worktree_cmd._clear_land_schema_faults(
+        UP_MIGRATED, "2026-10-03T12:00:00", CANON, "/main/bin/endless-go",
+    )
+    assert seen == {"db": 12, "binary": 11, "since": "2026-10-03T12:00:00",
+                    "by": f"worktree land {CANON}", "bin": "/main/bin/endless-go"}
+
+
+@pytest.mark.parametrize("up", [
+    None,
+    {"status": "current", "from": 12, "to": 12, "db": "/x/endless.db"},
+])
+def test_no_migration_clears_nothing(monkeypatch, up):
+    def clear(*a, **kw):
+        raise AssertionError("cleared without a migration")
+
+    monkeypatch.setattr("endless.event_bridge.clear_land_schema_faults", clear)
+    worktree_cmd._clear_land_schema_faults(up, "2026-10-03T12:00:00", CANON, None)
+
+
+def test_a_failed_clear_never_fails_the_land(monkeypatch, capsys):
+    def clear(*a, **kw):
+        raise click.ClickException("store locked")
+
+    monkeypatch.setattr("endless.event_bridge.clear_land_schema_faults", clear)
+    worktree_cmd._clear_land_schema_faults(
+        UP_MIGRATED, "2026-10-03T12:00:00", CANON, None,
+    )
+    err = capsys.readouterr().err
+    assert "store locked" in err
+    assert "endless errors list" in err
+    assert "The land succeeded" in err

@@ -106,6 +106,8 @@ func Run(args []string) {
 		runCodes()
 	case "record":
 		runRecord(args[1:])
+	case "clear-land-schema":
+		runClearLandSchema(args[1:])
 	case "raise":
 		runRaise(args[1:])
 	case "-h", "--help", "help":
@@ -133,6 +135,8 @@ func usageText() string {
 	fmt.Fprintln(w, "  codes                             print the documented error catalog")
 	fmt.Fprintln(w, "  record --code ID --summary T [--source S] [--detail D]")
 	fmt.Fprintln(w, "                                   record a real catalog fault (internal; the Python CLI's bridge to the fault store)")
+	fmt.Fprintln(w, "  clear-land-schema --db-version N --binary-version M --since T [--by B]")
+	fmt.Fprintln(w, "                                   clear the ERR-0020 a self-dev land's own migration caused (internal)")
 	fmt.Fprintln(w, "  raise [--severity S] [--summary T] [--repeat N]")
 	fmt.Fprintln(w, "                                    record a SYNTHETIC fault, to see this surface work")
 	fmt.Fprintln(w, "")
@@ -1308,6 +1312,42 @@ func clearedBy() string {
 //
 // --code must name a catalog entry, so this cannot invent classifications that
 // have no docs/errors.md section; an unknown ID is a usage error.
+// runClearLandSchema clears the ERR-0020 a self-dev land caused (E-2205).
+//
+// The land migrates the database from --binary-version to --db-version, then
+// renames the matching binary over the installed one. A reader that started on
+// the old binary just before the migration committed reads the new version and
+// records "database is at schema vN, endless-go carries vM" — tens of
+// milliseconds of exposure that no ordering inside the land can close. The land
+// knows both versions and when it started migrating (--since, the table's
+// '%Y-%m-%dT%H:%M:%S' UTC form), so it clears exactly that incident and nothing
+// older. Prints {"cleared": N}.
+//
+// Internal: the land is the only caller, which is why the Python CLI does not
+// spell it out.
+func runClearLandSchema(args []string) {
+	fs := refusal.NewFlags("clear-land-schema")
+	dbVersion := fs.Int64("db-version", 0, "the version the land migrated the database to")
+	binaryVersion := fs.Int64("binary-version", 0, "the version the replaced binary carried")
+	since := fs.String("since", "", "when the land began migrating, '%Y-%m-%dT%H:%M:%S' UTC")
+	by := fs.String("by", "", "who is clearing it, recorded on the row")
+	parseFlags(fs, "errors clear-land-schema", args)
+	if *dbVersion <= 0 || *binaryVersion <= 0 || *since == "" {
+		refusal.NoReport(
+			"endless-go errors: clear-land-schema: --db-version, --binary-version and --since are required",
+			"Pass all three and retry",
+		).Command("errors clear-land-schema").Exit(2)
+	}
+
+	cleared, err := faults.ClearFingerprintSince(
+		monitor.DatabaseAheadFingerprint(*dbVersion, *binaryVersion), *since, *by,
+	)
+	if err != nil {
+		storeFailure("errors clear-land-schema", "endless-go errors: clear-land-schema: ", err).Exit(1)
+	}
+	fmt.Printf("{\"cleared\": %d}\n", cleared)
+}
+
 func runRecord(args []string) {
 	fs := refusal.NewFlags("record")
 	codeID := fs.String("code", "", "catalog code ID, e.g. ERR-0008 or WARN-0009")

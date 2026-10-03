@@ -311,6 +311,47 @@ end:
 	return cleared, err
 }
 
+// ClearFingerprintSince clears the open incidents with exactly this
+// fingerprint whose FIRST occurrence is at or after since (the
+// '%Y-%m-%dT%H:%M:%S' UTC form the table stores), and returns how many.
+//
+// It exists for a caller that knows it caused a fault and when (E-2205): a
+// self-dev land migrates the database moments before it swaps in the binary
+// that matches it, and a reader that connected through the old binary in that
+// gap recorded ERR-0020. The fingerprint names the exact mismatch and since
+// bounds it to the land's own window, so an incident that predates the land —
+// a real problem someone has not looked at yet — is never swept up with it.
+func ClearFingerprintSince(fingerprint, since, by string) (cleared int, err error) {
+	var db *sql.DB
+	var result sql.Result
+	var affected int64
+
+	db, err = database()
+	if err != nil {
+		goto end
+	}
+
+	result, err = db.Exec(`UPDATE errors
+	           SET cleared_at = strftime('%Y-%m-%dT%H:%M:%S', 'now'),
+	               cleared_by = ?
+	         WHERE cleared_at IS NULL
+	           AND fingerprint = ?
+	           AND first_seen_at >= ?`, by, fingerprint, since)
+	if err != nil {
+		err = doterr.NewErr(ErrFaults, ErrClearing, ErrQuery, err)
+		goto end
+	}
+	affected, err = result.RowsAffected()
+	if err != nil {
+		err = doterr.NewErr(ErrFaults, ErrClearing, err)
+		goto end
+	}
+	cleared = int(affected)
+
+end:
+	return cleared, err
+}
+
 // query runs the shared SELECT with a caller-supplied WHERE clause. Ordering is
 // last_seen_at DESC so the newest incident is always first — Open relies on that
 // to pick Latest without a second query.

@@ -616,3 +616,59 @@ func TestCatalog_NumbersAreNeverReused(t *testing.T) {
 		}
 	}
 }
+
+// E-2205: a land clears exactly the incident its own migration caused — the
+// fingerprint it names, first seen inside its window — and nothing else.
+func TestClearFingerprintSince_ClearsOnlyThatFingerprintInsideTheWindow(t *testing.T) {
+	db, _ := newBoundStore(t)
+
+	const fp = "database-ahead:database is at schema v12, endless-go carries v11: upgrade endless"
+	faults.Record(faults.Fault{Code: faults.ErrCodeJobFailed, Source: "connect", Fingerprint: fp, Summary: "caused by the land"})
+	faults.Record(faults.Fault{Code: faults.ErrCodeJobFailed, Source: "job:b", Summary: "something else entirely"})
+
+	cleared, err := faults.ClearFingerprintSince(fp, "2026-01-01T00:00:00", "worktree land E-1")
+	if err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if cleared != 1 {
+		t.Fatalf("cleared %d, want 1", cleared)
+	}
+
+	var by string
+	if err = db.QueryRow(`SELECT cleared_by FROM errors WHERE summary = 'caused by the land'`).Scan(&by); err != nil {
+		t.Fatalf("read cleared row: %v", err)
+	}
+	if by != "worktree land E-1" {
+		t.Errorf("cleared_by = %q, want the land", by)
+	}
+
+	open, err := faults.List(faults.AllProjects, false, 0)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(open) != 1 || open[0].Summary != "something else entirely" {
+		t.Errorf("open incidents %+v, want only the unrelated one", open)
+	}
+}
+
+// An open incident with the same fingerprint that predates the land is
+// someone's unread real problem. Occurrences during the land fold into it (one
+// open incident per fingerprint), and the land must leave it open.
+func TestClearFingerprintSince_LeavesAnIncidentOpenedBeforeTheWindow(t *testing.T) {
+	db, _ := newBoundStore(t)
+
+	const fp = "database-ahead:database is at schema v12, endless-go carries v11: upgrade endless"
+	faults.Record(faults.Fault{Code: faults.ErrCodeJobFailed, Source: "connect", Fingerprint: fp, Summary: "older"})
+	if _, err := db.Exec(`UPDATE errors SET first_seen_at = '2020-01-01T00:00:00'`); err != nil {
+		t.Fatalf("backdate: %v", err)
+	}
+	faults.Record(faults.Fault{Code: faults.ErrCodeJobFailed, Source: "connect", Fingerprint: fp, Summary: "older"})
+
+	cleared, err := faults.ClearFingerprintSince(fp, "2026-01-01T00:00:00", "worktree land E-1")
+	if err != nil {
+		t.Fatalf("clear: %v", err)
+	}
+	if cleared != 0 {
+		t.Errorf("cleared %d, want 0: the incident predates the window", cleared)
+	}
+}

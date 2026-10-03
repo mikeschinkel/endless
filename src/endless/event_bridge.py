@@ -423,6 +423,37 @@ def backup_db(endless_go_bin: str | None = None) -> dict:
     return json.loads(result.stdout.strip())
 
 
+def clear_land_schema_faults(
+    db_version: int, binary_version: int, since: str, by: str,
+    endless_go_bin: str | None = None,
+) -> int:
+    """Shell out to `endless-go errors clear-land-schema` and return how many
+    incidents it cleared (E-2205).
+
+    Clears the open ERR-0020 "database is at schema v<db_version>, endless-go
+    carries v<binary_version>" incident first seen at or after `since` (the
+    errors table's '%Y-%m-%dT%H:%M:%S' UTC form) — the one a self_dev land's own
+    migration caused. The fingerprint is built Go-side, beside the code that
+    records it, so the two cannot drift. endless_go_bin pins the binary; see
+    apply_change.
+
+    Raises click.ClickException on failure (binary missing or non-zero exit).
+    """
+    config.require_db_context()  # E-1429
+    event_bin = _resolve_endless_go(override=endless_go_bin)
+    result = subprocess.run(
+        [event_bin, *config.go_db_context_args(), "errors", "clear-land-schema",
+         "--db-version", str(db_version),
+         "--binary-version", str(binary_version),
+         "--since", since, "--by", by],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise _child_refusal(result.stderr, result.returncode,
+                             "errors clear-land-schema")
+    return int(json.loads(result.stdout.strip() or "{}").get("cleared", 0))
+
+
 def _get_or_create_node_id() -> str:
     """Read node_id from config.json, or generate and persist one."""
     config_path = config.CONFIG_FILE

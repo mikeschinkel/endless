@@ -382,3 +382,17 @@ func TestDB_SeedAndGatesRunOnEveryConnect(t *testing.T) {
 		}
 	})
 }
+
+// E-2205: a land finds the ERR-0020 its own migration caused by rebuilding the
+// fingerprint from the two versions alone. It must be the very fingerprint a
+// recorded database-ahead refusal carries, or the land clears nothing.
+func TestDatabaseAheadFingerprint_MatchesTheRecordedRefusal(t *testing.T) {
+	got := DatabaseAheadFingerprint(12, 11)
+	want := databaseAheadRefusal("/any/endless.db", 12, 11).Fingerprint()
+	if got != want {
+		t.Errorf("DatabaseAheadFingerprint(12, 11) = %q, want %q", got, want)
+	}
+	if want != "database-ahead:database is at schema v12, endless-go carries v11: upgrade endless" {
+		t.Errorf("the recorded fingerprint changed shape: %q", want)
+	}
+}

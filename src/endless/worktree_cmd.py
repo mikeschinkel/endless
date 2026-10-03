@@ -3057,9 +3057,9 @@ def _resolve_land_endless_go(worktree_path: Path, project_root: Path) -> str | N
     binary — and never the worktree's. A worktree build never opens the main
     database, so the E-1664 arrangement (record with the worktree's binary,
     because only it matched the rows the land just migrated) is refused outright
-    now. Step 5.6 rebuilds this binary from the just-advanced main instead, so by
-    Step 6 it is built from exactly main + this branch and matches the database
-    Step 5.5 migrated.
+    now. Step 5.2 builds this binary from the just-advanced main and Step 5.6
+    swaps it in, so by Step 6 it is built from exactly main + this branch and
+    matches the database Step 5.5 migrated.
 
     Resolved BEFORE the ff-merge so a land that cannot rebuild it — no `just` on
     PATH — aborts while main and the database are untouched.
@@ -3088,52 +3088,99 @@ def _resolve_land_endless_go(worktree_path: Path, project_root: Path) -> str | N
     return str(project_root / "bin" / "endless-go")
 
 
-def _rebuild_main_binary(main_root: Path, canonical: str, base_branch: str) -> None:
-    """Rebuild the main checkout's endless-go — the installed binary — from the
-    just-advanced main (Step 5.6, E-2020).
+def _build_main_binary_next(main_root: Path, canonical: str, base_branch: str) -> None:
+    """Build the main checkout's endless-go — the installed binary — from the
+    just-advanced main, to `bin/endless-go.next` (Step 5.2, E-2205).
 
-    Runs AFTER Step 5.5 migrates the database and BEFORE Step 6 records the
-    landing with this binary. Between the migration and this rebuild the
-    installed binary is older than the database and every hook on the machine
-    meets a database ahead of it: refused silently, one fault (ERR-0020). This
-    step is what closes that window, and it now closes in one `go build` rather
-    than at the justfile's closing `just build`, after the land's post-steps
-    (cache warm, reap) have already run on the stale binary.
+    Runs AFTER Step 5's ff-merge and BEFORE Step 5.5 migrates the database. The
+    compile is the slow part of replacing the binary, and it must not sit
+    between the migration and the swap: until E-2205 it did, and every reader on
+    the machine that connected through the still-old binary in those seconds —
+    the tmux status line polls about once a second — met a database ahead of it
+    and recorded ERR-0020 for a condition the land itself had caused. Built
+    first, the binary goes live at Step 5.6 with a rename, and the window
+    between the migration committing and the new binary answering is one
+    syscall.
 
-    Not before 5.5: a rebuilt binary meeting a still-behind database would
-    migrate it on its next connect, racing the land's own backup-then-migrate.
+    It is built to the side, not over bin/endless-go: a new binary meeting the
+    still-behind database would migrate it on its next connect, racing the
+    land's own backup-then-migrate.
 
-    A failure is post-merge — main advanced, the database migrated — and is
-    reported as re-runnable: re-running the land rebuilds and records.
+    A failure is post-merge but PRE-migration — main advanced, the database
+    untouched, nothing recorded — and is reported as re-runnable: the re-run's
+    ff-merge is a no-op, and it builds, migrates and records.
     """
     from endless import config
     if not config.project_is_self_dev(main_root):
         return
     result = subprocess.run(
-        ["just", "go"], cwd=str(main_root), capture_output=True, text=True,
+        ["just", "go-build-next"], cwd=str(main_root),
+        capture_output=True, text=True,
     )
     if result.returncode != 0:
-        # `just go` is a foreign child, but its compiler output is already
-        # inside the message where it belongs — between the facts and the
-        # recovery — so attaching it again as detail would print it twice.
+        # `just go-build-next` is a foreign child, but its compiler output is
+        # already inside the message where it belongs — between the facts and
+        # the recovery — so attaching it again as detail would print it twice.
         #
         # NO-REPORT: the build is of code that is now ON main, the message
-        # names the exact re-run, and both steps it would repeat are
-        # idempotent. Nothing is lost and nothing needs deciding.
+        # names the exact re-run, and the one step it repeats (the ff-merge) is
+        # a no-op. Nothing is lost and nothing needs deciding.
+        raise agent_help.no_report(
+            f"Landed {canonical} into {base_branch}, but building the "
+            f"installed endless-go failed, so the database was NOT migrated "
+            f"and the landing is NOT recorded yet.",
+            f"Fix the build and re-run `just land {canonical}` — the ff-merge "
+            f"is a no-op on the re-run, which builds, migrates and records",
+            text=(f"Landed {canonical} into {base_branch}, but building the "
+                  f"installed endless-go failed:\n\n"
+                  f"{(result.stderr or result.stdout).strip()}\n\n"
+                  f"Neither the database migration nor the landing record has "
+                  f"happened. Fix the build and re-run `just land {canonical}`: "
+                  f"the ff-merge is a no-op on the re-run, which builds, "
+                  f"migrates and records."),
+        )
+
+
+def _swap_main_binary(main_root: Path, canonical: str, base_branch: str) -> None:
+    """Rename the binary Step 5.2 built over the main checkout's endless-go
+    (Step 5.6, E-2205).
+
+    Runs immediately after Step 5.5's migration commits and before Step 6
+    records the landing with this binary. A rename within one directory is
+    atomic, so every reader sees the old binary or the new one, never neither.
+
+    It is the same rename `just go-swap` performs, done in-process: spawning
+    `just` costs tens of milliseconds, and every one of them is time the old
+    binary spends in front of a migrated database.
+
+    A failure is post-migration — main advanced, the database migrated, the old
+    binary still installed and older than the database — and is reported as
+    re-runnable: the re-run builds again, finds the database current, swaps and
+    records.
+    """
+    from endless import config
+    if not config.project_is_self_dev(main_root):
+        return
+    bin_dir = main_root / "bin"
+    try:
+        os.replace(bin_dir / "endless-go.next", bin_dir / "endless-go")
+    except OSError as e:
+        # NO-REPORT: as for the build — the message names the exact re-run and
+        # every step it repeats is idempotent.
         raise agent_help.no_report(
             f"Landed {canonical} into {base_branch} and migrated the database, "
-            f"but rebuilding the installed endless-go failed, so the landing "
-            f"is NOT recorded yet.",
-            f"Fix the build and re-run `just land {canonical}` — the ff-merge "
-            f"and the migration are idempotent, so the re-run rebuilds and "
-            f"records",
+            f"but installing the rebuilt endless-go failed, so the landing is "
+            f"NOT recorded yet.",
+            f"Fix the cause and re-run `just land {canonical}` — the ff-merge "
+            f"and the migration are idempotent, so the re-run rebuilds, swaps "
+            f"and records",
             text=(f"Landed {canonical} into {base_branch} and migrated the "
-                  f"database, but rebuilding the installed endless-go "
-                  f"failed:\n\n"
-                  f"{(result.stderr or result.stdout).strip()}\n\n"
-                  f"The landing is not recorded yet. Fix the build and re-run "
+                  f"database, but installing the rebuilt endless-go failed:"
+                  f"\n\n{e}\n\n"
+                  f"The landing is not recorded yet. Fix the cause and re-run "
                   f"`just land {canonical}`: the ff-merge and the migration "
-                  f"are idempotent, so the re-run rebuilds and records."),
+                  f"are idempotent, so the re-run rebuilds, swaps and "
+                  f"records."),
         )
     click.echo(
         click.style("•", fg="cyan")
@@ -3159,7 +3206,7 @@ def _rebuild_worktree_binary(worktree_path: Path, canonical: str) -> None:
     the BINARY current by construction.
 
     Since ED-1601 no step points this binary at the real DB — Step 6 records
-    with the installed binary, rebuilt at Step 5.6 — so what this still buys is
+    with the installed binary, swapped in at Step 5.6 — so what this still buys is
     the compile check: a rebased branch that does not build aborts here, while
     base and the database are untouched.
 
@@ -3547,9 +3594,11 @@ def _apply_branch_schema_changes(
     base_branch: str,
     migrate_bin: str | None,
     schema_order: str = SCHEMA_ORDER_MIGRATIONS_FIRST,
-) -> None:
+) -> dict | None:
     """Back up, then migrate and apply this branch's schema changes — AFTER the
-    ff-merge.
+    ff-merge. Returns `endless-migrate up`'s result, {"status", "from", "to",
+    "db"}, which the land uses to clear the ERR-0020 its migration caused
+    (E-2205).
 
     Two kinds of step, in `schema_order` (E-2192): `endless-migrate up`, which
     brings the database to the newest goose migration the branch carries, and
@@ -3585,7 +3634,7 @@ def _apply_branch_schema_changes(
 
     The BACKUP runs on the PATH-resolved installed endless-go, not pinned: the
     main checkout's own build does not exist yet in a fresh checkout — Step 5.6
-    creates it — and nothing about a backup needs a particular one. It is a VACUUM
+    installs it — and nothing about a backup needs a particular one. It is a VACUUM
     INTO of the file — monitor.BackupDB opens the database itself and never goes
     through the application's connect, so it has no schema expectation to
     disappoint and no gate to fall foul of. Moving it would buy nothing and give
@@ -3639,12 +3688,16 @@ def _apply_branch_schema_changes(
             "a bug in the land, not in the branch.",
         )
 
+    up_result: dict | None = None
+
     def migrate_up() -> None:
+        nonlocal up_result
         try:
             res = _migrate_up(migrate_bin)
         except Exception as e:
             detail = e.message if isinstance(e, click.ClickException) else str(e)
             raise _post_merge_failure("migrating the database (`up`)", detail)
+        up_result = res
         if res.get("status") == "migrated":
             click.echo(
                 click.style("•", fg="cyan")
@@ -3666,6 +3719,63 @@ def _apply_branch_schema_changes(
     else:
         migrate_up()
         apply_changes()
+    return up_result
+
+
+def _clear_land_schema_faults(
+    up_result: dict | None, since: str, canonical: str,
+    endless_go_bin: str | None,
+) -> None:
+    """Clear the ERR-0020 this land's own migration caused (E-2205).
+
+    Step 5.2 builds before the migration and Step 5.6 swaps by rename right
+    after it, which shrinks the window in which the installed binary is older
+    than the database from a compile to milliseconds — but not to nothing. A
+    reader that started on the old binary just before the migration committed
+    reads the new version and records "database is at schema v<to>, endless-go
+    carries v<from>". No ordering inside the land can close that; the land is
+    the one party that knows it caused it, so it clears it.
+
+    Exactly that incident: the fingerprint names both versions, and `since` —
+    taken just before the migration — excludes an incident opened earlier, which
+    is somebody's real problem. Runs after the landing is recorded, so a reader
+    still in flight at the swap has finished and recorded by then.
+
+    Never fatal. The land has happened; at worst an incident is left for a
+    person to clear, which is where every land was before E-2205.
+    """
+    if not up_result or up_result.get("status") != "migrated":
+        return
+    from endless.event_bridge import clear_land_schema_faults
+    try:
+        cleared = clear_land_schema_faults(
+            int(up_result["to"]), int(up_result["from"]), since,
+            f"worktree land {canonical}", endless_go_bin=endless_go_bin,
+        )
+    except Exception as e:
+        detail = e.message if isinstance(e, click.ClickException) else str(e)
+        agent_help.warn.no_report(
+            f"Landed {canonical}, but clearing the schema-version error its "
+            f"migration may have caused failed: {detail}. The land itself "
+            f"succeeded.",
+            "Run `endless errors list`; clear any ERR-0020 naming "
+            f"v{up_result['to']} and v{up_result['from']} with "
+            "`endless errors clear <id>`",
+            text=(click.style("⚠ could not clear this land's schema-version "
+                              "error", fg="yellow")
+                  + f"\n    {detail}\n"
+                  f"    The land succeeded. `endless errors list` shows any "
+                  f"ERR-0020 naming v{up_result['to']} and "
+                  f"v{up_result['from']}; clear it with "
+                  f"`endless errors clear <id>`."),
+        )
+        return
+    if cleared:
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" Cleared the schema-version error this land's migration caused "
+              f"(v{up_result['from']} → v{up_result['to']})"
+        )
 
 
 def _record_only_landing(
@@ -4123,13 +4233,17 @@ def land_worktree(
       4.5 List the schema changes this branch adds (while main and the branch
          still differ — after Step 5 the diff is empty).
       5. ff-merge from main.
+      5.2 Build the installed (main checkout's) endless-go to the side,
+         self_dev only (E-2205): the compile happens before the migration, so
+         a failure leaves the database untouched.
       5.5 Migrate (`endless-migrate up`, E-2192) and apply those schema
          changes, self_dev only (E-1941), in land.toml's order. AFTER the
          merge, so a failure leaves the DB lagging landed code (a re-run fixes
          it) rather than migrated ahead of code that never landed.
-      5.6 Rebuild the installed (main checkout's) endless-go, self_dev only
-         (E-2020): a worktree build never opens main (ED-1601), so Step 6
-         records with the installed binary, which must match the database.
+      5.6 Swap Step 5.2's build in, self_dev only (E-2020, E-2205): a
+         worktree build never opens main (ED-1601), so Step 6 records with the
+         installed binary, which must match the database. Done by rename right
+         after the migration, so no reader meets a database ahead of it.
       6. Emit task.landed event. Worktree dir and branch stay; a
          separate reaper sweep removes them after worktree_ttl.
 
@@ -4640,19 +4754,25 @@ def land_worktree(
                 err_text,
             )
 
+        # Step 5.2 (E-2205): build the installed endless-go from the advanced
+        # main, to the side. Before Step 5.5, so the compile does not hold the
+        # old binary in place against a migrated database (ERR-0020), and a
+        # build failure stops the land while the database is untouched.
+        _build_main_binary_next(main_root, canonical, base_branch)
+
         # Step 5.5 (E-1941): apply this branch's schema changes now that main
         # HAS advanced. Before the merge this was the irreversible case (DB
         # migrated, code not landed, no installed binary able to read it);
         # after it, a failure merely leaves the DB lagging code that is already
         # on main, which a re-run fixes. Must precede Steps 5.6 and 6: the
-        # installed binary is rebuilt from main at 5.6 and records the landing at
+        # installed binary is swapped in at 5.6 and records the landing at
         # 6, and it needs the rows these changes write (E-1664 inverted).
         #
         # ED-1571: the applier is the migration executable built at Step 4.6,
         # NOT the endless-go Step 6 uses. A worktree build may not open the real
         # ledger at all (ED-1601), so the two steps run two different programs
         # against one database — one that carries migrations and no schema
-        # expectation, then the installed binary, rebuilt at Step 5.6, whose
+        # expectation, then the installed binary, swapped in at Step 5.6, whose
         # embedded schema matches what the first just wrote.
         #
         # self_dev only: `internal/schema/changes/` is endless's OWN schema, so a
@@ -4665,16 +4785,22 @@ def land_worktree(
         # its ff-merge is a no-op and its change list is empty, but `up` still
         # brings the database to the branch's migrations before the record is
         # retried, so the recovery no longer waits on an incidental migration.
+        # E-2205: the moment the migration window opens, in the errors table's
+        # own form, so the land can clear the ERR-0020 it causes and nothing
+        # older.
+        migrate_started = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+        up_result = None
         if config.project_is_self_dev(main_root):
-            _apply_branch_schema_changes(
+            up_result = _apply_branch_schema_changes(
                 schema_changes, worktree_path, canonical, base_branch,
                 migrate_bin, schema_order,
             )
 
-        # Step 5.6 (E-2020, ED-1601): rebuild the installed endless-go from the
-        # advanced main, so Step 6 records with a binary that matches the
-        # database Step 5.5 just migrated. A worktree build may not open main.
-        _rebuild_main_binary(main_root, canonical, base_branch)
+        # Step 5.6 (E-2020, ED-1601, E-2205): swap Step 5.2's build into place
+        # the moment the migration has committed, so Step 6 records with a
+        # binary that matches the database Step 5.5 just migrated, and no
+        # reader is left on the old one. A worktree build may not open main.
+        _swap_main_binary(main_root, canonical, base_branch)
 
         # Step 6 (E-1337): record the landing in task_landings via the
         # events bridge. Worktree directory and branch stay in place; a
@@ -4722,6 +4848,13 @@ def land_worktree(
         click.echo(
             click.style("•", fg="green")
             + f" Landed {canonical} ({branch}) into {base_branch}"
+        )
+
+        # E-2205: clear the ERR-0020 a reader recorded in the instant between
+        # Step 5.5's migration and Step 5.6's swap. After the record, so any
+        # reader still in flight at the swap has finished.
+        _clear_land_schema_faults(
+            up_result, migrate_started, canonical, endless_go_bin,
         )
 
         # E-1799: run the task's committed post-land script, if any, now that
