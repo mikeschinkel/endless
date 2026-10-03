@@ -171,3 +171,21 @@ sent back to `revisit`. A project at its cap is skipped for that run.
   status` has no session rows, so it has nothing to mark.
 - `docs/guide/reference.md`'s background-jobs list was stale (it named the
   deleted triage sweep); refreshed while adding the auto-spawn section.
+
+
+
+## 9. Regression owned after land: seeding a behind database (fixed by 5e009a3f7)
+
+Migration 11 added `task_types.auto_spawnable` and its seed. E-2020 (landed
+after this branch was cut, so the two met only at land) added
+`schema.MigrateToContext`, a test helper that builds a database one version
+behind and then ran `Seed()`. seeds.sql is written for the latest schema, so
+seeding a version-10 database failed ("no column named auto_spawnable"), and
+three `internal/monitor` TestDB_* tests turned `just test-go` red on main.
+
+Fixed on main in 5e009a3f7, committed under E-2181 and owned here:
+`MigrateToContext` seeds only at the latest version. Reviewed and kept as the
+right fix. Production already keeps that invariant — `reconcileSchema` seeds a
+current database, and migrates a behind one forward (`MigrateContext`) before
+seeding — so only the test helper broke it. A version-aware seed was rejected:
+nothing seeds a behind database, so it would serve a case no path reaches.
