@@ -7055,3 +7055,7 @@ When the project-wide regression is red because of another task's landed change 
 ### [2026-10-03] The spawned task's side lands its work, never the spawning session
 Landing belongs to the spawned session's side: today the user runs it in a tmux sibling pane of the spawned session; later the spawned session may kick it off, still from a sibling pane. The spawning session has no responsibility for a task after spawn beyond answering questions the spawned session asks. The handoff templates' 'The spawning session owns landing' is wrong; do not repeat or rely on it.
 - **Project**: endless
+
+### [2026-10-03] Use Endless's existing terms; never mint new ones in explanations
+Say 'session status' / 'session monitor' (and 'row'), not an invented word like 'board'. An invented term reads as an existing concept, and when it leaks into plans, docs or code it becomes vocabulary nobody chose. If a concept genuinely lacks a name, say so and propose the name as a question.
+- **Project**: endless
