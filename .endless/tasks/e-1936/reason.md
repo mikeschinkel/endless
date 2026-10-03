@@ -1,0 +1,1 @@
+No brainstorm needed: Claude Code mods answered the transport question, and the immediate need, telling the user that a blocked task became spawnable, is met by session status/monitor (E-2204) without inter-session messaging.
