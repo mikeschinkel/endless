@@ -7039,3 +7039,7 @@ Any claim about a task's status, phase, plan or links goes through `endless task
 ### [2026-10-02] Call the session-status view the monitor, not a board
 Mike's term for what session status / session monitor show is 'monitor' (e.g. 'shows on E-101's monitor'), not 'board'. Use 'monitor' in replies, plans and docs.
 - **Project**: endless
+
+### [2026-10-03] Re-check dependency status before repeating a caveat
+Before repeating a caveat that depends on another task's state (e.g. 'command X does not exist until E-NNNN lands'), re-check that task's status with --db main. Caveats carried forward from an earlier message go stale; restating one after the dependency landed wastes the user's attention.
+- **Project**: endless
