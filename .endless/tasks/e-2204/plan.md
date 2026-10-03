@@ -62,3 +62,30 @@ Display only: `--agent` and `--json` gain nothing. They already carry
   a dimmed row wraps the id in 22m … 2m; no escapes with color off.
 - A captured `session monitor` frame matches `session status` for the same
   board, as E-2188's suite does, so the two cannot split.
+
+## 5. Reveal a task that became spawnable, until it is spawned
+
+Added 2026-10-03 (ES-1248). This replaces waking an idle session: the session
+status / session monitor shows the news instead of the session taking a turn.
+
+- **What is highlighted:** a row whose task has at least one blocker that is
+  now resolved (landed, or a terminal status that unblocks), has no unresolved
+  blockers left, and has not been claimed. In the example, E-1814 lands, so
+  E-2204 (which it blocked) is highlighted, not E-1814.
+- **How long:** until the task is claimed or spawned. It is not cleared when the
+  notice is delivered on the session's next prompt.
+- **Computed, not stored:** derived each draw from `task_deps` and status,
+  like ownership, so it needs no notice row (notices for ended sessions are
+  reaped) and corrects itself.
+- **Colors:** background 160 is the duplicate marker; this one is background
+  118 with foreground 232 (`\x1b[38;5;232;48;5;118m`), 256-color, no fallback.
+  The plain-text fallback is a column-4 glyph chosen in the implementation and
+  added to the legend.
+- **Precedence on one id:** duplicate (red) first, then this (green), then focus
+  (inverse). Duplicate is a warning, this is news, focus is orientation.
+- Like the other highlights, it is never dimmed (part 3).
+
+Verify additions: a task whose only blocker lands is highlighted, stays
+highlighted after the session's next prompt, and loses the highlight once
+claimed; a task with one blocker resolved and another still open is not
+highlighted; precedence when an id is both a duplicate and newly spawnable.
