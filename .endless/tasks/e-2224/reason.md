@@ -1,0 +1,1 @@
+Not needed: session status/monitor shows the user a newly spawnable task (E-2204), and notices already reach the agent at its next prompt. A mod would add only a turn the user chose not to have.
