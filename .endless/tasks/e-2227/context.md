@@ -1,0 +1,1 @@
+On 2026-10-03, 30+ session monitor panes drove the machine to 100% CPU; the ceiling was about 17 panes. The design brainstorm, its rationale and the acceptance test are in the outcome of the brainstorm this cleans up.
