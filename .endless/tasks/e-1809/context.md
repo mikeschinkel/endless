@@ -1,1 +1,3 @@
 Builds on the endless-go launch seam introduced when spawn moved to CLI-arg prompt delivery: that change put the in-window launch behind endless-go, but Python still triggers window creation and passes tmux-specific params.
+
+From the E-2223 brainstorm (decision ED-1607): Endless will run on its own tmux server (`tmux -L endless`). Inside an Endless pane, `$TMUX` already points at the right socket. Callers outside a pane (a plain terminal, a background process, the web server) must pass the socket. The driver is the one place to handle this: use `$TMUX` when it's set, otherwise `-L endless` (or a configured socket).
