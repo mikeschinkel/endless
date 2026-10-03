@@ -148,3 +148,34 @@ appear. Do not introduce one — if something genuinely lacks a name, ask.
 10. No coined term: the rebuilt files carry no name for these views other than
     `project status` and `project monitor`.
 
+
+## Scope added during implementation
+
+- **Shared row code is a new package, `internal/taskrow`**: the action glyph
+  table, the status→action rule, the type letter, the phase character, the
+  fixed prefix and the legend fit. `session status` now uses it in place of its
+  own copies, so the two views cannot drift.
+- **`session status` no longer wears ⁇ on `unreviewed` tasks.** The shared rule
+  maps `unreviewed` to ☰ read — the glyph `project status` already had — where
+  `session status` had been falling through to its should-never-happen net.
+- **`rowcap` loses the parameters E-1976 added for the per-group cap**
+  (`resolve_cap(default=)`, `limit_options_for(default, unit)`). With that cap
+  gone they had no caller; `limit_options` is a plain decorator again.
+- **Guide text** (`docs/guide/reference.md`, `appendix-a.md`) rewritten for the
+  three lists. The line saying auto-spawned sessions carry `*` in `project
+  status` is removed: that marker lived on session rows, which are gone.
+
+## Decisions taken where the plan was silent
+
+- **⟳/⚠ apply to `underway` rows only**, as the plan words it. `session status`
+  marks ANY task a live session holds ⟳; following that here would hide ☑ on
+  every `unverified` task whose session is still open.
+- **The unsettled column (◆ ⊙ ~) and the block column (⊗ ⏸) are not drawn.**
+  The plan lists what rows keep; those were not on it. The one-column slot
+  between type letter and id is left blank.
+- **A cut third list prints `… N more (project status)`**, the codebase's rule
+  that a dropped row leaves a trace.
+- **`--sort id` is id descending** — newest filed first, the reverse-chronological
+  reading of the plan's "all three lists sort reverse-chronologically".
+- **A hidden session still marks its task live.** Hiding a session asks not to
+  see it; it should not make the work it holds read as stalled.
