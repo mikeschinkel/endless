@@ -7047,3 +7047,7 @@ Before repeating a caveat that depends on another task's state (e.g. 'command X 
 ### [2026-10-03] Don't attribute a seed's framing to Mike
 A task's seed, context and plan are often written by an agent in another session, not by Mike. Don't say 'you framed this' about wording in a seed. Attribute it to the seed, or ask.
 - **Project**: endless
+
+### [2026-10-03] A regression fix inherited from another task goes to that task's session
+When the project-wide regression is red because of another task's landed change (here E-1814's seed broke internal/monitor tests), do not commit the fix on your own task branch, even as a separate commit. It lands under the wrong task id and can't be removed once main has it. Fix the minimum only if you must report the suite green, but first message the owning task's live session (ListAgents/SendMessage) or ask Mike, so the fix lands under the task that caused it.
+- **Project**: endless
