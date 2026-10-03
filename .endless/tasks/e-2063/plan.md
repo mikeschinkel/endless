@@ -337,6 +337,22 @@ twelve are facts about the work:
   next conversation's first turn. Anyone who moves or conditionalizes it needs
   to know that.
 - **`summary`** does not appear because E-2074 removed it.
+- **`auto_spawned`** (E-1814) STAYS. Added after this table was first written.
+  It records how the SESSION came into being — the auto-spawn job opened it —
+  which a clear does not change, and the auto-spawn cap gates on it, so it is
+  operational rather than informational. A clear re-fires SessionStart in the
+  same window, which still carries `@endless_auto_spawned`, so the value is
+  re-asserted identically rather than contested.
+- **`focus_task_id`** (E-2188) STAYS, and this one is a judgment call worth
+  recording because the schema's own wording argues the other way. It calls the
+  column "the task the session touched last — the one its CONVERSATION is on
+  now", and by the letter of the governing rule a fact about the conversation
+  belongs on the instance. It stays anyway, on the same reasoning as the turn
+  state above: it is a display-only current-state pointer that moves freely with
+  every touch, nothing gates on it, and only one instance is live at a time, so
+  a single value on `sessions` is never wrong about the live conversation. What
+  is given up is "which task was instance 1 looking at when it was cleared",
+  which nothing asks.
 
 ## `sessions.session_id` is dropped, not kept
 
@@ -414,5 +430,7 @@ being removed entirely by E-2081.
 
 `session_messages` is the only table that re-points, which is the right answer —
 it is the only one whose rows are literally the conversation.
+
+
 
 
