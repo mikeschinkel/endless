@@ -1,0 +1,1 @@
+Implements the decision that Endless delivers to running sessions through an Endless mod and never writes Claude Code's socket (ED-1604), which replaced the E-1936 brainstorm. Research: docs/brief-2028-10-02-claude-code-mods-brief.md (sections 6 B, F, I and 8). Sessions are addressable by task name since E-2181.
