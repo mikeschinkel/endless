@@ -7,6 +7,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
+	"github.com/mikeschinkel/endless/internal/taskrow"
 )
 
 func TestClassify(t *testing.T) {
@@ -100,8 +101,8 @@ func TestActionIcons(t *testing.T) {
 		actDone:    "⇥",
 	}
 	for a, want := range cases {
-		if got := a.icon(); got != want {
-			t.Errorf("action(%d).icon() = %q, want %q", a, got, want)
+		if got := a.Icon(); got != want {
+			t.Errorf("action(%d).Icon() = %q, want %q", a, got, want)
 		}
 	}
 	// ⚑ must measure display-width 1 so the fixed 13-col prefix and the width-aware
@@ -999,8 +1000,8 @@ func TestLegendGlyphsAreUnique(t *testing.T) {
 		owner[glyph] = label
 	}
 
-	for a := action(0); int(a) < len(actionMeta); a++ {
-		claim(a.icon(), a.label())
+	for _, a := range taskrow.Actions() {
+		claim(a.Icon(), a.Label())
 	}
 	for _, d := range []struct{ glyph, label string }{
 		{"✓", "done"},

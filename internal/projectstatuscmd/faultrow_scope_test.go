@@ -87,14 +87,14 @@ func bindFaultStoreWithProjects(t *testing.T) (alpha, beta int64) {
 // nonEmptyRows is the minimal row set that exercises the normal (non-empty)
 // render path, so the fault row is asserted where it will actually be seen.
 func nonEmptyRows() []monitor.ProjectStatusRow {
-	return []monitor.ProjectStatusRow{taskRow(1, "unverified", 0)}
+	return []monitor.ProjectStatusRow{row(1, "unverified", 0)}
 }
 
 func TestFrameFaultRow_CountsOnlyThisProjectAndTheUnattributed(t *testing.T) {
 	alpha, _ := bindFaultStoreWithProjects(t)
 
 	var b strings.Builder
-	render(&b, "alpha", nonEmptyRows(), 10, 0, 120, false, now, faults.ProjectScope(alpha))
+	render(&b, "alpha", nonEmptyRows(), frameOpts{cols: 120, sort: sortUpdated}, faults.ProjectScope(alpha))
 	out := b.String()
 
 	if !strings.Contains(out, faultrow.Hint) {
@@ -121,7 +121,7 @@ func TestFrameFaultRow_MachineWideScopeSeesEverything(t *testing.T) {
 	bindFaultStoreWithProjects(t)
 
 	var b strings.Builder
-	render(&b, "alpha", nonEmptyRows(), 10, 0, 120, false, now, faults.AllProjects)
+	render(&b, "alpha", nonEmptyRows(), frameOpts{cols: 120, sort: sortUpdated}, faults.AllProjects)
 	out := b.String()
 
 	if !strings.Contains(out, "ERR-0002") {

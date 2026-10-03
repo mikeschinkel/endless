@@ -12,16 +12,16 @@ Endless tracks multiple projects from a single global DB. Every project is a reg
 endless project list                           # all registered projects
 endless project info                           # registration card for the current project
 endless project info <name>                    # for a named project
-endless project status                         # what in this project needs attention
+endless project status                         # the project's open urgent/now/next tasks
 endless project status <name>                  # for a named project
-endless project monitor                        # the same rows, live, until Ctrl-C
+endless project monitor                        # the same lists, live, until Ctrl-C
 endless project monitor --tmux                 # the monitor in its own two-pane tmux session
 ```
 
 `project info` is the registration card — metadata, notes, dependencies.
-`project status` ranks every claim on your attention across every session in
-the project, loudest first. `project monitor` is the live version of the same
-rows, the project-scoped counterpart to `endless session monitor`.
+`project status` lists the project's open tasks: urgent ones, then epics in
+now/next, then every other now/next task. `project monitor` is the live version
+of the same lists, the project-scoped counterpart to `endless session monitor`.
 
 ### Registering a project
 
@@ -124,7 +124,7 @@ The `auto-spawn` job starts a Claude session, unasked, on a task that is safe to
 
 A task is picked only when it is `ready` (human-approved), rated **low** complexity and **low** risk, in phase `now` or `urgent`, of type `todo` or `bugfix`, unblocked, planned with no open question, and never claimed by any session. Each due run spawns **at most one** task — `urgent` before `now`, oldest first — so the interval is the rate limit. A project with `cap` auto-spawned tasks still underway or unverified gets nothing more until one settles.
 
-The window opens detached, so it never takes your focus, in the tmux session of the most recently active attached client. With no client attached the run skips, so auto-spawn pauses while you are away. Two user-level settings in `~/.config/endless/config.json` tune it: `auto_spawn.interval` (default `5m`) and `auto_spawn.target` (`active`, the default, or `monitor` for the session the runner is in). Auto-spawned sessions carry `*` after their id in `endless project status`. `endless jobs list` shows why the last run did or did not spawn — `no project has opted in`, `nothing eligible`, `every opted-in project is at its cap`, `no tmux client is attached`, or `spawned E-N`.
+The window opens detached, so it never takes your focus, in the tmux session of the most recently active attached client. With no client attached the run skips, so auto-spawn pauses while you are away. Two user-level settings in `~/.config/endless/config.json` tune it: `auto_spawn.interval` (default `5m`) and `auto_spawn.target` (`active`, the default, or `monitor` for the session the runner is in). `endless jobs list` shows why the last run did or did not spawn — `no project has opted in`, `nothing eligible`, `every opted-in project is at its cap`, `no tmux client is attached`, or `spawned E-N`.
 
 ---
 

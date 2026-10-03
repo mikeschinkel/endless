@@ -855,68 +855,70 @@ def list_cmd(status, group, limit, no_limit):
 # counterpart to `session status` — defined further down — and this, the
 # project's metadata card, became `project info`. The pairing that results
 # matches the session verbs exactly: `session show` is the card and
-# `session status` ranks what needs attention; `project info` and
-# `project status` are now those same two.
+# `session status` lists the work; `project info` and `project status` are now
+# those same two.
 @project_cmd.command("info")
 @click.argument("name", default=None, required=False)
 def info(name):
     """Show a project's registration card — metadata, notes and dependencies.
 
-    Defaults to the project enclosing the working directory. For what in the
-    project needs your attention, see `endless project status`.
+    Defaults to the project enclosing the working directory. For the project's
+    open tasks, see `endless project status`.
     """
     from endless.status import show_status
     show_status(name)
 
 
+def _sort_option(f):
+    """`--sort` for `project status` and `project monitor`: one spelling, two verbs."""
+    return click.option(
+        "--sort", type=click.Choice(project_status_cmd.SORT_KEYS),
+        default=project_status_cmd.DEFAULT_SORT, show_default=True,
+        help="Order within each list, newest first: by last update, or by id.",
+    )(f)
+
+
 @project_cmd.command("status")
 @click.argument("name", default=None, required=False)
-@click.option("--all", "show_all", is_flag=True,
-              help="Include `ready` tasks — reviewed work, a claim on capacity "
-                   "rather than attention")
+@click.option("--later", is_flag=True,
+              help="Show ONLY `later` tasks — the phase the default view leaves out.")
+@_sort_option
 @output_options(agent=False,
-                json_help="Emit the rows as JSON, uncapped, each carrying its action")
-@project_status_cmd.group_limit_options
-def project_status(name, show_all, as_json, limit, no_limit):
-    """Show what in this project needs attention — a one-shot snapshot.
+                json_help="Emit the rows as JSON, each carrying its list and action")
+def project_status(name, later, sort, as_json):
+    """Show the project's open tasks — a one-shot snapshot, truncated nowhere.
 
-    The project-scoped counterpart to `endless session status`. Ranks every
-    attention claim in one list, loudest first: sessions blocked waiting on you,
-    then unverified work awaiting your verdict, outcomes awaiting a read, plans
-    awaiting approval, orphaned tasks nobody is holding, then the sessions that
-    are idle or working. A live session and the task it claimed are one row.
+    Three lists, in order and without separators: urgent tasks, then epics in
+    now/next, then every other task in now/next. Each task appears once, in the
+    highest list it qualifies for. A row is `session status`'s: action glyph,
+    type, id, phase, title — and an underway task reads ⟳ while a live session
+    holds it, ◷ once none does.
 
-    Defaults to the project enclosing the working directory; name another to see
-    it from anywhere. For a live, self-updating view, use `endless project
-    monitor`.
-
-    The cap is PER GROUP, not per frame: a single cap would spend every row on
-    the unverified backlog and push the sessions off the bottom. Each truncated
-    group says how many it left out.
+    Prints every row, however many: this is the view to grep for a task
+    `project monitor` has no room to show. Defaults to the project enclosing the
+    working directory; name another to see it from anywhere.
     """
     project_status_cmd.project_status_resolve(
-        name, show_all=show_all, limit=limit, no_limit=no_limit, as_json=as_json,
+        name, later=later, sort=sort, as_json=as_json,
     )
 
 
 @project_cmd.command("monitor")
 @click.argument("name", default=None, required=False)
-@click.option("--all", "show_all", is_flag=True,
-              help="Include `ready` tasks — reviewed work, a claim on capacity "
-                   "rather than attention")
+@_sort_option
 @click.option("--tmux", "use_tmux", is_flag=True,
               help="Open the monitor in its own two-pane tmux session (the "
                    "monitor above, a bare shell below) and switch to it. "
                    "Idempotent.")
 @click.option("--no-switch", is_flag=True,
               help="With --tmux: create the session but stay where you are.")
-@project_status_cmd.group_limit_options
-def project_monitor(name, show_all, use_tmux, no_switch, limit, no_limit):
+def project_monitor(name, sort, use_tmux, no_switch):
     """Live monitor: repeatedly render `project status` until interrupted.
 
-    The pane you keep open all day when several sessions are running. Loops the
-    same view `project status` prints once, redrawing every 2 seconds and
-    repainting only when the frame changes (no flicker). Ctrl-C exits.
+    The same three lists, redrawn every 2 seconds and repainted only when a row
+    changes. Urgent tasks and now/next epics always render in full; the third
+    list takes whatever height is left and says how many rows it could not fit.
+    `project status` shows them all. Ctrl-C exits.
 
     --tmux gives it the home it is designed for: its own tmux session, the
     monitor on top and a bare shell beneath it for running `endless` commands
@@ -931,9 +933,7 @@ def project_monitor(name, show_all, use_tmux, no_switch, limit, no_limit):
             "--no-switch only applies with --tmux. Nothing ran.",
             "Re-run adding --tmux, or drop --no-switch", exit_code=2,
             text="--no-switch only applies with --tmux.")
-    project_status_cmd.project_status_resolve(
-        name, monitor=True, show_all=show_all, limit=limit, no_limit=no_limit,
-    )
+    project_status_cmd.project_status_resolve(name, monitor=True, sort=sort)
 
 
 @project_cmd.command("scan")
@@ -2638,7 +2638,7 @@ def task_recent(project, show_all, limit, agent, as_json, parent_id, no_limit):
 def landing_report_options(all_help: str):
     """The option set `task landed` and `task unlanded` share (E-2095).
 
-    One factory, on rowcap.limit_options_for's reasoning: so a flag cannot
+    One factory, so a flag cannot
     appear on one of the pair and not the other, and so its help text is written
     once. The two commands are the two halves of one question — what reached the
     base branch, and what did not — and a reader who learns the flags on one is

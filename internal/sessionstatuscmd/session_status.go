@@ -30,90 +30,39 @@ import (
 	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/sessionmonitorcmd"
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
-	"github.com/mikeschinkel/endless/internal/taskstatus"
+	"github.com/mikeschinkel/endless/internal/taskrow"
 )
 
 // fallbackCols is used when the terminal width can't be detected (output not a
 // tty, no --cols, no $COLUMNS). Matches the bash prototype's default.
 const fallbackCols = 90
 
-// action is the primary classification of a row, in sort-rank order. The icon
-// and rank both derive from it. Parent and from (spawner) outrank the
-// in-flight/do/plan/etc. statuses; the bash prototype's icon-glyph sort had a
-// latent bug (it matched '⤴' but rendered '↑'), avoided here by ranking on the
-// enum, not the glyph.
-type action int
+// action is the primary classification of a row, in sort-rank order: the
+// shared task-row vocabulary (internal/taskrow, E-2156), so `session status` and
+// `project status` draw a task with the same glyph. The icon and rank both
+// derive from it. Parent and from (spawner) outrank the in-flight/do/plan/etc.
+// statuses; ranking on the enum rather than the glyph avoids the bash
+// prototype's latent icon-sort bug (it matched '⤴' but rendered '↑').
+//
+// The local names are kept so this package reads as it always has; the glyphs,
+// labels and their history live with the table in taskrow.
+type action = taskrow.Action
 
 const (
-	actThis action = iota
-	actParent
-	actFrom
-	actDoing
-	actDo
-	// actReview: a `submitted` task — a plan waiting for the owner's review.
-	// Spawn and claim accept it exactly as they accept `ready` (E-2200: the
-	// plan and open questions are the whole gate); approval is an optional
-	// review record, and this glyph is where that record shows. It gets its own
-	// ⚑ glyph and `review` label rather than folding into actDo (▶), so the
-	// board separates "reviewed, ready to spawn" from "plan not yet reviewed".
-	// Ranked right after actDo so it reads "here's what's been reviewed, then
-	// here's what's one review away". ⚑ (U+2691
-	// BLACK FLAG) measures single-width (asserted in TestActionIcons) so it aligns
-	// in the width-aware table like every other icon.
-	actReview
-	actPlan
-	actVerify
-	actOrphan
-	// actLanded: the task's work has merged (E-1693). ⏚ (U+23DA EARTH GROUND,
-	// "landed/grounded") measures single-width (verified with go-runewidth), so
-	// it aligns in the width-aware table like every other icon.
-	actLanded
-	// actUnknown: a status classify() doesn't recognize — a should-never-happen
-	// safety net (every real status is handled above), so its ⁇ appearing in the
-	// legend flags an unhandled status slipping through. ⁇ (U+2047) also measures
-	// single-width. Appended after the pre-existing members so sortRows' enum
-	// ranking is unchanged.
-	actUnknown
-	// actDone: a terminal-status task (confirmed/assumed/declined/obsolete/
-	// completed) whose work never landed — E-1871. Before this it fell through
-	// classify()'s switch to actUnknown, so the most ordinary rows in the database
-	// wore ⁇, the should-never-happen glyph, and drowned out its diagnostic value
-	// (declined/obsolete never land, so they hit it ALWAYS). ⇥ (U+21E5 RIGHTWARDS
-	// ARROW TO BAR) reads as a terminus and measures single-width (asserted in
-	// TestActionIcons), so the fixed 13-col prefix stays aligned.
-	//
-	// ⏚ landed WINS over ⇥: classify() checks r.Landed before the status switch,
-	// so a landed terminal task reads ⏚ and ⇥ marks only closed work that never
-	// merged — the informative case. TestClassify pins that precedence.
-	//
-	// APPENDED, not inserted: enum order is both legend order and sortRows' rank,
-	// so appending leaves every existing rank untouched (the rule E-1750 followed
-	// for actUnknown). Closed rows therefore sort last under --all, below the ⁇
-	// anomaly rows — an unhandled status deserves more prominence than a finished
-	// task.
-	actDone
+	actThis    = taskrow.This
+	actParent  = taskrow.Parent
+	actFrom    = taskrow.From
+	actDoing   = taskrow.Doing
+	actDo      = taskrow.Do
+	actReview  = taskrow.Review
+	actPlan    = taskrow.Plan
+	actVerify  = taskrow.Verify
+	actRead    = taskrow.Read
+	actOrphan  = taskrow.Orphan
+	actLanded  = taskrow.Landed
+	actUnknown = taskrow.Unknown
+	actDone    = taskrow.Done
 )
-
-// actionMeta maps each action to its legend glyph and label, indexed by the
-// action enum so enum order is legend order for free. buildLegend derives the
-// dynamic header from this table; icon()/label() read it.
-var actionMeta = [...]struct{ icon, label string }{
-	actThis:    {"●", "this"},
-	actParent:  {"↑", "parent"},
-	actFrom:    {"↩", "from"},
-	actDoing:   {"⟳", "doing"},
-	actDo:      {"▶", "do"},
-	actReview:  {"⚑", "review"},
-	actPlan:    {"✎", "plan"},
-	actVerify:  {"☑", "verify"},
-	actOrphan:  {"◷", "orphan"},
-	actLanded:  {"⏚", "landed"},
-	actUnknown: {"⁇", "unknown"},
-	actDone:    {"⇥", "closed"},
-}
-
-func (a action) icon() string  { return actionMeta[a].icon }
-func (a action) label() string { return actionMeta[a].label }
 
 // hiddenMode selects how the VIEWING session's hidden task rows (E-1914) are
 // treated by one render. Hiding is per (session, task) and display-scoped: it
@@ -799,7 +748,7 @@ func renderFrame(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTa
 	for _, r := range rows {
 		act := classify(r)
 		line := fmt.Sprintf("%s %s%s%s %s ",
-			act.icon(), typeLetter(r.TypeSlug), columnFourMark(r), idField(r, color), phaseChar(r),
+			act.Icon(), typeLetter(r.TypeSlug), columnFourMark(r), idField(r, color), phaseChar(r),
 		)
 		line += hiddenField(r, hw)
 		line += relationField(r, rw)
@@ -955,7 +904,7 @@ func hiddenField(r monitor.SessionStatusRow, hw int) string {
 }
 
 // legendEntry is one glyph and its label in the legend line.
-type legendEntry struct{ icon, label string }
+type legendEntry = taskrow.LegendEntry
 
 // buildLegend returns the dynamic header line: only the glyphs actually present
 // in rows, in enum order (actions) then a fixed order (decorations), with NO
@@ -977,29 +926,17 @@ type legendEntry struct{ icon, label string }
 // documents. The pane fit counts display rows (liveview.FrameDisplayRows), so a
 // wrapped legend still gets every row it needs.
 func buildLegend(rows []monitor.SessionStatusRow, cols int) string {
-	entries := legendEntries(rows)
-	normal := joinLegend(entries, " ", "  ")
-	if displayWidth(normal) <= cols {
-		return normal
-	}
-	if compact := joinLegend(entries, "", " "); displayWidth(compact) <= cols {
-		return compact
-	}
-	return normal
+	return taskrow.FitLegend("", legendEntries(rows), cols)
 }
 
 // joinLegend renders entries as icon+sep+label, separated by between.
 func joinLegend(entries []legendEntry, sep, between string) string {
-	parts := make([]string, 0, len(entries))
-	for _, e := range entries {
-		parts = append(parts, e.icon+sep+e.label)
-	}
-	return strings.Join(parts, between)
+	return taskrow.JoinLegend(entries, sep, between)
 }
 
 // legendEntries is the ordered set of glyphs present in rows.
 func legendEntries(rows []monitor.SessionStatusRow) []legendEntry {
-	var present [len(actionMeta)]bool
+	var present [taskrow.Count]bool
 	var done, blocked, blocks, unsettled, notStarted, undetermined, hidden, queued, referenced bool
 	var focus, duplicate bool
 	for _, r := range rows {
@@ -1039,9 +976,9 @@ func legendEntries(rows []monitor.SessionStatusRow) []legendEntry {
 		}
 	}
 	var parts []legendEntry
-	for a := action(0); int(a) < len(actionMeta); a++ {
+	for _, a := range taskrow.Actions() {
 		if present[a] {
-			parts = append(parts, legendEntry{a.icon(), a.label()})
+			parts = append(parts, legendEntry{Icon: a.Icon(), Label: a.Label()})
 		}
 	}
 	// Decorations after the actions, each shown only when a row bears it. ✓ is the
@@ -1052,50 +989,50 @@ func legendEntries(rows []monitor.SessionStatusRow) []legendEntry {
 	// (a focal/parent/from row can be terminal) before the relational/worktree
 	// markers.
 	if done {
-		parts = append(parts, legendEntry{"✓", "done"})
+		parts = append(parts, legendEntry{Icon: "✓", Label: "done"})
 	}
 	if blocked {
-		parts = append(parts, legendEntry{"⊗", "blocked"})
+		parts = append(parts, legendEntry{Icon: "⊗", Label: "blocked"})
 	}
 	if blocks {
-		parts = append(parts, legendEntry{"⏸", "blocks"})
+		parts = append(parts, legendEntry{Icon: "⏸", Label: "blocks"})
 	}
 	// ◼︎/◫ open column 4's run: when a row wears one, it is the most urgent thing
 	// that column says about it (E-2188).
 	if focus {
-		parts = append(parts, legendEntry{focusGlyph, "focus"})
+		parts = append(parts, legendEntry{Icon: focusGlyph, Label: "focus"})
 	}
 	if duplicate {
-		parts = append(parts, legendEntry{duplicateGlyph, "duplicate"})
+		parts = append(parts, legendEntry{Icon: duplicateGlyph, Label: "duplicate"})
 	}
 	if unsettled {
-		parts = append(parts, legendEntry{unsettledGlyph, "unsettled"})
+		parts = append(parts, legendEntry{Icon: unsettledGlyph, Label: "unsettled"})
 	}
 	// ⊙ sits beside ◆ because they are two states of the SAME column, and after
 	// it because the column reads in descending order of outstanding work: ◆ has
 	// some, ⊙ has none yet, a space has none left (E-2107).
 	if notStarted {
-		parts = append(parts, legendEntry{notStartedGlyph, "not started"})
+		parts = append(parts, legendEntry{Icon: notStartedGlyph, Label: "not started"})
 	}
 	// ~ closes the same column's run, after the three states that are answers,
 	// because it is the absence of one (E-2128).
 	if undetermined {
-		parts = append(parts, legendEntry{undeterminedGlyph, "not yet determined"})
+		parts = append(parts, legendEntry{Icon: undeterminedGlyph, Label: "not yet determined"})
 	}
 	// ⊘ comes last: it is the only decoration that describes THIS SESSION's view
 	// of the row rather than a property of the task or its worktree, and it can
 	// only ever appear under --show-hidden/--only-hidden.
 	if hidden {
-		parts = append(parts, legendEntry{hiddenGlyph, "hidden"})
+		parts = append(parts, legendEntry{Icon: hiddenGlyph, Label: "hidden"})
 	}
 	// ⊕/· join ⊘ in the view-scoped tail: like hidden, they describe how the row
 	// entered THIS SESSION's scope rather than anything about the task (E-1696).
 	// ⊕ before ·, matching the order they sort in.
 	if queued {
-		parts = append(parts, legendEntry{queuedGlyph, "queued"})
+		parts = append(parts, legendEntry{Icon: queuedGlyph, Label: "queued"})
 	}
 	if referenced {
-		parts = append(parts, legendEntry{referencedGlyph, "referenced"})
+		parts = append(parts, legendEntry{Icon: referencedGlyph, Label: "referenced"})
 	}
 	return parts
 }
@@ -1162,7 +1099,7 @@ func idField(r monitor.SessionStatusRow, color bool) string {
 
 // classify maps a row to its action, applying the status canonicalization from
 // the plan: revisit/unplanned/needs_plan → plan;
-// verify/unverified → verify;
+// verify/unverified → verify; unreviewed → read;
 // underway/in_progress → working (→ orphan when not in-flight); ready → do
 // REGARDLESS of plan text (ED-1522, confirmed by Mike). Focal/parent/from/
 // in-flight decorations take precedence over status; parent (real task-tree
@@ -1178,45 +1115,11 @@ func classify(r monitor.SessionStatusRow) action {
 	case r.InFlight:
 		return actDoing
 	}
-	// E-1693: a landed task's work has merged — no do/plan/verify verb applies. It
-	// stays visible (still a non-terminal status) but routes to actLanded (⏚) so
-	// the monitor never offers it as a fresh actionable spawn. Checked after the
-	// decorations (a landed task a live session is on still reads ⟳) and before the
-	// status switch.
-	if r.Landed {
-		return actLanded
-	}
-	// E-1871: a terminal status is a terminus, not a verb — route it to actDone
-	// (⇥ closed) rather than letting it fall through the switch's default to
-	// actUnknown (⁇), which is reserved for a status classify() does not know
-	// about. Delegated to isTerminal rather than re-listed as switch cases so the
-	// two cannot drift; a switch case cannot call a function, hence the if. It sits
-	// AFTER the r.Landed check on purpose — ⏚ landed outranks ⇥ closed, so ⇥ marks
-	// only closed work that never merged.
-	if isTerminal(r.Status) {
-		return actDone
-	}
-	switch r.Status {
-	case "ready":
-		return actDo
-	case "submitted":
-		// `submitted` = a plan waiting for the owner's review. It has a plan
-		// already, so it is NOT `actPlan` (✎ plan) — that would mis-show a
-		// planned-but-unreviewed task as "needs a plan". It is spawnable (the
-		// plan and open questions are the whole spawn gate; E-2200), but it is
-		// NOT `actDo` (▶) either: ▶ is what approval earns, so the board shows
-		// which plans the owner has reviewed. It routes to its own actReview (⚑),
-		// prompting the owner to review it; `task approve` turns ⚑ into ▶.
-		return actReview
-	case "unplanned", "needs_plan", "revisit":
-		return actPlan
-	case "verify", "unverified":
-		return actVerify
-	case "underway", "in_progress":
-		return actOrphan
-	default:
-		return actUnknown
-	}
+	// Below the decorations, the task's own facts decide, by the rule `project
+	// status` shares (taskrow.Classify): ⏚ landed (E-1693) outranks ⇥ closed
+	// (E-1871), which outranks the status switch. A landed task a live session is
+	// on still reads ⟳, because the decorations above win.
+	return taskrow.Classify(r.Status, r.Landed)
 }
 
 func sortRows(rows []monitor.SessionStatusRow) {
@@ -1396,41 +1299,12 @@ func unsettledMark(r monitor.SessionStatusRow) string {
 	}
 }
 
-func typeLetter(slug string) string {
-	switch slug {
-	case "epic":
-		return "E"
-	case "bugfix":
-		return "F"
-	case "research":
-		return "R"
-	case "brainstorm":
-		return "B"
-	default:
-		return "T"
-	}
-}
+func typeLetter(slug string) string { return taskrow.TypeLetter(slug) }
 
 // phaseChar is the single-column phase indicator: ✓ for done-work (focal/parent
 // rows can be terminal), else a per-phase glyph.
 func phaseChar(r monitor.SessionStatusRow) string {
-	if isTerminal(r.Status) {
-		return "✓"
-	}
-	switch r.Phase {
-	case "urgent":
-		return "!"
-	case "now":
-		return "1"
-	case "next":
-		return "2"
-	case "later":
-		return "3"
-	case "maybe":
-		return "?"
-	default:
-		return " "
-	}
+	return taskrow.PhaseChar(r.Phase, isTerminal(r.Status))
 }
 
 // blockField renders the block column for a row to the chosen total width bw:
@@ -1483,9 +1357,7 @@ func blockSegWidth(bw int) int {
 // rows classify() routes to actDone (⇥ closed). Delegated to taskstatus so it
 // cannot drift from monitor.IsTerminalTaskStatus, which answers the same
 // question for the cwd gate (E-1891).
-func isTerminal(status string) bool {
-	return taskstatus.Has(taskstatus.Terminal, status)
-}
+func isTerminal(status string) bool { return taskrow.IsTerminal(status) }
 
 func detectCols(override int) int { return liveview.DetectCols(override, fallbackCols) }
 

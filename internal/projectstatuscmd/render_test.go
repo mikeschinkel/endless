@@ -9,486 +9,332 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/taskrow"
 )
 
-// now is the fixed clock every test in this file measures ages against. A test
-// that read the wall clock would age its own fixtures between runs.
+// now anchors fixture timestamps. Nothing renders against it — the frame
+// carries no clock — it only makes "older" and "newer" fixed.
 var now = time.Date(2026, 8, 30, 12, 0, 0, 0, time.UTC)
 
 func ts(d time.Duration) string {
 	return now.Add(-d).Format("2006-01-02T15:04:05")
 }
 
-func taskRow(id int64, status string, age time.Duration) monitor.ProjectStatusRow {
+// row is a `now` todo in the given status, last updated age ago.
+func row(id int64, status string, age time.Duration) monitor.ProjectStatusRow {
 	return monitor.ProjectStatusRow{
 		ProjectID: 1, TaskID: id, Title: "task " + status, Status: status,
 		Phase: "now", TypeSlug: "todo", TaskUpdated: ts(age),
 	}
 }
 
-func sessionRow(sid int64, state string, age time.Duration, taskID int64) monitor.ProjectStatusRow {
-	r := monitor.ProjectStatusRow{
-		ProjectID: 1, SessionID: sid, SessionState: state, SessionActivity: ts(age),
-	}
-	if taskID != 0 {
-		r.TaskID = taskID
-		r.Title = "held task"
-		r.Status = "underway"
-		r.Phase = "now"
-		r.TypeSlug = "todo"
-		r.TaskUpdated = ts(age)
-	}
+func with(r monitor.ProjectStatusRow, edit func(*monitor.ProjectStatusRow)) monitor.ProjectStatusRow {
+	edit(&r)
 	return r
 }
 
-// TestActionGlyphsAreSingleWidth pins the property the fixed-width prefix rests
-// on. A two-column glyph shifts every following column on that row only, which
-// reads as a corrupt table rather than as a bad glyph choice — so the check
-// belongs here rather than in the eye of whoever adds the next rank.
-func TestActionGlyphsAreSingleWidth(t *testing.T) {
-	for _, a := range actions() {
-		if w := runewidth.StringWidth(a.icon()); w != 1 {
-			t.Errorf("action %q glyph %q measures %d columns, want 1",
-				a.label(), a.icon(), w)
-		}
-	}
+func phase(p string) func(*monitor.ProjectStatusRow) {
+	return func(r *monitor.ProjectStatusRow) { r.Phase = p }
 }
 
-// TestActionMetaIsComplete guards the one failure mode a fixed-size array has:
-// a rank added to the enum without a row in the table renders as an empty glyph
-// and an empty label, silently.
-func TestActionMetaIsComplete(t *testing.T) {
-	for _, a := range actions() {
-		if a.icon() == "" || a.label() == "" || a.noun() == "" {
-			t.Errorf("action %d has an incomplete actionMeta row: icon=%q label=%q noun=%q",
-				int(a), a.icon(), a.label(), a.noun())
-		}
+func epic(r *monitor.ProjectStatusRow) { r.TypeSlug = "epic" }
+
+func frame(rows []monitor.ProjectStatusRow, o frameOpts) string {
+	if o.cols == 0 {
+		o.cols = 120
 	}
-}
-
-func TestClassify(t *testing.T) {
-	tests := []struct {
-		name string
-		row  monitor.ProjectStatusRow
-		want action
-	}{
-		{"unverified task", taskRow(1, "unverified", time.Hour), actVerify},
-		{"unreviewed task", taskRow(2, "unreviewed", time.Hour), actRead},
-		{"submitted task", taskRow(3, "submitted", time.Hour), actReview},
-		{"underway task with no session is an orphan", taskRow(4, "underway", time.Hour), actOrphan},
-		{"ready task", taskRow(5, "ready", time.Hour), actReady},
-		{"working session", sessionRow(10, "working", time.Minute, 0), actDoing},
-		{"idle session", sessionRow(11, "idle", time.Minute, 0), actIdle},
-
-		// Both paused-on-a-person states are the waiting rank, and they share it
-		// deliberately (E-2091). `prompted` is the producer the rank was built
-		// for — a session blocked on a permission prompt — while `needs_input`
-		// is the older one. `project status` needs no third rank to tell them apart:
-		// the age column distinguishes a live prompt from a two-month-old row on
-		// sight, which is what that column is for.
-		{"prompted session is the waiting rank", sessionRow(11, "prompted", time.Minute, 0), actWaiting},
-		{"needs_input session is the waiting rank", sessionRow(12, "needs_input", time.Minute, 0), actWaiting},
-
-		// The session half wins over the task half. An `underway` task held by a
-		// live session is that session working, NOT an orphan — the whole point
-		// of the orphan rank is that nobody is holding the task.
-		{"underway task held by a live session is not an orphan",
-			sessionRow(13, "working", time.Minute, 4), actDoing},
-
-		{"unknown status", taskRow(6, "no-such-status", time.Hour), actUnknown},
-		{"unknown session state", sessionRow(14, "no-such-state", time.Minute, 0), actUnknown},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := classify(tt.row); got != tt.want {
-				t.Fatalf("classify = %q, want %q", got.label(), tt.want.label())
-			}
-		})
-	}
-}
-
-// TestRankOrderIsDeclarationOrder pins that the enum order IS the rank order,
-// which is the property that lets a new rank be added by declaring it in the
-// right place and nothing else.
-func TestRankOrderIsDeclarationOrder(t *testing.T) {
-	want := []string{"waiting", "verify", "read", "review", "orphan", "idle", "doing", "ready", "unknown"}
-	var got []string
-	for _, a := range actions() {
-		got = append(got, a.label())
-	}
-	if strings.Join(got, ",") != strings.Join(want, ",") {
-		t.Fatalf("rank order = %v, want %v", got, want)
-	}
-}
-
-// TestGroupsRenderInRankOrder is the same property observed through the render,
-// where it actually matters: unverified above idle above working, whatever order
-// the query returned.
-func TestGroupsRenderInRankOrder(t *testing.T) {
-	rows := []monitor.ProjectStatusRow{
-		sessionRow(10, "working", time.Minute, 0),
-		taskRow(1, "unverified", time.Hour),
-		sessionRow(11, "idle", time.Minute, 0),
-		taskRow(2, "submitted", time.Hour),
+	if o.sort == "" {
+		o.sort = sortUpdated
 	}
 	var b strings.Builder
-	render(&b, "demo", rows, 10, 0, 120, false, now, faults.AllProjects)
+	render(&b, "demo", rows, o, faults.ProjectScope(1))
+	return b.String()
+}
 
-	order := []string{"☑", "⚑", "‖", "⟳"}
-	at := 0
-	for _, line := range strings.Split(b.String(), "\n") {
-		if at < len(order) && strings.HasPrefix(line, order[at]) {
-			at++
+// ids is the task ids in the order a frame drew them.
+func ids(out string) []string {
+	var got []string
+	for _, line := range strings.Split(out, "\n") {
+		for _, f := range strings.Fields(line) {
+			if strings.HasPrefix(f, "E-") {
+				got = append(got, f)
+				break
+			}
 		}
 	}
-	if at != len(order) {
-		t.Fatalf("groups did not render in rank order (matched %d of %d):\n%s",
-			at, len(order), b.String())
+	return got
+}
+
+// mixed is one task of each list, plus an urgent epic, out of order.
+func mixed() []monitor.ProjectStatusRow {
+	return []monitor.ProjectStatusRow{
+		row(1, "unverified", time.Hour),
+		with(row(2, "ready", 2*time.Hour), epic),                            // now epic
+		with(row(3, "underway", 3*time.Hour), phase("urgent")),              // urgent task
+		with(with(row(4, "submitted", 4*time.Hour), epic), phase("next")),   // next epic
+		with(with(row(5, "unplanned", 5*time.Hour), epic), phase("urgent")), // urgent epic
+		with(row(6, "submitted", 6*time.Hour), phase("next")),
 	}
 }
 
-// TestSortDirectionPerGroup pins the split the actionMeta table encodes: every
-// group reads newest-first, because the cap makes the top of a group the only
-// part most people see — EXCEPT the waiting queue, where longest-blocked-first
-// is the fair discipline.
-func TestSortDirectionPerGroup(t *testing.T) {
-	verify := []monitor.ProjectStatusRow{
-		taskRow(1, "unverified", 80*24*time.Hour),
-		taskRow(2, "unverified", time.Minute),
-	}
-	sortGroup(actVerify, verify, now)
-	if verify[0].TaskID != 2 {
-		t.Errorf("verify sorted oldest-first; the 80-day sediment took the top row")
-	}
-
-	idle := []monitor.ProjectStatusRow{
-		sessionRow(1, "idle", 15*24*time.Hour, 0),
-		sessionRow(2, "idle", time.Minute, 0),
-	}
-	sortGroup(actIdle, idle, now)
-	if idle[0].SessionID != 2 {
-		t.Errorf("idle sorted oldest-first; the session that just handed work back was buried")
-	}
-
-	waiting := []monitor.ProjectStatusRow{
-		sessionRow(1, "needs_input", time.Minute, 0),
-		sessionRow(2, "needs_input", time.Hour, 0),
-	}
-	sortGroup(actWaiting, waiting, now)
-	if waiting[0].SessionID != 2 {
-		t.Errorf("waiting did not put the longest-blocked session first")
+// TestThreeListsInOrder: urgent, then now/next epics, then everything else —
+// and every task exactly once, an urgent epic in the urgent list only.
+func TestThreeListsInOrder(t *testing.T) {
+	got := strings.Join(ids(frame(mixed(), frameOpts{})), " ")
+	want := "E-3 E-5 E-2 E-4 E-1 E-6"
+	if got != want {
+		t.Errorf("order = %s, want %s", got, want)
 	}
 }
 
-// TestSortSinksUnreadableClocks pins that a row whose timestamp cannot be parsed
-// does not take the top of an oldest-first group by virtue of reading as the
-// zero time.
+func TestListOf(t *testing.T) {
+	cases := []struct {
+		r    monitor.ProjectStatusRow
+		want list
+	}{
+		{with(row(1, "ready", 0), phase("urgent")), listUrgent},
+		{with(with(row(1, "ready", 0), epic), phase("urgent")), listUrgent},
+		{with(row(1, "ready", 0), epic), listEpics},
+		{row(1, "ready", 0), listOther},
+	}
+	for _, c := range cases {
+		if got := listOf(c.r); got != c.want {
+			t.Errorf("listOf(%+v) = %d, want %d", c.r, got, c.want)
+		}
+	}
+}
+
+// many is n rows built by mk, with ids from base.
+func many(n int, base int64, mk func(int64) monitor.ProjectStatusRow) []monitor.ProjectStatusRow {
+	var out []monitor.ProjectStatusRow
+	for i := 0; i < n; i++ {
+		out = append(out, mk(base+int64(i)))
+	}
+	return out
+}
+
+func overflow() []monitor.ProjectStatusRow {
+	rows := many(8, 100, func(id int64) monitor.ProjectStatusRow {
+		return with(row(id, "underway", time.Duration(id)*time.Minute), phase("urgent"))
+	})
+	rows = append(rows, many(8, 200, func(id int64) monitor.ProjectStatusRow {
+		return with(row(id, "ready", time.Duration(id)*time.Minute), epic)
+	})...)
+	return append(rows, many(30, 300, func(id int64) monitor.ProjectStatusRow {
+		return row(id, "unplanned", time.Duration(id)*time.Minute)
+	})...)
+}
+
+func countPrefix(out, prefix string) int {
+	n := 0
+	for _, id := range ids(out) {
+		if strings.HasPrefix(id, prefix) {
+			n++
+		}
+	}
+	return n
+}
+
+// TestUrgentAndEpicsNeverTruncate: a budget far smaller than lists 1 and 2
+// still renders every row of both.
+func TestUrgentAndEpicsNeverTruncate(t *testing.T) {
+	out := frame(overflow(), frameOpts{budget: 5, truncate: true})
+	if n := countPrefix(out, "E-1"); n != 8 {
+		t.Errorf("urgent rows drawn = %d, want all 8:\n%s", n, out)
+	}
+	if n := countPrefix(out, "E-2"); n != 8 {
+		t.Errorf("epic rows drawn = %d, want all 8:\n%s", n, out)
+	}
+	if n := countPrefix(out, "E-3"); n != 0 {
+		t.Errorf("list 3 drew %d rows with no room left", n)
+	}
+	if !strings.Contains(out, footerFor(30)) {
+		t.Errorf("list 3 was cut without a trace:\n%s", out)
+	}
+}
+
+// TestOnlyListThreeGrowsWithHeight: more height buys list-3 rows and nothing
+// else, and the frame fits the budget it was given.
+func TestOnlyListThreeGrowsWithHeight(t *testing.T) {
+	small := frame(overflow(), frameOpts{budget: 25, truncate: true})
+	large := frame(overflow(), frameOpts{budget: 35, truncate: true})
+	if countPrefix(large, "E-3") <= countPrefix(small, "E-3") {
+		t.Errorf("list 3 did not grow: %d at 25 rows, %d at 35",
+			countPrefix(small, "E-3"), countPrefix(large, "E-3"))
+	}
+	for _, p := range []string{"E-1", "E-2"} {
+		if countPrefix(small, p) != countPrefix(large, p) {
+			t.Errorf("%sxx rows changed with height", p)
+		}
+	}
+	for _, c := range []struct {
+		out    string
+		budget int
+	}{{small, 25}, {large, 35}} {
+		// +1 for the fault-row allowance, which renders nothing without faults.
+		if lines := strings.Count(c.out, "\n") + faultRowLines; lines > c.budget {
+			t.Errorf("frame is %d lines, budget %d:\n%s", lines, c.budget, c.out)
+		}
+	}
+}
+
+// TestStatusTruncatesNothing: without truncate (`project status`) no budget cuts
+// anything.
+func TestStatusTruncatesNothing(t *testing.T) {
+	out := frame(overflow(), frameOpts{budget: 5, truncate: false})
+	if n := len(ids(out)); n != 46 {
+		t.Errorf("rows drawn = %d, want all 46", n)
+	}
+	if strings.Contains(out, "more (project status)") {
+		t.Errorf("`project status` printed a truncation footer:\n%s", out)
+	}
+}
+
+// TestSortKeys: an old task updated recently leads under `updated` and trails
+// under `id`.
+func TestSortKeys(t *testing.T) {
+	rows := []monitor.ProjectStatusRow{
+		row(10, "ready", time.Minute), // filed first, touched last
+		row(20, "ready", time.Hour),
+		row(30, "ready", 2*time.Hour),
+	}
+	if got := strings.Join(ids(frame(rows, frameOpts{sort: sortUpdated})), " "); got != "E-10 E-20 E-30" {
+		t.Errorf("--sort updated = %s", got)
+	}
+	if got := strings.Join(ids(frame(rows, frameOpts{sort: sortID})), " "); got != "E-30 E-20 E-10" {
+		t.Errorf("--sort id = %s", got)
+	}
+}
+
 func TestSortSinksUnreadableClocks(t *testing.T) {
 	rows := []monitor.ProjectStatusRow{
-		{SessionID: 1, SessionState: "needs_input", SessionActivity: "not a timestamp"},
-		{SessionID: 2, SessionState: "needs_input", SessionActivity: ts(time.Hour)},
+		with(row(1, "ready", 0), func(r *monitor.ProjectStatusRow) { r.TaskUpdated = "" }),
+		row(2, "ready", 48*time.Hour),
 	}
-	sortGroup(actWaiting, rows, now)
-	if rows[0].SessionID != 2 {
-		t.Fatalf("an unreadable clock sorted above a real one")
-	}
-}
-
-func TestFormatAge(t *testing.T) {
-	tests := []struct {
-		d    time.Duration
-		want string
-	}{
-		{0, "0s"},
-		{-time.Hour, "0s"},
-		{45 * time.Second, "45s"},
-		{90 * time.Second, "1m"},
-		{59 * time.Minute, "59m"},
-		{3 * time.Hour, "3h"},
-		{47 * time.Hour, "47h"},
-		{50 * time.Hour, "2d"},
-		{80 * 24 * time.Hour, "80d"},
-		{5000 * 24 * time.Hour, "999d"},
-	}
-	for _, tt := range tests {
-		got := formatAge(tt.d)
-		if got != tt.want {
-			t.Errorf("formatAge(%v) = %q, want %q", tt.d, got, tt.want)
-		}
-		if w := runewidth.StringWidth(got); w > ageWidth {
-			t.Errorf("formatAge(%v) = %q, %d columns — wider than the %d-column age field",
-				tt.d, got, w, ageWidth)
-		}
+	sortRows(rows, sortUpdated)
+	if rows[0].TaskID != 2 {
+		t.Errorf("a row with no readable clock sorted first")
 	}
 }
 
 func TestParseTSAcceptsBothStoredSpellings(t *testing.T) {
-	iso := parseTS("2026-08-30T11:00:00")
-	sqlite := parseTS("2026-08-30 11:00:00")
-	if iso.IsZero() || !iso.Equal(sqlite) {
-		t.Fatalf("the two stored timestamp spellings did not parse alike: %v vs %v", iso, sqlite)
-	}
-	if !parseTS("nonsense").IsZero() {
-		t.Errorf("an unparseable timestamp did not yield the zero time")
+	a, aok := parseTS("2026-08-30T10:00:00")
+	b, bok := parseTS("2026-08-30 10:00:00")
+	if !aok || !bok || !a.Equal(b) {
+		t.Errorf("the two spellings disagree: %v/%v %v/%v", a, aok, b, bok)
 	}
 }
 
-// TestCapIsPerGroup is the defect the per-group cap exists to prevent: a
-// frame-wide cap with 40 unverified tasks ranked near the top spends every row
-// on them and the sessions — what the view was built to triage — never render.
-func TestCapIsPerGroup(t *testing.T) {
-	var rows []monitor.ProjectStatusRow
-	for i := int64(1); i <= 40; i++ {
-		rows = append(rows, taskRow(i, "unverified", time.Duration(i)*time.Hour))
+// TestClassifyLiveSession: a live session changes an underway row only.
+func TestClassifyLiveSession(t *testing.T) {
+	live := func(r *monitor.ProjectStatusRow) { r.LiveSession = true }
+	prompted := func(r *monitor.ProjectStatusRow) { r.LiveSession, r.Prompted = true, true }
+	cases := []struct {
+		r    monitor.ProjectStatusRow
+		want taskrow.Action
+	}{
+		{row(1, "underway", 0), taskrow.Orphan},
+		{with(row(1, "underway", 0), live), taskrow.Doing},
+		{with(row(1, "underway", 0), prompted), taskrow.Waiting},
+		{with(row(1, "unverified", 0), live), taskrow.Verify},
+		{with(row(1, "unreviewed", 0), prompted), taskrow.Read},
+		{row(1, "submitted", 0), taskrow.Review},
+		{row(1, "ready", 0), taskrow.Do},
+		{row(1, "unplanned", 0), taskrow.Plan},
 	}
-	rows = append(rows, sessionRow(99, "working", time.Minute, 0))
-
-	var b strings.Builder
-	render(&b, "demo", rows, 3, 0, 120, false, now, faults.AllProjects)
-	out := b.String()
-
-	if n := strings.Count(out, "☑ "); n != 4 { // 3 rows + the legend entry
-		t.Errorf("verify rendered %d lines under --limit 3, want 3 rows + 1 legend entry", n)
-	}
-	if !strings.Contains(out, "⟳ T E-") && !strings.Contains(out, "⟳  ") {
-		t.Errorf("the working session was crowded out of the frame by the unverified backlog:\n%s", out)
-	}
-	if !strings.Contains(out, "… 37 more unverified (--no-limit)") {
-		t.Errorf("the truncated group did not name what it dropped:\n%s", out)
-	}
-}
-
-// TestBudgetKeepsTheFrameInsideThePane is the property a ranked view cannot do
-// without. An overrun frame does not wrap, it SCROLLS, and a scrolled frame
-// loses its top — which in this frame is the loudest rows. Sweeping the budget
-// rather than testing one value: the failure is a boundary, and boundaries are
-// where an off-by-one lives.
-func TestBudgetKeepsTheFrameInsideThePane(t *testing.T) {
-	var rows []monitor.ProjectStatusRow
-	for i := int64(1); i <= 40; i++ {
-		rows = append(rows, taskRow(i, "unverified", time.Duration(i)*time.Hour))
-		rows = append(rows, taskRow(1000+i, "submitted", time.Duration(i)*time.Hour))
-		rows = append(rows, sessionRow(2000+i, "idle", time.Duration(i)*time.Minute, 0))
-	}
-
-	for budget := 5; budget <= 60; budget++ {
-		var b strings.Builder
-		render(&b, "demo", rows, 10, budget, 120, false, now, faults.AllProjects)
-		if lines := strings.Count(b.String(), "\n"); lines > budget {
-			t.Fatalf("budget %d produced a %d-line frame:\n%s", budget, lines, b.String())
+	for _, c := range cases {
+		if got := classify(c.r); got != c.want {
+			t.Errorf("%s live=%v prompted=%v → %s, want %s",
+				c.r.Status, c.r.LiveSession, c.r.Prompted, got.Label(), c.want.Label())
 		}
 	}
 }
 
-// TestBudgetKeepsEveryGroupPresent is the other half: the frame must fit, but it
-// must not fit by dropping whole ranks. A frame that shows only unverified rows
-// has stopped answering the question it was built for.
-func TestBudgetKeepsEveryGroupPresent(t *testing.T) {
-	var rows []monitor.ProjectStatusRow
-	for i := int64(1); i <= 40; i++ {
-		rows = append(rows, taskRow(i, "unverified", time.Duration(i)*time.Hour))
-		rows = append(rows, taskRow(1000+i, "submitted", time.Duration(i)*time.Hour))
-		rows = append(rows, sessionRow(2000+i, "idle", time.Duration(i)*time.Minute, 0))
-		rows = append(rows, sessionRow(3000+i, "working", time.Duration(i)*time.Minute, 0))
+// TestLiveSessionGlyphs: the same task renders ⟳ held, ◷ stalled.
+func TestLiveSessionGlyphs(t *testing.T) {
+	held := frame([]monitor.ProjectStatusRow{with(row(7, "underway", 0),
+		func(r *monitor.ProjectStatusRow) { r.LiveSession = true })}, frameOpts{})
+	stalled := frame([]monitor.ProjectStatusRow{row(7, "underway", 0)}, frameOpts{})
+	if !strings.Contains(held, "⟳ T E-7") {
+		t.Errorf("held task is not ⟳:\n%s", held)
 	}
+	if !strings.Contains(stalled, "◷ T E-7") {
+		t.Errorf("stalled task is not ◷:\n%s", stalled)
+	}
+}
 
-	var b strings.Builder
-	render(&b, "demo", rows, 10, 20, 120, false, now, faults.AllProjects)
-	out := b.String()
-	for _, glyph := range []string{"☑", "⚑", "‖", "⟳"} {
-		if !strings.Contains(out, glyph) {
-			t.Errorf("group %q vanished from a 20-row frame:\n%s", glyph, out)
+// TestNoSessionInAnyRow: no session id, and none of the session-relative
+// glyphs, on any frame.
+func TestNoSessionInAnyRow(t *testing.T) {
+	rows := append(mixed(), with(row(9, "underway", 0), func(r *monitor.ProjectStatusRow) {
+		r.LiveSession, r.Prompted = true, true
+	}))
+	out := frame(rows, frameOpts{})
+	for _, bad := range []string{"ES-", "●", "↑", "↩"} {
+		if strings.Contains(out, bad) {
+			t.Errorf("frame carries %q:\n%s", bad, out)
 		}
 	}
 }
 
-// TestFairShareGivesSmallGroupsWhole pins the allocation's shape: a group that
-// wants less than its share renders whole and releases the rest, so the large
-// groups split what is left rather than everyone being trimmed alike.
-func TestFairShareGivesSmallGroupsWhole(t *testing.T) {
-	give := fairShare([]int{1, 2, 30, 30}, []int{1, 2, 30, 30}, 20)
-	if give[0] != 1 || give[1] != 2 {
-		t.Errorf("small groups were trimmed: got %v, want the first two whole", give)
-	}
-	total := 0
-	for i, n := range give {
-		total += n
-		if n < []int{1, 2, 30, 30}[i] {
-			total++ // the footer a truncated group pays for
-		}
-	}
-	if total > 20 {
-		t.Errorf("fairShare over-allocated: %v costs %d lines of a 20-line budget", give, total)
+// TestFrameHasNoClock: the frame is a pure function of the row set, so a
+// render a second later is byte-identical.
+func TestFrameHasNoClock(t *testing.T) {
+	a := frame(mixed(), frameOpts{budget: 6, truncate: true})
+	time.Sleep(1100 * time.Millisecond)
+	b := frame(mixed(), frameOpts{budget: 6, truncate: true})
+	if a != b {
+		t.Errorf("two renders of one row set differ:\n%s\n---\n%s", a, b)
 	}
 }
 
-// TestFairShareSurvivesAnImpossibleBudget: a budget too small for even one row
-// per group must not panic or produce negative counts. Every group then renders
-// as its footer alone, which still tells the truth.
-func TestFairShareSurvivesAnImpossibleBudget(t *testing.T) {
-	for _, budget := range []int{-5, 0, 1, 2} {
-		give := fairShare([]int{10, 10, 10, 10, 10}, []int{40, 40, 40, 40, 40}, budget)
-		for i, n := range give {
-			if n < 0 {
-				t.Fatalf("budget %d gave group %d a negative row count: %v", budget, i, give)
-			}
-		}
-	}
-}
-
-// TestEmptyGroupStillFooters: a group squeezed to zero rows by the budget must
-// still say it exists. A rank that vanishes silently is the defect the whole
-// footer idiom exists to prevent.
-func TestEmptyGroupStillFooters(t *testing.T) {
-	var rows []monitor.ProjectStatusRow
-	for i := int64(1); i <= 20; i++ {
-		rows = append(rows, taskRow(i, "unverified", time.Duration(i)*time.Hour))
-		rows = append(rows, sessionRow(1000+i, "idle", time.Duration(i)*time.Minute, 0))
-	}
-	var b strings.Builder
-	render(&b, "demo", rows, 10, 4, 120, false, now, faults.AllProjects)
-	out := b.String()
-	if !strings.Contains(out, "more unverified") || !strings.Contains(out, "more idle") {
-		t.Fatalf("a group squeezed to nothing did not footer:\n%s", out)
+func TestRowShape(t *testing.T) {
+	out := frame([]monitor.ProjectStatusRow{with(row(2156, "unverified", 0), phase("urgent"))}, frameOpts{})
+	if !strings.Contains(out, "☑ T E-2156 ! task unverified") {
+		t.Errorf("row is not glyph, type, id, phase, title:\n%s", out)
 	}
 }
 
 func TestLegendCarriesOnlyPresentGlyphs(t *testing.T) {
-	rows := []monitor.ProjectStatusRow{taskRow(1, "unverified", time.Hour)}
-	var b strings.Builder
-	render(&b, "demo", rows, 10, 0, 120, false, now, faults.AllProjects)
-	legendLine := strings.SplitN(b.String(), "\n", 2)[0]
-
-	if !strings.HasPrefix(legendLine, "demo · ") {
-		t.Errorf("legend does not name the project: %q", legendLine)
+	out := frame([]monitor.ProjectStatusRow{row(1, "unverified", 0)}, frameOpts{})
+	first := strings.SplitN(out, "\n", 2)[0]
+	if !strings.HasPrefix(first, "demo · ") || !strings.Contains(first, "☑ verify") {
+		t.Errorf("legend = %q", first)
 	}
-	if !strings.Contains(legendLine, "☑ verify") {
-		t.Errorf("legend omits a present glyph: %q", legendLine)
-	}
-	for _, absent := range []string{"⚑", "‖", "⟳", "◷", "▶", "⚠", "☰"} {
-		if strings.Contains(legendLine, absent) {
-			t.Errorf("legend names %q, which no row carries: %q", absent, legendLine)
-		}
+	if strings.Contains(first, "orphan") {
+		t.Errorf("legend names a glyph no row wears: %q", first)
 	}
 }
 
 func TestEmptyFrame(t *testing.T) {
 	var b strings.Builder
-	n := render(&b, "demo", nil, 10, 0, 120, false, now, faults.AllProjects)
-	if n != 0 {
-		t.Errorf("empty frame reported %d rows, want 0 (the pane fit treats 0 specially)", n)
-	}
-	if !strings.Contains(b.String(), "nothing needs attention in demo") {
-		t.Errorf("empty frame did not name the project it found nothing in:\n%s", b.String())
+	n := render(&b, "demo", nil, frameOpts{cols: 80, emptyPhrase: "later"}, faults.ProjectScope(1))
+	if n != 0 || !strings.Contains(b.String(), "no open tasks in later in demo") {
+		t.Errorf("empty frame = %q (n=%d)", b.String(), n)
 	}
 }
 
-// TestSessionColumnIsWidthOnDemand: a frame of pure task rows must not be padded
-// with an empty session gutter, and one with sessions must align every row to
-// the same column.
-func TestSessionColumnIsWidthOnDemand(t *testing.T) {
-	var tasksOnly strings.Builder
-	render(&tasksOnly, "demo", []monitor.ProjectStatusRow{
-		taskRow(1, "unverified", time.Hour),
-	}, 10, 0, 120, false, now, faults.AllProjects)
-	row := strings.Split(tasksOnly.String(), "\n")[1]
-	if strings.Contains(row, "  3d") && strings.Contains(row, "     3d") {
-		t.Errorf("task-only frame padded a session column: %q", row)
-	}
-
-	var mixed strings.Builder
-	render(&mixed, "demo", []monitor.ProjectStatusRow{
-		taskRow(1, "unverified", time.Hour),
-		sessionRow(1234, "idle", time.Minute, 0),
-	}, 10, 0, 120, false, now, faults.AllProjects)
-	if !strings.Contains(mixed.String(), "ES-1234") {
-		t.Errorf("session column did not appear when a row had a session:\n%s", mixed.String())
-	}
-}
-
-// TestRowsNeverExceedTheWidth: every rendered ROW must fit `cols`, at every
-// width. A wrapped row costs the whole table's alignment, not just its own.
-//
-// The legend is exempt, deliberately and on the same rule sessionstatuscmd
-// states: its glyphs are never truncated, because a legend missing a glyph that
-// IS on screen is worse than a legend that soft-wraps. Its wrap is not a silent
-// overrun either — nonRowLines measures it and charges the budget for it.
 func TestRowsNeverExceedTheWidth(t *testing.T) {
-	rows := []monitor.ProjectStatusRow{
-		taskRow(1, "unverified", time.Hour),
-		sessionRow(1234, "idle", time.Minute, 4321),
-		sessionRow(5, "working", time.Minute, 0),
-	}
-	rows[0].Title = strings.Repeat("a very long title ", 20)
-
-	for cols := 20; cols <= 200; cols += 7 {
-		var b strings.Builder
-		render(&b, "demo", rows, 10, 0, cols, false, now, faults.AllProjects)
-		for i, line := range strings.Split(b.String(), "\n") {
-			if line == "" || i == 0 { // i == 0 is the legend; see above
-				continue
-			}
+	long := with(row(1, "ready", 0), func(r *monitor.ProjectStatusRow) {
+		r.Title = strings.Repeat("a very long title ", 20)
+	})
+	for _, cols := range []int{12, 40, 80} {
+		out := frame([]monitor.ProjectStatusRow{long}, frameOpts{cols: cols})
+		for _, line := range strings.Split(strings.TrimRight(out, "\n"), "\n")[1:] {
 			if w := runewidth.StringWidth(line); w > cols {
-				t.Fatalf("at cols=%d a line measured %d columns: %q", cols, w, line)
+				t.Errorf("cols %d: line is %d wide: %q", cols, w, line)
 			}
 		}
 	}
 }
 
-// TestColorizeIsIntensityOnly pins the theme-independence rule: the renderer emits
-// bold and dim, never a color from the 30-47 range a terminal theme remaps.
 func TestColorizeIsIntensityOnly(t *testing.T) {
-	for _, a := range actions() {
-		got := colorize("row", a, true)
-		if strings.Contains(got, "\x1b[3") || strings.Contains(got, "\x1b[4") {
-			t.Errorf("action %q emitted a theme-remapped color: %q", a.label(), got)
-		}
-		if colorize("row", a, false) != "row" {
-			t.Errorf("action %q emitted escapes with color disabled", a.label())
-		}
+	urgent := colorize("x", with(row(1, "ready", 0), phase("urgent")), true)
+	plain := colorize("x", row(1, "ready", 0), true)
+	if urgent == "x" || plain != "x" {
+		t.Errorf("urgent=%q plain=%q", urgent, plain)
 	}
-	if !strings.Contains(colorize("row", actWaiting, true), "\x1b[1m") {
-		t.Errorf("the waiting rank is not bold — the one rank E-1815 calls load-bearing")
-	}
-}
-
-// TestAutoSpawnedSessionIsMarked (E-1814): a session the auto-spawn job started
-// carries the mark on its id, the legend names it, and the column still aligns.
-// A frame with no auto-spawned session says nothing about it.
-func TestAutoSpawnedSessionIsMarked(t *testing.T) {
-	auto := sessionRow(1234, "working", time.Minute, 77)
-	auto.AutoSpawned = true
-	manual := sessionRow(99, "working", time.Minute, 78)
-
-	var b strings.Builder
-	render(&b, "demo", []monitor.ProjectStatusRow{auto, manual}, 10, 0, 120, false, now, faults.AllProjects)
-	lines := strings.Split(b.String(), "\n")
-	if !strings.Contains(lines[0], autoSpawnedGlyph+" auto-spawned") {
-		t.Errorf("legend omits the auto-spawned mark: %q", lines[0])
-	}
-	var autoLine, manualLine string
-	for _, l := range lines {
-		switch {
-		case strings.Contains(l, "ES-1234"):
-			autoLine = l
-		case strings.Contains(l, "ES-99"):
-			manualLine = l
-		}
-	}
-	if !strings.Contains(autoLine, "ES-1234"+autoSpawnedGlyph) {
-		t.Errorf("auto-spawned row not marked: %q", autoLine)
-	}
-	if strings.Contains(manualLine, "ES-99"+autoSpawnedGlyph) {
-		t.Errorf("a person's session is marked auto-spawned: %q", manualLine)
-	}
-	// Alignment: the title starts in the same column on both rows.
-	if strings.Index(autoLine, "held task") != strings.Index(manualLine, "held task") {
-		t.Errorf("rows misaligned:\n%q\n%q", autoLine, manualLine)
-	}
-
-	var plain strings.Builder
-	render(&plain, "demo", []monitor.ProjectStatusRow{manual}, 10, 0, 120, false, now, faults.AllProjects)
-	if strings.Contains(strings.SplitN(plain.String(), "\n", 2)[0], "auto-spawned") {
-		t.Errorf("legend names auto-spawned with no such row: %q", plain.String())
+	if strings.Contains(urgent, "[3") || strings.Contains(urgent, "[4") {
+		t.Errorf("colorize used a color code: %q", urgent)
 	}
 }

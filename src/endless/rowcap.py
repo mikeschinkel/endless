@@ -42,7 +42,6 @@ def resolve_cap(
     no_limit: bool,
     *,
     machine: bool = False,
-    default: int = DEFAULT_ROW_CAP,
 ) -> int | None:
     """Resolve the two flags to a row cap, or None for uncapped.
 
@@ -53,13 +52,6 @@ def resolve_cap(
 
     `machine` marks a payload a program parses (`--json`, `--tsv`). It defaults
     to uncapped; an explicit `--limit` still applies.
-
-    `default` is the cap applied when neither flag was passed (E-1976). It exists
-    for the one surface whose cap is not measured in rows-per-render:
-    `project status` caps PER GROUP, so its default is a different number from a
-    listing-sized one. The VALIDATION — the mutual exclusion and the `--limit 0`
-    refusal — is the part that must not fork, which is why the number is a
-    parameter here rather than a second copy of this function somewhere else.
     """
     # Both refusals keep `exit_code=2`, the status a click.UsageError exits
     # with, because a caller's shell may already branch on it. Neither names a
@@ -91,7 +83,7 @@ def resolve_cap(
         return limit
     if machine:
         return None
-    return default
+    return DEFAULT_ROW_CAP
 
 
 def cap_rows(rows, cap: int | None, total: int | None = None):
@@ -171,32 +163,20 @@ def echo_footer(hidden: int, *, agent: bool = False, err: bool = False) -> None:
     click.echo(line if agent else click.style(line, dim=True))
 
 
-def limit_options_for(default: int = DEFAULT_ROW_CAP, unit: str = "rows to render"):
-    """Build the `--limit` / `--no-limit` decorator for a listing command.
+def limit_options(f):
+    """The `--limit` / `--no-limit` decorator every capped listing wears.
 
-    One factory so the two flags cannot appear on one command and not another,
-    and so their help text is written once. `default` and `unit` exist for
-    `project status` (E-1976), whose cap is per GROUP rather than per render —
-    a surface that spelled its own flags would be a surface that could drift
-    from these.
+    One decorator so the two flags cannot appear on one command and not
+    another, and so their help text is written once.
     """
-
-    def decorate(f):
-        f = click.option(
-            NO_LIMIT_FLAG, "no_limit", is_flag=True,
-            help="Render every row, however many there are.",
-        )(f)
-        f = click.option(
-            "--limit", default=None, type=int,
-            help=f"Max {unit} (default: {default}; "
-                 f"{NO_LIMIT_FLAG} for all). Machine formats (--json/--tsv) are "
-                 f"uncapped unless you pass this.",
-        )(f)
-        return f
-
-    return decorate
-
-
-# The decorator every ordinary listing wears. Used bare (`@rowcap.limit_options`),
-# so it is the built decorator rather than the factory.
-limit_options = limit_options_for()
+    f = click.option(
+        NO_LIMIT_FLAG, "no_limit", is_flag=True,
+        help="Render every row, however many there are.",
+    )(f)
+    f = click.option(
+        "--limit", default=None, type=int,
+        help=f"Max rows to render (default: {DEFAULT_ROW_CAP}; "
+             f"{NO_LIMIT_FLAG} for all). Machine formats (--json/--tsv) are "
+             f"uncapped unless you pass this.",
+    )(f)
+    return f

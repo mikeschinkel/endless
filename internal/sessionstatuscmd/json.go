@@ -149,7 +149,7 @@ func renderJSON(w io.Writer, a anchor, all bool) error {
 			Status:         r.Status,
 			Phase:          r.Phase,
 			Type:           r.TypeSlug,
-			Action:         classify(r).label(),
+			Action:         classify(r).Label(),
 			HasPlan:        r.HasPlan,
 			IsFocal:        r.IsFocal,
 			IsParent:       r.IsParent,

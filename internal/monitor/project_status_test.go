@@ -3,10 +3,7 @@ package monitor
 import (
 	"database/sql"
 	"strconv"
-	"strings"
 	"testing"
-
-	"github.com/mikeschinkel/endless/internal/sessionstate"
 )
 
 // The reads behind `endless project status` / `endless project monitor`
@@ -37,33 +34,18 @@ func TestSanitizeTmuxName(t *testing.T) {
 	}
 }
 
-// TestProjectStatusTaskStatusesComesFromTheVocabulary pins that the status set
-// is DERIVED from taskstatus.AwaitsUser rather than spelled out. A status list
-// inside a SQL string is invisible to every tool, which is exactly why it rots.
-func TestProjectStatusTaskStatusesComesFromTheVocabulary(t *testing.T) {
-	base := projectStatusTaskStatuses(false)
-	for _, want := range []string{"'unverified'", "'unreviewed'", "'submitted'", "'underway'"} {
-		if !strings.Contains(base, want) {
-			t.Errorf("projectStatusTaskStatuses(false) omits %s: %s", want, base)
-		}
-	}
-	// `ready` is spawnable work — a claim on capacity, not on attention — so it
-	// is off the default view and reachable only through --all.
-	if strings.Contains(base, "'ready'") {
-		t.Errorf("projectStatusTaskStatuses(false) includes 'ready': %s", base)
-	}
-	if !strings.Contains(projectStatusTaskStatuses(true), "'ready'") {
-		t.Errorf("projectStatusTaskStatuses(true) omits 'ready': %s", projectStatusTaskStatuses(true))
-	}
+// seedProjectStatusTask inserts one `now` task for these queries to find.
+func seedProjectStatusTask(t *testing.T, db *sql.DB, id, projectID int64, status string) {
+	t.Helper()
+	seedProjectStatusTaskIn(t, db, id, projectID, status, "now")
 }
 
-// seedProjectStatusTask inserts one task for these queries to find.
-func seedProjectStatusTask(t *testing.T, db *sql.DB, id, projectID int64, status string) {
+func seedProjectStatusTaskIn(t *testing.T, db *sql.DB, id, projectID int64, status, phase string) {
 	t.Helper()
 	if _, err := db.Exec(
 		`INSERT INTO tasks (id, project_id, title, status, phase, type_id, updated_at)
-		 VALUES (?, ?, ?, ?, 'now', 1, '2026-08-30T10:00:00')`,
-		id, projectID, "task "+status, status,
+		 VALUES (?, ?, ?, ?, ?, 1, '2026-08-30T10:00:00')`,
+		id, projectID, "task "+status, status, phase,
 	); err != nil {
 		t.Fatalf("seed task %d: %v", id, err)
 	}
@@ -81,152 +63,126 @@ func seedProjectStatusSession(t *testing.T, db *sql.DB, id, projectID int64, sta
 	}
 }
 
-// TestProjectStatusRowsMergesASessionWithItsTask is the defining join: a
-// session working E-1 and the task E-1 are ONE row, not two lines saying the
-// same thing twice.
-func TestProjectStatusRowsMergesASessionWithItsTask(t *testing.T) {
+var nowNext = []string{"urgent", "now", "next"}
+
+func projectStatusRows(t *testing.T, projectID int64, phases []string) []ProjectStatusRow {
+	t.Helper()
+	rows, err := ProjectStatusRows(projectID, phases)
+	if err != nil {
+		t.Fatalf("ProjectStatusRows: %v", err)
+	}
+	return rows
+}
+
+// TestProjectStatusRowsAreTasksOnly: a session is consulted, never a row (E-2156).
+// A session holding no task contributes nothing; a session holding a task
+// contributes a flag on that task's row, not a second row.
+func TestProjectStatusRowsAreTasksOnly(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p", "/tmp/p")
 	seedProjectStatusTask(t, db, 1, 1, "underway")
 	taskID := int64(1)
 	seedProjectStatusSession(t, db, 10, 1, "working", &taskID)
+	seedProjectStatusSession(t, db, 11, 1, "idle", nil)
 
-	rows, err := ProjectStatusRows(1, false)
-	if err != nil {
-		t.Fatalf("ProjectStatusRows: %v", err)
+	rows := projectStatusRows(t, 1, nowNext)
+	if len(rows) != 1 || rows[0].TaskID != 1 {
+		t.Fatalf("rows = %+v, want exactly task 1", rows)
 	}
-	if len(rows) != 1 {
-		t.Fatalf("got %d rows, want 1 merged row: %+v", len(rows), rows)
+	if !rows[0].LiveSession {
+		t.Errorf("task 1 is held by a working session but LiveSession is false")
 	}
-	r := rows[0]
-	if !r.HasTask() || !r.HasSession() {
-		t.Fatalf("the merged row lost a half: %+v", r)
-	}
-	if r.TaskID != 1 || r.SessionID != 10 {
-		t.Errorf("merged row = task %d / session %d, want 1 / 10", r.TaskID, r.SessionID)
-	}
-	if r.TypeSlug != "todo" {
-		t.Errorf("merged row lost its task type: %q", r.TypeSlug)
+	if rows[0].TypeSlug != "todo" {
+		t.Errorf("row lost its task type: %q", rows[0].TypeSlug)
 	}
 }
 
-// TestProjectStatusRowsSelectsAttentionStatuses pins which task statuses earn a
-// row of their own, and which do not.
-func TestProjectStatusRowsSelectsAttentionStatuses(t *testing.T) {
+// TestProjectStatusRowsSelectsNonTerminalInPhases pins the row set: every
+// non-terminal status, in the phases asked for, and nothing else.
+func TestProjectStatusRowsSelectsNonTerminalInPhases(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p", "/tmp/p")
-	for i, status := range []string{
-		"unverified", "unreviewed", "submitted", "underway", // included
-		"ready",                             // --all only
-		"confirmed", "untriaged", "revisit", // never
-	} {
+	open := []string{"unplanned", "submitted", "ready", "underway", "unverified", "unreviewed", "revisit"}
+	for i, status := range open {
 		seedProjectStatusTask(t, db, int64(i+1), 1, status)
 	}
+	seedProjectStatusTask(t, db, 50, 1, "confirmed")
+	seedProjectStatusTask(t, db, 51, 1, "declined")
+	seedProjectStatusTaskIn(t, db, 60, 1, "ready", "urgent")
+	seedProjectStatusTaskIn(t, db, 61, 1, "ready", "next")
+	seedProjectStatusTaskIn(t, db, 62, 1, "ready", "later")
+	seedProjectStatusTaskIn(t, db, 63, 1, "ready", "maybe")
 
-	got := statusSet(t, 1, false)
-	for _, want := range []string{"unverified", "unreviewed", "submitted", "underway"} {
-		if !got[want] {
-			t.Errorf("the default set omits %q", want)
+	got := map[int64]bool{}
+	for _, r := range projectStatusRows(t, 1, nowNext) {
+		got[r.TaskID] = true
+	}
+	for i := range open {
+		if !got[int64(i+1)] {
+			t.Errorf("non-terminal %q task is missing", open[i])
 		}
 	}
-	for _, unwanted := range []string{"ready", "confirmed", "untriaged", "revisit"} {
-		if got[unwanted] {
-			t.Errorf("the default set includes %q", unwanted)
+	for _, id := range []int64{60, 61} {
+		if !got[id] {
+			t.Errorf("task %d (urgent/next) is missing", id)
+		}
+	}
+	for _, id := range []int64{50, 51, 62, 63} {
+		if got[id] {
+			t.Errorf("task %d must not be in the urgent/now/next set", id)
 		}
 	}
 
-	all := statusSet(t, 1, true)
-	if !all["ready"] {
-		t.Errorf("--all omits 'ready'")
-	}
-	if all["confirmed"] || all["untriaged"] || all["revisit"] {
-		t.Errorf("--all leaked a status that claims nothing: %v", all)
+	later := projectStatusRows(t, 1, []string{"later"})
+	if len(later) != 1 || later[0].TaskID != 62 {
+		t.Errorf("later set = %+v, want only task 62", later)
 	}
 }
 
-func statusSet(t *testing.T, projectID int64, all bool) map[string]bool {
-	t.Helper()
-	rows, err := ProjectStatusRows(projectID, all)
-	if err != nil {
-		t.Fatalf("ProjectStatusRows: %v", err)
-	}
-	out := map[string]bool{}
-	for _, r := range rows {
-		out[r.Status] = true
-	}
-	return out
-}
-
-// TestProjectStatusRowsIsEveryLiveSession reverses the deliberate omission
-// E-1976 shipped with (E-2091).
-//
-// That omission excluded 'needs_input' because nothing transitioned a session
-// INTO it, so every row carrying it was a session that registered and never had
-// a turn — 34 in one project, none on a pane that still existed. Hiding them is
-// how they rotted unseen. `project status` caps each rank at ten rows and names the
-// remainder in a footer, which is machinery built for exactly this, and a row on
-// the row is what provides the mechanism to resolve it. So the filter is
-// sessionstate.Live and nothing narrower: every live state earns a row, 'ended'
-// alone does not.
-func TestProjectStatusRowsIsEveryLiveSession(t *testing.T) {
+// TestProjectStatusRowsLiveSessionFlags: only a LIVE session marks its task,
+// and a prompted one marks it Prompted too. An ended session is history; a
+// hidden one is still holding the work.
+func TestProjectStatusRowsLiveSessionFlags(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p", "/tmp/p")
-	seedProjectStatusSession(t, db, 12, 1, "ended", nil)
-
-	for i, state := range sessionstate.Get(sessionstate.Live) {
-		seedProjectStatusSession(t, db, int64(20+i), 1, state, nil)
+	for id := int64(1); id <= 4; id++ {
+		seedProjectStatusTask(t, db, id, 1, "underway")
 	}
-
-	rows, err := ProjectStatusRows(1, false)
-	if err != nil {
-		t.Fatalf("ProjectStatusRows: %v", err)
-	}
-	got := map[string]bool{}
-	for _, r := range rows {
-		got[r.SessionState] = true
-	}
-	for _, state := range sessionstate.Get(sessionstate.Live) {
-		if !got[state] {
-			t.Errorf("a %q session is missing from the row set", state)
-		}
-	}
-	if got[sessionstate.Ended] {
-		t.Errorf("an ended session rendered in the row set")
-	}
-	if len(rows) != len(sessionstate.Get(sessionstate.Live)) {
-		t.Errorf("the query returned %d rows, want one per live state (%d): %+v",
-			len(rows), len(sessionstate.Get(sessionstate.Live)), rows)
-	}
-}
-
-// TestProjectStatusRowsExcludesHiddenSessions: `endless session hide` is how a
-// user says "stop showing me this one", and a view whose whole job is attention
-// triage is the last surface that should ignore it.
-func TestProjectStatusRowsExcludesHiddenSessions(t *testing.T) {
-	db := withTestDB(t)
-	seedProject(t, db, 1, "p", "/tmp/p")
-	seedProjectStatusSession(t, db, 10, 1, "idle", nil)
-	if _, err := db.Exec("UPDATE sessions SET hidden = 1 WHERE id = 10"); err != nil {
+	one, two, three := int64(1), int64(2), int64(3)
+	seedProjectStatusSession(t, db, 10, 1, "idle", &one)
+	seedProjectStatusSession(t, db, 11, 1, "prompted", &two)
+	seedProjectStatusSession(t, db, 12, 1, "ended", &three)
+	seedProjectStatusSession(t, db, 13, 1, "idle", &three)
+	if _, err := db.Exec("UPDATE sessions SET hidden = 1 WHERE id = 13"); err != nil {
 		t.Fatalf("hide session: %v", err)
 	}
-	rows, err := ProjectStatusRows(1, false)
-	if err != nil {
-		t.Fatalf("ProjectStatusRows: %v", err)
+
+	by := map[int64]ProjectStatusRow{}
+	for _, r := range projectStatusRows(t, 1, nowNext) {
+		by[r.TaskID] = r
 	}
-	if len(rows) != 0 {
-		t.Fatalf("a hidden session rendered in the row set: %+v", rows)
+	want := map[int64][2]bool{1: {true, false}, 2: {true, true}, 3: {true, false}, 4: {false, false}}
+	for id, w := range want {
+		r := by[id]
+		if r.LiveSession != w[0] || r.Prompted != w[1] {
+			t.Errorf("task %d: live=%v prompted=%v, want live=%v prompted=%v",
+				id, r.LiveSession, r.Prompted, w[0], w[1])
+		}
 	}
 }
 
-// TestProjectStatusRowsExcludesDeadSessions pins the liveness filter, on the
+// TestProjectStatusRowsIgnoresDeadSessions pins the liveness filter, on the
 // same terms ListLiveSessions applies it: `dead` means we REACHED the session's
-// tmux server and its pane was not there. `unknown` — server unreachable — stays,
-// because "could not disprove" is not "gone" (E-1898).
-func TestProjectStatusRowsExcludesDeadSessions(t *testing.T) {
+// tmux server and its pane was not there, so the task it held has stalled.
+// `unknown` — server unreachable — still counts as live (E-1898).
+func TestProjectStatusRowsIgnoresDeadSessions(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p", "/tmp/p")
-	seedProjectStatusSession(t, db, 10, 1, "idle", nil)
-	seedProjectStatusSession(t, db, 11, 1, "idle", nil)
+	seedProjectStatusTask(t, db, 1, 1, "underway")
+	seedProjectStatusTask(t, db, 2, 1, "underway")
+	one, two := int64(1), int64(2)
+	seedProjectStatusSession(t, db, 10, 1, "idle", &one)
+	seedProjectStatusSession(t, db, 11, 1, "idle", &two)
 	bindSessionPane(t, db, 10, "%1")
 	bindSessionPane(t, db, 11, "%2")
 
@@ -234,12 +190,12 @@ func TestProjectStatusRowsExcludesDeadSessions(t *testing.T) {
 	restore := SetTestTmuxObservation(TestServerUUID, map[string]string{"%1": "claude"})
 	defer restore()
 
-	rows, err := ProjectStatusRows(1, false)
-	if err != nil {
-		t.Fatalf("ProjectStatusRows: %v", err)
+	by := map[int64]bool{}
+	for _, r := range projectStatusRows(t, 1, nowNext) {
+		by[r.TaskID] = r.LiveSession
 	}
-	if len(rows) != 1 || rows[0].SessionID != 10 {
-		t.Fatalf("sessions = %+v, want only the live session (10)", rows)
+	if !by[1] || by[2] {
+		t.Fatalf("live flags = %v, want task 1 live and task 2 stalled", by)
 	}
 }
 
@@ -276,7 +232,7 @@ func TestProjectStatusRowsScopesToOneProject(t *testing.T) {
 	seedProjectStatusTask(t, db, 2, 2, "unverified")
 	seedProjectStatusSession(t, db, 10, 2, "idle", nil)
 
-	rows, err := ProjectStatusRows(1, false)
+	rows, err := ProjectStatusRows(1, nowNext)
 	if err != nil {
 		t.Fatalf("ProjectStatusRows: %v", err)
 	}
@@ -295,7 +251,7 @@ func TestProjectStatusRowsOmitsRemovedTasks(t *testing.T) {
 	if _, err := db.Exec("UPDATE tasks SET removed = 1 WHERE id = 2"); err != nil {
 		t.Fatalf("remove task: %v", err)
 	}
-	rows, err := ProjectStatusRows(1, false)
+	rows, err := ProjectStatusRows(1, nowNext)
 	if err != nil {
 		t.Fatalf("ProjectStatusRows: %v", err)
 	}

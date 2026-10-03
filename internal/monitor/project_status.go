@@ -9,73 +9,45 @@ import (
 	"strings"
 
 	"github.com/mikeschinkel/endless/internal/sessionstate"
-	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
 
 // The reads behind `endless project status` / `endless project monitor`
-// (E-1976).
+// (E-1976, rebuilt around tasks by E-2156).
 //
-// This file answers ONE question — "what in this project is claiming a person's
-// attention right now?" — and it answers it in two halves that the caller merges
-// into one row set:
+// One row per TASK. Sessions are consulted and never listed: a task a live
+// session holds says so through its row's glyph, which is the one fact about a
+// session these views need — whether claimed work is still being worked or has
+// stalled. A session holding no task has no row at all; such rows were
+// unactionable, and followed up led to panes that no longer existed.
 //
-//  1. Every live session in the project. A session is an agent that is running,
-//     has stopped mid-turn, or has finished a turn; all three are things a
-//     person may need to look at.
-//  2. Every task in taskstatus.AwaitsUser — work that has stopped and is waiting
-//     on a person — plus every `underway` task, which is how an ORPHAN becomes
-//     visible: work that was claimed and whose session is gone.
-//
-// The merge belongs in Go rather than in a UNION because the two halves overlap
-// on exactly one key (a session's claimed task) and the overlap is a JOIN of
-// facts, not a concatenation of rows: a session working E-1976 and the task
-// E-1976 are ONE row, not two lines saying the same thing twice.
-//
-// Unlike SessionStatusRows this set is PROJECT-scoped, not focal-task-scoped,
-// and it is deliberately not a superset: `ready` arrives only under all=true,
-// because reviewed work waiting to start claims capacity, not attention.
+// Which tasks: every non-terminal task in the given phases. The caller passes
+// urgent/now/next for the default view and later for `project status --later`.
+// Grouping into lists and ordering within them are rendering decisions and live
+// with the renderer, in projectstatuscmd.
 
-// ProjectStatusRow is one row of what `endless project status` prints and
-// `endless project monitor` repaints. Every row carries a task, a session, or
-// both — never neither.
-//
-// The zero value of each half is its "absent" marker (TaskID == 0, SessionID ==
-// 0), which is why neither is a pointer: a row is read a dozen times per
-// repaint by width, sort and legend code, and a nil check at each of those is a
-// nil panic waiting for the one row shaped differently than the author pictured.
+// ProjectStatusRow is one task as `endless project status` prints it and
+// `endless project monitor` repaints it.
 type ProjectStatusRow struct {
 	ProjectID int64
-
-	// --- the task half (zero when a live session has claimed nothing) ---
-	TaskID   int64
-	Title    string
-	Status   string
-	Phase    string
-	TypeSlug string
-	// TaskUpdated is tasks.updated_at: when the task last changed, which for a
-	// row here is when it entered the status that put it here. It is
-	// the staleness clock — an `unverified` row updated 80 days ago is sediment,
-	// not a queue entry.
+	TaskID    int64
+	Title     string
+	Status    string
+	Phase     string
+	TypeSlug  string
+	// TaskUpdated is tasks.updated_at, the clock `--sort updated` orders by.
 	TaskUpdated string
-
-	// --- the session half (zero when the row is a task nobody is holding) ---
-	SessionID int64
-	// SessionState is any member of sessionstate.Live. 'ended' never reaches
-	// here: an ended session has stopped claiming anything.
-	SessionState string
-	// SessionActivity is sessions.last_activity, falling back to started_at when
-	// a session has not yet had a turn. It is the WAITING clock — how long this
-	// session has been in its current state, i.e. how long it has been holding
-	// something of yours.
-	SessionActivity string
-	// AutoSpawned is sessions.auto_spawned: the auto-spawn job opened this
-	// session's window (E-1814). Nobody asked for it, so the row says so.
-	AutoSpawned bool
+	// Landed is true when the task has a task_landings row — its work merged
+	// while its status is still open. Same fact, same glyph (⏚) as `session
+	// status`.
+	Landed bool
+	// LiveSession is true when a live session holds this task: a session in a
+	// sessionstate.Live state whose liveness was not observed `dead`.
+	LiveSession bool
+	// Prompted is true when one of those live sessions is blocked on a
+	// permission prompt (E-2091) — the same fact as LiveSession at a higher
+	// urgency.
+	Prompted bool
 }
-
-// HasTask and HasSession report which halves a row carries.
-func (r ProjectStatusRow) HasTask() bool    { return r.TaskID != 0 }
-func (r ProjectStatusRow) HasSession() bool { return r.SessionID != 0 }
 
 // ErrNoProject is returned when a project cannot be resolved — by name because
 // no such row exists, or from a directory that is not inside a registered
@@ -179,159 +151,58 @@ func ProjectForCwd() (id int64, name string, err error) {
 	return 0, "", fmt.Errorf("%w: no registered project encloses %s", ErrNoProject, cwd)
 }
 
-// projectStatusTaskStatuses is the status set a task must be in to earn a row
-// without a session behind it.
+// ProjectStatusRows returns every non-terminal task of one project in the
+// given phases, each carrying whether a live session holds it.
 //
-// AwaitsUser is the ball-is-in-your-court set; `underway` joins it here and
-// only here, because an underway task with no live session is an ORPHAN — work
-// somebody started and walked away from — which is a genuine attention claim
-// that no status of its own describes. An underway task WITH a live session is
-// merged onto that session's row instead and never renders as an orphan.
-func projectStatusTaskStatuses(all bool) string {
-	list := taskstatus.SQLList(taskstatus.AwaitsUser) + ",'" + string(taskstatus.Underway) + "'"
-	if all {
-		// `ready` is reviewed work waiting to start: a claim on CAPACITY, not on
-		// attention (`submitted` is spawnable too, but it awaits a review). It
-		// is off the default view for the same reason `session status` keeps
-		// terminal rows behind --all — including it by default would bury the
-		// rows that actually need a person under the ones that need a session.
-		list += ",'" + string(taskstatus.Ready) + "'"
+// Unordered: projectstatuscmd sorts, because the sort key is a flag.
+func ProjectStatusRows(projectID int64, phases []string) ([]ProjectStatusRow, error) {
+	if len(phases) == 0 {
+		return nil, nil
 	}
-	return list
-}
-
-// ProjectStatusRows returns the merged attention row set for one project.
-//
-// Sessions are read first so a task claimed by a live session is folded into
-// that session's row rather than emitted twice. Ordering is NOT applied here:
-// projectstatuscmd ranks and sorts per group, which is a rendering decision and lives
-// with the renderer.
-func ProjectStatusRows(projectID int64, all bool) ([]ProjectStatusRow, error) {
 	db, err := DB()
 	if err != nil {
 		return nil, err
 	}
 
-	// RefreshLiveness, not livenessReady: `project monitor` is a repeating view whose
-	// whole premise is which sessions are alive RIGHT NOW, and livenessReady's
-	// sync.Once would freeze that observation at the first frame — so a session
-	// that ended while the monitor was open would never leave it, and one that
-	// started would never appear. A one-shot render pays the same single
-	// observation either way, so there is no flag and no second entry point.
+	// RefreshLiveness, not livenessReady: `project monitor` is a repeating view,
+	// and livenessReady's sync.Once would freeze the observation at the first
+	// frame — so a session that ended while the monitor was open would keep its
+	// task reading ⟳ forever. A one-shot render pays the same single observation
+	// either way.
 	//
-	// A failed observation is not fatal. RefreshLiveness's own contract is that
-	// reaching nothing means `unknown`, not `dead`, so a frame rendered against a
-	// stale snapshot over-includes rather than hiding live work.
+	// Reaching nothing is not fatal: RefreshLiveness's contract is that an
+	// unreachable server means `unknown`, not `dead`, so a stale snapshot
+	// over-reports live sessions rather than calling held work stalled.
 	if err = RefreshLiveness(); err != nil {
 		return nil, err
 	}
 
-	rows, err := projectSessionRows(db, projectID)
-	if err != nil {
-		return nil, err
-	}
+	ph, args := stringPlaceholders(phases)
 
-	claimed := make(map[int64]bool, len(rows))
-	for _, r := range rows {
-		if r.HasTask() {
-			claimed[r.TaskID] = true
-		}
-	}
+	// The live-session subqueries mirror the filter ListLiveSessions applies:
+	// a Live state, and liveness not observed `dead` (`unknown` stays, because
+	// "could not disprove" is not "gone" — E-1898). A hidden session still
+	// counts: `session hide` asks not to SEE a session, and hiding one must not
+	// make the work it holds read as stalled.
+	liveHolder := `
+	    FROM sessions s
+	    JOIN session_liveness sl ON sl.session_id = s.id
+	   WHERE s.task_id = t.id
+	     AND s.state IN (` + sessionstate.SQLList(sessionstate.Live) + `)
+	     AND sl.liveness != 'dead'`
 
-	taskRows, err := projectTaskRows(db, projectID, all)
-	if err != nil {
-		return nil, err
-	}
-	for _, r := range taskRows {
-		if claimed[r.TaskID] {
-			continue
-		}
-		rows = append(rows, r)
-	}
-	return rows, nil
-}
-
-// projectSessionRows reads every live session in the project, with whatever task
-// it claimed joined on.
-//
-// Three filters, each answering a different question:
-//
-//   - state — sessionstate.Live, the whole of it. E-1976 shipped a narrower
-//     local set that excluded `needs_input`, on the honest reading that nothing
-//     transitioned a session INTO that state, so every row carrying it was a
-//     session that registered and never had a turn — 34 of them in one project,
-//     each last active 25 to 71 days earlier. Hiding them is how they rotted
-//     unseen. E-2091 reveals them instead and fixes the writers that made them:
-//     `project status` already caps each rank at ten rows with a footer naming
-//     the remainder, which is machinery built for exactly this, and a row in it
-//     is what provides the mechanism to resolve it. The existing rows are
-//     surfaced, not migrated — retiring them in the dark is the opposite of what
-//     revealing them is for.
-//   - liveness != 'dead' — a fresh OBSERVATION, joined the same way
-//     ListLiveSessions does it: we reached the session's tmux server and its
-//     pane was not there. `unknown` (server unreachable) deliberately stays,
-//     because "could not disprove" is not "gone" — the rule E-1898 established
-//     and `project status` has no reason to reinterpret.
-//   - hidden — `endless session hide` is how a user says "stop showing me this
-//     one", and a view whose whole job is attention triage is the last surface
-//     that should ignore it.
-//
-// The task join is LEFT: a session that has claimed nothing still gets a row,
-// because an agent running with no task is exactly the kind of thing a person
-// wants to see.
-func projectSessionRows(db *sql.DB, projectID int64) ([]ProjectStatusRow, error) {
-	rows, err := db.Query(`
-		SELECT s.id,
-		       s.state,
-		       COALESCE(NULLIF(s.last_activity, ''), s.started_at, '') AS activity,
-		       COALESCE(t.id, 0),
-		       COALESCE(t.title, ''),
-		       COALESCE(t.status, ''),
-		       COALESCE(t.phase, ''),
-		       COALESCE(ty.slug, ''),
-		       COALESCE(t.updated_at, ''),
-		       s.auto_spawned
-		  FROM sessions s
-		  JOIN session_liveness sl ON sl.session_id = s.id
-		  LEFT JOIN live_tasks t ON t.id = s.task_id
-		  LEFT JOIN task_types ty ON ty.id = t.type_id
-		 WHERE s.project_id = ?
-		   AND s.state IN (`+sessionstate.SQLList(sessionstate.Live)+`)
-		   AND sl.liveness != 'dead'
-		   AND s.hidden = 0`, projectID)
-	if err != nil {
-		return nil, fmt.Errorf("project status sessions: %w", err)
-	}
-	defer rows.Close()
-
-	var out []ProjectStatusRow
-	for rows.Next() {
-		r := ProjectStatusRow{ProjectID: projectID}
-		if err = rows.Scan(
-			&r.SessionID, &r.SessionState, &r.SessionActivity,
-			&r.TaskID, &r.Title, &r.Status, &r.Phase, &r.TypeSlug, &r.TaskUpdated,
-			&r.AutoSpawned,
-		); err != nil {
-			return nil, fmt.Errorf("project status sessions: %w", err)
-		}
-		out = append(out, r)
-	}
-	return out, rows.Err()
-}
-
-// projectTaskRows reads the project's attention-claiming tasks. Rows whose task
-// a live session already holds are dropped by the caller, not here — this query
-// has no business knowing about sessions, and the anti-join it would need
-// re-derives the set the caller is already holding.
-func projectTaskRows(db *sql.DB, projectID int64, all bool) ([]ProjectStatusRow, error) {
 	query := `
 		SELECT t.id, t.title, t.status, t.phase,
-		       COALESCE(ty.slug, ''), COALESCE(t.updated_at, '')
+		       COALESCE(ty.slug, ''), COALESCE(t.updated_at, ''),
+		       EXISTS(SELECT 1 FROM task_landings tl WHERE tl.task_id = t.id),
+		       EXISTS(SELECT 1 ` + liveHolder + `),
+		       EXISTS(SELECT 1 ` + liveHolder + ` AND s.state = '` + string(sessionstate.Prompted) + `')
 		  FROM live_tasks t
 		  LEFT JOIN task_types ty ON ty.id = t.type_id
 		 WHERE t.project_id = ?
-		   AND t.status IN (` + projectStatusTaskStatuses(all) + `)`
-	rows, err := db.Query(query, projectID)
+		   AND t.status NOT IN (` + terminalStatusSet + `)
+		   AND t.phase IN (` + ph + `)`
+	rows, err := db.Query(query, append([]any{projectID}, args...)...)
 	if err != nil {
 		return nil, fmt.Errorf("project status tasks: %w", err)
 	}
@@ -342,12 +213,25 @@ func projectTaskRows(db *sql.DB, projectID int64, all bool) ([]ProjectStatusRow,
 		r := ProjectStatusRow{ProjectID: projectID}
 		if err = rows.Scan(
 			&r.TaskID, &r.Title, &r.Status, &r.Phase, &r.TypeSlug, &r.TaskUpdated,
+			&r.Landed, &r.LiveSession, &r.Prompted,
 		); err != nil {
 			return nil, fmt.Errorf("project status tasks: %w", err)
 		}
 		out = append(out, r)
 	}
 	return out, rows.Err()
+}
+
+// stringPlaceholders is intPlaceholders for strings: "?,?,…" and the matching
+// args for a dynamic SQL `IN` clause.
+func stringPlaceholders(vals []string) (string, []any) {
+	ph := make([]string, len(vals))
+	args := make([]any, len(vals))
+	for i, v := range vals {
+		ph[i] = "?"
+		args[i] = v
+	}
+	return strings.Join(ph, ","), args
 }
 
 // SanitizeTmuxName folds a project name into something tmux will accept as part

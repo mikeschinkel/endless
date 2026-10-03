@@ -4,11 +4,10 @@
 // tmux launcher that gives the live one its dedicated two-pane session (E-1976).
 //
 // It is the project-scoped counterpart to internal/sessionstatuscmd. That view
-// answers "what is next for the task I am on"; this one answers "what in this
-// project is claiming a person's attention", across every concurrent session.
-// The two share their live-pane machinery (internal/liveview) and their fault
-// row (internal/faultrow) and nothing else — the questions are different, so
-// the row sets, the ranks and the glyph vocabularies are too.
+// answers "what is next for the task I am on"; this one lists the project's
+// open urgent, now and next tasks (E-2156). The two share their live-pane
+// machinery (internal/liveview), their fault row (internal/faultrow) and their
+// task-row vocabulary (internal/taskrow): a task reads the same in both.
 //
 // The Python verbs shell out here inheriting the terminal's stdout, so width and
 // color are detected against the real tty.
@@ -16,11 +15,9 @@ package projectstatuscmd
 
 import (
 	"errors"
-	"flag"
 	"fmt"
 	"io"
 	"os"
-	"time"
 
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/liveview"
@@ -37,13 +34,12 @@ const fallbackCols = 90
 // deliberately smaller than liveview.PanePctOfWindow's 80.
 //
 // For `session monitor` that 80% is a safety net: its frame is a handful of rows
-// and the cap almost never binds. The monitor is the opposite — fair-share
-// allocation grows the frame to fill whatever budget it is given, so the cap
-// binds on EVERY frame and whatever it leaves is exactly what the shell pane
-// below gets, forever. Two thirds keeps the monitor comfortably legible (five
-// groups still render several rows each on any normal terminal) while leaving a
-// third for the pane the user actually types in — which is the pane the whole
-// two-pane layout exists to provide.
+// and the cap almost never binds. The monitor is the opposite — its third list
+// grows to fill whatever budget it is given, so the cap binds on EVERY frame and
+// whatever it leaves is exactly what the shell pane below gets, forever. Two
+// thirds keeps the monitor comfortably legible while leaving a third for the
+// pane the user actually types in — which is the pane the whole two-pane layout
+// exists to provide.
 const monitorPctOfWindow = 65
 
 // Run dispatches both subcommands this package owns. One package, because the
@@ -63,28 +59,29 @@ type options struct {
 	project   string
 	projectID int64
 	monitor   bool
-	all       bool
-	limit     int
-	noLimit   bool
+	later     bool
+	sort      string
 	cols      int
 	rows      int
 	asJSON    bool
 }
+
+// defaultPhases is what both views cover by default; laterPhases is what
+// `project status --later` covers instead — the phase every other view leaves
+// out.
+var (
+	defaultPhases = []string{"urgent", "now", "next"}
+	laterPhases   = []string{"later"}
+)
 
 func runStatus(args []string) {
 	fs := refusal.NewFlags("project-status")
 	var o options
 	fs.StringVar(&o.project, "project", "", "project name (default: the project enclosing the working directory)")
 	fs.Int64Var(&o.projectID, "project-id", 0, "explicit project id (headless: bypasses name/cwd resolution and reads the resolved DB context instead of pinning main; intended for tests)")
-	fs.BoolVar(&o.monitor, "monitor", false, "live dashboard: redraw every 2s until interrupted (Ctrl-C)")
-	fs.BoolVar(&o.all, "all", false, "include `ready` tasks — reviewed work, a claim on capacity rather than attention")
-	// The default is duplicated in src/endless/project_status_cmd.py, which
-	// resolves the cap itself so `--limit`/`--no-limit` behave identically to
-	// every other Endless listing and then passes a RESOLVED number. So this
-	// default only applies to a direct `endless-go project-status` invocation.
-	// The two are asserted equal by .endless/tasks/e-1976/verify.sh.
-	fs.IntVar(&o.limit, "limit", defaultGroupCap, "max rows PER GROUP")
-	fs.BoolVar(&o.noLimit, "no-limit", false, "render every row in every group")
+	fs.BoolVar(&o.monitor, "monitor", false, "redraw every 2s until interrupted (Ctrl-C) — `project monitor`; the only mode that truncates")
+	fs.BoolVar(&o.later, "later", false, "show ONLY `later` tasks, instead of urgent/now/next")
+	fs.StringVar(&o.sort, "sort", string(sortUpdated), "row order within each list, newest first: updated or id")
 	fs.IntVar(&o.cols, "cols", 0, "terminal width override (0 = auto-detect)")
 	fs.IntVar(&o.rows, "rows", 0, "terminal height override (0 = auto-detect; the budget the monitor fits its frame into)")
 	fs.BoolVar(&o.asJSON, "json", false, "emit the row set as JSON instead of the rendered frame")
@@ -94,52 +91,45 @@ func runStatus(args []string) {
 		refusal.NoReport(err.Error(), "Fix the flag and retry").
 			Command("project-status").Text(fs.Output()).Exit(2)
 	}
-
-	// Mutually exclusive by design, not by precedence, matching rowcap.py: a cap
-	// and the removal of the cap are contradictory requests, and silently
-	// honoring one answers a question the caller did not ask.
-	if o.noLimit && wasSet(fs.FlagSet, "limit") {
-		refusal.NoReport("project-status: --limit and --no-limit are mutually exclusive",
-			"Pass only one of --limit and --no-limit and retry").
-			Command("project-status").Exit(2)
-	}
-	if !o.noLimit && o.limit < 1 {
-		refusal.NoReport("project-status: --limit must be at least 1; pass --no-limit to render every row",
-			"Pass --limit 1 or higher, or --no-limit, and retry").
+	if !validSortKey(o.sort) {
+		refusal.NoReport(fmt.Sprintf("project-status: --sort must be updated or id, not %q", o.sort),
+			"Pass --sort updated or --sort id and retry").
 			Command("project-status").Exit(2)
 	}
 
 	projectID, name := resolveProject(o)
-	groupCap := o.limit
-	if o.noLimit {
-		groupCap = 0
+	phases, phrase := defaultPhases, "urgent, now or next"
+	if o.later {
+		phases, phrase = laterPhases, "later"
 	}
+	key := sortKey(o.sort)
 
-	// --json is a DATA dump, not a view: it emits every row the query returned and
-	// leaves the include/exclude decision to the consumer, so it is UNCAPPED (the
-	// rule rowcap.py sets for machine formats — a consumer parsing a truncated
-	// payload has no footer to read and no way to notice) and it wins over
-	// --monitor, whose output is a drawn frame. --all still applies: that filters
-	// the query.
+	// --json is a DATA dump, not a view: every row, and it wins over --monitor,
+	// whose output is a drawn frame.
 	if o.asJSON {
-		rows, err := monitor.ProjectStatusRows(projectID, o.all)
+		rows, err := monitor.ProjectStatusRows(projectID, phases)
 		if err != nil {
 			fail(err)
 		}
-		if err = renderJSON(os.Stdout, name, rows, time.Now().UTC()); err != nil {
+		if err = renderJSON(os.Stdout, name, rows, key); err != nil {
 			fail(err)
 		}
 		return
 	}
 
 	color := liveview.ColorEnabled()
+	frame := frameSpec{projectID: projectID, name: name, phases: phases, phrase: phrase, sort: key, rows: o.rows}
 
 	// --monitor only makes sense against an interactive terminal (the redraw uses
 	// cursor-positioning escapes). When stdout is piped or captured, degrade to a
-	// single frame so scripts and pipes don't hang on an endless loop.
+	// single frame so scripts and pipes don't hang on an endless loop — still the
+	// monitor's frame, truncated to the height it was asked to fit.
+	if o.monitor {
+		frame.truncate = true
+	}
 	if o.monitor && isTTY() {
 		liveview.Loop(liveview.LoopConfig{
-			Render:       frameFunc(projectID, name, o.all, groupCap, o.rows),
+			Render:       frame.fn(),
 			ColsOverride: o.cols,
 			FallbackCols: fallbackCols,
 			Color:        color,
@@ -160,33 +150,51 @@ func runStatus(args []string) {
 		return
 	}
 
-	if _, err := frameFunc(projectID, name, o.all, groupCap, o.rows)(
+	if _, err := frame.fn()(
 		os.Stdout, liveview.DetectCols(o.cols, fallbackCols), color,
 	); err != nil {
 		fail(err)
 	}
 }
 
-// frameFunc binds one render into the liveview.Frame shape. The snapshot
-// and the monitor call the SAME closure, which is what makes `project status`
-// provably one frame of `project monitor` rather than a lookalike.
-func frameFunc(projectID int64, name string, all bool, groupCap, rowBudget int) liveview.Frame {
+// frameSpec is everything one frame needs that does not change between
+// repaints.
+type frameSpec struct {
+	projectID int64
+	name      string
+	phases    []string
+	phrase    string
+	sort      sortKey
+	// rows is the --rows override; 0 detects the pane height per frame.
+	rows int
+	// truncate is true for `project monitor`, the only view that cuts list 3.
+	truncate bool
+}
+
+// fn binds one render into the liveview.Frame shape. `project status` and
+// `project monitor` call the SAME closure; they differ only in whether list 3
+// may be cut to the pane.
+func (f frameSpec) fn() liveview.Frame {
 	return func(w io.Writer, cols int, color bool) (int, error) {
-		rows, err := monitor.ProjectStatusRows(projectID, all)
+		rows, err := monitor.ProjectStatusRows(f.projectID, f.phases)
 		if err != nil {
 			return 0, err
 		}
-		// Both the clock and the height budget are read PER FRAME, not per
-		// process. A monitor left open overnight must age its rows — freezing the
-		// clock at startup is the bug that leaves a 10-hour-idle session reading
-		// "2m" — and it must re-fit when the window is resized, which is the same
-		// argument liveview.Loop already makes for re-detecting the width.
-		budget := rowBudget
-		if budget == 0 {
+		// The height budget is read PER FRAME, not per process: a monitor must
+		// re-fit when its window is resized, the same argument liveview.Loop
+		// already makes for re-detecting the width.
+		budget := f.rows
+		if f.truncate && budget == 0 {
 			budget = liveview.DetectRows(os.Getenv("TMUX_PANE"), monitorPctOfWindow, 0)
 		}
-		return render(w, name, rows, groupCap, budget, cols, color, time.Now().UTC(),
-			faults.ProjectScope(projectID)), nil
+		return render(w, f.name, rows, frameOpts{
+			budget:      budget,
+			truncate:    f.truncate,
+			cols:        cols,
+			color:       color,
+			sort:        f.sort,
+			emptyPhrase: f.phrase,
+		}, faults.ProjectScope(f.projectID)), nil
 	}
 }
 
@@ -260,20 +268,6 @@ func resolveProject(o options) (int64, string) {
 		fail(err)
 	}
 	return id, name
-}
-
-// wasSet reports whether a flag was given on the command line, as opposed to
-// holding its default. flag has no built-in answer and the mutual-exclusion
-// check needs one: --limit carries a non-zero default, so its VALUE cannot
-// distinguish "not passed" from "passed the default".
-func wasSet(fs *flag.FlagSet, name string) bool {
-	found := false
-	fs.Visit(func(f *flag.Flag) {
-		if f.Name == name {
-			found = true
-		}
-	})
-	return found
 }
 
 func isTTY() bool { return liveview.IsTerminal(os.Stdout) }
