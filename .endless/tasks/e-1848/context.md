@@ -1,0 +1,3 @@
+From the E-2223 brainstorm (decision ED-1606): the monitor CPU redesign chose visibility gating over a shared hub process. A daemon like this is the deferred hub, to build only if profiling after gating shows a measured need.
+
+Today only visible monitors fire the job runner, so jobs don't run when no monitor is visible. Mike considers that acceptable and preferable: jobs serve task and session work, not general automation. `task spawn` always starts a session monitor, so only users who never spawn, or who kill the monitor, miss jobs. A cheaper alternative to a daemon, if that ever matters: other entry points that already run often (Claude hook handlers, `endless` commands) also attempt a lease-guarded, non-blocking `jobs.RunDue`.
