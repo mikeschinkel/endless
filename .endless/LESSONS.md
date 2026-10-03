@@ -7063,3 +7063,7 @@ Say 'session status' / 'session monitor' (and 'row'), not an invented word like 
 ### [2026-10-03] A decision states what is decided, not every alternative discussed
 Write a decision as the positive rule a future reader needs. Do not add prohibitions or rejected options just because they came up in the conversation (e.g. 'never write Claude Code's socket', 'MCP is not used') when nobody was going to try them; they add length, read as live risks, and get cited as authority. Include a rejected alternative only when a future reader would plausibly reach for it and needs to know why not.
 - **Project**: endless
+
+### [2026-10-03] Rebuild worktree binaries after rebasing onto main before re-verifying
+After git rebase main in a worktree, run just build before endless task verify. The worktree's bin/endless-go predates the rebase, so Python code from main that shells out to a new endless-go verb (e.g. worktree land-gate) fails with 'unknown verb' and looks like a regression in unrelated tests. Also: a test helper forcing the human audience must monkeypatch agent_help._AMBIENT_AUDIENCE, because ENDLESS_AUDIENCE is latched at import and the verify runner exports it.
+- **Project**: endless
