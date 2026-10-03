@@ -15,7 +15,8 @@ set -u
 
 WT="$(git rev-parse --show-toplevel)" || setup_error "not in a git repo"
 cd "${WT}" || setup_error "cannot cd to ${WT}"
-RUN_DIR="${ENDLESS_VERIFY_RUN}"
+RUN_DIR="$(mktemp -d)" || setup_error "could not create a temp dir"
+trap 'rm -rf "${RUN_DIR}"' EXIT
 
 command -v sqlite3 >/dev/null || setup_error "sqlite3 is required"
 command -v uv >/dev/null || setup_error "uv is required"
@@ -30,7 +31,7 @@ gate() {
     if "$@" >"${log}" 2>&1; then
         report_pass "${label}"
     else
-        report_fail "${label}" "pass" "failed — see ${log}"
+        report_fail "${label}" "pass" "$(tail -25 "${log}")"
         printf '\n%sFAIL-FAST: unit gate red; later assertions suppressed.%s\n' "${RED}" "${RESET}"
         summary
     fi
@@ -39,7 +40,13 @@ gate() {
 gate "go test ./internal/projectstatuscmd/ ./internal/taskrow/ ./internal/sessionstatuscmd/" \
     go test ./internal/projectstatuscmd/ ./internal/taskrow/ ./internal/sessionstatuscmd/
 gate "go test ./internal/monitor/" go test ./internal/monitor/
-gate "Python suite" uv run --project "${WT}" pytest "${WT}/tests" -q -x
+# The Python suite runs as it would in a plain shell. The CLI words its output
+# differently when it detects an agent, and a verify run launched from a Claude
+# session inherits the variables it detects one by — so tests pinning the human
+# wording would fail here for reasons that have nothing to do with this task.
+gate "Python suite" env -u ENDLESS_AUDIENCE -u CLAUDECODE -u CLAUDE_CODE_ENTRYPOINT -u CLAUDE_CODE_SESSION_ID \
+    -u CLAUDE_CODE_HOST_SESSION_ID -u CLAUDE_AGENT_SDK_VERSION \
+    uv run --project "${WT}" pytest "${WT}/tests" -q -x
 
 EGO="${RUN_DIR}/endless-go"
 gate "build endless-go" go build -o "${EGO}" ./cmd/endless-go
