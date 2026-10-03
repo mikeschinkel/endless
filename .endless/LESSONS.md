@@ -7059,3 +7059,7 @@ Landing belongs to the spawned session's side: today the user runs it in a tmux 
 ### [2026-10-03] Use Endless's existing terms; never mint new ones in explanations
 Say 'session status' / 'session monitor' (and 'row'), not an invented word like 'board'. An invented term reads as an existing concept, and when it leaks into plans, docs or code it becomes vocabulary nobody chose. If a concept genuinely lacks a name, say so and propose the name as a question.
 - **Project**: endless
+
+### [2026-10-03] A decision states what is decided, not every alternative discussed
+Write a decision as the positive rule a future reader needs. Do not add prohibitions or rejected options just because they came up in the conversation (e.g. 'never write Claude Code's socket', 'MCP is not used') when nobody was going to try them; they add length, read as live risks, and get cited as authority. Include a rejected alternative only when a future reader would plausibly reach for it and needs to know why not.
+- **Project**: endless
