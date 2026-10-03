@@ -7043,3 +7043,7 @@ Mike's term for what session status / session monitor show is 'monitor' (e.g. 's
 ### [2026-10-03] Re-check dependency status before repeating a caveat
 Before repeating a caveat that depends on another task's state (e.g. 'command X does not exist until E-NNNN lands'), re-check that task's status with --db main. Caveats carried forward from an earlier message go stale; restating one after the dependency landed wastes the user's attention.
 - **Project**: endless
+
+### [2026-10-03] Don't attribute a seed's framing to Mike
+A task's seed, context and plan are often written by an agent in another session, not by Mike. Don't say 'you framed this' about wording in a seed. Attribute it to the seed, or ask.
+- **Project**: endless
