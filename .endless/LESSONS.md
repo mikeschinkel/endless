@@ -7051,3 +7051,7 @@ A task's seed, context and plan are often written by an agent in another session
 ### [2026-10-03] A regression fix inherited from another task goes to that task's session
 When the project-wide regression is red because of another task's landed change (here E-1814's seed broke internal/monitor tests), do not commit the fix on your own task branch, even as a separate commit. It lands under the wrong task id and can't be removed once main has it. Fix the minimum only if you must report the suite green, but first message the owning task's live session (ListAgents/SendMessage) or ask Mike, so the fix lands under the task that caused it.
 - **Project**: endless
+
+### [2026-10-03] The spawned task's side lands its work, never the spawning session
+Landing belongs to the spawned session's side: today the user runs it in a tmux sibling pane of the spawned session; later the spawned session may kick it off, still from a sibling pane. The spawning session has no responsibility for a task after spawn beyond answering questions the spawned session asks. The handoff templates' 'The spawning session owns landing' is wrong; do not repeat or rely on it.
+- **Project**: endless
