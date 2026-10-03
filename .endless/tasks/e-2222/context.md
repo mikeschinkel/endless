@@ -1,0 +1,1 @@
+A land failure costs the human a failed land plus a wall of output to read. Today an agent finds a land blocker (a migration clash with main, a source conflict) only when the human runs the land. The agent should find it first, fix it, and hand off a branch that lands.
