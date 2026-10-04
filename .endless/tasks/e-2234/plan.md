@@ -6,8 +6,8 @@ Mike's spec (2026-10-04). All flags pass through to `endless-go spawn-window`
 | Flag | Behavior | tmux mechanism (to confirm) |
 |---|---|---|
 | `--no-refocus` | Spawn without moving focus; the current window stays selected | `new-window -d` |
-| `--to-first` | Insert before every existing window in the session | `-b -t <session>:{start}` |
-| `--to-last` | Append after every existing window (the default) | `-a -t <session>:{end}` |
+| `--to-first` | Insert before every existing window in the session (the default for manual `task spawn`) | `-b -t <session>:{start}` |
+| `--to-last` | Append after every existing window | `-a -t <session>:{end}` |
 | `--to-left` | Insert just before the current window | `-b -t <current window>` |
 | `--to-right` | Insert just after the current window | `-a -t <current window>` |
 | `--tmux-session NAME` | Spawn in the named tmux session; error if it does not exist | target `NAME`, checked with `has-session` first |
@@ -16,14 +16,19 @@ Mike's spec (2026-10-04). All flags pass through to `endless-go spawn-window`
 - `--to-left` / `--to-right` mean the current window of the target session.
   With `--tmux-session` naming another session, that is that session's active
   window.
-- **The default must really be "last".** Today `newWindowArgs` targets
-  `<session>:` (next free index), which lands in a gap rather than at the end
-  when window numbers have holes. Make the default `--to-last` explicitly.
+- **The default changes to `--to-first`** for manual `task spawn` (Mike,
+  2026-10-04). Today `newWindowArgs` targets `<session>:` (next free index),
+  which is neither first nor reliably last: it lands in a gap when window
+  numbers have holes. `--to-last` must likewise mean the true end.
 - E-2125's rule stands: the target session is always explicit, never tmux's
   "current" guess. `--tmux-session` only replaces the default (the spawner's own
   session).
-- E-1814's auto-spawn already uses `-d` and its own target setting; it should
-  build on these flags rather than keep a parallel path.
+- **Auto-spawn placement is configurable, defaulting to `--to-last`.** E-1814's
+  auto-spawn already uses `-d` and its own target-session setting; it builds on
+  these flags rather than a parallel path, and adds a user config value
+  (`auto_spawn.placement`: first | last | left | right, default `last`) next to
+  `auto_spawn.target`. Left and right are relative to the target session's
+  active window.
 
 ## Verify
 
