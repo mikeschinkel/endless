@@ -1629,6 +1629,7 @@ def land_gate_refusal(verdict: dict, canonical: str) -> agent_help.Refusal:
     """Classify a refused land-gate verdict (E-2159) by what refused.
 
     - A migration collision is the agent's to fix: every step is in the block.
+      So is a rewritten base (E-2232): the fix is `git rebase` in the worktree.
     - A hook's veto may or may not be: only its own words say whether the fix
       is in the worktree or needs the user, so the agent is told to read them.
     - A hook that cannot run is fixed on main, which is the user's checkout.
@@ -1636,7 +1637,7 @@ def land_gate_refusal(verdict: dict, canonical: str) -> agent_help.Refusal:
     summary = verdict.get("summary") or f"cannot land {canonical}: the land gate refused."
     text = land_gate_text(summary, verdict.get("block") or "")
     source = verdict.get("source")
-    if source == "migrations":
+    if source in ("migrations", "base_rewritten"):
         return agent_help.no_report(
             summary,
             "follow the steps between the markers in the worktree, then land again",

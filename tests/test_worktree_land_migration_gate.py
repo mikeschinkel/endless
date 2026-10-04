@@ -83,6 +83,7 @@ def test_agent_gets_the_verdict_at_both_ends(as_agent):
 
 @pytest.mark.parametrize("source, cls", [
     ("migrations", agent_help.NO_REPORT),
+    ("base_rewritten", agent_help.NO_REPORT),
     ("hook", agent_help.REPORT_IF),
     ("hook_not_executable", agent_help.REPORT),
 ])

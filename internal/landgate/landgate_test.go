@@ -265,3 +265,92 @@ func TestCheck_MigrationRefusalPreemptsHook(t *testing.T) {
 		t.Fatalf("want the migrations refusal, got %+v", v)
 	}
 }
+
+// rewriteMain forks the branch after main has gained 00003_main.sql, then
+// rewrites main the way a `git pull --rebase` onto a remote commit does
+// (E-2232): main's commits since the shared base are replayed onto a new
+// commit, so they carry new SHAs and the branch keeps the old copies. The
+// merge-base falls back to the shared base, and a plain diff from it shows the
+// branch "adding" main's own migration.
+func rewriteMain(t *testing.T, f *fixture) {
+	t.Helper()
+	shared := strings.TrimSpace(f.git(f.main, "rev-parse", "HEAD"))
+	f.write(f.main, "db/migrations/00003_main.sql", "-- main\n")
+	f.commit(f.main, "main migration")
+	f.git(f.wt, "reset", "-q", "--hard", "main")
+	f.write(f.wt, "code.go", "package x\n")
+	f.commit(f.wt, "branch work")
+
+	f.git(f.main, "checkout", "-q", "-b", "remote", shared)
+	f.write(f.main, "README.md", "edited on the host\n")
+	f.commit(f.main, "readme")
+	f.git(f.main, "checkout", "-q", "main")
+	f.git(f.main, "rebase", "-q", "remote")
+}
+
+func TestCheck_RewrittenMainIsNotACollision(t *testing.T) {
+	f := newFixture(t, withDirs)
+	rewriteMain(t, f)
+
+	v := f.check()
+	if v.Source == SourceMigrations {
+		t.Fatalf("main's own migration read as the branch's: %+v", v)
+	}
+	if !v.Refused || v.Source != SourceBaseRewritten {
+		t.Fatalf("want a base-rewritten refusal, got %+v", v)
+	}
+	if strings.Contains(v.Summary, "\n") {
+		t.Errorf("Summary must be one line: %q", v.Summary)
+	}
+	if !strings.Contains(v.Summary, "git rebase main") || !strings.Contains(v.Block, "git rebase main") {
+		t.Errorf("verdict must name git rebase main:\n%s\n%s", v.Summary, v.Block)
+	}
+	for _, bad := range []string{"→", "Rename each", "Re-order each", "sandbox reset"} {
+		if strings.Contains(v.Summary+v.Block, bad) {
+			t.Errorf("rewritten-main verdict must not offer %q:\n%s", bad, v.Block)
+		}
+	}
+
+	// Its own remedy clears it.
+	f.git(f.wt, "rebase", "-q", "main")
+	if v := f.check(); v.Refused {
+		t.Fatalf("still refused after git rebase main: %+v", v)
+	}
+}
+
+// A rewritten main does not hide a real collision: the branch's own migration
+// against one main genuinely gained is still refused, and only the branch's
+// own is offered a rename.
+func TestCheck_RewrittenMainStillCatchesRealCollision(t *testing.T) {
+	f := newFixture(t, withDirs)
+	rewriteMain(t, f)
+	f.write(f.wt, "db/migrations/00004_branch.sql", "-- branch\n")
+	f.commit(f.wt, "branch migration")
+	f.write(f.main, "db/migrations/00004_main.sql", "-- main 4\n")
+	f.commit(f.main, "main migration 4")
+
+	v := f.check()
+	if !v.Refused || v.Source != SourceMigrations {
+		t.Fatalf("want a migrations refusal, got %+v", v)
+	}
+	if got := strings.Join(v.Landed, ","); got != "db/migrations/00004_main.sql" {
+		t.Errorf("Landed = %q, want only main's genuinely new migration", got)
+	}
+	if len(v.Branch) != 1 || v.Branch[0].Path != "db/migrations/00004_branch.sql" ||
+		v.Branch[0].To != "db/migrations/00005_branch.sql" {
+		t.Errorf("Branch = %+v, want only 00004_branch.sql → 00005_branch.sql", v.Branch)
+	}
+}
+
+// A branch that adds a migration on top of a rewritten main, when main gained
+// none of its own, is told to rebase — not to rename anything.
+func TestCheck_RewrittenMainWithBranchMigrationOnly(t *testing.T) {
+	f := newFixture(t, withDirs)
+	rewriteMain(t, f)
+	f.write(f.wt, "db/migrations/00004_branch.sql", "-- branch\n")
+	f.commit(f.wt, "branch migration")
+
+	if v := f.check(); v.Source != SourceBaseRewritten {
+		t.Fatalf("want a base-rewritten refusal, got %+v", v)
+	}
+}

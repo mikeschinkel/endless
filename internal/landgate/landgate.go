@@ -16,6 +16,10 @@
 //     the branch ADDS files there and the base branch has ALSO added files
 //     there since the two diverged. It is a git diff over configured paths and
 //     knows nothing of goose, Alembic or Prisma, so it holds for any tool.
+//     Each side counts only its own commits: a commit the other side already
+//     carries under another SHA — what a rewritten base leaves on a branch —
+//     belongs to neither, and when the branch holds any the land is refused
+//     with `git rebase <base>` as the whole fix (E-2232).
 //
 //   - An optional project hook, .endless/hooks/pre-land.sh, for rules the
 //     built-in check does not cover. It may veto the land and explain why.
@@ -56,6 +60,7 @@ const HookPath = ".endless/hooks/pre-land.sh"
 // that cannot run is fixed on main, which is the user's.
 const (
 	SourceMigrations        = "migrations"
+	SourceBaseRewritten     = "base_rewritten"
 	SourceHook              = "hook"
 	SourceHookNotExecutable = "hook_not_executable"
 )
@@ -137,37 +142,130 @@ func checkMigrations(a Args, dirs []string) (v Verdict, err error) {
 	}
 	mb = strings.TrimSpace(mb)
 
-	branchAdded, err := added(a.Worktree, mb, "HEAD", dirs)
+	sides, err := ownCommits(a.Worktree, a.Base)
 	if err != nil {
 		return v, err
 	}
-	if len(branchAdded) == 0 {
-		return v, nil
-	}
-	landed, err := added(a.Worktree, mb, a.Base, dirs)
+
+	branchAdded, err := ownAdded(a.Worktree, mb, "HEAD", sides.branch, dirs)
 	if err != nil {
 		return v, err
 	}
-	if len(landed) == 0 {
+	landed, err := ownAdded(a.Worktree, mb, a.Base, sides.base, dirs)
+	if err != nil {
+		return v, err
+	}
+
+	// A real collision outranks a rewritten base: its instructions already
+	// start with the rebase that clears the rewrite.
+	if len(branchAdded) > 0 && len(landed) > 0 {
+		var onBase string
+		onBase, err = git(a.Worktree, append(
+			[]string{"ls-tree", "-r", "--name-only", a.Base, "--"}, dirs...)...)
+		if err != nil {
+			return v, fmt.Errorf("list %s's migrations: %w", a.Base, err)
+		}
+		v = Verdict{
+			Refused:   true,
+			Source:    SourceMigrations,
+			MergeBase: mb,
+			Landed:    landed,
+			Branch:    renames(branchAdded, lines(onBase)),
+		}
+		v.Summary = migrationSummary(a, v)
+		v.Block = migrationBlock(a, v)
 		return v, nil
 	}
 
-	onBase, err := git(a.Worktree, append(
-		[]string{"ls-tree", "-r", "--name-only", a.Base, "--"}, dirs...)...)
-	if err != nil {
-		return v, fmt.Errorf("list %s's migrations: %w", a.Base, err)
+	if sides.equivalent > 0 {
+		v = Verdict{Refused: true, Source: SourceBaseRewritten, MergeBase: mb}
+		v.Summary = rewrittenSummary(a)
+		v.Block = rewrittenBlock(a, sides.equivalent)
+		return v, nil
 	}
-
-	v = Verdict{
-		Refused:   true,
-		Source:    SourceMigrations,
-		MergeBase: mb,
-		Landed:    landed,
-		Branch:    renames(branchAdded, lines(onBase)),
-	}
-	v.Summary = migrationSummary(a, v)
-	v.Block = migrationBlock(a, v)
 	return v, nil
+}
+
+// commitSides is each side's own commits since the two diverged, and how many
+// of the branch's commits base already carries under another SHA.
+type commitSides struct {
+	branch     []string
+	base       []string
+	equivalent int
+}
+
+// ownCommits splits <base>...HEAD by patch identity (E-2232). A commit whose
+// change is already on the other side under another SHA belongs to neither: it
+// is what a rewritten base leaves behind. When base is rebased or amended after
+// the branch forks — `git pull` with pull.rebase onto a commit made on the host
+// is enough — every replayed commit gets a new SHA, the merge-base falls back
+// to before the rewrite, and the branch's old copies of base's commits look
+// like the branch's own work. Diffing from the merge-base would then report
+// base's own migrations as the branch adding them.
+func ownCommits(repo, base string) (s commitSides, err error) {
+	marked := func(side string) (map[string][]string, error) {
+		out, err := git(repo, "log", side, "--cherry-mark", "--no-merges",
+			"--format=%m %H", base+"...HEAD")
+		if err != nil {
+			return nil, fmt.Errorf("compare commits on %s and HEAD: %w", base, err)
+		}
+		m := map[string][]string{}
+		for _, ln := range lines(out) {
+			mark, sha, _ := strings.Cut(ln, " ")
+			m[mark] = append(m[mark], sha)
+		}
+		return m, nil
+	}
+	branch, err := marked("--right-only")
+	if err != nil {
+		return s, err
+	}
+	onBase, err := marked("--left-only")
+	if err != nil {
+		return s, err
+	}
+	// With one side selected, --cherry-mark prints that side's arrow for a
+	// commit of its own and "=" for one the other side also carries.
+	s.branch = branch[">"]
+	s.base = onBase["<"]
+	s.equivalent = len(branch["="])
+	return s, nil
+}
+
+// ownAdded lists the files under dirs that `to` adds relative to `from` AND
+// that one of `commits` adds. The first half is the net effect, so a file added
+// then removed is not counted; the second confines it to that side's own work.
+func ownAdded(repo, from, to string, commits, dirs []string) ([]string, error) {
+	if len(commits) == 0 {
+		return nil, nil
+	}
+	net, err := added(repo, from, to, dirs)
+	if err != nil || len(net) == 0 {
+		return nil, err
+	}
+	cmd := exec.Command("git", append(
+		[]string{"-C", repo, "diff-tree", "--stdin", "-r", "--no-commit-id",
+			"--no-renames", "--diff-filter=A", "--name-only", "--"}, dirs...)...)
+	cmd.Env = events.SanitizedGitEnv()
+	cmd.Stdin = strings.NewReader(strings.Join(commits, "\n") + "\n")
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
+	if err != nil {
+		return nil, fmt.Errorf("list migrations added by %s's own commits: %w: %s",
+			to, err, strings.TrimSpace(stderr.String()))
+	}
+	own := map[string]bool{}
+	for _, f := range lines(string(out)) {
+		own[f] = true
+	}
+	var files []string
+	for _, f := range net {
+		if own[f] {
+			files = append(files, f)
+		}
+	}
+	return files, nil
 }
 
 // added lists the files under dirs that `to` adds relative to `from`.
@@ -279,6 +377,31 @@ func migrationBlock(a Args, v Verdict) string {
 		"version, so a renumbered one would be skipped or applied twice there.\n")
 	fmt.Fprintf(&b, "  5. Re-verify: endless task verify %s\n", a.Task)
 	fmt.Fprintf(&b, "  6. Land again: endless worktree land %s\n", a.Task)
+	return b.String()
+}
+
+func rewrittenSummary(a Args) string {
+	return fmt.Sprintf(
+		"cannot land %s: %s was rewritten since this branch forked — run "+
+			"git rebase %s in the worktree, then land again. Nothing was merged.",
+		a.Task, a.Base, a.Base)
+}
+
+func rewrittenBlock(a Args, equivalent int) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "This branch carries %s that %s already holds under "+
+		"different SHAs: %s was rebased or amended after the branch forked, and "+
+		"the branch kept the old copies. Land refuses until the branch drops "+
+		"them, so what it checks and merges is the branch's own work on top of "+
+		"%s as it is now.\n\n",
+		plural(equivalent, "commit"), a.Base, a.Base, a.Base)
+	fmt.Fprintf(&b, "Fix it in the worktree, %s:\n", a.Worktree)
+	fmt.Fprintf(&b, "  1. git rebase %s\n"+
+		"     Git drops the commits %s already has, keeping only the branch's own.\n",
+		a.Base, a.Base)
+	fmt.Fprintf(&b, "  2. Land again: endless worktree land %s\n\n", a.Task)
+	fmt.Fprintf(&b, "Do not rename or renumber any migration for this: the ones "+
+		"that look duplicated are %s's own.\n", a.Base)
 	return b.String()
 }
 
