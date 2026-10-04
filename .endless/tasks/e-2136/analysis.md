@@ -1,9 +1,9 @@
 ## What this task is
 
 The Agent Folio Format writer, plus the first two commands rendered through it:
-`task show` (detail-shaped) and `session status` (list-shaped). Design is in the
-private briefs `brief-2028-09-12-agent-folio-format.md` and
-`brief-2028-09-12-agent-facing-output-endless.md`.
+`task show` (detail-shaped) and `session status` (list-shaped). This analysis
+and the plan carry the design; they are self-contained and cite nothing a reader
+cannot open.
 
 The motivating failure is observed, not theoretical: sessions call `task show`,
 see that an analysis exists behind a pointer, and proceed without fetching it —
@@ -167,3 +167,5 @@ field — something the implementation cannot be correct without and that a
 session could not produce from the title — and run the same task shape with it
 inlined versus behind a pointer. `task show` being in scope here is what makes
 that measurable.
+
+
