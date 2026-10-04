@@ -7279,11 +7279,25 @@ def _claude_binary() -> str:
     return claude_bin
 
 
+def _tmux_session_exists(name: str) -> bool:
+    """Whether a tmux session has exactly this name (E-2234).
+
+    `=` makes tmux match exactly: a bare name also matches as a prefix and
+    then as a glob, so `end` would answer for a session called `endless`.
+    """
+    return subprocess.run(
+        ["tmux", "has-session", "-t", f"={name}"],
+        capture_output=True,
+    ).returncode == 0
+
+
 def spawn_plan(item_id: int, project_name: str | None = None,
                worktree: str | None = None, force: bool = False,
                permission_mode: str = "auto", model: str | None = None,
                name: str | None = None, auto: bool = False,
-               target_session: str | None = None):
+               target_session: str | None = None,
+               no_refocus: bool = False, placement: str = "first",
+               tmux_session: str | None = None):
     """Spawn a new tmux window with Claude working on a task's prompt.
 
     Pre-claims the task (status flip + worktree creation) BEFORE launching
@@ -7315,6 +7329,13 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     focus, and marks it so SessionStart flags the session auto-spawned.
     `target_session` names the tmux session the window opens in; without it the
     window lands in the spawner's own session (E-2125).
+
+    `no_refocus`, `placement` and `tmux_session` are a person's (E-2234).
+    `no_refocus` opens the window detached, as `auto` does, without marking it.
+    `placement` is where its tab lands: first (the default), last, or left/right
+    of the target session's active window. `tmux_session` names the target
+    session the way a person sees it, matched exactly; a name no session has is
+    refused here, before the pre-claim, so a typo costs nothing.
     """
     import shutil
     import subprocess
@@ -7332,7 +7353,13 @@ def spawn_plan(item_id: int, project_name: str | None = None,
             "installing tmux — spawn's only delivery surface — or forgoing "
             "spawning",
         )
-    if not target_session and not os.environ.get("TMUX"):
+    if tmux_session is not None and not _tmux_session_exists(tmux_session):
+        raise agent_help.no_report(
+            f"No tmux session is named {tmux_session!r}. Nothing was spawned.",
+            "Pass --tmux-session the exact name of an existing session "
+            "(`tmux ls` lists them), or omit it to spawn in your own, and retry",
+        )
+    if not (target_session or tmux_session) and not os.environ.get("TMUX"):
         raise agent_help.report(
             "Not in a tmux session. "
             "endless spawn requires tmux.",
@@ -7514,10 +7541,15 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     # An explicit --name wins; otherwise the session is named for its task
     # (E-2181), never left to Claude Code's cwd-plus-disambiguator default.
     spawn_cmd += ["--name", name or claude_session_name(item_id)]
+    spawn_cmd += ["--placement", placement]
     if auto:
         spawn_cmd += ["--auto"]
+    if no_refocus:
+        spawn_cmd += ["--no-refocus"]
     if target_session:
         spawn_cmd += ["--target-session", target_session]
+    if tmux_session is not None:
+        spawn_cmd += ["--tmux-session", tmux_session]
     subprocess.run(spawn_cmd, check=True)
 
     # E-1428: the same aligned-label discipline `task claim` prints under, and
@@ -7537,7 +7569,10 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     _echo_labeled_rows(rows)
     click.echo("")
     click.echo("  Switch to it:")
-    click.echo(f"      tmux select-window -t {window_name}")
+    if tmux_session is not None:
+        click.echo(f"      tmux switch-client -t ={tmux_session}:{window_name}")
+    else:
+        click.echo(f"      tmux select-window -t {window_name}")
 
 
 def search_tasks(

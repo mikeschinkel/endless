@@ -729,7 +729,18 @@ endless task spawn <id>                           # new tmux window
 endless task spawn <id> --permission-mode plan    # override the spawned session's permission mode (default: auto)
 endless task spawn <id> --model <model>           # pass a --model through to the spawned claude (optional)
 endless task spawn <id> --worktree <path>         # cd to <path> instead of the spawn-created worktree
+endless task spawn <id> --no-refocus              # open the window without switching to it
+endless task spawn <id> --to-last                 # tab position: --to-first (default), --to-last, --to-left, --to-right
+endless task spawn <id> --tmux-session <name>     # open in that tmux session instead of your own (refused if none has that name)
 ```
+
+Placement is where the new window's tab lands among the session's windows.
+`--to-first` (the default) puts it before every existing window and
+`--to-last` after every one — the true ends, whatever holes the window
+numbering has. `--to-left` and `--to-right` put it beside the session's
+active window; with `--tmux-session`, that is the named session's active
+window. The four are mutually exclusive. `--tmux-session` matches the name
+exactly, never as a prefix.
 
 `--reopen` is retired. Reopening settled work in a *fresh* session threw away
 the session that did it — the only place its reasoning lives. Reopen in that

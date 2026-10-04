@@ -365,10 +365,10 @@ func TestResolveTarget(t *testing.T) {
 }
 
 func TestSpawnArgs(t *testing.T) {
-	if got, want := spawnArgs(42, "$5"), []string{"--no-session", "task", "spawn", "E-42", "--auto", "--target-session", "$5"}; !reflect.DeepEqual(got, want) {
+	if got, want := spawnArgs(42, "$5", "last"), []string{"--no-session", "task", "spawn", "E-42", "--auto", "--to-last", "--target-session", "$5"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("with target: %q, want %q", got, want)
 	}
-	if got, want := spawnArgs(42, ""), []string{"--no-session", "task", "spawn", "E-42", "--auto"}; !reflect.DeepEqual(got, want) {
+	if got, want := spawnArgs(42, "", "right"), []string{"--no-session", "task", "spawn", "E-42", "--auto", "--to-right"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("monitor target: %q, want %q", got, want)
 	}
 }
@@ -393,6 +393,22 @@ func TestRegisteredAndScheduled(t *testing.T) {
 		`{"auto_spawn":{"interval":"soon"}}`)
 	if got := (job{}).Schedule().Interval.String(); got != "5m0s" {
 		t.Errorf("unparsable interval = %s, want the 5m0s default", got)
+	}
+}
+
+// TestLoadSettings_Placement: an auto-spawned window lands last unless the
+// user's config says otherwise (E-2234).
+func TestLoadSettings_Placement(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
+	if got := loadSettings().placement; got != "last" {
+		t.Errorf("default placement = %q, want last", got)
+	}
+	writeFile(t, filepath.Join(home, ".config", "endless", "config.json"),
+		`{"auto_spawn":{"placement":"left"}}`)
+	if got := loadSettings().placement; got != "left" {
+		t.Errorf("configured placement = %q, want left", got)
 	}
 }
 

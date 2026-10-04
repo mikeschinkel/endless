@@ -195,3 +195,85 @@ def test_foreground_spawn_explicit_name_wins(isolated_env, fg_env):
     cmd = [c for c in fg_env if "spawn-window" in c][0]
     assert cmd.count("--name") == 1
     assert cmd[cmd.index("--name") + 1] == "foo"
+
+
+# E-2234: focus and placement flags.
+
+def test_manual_spawn_defaults_to_first_and_refocus(isolated_env, fg_env):
+    """A plain manual spawn puts its tab first and takes focus."""
+    _seed_project_and_task(1705)
+
+    spawn_plan(1705)
+
+    cmd = [c for c in fg_env if "spawn-window" in c][0]
+    assert cmd[cmd.index("--placement") + 1] == "first"
+    assert "--no-refocus" not in cmd
+    assert "--tmux-session" not in cmd
+
+
+def test_spawn_threads_placement_no_refocus_and_tmux_session(
+        isolated_env, fg_env, monkeypatch):
+    _seed_project_and_task(1705)
+    monkeypatch.setattr(task_cmd, "_tmux_session_exists", lambda name: True)
+    monkeypatch.delenv("TMUX")  # a named session needs a server, not a pane
+
+    spawn_plan(1705, placement="right", no_refocus=True, tmux_session="work")
+
+    cmd = [c for c in fg_env if "spawn-window" in c][0]
+    assert cmd[cmd.index("--placement") + 1] == "right"
+    assert "--no-refocus" in cmd
+    assert cmd[cmd.index("--tmux-session") + 1] == "work"
+    assert "--auto" not in cmd
+
+
+def test_missing_tmux_session_refuses_before_pre_claim(
+        isolated_env, fg_env, monkeypatch):
+    """A name no session has is refused before anything happens — no
+    pre-claim, no worktree, no window."""
+    _seed_project_and_task(1705)
+    monkeypatch.setattr(task_cmd, "_tmux_session_exists", lambda name: False)
+    claimed = []
+    monkeypatch.setattr(task_cmd, "_perform_claim_work",
+                        lambda **k: claimed.append(k))
+
+    import click
+    with pytest.raises(click.ClickException, match="No tmux session is named 'nope'"):
+        spawn_plan(1705, tmux_session="nope")
+    assert claimed == []
+    assert not [c for c in fg_env if "spawn-window" in c]
+
+
+def _invoke_spawn(monkeypatch, *args):
+    from click.testing import CliRunner
+    from endless.cli import main
+    calls = []
+    monkeypatch.setattr(task_cmd, "spawn_plan",
+                        lambda *a, **k: calls.append(k))
+    result = CliRunner().invoke(main, ["task", "spawn", "E-1705", *args])
+    return result, calls
+
+
+@pytest.mark.parametrize("flag,placement", [
+    ([], "first"), (["--to-first"], "first"), (["--to-last"], "last"),
+    (["--to-left"], "left"), (["--to-right"], "right"),
+])
+def test_cli_maps_to_flags_to_placement(isolated_env, monkeypatch, flag, placement):
+    result, calls = _invoke_spawn(monkeypatch, *flag)
+    assert result.exit_code == 0, result.output
+    assert calls[0]["placement"] == placement
+    assert calls[0]["no_refocus"] is False
+
+
+def test_cli_to_flags_are_mutually_exclusive(isolated_env, monkeypatch):
+    result, calls = _invoke_spawn(monkeypatch, "--to-first", "--to-left")
+    assert result.exit_code == 2
+    assert "mutually exclusive" in result.output
+    assert calls == []
+
+
+def test_cli_threads_no_refocus_and_tmux_session(isolated_env, monkeypatch):
+    result, calls = _invoke_spawn(monkeypatch, "--no-refocus",
+                                  "--tmux-session", "work")
+    assert result.exit_code == 0, result.output
+    assert calls[0]["no_refocus"] is True
+    assert calls[0]["tmux_session"] == "work"

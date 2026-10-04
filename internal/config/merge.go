@@ -103,7 +103,8 @@ func (c *EndlessConfig) Merge(other cfgstore.RootConfig) cfgstore.RootConfig {
 	out.ProjectStatus.Colors.Other = mergeListColor(c.ProjectStatus.Colors.Other, o.ProjectStatus.Colors.Other)
 
 	// AutoSpawn: Enabled and Cap are project-only and deliberately NOT
-	// inherited — see AutoSpawn. Interval and Target are CLI-only: inherit.
+	// inherited — see AutoSpawn. Interval, Target and Placement are CLI-only:
+	// inherit.
 	out.AutoSpawn.Enabled = c.AutoSpawn.Enabled
 	out.AutoSpawn.Cap = c.AutoSpawn.Cap
 	if out.AutoSpawn.Interval == "" {
@@ -111,6 +112,9 @@ func (c *EndlessConfig) Merge(other cfgstore.RootConfig) cfgstore.RootConfig {
 	}
 	if out.AutoSpawn.Target == "" {
 		out.AutoSpawn.Target = o.AutoSpawn.Target
+	}
+	if out.AutoSpawn.Placement == "" {
+		out.AutoSpawn.Placement = o.AutoSpawn.Placement
 	}
 
 	return &out

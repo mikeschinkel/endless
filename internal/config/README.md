@@ -140,6 +140,7 @@ whole:
 | `cap`      | project only | `int`    | Most auto-spawned tasks outstanding (underway or unverified) at once. Default `3`. |
 | `interval` | CLI only     | `string` | Job cadence, a Go duration. Default `5m`. At most one task is spawned per interval. |
 | `target`   | CLI only     | `string` | tmux session the window opens in: `active` (default — the session of the most recently active attached client) or `monitor` (the session the job runs in). |
+| `placement` | CLI only    | `string` | Where the window's tab lands in that session: `first`, `last` (default), `left` or `right` — the last two relative to the session's active window. The same positions `task spawn --to-first`/`--to-last`/`--to-left`/`--to-right` take. |
 
 `enabled` and `cap` are **never inherited** from the CLI layer: a user-level
 `enabled: true` does not opt any project in. They are read from the project

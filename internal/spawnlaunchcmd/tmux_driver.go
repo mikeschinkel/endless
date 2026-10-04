@@ -17,19 +17,23 @@ import (
 
 // newWindowArgs builds
 //
-//	tmux new-window [-d] -t <target> [-c <cwd>] -n <name> -P -F #{pane_id} -- <cmd...>
+//	tmux new-window [-d] {-a|-b} -t <place.target> [-c <cwd>] -n <name> -P -F #{pane_id} -- <cmd...>
 //
 // detached adds `-d`, which creates the window without making it the current
 // window of its session. The auto-spawn job (E-1814) passes it so a session
-// nobody asked for never takes focus from the one the user is typing in; a
-// manual `task spawn` omits it, because the person who asked is looking for
-// the window.
-// target is REQUIRED and names the session the window is created in (E-2125).
-// Without it tmux picks the "current" session, which off a command line means
+// nobody asked for never takes focus from the one the user is typing in, and a
+// manual `task spawn --no-refocus` passes it for the same reason (E-2234); a
+// plain manual `task spawn` omits it, because the person who asked is looking
+// for the window.
+//
+// place is REQUIRED and names both the session the window is created in
+// (E-2125) and where its tab lands within that session (E-2234). Without an
+// explicit session tmux picks the "current" one, which off a command line means
 // the most recently active one on the server — so a spawn asked for in one
 // session materialized in whichever session the person happened to be looking
-// at, with nothing on the window saying where it came from. The session that
-// asked for the window is the session that gets it; see spawnerSession.
+// at, with nothing on the window saying where it came from. See windowPlacement
+// for why the position is always `-a`/`-b` against a window rather than tmux's
+// "next free index".
 //
 // The `--` terminates tmux flag parsing so the window command and its args are
 // passed through literally (no shell re-quoting of cmd elements). When cwd is
@@ -40,17 +44,105 @@ import (
 // by name. A name lookup is the same unqualified-target bug one call later: two
 // sessions can each hold a window called `E-1705`, and `-t E-1705` would answer
 // with whichever the server considered current.
-func newWindowArgs(target, cwd, windowName string, detached bool, cmd []string) []string {
+func newWindowArgs(place windowPlacement, cwd, windowName string, detached bool, cmd []string) []string {
 	args := []string{"new-window"}
 	if detached {
 		args = append(args, "-d")
 	}
-	args = append(args, "-t", target)
+	args = append(args, place.flag, "-t", place.target)
 	if cwd != "" {
 		args = append(args, "-c", cwd)
 	}
 	args = append(args, "-n", windowName, "-P", "-F", "#{pane_id}", "--")
 	return append(args, cmd...)
+}
+
+// Placement is where a spawned window's tab lands among its session's windows
+// (E-2234). Manual `task spawn` defaults to PlaceFirst; the auto-spawn job
+// defaults to PlaceLast, configurable as auto_spawn.placement.
+type Placement string
+
+const (
+	// PlaceFirst inserts before every existing window in the session.
+	PlaceFirst Placement = "first"
+	// PlaceLast appends after every existing window in the session.
+	PlaceLast Placement = "last"
+	// PlaceLeft inserts just before the session's active window.
+	PlaceLeft Placement = "left"
+	// PlaceRight inserts just after the session's active window.
+	PlaceRight Placement = "right"
+)
+
+// Placements is every valid Placement, in the order they are documented.
+var Placements = []Placement{PlaceFirst, PlaceLast, PlaceLeft, PlaceRight}
+
+// ParsePlacement validates a placement name. Exported because the auto-spawn
+// job validates auto_spawn.placement with it before it shells a spawn.
+func ParsePlacement(s string) (Placement, error) {
+	for _, p := range Placements {
+		if string(p) == s {
+			return p, nil
+		}
+	}
+	return "", fmt.Errorf("placement %q is not one of %q, %q, %q or %q",
+		s, PlaceFirst, PlaceLast, PlaceLeft, PlaceRight)
+}
+
+// relative reports whether the placement is anchored on the session's active
+// window, which has to be asked of tmux before the argv can be built.
+func (p Placement) relative() bool {
+	return p == PlaceLeft || p == PlaceRight
+}
+
+// windowPlacement is new-window's position flag and the window it is relative
+// to: `-b` inserts before that window, `-a` after it, and tmux shuffles the
+// later windows up an index to make room.
+type windowPlacement struct {
+	flag   string
+	target string
+}
+
+// placementFor turns a Placement into new-window's position for session sid (a
+// `$N` id). activeWindow is the session's active window id (`@N`), needed only
+// for PlaceLeft and PlaceRight.
+//
+// Every placement is relative to a real window, never `<session>:` alone. That
+// form means "next free index", which is neither first nor reliably last: with
+// windows 0 and 2 it lands at 1, in the gap. `{start}` and `{end}` are tmux's
+// lowest- and highest-numbered windows of the session, so `-b {start}` and
+// `-a {end}` are the true ends whatever holes the numbering has.
+func placementFor(p Placement, sid, activeWindow string) windowPlacement {
+	sess := sessionTarget(sid)
+	switch p {
+	case PlaceLast:
+		return windowPlacement{"-a", sess + "{end}"}
+	case PlaceLeft:
+		return windowPlacement{"-b", activeWindow}
+	case PlaceRight:
+		return windowPlacement{"-a", activeWindow}
+	default:
+		return windowPlacement{"-b", sess + "{start}"}
+	}
+}
+
+// activeWindowArgs builds `tmux display-message -p -t <session>: #{window_id}`,
+// which resolves a session to the id of its active window — what PlaceLeft and
+// PlaceRight are relative to.
+func activeWindowArgs(sid string) []string {
+	return []string{"display-message", "-p", "-t", sessionTarget(sid), "#{window_id}"}
+}
+
+// hasSessionArgs builds `tmux has-session -t =<name>`. The `=` makes tmux match
+// the name exactly: a bare name also matches as a prefix and then as a glob, so
+// `--tmux-session end` would quietly land in a session called `endless`.
+func hasSessionArgs(name string) []string {
+	return []string{"has-session", "-t", "=" + name}
+}
+
+// namedSessionIDArgs builds `tmux display-message -p -t =<name>: #{session_id}`,
+// which resolves an exactly-named session to its `$N` id.
+func namedSessionIDArgs(name string) []string {
+	return []string{"display-message", "-p", "-t", "=" + name + ":", "#{session_id}"}
 }
 
 // sessionIDArgs builds `tmux display-message -p -t <pane> #{session_id}`, which
@@ -59,9 +151,10 @@ func sessionIDArgs(pane string) []string {
 	return []string{"display-message", "-p", "-t", pane, "#{session_id}"}
 }
 
-// sessionTarget renders an explicit session id (`$3`) as a new-window target:
-// the id suffixed with `:`, so tmux reads it as "this session, next free index"
-// rather than as a window name. An id already carrying the suffix is kept.
+// sessionTarget renders a session id (`$3`) as a target prefix: the id
+// suffixed with `:`, so tmux reads it as a session rather than as a window
+// name, and a window token such as `{start}` can follow. An id already carrying
+// the suffix is kept.
 func sessionTarget(id string) string {
 	if strings.HasSuffix(id, ":") {
 		return id
@@ -69,9 +162,8 @@ func sessionTarget(id string) string {
 	return id + ":"
 }
 
-// spawnerSession returns the new-window target: the session that owns the pane
-// this process is running in, as a session id (`$3`) suffixed with `:` so tmux
-// reads it as "this session, next free index" rather than as a window name.
+// spawnerSession returns the session that owns the pane this process is running
+// in, as a session id (`$3`).
 //
 // Session ids are used rather than names because a name can be changed or
 // duplicated across a rename while a `$N` id is fixed for the session's life.
@@ -108,7 +200,7 @@ func spawnerSession() (string, error) {
 			fmt.Sprintf("pane %s reported no session id", pane),
 			"whether tmux answering a pane query with nothing is something they can clear")
 	}
-	return sessionTarget(id), nil
+	return id, nil
 }
 
 // setOptionArgs builds `tmux set-option -w -t <target> <key> <value>` for one

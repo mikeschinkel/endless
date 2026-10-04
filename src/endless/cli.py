@@ -3849,6 +3849,25 @@ def task_handoff(item_id):
                    "spawned session reads .claude/settings.json from this "
                    "directory, so a worktree-local hook override (see "
                    "'just claude-settings-init') applies.")
+# E-2234: focus and placement. --to-* name where the window's tab lands among
+# the session's windows; they are mutually exclusive and default to --to-first.
+@click.option("--no-refocus", "no_refocus", is_flag=True,
+              help="Open the window without switching to it; the current "
+                   "window stays selected.")
+@click.option("--to-first", "to_first", is_flag=True,
+              help="Put the window's tab before every existing window "
+                   "(the default).")
+@click.option("--to-last", "to_last", is_flag=True,
+              help="Put the window's tab after every existing window.")
+@click.option("--to-left", "to_left", is_flag=True,
+              help="Put the window's tab just before the session's active "
+                   "window.")
+@click.option("--to-right", "to_right", is_flag=True,
+              help="Put the window's tab just after the session's active "
+                   "window.")
+@click.option("--tmux-session", "tmux_session", default=None, metavar="NAME",
+              help="Open the window in the tmux session with exactly this "
+                   "name, instead of your own. Refused if none exists.")
 # E-2093: deprecated alongside `claim --force`, which it mirrored. Two verbs
 # disagreeing about what one flag meant is the condition that made it reachable
 # as a catch-all. Hidden and warning for one release, then deleted; the
@@ -3878,7 +3897,8 @@ def task_handoff(item_id):
 @click.option("--auto", "auto", is_flag=True, hidden=True)
 @click.option("--target-session", "target_session", default=None, hidden=True)
 def task_spawn(item_id, project, permission_mode, model, session_name,
-               worktree, force, reopen, print_decision, bg, attach,
+               worktree, no_refocus, to_first, to_last, to_left, to_right,
+               tmux_session, force, reopen, print_decision, bg, attach,
                new_session, auto, target_session):
     """Spawn Claude working on a task in a new tmux window.
 
@@ -3914,11 +3934,26 @@ def task_spawn(item_id, project, permission_mode, model, session_name,
             "tmux-hosted sessions, and every surface that read them is gone.\n"
             "Spawn a tmux-hosted session instead:\n"
             f"    endless task spawn E-{item_id}"))
+    chosen = [name for name, on in (("first", to_first), ("last", to_last),
+                                     ("left", to_left), ("right", to_right))
+              if on]
+    if len(chosen) > 1:
+        raise click.UsageError(
+            "--to-first, --to-last, --to-left and --to-right are mutually "
+            "exclusive; pass one of them: "
+            + ", ".join(f"--to-{n}" for n in chosen))
+    if tmux_session is not None and target_session:
+        raise click.UsageError(
+            "--tmux-session and --target-session both name the session; "
+            "pass one of them")
     from endless.task_cmd import spawn_plan
     spawn_plan(item_id, project_name=project,
                worktree=worktree, force=force,
                permission_mode=permission_mode, model=model,
-               name=session_name, auto=auto, target_session=target_session)
+               name=session_name, auto=auto, target_session=target_session,
+               no_refocus=no_refocus,
+               placement=chosen[0] if chosen else "first",
+               tmux_session=tmux_session)
 
 
 @task_cmd.command("reopen")

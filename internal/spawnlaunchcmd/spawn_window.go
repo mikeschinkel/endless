@@ -35,6 +35,9 @@ func runSpawnWindow(args []string) {
 		cwd        = fs.String("cwd", "", "Working directory for the window")
 		auto       = fs.Bool("auto", false, "Auto-spawned (E-1814): open detached and mark the window @endless_auto_spawned")
 		targetSess = fs.String("target-session", "", "tmux session id to open the window in, instead of the spawner's own")
+		tmuxSess   = fs.String("tmux-session", "", "tmux session NAME to open the window in; refused if it does not exist")
+		placement  = fs.String("placement", string(PlaceFirst), "Where the window's tab lands: first, last, left or right (of the session's active window)")
+		noRefocus  = fs.Bool("no-refocus", false, "Open the window without making it the session's current window")
 	)
 	if err := fs.Parse(args); err != nil {
 		// Text carries flag's own error line and usage block, which is what
@@ -49,6 +52,17 @@ func runSpawnWindow(args []string) {
 
 	if *claudeBin == "" {
 		missingFlag("--claude-bin")
+	}
+	if *targetSess != "" && *tmuxSess != "" {
+		refusal.NoReport("spawn-window: --target-session and --tmux-session both name the session",
+			"Pass one of them and retry").
+			Command("spawn-window").Exit(2)
+	}
+	place, err := ParsePlacement(*placement)
+	if err != nil {
+		refusal.NoReport(fmt.Sprintf("spawn-window: --%v", err),
+			"Pass --placement first, last, left or right and retry").
+			Command("spawn-window").Exit(2)
 	}
 	if *handoff == "" {
 		missingFlag("--handoff-file")
@@ -89,10 +103,11 @@ func runSpawnWindow(args []string) {
 	// Resolve the landing session BEFORE the window is asked for, so a spawn
 	// that cannot say where it belongs fails without having created anything.
 	//
-	// --target-session names it outright. The auto-spawn job passes one because
-	// it runs in a monitor's tmux session, and a window landing there — out of
-	// sight — is the failure E-1815 designed the target setting against.
-	target, err := resolveTarget(*targetSess)
+	// --target-session names it outright by id. The auto-spawn job passes one
+	// because it runs in a monitor's tmux session, and a window landing there —
+	// out of sight — is the failure E-1815 designed the target setting against.
+	// --tmux-session names it by the name a person sees (E-2234).
+	target, err := resolveTarget(*targetSess, *tmuxSess, place)
 	if err != nil {
 		_ = os.Remove(specPath)
 		// spawnerSession classified its own failures (see tmux_driver.go); Text
@@ -109,7 +124,7 @@ func runSpawnWindow(args []string) {
 	// each hold a window called `E-1705`, and tmux answers with whichever one
 	// it considers current.
 	cmd := []string{self, "spawn-launch", "--spec", specPath}
-	claudePane, err := tmuxRunOut(newWindowArgs(target, *cwd, *windowName, *auto, cmd)...)
+	claudePane, err := tmuxRunOut(newWindowArgs(target, *cwd, *windowName, *auto || *noRefocus, cmd)...)
 	if err != nil {
 		// The window was never created, so spawn-launch will not run to delete
 		// the spec file; remove it here.
@@ -136,13 +151,66 @@ func runSpawnWindow(args []string) {
 	buildLayoutAround(claudePane, *cwd)
 }
 
-// resolveTarget is the new-window target: the named session when one is given,
-// else the spawner's own (E-2125).
-func resolveTarget(explicit string) (string, error) {
-	if explicit != "" {
-		return sessionTarget(explicit), nil
+// resolveTarget is where new-window puts the window: the session named by id
+// or by name when one is given, else the spawner's own (E-2125), and the
+// position within it the placement asks for (E-2234).
+func resolveTarget(sessionID, sessionName string, place Placement) (wp windowPlacement, err error) {
+	var sid, active string
+
+	switch {
+	case sessionID != "":
+		sid = sessionID
+	case sessionName != "":
+		sid, err = namedSession(sessionName)
+	default:
+		sid, err = spawnerSession()
 	}
-	return spawnerSession()
+	if err != nil {
+		goto end
+	}
+	if place.relative() {
+		active, err = tmuxRunOut(activeWindowArgs(sid)...)
+		if err == nil && active == "" {
+			err = fmt.Errorf("session %s reported no active window", sid)
+		}
+		if err != nil {
+			err = refusal.Report(
+				fmt.Sprintf("resolve the active window of session %s: %v", sid, err),
+				"whether tmux failing to name a live session's active window is something they can clear").
+				Cause(err)
+			goto end
+		}
+	}
+	wp = placementFor(place, sid, active)
+
+end:
+	return wp, err
+}
+
+// namedSession resolves --tmux-session to a session id, refusing a name no
+// session has. Checked with has-session first so a typo is told apart from a
+// tmux server that will not answer.
+func namedSession(name string) (sid string, err error) {
+	if err = tmuxRun(hasSessionArgs(name)...); err != nil {
+		err = refusal.NoReport(
+			fmt.Sprintf("no tmux session is named %q", name),
+			"Pass --tmux-session the exact name of an existing session (tmux ls lists them) and retry").
+			Cause(err)
+		goto end
+	}
+	sid, err = tmuxRunOut(namedSessionIDArgs(name)...)
+	if err == nil && sid == "" {
+		err = fmt.Errorf("session %q reported no session id", name)
+	}
+	if err != nil {
+		err = refusal.Report(
+			fmt.Sprintf("resolve tmux session %q: %v", name, err),
+			"whether tmux failing to map an existing session to its id is something they can clear").
+			Cause(err)
+	}
+
+end:
+	return sid, err
 }
 
 // projectDirFor resolves the directory the monitor and shell panes start in: the

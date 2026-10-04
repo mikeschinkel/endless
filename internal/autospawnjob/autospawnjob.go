@@ -59,6 +59,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/jobs"
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/rating"
+	"github.com/mikeschinkel/endless/internal/spawnlaunchcmd"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
 
@@ -133,7 +134,15 @@ func (job) Run(ctx context.Context) (err error) {
 		goto end
 	}
 
-	err = spawn(ctx, pick, target)
+	// A typo here is a configuration error, failed rather than quietly
+	// defaulted, for the same reason an unknown target is: so it is seen.
+	_, err = spawnlaunchcmd.ParsePlacement(s.placement)
+	if err != nil {
+		err = fmt.Errorf("auto_spawn.%w", err)
+		goto end
+	}
+
+	err = spawn(ctx, pick, target, s.placement)
 	if err != nil {
 		goto end
 	}
@@ -145,12 +154,13 @@ end:
 
 // settings is the user-level half of the config: one job, one cadence.
 type settings struct {
-	interval time.Duration
-	target   string
+	interval  time.Duration
+	target    string
+	placement string
 }
 
-// loadSettings reads auto_spawn.interval and auto_spawn.target from the user's
-// config (the CLI layer). A missing, unreadable or unparsable interval falls
+// loadSettings reads auto_spawn.interval, auto_spawn.target and
+// auto_spawn.placement from the user's config (the CLI layer). A missing, unreadable or unparsable interval falls
 // back to the default rather than failing: Schedule has no error return, and a
 // typo in a preference must not stop the runner from scheduling anything.
 func loadSettings() (s settings) {
@@ -159,6 +169,7 @@ func loadSettings() (s settings) {
 
 	s.interval, _ = time.ParseDuration(config.DefaultAutoSpawnInterval)
 	s.target = config.AutoSpawnTargetActive
+	s.placement = config.DefaultAutoSpawnPlacement
 
 	cfg, err = config.Load("")
 	if err != nil || cfg == nil {
@@ -169,6 +180,9 @@ func loadSettings() (s settings) {
 	}
 	if cfg.AutoSpawn.Target != "" {
 		s.target = cfg.AutoSpawn.Target
+	}
+	if cfg.AutoSpawn.Placement != "" {
+		s.placement = cfg.AutoSpawn.Placement
 	}
 
 end:
@@ -494,7 +508,7 @@ func describeTarget(setting, target string) string {
 //
 // Output is captured, never inherited: jobs.Job forbids writing to the
 // trigger's terminal. It rides along in the error on failure.
-func spawn(ctx context.Context, pick candidate, target string) (err error) {
+func spawn(ctx context.Context, pick candidate, target, placement string) (err error) {
 	var bin string
 	var cmd *exec.Cmd
 	var out []byte
@@ -522,7 +536,7 @@ func spawn(ctx context.Context, pick candidate, target string) (err error) {
 
 	ctx, cancel = context.WithTimeout(ctx, spawnTimeout)
 	defer cancel()
-	cmd = exec.CommandContext(ctx, bin, spawnArgs(pick.taskID, target)...)
+	cmd = exec.CommandContext(ctx, bin, spawnArgs(pick.taskID, target, placement)...)
 	cmd.Dir = pick.projectPath
 
 	out, err = cmd.CombinedOutput()
@@ -542,8 +556,12 @@ end:
 // finds the Claude session sharing the monitor's tmux window and credits the
 // claim to it. With it the event is recorded as the system's, which is what
 // the flag exists for (cron, scripts, anything with no session behind it).
-func spawnArgs(taskID int64, target string) []string {
-	args := []string{"--no-session", "task", "spawn", "E-" + strconv.FormatInt(taskID, 10), "--auto"}
+//
+// placement is always passed (E-2234): `task spawn` defaults to first, which is
+// right for a person who asked for the window and wrong for one nobody did.
+func spawnArgs(taskID int64, target, placement string) []string {
+	args := []string{"--no-session", "task", "spawn", "E-" + strconv.FormatInt(taskID, 10), "--auto",
+		"--to-" + placement}
 	if target != "" {
 		args = append(args, "--target-session", target)
 	}

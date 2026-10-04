@@ -110,9 +110,9 @@ type ListColor struct {
 // is the failure the per-project switch exists to prevent. Read them with
 // LoadProject.
 //
-// Interval and Target are CLI-ONLY: there is one auto-spawn job for the whole
-// database, so a per-project cadence has nothing to attach to. Read them with
-// Load("").
+// Interval, Target and Placement are CLI-ONLY: there is one auto-spawn job for
+// the whole database, so a per-project cadence has nothing to attach to. Read
+// them with Load("").
 type AutoSpawn struct {
 	// Enabled opts the project in. Absent or false is off, which is also the
 	// kill switch.
@@ -130,6 +130,11 @@ type AutoSpawn struct {
 	// session of the most recently active attached client) or "monitor" (the
 	// session the job runs in). Empty means "active".
 	Target string `json:"target,omitempty"`
+
+	// Placement is where a spawned window's tab lands in the target session
+	// (E-2234): "first", "last", "left" or "right", the last two relative to
+	// that session's active window. Empty means DefaultAutoSpawnPlacement.
+	Placement string `json:"placement,omitempty"`
 }
 
 const (
@@ -139,6 +144,11 @@ const (
 
 	// DefaultAutoSpawnInterval is the job cadence when none is configured.
 	DefaultAutoSpawnInterval = "5m"
+
+	// DefaultAutoSpawnPlacement puts an auto-spawned window after every
+	// existing one, out of the way of the windows the user arranged. A manual
+	// `task spawn` defaults to first instead, because its user asked for it.
+	DefaultAutoSpawnPlacement = "last"
 
 	// AutoSpawnTargetActive and AutoSpawnTargetMonitor are the two Target
 	// values.

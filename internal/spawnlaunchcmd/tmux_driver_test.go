@@ -7,14 +7,14 @@ import (
 	"testing"
 )
 
-// TestNewWindowArgs_WithCwd pins the normal new-window command: -t <session>,
-// -c <cwd>, -n <name>, the -P -F pane-id readback, then `--` and the window
+// TestNewWindowArgs_WithCwd pins the normal new-window command: the position
+// flag and -t <window>, -c <cwd>, -n <name>, the -P -F pane-id readback, then `--` and the window
 // command passed through literally.
 func TestNewWindowArgs_WithCwd(t *testing.T) {
-	got := newWindowArgs("$3:", "/wt/e-1705", "endless_deliver[E-1705]", false,
+	got := newWindowArgs(placementFor(PlaceFirst, "$3", ""), "/wt/e-1705", "endless_deliver[E-1705]", false,
 		[]string{"/bin/endless-go", "spawn-launch", "--spec", "/tmp/spec.json"})
 	want := []string{
-		"new-window", "-t", "$3:", "-c", "/wt/e-1705",
+		"new-window", "-b", "-t", "$3:{start}", "-c", "/wt/e-1705",
 		"-n", "endless_deliver[E-1705]", "-P", "-F", "#{pane_id}", "--",
 		"/bin/endless-go", "spawn-launch", "--spec", "/tmp/spec.json",
 	}
@@ -27,9 +27,9 @@ func TestNewWindowArgs_WithCwd(t *testing.T) {
 // inherits the caller's directory. The target does NOT drop with it: cwd is
 // optional, the landing session is not.
 func TestNewWindowArgs_NoCwdOmitsFlag(t *testing.T) {
-	got := newWindowArgs("$0:", "", "win", false, []string{"/bin/claude", "attach", "abcd1234"})
+	got := newWindowArgs(placementFor(PlaceLast, "$0", ""), "", "win", false, []string{"/bin/claude", "attach", "abcd1234"})
 	want := []string{
-		"new-window", "-t", "$0:", "-n", "win", "-P", "-F", "#{pane_id}", "--",
+		"new-window", "-a", "-t", "$0:{end}", "-n", "win", "-P", "-F", "#{pane_id}", "--",
 		"/bin/claude", "attach", "abcd1234",
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -39,7 +39,7 @@ func TestNewWindowArgs_NoCwdOmitsFlag(t *testing.T) {
 
 // TestNewWindowArgs_AlwaysTargeted is E-2125's regression, stated as the
 // property rather than as one argv: whatever else varies, `-t <target>` is
-// present and immediately follows the verb. An untargeted new-window lands in
+// present and immediately follows the verb's position flag (E-2234). An untargeted new-window lands in
 // the server's most recently active session, so a spawn asked for in one
 // session appeared in whichever one the operator was looking at.
 func TestNewWindowArgs_AlwaysTargeted(t *testing.T) {
@@ -50,15 +50,15 @@ func TestNewWindowArgs_AlwaysTargeted(t *testing.T) {
 		win    string
 		cmd    []string
 	}{
-		{"cwd and command", "$3:", "/wt/e-1", "E-1", []string{"claude"}},
-		{"no cwd", "$12:", "", "E-2", []string{"claude"}},
-		{"no command", "$0:", "/wt/e-3", "E-3", nil},
+		{"cwd and command", "$3:{start}", "/wt/e-1", "E-1", []string{"claude"}},
+		{"no cwd", "$12:{end}", "", "E-2", []string{"claude"}},
+		{"no command", "@4", "/wt/e-3", "E-3", nil},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			got := newWindowArgs(tc.target, tc.cwd, tc.win, false, tc.cmd)
-			if len(got) < 3 || got[0] != "new-window" || got[1] != "-t" || got[2] != tc.target {
-				t.Fatalf("args = %q, want it to open with new-window -t %q", got, tc.target)
+			got := newWindowArgs(windowPlacement{"-b", tc.target}, tc.cwd, tc.win, false, tc.cmd)
+			if len(got) < 4 || got[0] != "new-window" || got[1] != "-b" || got[2] != "-t" || got[3] != tc.target {
+				t.Fatalf("args = %q, want it to open with new-window -b -t %q", got, tc.target)
 			}
 		})
 	}
@@ -176,15 +176,17 @@ func TestWindowOptionCommands(t *testing.T) {
 	}
 }
 
-// TestNewWindowArgs_DetachedOnlyWhenAuto pins E-1814's focus rule: an
-// auto-spawned window opens with -d so it never takes the user's focus, and a
-// manual spawn does not, because the person who asked is looking for it.
-func TestNewWindowArgs_DetachedOnlyWhenAuto(t *testing.T) {
+// TestNewWindowArgs_DetachedOnlyWhenAsked pins E-1814's focus rule: a window
+// opened detached (auto-spawn, or `--no-refocus` since E-2234) carries -d so it
+// never takes the user's focus, and a plain manual spawn does not, because the
+// person who asked is looking for it.
+func TestNewWindowArgs_DetachedOnlyWhenAsked(t *testing.T) {
 	cmd := []string{"/bin/endless-go", "spawn-launch", "--spec", "/tmp/s.json"}
+	place := placementFor(PlaceFirst, "$3", "")
 
-	auto := newWindowArgs("$3:", "/wt/e-9", "E-9", true, cmd)
+	auto := newWindowArgs(place, "/wt/e-9", "E-9", true, cmd)
 	want := []string{
-		"new-window", "-d", "-t", "$3:", "-c", "/wt/e-9",
+		"new-window", "-d", "-b", "-t", "$3:{start}", "-c", "/wt/e-9",
 		"-n", "E-9", "-P", "-F", "#{pane_id}", "--",
 		"/bin/endless-go", "spawn-launch", "--spec", "/tmp/s.json",
 	}
@@ -192,7 +194,7 @@ func TestNewWindowArgs_DetachedOnlyWhenAuto(t *testing.T) {
 		t.Fatalf("auto args = %q, want %q", auto, want)
 	}
 
-	manual := newWindowArgs("$3:", "/wt/e-9", "E-9", false, cmd)
+	manual := newWindowArgs(place, "/wt/e-9", "E-9", false, cmd)
 	for _, a := range manual {
 		if a == "-d" {
 			t.Fatalf("manual spawn carries -d: %q", manual)
@@ -201,21 +203,22 @@ func TestNewWindowArgs_DetachedOnlyWhenAuto(t *testing.T) {
 }
 
 // TestResolveTarget_ExplicitSessionWins: --target-session names the session
-// outright, needs no $TMUX_PANE, and is rendered as a session target.
+// outright, needs no $TMUX_PANE, and is rendered as a window in that session.
 func TestResolveTarget_ExplicitSessionWins(t *testing.T) {
 	t.Setenv("TMUX_PANE", "")
+	want := windowPlacement{"-b", "$7:{start}"}
 	for _, in := range []string{"$7", "$7:"} {
-		got, err := resolveTarget(in)
+		got, err := resolveTarget(in, "", PlaceFirst)
 		if err != nil {
 			t.Fatalf("resolveTarget(%q): %v", in, err)
 		}
-		if got != "$7:" {
-			t.Errorf("resolveTarget(%q) = %q, want %q", in, got, "$7:")
+		if got != want {
+			t.Errorf("resolveTarget(%q) = %v, want %v", in, got, want)
 		}
 	}
 	// With no explicit session it is still the spawner's, which refuses
 	// without a pane rather than guessing (E-2125).
-	if _, err := resolveTarget(""); err == nil {
+	if _, err := resolveTarget("", "", PlaceFirst); err == nil {
 		t.Error("resolveTarget(\"\") with no $TMUX_PANE: want an error")
 	}
 }
