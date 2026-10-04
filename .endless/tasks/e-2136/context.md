@@ -36,16 +36,11 @@ and a row owned elsewhere is omitted from the drawing entirely. A session
 reading its own board cannot tell its work from another session's — which it
 did, reporting another session's tasks as the user's to spawn.
 
-## Where the design lives
-
-The private briefs `brief-2028-09-12-agent-folio-format.md` (the container, at
-general scope) and `brief-2028-09-12-agent-facing-output-endless.md` (what
-Endless puts in it). Both are gitignored and absent from worktrees; read them in
-the main checkout.
-
 ## History
 
 E-2190 was the `session status` half and is superseded here, so the shape rules
 are decided while being tested on the hardest list. E-1504 was filed as this
 task's dependent, was narrowed to the flag surface alone — the rename,
 `--format`, and the two missing `--json` flags — and has landed.
+
+
