@@ -128,6 +128,16 @@ def isolated_env(tmp_path, monkeypatch):
     monkeypatch.delenv("CLAUDE_CODE_ENTRYPOINT", raising=False)
     monkeypatch.delenv("__CFBundleIdentifier", raising=False)
 
+    # E-2203: and E-2159's ambient audience, the third signal agent_facing
+    # reads. An agent running `endless task verify` exports
+    # ENDLESS_AUDIENCE=agent to the suite, and agent_help latches it at IMPORT,
+    # so deleting the variable alone is too late: pin the latch too. Without it
+    # every test that models a person reads as an agent under the runner and
+    # passes in a bare shell — the same split the block above exists to close.
+    monkeypatch.delenv("ENDLESS_AUDIENCE", raising=False)
+    from endless import agent_help as _agent_help
+    monkeypatch.setattr(_agent_help, "_AMBIENT_AUDIENCE", False)
+
     # Prepend this worktree's bin/ to PATH so subprocesses (e.g. endless-event
     # invoked by event_bridge.emit_event) find the locally-built binary, not
     # the globally-installed one symlinked from a sibling worktree.

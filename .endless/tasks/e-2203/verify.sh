@@ -67,6 +67,9 @@ unset TMUX TMUX_PANE ENDLESS_SESSION_ID ENDLESS_NO_JOBS ENDLESS_NO_HOOKS 2>/dev/
 # decide whether a command below runs as an agent. Sections that need an agent
 # set one explicitly.
 for v in $(env | sed -n 's/^\(CLAUDE[A-Z_]*\)=.*/\1/p'); do unset "${v}"; done
+# The same for E-2159's ambient audience: an agent running `endless task verify`
+# exports ENDLESS_AUDIENCE=agent, which would make every "person" below an agent.
+unset ENDLESS_AUDIENCE 2>/dev/null || true
 mkdir -p "${STUB}" "${REPO}" "${XDG_CONFIG_HOME}/endless" "${XDG_CACHE_HOME}" "${PROMPTS}"
 
 # The fake model. The prompt is the last argument.
