@@ -61,7 +61,10 @@ chmod +x "${STUBS}/claude" "${STUBS}/endless"
 export PATH="${STUBS}:${PATH}"
 
 # Windows A(0) C(2): the hole at 1 is where `<session>:` alone used to land.
-tm new-session -d -s probe -n A -x 200 -y 50 || setup_error "tmux new-session"
+# Every pane runs sleep, never a shell: a shell killed with the server writes
+# its history into the runner's temp HOME after the runner has begun removing it.
+tm new-session -d -s probe -n A -x 200 -y 50 sleep 300 || setup_error "tmux new-session"
+tm set-option -g default-command "sleep 300"
 tm new-window -d -t probe:1 -n B
 tm new-window -d -t probe:2 -n C
 tm kill-window -t probe:B

@@ -170,10 +170,12 @@ func TestPlacement_LiveTmux(t *testing.T) {
 	tmuxRunOut = tm
 	tmuxRun = func(args ...string) error { _, err := tm(args...); return err }
 
-	// Windows A(0) B(1) C(2), then B killed: A(0) C(2), A active.
-	must("new-session", "-d", "-s", "probe", "-n", "A", "-x", "80", "-y", "24")
-	must("new-window", "-d", "-t", "probe:1", "-n", "B")
-	must("new-window", "-d", "-t", "probe:2", "-n", "C")
+	// Windows A(0) B(1) C(2), then B killed: A(0) C(2), A active. Every pane
+	// runs sleep rather than the user's shell, which would write its history on
+	// the way down.
+	must("new-session", "-d", "-s", "probe", "-n", "A", "-x", "80", "-y", "24", "sleep", "60")
+	must("new-window", "-d", "-t", "probe:1", "-n", "B", "sleep", "60")
+	must("new-window", "-d", "-t", "probe:2", "-n", "C", "sleep", "60")
 	must("kill-window", "-t", "probe:B")
 	layout := func() string {
 		return must("list-windows", "-t", "=probe", "-F", "#{window_name}#{?window_active,*,}")
