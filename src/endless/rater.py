@@ -463,7 +463,9 @@ def render_results(results: list[dict], dry_run: bool) -> None:
         elif outcome == "skipped":
             click.echo(f"  {task} skipped ({r['detail']})")
         else:
-            click.echo(f"  {task} left unrated ({r['detail']})", err=True)
+            # stdout, not stderr: a failed task is a result line of the sweep,
+            # not a refusal — the actionable record is the WARN-0029 fault.
+            click.echo(f"  {task} left unrated ({r['detail']})")
 
     rated = sum(1 for r in results if r["outcome"] in ("rated", "partial", "dry-run"))
     failed = sum(1 for r in results if r["outcome"] == "failed")

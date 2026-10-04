@@ -3851,13 +3851,20 @@ def _refuse_unrated_approve(item_id: int, effective: dict):
         return
     tid = task_id_display(item_id)
     flags = " ".join(f"--{a} <low|medium|high>" for a in unrated)
-    raise click.ClickException(
-        f"Cannot approve {tid}: its {' and '.join(unrated)} "
-        f"{'was' if len(unrated) == 1 else 'were'} never proposed, and "
-        f"approving ratifies proposed ratings.\n"
-        f"  The agent that planned it proposes them, or the rater job does on "
-        f"its next run (`endless rater run --task {tid}` runs it now).\n"
-        f"  To set them yourself instead: endless task approve {tid} {flags}"
+    what = (f"{' and '.join(unrated)} "
+            f"{'was' if len(unrated) == 1 else 'were'} never proposed")
+    # no_report: an agent that meets this can clear it alone, by proposing the
+    # ratings it is the one meant to know. The text is the person's.
+    raise agent_help.no_report(
+        f"Cannot approve {tid}: its {what}",
+        f"Propose them with endless task update {tid} {flags}, then approve",
+        text=(
+            f"Cannot approve {tid}: its {what}, and approving ratifies "
+            f"proposed ratings.\n"
+            f"  The agent that planned it proposes them, or the rater job does "
+            f"on its next run (`endless rater run --task {tid}` runs it now).\n"
+            f"  To set them yourself instead: endless task approve {tid} {flags}"
+        ),
     )
 
 
@@ -3880,14 +3887,18 @@ def _refuse_unrated_promotion(item_id: int | None, effective: dict):
         "ratings for the user to ratify."
     )
     if item_id is None:
-        raise click.ClickException(
-            f"Cannot file a task with a plan while {what}. {why} Nothing was "
-            f"filed — re-run this add with {flags}."
+        raise agent_help.no_report(
+            f"Cannot file a task with a plan while {what}. Nothing was filed",
+            f"Re-run this add with {flags}",
+            text=(f"Cannot file a task with a plan while {what}. {why} Nothing "
+                  f"was filed — re-run this add with {flags}."),
         )
     tid = task_id_display(item_id)
-    raise click.ClickException(
-        f"Plan saved, but {tid} was not submitted: {what}. {why}\n"
-        f"  Rate and submit it: endless task submit {tid} {flags}"
+    raise agent_help.no_report(
+        f"Plan saved, but {tid} was not submitted: {what}",
+        f"Rate and submit it: endless task submit {tid} {flags}",
+        text=(f"Plan saved, but {tid} was not submitted: {what}. {why}\n"
+              f"  Rate and submit it: endless task submit {tid} {flags}"),
     )
 
 

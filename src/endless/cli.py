@@ -4784,8 +4784,9 @@ def rater_run(task_ref, limit, project, all_projects, dry_run):
     from endless.task_cmd import parse_task_id
 
     if project and all_projects:
-        raise click.ClickException(
-            "--project and --all-projects are mutually exclusive."
+        raise agent_help.no_report(
+            "--project and --all-projects are mutually exclusive",
+            "Pass one of them and retry",
         )
     rater.run(
         task_id=parse_task_id(task_ref) if task_ref else None,

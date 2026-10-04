@@ -137,6 +137,11 @@ def isolated_env(tmp_path, monkeypatch):
     monkeypatch.delenv("ENDLESS_AUDIENCE", raising=False)
     from endless import agent_help as _agent_help
     monkeypatch.setattr(_agent_help, "_AMBIENT_AUDIENCE", False)
+    # The other two latches agent_facing reads are module globals a CLI
+    # invocation with --agent-view / --agent sets and nothing clears, so one
+    # such test would make every later test in the interpreter an agent's.
+    monkeypatch.setattr(_agent_help, "_AGENT_VIEW", False)
+    monkeypatch.setattr(_agent_help, "_AGENT_FORMAT", False)
 
     # Prepend this worktree's bin/ to PATH so subprocesses (e.g. endless-event
     # invoked by event_bridge.emit_event) find the locally-built binary, not
