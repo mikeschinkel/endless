@@ -59,3 +59,62 @@ never reads the source. Say what it does for a solo user with no agents at all.
 This brainstorm should NOT conclude by proposing a gate simply because gates are
 what this project reaches for. The lightest thing that changes the default — an
 agent asking before coining — may be most of the value.
+
+
+# Since this was filed (ES-1248, 2026-10-04)
+
+**A second failure mode: overloading, not just coining.** In one session:
+
+- "board" was coined for the session status / session monitor display, and
+  nearly reached a plan and a JSON field before being caught.
+- "owner"/"ownership" turned out to carry three unrelated meanings at once: the
+  claiming session (ED-1560), the session whose display keeps a duplicated task
+  (E-2188), and the worktree lock (ED-1530). Nobody coined anything; the word
+  drifted.
+- "triager" was used both as a class of job and as one job's name.
+- "surfaced" (the stored relation) and "filed by" (what a reader would say)
+  name the same fact. Mike prefers the latter; that is a code-vs-reader
+  vocabulary gap rather than a coined word.
+
+So a glossary has to catch overloading as well as coining. That means an entry
+needs to say what a term is NOT, and which other senses it was split from.
+
+**A decision already did glossary work.** ED-1605 (accepted) defines owner, the
+owner's current Claude session, steward and worktree lock holder, and says
+"Endless uses 'own' for nothing else". E-2225 aligns the code and docs with it.
+Whether glossary entries are decisions of a kind, or a separate store that
+decisions feed, is now a live question. E-1868 is moving decisions onto tasks,
+which changes what "a decision" will be.
+
+**A lesson is standing in for the glossary today.** "Use Endless's existing
+terms; never mint new ones in explanations" is in LESSONS. It cannot work
+without a list of what the existing terms are.
+
+# Seed entries to test the shape against
+
+owner · the owner's current Claude session · steward · worktree lock holder ·
+claim / claiming session · rater (a job) vs triager (the class) · filed by vs
+surfaced · project status / project monitor vs session status / session monitor
+· "wake" (discussed, deliberately not adopted, so there is nothing to define).
+
+# Open questions (fine to leave some open)
+
+1. Entry shape: term, definition, NOT-to-be-confused-with, superseded terms,
+   the code identifier that carries it, the decision that settled it?
+2. Store: a committed markdown file, a table, decisions of a glossary kind, or
+   a section of the guide?
+3. How agents meet it: injected, fetched on demand (`endless guide glossary`?),
+   or checked only when writing durable content?
+4. Coining: an explicit ASK with no enforcement, a verb (`endless term
+   propose`), or a gate? The constraint below still applies.
+5. Overloading: is there any cheap signal that one word is being used in two
+   senses, or is that a review-time judgment only?
+6. Code identifiers vs reader terms (`surfaced` vs "filed by"): does the
+   glossary map them, or does the code rename to match?
+7. The early-project step Mike described: agreeing terms up front.
+
+# Deliverable
+
+An outcome recommending the lightest design that changes the default, with the
+seed entries written in that shape as a worked example, and a list of follow-up
+tasks if the recommendation needs any.
