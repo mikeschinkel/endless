@@ -1,0 +1,1 @@
+Agents use terms the user never agreed to, either coined ("attention board", "board") or drifted ("owner" carrying three meanings). The E-2154 brainstorm settled on a glossary as a destination table with commands: proposing a term is good, using an unagreed one is bad. See E-2154's outcome for the full design.
