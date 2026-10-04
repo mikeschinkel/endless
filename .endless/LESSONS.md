@@ -7121,3 +7121,7 @@ On E-2156's revisit I argued against using freed pane lines because 'the plan's 
 ### [2026-10-04] Endless stores durable data in tables + commands, not committed files
 In the E-2154 glossary brainstorm I proposed a committed human-readable file (like LESSONS.md) as the glossary store. Mike corrected: Endless has moved away from files toward database tables and commands, because files create version-control requirements and a hierarchical filesystem is a poor model for that data. When proposing where new durable Endless data lives, start from a table plus commands.
 - **Project**: endless
+
+### [2026-10-04] Separate the requester's own words from agent-added framing in a seed
+In the E-2154 glossary brainstorm, the seed's 'what to explore' list was written by a prior agent session and included detection of coined terms. I presented detection back to Mike as if it were his idea. He never envisioned it: the detector is the user. When a seed mixes the requester's quoted words with agent-written exploration items, attribute each one correctly, and don't treat an agent-added item as a requirement the requester holds.
+- **Project**: endless
