@@ -7113,3 +7113,7 @@ rather than assuming public-is-fine.
 ### [2026-10-04] Don't call it ready while Mike's verify is still running
 Context: E-2203, after a rebase. Mike said he was running verify and would land after if it was ready. I answered 'Yes, it's ready'. He meant 'ready if verify passes', and his run had not finished, so I could not know. My own earlier verify and regression passes do not tell me the outcome of the run he is waiting on. When Mike's run is in flight, say what to do after each outcome (passes: land; fails: paste it here) instead of declaring a result.
 - **Project**: endless
+
+### [2026-10-04] Don't stretch a plan's stated reason into a rule
+On E-2156's revisit I argued against using freed pane lines because 'the plan's point is that the pane moves only when the row set changes'. The plan said that about removing the age column (a clock that changed every tick), not about how many rows fill a resized pane. Mike called it treating plans as dogma. A plan's rationale applies to the decision it was written for; when the user asks for something else, weigh it on its merits rather than citing the plan against them.
+- **Project**: endless
