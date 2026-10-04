@@ -90,7 +90,7 @@ func TestTerminalStatusNeverUnknown(t *testing.T) {
 
 // TestActionIcons pins the glyphs that other surfaces (and the legend) depend on,
 // notably the E-1750 split of the old ⁇ catch-all into ⏚ landed and ⁇ unknown,
-// the untouched ◷ orphan they must stay distinct from, and the E-1765 ⚑ review
+// the untouched ◷ orphan they must stay distinct from, and the E-1765 ⚑ approve
 // (submitted, a plan awaiting review — spawnable, but not yet reviewed).
 func TestActionIcons(t *testing.T) {
 	cases := map[action]string{
@@ -108,7 +108,7 @@ func TestActionIcons(t *testing.T) {
 	// ⚑ must measure display-width 1 so the fixed 13-col prefix and the width-aware
 	// table stay aligned, the same guarantee ⏚/⁇/◆ carry (E-1765).
 	if w := displayWidth("⚑"); w != 1 {
-		t.Errorf("⚑ review glyph display width = %d, want 1", w)
+		t.Errorf("⚑ approve glyph display width = %d, want 1", w)
 	}
 	// Same guarantee for ⇥ closed (E-1871) — it replaces ⁇ in column 1, so a
 	// width-2 glyph there would shift the id column on every closed row.
@@ -599,9 +599,9 @@ func TestBuildLegend(t *testing.T) {
 			mustNotHave: []string{"done"},
 		},
 		{
-			name:     "submitted row surfaces ⚑ review",
+			name:     "submitted row surfaces ⚑ approve",
 			rows:     []monitor.SessionStatusRow{{Status: "submitted"}},
-			mustHave: []string{"⚑ review"},
+			mustHave: []string{"⚑ approve"},
 		},
 		{
 			name: "do and review render in enum order",
@@ -609,7 +609,7 @@ func TestBuildLegend(t *testing.T) {
 				{Status: "submitted", UnsettledKnown: true}, // review (later in enum)
 				{Status: "ready", UnsettledKnown: true},     // do (earlier in enum)
 			},
-			want: "▶ do  ⚑ review  ⊙ not started",
+			want: "▶ do  ⚑ approve  ⊙ not started",
 		},
 		{
 			name:     "landed row surfaces ⏚ landed",

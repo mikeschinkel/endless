@@ -83,11 +83,14 @@ def project_status_resolve(
     _run(args)
 
 
-def project_window_resolve(project: str | None, no_switch: bool = False) -> None:
+def project_window_resolve(project: str | None, no_switch: bool = False,
+                           use_existing: bool = False) -> None:
     """Open (or switch to) the dedicated two-pane tmux session for the monitor."""
     args = [_go_binary(), "project-window"]
     if project:
         args += ["--project", project]
     if no_switch:
         args.append("--no-switch")
+    if use_existing:
+        args.append("--use-existing")
     _run(args)

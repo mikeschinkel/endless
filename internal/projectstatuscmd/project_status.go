@@ -19,6 +19,8 @@ import (
 	"io"
 	"os"
 
+	"golang.org/x/term"
+
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/liveview"
 	"github.com/mikeschinkel/endless/internal/monitor"
@@ -29,17 +31,12 @@ import (
 // --cols, no $COLUMNS). Matches sessionstatuscmd's.
 const fallbackCols = 90
 
-// monitorPctOfWindow is the share of the tmux window the monitor claims, and it
-// is
-// deliberately smaller than liveview.PanePctOfWindow's 80.
-//
-// For `session monitor` that 80% is a safety net: its frame is a handful of rows
-// and the cap almost never binds. The monitor is the opposite — its third list
-// grows to fill whatever budget it is given, so the cap binds on EVERY frame and
-// whatever it leaves is exactly what the shell pane below gets, forever. Two
-// thirds keeps the monitor comfortably legible while leaving a third for the
-// pane the user actually types in — which is the pane the whole two-pane layout
-// exists to provide.
+// monitorPctOfWindow is the share of the tmux window the monitor's pane starts
+// at when `project monitor --tmux` builds the layout. After that the pane's
+// height is the user's: the frame fits whatever pane it is in, and dragging
+// the divider is how to see more rows or fewer (E-2156). Two thirds keeps the
+// monitor legible while leaving a third for the shell the layout exists to
+// provide.
 const monitorPctOfWindow = 65
 
 // Run dispatches both subcommands this package owns. One package, because the
@@ -133,7 +130,10 @@ func runStatus(args []string) {
 			ColsOverride: o.cols,
 			FallbackCols: fallbackCols,
 			Color:        color,
-			Pane:         os.Getenv("TMUX_PANE"),
+			// No Pane: `session monitor` fits its pane to its frame, but this
+			// frame fits its pane instead — the third list grows into whatever
+			// height the user gives it. Fitting the pane as well would undo
+			// every resize the user made (E-2156).
 			// The E-698 trigger. NOTE: this does NOT by itself make the project
 			// monitor auto-spawn's on/off switch, which is how E-1815 describes it
 			// — `session monitor` fires the same runner, so closing this window
@@ -181,11 +181,11 @@ func (f frameSpec) fn() liveview.Frame {
 			return 0, err
 		}
 		// The height budget is read PER FRAME, not per process: a monitor must
-		// re-fit when its window is resized, the same argument liveview.Loop
+		// re-fit when its pane is resized, the same argument liveview.Loop
 		// already makes for re-detecting the width.
 		budget := f.rows
 		if f.truncate && budget == 0 {
-			budget = liveview.DetectRows(os.Getenv("TMUX_PANE"), monitorPctOfWindow, 0)
+			budget = paneBudget()
 		}
 		return render(w, f.name, rows, frameOpts{
 			budget:      budget,
@@ -271,6 +271,21 @@ func resolveProject(o options) (int64, string) {
 }
 
 func isTTY() bool { return liveview.IsTerminal(os.Stdout) }
+
+// paneBudget is the lines a monitor frame may use: the height of the terminal
+// it is drawing into — inside tmux, its own pane — less one. The one is the
+// line the cursor sits on after the frame's last newline; a frame that filled
+// every line would scroll the pane by one on each repaint, which is what left
+// duplicated rows above the legend.
+//
+// Without a terminal to measure (stdout piped), it falls back to a share of the
+// tmux window, so a captured monitor frame is still a plausible height.
+func paneBudget() int {
+	if _, h, err := term.GetSize(int(os.Stdout.Fd())); err == nil && h > 1 {
+		return h - 1
+	}
+	return liveview.DetectRows(os.Getenv("TMUX_PANE"), monitorPctOfWindow, 0)
+}
 
 // fail ends the command on an error that reached it without a class of its own
 // — a row query, a frame render, the JSON write, or the monitor loop giving up.

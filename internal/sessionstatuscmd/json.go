@@ -27,7 +27,7 @@ import (
 // the rest of the CLI's JSON (`session list --json`, `task show --json`).
 //
 // `action` is the classifier's verdict as its machine slug ("doing", "do",
-// "review", …) — the same value the table encodes as a glyph. Emitting the label
+// "approve", …) — the same value the table encodes as a glyph. Emitting the label
 // rather than the glyph keeps consumers off the icon vocabulary, which is a
 // rendering detail free to change.
 type jsonRow struct {

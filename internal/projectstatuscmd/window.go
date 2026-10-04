@@ -73,17 +73,16 @@ func newSessionArgs(l windowLayout) []string {
 // splitMonitorArgs inserts the monitor ABOVE the shell pane (-b), running the
 // monitor command.
 //
-// No `-l` height: the monitor sizes its own pane on first paint, from a budget
-// it computes against the window (liveview.DetectRows), so a height guessed here
-// would be overwritten a moment later — and guessing one is what E-1851 removed
-// from the spawn layout for the same reason. tmux's even split is the starting
-// point and the monitor settles from there.
+// `-l` sets the monitor's STARTING height (monitorPctOfWindow). It is only a
+// start: the monitor never resizes its pane, it fits its frame to whatever
+// height the pane has (E-2156), so after this the divider is the user's.
 //
 // Targets the shell by PANE ID rather than by index: pane indexes depend on the
 // user's pane-base-index and shift as panes are added, so index targeting
 // silently addresses the wrong pane on a 1-based configuration.
 func splitMonitorArgs(l windowLayout, shellPane string) []string {
-	args := []string{"split-window", "-v", "-b", "-t", shellPane}
+	args := []string{"split-window", "-v", "-b", "-t", shellPane,
+		"-l", fmt.Sprintf("%d%%", monitorPctOfWindow)}
 	if l.Dir != "" {
 		args = append(args, "-c", l.Dir)
 	}
@@ -215,6 +214,7 @@ func runWindow(args []string) {
 	fs := refusal.NewFlags("project-window")
 	project := fs.String("project", "", "project name (default: the project enclosing the working directory)")
 	noSwitch := fs.Bool("no-switch", false, "create the session but leave the caller where they are")
+	useExisting := fs.Bool("use-existing", false, "adopt an existing tmux session of that name that Endless did not create, instead of refusing")
 	if err := fs.Parse(args); err != nil {
 		// Text carries flag's own error line and the flag defaults it appends,
 		// which is what stderr held before this was classified.
@@ -282,16 +282,28 @@ func runWindow(args []string) {
 				layout.Session, DefaultSessionNameTemplate)).
 			Exit(1)
 	case ownForeign:
+		if *useExisting {
+			// The user named this session as theirs to hand over. Stamp it so the
+			// next launch recognizes it, and switch to it as it stands: its panes
+			// are left exactly as they are, so nothing running in it is touched.
+			if err = tmuxRun(setMonitorOptionArgs(layout.Session, layout.Project)); err != nil {
+				windowReport(
+					fmt.Sprintf("project-window: adopting the session %q: %v", layout.Session, err),
+					"whether a tmux server that refused a session option is something they can clear").
+					Exit(1)
+			}
+			break
+		}
 		// Closing a tmux session is destructive to whatever is running in it,
 		// and this one is the user's: Endless never stamped it.
 		windowReport(
 			fmt.Sprintf("project-window: a tmux session named %q already exists and Endless did not create it. Refusing to take it over",
 				layout.Session),
-			"whether to close their own tmux session, or to set tmux.session_name to a name Endless can have").
+			"whether to adopt their session with --use-existing, close it, or set tmux.session_name to a name Endless can have").
 			Text(fmt.Sprintf(
 				"project-window: a tmux session named %q already exists and Endless did not create it.\n"+
-					"Refusing to take it over. Either close it, or set `tmux.session_name` "+
-					"in .endless/config.json to a name of your own (default: %q).",
+					"Refusing to take it over. Re-run with --use-existing to use it as it is, close it, "+
+					"or set `tmux.session_name` in .endless/config.json to a name of your own (default: %q).",
 				layout.Session, DefaultSessionNameTemplate)).
 			Exit(1)
 	case ownNone:

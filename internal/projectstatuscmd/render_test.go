@@ -328,13 +328,23 @@ func TestRowsNeverExceedTheWidth(t *testing.T) {
 	}
 }
 
-func TestColorizeIsIntensityOnly(t *testing.T) {
-	urgent := colorize("x", with(row(1, "ready", 0), phase("urgent")), true)
-	plain := colorize("x", row(1, "ready", 0), true)
-	if urgent == "x" || plain != "x" {
-		t.Errorf("urgent=%q plain=%q", urgent, plain)
+// TestListBackgrounds: each list wears its own background, padded to the full
+// width, and color off leaves the line untouched.
+func TestListBackgrounds(t *testing.T) {
+	r := row(1, "ready", 0)
+	for l, want := range map[list]string{listUrgent: "48;5;1m", listEpics: "48;5;2m", listOther: "48;5;3m"} {
+		got := colorize("x", r, l, 10, true)
+		if !strings.Contains(got, want) || !strings.Contains(got, "38;5;232m") {
+			t.Errorf("list %d: %q lacks %s on 232", l, got, want)
+		}
+		if !strings.Contains(got, "x"+strings.Repeat(" ", 9)) {
+			t.Errorf("list %d: %q is not padded to the width", l, got)
+		}
 	}
-	if strings.Contains(urgent, "[3") || strings.Contains(urgent, "[4") {
-		t.Errorf("colorize used a color code: %q", urgent)
+	if got := colorize("x", r, listOther, 10, false); got != "x" {
+		t.Errorf("color off changed the line: %q", got)
+	}
+	if got := colorize("x", with(r, phase("urgent")), listUrgent, 10, true); !strings.HasPrefix(got, "\x1b[1m") {
+		t.Errorf("urgent row is not bold: %q", got)
 	}
 }

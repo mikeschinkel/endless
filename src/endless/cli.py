@@ -912,7 +912,10 @@ def project_status(name, later, sort, as_json):
                    "Idempotent.")
 @click.option("--no-switch", is_flag=True,
               help="With --tmux: create the session but stay where you are.")
-def project_monitor(name, sort, use_tmux, no_switch):
+@click.option("--use-existing", is_flag=True,
+              help="With --tmux: use a tmux session of the monitor's name that "
+                   "Endless did not create, as it is, instead of refusing.")
+def project_monitor(name, sort, use_tmux, no_switch, use_existing):
     """Live monitor: repeatedly render `project status` until interrupted.
 
     The same three lists, redrawn every 2 seconds and repainted only when a row
@@ -926,13 +929,15 @@ def project_monitor(name, sort, use_tmux, no_switch):
     to the session that already exists rather than making a second one.
     """
     if use_tmux:
-        project_status_cmd.project_window_resolve(name, no_switch=no_switch)
+        project_status_cmd.project_window_resolve(
+            name, no_switch=no_switch, use_existing=use_existing)
         return
-    if no_switch:
+    if no_switch or use_existing:
+        flag = "--no-switch" if no_switch else "--use-existing"
         raise agent_help.no_report(
-            "--no-switch only applies with --tmux. Nothing ran.",
-            "Re-run adding --tmux, or drop --no-switch", exit_code=2,
-            text="--no-switch only applies with --tmux.")
+            f"{flag} only applies with --tmux. Nothing ran.",
+            f"Re-run adding --tmux, or drop {flag}", exit_code=2,
+            text=f"{flag} only applies with --tmux.")
     project_status_cmd.project_status_resolve(name, monitor=True, sort=sort)
 
 

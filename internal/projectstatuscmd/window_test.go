@@ -68,10 +68,11 @@ func TestSplitMonitorArgsInsertsAboveTheShell(t *testing.T) {
 	if i := indexOf(got, "--"); i < 0 || joined(got[i+1:]) != "endless project monitor demo" {
 		t.Errorf("the monitor command is not passed literally after --: %v", got)
 	}
-	// No -l: the monitor sizes its own pane from a window-derived budget on first
-	// paint, so a height guessed here is overwritten a moment later.
-	if indexOf(got, "-l") >= 0 {
-		t.Errorf("the split guesses a height the monitor immediately overrides: %v", got)
+	// -l is the monitor's starting height. The monitor never resizes its pane
+	// after that (E-2156), so without it the layout would start at tmux's even
+	// split and stay there until the user dragged it.
+	if i := indexOf(got, "-l"); i < 0 || got[i+1] != "65%" {
+		t.Errorf("the split does not set the monitor's starting height: %v", got)
 	}
 }
 

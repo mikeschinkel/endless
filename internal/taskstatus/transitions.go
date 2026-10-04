@@ -188,7 +188,7 @@ var transitionGroups = []transitionGroup{
 	{
 		// Approval is a review RECORD, not a permission: spawn and claim accept
 		// `submitted` exactly as they accept `ready` (E-2200). What approving
-		// changes is what the board shows — ⚑ review becomes ▶ do.
+		// changes is what the board shows — ⚑ approve becomes ▶ do.
 		Name: "Planning and review — approval records that the owner reviewed the plan",
 		Transitions: []Transition{
 			{From: Unplanned, To: Submitted, Actor: ActorAgent, Label: "submits — plan attached"},

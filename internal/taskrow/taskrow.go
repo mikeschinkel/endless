@@ -6,7 +6,7 @@
 // Two views drawing the same task should draw the same row. Before this package
 // each view carried its own glyph table and its own type and phase columns, and
 // they had already drifted — `session status` wore the should-never-happen ⁇ on
-// every `unreviewed` task, while `project status` had a ☰ for it. One table
+// every `unreviewed` task, while `project status` had its own glyph for it. One table
 // means a glyph added for one view is a glyph the other already knows.
 //
 // What stays with each view is what genuinely differs: which DECORATIONS
@@ -45,7 +45,9 @@ const (
 	Doing
 	// Do: a `ready` task — reviewed, waiting to start.
 	Do
-	// Review: a `submitted` task — a plan waiting for the owner's review. Spawn
+	// Review: a `submitted` task — a plan waiting for the owner's review. Its
+	// label is "approve", the act `task approve` performs, because "review"
+	// belongs to Read (E-2156). Spawn
 	// and claim accept it exactly as they accept `ready` (E-2200: the plan and
 	// open questions are the whole gate); approval is an optional review record,
 	// and this glyph is where that record shows. It gets its own ⚑ glyph rather
@@ -59,8 +61,10 @@ const (
 	// Verify: an `unverified` task, implementation awaiting the owner's verdict.
 	Verify
 	// Read: an `unreviewed` task — a research or brainstorm outcome delivered and
-	// awaiting a read. Distinct from Verify because the act is different: read a
-	// document, not run a command.
+	// awaiting the owner's review. Distinct from Verify because the act is
+	// different: read a document, not run a command. » (U+00BB) is Latin-1 and
+	// one column in every font; ☰ (U+2630), its first glyph, rendered wider than
+	// one column in real terminals.
 	Read
 	// Orphan: an `underway` task with no live session on it — claimed work that
 	// has stalled.
@@ -93,10 +97,10 @@ var meta = [...]struct{ icon, label string }{
 	Waiting: {"⚠", "waiting"},
 	Doing:   {"⟳", "doing"},
 	Do:      {"▶", "do"},
-	Review:  {"⚑", "review"},
+	Review:  {"⚑", "approve"},
 	Plan:    {"✎", "plan"},
 	Verify:  {"☑", "verify"},
-	Read:    {"☰", "read"},
+	Read:    {"»", "review"},
 	Orphan:  {"◷", "orphan"},
 	Landed:  {"⏚", "landed"},
 	Unknown: {"⁇", "unknown"},

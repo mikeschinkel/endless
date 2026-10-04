@@ -102,7 +102,8 @@ assert_eq "no task appears twice" \
 assert_not_contains "terminal tasks are not listed" "E-90" "${OUT}"
 assert_not_contains "later tasks are not in the default view" "E-91" "${OUT}"
 assert_contains "the urgent epic carries its epic letter AND the urgent glyph" "✎ E E-12   !" "${OUT}"
-assert_contains "unreviewed reads ☰, not the ⁇ net" "☰ R E-36" "${OUT}"
+assert_contains "unreviewed reads », not the ⁇ net" "» R E-36" "${OUT}"
+assert_contains "the legend calls » review" "» review" "${OUT}"
 assert_not_contains "no row wears the ⁇ should-never-happen glyph" "⁇" "${OUT}"
 
 # ── 3. untruncated lists ────────────────────────────────────────────────────
@@ -221,5 +222,75 @@ HITS="$( { grep -n -i -E 'attention board|dashboard|attention view|task view|att
           grep -n -i -w 'board' "${REBUILT[@]}"; } \
         | grep -v -F 'session monitor`** — the live dashboard' || true)"
 assert_eq "no coined synonym in the rebuilt files" "" "${HITS}"
+
+# ── 11–13. the monitor in a real pane ───────────────────────────────────────
+# A private tmux server (TMUX_TMPDIR in the run dir), so nothing here touches
+# the user's own sessions.
+section "11–13. The monitor in a real tmux pane"
+
+if ! command -v tmux >/dev/null; then
+    report_skip "the monitor in a real tmux pane" "tmux is not installed"
+else
+    # Short on purpose: a tmux socket path over ~104 bytes cannot be bound, and
+    # the run dir under $TMPDIR is already most of that.
+    TMUX_TMPDIR="$(mktemp -d /tmp/e2156.XXXXXX)" || setup_error "could not create a tmux dir"
+    export TMUX_TMPDIR
+    unset TMUX TMUX_PANE
+    trap 'tmux kill-server 2>/dev/null; rm -rf "${RUN_DIR}" "${TMUX_TMPDIR}"' EXIT
+
+    reset_fixture
+    q "INSERT INTO tasks (id,project_id,title,status,phase,type_id,updated_at) VALUES
+     (11,1,'urgent','ready','urgent',1,'2026-09-01T10:00:00'),
+     (21,1,'epic','ready','now',4,'2026-09-01T10:00:00');"
+    for i in $(seq 300 359); do
+        q "INSERT INTO tasks (id,project_id,title,status,phase,type_id,updated_at) VALUES (${i},1,'o${i}','unplanned','now',1,'2026-09-01T10:00:00');"
+    done
+
+    tmux new-session -d -s host -x 100 -y 60 "sleep 600" || setup_error "tmux new-session failed"
+    MON="$(tmux split-window -v -b -l 20 -t host -P -F '#{pane_id}' \
+        "cd '${PROJ}' && '${EGO}' --db-dir '${DBDIR}' project-status --project-id 1 --monitor")" \
+        || setup_error "tmux split-window failed"
+
+    # capture <height> — resize the monitor pane, wait past a repaint, and
+    # print what the pane shows (with escapes).
+    capture() {
+        tmux resize-pane -t "${MON}" -y "$1"
+        sleep 3
+        tmux capture-pane -p -e -t "${MON}"
+    }
+    rows_in() { grep -c ' E-[0-9]' <<<"$1" || true; }
+
+    S20="$(capture 20)"
+    S40="$(capture 40)"
+    S15="$(capture 15)"
+    n20="$(rows_in "${S20}")"; n40="$(rows_in "${S40}")"; n15="$(rows_in "${S15}")"
+    assert_eq "dragging the pane taller shows more rows (${n20} at 20, ${n40} at 40)" \
+        "yes" "$( (( n40 > n20 )) && echo yes || echo no)"
+    assert_eq "dragging it shorter shows fewer (${n15} at 15)" \
+        "yes" "$( (( n15 < n20 )) && echo yes || echo no)"
+    assert_eq "the monitor did not resize its own pane back" \
+        "15" "$(tmux display -p -t "${MON}" '#{pane_height}')"
+    for shot in "${S40}" "${S15}"; do
+        first="$(head -1 <<<"${shot}" | sed 's/\x1b\[[0-9;]*m//g')"
+        assert_contains "the legend is the pane's first line (no rows scrolled above it)" "demo · " "${first}"
+    done
+    assert_eq "no row is drawn twice after a shrink" \
+        "" "$(grep -oE ' E-[0-9]+ ' <<<"${S15}" | sort | uniq -d)"
+    assert_contains "urgent rows wear background 1 on 232" "48;5;1m" "${S40}"
+    assert_contains "epic rows wear background 2 on 232" "48;5;2m" "${S40}"
+    assert_contains "other rows wear background 3 on 232" "48;5;3m" "${S40}"
+
+    # --use-existing: a session of the monitor's name that Endless did not make.
+    tmux new-session -d -s e-demo-monitor "sleep 600"
+    WIN() { ( cd "${PROJ}" && "${EGO}" --db-dir "${DBDIR}" project-window --project demo --no-switch "$@" 2>&1 ); }
+    REFUSED="$(WIN)"
+    assert_contains "a foreign session is refused, naming the way through" "--use-existing" "${REFUSED}"
+    WIN --use-existing >/dev/null
+    assert_eq "--use-existing adopts it" "demo" \
+        "$(tmux show-options -v -t e-demo-monitor @endless_monitor 2>/dev/null)"
+    assert_eq "and leaves its panes as they were" "1" \
+        "$(tmux list-panes -t e-demo-monitor | wc -l | tr -d ' ')"
+    assert_not_contains "the next launch accepts it without the flag" "Endless did not create it" "$(WIN)"
+fi
 
 summary

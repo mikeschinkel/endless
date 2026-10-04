@@ -3927,7 +3927,7 @@ def approve_item(item_id: int, complexity: str | None = None,
 
     Approval gates nothing: `_require_spawnable` (plan, open questions) is the
     whole spawn and claim gate, and it never reads status (E-2200). What
-    approving changes is the board, where ⚑ review becomes ▶ do.
+    approving changes is the board, where ⚑ approve becomes ▶ do.
 
     Approval being a human act stays a CONVENTION, not an enforced gate. It was
     enforced against `kind=background` sessions only, and E-2074 removed that

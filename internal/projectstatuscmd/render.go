@@ -269,9 +269,9 @@ func render(
 	}
 
 	drawn := 0
-	for _, l := range lists {
-		for _, r := range l {
-			fmt.Fprintln(w, colorize(rowLine(r, titleBudget, o.cols), r, o.color))
+	for l, set := range lists {
+		for _, r := range set {
+			fmt.Fprintln(w, colorize(rowLine(r, titleBudget, o.cols), r, list(l), o.cols, o.color))
 			drawn++
 		}
 	}
@@ -327,13 +327,34 @@ func rowLine(r monitor.ProjectStatusRow, titleBudget, cols int) string {
 // measured on this repository, ~13s for 151 branches — which is why it wants a
 // cached or on-demand path rather than a probe on every frame.
 
-// colorize applies a row's intensity, the rule `session status` uses for the
-// phases this view shows: urgent is bold. ⚠ is bold too, whatever the phase —
-// a session blocked on the user is the loudest thing a row can say. Intensity
-// only, never color: the 30-47 ANSI range is remapped by the user's theme.
-func colorize(line string, r monitor.ProjectStatusRow, enabled bool) string {
-	if r.Phase == "urgent" || classify(r) == taskrow.Waiting {
-		return liveview.Strong(line, enabled)
+// listStyle is each list's background and foreground, as 256-color indexes
+// (E-2156, chosen by Mike: background palette 1/2/3 behind near-black 232).
+// The background is what tells the three lists apart without separator rows;
+// the near-black foreground keeps text legible on all three.
+//
+// 1, 2 and 3 are the theme's own red, green and yellow, so the tint follows
+// the user's palette rather than fighting it.
+var listStyle = [listCount]struct{ bg, fg int }{
+	listUrgent: {1, 232},
+	listEpics:  {2, 232},
+	listOther:  {3, 232},
+}
+
+// colorize paints a row in its list's colors, padded to the full width so the
+// band reads as one block. ⚠ and urgent rows are also bold — a session blocked
+// on the user is the loudest thing a row can say. With color off the line is
+// returned untouched.
+func colorize(line string, r monitor.ProjectStatusRow, l list, cols int, enabled bool) string {
+	if !enabled {
+		return line
 	}
-	return line
+	if pad := cols - runewidth.StringWidth(line); pad > 0 {
+		line += strings.Repeat(" ", pad)
+	}
+	st := listStyle[l]
+	sgr := fmt.Sprintf("\x1b[48;5;%dm\x1b[38;5;%dm", st.bg, st.fg)
+	if r.Phase == "urgent" || classify(r) == taskrow.Waiting {
+		sgr = liveview.Bold + sgr
+	}
+	return sgr + line + liveview.Reset
 }
