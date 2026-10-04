@@ -7109,3 +7109,7 @@ versioned, not promoted until proven" posture, so moving it wholesale into
 `docs/` publishes something its author deliberately held back. Ask where it goes
 rather than assuming public-is-fine.
 - **Project**: endless
+
+### [2026-10-04] Don't call it ready while Mike's verify is still running
+Context: E-2203, after a rebase. Mike said he was running verify and would land after if it was ready. I answered 'Yes, it's ready'. He meant 'ready if verify passes', and his run had not finished, so I could not know. My own earlier verify and regression passes do not tell me the outcome of the run he is waiting on. When Mike's run is in flight, say what to do after each outcome (passes: land; fails: paste it here) instead of declaring a result.
+- **Project**: endless
