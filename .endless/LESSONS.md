@@ -7067,3 +7067,45 @@ Write a decision as the positive rule a future reader needs. Do not add prohibit
 ### [2026-10-03] Rebuild worktree binaries after rebasing onto main before re-verifying
 After git rebase main in a worktree, run just build before endless task verify. The worktree's bin/endless-go predates the rebase, so Python code from main that shells out to a new endless-go verb (e.g. worktree land-gate) fails with 'unknown verb' and looks like a regression in unrelated tests. Also: a test helper forcing the human audience must monkeypatch agent_help._AMBIENT_AUDIENCE, because ENDLESS_AUDIENCE is latched at import and the verify runner exports it.
 - **Project**: endless
+
+### [2026-10-04] Never cite a private or gitignored document from content that gets published
+Mike, emphatically: E-2136's analysis cited `docs/private/brief-2028-09-12-agent-folio-format.md`
+and its companion as where the design lives. Task content is published. Citing a
+private document from it is something to NEVER do.
+
+WHY IT IS WRONG, two separate failures:
+
+1. **It leaks.** The citation names a private document, its subject and its
+   filename to every future reader of the published content. The content stayed
+   private; the fact of it, and what it covers, did not.
+
+2. **It is a dangling reference for everyone else.** `docs/private/` is
+   gitignored, so it is absent from every worktree and from any clone. A reader
+   who follows the pointer finds nothing, and the published analysis is
+   therefore incomplete by construction — it delegates its substance to
+   something the reader cannot open. I even hit this myself in the same session:
+   the directory did not exist in my worktree and I had to read it from the main
+   checkout.
+
+THE RULE. Content that gets published — a task's description, context, analysis,
+plan, outcome or notes, a decision, a lesson, a commit message — must be
+SELF-CONTAINED with respect to private material. Carry the substance it needs.
+Cite only paths that exist in the repository for everyone who can read the
+published text.
+
+HOW TO TELL. Before citing a path from published content, ask whether it is
+committed. If `git check-ignore` matches it, or it lives under a `private/`
+directory, it cannot be cited — not by path, not by filename, not by
+description.
+
+WHAT TO DO INSTEAD. Move the substance into the published field itself, or into
+a committed document, or into the package doc of the code that implements it.
+A design's eventual home is beside its implementation; until that exists, the
+analysis carries it.
+
+NOTE ON PUBLICATION POSTURE. Relocating private content to a public path is not
+automatically safe either: the AFF brief carries its own "not named, not
+versioned, not promoted until proven" posture, so moving it wholesale into
+`docs/` publishes something its author deliberately held back. Ask where it goes
+rather than assuming public-is-fine.
+- **Project**: endless
