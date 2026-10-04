@@ -1,0 +1,1 @@
+Mike wants the glossary visible, not out of sight and out of mind (E-2154). Start simple: the coloured glossary list with -p pagination, in a tmux tab like the one running project monitor.
