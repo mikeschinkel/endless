@@ -115,7 +115,10 @@ func runStatus(args []string) {
 	}
 
 	color := liveview.ColorEnabled()
-	frame := frameSpec{projectID: projectID, name: name, phases: phases, phrase: phrase, sort: key, rows: o.rows}
+	// A project whose path cannot be read renders in the default colors.
+	dir, _ := monitor.ProjectPath(projectID)
+	frame := frameSpec{projectID: projectID, name: name, phases: phases, phrase: phrase,
+		sort: key, rows: o.rows, styles: listStylesFor(dir)}
 
 	// --monitor only makes sense against an interactive terminal (the redraw uses
 	// cursor-positioning escapes). When stdout is piped or captured, degrade to a
@@ -169,6 +172,7 @@ type frameSpec struct {
 	rows int
 	// truncate is true for `project monitor`, the only view that cuts list 3.
 	truncate bool
+	styles   *listStyles
 }
 
 // fn binds one render into the liveview.Frame shape. `project status` and
@@ -194,6 +198,7 @@ func (f frameSpec) fn() liveview.Frame {
 			color:       color,
 			sort:        f.sort,
 			emptyPhrase: f.phrase,
+			styles:      f.styles,
 		}, faults.ProjectScope(f.projectID)), nil
 	}
 }

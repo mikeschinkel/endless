@@ -14,10 +14,9 @@ import (
 func joined(args []string) string { return strings.Join(args, " ") }
 
 var demoLayout = windowLayout{
-	Session:    "e-demo-monitor",
+	Session:    "demo",
 	Dir:        "/tmp/demo",
 	MonitorCmd: []string{"endless", "project", "monitor", "demo"},
-	Project:    "demo",
 }
 
 // TestNewSessionArgsIsADetachedShell pins two things at once, and the second is
@@ -33,7 +32,7 @@ var demoLayout = windowLayout{
 // (E-1976). The symptom is a window with no second pane at all.
 func TestNewSessionArgsIsADetachedShell(t *testing.T) {
 	got := newSessionArgs(demoLayout)
-	if !strings.Contains(joined(got), "new-session -d -s e-demo-monitor") {
+	if !strings.Contains(joined(got), "new-session -d -s demo") {
 		t.Errorf("new-session is not detached or misnames the session: %v", got)
 	}
 	if !strings.Contains(joined(got), "-c /tmp/demo") {
@@ -84,42 +83,41 @@ func TestFocusReturnsToTheShell(t *testing.T) {
 	}
 }
 
-// TestOwnershipMarkTargetsCarryNoEqualsPrefix is the counterpart to
-// TestSessionTargetsAreExact, and it exists because these two builders are the
-// ONLY ones here that must not carry `=`.
-//
-// tmux's option commands reject the exact-match form outright — `no such
-// session: =name` — and that is how an earlier draft of this stamp shipped
-// inert: it was written to match its neighbours, every argv test agreed with it,
-// and nothing asked tmux whether it would take the argv. A shape test cannot see
-// a contract it never exercises; the live round trip is in this task's verify
-// suite.
-func TestOwnershipMarkTargetsCarryNoEqualsPrefix(t *testing.T) {
+// TestEveryWindowIsNamedProjects: both ways a launch gets a window name it
+// `projects`, and -n is what keeps tmux from renaming it to the shell.
+func TestEveryWindowIsNamedProjects(t *testing.T) {
 	for name, args := range map[string][]string{
-		"set-option":   setMonitorOptionArgs("e-demo-monitor", "demo"),
-		"show-options": getMonitorOptionArgs("e-demo-monitor"),
+		"new-session": newSessionArgs(demoLayout),
+		"new-window":  newWindowArgs(demoLayout),
 	} {
-		if strings.Contains(joined(args), "=e-demo-monitor") {
-			t.Errorf("%s carries the = prefix tmux refuses on option commands: %v", name, args)
+		if i := indexOf(args, "-n"); i < 0 || args[i+1] != "projects" {
+			t.Errorf("%s does not name its window projects: %v", name, args)
+		}
+		if indexOf(args, "-P") < 0 {
+			t.Errorf("%s does not report the shell pane's id: %v", name, args)
 		}
 	}
 }
 
-// TestOwnershipMarkCarriesBothFacts: one option, two jobs. Its PRESENCE proves
-// Endless built the session; its VALUE says which project's monitor it holds. A
-// session without it was made by someone else, whatever it is called — which is
-// the only question that matters once the name is user-configurable.
-func TestOwnershipMarkCarriesBothFacts(t *testing.T) {
-	set := joined(setMonitorOptionArgs("e-demo-monitor", "demo"))
-	if set != "set-option -t e-demo-monitor @endless_monitor demo" {
-		t.Errorf("the ownership mark does not record the project: %q", set)
-	}
-	get := joined(getMonitorOptionArgs("e-demo-monitor"))
-	if get != "show-options -v -t e-demo-monitor @endless_monitor" {
-		t.Errorf("the ownership mark is not read back from the session: %q", get)
+// TestNewWindowTargetsTheSessionExactly: `=demo:` is the session itself, matched
+// exactly, so `demo` never resolves to `demo-legacy`.
+func TestNewWindowTargetsTheSessionExactly(t *testing.T) {
+	if !strings.Contains(joined(newWindowArgs(demoLayout)), "-t =demo:") {
+		t.Errorf("new-window does not target the session exactly: %v", newWindowArgs(demoLayout))
 	}
 }
 
+// TestLauncherUsesItsOwnServer: every command the launcher runs goes to the
+// monitor's server, never the user's default one.
+func TestLauncherUsesItsOwnServer(t *testing.T) {
+	got := tmuxArgs([]string{"has-session", "-t", "=demo"})
+	if joined(got[:2]) != "-L endless" {
+		t.Errorf("launcher command is not on the endless server: %v", got)
+	}
+	if attachHint("demo") != "tmux -L endless attach -t demo" {
+		t.Errorf("attach hint = %q", attachHint("demo"))
+	}
+}
 // TestSessionTargetsAreExact pins the `=` prefix. Without it tmux matches a
 // session name as a PREFIX, so a project whose name is a prefix of another's
 // (`h2pp` inside `h2pp-legacy`) resolves to the wrong monitor, and the launcher
@@ -127,7 +125,6 @@ func TestOwnershipMarkCarriesBothFacts(t *testing.T) {
 func TestSessionTargetsAreExact(t *testing.T) {
 	for name, args := range map[string][]string{
 		"has-session":    hasSessionArgs("e-demo-monitor"),
-		"switch-client":  switchClientArgs("e-demo-monitor"),
 		"attach-session": attachArgs("e-demo-monitor"),
 	} {
 		if !strings.Contains(joined(args), "=e-demo-monitor") {

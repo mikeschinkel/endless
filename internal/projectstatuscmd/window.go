@@ -10,15 +10,25 @@ import (
 	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
-// The dedicated monitor session (E-1976, per E-1815's topology).
+// The monitor's tmux home (E-1976; moved to its own server by E-2156).
 //
-// `project monitor --tmux` gets its OWN tmux session with two panes: the monitor
-// on top, and a bare interactive shell beneath it for running `endless` commands
-// against what the monitor shows. Its own session rather than a window in the
-// user's, because it is a standing surface rather than a piece of work — and
-// because the user's
-// windows are where auto-spawned sessions land (E-1814), which a review-batch
-// session would take out of sight.
+// `project monitor --tmux` runs on a DEDICATED tmux server, `tmux -L endless`,
+// in a session named for the project. A server of its own because the monitor
+// and the task sessions want incompatible window layouts: on one server,
+// moving between them is a switch-client that rearranges what you were looking
+// at, and the monitor's session crowds the task sessions in `tmux ls`. On its
+// own server it lives in its own terminal window, and `tmux -L endless ls`
+// lists only monitors.
+//
+// The cost: one tmux client cannot switch to a session on another server. From
+// inside tmux the launcher builds the window and prints the attach command for
+// another terminal; from a plain terminal it attaches.
+//
+// Every launch ADDS a window named `projects` — a bare shell with the monitor
+// above it — to the project's session, creating the session if needed. Adding
+// rather than reusing means a launch always ends with a running monitor, even
+// when the last one was closed; a launch too many leaves a duplicate window,
+// which the user closes like any other.
 //
 // The bare shell is `agentenv` `unknown`: the CLI fails open there and the hook
 // no-ops, which is the desired behaviour — it is a place to type, not a place an
@@ -27,10 +37,18 @@ import (
 // Focus lands on the SHELL, not the monitor. The monitor is read; the shell is
 // used. Nothing is ever typed into a pane running a redraw loop.
 
+// monitorServer is the tmux socket name (-L) the monitor runs on.
+const monitorServer = "endless"
+
+// monitorWindowName names the window each launch adds. Set with -n, which also
+// turns tmux's automatic-rename off for it, so the tab keeps the name instead of
+// showing whatever the shell is running.
+const monitorWindowName = "projects"
+
 // windowLayout is every tmux fact the launcher needs, in one place so the argv
 // builders below stay pure and testable.
 type windowLayout struct {
-	// Session is the tmux session name (monitor.ProjectSessionName).
+	// Session is the tmux session name (sessionNameFor).
 	Session string
 	// Dir is the working directory both panes start in — the project's main
 	// checkout, because both are observation surfaces onto the main database and
@@ -38,32 +56,28 @@ type windowLayout struct {
 	Dir string
 	// MonitorCmd is the argv of the monitor's pane.
 	MonitorCmd []string
-	// Project is the project the monitor is for. It is already baked into Session
-	// (monitor.MonitorSessionName), and kept here because the layout is the one
-	// place that knows both, which is what a future multiplexer driver will need.
-	Project string
 }
 
-// newSessionArgs builds `tmux new-session -d -s <name> -c <dir>` — with NO
-// command, so the session's first pane is the user's own shell.
+// newSessionArgs builds the session with its first `projects` window: detached
+// (-d), so creating it never yanks the user out of what they are doing, and
+// with NO command, so the first pane is the user's own shell. The monitor is
+// inserted above that shell afterwards (splitMonitorArgs).
 //
-// The SHELL is created first and the monitor inserted ABOVE it, not the other
-// way round. This is E-1851's rule, learned in spawnlaunchcmd.buildLayoutAround
-// and restated here because getting it backwards is invisible until it bites:
-// the monitor shrinks its own pane to its frame on first paint
-// (liveview.FitPaneToFrame), so creating the monitor first and then splitting a
-// shell off it races that shrink. The shell then gets whatever few rows survived
-// — or, in a short window, the split fails outright and there is no second pane
-// at all. Splitting off a shell cannot race anything, because a shell does not
-// resize itself.
-//
-// Detached (-d): creating the session must never yank the user out of what they
-// are doing. Attaching or switching is a separate, explicit step.
-//
-// `-P -F #{pane_id}` reports the shell's pane id, which is what focus is handed
-// back to once the monitor is in place.
+// `-P -F #{pane_id}` reports the shell's pane id, which focus is handed back to
+// once the monitor is in place.
 func newSessionArgs(l windowLayout) []string {
-	args := []string{"new-session", "-d", "-s", l.Session}
+	args := []string{"new-session", "-d", "-s", l.Session, "-n", monitorWindowName}
+	if l.Dir != "" {
+		args = append(args, "-c", l.Dir)
+	}
+	return append(args, "-P", "-F", "#{pane_id}")
+}
+
+// newWindowArgs adds a `projects` window to a session that already exists, its
+// first pane a shell, reporting that pane's id. The trailing `:` targets the
+// session rather than a window in it, and `=` makes the match exact.
+func newWindowArgs(l windowLayout) []string {
+	args := []string{"new-window", "-t", "=" + l.Session + ":", "-n", monitorWindowName}
 	if l.Dir != "" {
 		args = append(args, "-c", l.Dir)
 	}
@@ -92,22 +106,15 @@ func splitMonitorArgs(l windowLayout, shellPane string) []string {
 
 // selectPaneArgs hands focus to a pane. After the monitor is inserted it is the
 // active pane (tmux selects a new split), and the monitor is read, not typed
-// in —
-// so focus goes back to the shell explicitly rather than by luck.
+// in — so focus goes back to the shell explicitly rather than by luck.
 func selectPaneArgs(pane string) []string {
 	return []string{"select-pane", "-t", pane}
 }
 
-// hasSessionArgs builds the existence check that makes the launcher idempotent.
+// hasSessionArgs builds the existence check that decides between creating the
+// session and adding a window to it.
 func hasSessionArgs(session string) []string {
 	return []string{"has-session", "-t", "=" + session}
-}
-
-// switchClientArgs moves the ATTACHED client to the monitor session — the right
-// move when the caller is already inside tmux, where `attach` would refuse
-// (nested) and is not what was wanted anyway.
-func switchClientArgs(session string) []string {
-	return []string{"switch-client", "-t", "=" + session}
 }
 
 // attachArgs builds the attach used when the caller is NOT inside tmux.
@@ -115,81 +122,9 @@ func attachArgs(session string) []string {
 	return []string{"attach-session", "-t", "=" + session}
 }
 
-// monitorOptionKey is the tmux session option that marks a session as one
-// Endless built, and records which project's monitor it holds.
-//
-// One option carrying both facts: its PRESENCE is the ownership proof, its VALUE
-// is the project. A session without it was made by someone else, whatever it is
-// called.
-//
-// This is load-bearing exactly because the name is configurable. With the
-// built-in `e-<project>-monitor` a collision was implausible; the moment a user
-// can set `tmux.session_name` to `{{project}}` — which is the natural thing to
-// want — the launcher can find a session with the right name that is the user's
-// own shell. Adopting it would switch them into a window with no monitor and
-// report "reusing", which is a lie told confidently.
-const monitorOptionKey = "@endless_monitor"
-
-// setMonitorOptionArgs / getMonitorOptionArgs stamp and read the ownership mark.
-//
-// NOTE the target carries NO `=` prefix, unlike every other builder in this
-// file. tmux's option commands do not accept the exact-match form and fail
-// outright with `no such session: =name` — which is how an earlier draft of this
-// shipped inert: the argv was written to match its neighbours, every argv test
-// agreed with it, and nothing asked tmux whether it would take it. The verify
-// suite now drives a real tmux server for this round trip.
-//
-// Losing the exact match costs nothing here: these are only ever called for a
-// session `has-session -t =<name>` has already resolved exactly.
-func setMonitorOptionArgs(session, project string) []string {
-	return []string{"set-option", "-t", session, monitorOptionKey, project}
-}
-
-func getMonitorOptionArgs(session string) []string {
-	return []string{"show-options", "-v", "-t", session, monitorOptionKey}
-}
-
-// ownership is what the launcher learned about a session already using the name
-// it wants.
-type ownership int
-
-const (
-	// ownNone: no session by that name. Build it.
-	ownNone ownership = iota
-	// ownMine: Endless built it, for THIS project. Reuse it.
-	ownMine
-	// ownOtherProject: Endless built it, for a different project. Only reachable
-	// when the configured template does not vary by project — `monitor`, say. Not
-	// an error in the session; an error in the name.
-	ownOtherProject
-	// ownForeign: a session by that name exists and Endless did not make it.
-	// Never adopt it.
-	ownForeign
-)
-
-// checkOwnership decides which of those four a name is in.
-//
-// An unstamped session reads as FOREIGN, and that is the deliberate direction.
-// tmux reports an unset user option as an error rather than an empty string, so
-// "no stamp" and "cannot read the stamp" arrive alike — and both mean the same
-// thing operationally: nothing here proves Endless built it. Guessing generously
-// would put us straight back to adopting a stranger's session.
-//
-// The one cost is a monitor created before this stamp existed: it reads foreign
-// and the user is told to close it. That is a one-time message, not a silent
-// wrong window.
-func checkOwnership(session, project string) ownership {
-	if !tmuxOK(hasSessionArgs(session)) {
-		return ownNone
-	}
-	owner, err := tmuxOut(getMonitorOptionArgs(session))
-	if err != nil || owner == "" {
-		return ownForeign
-	}
-	if owner != project {
-		return ownOtherProject
-	}
-	return ownMine
+// attachHint is the command that reaches the monitor from another terminal.
+func attachHint(session string) string {
+	return fmt.Sprintf("tmux -L %s attach -t %s", monitorServer, session)
 }
 
 // monitorCommand is the argv run in the monitor pane. `endless project monitor
@@ -213,8 +148,7 @@ func monitorCommand(project string) []string {
 func runWindow(args []string) {
 	fs := refusal.NewFlags("project-window")
 	project := fs.String("project", "", "project name (default: the project enclosing the working directory)")
-	noSwitch := fs.Bool("no-switch", false, "create the session but leave the caller where they are")
-	useExisting := fs.Bool("use-existing", false, "adopt an existing tmux session of that name that Endless did not create, instead of refusing")
+	noSwitch := fs.Bool("no-switch", false, "build the window but do not attach to it")
 	if err := fs.Parse(args); err != nil {
 		// Text carries flag's own error line and the flag defaults it appends,
 		// which is what stderr held before this was classified.
@@ -226,11 +160,11 @@ func runWindow(args []string) {
 		// The message names a command, which by the letter of the rule would
 		// make it no-report — but `endless project monitor` is a redraw loop in
 		// somebody's terminal, not a thing an agent can run in place of the
-		// two-pane session it just asked for. Installing tmux, or deciding to
+		// two-pane window it just asked for. Installing tmux, or deciding to
 		// watch the monitor by hand instead, is the user's.
 		windowReport(
 			"project-window: tmux is not installed. Run `endless project monitor` "+
-				"directly in a terminal instead — the dedicated two-pane session needs tmux.",
+				"directly in a terminal instead — the dedicated two-pane window needs tmux.",
 			"whether to install tmux or run the live monitor in their own terminal").
 			Exit(1)
 	}
@@ -249,124 +183,46 @@ func runWindow(args []string) {
 	// not be able to stop the monitor from opening.
 	sessionName, warn := sessionNameFor(name, sessionNameTemplate(dir))
 	if warn != nil {
-		// The template is a config preference, and an agent must not go editing
-		// the user's config over it — but nothing is blocked either: the monitor
-		// opens under the default name.
 		refusal.NoReport(fmt.Sprintf("project-window: %v", warn),
 			"Continue; the monitor opened under the default session name").
 			Command("project-window").Print()
 	}
 
-	layout := windowLayout{
-		Session:    sessionName,
-		Dir:        dir,
-		MonitorCmd: monitorCommand(name),
-		Project:    name,
+	layout := windowLayout{Session: sessionName, Dir: dir, MonitorCmd: monitorCommand(name)}
+
+	created := !tmuxOK(hasSessionArgs(layout.Session))
+	build := newWindowArgs(layout)
+	if created {
+		build = newSessionArgs(layout)
+	}
+	shellPane, err := tmuxOut(build)
+	if err != nil {
+		// tmuxOut captures stdout only, so tmux's own reason is not in this
+		// message and there is nothing here to retry differently.
+		windowReport(
+			fmt.Sprintf("project-window: opening the monitor window: %v", err),
+			"whether a tmux server that refused a new window is something they can clear").
+			Exit(1)
+	}
+	// The monitor pane is best-effort: a shell with no monitor beside it is a
+	// degraded but working window, and refusing over a failed split would trade
+	// the whole feature for half of it.
+	if err = tmuxRun(splitMonitorArgs(layout, shellPane)); err != nil {
+		refusal.NoReport(fmt.Sprintf("project-window: monitor pane: %v", err),
+			"Continue; the window has a shell but no monitor pane").
+			Command("project-window").Print()
+	} else if err = tmuxRun(selectPaneArgs(shellPane)); err != nil {
+		// Focus belongs on the shell: the monitor is read, the shell is typed
+		// in. Cosmetic if it fails — the user presses a pane key.
+		refusal.NoReport(fmt.Sprintf("project-window: focus shell: %v", err),
+			"Continue; the focus failure is cosmetic").
+			Command("project-window").Print()
 	}
 
-	created := false
-	switch checkOwnership(layout.Session, layout.Project) {
-	case ownMine:
-		// Ours, for this project. Fall through to the switch/attach below.
-	case ownOtherProject:
-		// The fix is a line in the user's own `tmux.session_name`, which is a
-		// preference nobody else gets to set for them.
-		windowReport(
-			fmt.Sprintf("project-window: the session %q already holds another project's monitor",
-				layout.Session),
-			"whether to give tmux.session_name a per-project name, or to close the other project's monitor").
-			Text(fmt.Sprintf(
-				"project-window: the session %q already holds another project's monitor.\n"+
-					"Your `tmux.session_name` renders the same name for every project. "+
-					"Include the project in it — the default is %q.",
-				layout.Session, DefaultSessionNameTemplate)).
-			Exit(1)
-	case ownForeign:
-		if *useExisting {
-			// The user named this session as theirs to hand over. Stamp it so the
-			// next launch recognizes it, and switch to it as it stands: its panes
-			// are left exactly as they are, so nothing running in it is touched.
-			if err = tmuxRun(setMonitorOptionArgs(layout.Session, layout.Project)); err != nil {
-				windowReport(
-					fmt.Sprintf("project-window: adopting the session %q: %v", layout.Session, err),
-					"whether a tmux server that refused a session option is something they can clear").
-					Exit(1)
-			}
-			break
-		}
-		// Closing a tmux session is destructive to whatever is running in it,
-		// and this one is the user's: Endless never stamped it.
-		windowReport(
-			fmt.Sprintf("project-window: a tmux session named %q already exists and Endless did not create it. Refusing to take it over",
-				layout.Session),
-			"whether to adopt their session with --use-existing, close it, or set tmux.session_name to a name Endless can have").
-			Text(fmt.Sprintf(
-				"project-window: a tmux session named %q already exists and Endless did not create it.\n"+
-					"Refusing to take it over. Re-run with --use-existing to use it as it is, close it, "+
-					"or set `tmux.session_name` in .endless/config.json to a name of your own (default: %q).",
-				layout.Session, DefaultSessionNameTemplate)).
-			Exit(1)
-	case ownNone:
-		shellPane, serr := tmuxOut(newSessionArgs(layout))
-		if serr != nil {
-			// tmuxOut captures stdout only, so tmux's own reason is not in this
-			// message and there is nothing here to retry differently.
-			windowReport(
-				fmt.Sprintf("project-window: creating the monitor session: %v", serr),
-				"whether a tmux server that refused a new session is something they can clear").
-				Exit(1)
-		}
-		// The monitor pane is best-effort: a shell with no monitor beside it is a
-		// degraded but working window, and refusing to open one over a failed
-		// split would trade the whole feature for half of it.
-		if err = tmuxRun(splitMonitorArgs(layout, shellPane)); err != nil {
-			refusal.NoReport(fmt.Sprintf("project-window: monitor pane: %v", err),
-				"Continue; the session has a shell but no monitor pane").
-				Command("project-window").Print()
-		} else if err = tmuxRun(selectPaneArgs(shellPane)); err != nil {
-			// Focus belongs on the shell: the monitor is read, the shell is typed
-			// in. Cosmetic if it fails — the user presses a pane key.
-			refusal.NoReport(fmt.Sprintf("project-window: focus shell: %v", err),
-				"Continue; the focus failure is cosmetic").
-				Command("project-window").Print()
-		}
-		// Stamp ownership LAST, so a session that failed to build is not claimed
-		// by a project whose monitor never started. A stamp that fails is fatal,
-		// not best-effort: an unstamped session reads as foreign on the next
-		// launch, so leaving one behind would strand the user under a name they
-		// are then told they cannot have.
-		if err = tmuxRun(setMonitorOptionArgs(layout.Session, layout.Project)); err != nil {
-			// A half-built session is now sitting in the user's tmux server under
-			// a name the next launch will refuse as foreign, and only they can
-			// close it — an agent closing a tmux session takes whatever else is
-			// running in it with it.
-			windowReport(
-				fmt.Sprintf("project-window: could not mark %q as Endless's: %v", layout.Session, err),
-				"whether to close the half-built session left in their tmux server, and whether to try again").
-				Text(fmt.Sprintf(
-					"project-window: could not mark %q as Endless's: %v\n"+
-						"Close it before running this again; unmarked, it will be refused as foreign.",
-					layout.Session, err)).
-				Exit(1)
-		}
-		created = true
-	}
-
-	if *noSwitch {
+	// One tmux client cannot switch to a session on another server, so from
+	// inside tmux the window is built and the user is told where it is.
+	if *noSwitch || monitor.InTmux() {
 		reportWindow(layout.Session, created, false)
-		return
-	}
-
-	if monitor.InTmux() {
-		if err = tmuxRun(switchClientArgs(layout.Session)); err != nil {
-			// The session itself is built and waiting; what failed is moving the
-			// user's attached client into it, which is theirs to do.
-			windowReport(
-				fmt.Sprintf("project-window: switching to %s: %v", layout.Session, err),
-				"whether to switch or attach to the session themselves — it already exists").
-				Exit(1)
-		}
-		reportWindow(layout.Session, created, true)
 		return
 	}
 
@@ -376,7 +232,7 @@ func runWindow(args []string) {
 	// reached through a Python wrapper that owns the exit status, and replacing
 	// the process would take that reporting path away for no gain — tmux holds
 	// the terminal either way.
-	cmd := exec.Command("tmux", attachArgs(layout.Session)...)
+	cmd := exec.Command("tmux", append([]string{"-L", monitorServer}, attachArgs(layout.Session)...)...)
 	// tmux owns this terminal for the length of the attach, so its stdio — its
 	// stderr included — is its own.
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, refusal.Passthrough()
@@ -385,11 +241,11 @@ func runWindow(args []string) {
 		// The class turns on who is reading, and that is a question the process
 		// can answer rather than hand over. An agent has no terminal for tmux to
 		// open onto, so its attach failing means only "you cannot attach" — and
-		// the session it asked for exists, so --no-switch gets the same result.
+		// the window it asked for exists, so --no-switch gets the same result.
 		// A person's attach failing in a real terminal is something else, and
 		// only they can say what.
 		if refusal.Agent() {
-			refusal.NoReport(msg, "Rerun with --no-switch; the session already exists").
+			refusal.NoReport(msg, "Rerun with --no-switch; the window already exists").
 				Command("project-window").Exit(1)
 		}
 		windowReport(msg,
@@ -407,24 +263,28 @@ func windowReport(summary, decision string) *refusal.Error {
 }
 
 // reportWindow says what happened, on stderr so it never lands in a caller's
-// captured stdout. Idempotence is only useful if the user can tell which of the
-// two things occurred.
-func reportWindow(session string, created, switched bool) {
-	verb := "reusing"
+// captured stdout, and how to reach it when the launcher did not attach.
+func reportWindow(session string, created, attached bool) {
+	where := fmt.Sprintf("added a %q window to tmux session %q", monitorWindowName, session)
 	if created {
-		verb = "created"
+		where = fmt.Sprintf("created tmux session %q with a %q window", session, monitorWindowName)
 	}
-	line := fmt.Sprintf("• %s tmux session %q", verb, session)
-	if !switched {
-		line += fmt.Sprintf("  (attach with: tmux attach -t %s)", session)
+	line := fmt.Sprintf("• %s on the %q tmux server", where, monitorServer)
+	if !attached {
+		line += fmt.Sprintf("\n  Attach from its own terminal window: %s", attachHint(session))
 	}
 	// A success notice, not a refusal: nothing is blocked and there is nothing
 	// to decide, so it carries no directive for either reader.
 	refusal.Info(line).Print()
 }
 
+// tmuxArgs puts every launcher command on the monitor's own server.
+func tmuxArgs(args []string) []string {
+	return append([]string{"-L", monitorServer}, args...)
+}
+
 func tmuxRun(args []string) error {
-	cmd := exec.Command("tmux", args...)
+	cmd := exec.Command("tmux", tmuxArgs(args)...)
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		msg := strings.TrimSpace(string(out))
@@ -439,13 +299,13 @@ func tmuxRun(args []string) error {
 // tmuxOK reports whether a tmux command succeeded, discarding its output. Used
 // for has-session, where the exit status IS the answer.
 func tmuxOK(args []string) bool {
-	return exec.Command("tmux", args...).Run() == nil
+	return exec.Command("tmux", tmuxArgs(args)...).Run() == nil
 }
 
 // tmuxOut runs a tmux command and returns its trimmed stdout — for the argv
-// builders that ask tmux a question (a created pane's id, a session's stamp).
+// builders that ask tmux a question (a created pane's id).
 func tmuxOut(args []string) (string, error) {
-	out, err := exec.Command("tmux", args...).Output()
+	out, err := exec.Command("tmux", tmuxArgs(args)...).Output()
 	if err != nil {
 		return "", fmt.Errorf("tmux %v: %w", args, err)
 	}

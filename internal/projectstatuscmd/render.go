@@ -149,11 +149,6 @@ func classify(r monitor.ProjectStatusRow) taskrow.Action {
 	return taskrow.Classify(r.Status, r.Landed)
 }
 
-// faultRowLines is the allowance for the fault row. It renders only when an
-// incident is open, but it is budgeted for unconditionally: discovering it at
-// paint time would cost exactly the row the budget was protecting.
-const faultRowLines = 1
-
 // minTitleBudget is the floor on the columns left for a title. Below this the
 // title is all ellipsis and the row says nothing.
 const minTitleBudget = 10
@@ -170,6 +165,8 @@ type frameOpts struct {
 	sort     sortKey
 	// emptyPhrase names the phases the frame covers, for the empty hint.
 	emptyPhrase string
+	// styles is each list's colors; the zero value is defaultListStyles.
+	styles *listStyles
 }
 
 // legendLines is how many terminal lines the legend occupies at cols. The
@@ -236,10 +233,17 @@ func render(
 	o frameOpts,
 	scope faults.ProjectScope,
 ) int {
+	// The fault row is rendered first, into a buffer, so the budget can reserve
+	// exactly the lines it takes — none when no incident is open — and the
+	// third list gets every line the pane has left.
+	var faultBuf strings.Builder
+	faultrow.Render(&faultBuf, o.cols, o.color, scope)
+	faultLines := strings.Count(faultBuf.String(), "\n")
+
 	lists := partition(rows, o.sort)
 	if len(rows) == 0 {
 		fmt.Fprintln(w, liveview.Dim(emptyHint(project, o.emptyPhrase), o.color))
-		faultrow.Render(w, o.cols, o.color, scope)
+		io.WriteString(w, faultBuf.String())
 		return 0
 	}
 
@@ -248,7 +252,7 @@ func render(
 	// never longer than the one budgeted for.
 	omitted := 0
 	if o.truncate && o.budget > 0 {
-		fixed := legendLines(legend(project, lists, o.cols), o.cols) + faultRowLines +
+		fixed := legendLines(legend(project, lists, o.cols), o.cols) + faultLines +
 			len(lists[listUrgent]) + len(lists[listEpics])
 		room := o.budget - fixed
 		if other := lists[listOther]; len(other) > room {
@@ -271,7 +275,7 @@ func render(
 	drawn := 0
 	for l, set := range lists {
 		for _, r := range set {
-			fmt.Fprintln(w, colorize(rowLine(r, titleBudget, o.cols), r, list(l), o.cols, o.color))
+			fmt.Fprintln(w, o.styles.colorize(rowLine(r, titleBudget, o.cols), r, list(l), o.cols, o.color))
 			drawn++
 		}
 	}
@@ -279,7 +283,7 @@ func render(
 		fmt.Fprintln(w, liveview.Dim("      "+footerFor(omitted), o.color))
 	}
 
-	faultrow.Render(w, o.cols, o.color, scope)
+	io.WriteString(w, faultBuf.String())
 	return drawn
 }
 
@@ -327,14 +331,17 @@ func rowLine(r monitor.ProjectStatusRow, titleBudget, cols int) string {
 // measured on this repository, ~13s for 151 branches — which is why it wants a
 // cached or on-demand path rather than a probe on every frame.
 
-// listStyle is each list's background and foreground, as 256-color indexes
-// (E-2156, chosen by Mike: background palette 1/2/3 behind near-black 232).
-// The background is what tells the three lists apart without separator rows;
-// the near-black foreground keeps text legible on all three.
-//
-// 1, 2 and 3 are the theme's own red, green and yellow, so the tint follows
-// the user's palette rather than fighting it.
-var listStyle = [listCount]struct{ bg, fg int }{
+// listStyles is each list's background and foreground, as 256-color indexes.
+// The background is what tells the three lists apart without separator rows.
+// A negative index leaves that attribute at the terminal's default, which is
+// how a list goes without a background.
+type listStyles [listCount]struct{ bg, fg int }
+
+// defaultListStyles is Mike's pick (E-2156): the theme's red, green and yellow
+// (palette 1, 2, 3) behind near-black 232, so the tint follows the user's
+// palette rather than fighting it. `project_status.colors` in config overrides
+// any of them.
+var defaultListStyles = listStyles{
 	listUrgent: {1, 232},
 	listEpics:  {2, 232},
 	listOther:  {3, 232},
@@ -343,18 +350,30 @@ var listStyle = [listCount]struct{ bg, fg int }{
 // colorize paints a row in its list's colors, padded to the full width so the
 // band reads as one block. ⚠ and urgent rows are also bold — a session blocked
 // on the user is the loudest thing a row can say. With color off the line is
-// returned untouched.
-func colorize(line string, r monitor.ProjectStatusRow, l list, cols int, enabled bool) string {
+// returned untouched. A nil receiver uses defaultListStyles.
+func (st *listStyles) colorize(line string, r monitor.ProjectStatusRow, l list, cols int, enabled bool) string {
 	if !enabled {
 		return line
 	}
-	if pad := cols - runewidth.StringWidth(line); pad > 0 {
-		line += strings.Repeat(" ", pad)
+	if st == nil {
+		st = &defaultListStyles
 	}
-	st := listStyle[l]
-	sgr := fmt.Sprintf("\x1b[48;5;%dm\x1b[38;5;%dm", st.bg, st.fg)
+	style := st[l]
+	sgr := ""
 	if r.Phase == "urgent" || classify(r) == taskrow.Waiting {
-		sgr = liveview.Bold + sgr
+		sgr = liveview.Bold
+	}
+	if style.bg >= 0 {
+		sgr += fmt.Sprintf("\x1b[48;5;%dm", style.bg)
+		if pad := cols - runewidth.StringWidth(line); pad > 0 {
+			line += strings.Repeat(" ", pad)
+		}
+	}
+	if style.fg >= 0 {
+		sgr += fmt.Sprintf("\x1b[38;5;%dm", style.fg)
+	}
+	if sgr == "" {
+		return line
 	}
 	return sgr + line + liveview.Reset
 }

@@ -96,6 +96,12 @@ func (c *EndlessConfig) Merge(other cfgstore.RootConfig) cfgstore.RootConfig {
 		out.Tmux.SessionName = o.Tmux.SessionName
 	}
 
+	// Layered field: ProjectStatus.Colors, per list and per attribute, so a
+	// project recoloring one list keeps the others it inherits.
+	out.ProjectStatus.Colors.Urgent = mergeListColor(c.ProjectStatus.Colors.Urgent, o.ProjectStatus.Colors.Urgent)
+	out.ProjectStatus.Colors.Epics = mergeListColor(c.ProjectStatus.Colors.Epics, o.ProjectStatus.Colors.Epics)
+	out.ProjectStatus.Colors.Other = mergeListColor(c.ProjectStatus.Colors.Other, o.ProjectStatus.Colors.Other)
+
 	// AutoSpawn: Enabled and Cap are project-only and deliberately NOT
 	// inherited — see AutoSpawn. Interval and Target are CLI-only: inherit.
 	out.AutoSpawn.Enabled = c.AutoSpawn.Enabled
@@ -176,4 +182,16 @@ func mergeChecks(project, global map[string]bool) map[string]bool {
 		out[name] = rule(gv, pv, name)
 	}
 	return out
+}
+
+// mergeListColor takes each attribute from the receiver when it set one, else
+// from the other layer.
+func mergeListColor(c, o ListColor) ListColor {
+	if c.BG == nil {
+		c.BG = o.BG
+	}
+	if c.FG == nil {
+		c.FG = o.FG
+	}
+	return c
 }

@@ -28,7 +28,8 @@ const ConfigFile = "config.json"
 //   - Project-only: Name, Label, Description, Language, Status, Dependencies, Documents,
 //     Migrations.
 //     These have no CLI-layer analog; the CLI layer ignores them.
-//   - Layered: Tracking, Checks, Tmux. Project values override CLI values.
+//   - Layered: Tracking, Checks, Tmux, ProjectStatus. Project values override
+//     CLI values.
 //
 // JSON tags MUST stay byte-identical to the existing on-disk schema so files
 // continue to load without migration.
@@ -72,6 +73,33 @@ type EndlessConfig struct {
 	// that project's decision, and the job's cadence is the user's, because one
 	// job serves every project. See AutoSpawn.
 	AutoSpawn AutoSpawn `json:"auto_spawn,omitzero"`
+
+	// ProjectStatus holds display preferences for `project status` and
+	// `project monitor`. Layered per list and per attribute.
+	ProjectStatus ProjectStatus `json:"project_status,omitzero"`
+}
+
+// ProjectStatus is the "project_status" object.
+type ProjectStatus struct {
+	// Colors sets each list's row colors. A list or attribute left out keeps
+	// the built-in default.
+	Colors ListColors `json:"colors,omitzero"`
+}
+
+// ListColors is "project_status.colors": one entry per list, in the order the
+// lists render.
+type ListColors struct {
+	Urgent ListColor `json:"urgent,omitzero"`
+	Epics  ListColor `json:"epics,omitzero"`
+	Other  ListColor `json:"other,omitzero"`
+}
+
+// ListColor is one list's background and foreground as 256-color indexes
+// (0–255). Absent inherits; -1 means none — the terminal's own default — which
+// is how a list goes without a background.
+type ListColor struct {
+	BG *int `json:"bg,omitempty"`
+	FG *int `json:"fg,omitempty"`
 }
 
 // AutoSpawn is the "auto_spawn" object.

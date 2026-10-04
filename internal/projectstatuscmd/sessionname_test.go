@@ -19,55 +19,18 @@ func init() {
 	cfgstore.SetLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))
 }
 
-// TestDefaultNameLeadsWithTheProject is the naming rule, and it is a rule about
-// the FIRST NINE characters because that is all a tmux status line shows on the
-// machine this was reported from.
-//
-// Two shapes failed it before this one, and both looked fine in `tmux ls`:
-// `{{project}}-monitor` showed `endless-m`, a mangled twin of the user's own
-// `endless` session sitting beside it in the list; and a fixed `e-monitor` with
-// a `-{{project}}` suffix for the second project showed `e-monitor` for both,
-// which is the wrong-monitor problem the suffix existed to prevent, moved one
-// level down.
-func TestDefaultNameLeadsWithTheProject(t *testing.T) {
-	const tabWidth = 9
-
-	tests := []struct{ project, want, tab string }{
-		{"endless", "e-endless-monitor", "e-endless"},
-		{"gomion", "e-gomion-monitor", "e-gomion-"},
-		// A short project name keeps enough room that "monitor" survives into
-		// the tab as well.
-		{"h2pp", "e-h2pp-monitor", "e-h2pp-mo"},
-		// A user-chosen name with tmux's forbidden characters in it is folded on
-		// the way out, so the user never has to know tmux's rules.
-		{"My Cool App", "e-My-Cool-App-monitor", "e-My-Coo"},
-	}
-	for _, tt := range tests {
-		got, warn := sessionNameFor(tt.project, "")
-		if warn != nil {
-			t.Errorf("sessionNameFor(%q, default) warned: %v", tt.project, warn)
+// TestDefaultNameIsTheProject: on the monitor's own tmux server the session is
+// simply the project's name, folded to what tmux accepts.
+func TestDefaultNameIsTheProject(t *testing.T) {
+	for project, want := range map[string]string{
+		"endless":     "endless",
+		"h2pp":        "h2pp",
+		"My Cool App": "My-Cool-App",
+	} {
+		got, warn := sessionNameFor(project, "")
+		if warn != nil || got != want {
+			t.Errorf("sessionNameFor(%q, default) = %q (warn %v), want %q", project, got, warn, want)
 		}
-		if got != tt.want {
-			t.Errorf("sessionNameFor(%q) = %q, want %q", tt.project, got, tt.want)
-		}
-		if tab := got[:min(tabWidth, len(got))]; !strings.HasPrefix(tab, tt.tab) {
-			t.Errorf("sessionNameFor(%q) shows %q in %d columns, want %q",
-				tt.project, tab, tabWidth, tt.tab)
-		}
-	}
-
-	// The property those cases are instances of: two projects must differ INSIDE
-	// the truncated window, or the tab cannot tell them apart.
-	a, _ := sessionNameFor("endless", "")
-	b, _ := sessionNameFor("gomion", "")
-	if a[:tabWidth] == b[:tabWidth] {
-		t.Errorf("two projects share the visible %d columns: both read %q", tabWidth, a[:tabWidth])
-	}
-
-	// ...and the monitor must not read as the project's OWN session, which is the
-	// collision `endless-m` created.
-	if strings.HasPrefix(a, "endless") {
-		t.Errorf("the monitor session reads as the project's own session: %q", a)
 	}
 }
 
@@ -114,7 +77,7 @@ func TestBadTemplateFallsBackAndSaysSo(t *testing.T) {
 		"   ",                // renders to nothing
 	} {
 		got, warn := sessionNameFor("endless", tmpl)
-		if got != "e-endless-monitor" {
+		if got != "endless" {
 			t.Errorf("template %q did not fall back to the default: got %q", tmpl, got)
 		}
 		if tmpl != "   " && warn == nil {
@@ -127,7 +90,7 @@ func TestBadTemplateFallsBackAndSaysSo(t *testing.T) {
 // empty name — it is "no preference expressed".
 func TestBlankTemplateIsTheDefault(t *testing.T) {
 	got, warn := sessionNameFor("endless", "")
-	if warn != nil || got != "e-endless-monitor" {
+	if warn != nil || got != "endless" {
 		t.Fatalf("an unset template did not yield the default: %q (%v)", got, warn)
 	}
 }
@@ -173,7 +136,7 @@ func TestSessionNameTemplateSurvivesABrokenConfig(t *testing.T) {
 	}
 
 	name, _ := sessionNameFor("endless", sessionNameTemplate(dir))
-	if name != "e-endless-monitor" {
+	if name != "endless" {
 		t.Errorf("a broken config did not fall back to the default name: %q", name)
 	}
 }

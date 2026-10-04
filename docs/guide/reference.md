@@ -15,7 +15,7 @@ endless project info <name>                    # for a named project
 endless project status                         # the project's open urgent/now/next tasks
 endless project status <name>                  # for a named project
 endless project monitor                        # the same lists, live, until Ctrl-C
-endless project monitor --tmux                 # the monitor in its own two-pane tmux session
+endless project monitor --tmux                 # the monitor on its own tmux server, in its own terminal
 ```
 
 `project info` is the registration card — metadata, notes, dependencies.

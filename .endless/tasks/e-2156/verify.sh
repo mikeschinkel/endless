@@ -137,8 +137,8 @@ assert_eq "more height buys more third-list rows (${n40} at 40, ${n50} at 50)" \
     "yes" "$( (( n50 > n40 && n40 > 0 )) && echo yes || echo no)"
 assert_eq "the urgent list is the same at both heights" "$(count "${AT40}" 1)" "$(count "${AT50}" 1)"
 assert_eq "the epic list is the same at both heights" "$(count "${AT40}" 2)" "$(count "${AT50}" 2)"
-assert_eq "the 40-row frame fits 40 rows (fault-row allowance included)" \
-    "yes" "$( (( $(wc -l <<<"${AT40}") + 1 <= 40 )) && echo yes || echo no)"
+assert_eq "the 40-row frame fits 40 rows" \
+    "yes" "$( (( $(wc -l <<<"${AT40}") <= 40 )) && echo yes || echo no)"
 
 # ── 5. --sort ───────────────────────────────────────────────────────────────
 section "5. --sort updated and --sort id differ"
@@ -236,7 +236,7 @@ else
     TMUX_TMPDIR="$(mktemp -d /tmp/e2156.XXXXXX)" || setup_error "could not create a tmux dir"
     export TMUX_TMPDIR
     unset TMUX TMUX_PANE
-    trap 'tmux kill-server 2>/dev/null; rm -rf "${RUN_DIR}" "${TMUX_TMPDIR}"' EXIT
+    trap 'tmux kill-server 2>/dev/null; tmux -L endless kill-server 2>/dev/null; rm -rf "${RUN_DIR}" "${TMUX_TMPDIR}"' EXIT
 
     reset_fixture
     q "INSERT INTO tasks (id,project_id,title,status,phase,type_id,updated_at) VALUES
@@ -252,17 +252,23 @@ else
         || setup_error "tmux split-window failed"
 
     # capture <height> — resize the monitor pane, wait past a repaint, and
-    # print what the pane shows (with escapes).
+    # print what the pane shows, as plain text.
     capture() {
         tmux resize-pane -t "${MON}" -y "$1"
         sleep 3
-        tmux capture-pane -p -e -t "${MON}"
+        tmux capture-pane -p -t "${MON}"
     }
     rows_in() { grep -c ' E-[0-9]' <<<"$1" || true; }
 
     S20="$(capture 20)"
     S40="$(capture 40)"
+    COLOR40="$(tmux capture-pane -p -e -t "${MON}")"
+    # Counted straight off tmux: $(...) strips trailing newlines, so a count
+    # taken from a saved capture would always be zero.
+    blank_tail() { tmux capture-pane -p -t "${MON}" | awk 'NF{n=0;next}{n++}END{print n+0}'; }
+    BLANK40="$(blank_tail)"
     S15="$(capture 15)"
+    BLANK15="$(blank_tail)"
     n20="$(rows_in "${S20}")"; n40="$(rows_in "${S40}")"; n15="$(rows_in "${S15}")"
     assert_eq "dragging the pane taller shows more rows (${n20} at 20, ${n40} at 40)" \
         "yes" "$( (( n40 > n20 )) && echo yes || echo no)"
@@ -271,26 +277,37 @@ else
     assert_eq "the monitor did not resize its own pane back" \
         "15" "$(tmux display -p -t "${MON}" '#{pane_height}')"
     for shot in "${S40}" "${S15}"; do
-        first="$(head -1 <<<"${shot}" | sed 's/\x1b\[[0-9;]*m//g')"
+        first="$(head -1 <<<"${shot}")"
         assert_contains "the legend is the pane's first line (no rows scrolled above it)" "demo · " "${first}"
     done
     assert_eq "no row is drawn twice after a shrink" \
         "" "$(grep -oE ' E-[0-9]+ ' <<<"${S15}" | sort | uniq -d)"
-    assert_contains "urgent rows wear background 1 on 232" "48;5;1m" "${S40}"
-    assert_contains "epic rows wear background 2 on 232" "48;5;2m" "${S40}"
-    assert_contains "other rows wear background 3 on 232" "48;5;3m" "${S40}"
+    assert_contains "urgent rows wear background 1 on 232" "48;5;1m" "${COLOR40}"
+    assert_contains "epic rows wear background 2 on 232" "48;5;2m" "${COLOR40}"
+    assert_contains "other rows wear background 3 on 232" "48;5;3m" "${COLOR40}"
 
-    # --use-existing: a session of the monitor's name that Endless did not make.
-    tmux new-session -d -s e-demo-monitor "sleep 600"
-    WIN() { ( cd "${PROJ}" && "${EGO}" --db-dir "${DBDIR}" project-window --project demo --no-switch "$@" 2>&1 ); }
-    REFUSED="$(WIN)"
-    assert_contains "a foreign session is refused, naming the way through" "--use-existing" "${REFUSED}"
-    WIN --use-existing >/dev/null
-    assert_eq "--use-existing adopts it" "demo" \
-        "$(tmux show-options -v -t e-demo-monitor @endless_monitor 2>/dev/null)"
-    assert_eq "and leaves its panes as they were" "1" \
-        "$(tmux list-panes -t e-demo-monitor | wc -l | tr -d ' ')"
-    assert_not_contains "the next launch accepts it without the flag" "Endless did not create it" "$(WIN)"
+    # Lines left blank under the frame: one for the cursor, none held for a
+    # fault row that is not showing.
+    assert_eq "a 40-line pane leaves one blank line, not more" "1" "${BLANK40}"
+    assert_eq "a 15-line pane leaves one blank line, not more" "1" "${BLANK15}"
+
+    # The launcher: its own server, a `projects` window per run.
+    mkdir -p "${RUN_DIR}/stub"
+    printf '#!/bin/sh\nexec sleep 600\n' >"${RUN_DIR}/stub/endless"
+    chmod +x "${RUN_DIR}/stub/endless"
+    WIN() { ( cd "${PROJ}" && PATH="${RUN_DIR}/stub:${PATH}" \
+        "${EGO}" --db-dir "${DBDIR}" project-window --project demo --no-switch 2>&1 ); }
+    FIRST="$(WIN)"; WIN >/dev/null
+    assert_contains "the launcher names the attach command for its own window" \
+        "tmux -L endless attach -t demo" "${FIRST}"
+    assert_eq "the session is named for the project, on the endless server" \
+        "demo" "$(tmux -L endless list-sessions -F '#{session_name}' 2>/dev/null)"
+    assert_eq "each run adds a projects window holding monitor and shell" \
+        "projects 2|projects 2" \
+        "$(tmux -L endless list-windows -t demo -F '#{window_name} #{window_panes}' | paste -sd'|' -)"
+    assert_eq "nothing was created on the default server's demo session" \
+        "no" "$(tmux has-session -t =demo 2>/dev/null && echo yes || echo no)"
+    tmux -L endless kill-server 2>/dev/null
 fi
 
 summary

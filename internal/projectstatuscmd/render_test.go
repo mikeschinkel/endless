@@ -171,8 +171,9 @@ func TestOnlyListThreeGrowsWithHeight(t *testing.T) {
 		out    string
 		budget int
 	}{{small, 25}, {large, 35}} {
-		// +1 for the fault-row allowance, which renders nothing without faults.
-		if lines := strings.Count(c.out, "\n") + faultRowLines; lines > c.budget {
+		// With no fault open nothing is reserved for one, so the frame fills
+		// the budget exactly.
+		if lines := strings.Count(c.out, "\n"); lines != c.budget {
 			t.Errorf("frame is %d lines, budget %d:\n%s", lines, c.budget, c.out)
 		}
 	}
@@ -333,7 +334,7 @@ func TestRowsNeverExceedTheWidth(t *testing.T) {
 func TestListBackgrounds(t *testing.T) {
 	r := row(1, "ready", 0)
 	for l, want := range map[list]string{listUrgent: "48;5;1m", listEpics: "48;5;2m", listOther: "48;5;3m"} {
-		got := colorize("x", r, l, 10, true)
+		got := (*listStyles)(nil).colorize("x", r, l, 10, true)
 		if !strings.Contains(got, want) || !strings.Contains(got, "38;5;232m") {
 			t.Errorf("list %d: %q lacks %s on 232", l, got, want)
 		}
@@ -341,10 +342,10 @@ func TestListBackgrounds(t *testing.T) {
 			t.Errorf("list %d: %q is not padded to the width", l, got)
 		}
 	}
-	if got := colorize("x", r, listOther, 10, false); got != "x" {
+	if got := (*listStyles)(nil).colorize("x", r, listOther, 10, false); got != "x" {
 		t.Errorf("color off changed the line: %q", got)
 	}
-	if got := colorize("x", with(r, phase("urgent")), listUrgent, 10, true); !strings.HasPrefix(got, "\x1b[1m") {
+	if got := (*listStyles)(nil).colorize("x", with(r, phase("urgent")), listUrgent, 10, true); !strings.HasPrefix(got, "\x1b[1m") {
 		t.Errorf("urgent row is not bold: %q", got)
 	}
 }

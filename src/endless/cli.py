@@ -907,15 +907,13 @@ def project_status(name, later, sort, as_json):
 @click.argument("name", default=None, required=False)
 @_sort_option
 @click.option("--tmux", "use_tmux", is_flag=True,
-              help="Open the monitor in its own two-pane tmux session (the "
-                   "monitor above, a bare shell below) and switch to it. "
-                   "Idempotent.")
+              help="Open the monitor on its own tmux server (`tmux -L endless`): "
+                   "a `projects` window, the monitor above a bare shell, in a "
+                   "session named for the project. Attaches when run outside "
+                   "tmux; inside tmux it prints the attach command.")
 @click.option("--no-switch", is_flag=True,
-              help="With --tmux: create the session but stay where you are.")
-@click.option("--use-existing", is_flag=True,
-              help="With --tmux: use a tmux session of the monitor's name that "
-                   "Endless did not create, as it is, instead of refusing.")
-def project_monitor(name, sort, use_tmux, no_switch, use_existing):
+              help="With --tmux: build the window but do not attach.")
+def project_monitor(name, sort, use_tmux, no_switch):
     """Live monitor: repeatedly render `project status` until interrupted.
 
     The same three lists, redrawn every 2 seconds and repainted only when a row
@@ -923,21 +921,21 @@ def project_monitor(name, sort, use_tmux, no_switch, use_existing):
     list takes whatever height is left and says how many rows it could not fit.
     `project status` shows them all. Ctrl-C exits.
 
-    --tmux gives it the home it is designed for: its own tmux session, the
-    monitor on top and a bare shell beneath it for running `endless` commands
-    against what it shows. Focus lands on the shell. Running it again switches
-    to the session that already exists rather than making a second one.
+    --tmux gives it the home it is designed for, meant for a terminal window of
+    its own: a tmux server separate from your task sessions, holding a session
+    named for the project. Each run adds a `projects` window there — the monitor
+    on top, a bare shell beneath it for running `endless` commands against what
+    it shows — so a run always ends with a live monitor; close a window you have
+    no use for. Drag the divider to see more rows or fewer.
     """
     if use_tmux:
-        project_status_cmd.project_window_resolve(
-            name, no_switch=no_switch, use_existing=use_existing)
+        project_status_cmd.project_window_resolve(name, no_switch=no_switch)
         return
-    if no_switch or use_existing:
-        flag = "--no-switch" if no_switch else "--use-existing"
+    if no_switch:
         raise agent_help.no_report(
-            f"{flag} only applies with --tmux. Nothing ran.",
-            f"Re-run adding --tmux, or drop {flag}", exit_code=2,
-            text=f"{flag} only applies with --tmux.")
+            "--no-switch only applies with --tmux. Nothing ran.",
+            "Re-run adding --tmux, or drop --no-switch", exit_code=2,
+            text="--no-switch only applies with --tmux.")
     project_status_cmd.project_status_resolve(name, monitor=True, sort=sort)
 
 

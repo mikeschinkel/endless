@@ -143,16 +143,6 @@ def test_window_argv(monkeypatch):
     assert seen["argv"][:2] == ["/fake/endless-go", "project-window"]
     assert seen["argv"][seen["argv"].index("--project") + 1] == "demo"
     assert "--no-switch" in seen["argv"]
-    assert "--use-existing" not in seen["argv"]
-
-    project_status_cmd.project_window_resolve("demo", use_existing=True)
-    assert "--use-existing" in seen["argv"]
-
-
-def test_use_existing_without_tmux_is_refused(runner):
-    result = runner.invoke(main, ["project", "monitor", "demo", "--use-existing"])
-    assert result.exit_code != 0
-    assert "--tmux" in result.output
 
 
 def test_monitor_tmux_routes_to_the_window_verb(runner, monkeypatch):

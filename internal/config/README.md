@@ -71,6 +71,7 @@ These are not expected to appear in CLI files. Same safety-net pattern.
 | `checks`   | `map[string]bool` | Per-key merge: for each key, receiver value wins if present; otherwise inherit from other. |
 | `tmux`     | `object`          | Merged PER FIELD, not wholesale — see `tmux` below.                                        |
 | `auto_spawn` | `object`        | Split by field — see `auto_spawn` below.                                                   |
+| `project_status` | `object`    | Per list and per attribute — see `project_status` below.                                   |
 
 #### `tracking`
 
@@ -84,7 +85,7 @@ Multiplexer preferences.
 
 | Field          | Type     | Meaning |
 | -------------- | -------- | ------- |
-| `session_name` | `string` | Go `text/template` naming the tmux session `endless project monitor --tmux` opens for a project. Default `e-{{project}}-monitor`. |
+| `session_name` | `string` | Go `text/template` naming the tmux session `endless project monitor --tmux` opens for a project. Default `{{project}}`. The session lives on the monitor's own tmux server (`tmux -L endless`). |
 
 `{{project}}` is available as a function, so the setting reads the way you would
 write it; `{{.Project}}` resolves to the same string. The rendered result is
@@ -99,15 +100,32 @@ A template that fails to parse or renders to nothing falls back to the default
 and warns on stderr: this is a preference, and a typo in one must not stop the
 monitor from opening.
 
-**Naming is a preference; ownership is a fact.** Because you can choose a name
-that collides with a session you already keep open, the launcher marks every
-session it creates (`@endless_monitor`, holding the project) and refuses to take
-over one it did not create, rather than switching you into a window with no
-monitor in it. That is why this setting costs an ownership check — see
-`internal/projectstatuscmd/window.go`.
+The session lives on its own tmux server, so a name cannot collide with a
+session you keep on your usual one. Each launch adds a `projects` window to it.
 
 Merged per field rather than wholesale, so a project that sets one tmux
 preference does not silently blank the others it inherits from the CLI layer.
+
+#### `project_status`
+
+Display preferences for `endless project status` and `endless project monitor`.
+`colors` sets each list's row colors as 256-color indexes: `bg` is the
+background, `fg` the text. Leave a list or an attribute out to keep its
+default; `-1` means none (the terminal's own color), which is how a list goes
+without a background. Merged per list and per attribute.
+
+| List     | Default          |
+| -------- | ---------------- |
+| `urgent` | `bg 1`, `fg 232` |
+| `epics`  | `bg 2`, `fg 232` |
+| `other`  | `bg 3`, `fg 232` |
+
+Indexes 1–3 are your theme's own red, green and yellow, so the defaults follow
+your palette.
+
+```json
+{ "project_status": { "colors": { "epics": { "bg": 236, "fg": -1 }, "other": { "bg": -1 } } } }
+```
 
 #### `auto_spawn`
 

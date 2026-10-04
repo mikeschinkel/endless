@@ -13,37 +13,19 @@ import (
 
 // Naming the monitor's tmux session (E-1976).
 //
-// Two things are settled here, and they pull against each other:
-//
-//   - The name should be whatever fits the user's workflow, which means
-//     configurable (`tmux.session_name`, a Go text/template).
-//   - The launcher must never adopt a session it did not create, which a
-//     configurable name makes possible — the whole point of configuring it is
-//     that someone can choose `{{project}}` and collide with the session they
-//     already keep open for that project.
-//
-// So the name is a preference and OWNERSHIP is a fact, checked separately (see
-// window.go). Before this was configurable the built-in name was distinctive
-// enough that no check was needed; making it configurable is what brings the
-// check back, and that is a cost of the feature rather than an oversight in it.
+// The name is a preference: `tmux.session_name`, a Go text/template, so it can
+// fit the user's workflow.
 
-// DefaultSessionNameTemplate is the built-in `tmux.session_name`.
+// DefaultSessionNameTemplate is the built-in `tmux.session_name`: the project's
+// own name.
 //
-// Every part of the shape answers the same constraint: a tmux status line
-// truncates a session name to the width it has — nine characters on the machine
-// this was reported from — so whatever distinguishes one monitor from another has
-// to be at the FRONT.
-//
-//   - The PROJECT leads, because that is what differs. `{{project}}-monitor`
-//     spends the visible nine on `endless-m`, which reads as a mangled copy of
-//     an `endless` session sitting beside it in the list.
-//   - `e-` leads the project: two characters that say "Endless made this", using
-//     the prefix Endless already wears on its ids (E-NNNN, ES-NNNN, ED-NNNN),
-//     and enough to keep the monitor out of the namespace a user picks by hand.
-//   - `-monitor` trails, where truncation usually eats it. That is fine — it is
-//     there for the full name, which is what `tmux ls` and `tmux attach -t`
-//     show, and it survives into the tab for short project names (`e-h2pp-mo`).
-const DefaultSessionNameTemplate = "e-{{project}}-monitor"
+// It was `e-{{project}}-monitor` while the monitor shared the user's tmux
+// server, where a bare project name would collide with the session the user
+// already keeps for that project and could not be told apart from it in a
+// truncated status line. Since E-2156 the monitor runs on its own server
+// (`tmux -L endless`), which holds nothing but monitors, so neither problem
+// exists there and the plain name is the one to read.
+const DefaultSessionNameTemplate = "{{project}}"
 
 // sessionNameFor renders the configured template for one project.
 //
