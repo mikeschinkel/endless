@@ -7117,3 +7117,7 @@ Context: E-2203, after a rebase. Mike said he was running verify and would land 
 ### [2026-10-04] Don't stretch a plan's stated reason into a rule
 On E-2156's revisit I argued against using freed pane lines because 'the plan's point is that the pane moves only when the row set changes'. The plan said that about removing the age column (a clock that changed every tick), not about how many rows fill a resized pane. Mike called it treating plans as dogma. A plan's rationale applies to the decision it was written for; when the user asks for something else, weigh it on its merits rather than citing the plan against them.
 - **Project**: endless
+
+### [2026-10-04] Endless stores durable data in tables + commands, not committed files
+In the E-2154 glossary brainstorm I proposed a committed human-readable file (like LESSONS.md) as the glossary store. Mike corrected: Endless has moved away from files toward database tables and commands, because files create version-control requirements and a hierarchical filesystem is a poor model for that data. When proposing where new durable Endless data lives, start from a table plus commands.
+- **Project**: endless
