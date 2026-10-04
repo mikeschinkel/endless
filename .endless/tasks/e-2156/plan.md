@@ -179,3 +179,24 @@ appear. Do not introduce one — if something genuinely lacks a name, ask.
   reading of the plan's "all three lists sort reverse-chronologically".
 - **A hidden session still marks its task live.** Hiding a session asks not to
   see it; it should not make the work it holds read as stalled.
+
+## Revisit (2026-10-04), from Mike living with the monitor
+
+- **Lists are told apart by background color**, still with no separator rows:
+  urgent on palette 1, epics on palette 2, everything else on palette 3, all
+  behind foreground 232 (Mike's picks), each row padded to the full width.
+- **» replaces ☰ for `unreviewed`**, and its label is now "review". ☰ rendered
+  wider than one column in a real terminal. ⚑ (a `submitted` plan) is relabeled
+  "approve" — the act `task approve` performs — so "review" is not on two
+  glyphs. Applies to `session status` too, through taskrow.
+- **The monitor fits its frame to its own pane** and no longer resizes the pane.
+  Dragging the tmux divider now changes how many third-list rows show; before,
+  the budget came from 65% of the window and the pane was refitted every
+  repaint, so dragging did nothing and a window resize snapped it back. The
+  budget is the pane height less one line, which also stops the frame from
+  scrolling and leaving duplicated rows above the legend. `--tmux` now starts
+  the monitor pane at 65% (`split-window -l 65%`), since nothing resizes it after.
+- **`project monitor --tmux --use-existing`** adopts a session of the monitor's
+  name that Endless did not create: stamps it as the project's monitor and
+  switches to it, leaving its panes as they are. Without the flag the refusal
+  now names it.
