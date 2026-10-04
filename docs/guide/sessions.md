@@ -239,6 +239,8 @@ endless session task remove E-101      # a capture that shouldn't have happened
 
 `session status` tiers rows by relation. Decided work (`claimed` / `queued`, marked ⊕) leads among equally actionable rows; `referenced` rows (marked ·) sink below everything and render dimmed, so reads can never crowd out work. Relation never outranks actionability, though — a `queued` task parked in `later` still sits below the task you're actually working.
 
+Two more kinds of row render dimmed because neither is actionable from your board: `⟳ doing` rows, which another live session is working, and the `↑ parent` row, in every phase — both even when they wear `◆`, since landing them is not this board's job. `☑ verify` rows stay bright — verifying is your user's action — and your claimed task never dims. A highlighted id (focus, duplicate, unblocked) keeps its full colour on a dimmed row.
+
 ### Focus, and a task on more than one board
 
 Your session's **focused** task is the one it last claimed, filed or updated (including `touch`) — what the conversation is on right now, which is often not the task you claimed. Queueing or reading a task does not move focus. `session status` / `session monitor` highlight it: the id in inverse video, and `◼︎` between the type letter and the id. Your claimed task never shows `◼︎` — when it has focus, the colour says so, and in plain text no `◼︎` anywhere means the same thing. `--json` carries `focus` on the frame and `focused` on each row. A focused task is shown even if you hid it.
@@ -249,9 +251,11 @@ When the same task sits on several live sessions' boards, only its **owner** sho
 2. Otherwise, the only live session that updated it.
 3. Otherwise (two or more live updaters) nobody owns it, and it stays on each board with the duplicate mark.
 
-Updating a task never takes it from the session that filed it. The task's claiming session is left out: working the task you claimed is the expected case, and it already shows as ⟳ doing on other boards. Dead sessions own nothing. Your claimed task, its parent and its spawner are never hidden this way.
+Updating a task never takes it from the session that filed it. Hiding it does give it up: a session that ran `session hide --task` on a task no longer counts as its filer or updater, so it neither owns the task nor makes it ambiguous — hide means "not mine". The exception is focus: if the hiding session has the task in focus again, it counts, because touching the task again is exactly when duplicate work is possible. The task's claiming session is left out: working the task you claimed is the expected case, and it already shows as ⟳ doing on other boards. Dead sessions own nothing. Your claimed task, its parent and its spawner are never hidden this way.
 
-The **duplicate** mark — `◫`, and the id bright white on black — warns that another session may already have done real work on the task. It appears on both boards when a task is focused in one session and owned by another, and on every board when ownership is ambiguous. Stop and decide which session keeps it. `--json` carries `duplicate_work` and `owned_elsewhere` on every row, including rows the table omits.
+The **duplicate** mark — `◫`, and the id near-black on red (256-colour 232 on 160) — warns that another session may already have done real work on the task. It appears on both boards when a task is focused in one session and owned by another, and on every board when ownership is ambiguous. Stop and decide which session keeps it. `--json` carries `duplicate_work` and `owned_elsewhere` on every row, including rows the table omits.
+
+The **unblocked** mark — `▷`, and the id near-black on green (232 on 118) — is news: a task that was blocked has had a blocker released (a terminal status), nothing still holds it, and nobody has claimed it. It stays until someone claims or spawns it; it is computed each draw, not delivered once. On one id, duplicate outranks unblocked, which outranks focus. `--json` carries it as `spawnable`.
 
 ## Interactive, user-run session commands
 

@@ -23,7 +23,7 @@ func stubOwnership(t *testing.T, fn func(rows []monitor.SessionStatusRow, viewer
 // TestColumnFourMarkWidths: ◼︎ and ◫ take one column, like the unsettled marks
 // they displace, so the id column never shifts (E-2188).
 func TestColumnFourMarkWidths(t *testing.T) {
-	for _, g := range []string{focusGlyph, duplicateGlyph} {
+	for _, g := range []string{focusGlyph, duplicateGlyph, spawnableGlyph} {
 		if w := displayWidth(g); w != 1 {
 			t.Errorf("display width of %q = %d, want 1", g, w)
 		}
@@ -54,7 +54,8 @@ func TestColumnFourMark(t *testing.T) {
 }
 
 // TestIDField: the highlight wraps the id only, the padding stays outside it,
-// and colour off emits no escapes at all.
+// and colour off emits no escapes at all. The colours are spelled as literal
+// escapes, not the constants, so a changed constant fails here (E-2204).
 func TestIDField(t *testing.T) {
 	focused := monitor.SessionStatusRow{ID: 42, Focused: true}
 	dup := monitor.SessionStatusRow{ID: 42, Focused: true, DuplicateWork: true}
@@ -62,10 +63,10 @@ func TestIDField(t *testing.T) {
 	if got := idField(focused, false); got != "E-42  " {
 		t.Errorf("colour off: %q, want %q", got, "E-42  ")
 	}
-	if got, want := idField(focused, true), ansiInverse+"E-42"+ansiInverseOff+"  "; got != want {
+	if got, want := idField(focused, true), "\x1b[7mE-42\x1b[27m  "; got != want {
 		t.Errorf("focused: %q, want %q", got, want)
 	}
-	if got, want := idField(dup, true), ansiDuplicateID+"E-42"+ansiDuplicateOff+"  "; got != want {
+	if got, want := idField(dup, true), "\x1b[38;5;232;48;5;160mE-42\x1b[39;49m  "; got != want {
 		t.Errorf("duplicate: %q, want %q", got, want)
 	}
 	if got := idField(monitor.SessionStatusRow{ID: 1234567}, true); got != "E-1234567" {

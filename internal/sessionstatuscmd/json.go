@@ -77,6 +77,9 @@ type jsonRow struct {
 	Focused        bool `json:"focused"`
 	DuplicateWork  bool `json:"duplicate_work"`
 	OwnedElsewhere bool `json:"owned_elsewhere"`
+	// Spawnable is E-2204's: a blocker has released the task, none still holds
+	// it, and nobody has claimed it. The table draws it as ▷ and a green id.
+	Spawnable bool `json:"spawnable"`
 }
 
 // jsonFrame wraps the rows with the ids they were resolved against, so a
@@ -168,6 +171,7 @@ func renderJSON(w io.Writer, a anchor, all bool) error {
 			Focused:        r.Focused,
 			DuplicateWork:  r.DuplicateWork,
 			OwnedElsewhere: r.OwnedElsewhere,
+			Spawnable:      r.Spawnable(),
 		})
 		if r.Focused {
 			out.Focus = "E-" + strconv.FormatInt(r.ID, 10)

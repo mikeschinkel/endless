@@ -221,3 +221,75 @@ func TestOwnership_NoViewerAnnotatesNothing(t *testing.T) {
 		t.Errorf("viewer 0: %+v, want unannotated", r)
 	}
 }
+
+func ownHide(t *testing.T, sessionID, taskID int64) {
+	t.Helper()
+	if _, err := HideSessionTasks(sessionID, []int64{taskID}); err != nil {
+		t.Fatalf("hide s=%d t=%d: %v", sessionID, taskID, err)
+	}
+}
+
+// TestOwnership_HiddenRevisiterExcluded is E-2204's reported case (E-1814): two
+// live updaters, one of which hid the task. The hider gives up its claim, so the
+// task is not ambiguous and the other updater owns it, unmarked.
+func TestOwnership_HiddenRevisiterExcluded(t *testing.T) {
+	db := ownFixture(t)
+	snSessionTaskRel(t, db, 2, 151, ownRelRevisited)
+	snSessionTaskRel(t, db, 3, 151, ownRelRevisited)
+	ownHide(t, 3, 151)
+
+	if r := ownBoard(t, 101, 2)[151]; r.OwnedElsewhere || r.DuplicateWork {
+		t.Errorf("remaining updater's board: %+v, want shown, unmarked", r)
+	}
+	if r := ownBoard(t, 102, 3)[151]; !r.OwnedElsewhere || r.DuplicateWork {
+		t.Errorf("hider's board: %+v, want owned elsewhere, unmarked", r)
+	}
+}
+
+// TestOwnership_HiddenSurfacerExcluded: a filer that hides its own task gives up
+// ownership too — hide means "not mine" — so the sole updater owns it.
+func TestOwnership_HiddenSurfacerExcluded(t *testing.T) {
+	db := ownFixture(t)
+	snSessionTaskRel(t, db, 1, 150, ownRelSurfaced)
+	snSessionTaskRel(t, db, 2, 150, ownRelRevisited)
+	ownHide(t, 1, 150)
+
+	if r := ownBoard(t, 101, 2)[150]; r.OwnedElsewhere || r.DuplicateWork {
+		t.Errorf("updater's board: %+v, want shown, unmarked (it owns it now)", r)
+	}
+	if r := ownBoard(t, 100, 1)[150]; !r.OwnedElsewhere {
+		t.Errorf("hiding filer's board: %+v, want owned elsewhere", r)
+	}
+}
+
+// TestOwnership_HiddenNonFocuserExcluded: a hider that has moved its focus away
+// leaves no trace — neither an owner nor a focuser — so the filer's row is
+// unmarked.
+func TestOwnership_HiddenNonFocuserExcluded(t *testing.T) {
+	db := ownFixture(t)
+	snSessionTaskRel(t, db, 1, 150, ownRelSurfaced)
+	snSessionTaskRel(t, db, 2, 150, ownRelSurfaced)
+	ownHide(t, 2, 150)
+
+	if r := ownBoard(t, 100, 1)[150]; r.OwnedElsewhere || r.DuplicateWork {
+		t.Errorf("filer's board: %+v, want shown, unmarked (two filers, one hid it)", r)
+	}
+}
+
+// TestOwnership_HiddenButFocusedCounts: focus overrides hide. A session that hid
+// a task and then put it back in focus is touching it again, which is exactly
+// when duplicate work is possible, so both boards carry the mark.
+func TestOwnership_HiddenButFocusedCounts(t *testing.T) {
+	db := ownFixture(t)
+	snSessionTaskRel(t, db, 1, 150, ownRelSurfaced)
+	snSessionTaskRel(t, db, 2, 150, ownRelRevisited)
+	ownHide(t, 2, 150)
+	ownSetFocus(t, db, 2, 150)
+
+	if r := ownBoard(t, 100, 1)[150]; r.OwnedElsewhere || !r.DuplicateWork {
+		t.Errorf("filer's board: %+v, want shown with the duplicate mark", r)
+	}
+	if r := ownBoard(t, 101, 2)[150]; r.OwnedElsewhere || !r.DuplicateWork || !r.Focused {
+		t.Errorf("hider's board while focused: %+v, want focused, shown, duplicate mark", r)
+	}
+}

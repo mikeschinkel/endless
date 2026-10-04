@@ -938,7 +938,7 @@ func joinLegend(entries []legendEntry, sep, between string) string {
 func legendEntries(rows []monitor.SessionStatusRow) []legendEntry {
 	var present [taskrow.Count]bool
 	var done, blocked, blocks, unsettled, notStarted, undetermined, hidden, queued, referenced bool
-	var focus, duplicate bool
+	var focus, duplicate, spawnable bool
 	for _, r := range rows {
 		present[classify(r)] = true
 		if isTerminal(r.Status) {
@@ -967,6 +967,8 @@ func legendEntries(rows []monitor.SessionStatusRow) []legendEntry {
 			focus = true
 		case duplicateGlyph:
 			duplicate = true
+		case spawnableGlyph:
+			spawnable = true
 		case unsettledGlyph:
 			unsettled = true
 		case notStartedGlyph:
@@ -1005,6 +1007,9 @@ func legendEntries(rows []monitor.SessionStatusRow) []legendEntry {
 	if duplicate {
 		parts = append(parts, legendEntry{Icon: duplicateGlyph, Label: "duplicate"})
 	}
+	if spawnable {
+		parts = append(parts, legendEntry{Icon: spawnableGlyph, Label: "unblocked"})
+	}
 	if unsettled {
 		parts = append(parts, legendEntry{Icon: unsettledGlyph, Label: "unsettled"})
 	}
@@ -1042,15 +1047,19 @@ func legendEntries(rows []monitor.SessionStatusRow) []legendEntry {
 // text rather than the emoji presentation — without it some terminals draw a
 // double-width emoji and the prefix loses its alignment. ◫ is U+25EB WHITE
 // SQUARE WITH VERTICAL BISECTING LINE: a square split in two, for one task on
-// two boards. Both measure one column (asserted in TestColumnFourMarkWidths).
+// two boards. spawnableGlyph is E-2204's: ▷ is U+25B7 WHITE RIGHT-POINTING
+// TRIANGLE, the outline of the ▶ do icon — work that has just become doable.
+// All measure one column (asserted in TestColumnFourMarkWidths).
 const (
 	focusGlyph     = "\u25fc\ufe0e"
 	duplicateGlyph = "\u25eb"
+	spawnableGlyph = "\u25b7"
 )
 
-// columnFourMark is the glyph between the type letter and the id. ◫ duplicate
-// and ◼︎ focus displace the unsettled mark there (E-2188), duplicate first — it
-// is the warning, and a task can be both focused here and owned elsewhere.
+// columnFourMark is the glyph between the type letter and the id. ◫ duplicate,
+// ▷ spawnable and ◼︎ focus displace the unsettled mark there (E-2188, E-2204),
+// in the order the id highlight uses: duplicate is a warning, spawnable is news,
+// focus is orientation. A task can be both focused here and owned elsewhere.
 //
 // The board's claimed-task row is the exception and keeps its unsettled mark:
 // it cannot be a duplicate by definition, and when it is the focus the colour
@@ -1061,6 +1070,8 @@ func columnFourMark(r monitor.SessionStatusRow) string {
 		switch {
 		case r.DuplicateWork:
 			return duplicateGlyph
+		case r.Spawnable():
+			return spawnableGlyph
 		case r.Focused:
 			return focusGlyph
 		}
@@ -1071,30 +1082,53 @@ func columnFourMark(r monitor.SessionStatusRow) string {
 // ANSI for the id highlight (E-2188). Each is paired with the code that undoes
 // ONLY what it set, not with a full reset, so the row's own dim or bold
 // (colorize) survives past the id.
+//
+// The two colour highlights are 256-colour, foreground 232 (near black) on a
+// saturated background, with no 16-colour fallback (E-2204): the column-4 glyph
+// is already the plain-text fallback. 160 is red, the duplicate warning; 118 is
+// green, a task that has just become spawnable.
 const (
 	ansiInverse      = "\x1b[7m"
 	ansiInverseOff   = "\x1b[27m"
-	ansiDuplicateID  = "\x1b[97;40m" // bright white on black
-	ansiDuplicateOff = "\x1b[39;49m" // default foreground and background
+	ansiDuplicateID  = "\x1b[38;5;232;48;5;160m"
+	ansiSpawnableID  = "\x1b[38;5;232;48;5;118m"
+	ansiHighlightOff = "\x1b[39;49m" // default foreground and background
+	ansiDimOff       = "\x1b[22m"    // normal intensity: cancels dim (and bold)
 )
 
 // idField renders the row's id, padded to its six-column slot. With colour on,
-// a duplicate's id is bright white on black and a focused id is inverse video;
-// the padding stays outside the escapes so the slot keeps its width.
+// a duplicate's id is 232 on 160, a spawnable id 232 on 118, and a focused id
+// inverse video, in that precedence; the padding stays outside the escapes so
+// the slot keeps its width.
+//
+// A highlight is never faded by its row's dim (E-2204): on a dimmed row the id
+// cancels dim before its highlight and restores it after, so the contrast the
+// colours were chosen for survives on exactly the rows — in-flight ones — where
+// a duplicate tends to appear.
 func idField(r monitor.SessionStatusRow, color bool) string {
 	id := "E-" + strconv.FormatInt(r.ID, 10)
 	pad := ""
 	if n := 6 - len(id); n > 0 {
 		pad = strings.Repeat(" ", n)
 	}
-	switch {
-	case !color:
-	case r.DuplicateWork:
-		id = ansiDuplicateID + id + ansiDuplicateOff
-	case r.Focused:
-		id = ansiInverse + id + ansiInverseOff
+	if !color {
+		return id + pad
 	}
-	return id + pad
+	var on, off string
+	switch {
+	case r.DuplicateWork:
+		on, off = ansiDuplicateID, ansiHighlightOff
+	case r.Spawnable():
+		on, off = ansiSpawnableID, ansiHighlightOff
+	case r.Focused:
+		on, off = ansiInverse, ansiInverseOff
+	default:
+		return id + pad
+	}
+	if rowIntensity(r) == intensityDim {
+		on, off = ansiDimOff+on, off+ansiDim
+	}
+	return on + id + off + pad
 }
 
 // classify maps a row to its action, applying the status canonicalization from
@@ -1412,22 +1446,60 @@ const (
 // be excluded by name (E-2128): a row whose verdict has not been computed is not
 // a row with outstanding work, and a never-started `later` task should still read
 // dim while the job catches up. ⊙ is out of the veto for the same reason.
+//
+// In-flight (⟳) and parent (↑) rows dim too (E-2204): neither is actionable
+// from this board — another session is working the one, and the other is the
+// frame the board hangs from. The parent dims in every phase, urgent included.
+// The board's own task never dims. ☑ verify rows are not in the set: verifying
+// is the user's action.
+//
+// These two are OUTSIDE E-1707's unsettled veto (decided with Mike, E-2204). A
+// row being worked almost always wears ◆ — its worktree diverges because it is
+// being worked — so under the veto the dim would almost never apply. And the ◆
+// is not this board's to act on: landing an in-flight task is its own session's
+// job, and the parent is the frame. The ◆ is still drawn, just dimmed.
 func colorize(line string, r monitor.SessionStatusRow, enabled bool) string {
 	if !enabled {
 		return line
 	}
-	phase := r.Phase
-	switch {
-	case isTerminal(r.Status), r.Hidden, isReferenced(r),
-		phase == "later", phase == "maybe":
-		if r.Unsettled {
-			return line
-		}
+	switch rowIntensity(r) {
+	case intensityDim:
 		return ansiDim + line + ansiReset
-	case phase == "urgent":
+	case intensityBold:
 		return ansiBold + line + ansiReset
 	default:
 		return line
+	}
+}
+
+// intensity is a row's weight, decided once by rowIntensity so colorize and
+// idField (which must know whether to lift its highlight out of a dim) cannot
+// disagree.
+type intensity int
+
+const (
+	intensityNormal intensity = iota
+	intensityDim
+	intensityBold
+)
+
+// rowIntensity is colorize's rule, without the escapes. See colorize.
+// in_flight and is_parent are never set on the board's own task (the row query
+// excludes the focal from both), so the new dims cannot reach it.
+func rowIntensity(r monitor.SessionStatusRow) intensity {
+	switch {
+	case r.InFlight, r.IsParent:
+		return intensityDim
+	case isTerminal(r.Status), r.Hidden, isReferenced(r),
+		r.Phase == "later", r.Phase == "maybe":
+		if r.Unsettled {
+			return intensityNormal
+		}
+		return intensityDim
+	case r.Phase == "urgent":
+		return intensityBold
+	default:
+		return intensityNormal
 	}
 }
 

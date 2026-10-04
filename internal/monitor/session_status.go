@@ -105,7 +105,11 @@ type SessionStatusRow struct {
 	DuplicateWork  bool
 	OwnedElsewhere bool
 	BlockedByN     int
-	BlocksN        int
+	// ReleasedByN counts the tasks that block this one and no longer hold it:
+	// blockers in a Terminal status, the same release rule BlockedByN applies
+	// from the other side (E-876). Spawnable reads it (E-2204).
+	ReleasedByN int
+	BlocksN     int
 	// SupersededBy holds the ids of the tasks that supersede this one. `old
 	// superseded_by new` is stored active-voice as (source=new, target=old,
 	// dep_type='supersedes'), so these are the source_ids of the 'supersedes' rows
@@ -151,6 +155,23 @@ func (r SessionStatusRow) HasWorkProduct() bool {
 	default:
 		return r.Landed
 	}
+}
+
+// Spawnable reports whether the row's task has BECOME spawnable (E-2204): at
+// least one of its blockers has released it, none still holds it, and nobody has
+// picked it up — its status is one a claim promotes, and no live session is on
+// it. It is computed from the row each draw, never stored, so it clears itself
+// the moment the task is claimed or spawned and needs no notice row.
+//
+// "Released" is the block-release rule, not landedness: a blocker that landed but
+// still awaits verification still holds its dependent (BlockedByN counts it), and
+// highlighting such a row as news while it carries ⊗ would contradict itself.
+//
+// The board's own task is never spawnable; it is already claimed by definition.
+func (r SessionStatusRow) Spawnable() bool {
+	return !r.IsFocal && !r.InFlight &&
+		r.ReleasedByN > 0 && r.BlockedByN == 0 &&
+		taskstatus.Has(taskstatus.ClaimPromotes, r.Status)
 }
 
 // supersededByExpr is the `enr`-CTE column that collects a task's replacements as
@@ -422,13 +443,17 @@ enr AS (
        WHERE d.source_type = 'task' AND d.target_type = 'task'
          AND d.dep_type = 'blocks' AND d.target_id = b.id
          AND blk.status NOT IN (` + terminalStatusSet + `)) AS blocked_by_n,
+    (SELECT count(*) FROM task_deps d JOIN live_tasks blk ON blk.id = d.source_id
+       WHERE d.source_type = 'task' AND d.target_type = 'task'
+         AND d.dep_type = 'blocks' AND d.target_id = b.id
+         AND blk.status IN (` + terminalStatusSet + `)) AS released_by_n,
     (SELECT count(*) FROM task_deps d
        WHERE d.source_type = 'task' AND d.source_id = b.id
          AND d.dep_type = 'blocks') AS blocks_n,` + supersededByExpr + `,` + duplicatesExpr + `
   FROM allbase b
 )
 SELECT id, project_id, title, status, phase, type_slug, has_plan,
-       is_focal, is_parent, is_from, in_flight, landed, blocked_by_n, blocks_n,
+       is_focal, is_parent, is_from, in_flight, landed, blocked_by_n, released_by_n, blocks_n,
        superseded_by, duplicates
   FROM enr
  WHERE (? = 1) OR is_focal OR is_parent OR is_from
@@ -455,7 +480,7 @@ func scanSessionStatusRows(rows *sql.Rows) ([]SessionStatusRow, error) {
 		var superseded, duplicates sql.NullString
 		if err := rows.Scan(
 			&r.ID, &r.ProjectID, &r.Title, &r.Status, &r.Phase, &r.TypeSlug, &r.HasPlan,
-			&r.IsFocal, &r.IsParent, &r.IsFrom, &r.InFlight, &r.Landed, &r.BlockedByN, &r.BlocksN,
+			&r.IsFocal, &r.IsParent, &r.IsFrom, &r.InFlight, &r.Landed, &r.BlockedByN, &r.ReleasedByN, &r.BlocksN,
 			&superseded, &duplicates,
 		); err != nil {
 			return nil, err
@@ -533,13 +558,17 @@ enr AS (
        WHERE d.source_type = 'task' AND d.target_type = 'task'
          AND d.dep_type = 'blocks' AND d.target_id = b.id
          AND blk.status NOT IN (` + terminalStatusSet + `)) AS blocked_by_n,
+    (SELECT count(*) FROM task_deps d JOIN live_tasks blk ON blk.id = d.source_id
+       WHERE d.source_type = 'task' AND d.target_type = 'task'
+         AND d.dep_type = 'blocks' AND d.target_id = b.id
+         AND blk.status IN (` + terminalStatusSet + `)) AS released_by_n,
     (SELECT count(*) FROM task_deps d
        WHERE d.source_type = 'task' AND d.source_id = b.id
          AND d.dep_type = 'blocks') AS blocks_n,` + supersededByExpr + `,` + duplicatesExpr + `
   FROM base b
 )
 SELECT id, project_id, title, status, phase, type_slug, has_plan,
-       is_focal, is_parent, is_from, in_flight, landed, blocked_by_n, blocks_n,
+       is_focal, is_parent, is_from, in_flight, landed, blocked_by_n, released_by_n, blocks_n,
        superseded_by, duplicates
   FROM enr
  WHERE (? = 1) OR status NOT IN (` + terminalStatusSet + `)

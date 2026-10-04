@@ -185,7 +185,8 @@ func boardSessions(db *sql.DB, viewer, focal int64) (map[int64]bool, error) {
 }
 
 // liveOwnership gathers, for each task id, the surfacers, revisiters and
-// focusers among live sessions — excluding each task's own claiming session.
+// focusers among live sessions — excluding each task's own claiming session,
+// and excluding from surfacers and revisiters any session that hid the task.
 // Tasks nobody live has touched are simply absent from the map.
 func liveOwnership(db *sql.DB, taskIDs []int64) (map[int64]taskOwnership, error) {
 	out := make(map[int64]taskOwnership)
@@ -201,6 +202,9 @@ func liveOwnership(db *sql.DB, taskIDs []int64) (map[int64]taskOwnership, error)
 		    AND s.state IN (`+liveSessionStates+`)
 		    AND s.task_id IS NOT st.task_id
 		    AND st.relation_id IN (?, ?)
+		    AND NOT EXISTS (
+		      SELECT 1 FROM session_hidden_tasks h
+		       WHERE h.session_id = st.session_id AND h.task_id = st.task_id)
 		  ORDER BY st.session_id`,
 		append(args, int(sessiontaskrelation.RelationSurfaced), int(sessiontaskrelation.RelationRevisited))...,
 	)
