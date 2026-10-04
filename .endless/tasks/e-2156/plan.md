@@ -200,3 +200,18 @@ appear. Do not introduce one — if something genuinely lacks a name, ask.
   name that Endless did not create: stamps it as the project's monitor and
   switches to it, leaving its panes as they are. Without the flag the refusal
   now names it.
+
+## Revisit, round 2 (2026-10-04)
+
+- **The monitor gets its own tmux server**, `tmux -L endless`, viewed from a
+  terminal window of its own, in a session named for the project
+  (`tmux.session_name` default is now `{{project}}`). Each `--tmux` run adds a
+  `projects` window — monitor above a shell — so a run always ends with a live
+  monitor; duplicates are closed by hand. Outside tmux it attaches; inside tmux
+  it prints `tmux -L endless attach -t <project>`.
+- **`--use-existing` and the ownership stamp are removed.** Adding a window is
+  not destructive, so there is nothing to refuse.
+- **`project_status.colors`** in layered config overrides each list's `bg`/`fg`
+  (256-color indexes, -1 = none). Defaults 1/232, 2/232, 3/232.
+- **The fault row's line is reserved only while one renders**, so a resized
+  pane fills with rows and leaves only the cursor's line blank.
