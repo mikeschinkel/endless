@@ -23,13 +23,13 @@ package raterjob
 import (
 	"context"
 	"fmt"
-	"os"
 	"os/exec"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/jobs"
+	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
 // JobName keys this job's scheduling row. It must stay stable: changing it
@@ -105,7 +105,8 @@ func (job) Schedule() (schedule jobs.Schedule) {
 func (job) Run(ctx context.Context) (err error) {
 	var cmd *exec.Cmd
 	var out []byte
-	var bin string
+	var bin, dir string
+	var dbArgs []string
 
 	bin, err = exec.LookPath("endless")
 	if err != nil {
@@ -113,14 +114,15 @@ func (job) Run(ctx context.Context) (err error) {
 		goto end
 	}
 
-	cmd = exec.CommandContext(ctx, bin, runArgs()...)
-	cmd.Env = jobs.ChildEnv()
-	// A neutral working directory, deliberately. The Python CLI refuses to
-	// touch a database from inside a self-dev worktree without an explicit --db
-	// (E-1429), and the runner's cwd is whatever the trigger happened to be run
-	// from. Routing by environment from a directory that belongs to no project
-	// makes the child's DB resolution depend only on what this function passes.
-	cmd.Dir = os.TempDir()
+	// The child opens this process's database by flag, never by environment
+	// (E-2186): see monitor.ChildDBRoute for the three cases.
+	dbArgs, dir, err = monitor.ChildDBRoute()
+	if err != nil {
+		err = fmt.Errorf("rater sweep: %w", err)
+		goto end
+	}
+	cmd = exec.CommandContext(ctx, bin, append(dbArgs, runArgs()...)...)
+	cmd.Dir = dir
 
 	out, err = cmd.CombinedOutput()
 	if err != nil {
