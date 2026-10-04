@@ -3938,14 +3938,16 @@ def task_spawn(item_id, project, permission_mode, model, session_name,
                                      ("left", to_left), ("right", to_right))
               if on]
     if len(chosen) > 1:
-        raise click.UsageError(
+        raise agent_help.no_report(
             "--to-first, --to-last, --to-left and --to-right are mutually "
-            "exclusive; pass one of them: "
-            + ", ".join(f"--to-{n}" for n in chosen))
+            "exclusive; got " + ", ".join(f"--to-{n}" for n in chosen)
+            + ". Nothing ran.",
+            "Pass at most one --to-* flag and retry", exit_code=2)
     if tmux_session is not None and target_session:
-        raise click.UsageError(
-            "--tmux-session and --target-session both name the session; "
-            "pass one of them")
+        raise agent_help.no_report(
+            "--tmux-session and --target-session both name the session. "
+            "Nothing ran.",
+            "Pass one of them and retry", exit_code=2)
     from endless.task_cmd import spawn_plan
     spawn_plan(item_id, project_name=project,
                worktree=worktree, force=force,
