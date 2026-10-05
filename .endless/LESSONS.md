@@ -7129,3 +7129,7 @@ In the E-2154 glossary brainstorm, the seed's 'what to explore' list was written
 ### [2026-10-04] Don't rank options by size
 On E-2156, offering fixes for the monitor's shell pane, I recommended option A partly because it was 'small enough to do now' and called option C 'a task of its own'. Mike pointed out size is not the most important concern and that I keep prioritizing it despite being told not to. The question is what behavior he wants and whether an option is specified well enough to deliver it; size bears on how work is split, not on which option is right.
 - **Project**: endless
+
+### [2026-10-04] Don't coin a term without agreeing it
+Specifying the project monitor's shell pane (E-2156/E-2238), I named it a 'console' and proposed ENDLESS_CONSOLE, without discussion. Mike uses 'monitor' for both the project and session monitors, and E-2154 exists because agents keep coining words. A new term needs agreement on what it means and why it is needed beside the existing ones; propose it as a question, don't use it as if settled.
+- **Project**: endless
