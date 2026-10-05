@@ -7137,3 +7137,7 @@ Specifying the project monitor's shell pane (E-2156/E-2238), I named it a 'conso
 ### [2026-10-04] Say 'filed' for creating a task; 'spawn' means launching a session
 Closing the E-2154 glossary brainstorm, I said the synthesis 'spawned three tasks'. Mike corrected: in Endless, spawn means launching a session (task spawn); creating a task is filing it. I picked the word up from the spawn instructions' own wording ('spawn the decisions/tasks it produces'), but in my report to Mike it collided with Endless's existing term.
 - **Project**: endless
+
+### [2026-10-04] Resolve plan questions with Mike, never leave them in the plan
+Writing E-2238's plan I put an 'Open questions' section in it (naming, which server task sessions live on, command classification) and told Mike they were 'open in the plan'. Mike has said many times that plans should not hold open questions: when a plan needs a decision, ask him and write the answer into the plan. Leaving it open hands the decision to whichever session implements the plan.
+- **Project**: endless
