@@ -7149,3 +7149,7 @@ Context: landing E-1994, worktree land refused saying the branch adds internal/s
 ### [2026-10-05] Don't flag a landed task sitting at assumed
 Context: E-2203 had landed, and Mike said it was landed and verified. The land set the status to assumed, and in /whats-left I told him to set confirmed himself if he wanted it. He was annoyed: assumed is his standard workflow. He sets assumed and moves on, and sets confirmed only after fully testing a feature, which he rarely does because it would slow him down. So a landed task at assumed is the expected end state, not a loose end. Don't suggest moving it to confirmed.
 - **Project**: endless
+
+### [2026-10-05] Answer the artifact Mike names, not its current location
+While discussing verify output after E-2242, Mike asked whether the CTRF report, which the runner writes to the user cache dir, should be version-controlled. I argued against committing 'the cache file', treating the report and the place it currently lives as one thing, and so answered a narrower question than he asked. He meant the CTRF report itself, committed on every run, as a history. When Mike points at a file by its path, his question is usually about the content; the path is just where it happens to live today.
+- **Project**: endless
