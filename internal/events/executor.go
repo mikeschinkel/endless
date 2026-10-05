@@ -469,11 +469,14 @@ func execTaskCreated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 	// A client older than E-1993 still files at `untriaged`; it lands where a
 	// rebuild of the same event would put it.
 	status := currentStatus(p.Status, strings.TrimSpace(plan) != "")
-	// primeRequested (E-1994) rides the same inference: a plan attached is the
-	// moment the `prime` job may start the task's session ahead of need.
-	primeRequested := 0
 	if isPreJudgmentStatus(status) && strings.TrimSpace(plan) != "" {
 		status = "submitted"
+	}
+	// primeRequested (E-1994): a task filed `submitted` with its plan — by the
+	// inference above or explicitly — is the moment the `prime` job may start
+	// its session ahead of need.
+	primeRequested := 0
+	if status == string(taskstatus.Submitted) && strings.TrimSpace(plan) != "" {
 		primeRequested = 1
 	}
 
@@ -584,9 +587,18 @@ func execTaskStatusChanged(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 			return nil, fmt.Errorf("events: cascade status change: %w", err)
 		}
 	} else {
+		// E-1994: `task submit` reaches `submitted` through this event, not
+		// task.fields_updated, so the `prime` job's cue is set here as well.
+		// The CASE reads the row's OLD status, so it fires only on a move from
+		// before judgment — the same rule execTaskFieldsUpdated applies.
 		_, err := db.Exec(
-			"UPDATE tasks SET status = ?, completed_at = ? WHERE id = ?",
-			p.NewStatus, completedAt, taskID,
+			`UPDATE tasks SET status = ?, completed_at = ?,
+			        prime_requested = CASE
+			            WHEN ? = '`+string(taskstatus.Submitted)+`'
+			             AND status IN (`+taskstatus.SQLList(taskstatus.PreJudgment)+`)
+			            THEN 1 ELSE prime_requested END
+			  WHERE id = ?`,
+			p.NewStatus, completedAt, p.NewStatus, taskID,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("events: status change: %w", err)
@@ -784,10 +796,7 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 				if err := db.QueryRow("SELECT status FROM tasks WHERE id = ?",
 					taskID).Scan(&currentStatus); err == nil {
 					if isPreJudgmentStatus(currentStatus) {
-						// E-1994: the attach is also the `prime` job's cue.
-						// Never cleared — the job stops asking once a
-						// session binds — so it needs no matching reset.
-						setClauses = append(setClauses, "status = ?", "prime_requested = 1")
+						setClauses = append(setClauses, "status = ?")
 						args = append(args, taskstatus.Submitted)
 						newStatus = taskstatus.Submitted
 						hasNewStatus = true
@@ -821,6 +830,14 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 		}
 		if err := ValidateStatusActor(db, mustParseInt64(taskID), newStatus, evt.Actor); err != nil {
 			return nil, err
+		}
+		// E-1994: a plan reaching `submitted` from before judgment is the
+		// `prime` job's cue, whichever route took it there — the plan-attach
+		// inference above, or an explicit `task submit` after an agent's
+		// unrated attach was held (E-2203). Never cleared: the job stops
+		// asking once a session binds, so there is no matching reset.
+		if newStatus == string(taskstatus.Submitted) && isPreJudgmentStatus(currentStatus) {
+			setClauses = append(setClauses, "prime_requested = 1")
 		}
 	}
 

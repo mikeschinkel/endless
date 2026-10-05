@@ -190,6 +190,7 @@ def test_drafting_handoff_asks_for_a_plan(seeded_project_at_cwd):
     item_id = task_cmd.add_item(title="Fix a thing", description="d")
     text = task_cmd.render_handoff(item_id, "Fix a thing", primed=True, drafting=True)
     assert "has no plan. Draft one" in text
+    assert "--complexity" in text and "--risk" in text
 
 
 def test_a_user_started_session_gets_no_wait_clause(seeded_project_at_cwd):
@@ -305,3 +306,16 @@ def test_a_bound_session_without_the_draft_marker_is_not_the_drafter(
     assert not task_cmd._drafting_session_holds(item_id)
     monkeypatch.setattr(task_cmd, "_prime_draft_window_task", lambda: str(item_id))
     assert task_cmd._drafting_session_holds(item_id)
+
+
+def test_submit_after_a_held_attach_requests_a_prime(seeded_project_at_cwd):
+    """An agent's unrated attach holds the status (E-2203); its later
+    `task submit` is then the move to `submitted`, and must request the prime
+    the held attach could not."""
+    item_id = task_cmd.add_item(title="Fix a thing", description="d")
+    task_cmd.update_plan(item_id, plan="# Plan\nbody", keep_status=True)
+    assert db.query("SELECT prime_requested FROM tasks WHERE id = ?",
+                    (item_id,))[0]["prime_requested"] == 0
+    task_cmd.submit_item(item_id, complexity="low", risk="low")
+    row = db.query("SELECT status, prime_requested FROM tasks WHERE id = ?", (item_id,))[0]
+    assert (row["status"], row["prime_requested"]) == ("submitted", 1)
