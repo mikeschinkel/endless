@@ -157,3 +157,18 @@ question, though it may share the challenge model call.
 - `project status` gains a `◇ primed` rank between idle and doing.
 - Drift check lives in `internal/plancite` (a heuristic tuned to miss rather
   than cry wolf: backticked tokens, or bare tokens with a file extension).
+
+## After rebasing onto main (2026-10-04)
+
+- `--detached` dropped: E-2234 landed spawn-window `--no-refocus`, the same
+  act; `task prime` uses it, plus E-2234's `--placement` (the job passes
+  `auto_spawn`'s placement setting through a hidden `--placement`).
+- E-2156 rebuilt `project status` around tasks, so the primed rank moved: a new
+  `taskrow.Primed` action (◇ primed) and a `Primed` flag on the project-status
+  row; a task held by a primed session reads ◇ instead of its ⚑/▶/✎ status.
+- E-2159's refusal classes: every new refusal is `no_report`/`report`/`relay`
+  (Python) or `internal/refusal` (Go `session-prime`).
+- No migration renumber was needed: main's 00011/00012 are the same files this
+  branch already had; 00013_prime is next.
+- The Endless project opts in: `"prime": {"enabled": true}` in its
+  `.endless/config.json`.
