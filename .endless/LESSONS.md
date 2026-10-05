@@ -7145,3 +7145,7 @@ Writing E-2238's plan I put an 'Open questions' section in it (naming, which ser
 ### [2026-10-05] When land says the branch adds main's own migration, main was rewritten — rebase --onto, don't renumber
 Context: landing E-1994, worktree land refused saying the branch adds internal/schema/migrations/00013_rater_claims.sql and told me to renumber it to 00014. That file was main's own (E-2203); main's history had been rewritten after my last rebase (same commits, new SHAs), so the merge-base fell back to an old commit and every rewritten commit looked like branch work. Following the instructions would have renumbered main's migration. Check first: if `git merge-base --is-ancestor <branch's old base> main` is false and `git diff <old base> main` shows no real change, move only your own commits with `git rebase --onto main <old base>`; renumber only migrations the branch genuinely adds.
 - **Project**: endless
+
+### [2026-10-05] Don't flag a landed task sitting at assumed
+Context: E-2203 had landed, and Mike said it was landed and verified. The land set the status to assumed, and in /whats-left I told him to set confirmed himself if he wanted it. He was annoyed: assumed is his standard workflow. He sets assumed and moves on, and sets confirmed only after fully testing a feature, which he rarely does because it would slow him down. So a landed task at assumed is the expected end state, not a loose end. Don't suggest moving it to confirmed.
+- **Project**: endless
