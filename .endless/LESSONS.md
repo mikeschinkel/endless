@@ -7153,3 +7153,7 @@ Context: E-2203 had landed, and Mike said it was landed and verified. The land s
 ### [2026-10-05] Answer the artifact Mike names, not its current location
 While discussing verify output after E-2242, Mike asked whether the CTRF report, which the runner writes to the user cache dir, should be version-controlled. I argued against committing 'the cache file', treating the report and the place it currently lives as one thing, and so answered a narrower question than he asked. He meant the CTRF report itself, committed on every run, as a history. When Mike points at a file by its path, his question is usually about the content; the path is just where it happens to live today.
 - **Project**: endless
+
+### [2026-10-05] Check current Endless usage before asserting how routing works
+While proposing that every verify run commit its CTRF report to main (after E-2242), I claimed Endless ledger writes from a worktree go to the sandbox by default, so the write would need to reach main explicitly. Mike asked whether I was sure I knew the current usage patterns: most of Endless now runs from the main install unless a worktree explicitly asks otherwise, and endless guide orchestration says a self-dev worktree has no default database at all. I stated a stale model of routing as fact without checking the guide. When a design point depends on how Endless currently routes binaries or databases, read the guide before stating it.
+- **Project**: endless
