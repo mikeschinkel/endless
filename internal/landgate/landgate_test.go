@@ -354,3 +354,16 @@ func TestCheck_RewrittenMainWithBranchMigrationOnly(t *testing.T) {
 		t.Fatalf("want a base-rewritten refusal, got %+v", v)
 	}
 }
+
+// Copies of base's commits that add no migration are not worth a refusal:
+// nothing about numbering can be misread, and land's own rebase drops them. A
+// commit cherry-picked from the branch onto main is the everyday case.
+func TestCheck_CopiedCommitWithoutMigrationsIsAllowed(t *testing.T) {
+	f := newFixture(t, withDirs)
+	f.write(f.wt, "code.go", "package x\n")
+	f.commit(f.wt, "branch fix")
+	f.git(f.main, "cherry-pick", "task/1")
+	if v := f.check(); v.Refused {
+		t.Fatalf("refused over a copied commit with no migrations: %+v", v)
+	}
+}

@@ -14,6 +14,8 @@
 #      2026-10-03 `git pull --rebase` shape): the verdict is base_rewritten,
 #      not a migration collision, offers no rename, and `git rebase main`
 #      clears it.
+#   3. A commit cherry-picked from the branch onto main, adding no migration,
+#      is not refused: only copies that carry migrations are worth stopping for.
 source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
@@ -91,6 +93,14 @@ assert_not_contains "no sandbox-reset step for a rewrite" \
 g "${WT}" rebase -q main
 OUT=$(gate)
 assert_eq "git rebase main clears it" "False" \
+    "$(printf '%s' "${OUT}" | python3 -c 'import json,sys; print(bool(json.load(sys.stdin).get("refused")))')"
+
+section "3. A copied commit without migrations"
+put "${WT}" fix.go "package x // fix"
+commit "${WT}" "branch fix"
+g "${MAIN}" cherry-pick task/1
+OUT=$(gate)
+assert_eq "a cherry-picked commit with no migration is not refused" "False" \
     "$(printf '%s' "${OUT}" | python3 -c 'import json,sys; print(bool(json.load(sys.stdin).get("refused")))')"
 
 summary

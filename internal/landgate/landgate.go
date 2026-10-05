@@ -18,8 +18,8 @@
 //     knows nothing of goose, Alembic or Prisma, so it holds for any tool.
 //     Each side counts only its own commits: a commit the other side already
 //     carries under another SHA — what a rewritten base leaves on a branch —
-//     belongs to neither, and when the branch holds any the land is refused
-//     with `git rebase <base>` as the whole fix (E-2232).
+//     belongs to neither. When such copies on the branch add migrations, the
+//     land is refused with `git rebase <base>` as the whole fix (E-2232).
 //
 //   - An optional project hook, .endless/hooks/pre-land.sh, for rules the
 //     built-in check does not cover. It may veto the land and explain why.
@@ -177,21 +177,27 @@ func checkMigrations(a Args, dirs []string) (v Verdict, err error) {
 		return v, nil
 	}
 
-	if sides.equivalent > 0 {
+	// Only a copy that carries migrations is worth stopping for. One that does
+	// not cannot mislead anyone about numbering, and land's own rebase drops it.
+	copied, err := addedBy(a.Worktree, sides.equivalent, dirs)
+	if err != nil {
+		return v, err
+	}
+	if len(copied) > 0 {
 		v = Verdict{Refused: true, Source: SourceBaseRewritten, MergeBase: mb}
 		v.Summary = rewrittenSummary(a)
-		v.Block = rewrittenBlock(a, sides.equivalent)
+		v.Block = rewrittenBlock(a, len(sides.equivalent))
 		return v, nil
 	}
 	return v, nil
 }
 
-// commitSides is each side's own commits since the two diverged, and how many
-// of the branch's commits base already carries under another SHA.
+// commitSides is each side's own commits since the two diverged, and the
+// branch's commits that base already carries under another SHA.
 type commitSides struct {
 	branch     []string
 	base       []string
-	equivalent int
+	equivalent []string
 }
 
 // ownCommits splits <base>...HEAD by patch identity (E-2232). A commit whose
@@ -228,7 +234,7 @@ func ownCommits(repo, base string) (s commitSides, err error) {
 	// commit of its own and "=" for one the other side also carries.
 	s.branch = branch[">"]
 	s.base = onBase["<"]
-	s.equivalent = len(branch["="])
+	s.equivalent = branch["="]
 	return s, nil
 }
 
@@ -243,6 +249,24 @@ func ownAdded(repo, from, to string, commits, dirs []string) ([]string, error) {
 	if err != nil || len(net) == 0 {
 		return nil, err
 	}
+	own, err := addedBy(repo, commits, dirs)
+	if err != nil {
+		return nil, err
+	}
+	var files []string
+	for _, f := range net {
+		if own[f] {
+			files = append(files, f)
+		}
+	}
+	return files, nil
+}
+
+// addedBy is the set of files under dirs that any of commits adds.
+func addedBy(repo string, commits, dirs []string) (map[string]bool, error) {
+	if len(commits) == 0 {
+		return nil, nil
+	}
 	cmd := exec.Command("git", append(
 		[]string{"-C", repo, "diff-tree", "--stdin", "-r", "--no-commit-id",
 			"--no-renames", "--diff-filter=A", "--name-only", "--"}, dirs...)...)
@@ -252,18 +276,12 @@ func ownAdded(repo, from, to string, commits, dirs []string) ([]string, error) {
 	cmd.Stderr = &stderr
 	out, err := cmd.Output()
 	if err != nil {
-		return nil, fmt.Errorf("list migrations added by %s's own commits: %w: %s",
-			to, err, strings.TrimSpace(stderr.String()))
+		return nil, fmt.Errorf("list migrations added by %d commits: %w: %s",
+			len(commits), err, strings.TrimSpace(stderr.String()))
 	}
-	own := map[string]bool{}
+	files := map[string]bool{}
 	for _, f := range lines(string(out)) {
-		own[f] = true
-	}
-	var files []string
-	for _, f := range net {
-		if own[f] {
-			files = append(files, f)
-		}
+		files[f] = true
 	}
 	return files, nil
 }
