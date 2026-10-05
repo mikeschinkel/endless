@@ -7173,3 +7173,7 @@ While presenting E-2243's open questions (where committed verify-run CTRF report
 ### [2026-10-05] Verify suites are land-time gates, not test suites
 While planning E-2243 (commit verify-run CTRF reports to main), I argued for recording failing verify runs because 'failed then passed on the same SHA' is a flaky-suite signal, and I estimated five to twenty runs per task. Mike pointed out that verify suites are his own design, valid only up to land, not industry-style project test suites: flakiness tracking does not apply, a failure matters only within the worktree's lifespan, and he typically runs verify one to three times. Before borrowing a test-suite practice for verify suites, check it against what a verify suite is: a one-task gate that expires at land.
 - **Project**: endless
+
+### [2026-10-05] How a failure is handled is separate from how much the artifact matters
+While planning E-2243, Mike chose to fail a verify run when its CTRF report cannot be committed to main, and also called the report a nice-to-have. I called those two answers a conflict. He disagreed: a commit that cannot happen means something is wrong and should be stopped and resolved, not papered over, whatever the artifact's importance; carrying on would also silently lose the artifact in cases that might matter more than expected. Do not infer the failure policy from how important the output seems.
+- **Project**: endless
