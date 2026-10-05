@@ -376,3 +376,37 @@ func TestCheck_CopiedCommitWithoutMigrationsRefuses(t *testing.T) {
 		t.Fatalf("still refused after git rebase main: %+v", v)
 	}
 }
+
+// The rewritten-base refusal is not a migration rule, so a project that
+// declares no migration dirs gets it too (E-2242). Without it, such a project
+// met land's rebase conflict on the copies instead of the fix.
+func TestCheck_CopiedCommitRefusesWithoutMigrationDirs(t *testing.T) {
+	f := newFixture(t, `{"name":"p"}`)
+	f.write(f.wt, "code.go", "package x\n")
+	f.commit(f.wt, "branch fix")
+	f.write(f.main, "other.txt", "x\n")
+	f.commit(f.main, "unrelated")
+	f.git(f.main, "cherry-pick", "task/1")
+	v := f.check()
+	if !v.Refused || v.Source != SourceBaseRewritten {
+		t.Fatalf("want a base-rewritten refusal, got %+v", v)
+	}
+	if !strings.Contains(v.Summary, "git rebase main") {
+		t.Errorf("Summary must name git rebase main: %q", v.Summary)
+	}
+	f.git(f.wt, "rebase", "-q", "main")
+	if v := f.check(); v.Refused {
+		t.Fatalf("still refused after git rebase main: %+v", v)
+	}
+}
+
+// A rewritten base outranks the hook: the hook is not asked about a branch
+// whose history is not yet its own.
+func TestCheck_RewrittenBaseRefusalPreemptsHook(t *testing.T) {
+	f := newFixture(t, `{"name":"p"}`)
+	rewriteMain(t, f)
+	writeHook(t, f, "#!/bin/sh\necho hook ran\nexit 1\n", 0o755)
+	if v := f.check(); v.Source != SourceBaseRewritten {
+		t.Fatalf("want the base-rewritten refusal, got %+v", v)
+	}
+}

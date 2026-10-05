@@ -9,23 +9,27 @@
 // E-2182 is that land refuses and tells the agent how to fix it, rather than
 // renumbering verified code itself.
 //
-// The gate has two halves, and a project uses either, both or neither:
+// The gate has three parts. The first and last are opt-in; the middle one
+// always runs:
 //
-//   - The built-in check. A project declares its migration directories in
+//   - The migration check. A project declares its migration directories in
 //     .endless/config.json ("migrations": {"dirs": [...]}). Land refuses when
 //     the branch ADDS files there and the base branch has ALSO added files
 //     there since the two diverged. It is a git diff over configured paths and
 //     knows nothing of goose, Alembic or Prisma, so it holds for any tool.
 //     Each side counts only its own commits: a commit the other side already
 //     carries under another SHA — what a rewritten base leaves on a branch —
-//     belongs to neither, and when the branch holds any the land is refused
-//     with `git rebase <base>` as the whole fix (E-2232).
+//     belongs to neither (E-2232).
+//
+//   - The rewritten-base check, for every project. When the branch holds any
+//     such copy the land is refused with `git rebase <base>` as the whole fix
+//     (E-2232, E-2242).
 //
 //   - An optional project hook, .endless/hooks/pre-land.sh, for rules the
-//     built-in check does not cover. It may veto the land and explain why.
+//     built-in checks do not cover. It may veto the land and explain why.
 //
-// Either way the result is one Verdict carrying a one-line Summary and a Block
-// meant to be pasted to the agent, so the caller has one renderer for both.
+// Whichever refuses, the result is one Verdict carrying a one-line Summary and
+// a Block meant to be pasted to the agent, so the caller has one renderer.
 //
 // The gate must run BEFORE land rebases the branch. Afterwards the merge-base
 // is the base tip, the base has "gained" nothing, and the check passes a
@@ -103,20 +107,48 @@ type Verdict struct {
 	Branch    []Rename `json:"branch,omitempty"`
 }
 
-// Check runs the built-in migration check, then the project's hook. The first
-// refusal wins: a land blocked for two reasons is fixed one reason at a time,
-// and the hook is not asked about a branch the built-in check already refused.
+// Check runs the migration check (when the project declares migration dirs),
+// then the rewritten-base check, then the project's hook. The first refusal
+// wins: a land blocked for two reasons is fixed one reason at a time, and the
+// hook is not asked about a branch the built-in checks already refused.
+//
+// A real collision outranks a rewritten base: its instructions already start
+// with the rebase that clears the rewrite. The rewritten-base check runs for
+// every project (E-2242): it is about the branch's history, not migrations,
+// and a project without migration dirs otherwise meets land's rebase conflict
+// on the copies instead of the fix.
 func Check(a Args) (v Verdict, err error) {
+	mb, err := git(a.Worktree, "merge-base", a.Base, "HEAD")
+	if err != nil {
+		return v, fmt.Errorf("merge-base of %s and HEAD: %w", a.Base, err)
+	}
+	mb = strings.TrimSpace(mb)
+
+	sides, err := ownCommits(a.Worktree, a.Base)
+	if err != nil {
+		return v, err
+	}
+
 	var dirs []string
 	dirs, err = migrationDirs(a.ProjectRoot)
 	if err != nil {
 		return v, err
 	}
 	if len(dirs) > 0 {
-		v, err = checkMigrations(a, dirs)
+		v, err = checkMigrations(a, dirs, mb, sides)
 		if err != nil || v.Refused {
 			return v, err
 		}
+	}
+
+	// Any copy at all, not only one carrying migrations: land's rebase does
+	// not reliably drop them. `git rebase <base>` compares against base and
+	// drops them.
+	if len(sides.equivalent) > 0 {
+		v = Verdict{Refused: true, Source: SourceBaseRewritten, MergeBase: mb}
+		v.Summary = rewrittenSummary(a)
+		v.Block = rewrittenBlock(a, len(sides.equivalent))
+		return v, nil
 	}
 	return runHook(a)
 }
@@ -135,18 +167,7 @@ func migrationDirs(projectRoot string) (dirs []string, err error) {
 	return dirs, nil
 }
 
-func checkMigrations(a Args, dirs []string) (v Verdict, err error) {
-	mb, err := git(a.Worktree, "merge-base", a.Base, "HEAD")
-	if err != nil {
-		return v, fmt.Errorf("merge-base of %s and HEAD: %w", a.Base, err)
-	}
-	mb = strings.TrimSpace(mb)
-
-	sides, err := ownCommits(a.Worktree, a.Base)
-	if err != nil {
-		return v, err
-	}
-
+func checkMigrations(a Args, dirs []string, mb string, sides commitSides) (v Verdict, err error) {
 	branchAdded, err := ownAdded(a.Worktree, mb, "HEAD", sides.branch, dirs)
 	if err != nil {
 		return v, err
@@ -156,8 +177,6 @@ func checkMigrations(a Args, dirs []string) (v Verdict, err error) {
 		return v, err
 	}
 
-	// A real collision outranks a rewritten base: its instructions already
-	// start with the rebase that clears the rewrite.
 	if len(branchAdded) > 0 && len(landed) > 0 {
 		var onBase string
 		onBase, err = git(a.Worktree, append(
@@ -174,18 +193,6 @@ func checkMigrations(a Args, dirs []string) (v Verdict, err error) {
 		}
 		v.Summary = migrationSummary(a, v)
 		v.Block = migrationBlock(a, v)
-		return v, nil
-	}
-
-	// Any copy at all, not only one carrying migrations: land's rebase does
-	// not reliably drop them. Its orphan-stripping step rebases with an
-	// orphan, not base, as upstream, so git compares the branch's commits
-	// against that orphan and replays base's copies onto base, conflicting.
-	// `git rebase <base>` compares against base and drops them.
-	if len(sides.equivalent) > 0 {
-		v = Verdict{Refused: true, Source: SourceBaseRewritten, MergeBase: mb}
-		v.Summary = rewrittenSummary(a)
-		v.Block = rewrittenBlock(a, len(sides.equivalent))
 		return v, nil
 	}
 	return v, nil

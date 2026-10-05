@@ -374,7 +374,9 @@ def _drop_orphan_amendable_commits(
     forked off the old SHA carry an orphan that conflicts on rebase even
     though main has the equivalent (superset) content under a new SHA.
     This helper detects contiguous orphans at the BASE of the branch
-    and strips them via a single 'rebase --onto base last-orphan HEAD'.
+    and strips them via a single 'rebase --onto base <upstream>', where
+    upstream merges base and the last orphan so copies of base's commits
+    are dropped rather than replayed (E-2242).
 
     Returns (count_dropped, first_subject):
       - (0, None) when no orphans found; helper is a no-op.
@@ -418,8 +420,22 @@ def _drop_orphan_amendable_commits(
     # "diverging branches" — permanently, regardless of retry count.
     # Omitting the third arg keeps HEAD attached and moves the branch
     # ref with the rebase.
+    #
+    # The upstream is a throwaway merge of base and the last orphan, not the
+    # orphan alone (E-2242). Git drops a commit whose change is already in
+    # upstream...HEAD's left side; with the orphan as upstream that side is
+    # empty, so a branch forked before base was rewritten replays its old
+    # copies of base's commits onto base and conflicts. With base as a parent,
+    # git compares against base and drops them, while the replayed range
+    # (upstream..HEAD) still starts after the orphans.
+    upstream = _git_run(
+        ["commit-tree", f"{base_branch}^{{tree}}",
+         "-p", base_branch, "-p", last_orphan_sha,
+         "-m", "endless: land orphan-drop upstream"],
+        cwd=worktree_path,
+    ).stdout.strip()
     _git_run(
-        ["rebase", "--onto", base_branch, last_orphan_sha],
+        ["rebase", "--onto", base_branch, upstream],
         cwd=worktree_path,
     )
     return (n, first_subject)
@@ -1664,8 +1680,9 @@ def _land_gate(
     """Ask `endless-go worktree land-gate` whether this land may proceed.
 
     E-2184. The check itself is Go (internal/landgate): a git diff over the
-    project's declared migration directories, then the project's optional
-    `.endless/hooks/pre-land.sh`. Returns the verdict JSON.
+    project's declared migration directories, then a refusal for a branch
+    holding copies of a rewritten base's commits (E-2242), then the project's
+    optional `.endless/hooks/pre-land.sh`. Returns the verdict JSON.
 
     Runs the INSTALLED endless-go — main's build — even in self_dev, where the
     rest of the land uses the worktree's (E-1664). The gate is main's rule, like
@@ -1686,7 +1703,7 @@ def _land_gate(
     if not binary:
         raise agent_help.report(
             f"cannot land {canonical}: endless-go is not on PATH, so the land "
-            f"gate (migration collisions, pre-land hook) cannot run. Nothing "
+            f"gate (migration collisions, rewritten base, pre-land hook) cannot run. Nothing "
             f"was merged.",
             "installing endless-go",
         )
@@ -4583,7 +4600,9 @@ def land_worktree(
             )
 
         # Step 3.6 (E-2184): refuse when the branch and base both added
-        # migrations since they diverged, or the project's pre-land hook vetoes.
+        # migrations since they diverged, when the branch holds copies of base's
+        # commits because base was rewritten (E-2242), or the project's pre-land
+        # hook vetoes.
         # BEFORE Step 3.7, whose rebase can move the merge-base to base's tip and
         # blind the check. Per attempt, not once: a retry means base moved, and
         # what it moved by may be a migration.

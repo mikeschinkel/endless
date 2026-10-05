@@ -466,6 +466,11 @@ the land, as a migration tool refusing a duplicate version on every connect. So
   paths, so it works for any migration tool. For numeric names (`00008_x.sql`)
   the refusal names each file's new number; for other schemes it says to
   re-order in the tool's own terms. No `migrations` key → no check.
+- **Rewritten base.** For every project, with or without a `migrations` key:
+  when the base branch was rebased or amended after the branch forked (a
+  `git pull --rebase` on main is enough), the branch still holds the old copies
+  of base's commits. Land refuses and the fix is `git rebase <base>` in the
+  worktree, which drops the copies; nothing needs renaming.
 - **`.endless/hooks/pre-land.sh`** (optional, `chmod +x`), for rules the built-in
   check does not cover. Run with **cwd = the worktree**, **`$1` = the worktree
   path**, **`$2` = the base branch**; `ENDLESS_TASK_ID` and `ENDLESS_BASE_BRANCH`

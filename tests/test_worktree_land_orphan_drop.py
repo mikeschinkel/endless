@@ -232,3 +232,42 @@ def test_drop_keeps_head_attached_to_branch(repo_with_worktree):
     assert post_branch_ref != pre_head, (
         "branch ref unchanged after drop; orphan-drop did not advance it"
     )
+
+
+def test_rewritten_base_copies_behind_orphan_are_not_replayed(repo_with_worktree):
+    """E-2242: base was rewritten after the branch forked, so the branch holds
+    old copies of base's commits — led by one with an amendable subject, which
+    the helper takes for an orphan. The copies must be dropped, not replayed:
+    one of them adds a file base has since modified, and replaying it onto
+    base conflicts (seen 2026-10-05 on a copied `Endless: add decision`).
+    """
+    main = repo_with_worktree["main"]
+    shared = _head_sha(main)
+    _commit(main, LEDGER_SUBJECT, {".endless/db-ledger/x.jsonl": '{"a":1}\n'})
+    _commit(main, "Endless: add decision ED-1", {"decisions/ED-1.md": "v1\n"})
+    _commit(main, LEDGER_SUBJECT, {".endless/db-ledger/x.jsonl": '{"a":1}\n{"a":2}\n'})
+
+    wt = _create_task_branch(main, repo_with_worktree["tmp"])
+    _commit(wt, "user work", {"hello.txt": "hello\n"})
+
+    # Rewrite main the way `git pull --rebase` onto a host commit does: every
+    # commit since `shared` is replayed under a new SHA.
+    _run(["git", "checkout", "-q", "-b", "remote", shared], main)
+    _commit(main, "edited on the host", {"README.md": "host\n"})
+    _run(["git", "checkout", "-q", "main"], main)
+    _run(["git", "rebase", "-q", "remote"], main)
+    # Then base updates the file one of the branch's copies adds.
+    _commit(main, "Endless: update decision ED-1", {"decisions/ED-1.md": "v2\n"})
+
+    assert _log_subjects(wt, "main..HEAD") == [
+        LEDGER_SUBJECT, "Endless: add decision ED-1", LEDGER_SUBJECT, "user work",
+    ]
+
+    count, subj = _drop_orphan_amendable_commits(wt, "main")
+    assert count == 1
+    assert subj == LEDGER_SUBJECT
+
+    assert _log_subjects(wt, "main..HEAD") == ["user work"]
+    assert (wt / "decisions" / "ED-1.md").read_text() == "v2\n"
+    symref = _run(["git", "symbolic-ref", "HEAD"], wt).stdout.strip()
+    assert symref == "refs/heads/task/x"
