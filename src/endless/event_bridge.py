@@ -425,8 +425,8 @@ def clear_land_schema_faults(
     carries v<binary_version>" incident first seen at or after `since` (the
     errors table's '%Y-%m-%dT%H:%M:%S' UTC form) — the one a self_dev land's own
     migration caused. The fingerprint is built Go-side, beside the code that
-    records it, so the two cannot drift. endless_go_bin pins the binary; see
-    apply_change.
+    records it, so the two cannot drift. endless_go_bin pins the binary, exactly
+    as `emit_event` does (E-1664).
 
     Raises click.ClickException on failure (binary missing or non-zero exit).
     """

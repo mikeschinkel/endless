@@ -25,8 +25,9 @@
 #       before the merge by name as retired; any other key is refused.
 #   C6  Python: a missing column names `endless db upgrade`; a Python read
 #       runs no migration ladder.
-#   C7  END TO END: a real self_dev land against a main database held at 00012
-#       (with _schema_version) migrates and records in one run; the same land
+#   C7  END TO END: a real self_dev land against a main database held one
+#       migration behind this tree (with _schema_version) migrates and records
+#       in one run; the same land
 #       carrying the retired key is refused with main and the DB untouched.
 #
 # Layers:
@@ -143,6 +144,9 @@ out=$("${MIGRATE}" apply x.sql 2>&1)
 assert_contains "endless-migrate apply is an unknown command" "unknown command" "${out}"
 
 LATEST=$(ls internal/schema/migrations/ | grep -E '^[0-9]+_' | sed -E 's/^0*([0-9]+)_.*/\1/' | sort -n | tail -1)
+PREV=$((LATEST - 1))
+DROP=$(ls internal/schema/migrations/ | grep -E '^0*[0-9]+_drop_schema_version\.sql$' | sed -E 's/^0*([0-9]+)_.*/\1/')
+assert_eq "the _schema_version drop is the newest migration" "${LATEST}" "${DROP}"
 fresh="${TMP}/fresh"
 mkdir -p "${fresh}" && : >"${fresh}/endless.db"
 "${MIGRATE}" --db-dir "${fresh}" up >/dev/null 2>&1
@@ -193,11 +197,13 @@ else
     report_fail "a goose database at user_version 0 migrates normally" "exit 0" "${out}"
 fi
 
-section "C3. A real land against a main database held at 00012 (C7)"
+section "C3. A real land against a main database one migration behind (C7)"
 
 # stage_behind_db <home> — a main database under <home>, built by a copy of
-# this tree's endless-go OUTSIDE the worktree path, then held at 00012 with the
-# retired _schema_version table restored.
+# this tree's endless-go OUTSIDE the worktree path, then held at ${PREV} — one
+# step short of this tree's latest, the drop — with the retired _schema_version
+# table restored. Derived from the tree rather than written down, because main
+# keeps gaining migrations while this branch waits to land.
 stage_behind_db() {
     local home="$1" db="$1/.config/endless/endless.db"
     mkdir -p "${home}"
@@ -207,11 +213,11 @@ stage_behind_db() {
         || setup_error "could not build the scratch main database"
     sqlite3 "${db}" "CREATE TABLE _schema_version (name TEXT PRIMARY KEY,
                          applied_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')));
-                     DELETE FROM goose_db_version WHERE version_id >= 13;" \
-        || setup_error "could not hold the scratch database at 00012"
+                     DELETE FROM goose_db_version WHERE version_id >= ${LATEST};" \
+        || setup_error "could not hold the scratch database at ${PREV}"
     printf '{}\n' >"${home}/.config/endless/config.json"
-    [[ "$(sqlite3 "${db}" 'SELECT max(version_id) FROM goose_db_version')" == 12 ]] \
-        || setup_error "the scratch database is not at 00012"
+    [[ "$(sqlite3 "${db}" 'SELECT max(version_id) FROM goose_db_version')" == "${PREV}" ]] \
+        || setup_error "the scratch database is not at ${PREV}"
 }
 
 land() {
@@ -227,7 +233,7 @@ assert_contains "fixed: the database starts with _schema_version" \
     "schema_version_before=yes" "${OUT}"
 assert_contains "fixed: the land completes" "outcome=landed" "${OUT}"
 assert_contains "fixed: main advances" "main_advanced=yes" "${OUT}"
-assert_contains "fixed: the database reaches 00013" "db_version=13" "${OUT}"
+assert_contains "fixed: the database reaches ${LATEST}" "db_version=${LATEST}" "${OUT}"
 assert_contains "fixed: _schema_version is gone" "schema_version_after=no" "${OUT}"
 assert_contains "fixed: the landing is recorded in the same run" "landings=1" "${OUT}"
 
@@ -235,7 +241,7 @@ land retired
 assert_contains "retired: the land is refused, naming the retired key" \
     "schema_order, which is retired" "${OUT}"
 assert_contains "retired: refused before the merge" "main_advanced=no" "${OUT}"
-assert_contains "retired: the database was not migrated" "db_version=12" "${OUT}"
+assert_contains "retired: the database was not migrated" "db_version=${PREV}" "${OUT}"
 assert_contains "retired: nothing was recorded" "landings=0" "${OUT}"
 
 summary
