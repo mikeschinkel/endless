@@ -1,0 +1,3 @@
+Since E-2156, `endless project monitor --tmux` runs on its own tmux server (`tmux -L endless`), viewed from a terminal window of its own, with a shell pane under the monitor for running `endless` commands.
+
+Anything that opens a tmux window from that shell inherits the monitor server's $TMUX, so it lands there instead of on the user's main server: `endless task claim` (which starts Claude through the spawn-window seam), `task spawn`, and the auto-spawn job when its target is `monitor` (the project monitor fires jobs). Those Claude sessions then sit beside the monitor rather than with the user's task sessions, whose layout the monitor server deliberately does not share, and their liveness reads `unknown` because the monitor server carries no @server_uuid.
