@@ -7169,3 +7169,7 @@ While answering a needs-plan question list about where verify run reports live, 
 ### [2026-10-05] Current rules are not pros or cons when weighing options
 While presenting E-2243's open questions (where committed verify-run CTRF reports should live), I listed 'adds a third kind of file, so the rule text in .endless/tasks/CLAUDE.md must change' as a con of one option, and 'leaves the two-kinds rule intact' as a pro of the other. Mike objected to both: what CLAUDE.md says describes what is current, not dogma, and it should not weigh against an improvement. Keeping an arbitrary status quo is not a pro either. When weighing design options, judge each on what it does; a rule that would need updating is part of the work, not a cost of the option.
 - **Project**: endless
+
+### [2026-10-05] Verify suites are land-time gates, not test suites
+While planning E-2243 (commit verify-run CTRF reports to main), I argued for recording failing verify runs because 'failed then passed on the same SHA' is a flaky-suite signal, and I estimated five to twenty runs per task. Mike pointed out that verify suites are his own design, valid only up to land, not industry-style project test suites: flakiness tracking does not apply, a failure matters only within the worktree's lifespan, and he typically runs verify one to three times. Before borrowing a test-suite practice for verify suites, check it against what a verify suite is: a one-task gate that expires at land.
+- **Project**: endless
