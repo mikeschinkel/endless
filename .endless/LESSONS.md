@@ -7133,3 +7133,7 @@ On E-2156, offering fixes for the monitor's shell pane, I recommended option A p
 ### [2026-10-04] Don't coin a term without agreeing it
 Specifying the project monitor's shell pane (E-2156/E-2238), I named it a 'console' and proposed ENDLESS_CONSOLE, without discussion. Mike uses 'monitor' for both the project and session monitors, and E-2154 exists because agents keep coining words. A new term needs agreement on what it means and why it is needed beside the existing ones; propose it as a question, don't use it as if settled.
 - **Project**: endless
+
+### [2026-10-04] Say 'filed' for creating a task; 'spawn' means launching a session
+Closing the E-2154 glossary brainstorm, I said the synthesis 'spawned three tasks'. Mike corrected: in Endless, spawn means launching a session (task spawn); creating a task is filing it. I picked the word up from the spawn instructions' own wording ('spawn the decisions/tasks it produces'), but in my report to Mike it collided with Endless's existing term.
+- **Project**: endless
