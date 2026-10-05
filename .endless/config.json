@@ -15,5 +15,8 @@
   "minimizer": {
     "enabled": false,
     "optimizer": false
+  },
+  "prime": {
+    "enabled": true
   }
 }
