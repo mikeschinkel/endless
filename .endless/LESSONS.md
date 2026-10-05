@@ -7125,3 +7125,7 @@ In the E-2154 glossary brainstorm I proposed a committed human-readable file (li
 ### [2026-10-04] Separate the requester's own words from agent-added framing in a seed
 In the E-2154 glossary brainstorm, the seed's 'what to explore' list was written by a prior agent session and included detection of coined terms. I presented detection back to Mike as if it were his idea. He never envisioned it: the detector is the user. When a seed mixes the requester's quoted words with agent-written exploration items, attribute each one correctly, and don't treat an agent-added item as a requirement the requester holds.
 - **Project**: endless
+
+### [2026-10-04] Don't rank options by size
+On E-2156, offering fixes for the monitor's shell pane, I recommended option A partly because it was 'small enough to do now' and called option C 'a task of its own'. Mike pointed out size is not the most important concern and that I keep prioritizing it despite being told not to. The question is what behavior he wants and whether an option is specified well enough to deliver it; size bears on how work is split, not on which option is right.
+- **Project**: endless
