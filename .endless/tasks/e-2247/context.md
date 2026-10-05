@@ -1,0 +1,1 @@
+Split out of the entity-attribution bugfix (Mike, 2026-10-05). Endless and go-cfgstore already link tasks across projects. A link is itself information: storing it in a public ledger can leak a private project's items. Richer cases (partly overlapping readers, visibility changing over time) are left to separate maybe-phase tasks.
