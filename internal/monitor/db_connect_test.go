@@ -104,6 +104,11 @@ func mainDBUnderTempHome(t *testing.T) string {
 	t.Helper()
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	// Since E-2186 the main database follows $XDG_CONFIG_HOME/endless before
+	// $HOME/.config/endless, so a caller's XDG_CONFIG_HOME (the verify runner
+	// sets one) would send the pinned connect to a different database than the
+	// one this helper hands back. Empty means unset to that resolver.
+	t.Setenv("XDG_CONFIG_HOME", "")
 	dir := filepath.Join(home, ".config", "endless")
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		t.Fatal(err)
