@@ -1,0 +1,1 @@
+lesson write only appends, and agents may neither read nor edit LESSONS.md. E-2235 replaces the lesson 'never mint new terms in explanations' with 'propose terms; use only agreed ones' and needs the old one retired; Mike chose a retire command over a hand edit.
