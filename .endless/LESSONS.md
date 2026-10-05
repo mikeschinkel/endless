@@ -7141,3 +7141,7 @@ Closing the E-2154 glossary brainstorm, I said the synthesis 'spawned three task
 ### [2026-10-04] Resolve plan questions with Mike, never leave them in the plan
 Writing E-2238's plan I put an 'Open questions' section in it (naming, which server task sessions live on, command classification) and told Mike they were 'open in the plan'. Mike has said many times that plans should not hold open questions: when a plan needs a decision, ask him and write the answer into the plan. Leaving it open hands the decision to whichever session implements the plan.
 - **Project**: endless
+
+### [2026-10-05] When land says the branch adds main's own migration, main was rewritten — rebase --onto, don't renumber
+Context: landing E-1994, worktree land refused saying the branch adds internal/schema/migrations/00013_rater_claims.sql and told me to renumber it to 00014. That file was main's own (E-2203); main's history had been rewritten after my last rebase (same commits, new SHAs), so the merge-base fell back to an old commit and every rewritten commit looked like branch work. Following the instructions would have renumbered main's migration. Check first: if `git merge-base --is-ancestor <branch's old base> main` is false and `git diff <old base> main` shows no real change, move only your own commits with `git rebase --onto main <old base>`; renumber only migrations the branch genuinely adds.
+- **Project**: endless
