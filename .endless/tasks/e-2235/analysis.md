@@ -18,4 +18,5 @@ Planning answers (Mike, 2026-10-04):
 8. Revising an agreed term is `term update` in place, linking the task where it was revised; the ledger is the history.
 9. A project opts out of a global term with a project entry marked rejected that shadows it. `term disable` is global-only.
 10. Retiring the old lesson uses a lesson retire command, filed separately and preceding this task.
-11. OPEN: guide placement — a new `endless guide glossary` topic (there are six topics today) or a section in an existing one.
+11. Guide placement: a new `endless guide glossary` topic, the seventh. Mike: seven topics is okay, more is probably too many.
+12. Folded in: the handoff template's brainstorm deliverable line (internal/templatecmd/templates/handoff/_mechanics.tmpl, "spawn the decisions/tasks it produces") says "spawn" where Endless means "file"; spawn means launching a session. Change it to "file" while editing the templates for term injection.
