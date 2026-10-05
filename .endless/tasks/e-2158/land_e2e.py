@@ -20,9 +20,10 @@ REAL: git (a throwaway main repo + feature worktree), the rebase and ff-merge,
 the pre-migration backup, `endless-migrate up` (built from this tree), and the
 `task.landed` emit against `--db main` under the temp HOME. STUBBED: the
 registry lookups a throwaway repo cannot answer, and the `just` builds, whose
-outputs are the real binaries already built from this tree — Step 5.6's build
-is replaced by COPYING this tree's endless-go into the throwaway main checkout's
-bin/, the file `just go` would have produced there, outside any worktree.
+outputs are the real binaries already built from this tree — Step 5.2's build
+is replaced by COPYING this tree's endless-go to the throwaway main checkout's
+bin/endless-go.next, the file `just go-build-next` would have produced there,
+outside any worktree. Step 5.6 swaps it in for real.
 """
 
 import os
@@ -116,12 +117,15 @@ import endless.config as config  # noqa: E402
 config.project_is_self_dev = lambda root: True
 
 
-def fake_just_go(main_root, canonical, base_branch):
+def fake_just_go_build_next(main_root, canonical, base_branch):
     (main_root / "bin").mkdir(exist_ok=True)
-    shutil.copy2(GO_BIN, main_root / "bin" / "endless-go")
+    shutil.copy2(GO_BIN, main_root / "bin" / "endless-go.next")
 
 
-wc._rebuild_main_binary = fake_just_go
+# Step 5.2 builds the main checkout's endless-go to the side with `just
+# go-build-next`; the throwaway repo has no justfile, so the build is a copy of
+# this tree's binary to the same path. Step 5.6's swap runs for real.
+wc._build_main_binary_next = fake_just_go_build_next
 
 print(f"schema_version_before={'yes' if has_schema_version() else 'no'}")
 main_before = head(main, "main")
