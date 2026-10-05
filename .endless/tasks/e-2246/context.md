@@ -1,0 +1,1 @@
+From Mike, during the E-1883 follow-up on cross-project links: nothing can require a check when a repo goes from private to public, since there is no controlling entity, so the most Endless can offer is scanning and cleanup for those who need it.
