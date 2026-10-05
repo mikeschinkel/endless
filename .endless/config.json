@@ -18,5 +18,8 @@
   },
   "prime": {
     "enabled": true
+  },
+  "main_sync": {
+    "enabled": true
   }
 }
