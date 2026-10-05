@@ -1,3 +1,5 @@
+_**NOTE**: This is still pre-Alpha, so if you are interested in trying it you can contact me at mike at newclarity.net and I will put you on the list to notify when it is ready for you to try._
+
 # Manage endless Claude Code sessions w/o going insane
 
 Endless lets one developer run many Claude Code sessions at once — each tracked by
