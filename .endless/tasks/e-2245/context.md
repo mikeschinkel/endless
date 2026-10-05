@@ -1,0 +1,1 @@
+From Mike, during the E-1883 follow-up on cross-project links: a link stored on one machine is invisible to teammates, and readers of two private projects often overlap only partly, so no repo is a safe home for the link. Roadmap item only; not to be built short term.
