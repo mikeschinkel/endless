@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"path"
 	"strings"
+
+	"github.com/mikeschinkel/endless/internal/baserewrite"
 )
 
 // E-1758 — worktree anomaly core.
@@ -57,6 +59,7 @@ const (
 	AnomalyDetachedHead   AnomalyKind = 2 // HEAD is detached
 	AnomalyBranchMismatch AnomalyKind = 3 // HEAD is not on the companion's branch
 	AnomalyPrunable       AnomalyKind = 4 // git marks the worktree prunable/locked
+	AnomalyBaseRewritten  AnomalyKind = 5 // the base branch was rewritten under this branch
 )
 
 // String returns the machine slug for the kind.
@@ -70,6 +73,8 @@ func (k AnomalyKind) String() string {
 		return "branch-mismatch"
 	case AnomalyPrunable:
 		return "prunable"
+	case AnomalyBaseRewritten:
+		return "base-rewritten"
 	default:
 		return fmt.Sprintf("AnomalyKind(%d)", int(k))
 	}
@@ -96,8 +101,63 @@ func (a WorktreeAnomaly) Line() string {
 // that lookup routed to the per-worktree sandbox (which lacks the task row) and
 // errored; path-based resolution behaves identically in self-dev and consumer
 // projects. An empty projectRoot disables only the repo-level prunable probe.
+//
+// It alone runs the base-rewritten probe (E-2233): `worktree check` runs at
+// handoff, once, which is where a land that will be refused should be named.
+// The probe compares patch ids across base...HEAD — a fifth of a second here,
+// more on a large rewrite — and `session status` renders continuously, so the
+// DB-keyed WorktreeAnomalies below leaves it out (ED-1589).
 func WorktreeAnomaliesAt(ctx context.Context, projectRoot, worktreePath string) []WorktreeAnomaly {
-	return worktreeAnomaliesAt(ctx, projectRoot, worktreePath)
+	anomalies := worktreeAnomaliesAt(ctx, projectRoot, worktreePath)
+	if a, ok := baseRewrittenAnomaly(ctx, worktreePath); ok {
+		anomalies = append(anomalies, a)
+	}
+	return anomalies
+}
+
+// baseRewrittenAnomaly reports a worktree whose branch still carries copies of
+// commits its base now holds under other SHAs — what `git pull` with
+// pull.rebase leaves on every branch cut before it. `worktree land` refuses
+// such a branch (internal/landgate), so saying so at handoff lets the fix
+// happen before the land rather than after it fails.
+//
+// The base is the companion's base_branch, else the repository's default
+// branch. Best-effort like every probe here: anything that cannot be resolved
+// claims no anomaly.
+func baseRewrittenAnomaly(ctx context.Context, wt string) (a WorktreeAnomaly, ok bool) {
+	base := ""
+	if comp, err := ReadWorktreeCompanion(wt); err == nil && comp != nil {
+		base = comp.BaseBranch
+	}
+	if base == "" {
+		b, err := DefaultBranch(ctx, wt)
+		if err != nil {
+			return a, false
+		}
+		base = b
+	}
+	sides, err := baserewrite.BranchSide(func(args ...string) (string, error) {
+		return runGit(ctx, wt, args...)
+	}, base, "HEAD")
+	if err != nil || len(sides.Equivalent) == 0 {
+		return a, false
+	}
+	return WorktreeAnomaly{
+		Kind:   AnomalyBaseRewritten,
+		Detail: BaseRewrittenDetail(base, len(sides.Equivalent)),
+	}, true
+}
+
+// BaseRewrittenDetail is the one-line account of a rewritten base, shared with
+// the main-sync job's fault so the two read alike.
+func BaseRewrittenDetail(base string, copies int) string {
+	noun := "commits"
+	if copies == 1 {
+		noun = "commit"
+	}
+	return fmt.Sprintf("%s was rewritten since this branch forked; the branch "+
+		"carries %d %s %s already holds under other SHAs, so land will refuse "+
+		"it — run `git rebase %s` here", base, copies, noun, base, base)
 }
 
 // WorktreeAnomalies returns the genuine handoff anomalies for the task's

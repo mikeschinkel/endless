@@ -600,6 +600,8 @@ func TestCatalog_NumbersAreNeverReused(t *testing.T) {
 		"0027": "post-land-not-executable",
 		"0028": "stale-companion",
 		"0029": "rate-failed",
+		"0030": "main-diverged",
+		"0031": "main-rewritten",
 	}
 
 	for _, code := range faults.Codes() {

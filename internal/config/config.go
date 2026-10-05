@@ -83,7 +83,35 @@ type EndlessConfig struct {
 	// reason. Its cadence, tmux target and placement are AutoSpawn's: both jobs
 	// start sessions nobody asked for, and the user's one setting governs both.
 	Prime Prime `json:"prime,omitzero"`
+
+	// MainSync configures the main-sync job (E-2233): keeping the project's
+	// default branch in step with its upstream. Split across the layers like
+	// AutoSpawn, for the same reasons — see MainSync.
+	MainSync MainSync `json:"main_sync,omitzero"`
 }
+
+// MainSync is the "main_sync" object.
+//
+// Enabled is PROJECT-ONLY and never inherited from the CLI layer: the job
+// pushes the project's main to its remote, and whether a project's unpushed
+// history gets published is that project's decision. A user-level `enabled:
+// true` silently publishing every project is the failure the per-project switch
+// prevents. Read it with LoadProject.
+//
+// Interval is CLI-ONLY: one job serves every project, so a per-project cadence
+// has nothing to attach to. Read it with Load("").
+type MainSync struct {
+	// Enabled opts the project in. Absent or false is off, which is also the
+	// kill switch.
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Interval is the job's cadence as a Go duration ("5m"). Empty means
+	// DefaultMainSyncInterval.
+	Interval string `json:"interval,omitempty"`
+}
+
+// DefaultMainSyncInterval is the main-sync cadence when none is configured.
+const DefaultMainSyncInterval = "5m"
 
 // Prime is the "prime" object. Both fields are PROJECT-ONLY and never
 // inherited from the CLI layer: a primed session is a live process and a tmux

@@ -51,6 +51,7 @@ import (
 
 	"github.com/mikeschinkel/go-dt"
 
+	"github.com/mikeschinkel/endless/internal/baserewrite"
 	"github.com/mikeschinkel/endless/internal/config"
 	"github.com/mikeschinkel/endless/internal/events"
 )
@@ -144,10 +145,10 @@ func Check(a Args) (v Verdict, err error) {
 	// Any copy at all, not only one carrying migrations: land's rebase does
 	// not reliably drop them. `git rebase <base>` compares against base and
 	// drops them.
-	if len(sides.equivalent) > 0 {
+	if len(sides.Equivalent) > 0 {
 		v = Verdict{Refused: true, Source: SourceBaseRewritten, MergeBase: mb}
 		v.Summary = rewrittenSummary(a)
-		v.Block = rewrittenBlock(a, len(sides.equivalent))
+		v.Block = rewrittenBlock(a, len(sides.Equivalent))
 		return v, nil
 	}
 	return runHook(a)
@@ -167,12 +168,12 @@ func migrationDirs(projectRoot string) (dirs []string, err error) {
 	return dirs, nil
 }
 
-func checkMigrations(a Args, dirs []string, mb string, sides commitSides) (v Verdict, err error) {
-	branchAdded, err := ownAdded(a.Worktree, mb, "HEAD", sides.branch, dirs)
+func checkMigrations(a Args, dirs []string, mb string, sides baserewrite.Sides) (v Verdict, err error) {
+	branchAdded, err := ownAdded(a.Worktree, mb, "HEAD", sides.Branch, dirs)
 	if err != nil {
 		return v, err
 	}
-	landed, err := ownAdded(a.Worktree, mb, a.Base, sides.base, dirs)
+	landed, err := ownAdded(a.Worktree, mb, a.Base, sides.Base, dirs)
 	if err != nil {
 		return v, err
 	}
@@ -198,50 +199,17 @@ func checkMigrations(a Args, dirs []string, mb string, sides commitSides) (v Ver
 	return v, nil
 }
 
-// commitSides is each side's own commits since the two diverged, and the
-// branch's commits that base already carries under another SHA.
-type commitSides struct {
-	branch     []string
-	base       []string
-	equivalent []string
-}
-
-// ownCommits splits <base>...HEAD by patch identity (E-2232). A commit whose
-// change is already on the other side under another SHA belongs to neither: it
-// is what a rewritten base leaves behind. When base is rebased or amended after
-// the branch forks — `git pull` with pull.rebase onto a commit made on the host
-// is enough — every replayed commit gets a new SHA, the merge-base falls back
-// to before the rewrite, and the branch's old copies of base's commits look
-// like the branch's own work. Diffing from the merge-base would then report
-// base's own migrations as the branch adding them.
-func ownCommits(repo, base string) (s commitSides, err error) {
-	marked := func(side string) (map[string][]string, error) {
-		out, err := git(repo, "log", side, "--cherry-mark", "--no-merges",
-			"--format=%m %H", base+"...HEAD")
-		if err != nil {
-			return nil, fmt.Errorf("compare commits on %s and HEAD: %w", base, err)
-		}
-		m := map[string][]string{}
-		for _, ln := range lines(out) {
-			mark, sha, _ := strings.Cut(ln, " ")
-			m[mark] = append(m[mark], sha)
-		}
-		return m, nil
-	}
-	branch, err := marked("--right-only")
-	if err != nil {
-		return s, err
-	}
-	onBase, err := marked("--left-only")
-	if err != nil {
-		return s, err
-	}
-	// With one side selected, --cherry-mark prints that side's arrow for a
-	// commit of its own and "=" for one the other side also carries.
-	s.branch = branch[">"]
-	s.base = onBase["<"]
-	s.equivalent = branch["="]
-	return s, nil
+// ownCommits splits <base>...HEAD by patch identity (E-2232). The definition
+// lives in internal/baserewrite so the main-sync job and `worktree check`
+// report a rewritten base by exactly the rule this gate refuses on (E-2233).
+//
+// Diffing from the merge-base alone would report base's own migrations as the
+// branch adding them whenever base was rewritten after the branch forked: the
+// branch's old copies of base's commits look like the branch's own work.
+func ownCommits(repo, base string) (baserewrite.Sides, error) {
+	return baserewrite.Split(func(args ...string) (string, error) {
+		return git(repo, args...)
+	}, base, "HEAD")
 }
 
 // ownAdded lists the files under dirs that `to` adds relative to `from` AND

@@ -112,7 +112,7 @@ A job that fails is rescheduled rather than abandoned. Jobs that declare a backo
 
 A job can end a run successfully without doing its work — nothing was due for it to act on. The **NOTE** column in `jobs list` says what the last run did and why; it is replaced every run, so it never describes an older one. A skip is not a failure and does not back off.
 
-The runner itself knows nothing job-specific — jobs register themselves with it. Today they are the auto-spawn and prime selectors below, the rater (which proposes complexity and risk for `submitted` tasks nobody rated — see **Ratings** in `endless guide tasks`), the hourly database backup, the document-mirror sweep, the unlanded-branch cache, and the minimizer's autoresearch tick.
+The runner itself knows nothing job-specific — jobs register themselves with it. Today they are the auto-spawn and prime selectors below, the rater (which proposes complexity and risk for `submitted` tasks nobody rated — see **Ratings** in `endless guide tasks`), the hourly database backup, the document-mirror sweep, the unlanded-branch cache, main sync, and the minimizer's autoresearch tick.
 
 ### Auto-spawn
 
@@ -135,6 +135,18 @@ The `prime` job starts a task's session **before it is needed** (see **Primed se
 ```
 
 A task is primed only when its plan was attached and it still has one, it is `submitted` or `ready`, in phase `now` or `urgent`, unblocked, with no open question, and no session has ever bound to it. Each due run primes **at most one**, `urgent` first. `cap` counts live sessions on tasks nobody has started yet — reading in or primed — because each is a live process and a tmux window. The cadence and tmux target are auto-spawn's `interval` and `target`. `endless jobs list` notes `no project has opted in`, `nothing to prime`, `every opted-in project is at its prime cap`, or `primed E-N`.
+
+### Main sync
+
+The `main-sync` job keeps a project's default branch in step with its upstream, so that integrating a commit made elsewhere stays a fast-forward instead of a rewrite of hundreds of unpushed commits. It is **off until a project opts in**, in that project's own `.endless/config.json`:
+
+```json
+{ "main_sync": { "enabled": true } }
+```
+
+Each run fetches main's upstream, then: if only the remote moved, `git merge --ff-only`; if only main moved, `git push` (never forced); if **both** moved, it changes nothing and records `ERR-0030`, naming each side's count and both ways out — merging costs one merge commit, rebasing makes every open task branch `git rebase main` before it can land. Which one is your call. It never runs `git pull`, so `pull.rebase` and `pull.ff` have no effect on it. It acts only on the main checkout, and only while that checkout has the default branch checked out. A failed fetch or push is recorded and backs off.
+
+It also watches for main being **rewritten** under open task branches (a `git pull` with `pull.rebase` does it), and records `WARN-0031` naming each branch that still carries the old copies, because land will refuse each one until it runs `git rebase main`. `endless worktree check` reports the same for the worktree you are in. `main_sync.interval` in `~/.config/endless/config.json` sets the cadence (default `5m`); `endless jobs list` notes what each project's last run did.
 
 ---
 

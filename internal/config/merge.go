@@ -120,6 +120,13 @@ func (c *EndlessConfig) Merge(other cfgstore.RootConfig) cfgstore.RootConfig {
 	// Prime: project-only, never inherited — see Prime.
 	out.Prime = c.Prime
 
+	// MainSync: Enabled is project-only and deliberately NOT inherited;
+	// Interval is CLI-only. See MainSync.
+	out.MainSync.Enabled = c.MainSync.Enabled
+	if out.MainSync.Interval == "" {
+		out.MainSync.Interval = o.MainSync.Interval
+	}
+
 	return &out
 }
 

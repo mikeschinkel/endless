@@ -1,0 +1,33 @@
+# E-2233: main rewritten under a task branch (the pull.rebase accident) is a
+# handoff anomaly — land will refuse the branch until it is rebased — and the
+# line names the fix. Rebasing clears it.
+
+exec git init -q -b main
+exec git add .gitignore tracked.txt
+exec git commit -q -m initial
+cp extra.txt base.txt
+exec git add base.txt
+exec git commit -q -m 'add base'
+
+exec git worktree add -q -b task/1 .endless/worktrees/e-1 main
+cp extra.txt .endless/worktrees/e-1/work.txt
+exec git -C .endless/worktrees/e-1 add work.txt
+exec git -C .endless/worktrees/e-1 commit -q -m 'branch work'
+
+# Rewrite main: the same change under a new SHA.
+exec git commit -q --amend -m 'add base, reworded'
+
+! exec endless-go session-query worktree-anomalies --worktree-path $WORK/.endless/worktrees/e-1 --project-root $WORK
+stdout 'base-rewritten: main was rewritten since this branch forked; the branch carries 1 commit main already holds under other SHAs'
+stdout 'run `git rebase main` here'
+
+exec git -C .endless/worktrees/e-1 rebase -q main
+exec endless-go session-query worktree-anomalies --worktree-path $WORK/.endless/worktrees/e-1 --project-root $WORK
+! stdout base-rewritten
+
+-- .gitignore --
+.endless/
+-- tracked.txt --
+committed content
+-- extra.txt --
+more content

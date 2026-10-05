@@ -815,3 +815,34 @@ the rater job retries it on its next run. To rate it now, run `endless task
 update <id> --complexity <low|medium|high> --risk <low|medium|high>`, or
 `endless rater run --task <id>` to retry the model. Dismiss with `endless errors
 clear <id>`.
+
+## ERR-0030 — main-diverged
+
+**Severity:** error · **Raised by:** the `main-sync` job (E-2233)
+
+A project opted into `main_sync`, and its default branch and that branch's
+upstream each hold commits the other lacks. A fast-forward would lose main's
+commits and a push would be rejected, so the job changed nothing and stopped
+syncing. It never chooses between merge and rebase for you, and it never runs
+`git pull`, so your `pull.rebase` setting cannot choose for it either.
+
+Fingerprinted on the project's branch: a divergence that lasts across runs is
+one incident with a rising occurrence count.
+
+**What to do.** Decide how to bring the two together; the job changes nothing until you do. Merging (`git merge <upstream>` on main) costs one merge commit and nothing else, because nothing in Endless assumes main is linear. Rebasing (`git rebase <upstream>` on main) gives every unpushed commit on main a new SHA, so every open task branch must then run `git rebase main` before it can land. The incident's summary names the upstream and how many commits each side holds. The next run pushes once main contains its upstream. Dismiss with `endless errors clear <id>` after that.
+
+## WARN-0031 — main-rewritten
+
+**Severity:** warning · **Raised by:** the `main-sync` job (E-2233)
+
+Main was rebased or amended after some open task branches forked from it. Those
+branches still carry the old copies of main's commits, and `endless worktree
+land` refuses each of them until it is rebased (E-2232). Nothing has failed
+yet: this is raised so the rebase happens before a land is refused.
+
+The job looks for it when main's tip stops descending from the tip it last saw,
+and on its first run in each process. A branch with no work of its own is not
+listed. Fingerprinted on the project, so one rewrite is one incident however
+many branches it strands.
+
+**What to do.** Run `git rebase main` in each worktree the incident names (`endless errors show <n> --detail` lists them all); git drops the copies main already holds and keeps each branch's own work. `endless worktree check`, run inside a worktree, says the same for that one branch. Do not rename or renumber any migration for this. Dismiss with `endless errors clear <id>` once the branches are rebased.

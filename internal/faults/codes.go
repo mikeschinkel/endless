@@ -693,6 +693,53 @@ var (
 			"igh> --risk <low|medium|high>`, or `endless rater run --task <id" +
 			">` to retry the model. Dismiss with `endless errors clear <id>`.",
 	}
+
+	// ErrCodeMainDiverged covers the main-sync job (E-2233) finding that main
+	// and its upstream each hold commits the other lacks, so neither a
+	// fast-forward nor a push can bring them together.
+	//
+	// Error rather than warning: the project opted into sync and sync has
+	// stopped. The job changes nothing on divergence and never chooses between
+	// merge and rebase, because the two cost very different amounts and the
+	// choice belongs to the user. Fingerprinted on the project's branch, so a
+	// divergence that persists across runs is one incident with a rising count.
+	ErrCodeMainDiverged = Code{
+		ID:       "ERR-0030",
+		Slug:     "main-diverged",
+		Severity: SeverityError,
+		Title:    "Main and its upstream have diverged, so sync has stopped",
+		Remedy: "Decide how to bring the two together; the job changes nothing " +
+			"until you do. Merging (`git merge <upstream>` on main) costs one " +
+			"merge commit and nothing else, because nothing in Endless assumes " +
+			"main is linear. Rebasing (`git rebase <upstream>` on main) gives " +
+			"every unpushed commit on main a new SHA, so every open task branch " +
+			"must then run `git rebase main` before it can land. The incident's " +
+			"summary names the upstream and how many commits each side holds. " +
+			"The next run pushes once main contains its upstream. Dismiss with " +
+			"`endless errors clear <id>` after that.",
+	}
+
+	// ErrCodeMainRewritten covers the main-sync job (E-2233) finding open task
+	// branches that still carry copies of commits main now holds under other
+	// SHAs — main was rebased or amended after they forked. `worktree land`
+	// refuses each of them until it is rebased (E-2232).
+	//
+	// Warning rather than error: nothing has failed yet. It is raised so the
+	// rebase happens before a land is refused, not after. Fingerprinted on the
+	// project, so one rewrite is one incident however many branches it strands.
+	ErrCodeMainRewritten = Code{
+		ID:       "WARN-0031",
+		Slug:     "main-rewritten",
+		Severity: SeverityWarning,
+		Title:    "Main was rewritten under open task branches",
+		Remedy: "Run `git rebase main` in each worktree the incident names " +
+			"(`endless errors show <n> --detail` lists them all); git drops the " +
+			"copies main already holds and keeps each branch's own work. " +
+			"`endless worktree check`, run inside a worktree, says the same for " +
+			"that one branch. Do not rename or renumber any migration for this. " +
+			"Dismiss with `endless errors clear <id>` once the branches are " +
+			"rebased.",
+	}
 )
 
 // catalog indexes every registered Code by ID. Built once at init from the
@@ -727,6 +774,8 @@ var catalog = buildCatalog(
 	ErrCodePostLandNotExecutable,
 	ErrCodeStaleCompanion,
 	ErrCodeRateFailed,
+	ErrCodeMainDiverged,
+	ErrCodeMainRewritten,
 )
 
 // buildCatalog indexes codes by ID. It panics on a duplicate ID: a collision is

@@ -71,6 +71,7 @@ These are not expected to appear in CLI files. Same safety-net pattern.
 | `checks`   | `map[string]bool` | Per-key merge: for each key, receiver value wins if present; otherwise inherit from other. |
 | `tmux`     | `object`          | Merged PER FIELD, not wholesale — see `tmux` below.                                        |
 | `auto_spawn` | `object`        | Split by field — see `auto_spawn` below.                                                   |
+| `main_sync` | `object`         | Split by field — see `main_sync` below.                                                    |
 | `project_status` | `object`    | Per list and per attribute — see `project_status` below.                                   |
 
 #### `tracking`
@@ -148,6 +149,27 @@ file alone (`config.LoadProject`), and a project with no file is off.
 
 ```json
 { "auto_spawn": { "enabled": true, "cap": 2 } }
+```
+
+#### `main_sync`
+
+The main-sync job (E-2233) keeps a project's default branch in step with its
+upstream: it fetches, fast-forwards main when only the remote moved, pushes when
+only main moved, and records a fault — changing nothing — when both did. It
+never runs `git pull`, so your `pull.rebase` and `pull.ff` settings have no
+effect on it, and it never force-pushes.
+
+| Field      | Layer        | Type     | Meaning |
+| ---------- | ------------ | -------- | ------- |
+| `enabled`  | project only | `bool`   | Opts this project in. Default `false`; also the kill switch. |
+| `interval` | CLI only     | `string` | Job cadence, a Go duration. Default `5m`. |
+
+`enabled` is **never inherited** from the CLI layer: the job publishes main to
+its remote, and that is each project's decision. It is read from the project
+file alone (`config.LoadProject`), and a project with no file is off.
+
+```json
+{ "main_sync": { "enabled": true } }
 ```
 
 #### `checks`
