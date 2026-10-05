@@ -18,8 +18,8 @@
 //     knows nothing of goose, Alembic or Prisma, so it holds for any tool.
 //     Each side counts only its own commits: a commit the other side already
 //     carries under another SHA — what a rewritten base leaves on a branch —
-//     belongs to neither. When such copies on the branch add migrations, the
-//     land is refused with `git rebase <base>` as the whole fix (E-2232).
+//     belongs to neither, and when the branch holds any the land is refused
+//     with `git rebase <base>` as the whole fix (E-2232).
 //
 //   - An optional project hook, .endless/hooks/pre-land.sh, for rules the
 //     built-in check does not cover. It may veto the land and explain why.
@@ -177,13 +177,12 @@ func checkMigrations(a Args, dirs []string) (v Verdict, err error) {
 		return v, nil
 	}
 
-	// Only a copy that carries migrations is worth stopping for. One that does
-	// not cannot mislead anyone about numbering, and land's own rebase drops it.
-	copied, err := addedBy(a.Worktree, sides.equivalent, dirs)
-	if err != nil {
-		return v, err
-	}
-	if len(copied) > 0 {
+	// Any copy at all, not only one carrying migrations: land's rebase does
+	// not reliably drop them. Its orphan-stripping step rebases with an
+	// orphan, not base, as upstream, so git compares the branch's commits
+	// against that orphan and replays base's copies onto base, conflicting.
+	// `git rebase <base>` compares against base and drops them.
+	if len(sides.equivalent) > 0 {
 		v = Verdict{Refused: true, Source: SourceBaseRewritten, MergeBase: mb}
 		v.Summary = rewrittenSummary(a)
 		v.Block = rewrittenBlock(a, len(sides.equivalent))

@@ -15,7 +15,8 @@
 #      not a migration collision, offers no rename, and `git rebase main`
 #      clears it.
 #   3. A commit cherry-picked from the branch onto main, adding no migration,
-#      is not refused: only copies that carry migrations are worth stopping for.
+#      still refuses (land's orphan-stripping rebase conflicts on such copies),
+#      and `git rebase main` clears it.
 source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
@@ -98,9 +99,16 @@ assert_eq "git rebase main clears it" "False" \
 section "3. A copied commit without migrations"
 put "${WT}" fix.go "package x // fix"
 commit "${WT}" "branch fix"
+# An unrelated main commit first, so the pick gets a new SHA rather than
+# reproducing the branch's commit byte for byte.
+put "${MAIN}" other.txt "unrelated"
+commit "${MAIN}" unrelated
 g "${MAIN}" cherry-pick task/1
 OUT=$(gate)
-assert_eq "a cherry-picked commit with no migration is not refused" "False" \
-    "$(printf '%s' "${OUT}" | python3 -c 'import json,sys; print(bool(json.load(sys.stdin).get("refused")))')"
+assert_eq "a cherry-picked commit with no migration refuses" \
+    "base_rewritten" "$(printf '%s' "${OUT}" | field source)"
+g "${WT}" rebase -q main
+OUT=$(gate)
+assert_eq "git rebase main clears it" "" "$(printf '%s' "${OUT}" | field source)"
 
 summary

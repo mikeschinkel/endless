@@ -355,15 +355,24 @@ func TestCheck_RewrittenMainWithBranchMigrationOnly(t *testing.T) {
 	}
 }
 
-// Copies of base's commits that add no migration are not worth a refusal:
-// nothing about numbering can be misread, and land's own rebase drops them. A
-// commit cherry-picked from the branch onto main is the everyday case.
-func TestCheck_CopiedCommitWithoutMigrationsIsAllowed(t *testing.T) {
+// A copy of base's commits refuses even when it adds no migration: land's
+// orphan-stripping rebase does not drop such copies and conflicts on them
+// (seen 2026-10-05, a copied decision mirror). A commit cherry-picked from the
+// branch onto main is the everyday case, and `git rebase main` clears it.
+func TestCheck_CopiedCommitWithoutMigrationsRefuses(t *testing.T) {
 	f := newFixture(t, withDirs)
 	f.write(f.wt, "code.go", "package x\n")
 	f.commit(f.wt, "branch fix")
+	// An unrelated commit first, so the pick gets a new parent and a new SHA
+	// rather than reproducing the branch's commit byte for byte.
+	f.write(f.main, "other.txt", "x\n")
+	f.commit(f.main, "unrelated")
 	f.git(f.main, "cherry-pick", "task/1")
+	if v := f.check(); v.Source != SourceBaseRewritten {
+		t.Fatalf("want a base-rewritten refusal, got %+v", v)
+	}
+	f.git(f.wt, "rebase", "-q", "main")
 	if v := f.check(); v.Refused {
-		t.Fatalf("refused over a copied commit with no migrations: %+v", v)
+		t.Fatalf("still refused after git rebase main: %+v", v)
 	}
 }
