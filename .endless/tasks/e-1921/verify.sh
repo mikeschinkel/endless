@@ -64,7 +64,8 @@ EOF
 }
 
 EXPOSED=(tests/test_template_materialize.py tests/test_land_conflict.py
-         tests/test_guide_conditionals.py tests/test_endless_go_bin.py)
+         tests/test_guide_conditionals.py tests/test_worktree_land_migration_gate.py
+         tests/test_endless_go_bin.py)
 CHANGED=("${EXPOSED[@]}" tests/test_default_branch_parity.py tests/test_epic_cmd.py
          tests/test_status_registry_client.py tests/test_session_state_lazy_lookup.py)
 

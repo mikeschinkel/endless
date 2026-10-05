@@ -25,9 +25,6 @@ from endless.worktree_cmd import (
     land_gate_text,
 )
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
-ENDLESS_GO = REPO_ROOT / "bin" / "endless-go"
-
 
 @pytest.fixture(autouse=True)
 def _pin_agent_view(monkeypatch):
@@ -108,10 +105,8 @@ def _commit(repo: Path, msg: str, files: dict[str, str]):
 
 
 @pytest.fixture
-def repos(tmp_path, monkeypatch, on_path):
-    if not os.access(ENDLESS_GO, os.X_OK):
-        pytest.skip("bin/endless-go is not built; run `just build`")
-    on_path(ENDLESS_GO)
+def repos(tmp_path, monkeypatch, on_path, endless_go_bin):
+    on_path(endless_go_bin)
     monkeypatch.setenv("HOME", str(tmp_path / "home"))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "home" / ".config"))
     main = tmp_path / "main"
