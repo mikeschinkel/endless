@@ -7165,3 +7165,7 @@ Refines the lesson recorded just before it, about checking current Endless usage
 ### [2026-10-05] Rule text and status quo are not pros or cons of a design option
 While answering a needs-plan question list about where verify run reports live, Mike rejected a con that said an option 'adds a third kind of file to a directory whose CLAUDE.md defines exactly two, so the rule text must change', and a pro that said another 'leaves the two-kinds rule intact'. His reason: CLAUDE.md describes what is current, not immutable dogma, and must not preclude improvements; keeping an arbitrary status quo is not a merit. When weighing options, judge them on what they do. Having to update a rule doc to match is not a cost, and leaving one untouched is not a benefit.
 - **Project**: endless
+
+### [2026-10-05] Current rules are not pros or cons when weighing options
+While presenting E-2243's open questions (where committed verify-run CTRF reports should live), I listed 'adds a third kind of file, so the rule text in .endless/tasks/CLAUDE.md must change' as a con of one option, and 'leaves the two-kinds rule intact' as a pro of the other. Mike objected to both: what CLAUDE.md says describes what is current, not dogma, and it should not weigh against an improvement. Keeping an arbitrary status quo is not a pro either. When weighing design options, judge each on what it does; a rule that would need updating is part of the work, not a cost of the option.
+- **Project**: endless
