@@ -94,17 +94,18 @@ type SessionStatusRow struct {
 	// unclassified row belongs. AnnotateSessionStatusRelation fills this for one
 	// viewer; unannotated rows stay 0 so every existing caller is unaffected.
 	Relation sessiontaskrelation.Relation
-	// Focused, DuplicateWork and OwnedElsewhere are E-2188's focus and
-	// ownership annotations, filled by AnnotateSessionStatusOwnership for one
-	// viewer (see session_ownership.go). Focused: this is the viewer's
+	// Focused, DuplicateWork and StewardedElsewhere are E-2188's focus and
+	// stewardship annotations, filled by AnnotateSessionStatusStewardship for
+	// one viewer (see session_stewardship.go). Focused: this is the viewer's
 	// focus_task_id. DuplicateWork: another live session may already be working
-	// it — the task is ambiguously owned, or focused on one board and owned by
-	// another. OwnedElsewhere: another live session owns it and the viewer is not
-	// focused on it, so the table omits it. Unannotated rows stay false.
-	Focused        bool
-	DuplicateWork  bool
-	OwnedElsewhere bool
-	BlockedByN     int
+	// it — the task's stewardship is ambiguous, or it is focused on one board
+	// and stewarded by another. StewardedElsewhere: another live session is its
+	// steward and the viewer is not focused on it, so the table omits it.
+	// Unannotated rows stay false.
+	Focused            bool
+	DuplicateWork      bool
+	StewardedElsewhere bool
+	BlockedByN         int
 	// ReleasedByN counts the tasks that block this one and no longer hold it:
 	// blockers in a Terminal status, the same release rule BlockedByN applies
 	// from the other side (E-876). Spawnable reads it (E-2204).

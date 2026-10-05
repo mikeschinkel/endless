@@ -179,7 +179,7 @@ func TestPlanAttachPromotionIsALegalEdge(t *testing.T) {
 
 // TestClaimPromotesMatchesClaimEdges holds the ClaimPromotes group and the
 // table's `claims` edges to one fact (E-2200). They drifted once: spawn took
-// `submitted` tasks while both said it could not, and sessions told the owner
+// `submitted` tasks while both said it could not, and sessions told the user
 // to approve before spawning.
 func TestClaimPromotesMatchesClaimEdges(t *testing.T) {
 	var edges []taskstatus.Status

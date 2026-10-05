@@ -112,9 +112,15 @@ Stay focused on E-{{.spawned_id}} — one session, one task. {{if eq .task_type 
   have I been asked? — in front of a destructive act, and the asking is where it
   failed: on 2026-08-25 two sessions ten minutes apart destroyed worktrees, and
   neither OVERRODE the rule. Both concluded conversational text had satisfied
-  the precondition. One caused real damage. `land` keeps "without asking"
-  because it is the normal end of a task and the spawning session owns the
-  timing. Removal gets NEVER, with nothing left to evaluate.
+  the precondition. One caused real damage. Removal gets NEVER, with nothing
+  left to evaluate.
+
+  E-2225 replaced `land`'s "without asking", and the wrappers' line naming the
+  spawning session as the one that lands, with ED-1605's landing rule: the work is landed from
+  the owner's side — the session that claimed the task, which is the one
+  reading this — by the user in a tmux sibling pane, never by the spawning
+  session. It lives here rather than in each wrapper so the claim wrapper
+  carries it too.
 
   It names four commands because it has to name the OUTCOME: `drop`, `reap`,
   `git worktree remove` and `rm -r` all reach the same destroyed worktree, so a
@@ -128,7 +134,7 @@ Stay focused on E-{{.spawned_id}} — one session, one task. {{if eq .task_type 
   a worktree, and the person running the session does it in their own shell.
 */ -}}
 {{define "handoff_land_drop" -}}
-Don't run `endless worktree land` without asking. NEVER remove a worktree, and never OFFER to — not `endless worktree drop`, not `endless worktree reap`, not `git worktree remove`, not `rm -r` on the directory. A PreToolUse hook refuses all four, so this is not a rule you can decide has been waived; removal is not an agent's to perform, and the person running this session does it themselves if it ever comes to that. Retention is the design. If a branch's history has diverged from main, the fix is `git rebase main` or `git reset --hard main` **in place**; removal deletes the directory a live session is sitting in, and is only for abandoning the work itself. If removal looks warranted, say so once and stop.
+The work is landed from the owner's side — this session's — by the user in a tmux sibling pane of this window, not by the spawning session; do not run `endless worktree land` yourself. NEVER remove a worktree, and never OFFER to — not `endless worktree drop`, not `endless worktree reap`, not `git worktree remove`, not `rm -r` on the directory. A PreToolUse hook refuses all four, so this is not a rule you can decide has been waived; removal is not an agent's to perform, and the person running this session does it themselves if it ever comes to that. Retention is the design. If a branch's history has diverged from main, the fix is `git rebase main` or `git reset --hard main` **in place**; removal deletes the directory a live session is sitting in, and is only for abandoning the work itself. If removal looks warranted, say so once and stop.
 {{- end}}
 
 {{define "handoff_deliverable" -}}

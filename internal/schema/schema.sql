@@ -131,7 +131,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS processes_identity
 -- AI coding sessions
 --
 -- task_id (E-1571 as active_task_id, renamed E-1969): the ONE task this session
--- owns. Named without an `active_` qualifier because there is no inactive task
+-- claimed. Named without an `active_` qualifier because there is no inactive task
 -- to distinguish it from — a session holds at most one task for its lifetime.
 -- Write-once per ED-1560; see the trigger below the table.
 --
@@ -207,7 +207,7 @@ CREATE TABLE IF NOT EXISTS sessions (
 -- same splice reason (migration 00011).
 
 -- sessions.task_id is write-once (ED-1560, enforced by E-1969): NULL -> one
--- value, then never again. Not cleared, not repointed. A session owns exactly
+-- value, then never again. Not cleared, not repointed. A session claims exactly
 -- one task for its lifetime; work on a different task is a different session.
 --
 -- A trigger rather than an audit of the writers, because the writers are the

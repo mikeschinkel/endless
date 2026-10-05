@@ -8,7 +8,7 @@ rows, and `epic show` reuses the task detail renderer with children on by
 default.
 
 Promotion validation (E-1543), auto-derivation (E-1541), and the
-pause-on-revisit hook (E-1542) are owned by sibling tasks and are not
+pause-on-revisit hook (E-1542) belong to sibling tasks and are not
 implemented here.
 """
 

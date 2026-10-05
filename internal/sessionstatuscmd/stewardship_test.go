@@ -8,16 +8,16 @@ import (
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
-// stubOwnership replaces the focus/ownership seam for one test. nil stubs it
+// stubStewardship replaces the focus/stewardship seam for one test. nil stubs it
 // to a no-op, for tests that exercise other annotations without a database.
-func stubOwnership(t *testing.T, fn func(rows []monitor.SessionStatusRow, viewer, focal int64) error) {
+func stubStewardship(t *testing.T, fn func(rows []monitor.SessionStatusRow, viewer, focal int64) error) {
 	t.Helper()
-	prev := annotateOwnership
-	t.Cleanup(func() { annotateOwnership = prev })
+	prev := annotateStewardship
+	t.Cleanup(func() { annotateStewardship = prev })
 	if fn == nil {
 		fn = func([]monitor.SessionStatusRow, int64, int64) error { return nil }
 	}
-	annotateOwnership = fn
+	annotateStewardship = fn
 }
 
 // TestColumnFourMarkWidths: ◼︎ and ◫ take one column, like the unsettled marks
@@ -133,15 +133,15 @@ func TestRender_ClaimedTaskFocusIsColourOnly(t *testing.T) {
 	}
 }
 
-// TestApplyHiddenMode_FocusAndOwnership: focus overrides a manual hide (the row
-// is shown and still wears ⊘); a row owned elsewhere is omitted in every mode
+// TestApplyHiddenMode_FocusAndStewardship: focus overrides a manual hide (the row
+// is shown and still wears ⊘); a row stewarded elsewhere is omitted in every mode
 // and never counted in the hidden footer.
-func TestApplyHiddenMode_FocusAndOwnership(t *testing.T) {
+func TestApplyHiddenMode_FocusAndStewardship(t *testing.T) {
 	rows := []monitor.SessionStatusRow{
 		{ID: 1},
 		{ID: 2, Hidden: true},
 		{ID: 3, Hidden: true, Focused: true},
-		{ID: 4, OwnedElsewhere: true},
+		{ID: 4, StewardedElsewhere: true},
 	}
 	ids := func(rs []monitor.SessionStatusRow) []int64 {
 		var out []int64
@@ -212,9 +212,9 @@ func TestBuildLegend_Fit(t *testing.T) {
 	}
 }
 
-// TestRenderJSON_CarriesFocus: --json states focus and ownership explicitly on
+// TestRenderJSON_CarriesFocus: --json states focus and stewardship explicitly on
 // every row, including the claimed task's focus the table leaves to colour, and
-// keeps a row owned elsewhere that the table omits.
+// keeps a row stewarded elsewhere that the table omits.
 func TestRenderJSON_CarriesFocus(t *testing.T) {
 	prevGather, prevHidden, prevRelation := gatherRows, annotateHidden, annotateRelation
 	t.Cleanup(func() { gatherRows, annotateHidden, annotateRelation = prevGather, prevHidden, prevRelation })
@@ -227,9 +227,9 @@ func TestRenderJSON_CarriesFocus(t *testing.T) {
 	}
 	annotateHidden = func([]monitor.SessionStatusRow, int64) error { return nil }
 	annotateRelation = func([]monitor.SessionStatusRow, int64) error { return nil }
-	stubOwnership(t, func(rows []monitor.SessionStatusRow, viewer, focal int64) error {
+	stubStewardship(t, func(rows []monitor.SessionStatusRow, viewer, focal int64) error {
 		rows[0].Focused = true
-		rows[1].OwnedElsewhere = true
+		rows[1].StewardedElsewhere = true
 		rows[2].DuplicateWork = true
 		return nil
 	})
@@ -249,10 +249,10 @@ func TestRenderJSON_CarriesFocus(t *testing.T) {
 	for _, r := range frame.Rows {
 		got[r.ID] = r
 	}
-	if !got[100].Focused || !got[150].OwnedElsewhere || !got[151].DuplicateWork {
+	if !got[100].Focused || !got[150].StewardedElsewhere || !got[151].DuplicateWork {
 		t.Errorf("rows missing their verdicts: %+v", frame.Rows)
 	}
-	for _, key := range []string{`"focused"`, `"duplicate_work"`, `"owned_elsewhere"`} {
+	for _, key := range []string{`"focused"`, `"duplicate_work"`, `"stewarded_elsewhere"`} {
 		if !strings.Contains(b.String(), key) {
 			t.Errorf("JSON lacks %s", key)
 		}

@@ -8,8 +8,8 @@ import (
 // ListLiveSessions is where the dead-pane reaper's job went, and it is the read
 // the spawn/claim ownership guard uses to decide whether a task is already held.
 // These tests pin both directions of that decision, because the two failure
-// modes are not symmetric: wrongly keeping an owner costs a retry, wrongly
-// dropping one hands a live worktree to a second session.
+// modes are not symmetric: wrongly keeping an owner live costs a retry,
+// wrongly dropping one hands a live worktree to a second session.
 
 // TestListLiveSessions_OmitsObservablyDead is the E-1807 guarantee, now
 // achieved without writing anything. A session whose pane is gone from a server
@@ -77,7 +77,7 @@ func TestListLiveSessions_KeepsUnknownOwners(t *testing.T) {
 }
 
 // TestListLiveSessions_KeepsPanelessSessions pins that a session with no pane
-// binding is still listed as an owner. Named for background agents until
+// binding is still listed as live. Named for background agents until
 // E-2074 removed them; the population is now any row whose process_id is NULL
 // — before its first hook lands one, or after an E-1898 backfill left it NULL.
 func TestListLiveSessions_KeepsPanelessSessions(t *testing.T) {

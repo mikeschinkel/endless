@@ -225,8 +225,9 @@ func TestRender_Claim_EpicCarriesChildrenState(t *testing.T) {
 // to make unconditional. The old wording — "Don't run `endless worktree
 // land`/`drop` without asking" — put a precondition in front of a destructive
 // act, and on 2026-08-25 two sessions in ten minutes decided conversational
-// text had satisfied it. Landing keeps "ask first" because it is how a task
-// normally ends; removal gets no precondition to mis-evaluate.
+// text had satisfied it. Removal gets no precondition to mis-evaluate, and
+// landing (E-2225, ED-1605) is the user's, from the owner's side, so it gets
+// none either.
 //
 // The assertions run against RENDERED output, for both the spawn wrappers and
 // the claim wrapper, so a future template that grows its own copy of the rule
@@ -243,7 +244,10 @@ func TestRender_Handoff_WorktreeRemovalIsCategorical(t *testing.T) {
 		"endless worktree drop",
 		"endless worktree reap",
 		"git worktree remove",
-		"endless worktree land` without asking",
+		// ED-1605's landing rule: the user lands, from the owner's side.
+		"landed from the owner's side",
+		"by the user in a tmux sibling pane",
+		"do not run `endless worktree land` yourself",
 		// Who does it instead, so a session that thinks removal is warranted
 		// has somewhere to put that. E-2073 moved this off the spawning
 		// session and onto the person running the session, because the hook
@@ -283,6 +287,12 @@ func TestRender_Handoff_WorktreeRemovalIsCategorical(t *testing.T) {
 				if strings.Contains(out, forbidden) {
 					t.Errorf("%s still carries the precondition form %q\n--- output ---\n%s",
 						name, forbidden, out)
+				}
+				for _, stale := range []string{"owns landing", "endless worktree land` without asking"} {
+					if strings.Contains(out, stale) {
+						t.Errorf("%s still carries the pre-ED-1605 landing wording %q\n--- output ---\n%s",
+							name, stale, out)
+					}
 				}
 			}
 		})

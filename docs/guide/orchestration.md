@@ -338,7 +338,7 @@ git commit -m "E-<id>: what changed"
 
 #### The commit message
 
-**Form: `E-<id>: <verb-first summary>`.** The task id that owns the change, a colon, then what the commit does — imperative mood, lower-case after the colon, no trailing period, one line:
+**Form: `E-<id>: <verb-first summary>`.** The id of the task the change belongs to, a colon, then what the commit does — imperative mood, lower-case after the colon, no trailing period, one line:
 
 ```
 E-101: route closed tasks to ⇥ instead of ⁇ in session status
@@ -504,7 +504,7 @@ After the post-land script runs (or if none was shipped), `worktree land` verifi
 #### Per-branch land settings (`land.toml`)
 
 How a branch lands can be told to `land` by the branch itself, in
-`.endless/tasks/e-<id>/land.toml` — a task-owned file beside `verify.toml` and
+`.endless/tasks/e-<id>/land.toml` — a per-task file beside `verify.toml` and
 `verify.sh`, written and committed on the task branch. It travels with the
 branch, rebases with the code it describes, shows up in the reviewed diff, and
 `land` reads it from the **worktree** (the landing branch) at the moment it
@@ -680,7 +680,7 @@ endless internal template render handoff/claim < vars.json
 {{if .report_gate}}Every handoff's closing `Final message` line follows one discipline: **write the reply you mean to send, and let the minimizer cut it**. For git state it defers to `endless worktree check`, which prints one line per genuine anomaly and stays silent when the worktree is clean — so a spawned session puts whatever that command prints into its draft and otherwise says nothing about git (a branch ahead of main and the absence of stray files are not anomalies). Beyond git it surfaces state outside endless (CI, services) only when actually in play, plus the how-to-test. Recaps of status, phase and relationships, and confirmations that a problem does not exist, are what the minimizer deletes — a second party applying that judgment is the whole point.
 {{else}}Every handoff's closing `Final message` line follows one discipline: **say what your user has to act on, and nothing they did not ask for**. For git state it defers to `endless worktree check`, which prints one line per genuine anomaly and stays silent when the worktree is clean — so a spawned session relays whatever that command prints and otherwise says nothing about git (a branch ahead of main and the absence of stray files are not anomalies). Beyond git it surfaces state outside endless (CI, services) only when actually in play, plus the how-to-test. It does not recap task status, phase or relationships, and does not confirm that a problem does not exist. Where `report_gate` is off there is no second party to apply that judgment, so the handoff states it outright rather than leaving it to be cut.
 {{end}}
-### A session owns one task for its lifetime
+### A session claims one task for its lifetime
 
 `sessions.task_id` is **write-once**: set when the session claims, then never
 cleared and never re-pointed. Work on a different task is a different session.
@@ -719,8 +719,8 @@ Three consequences you will meet:
   That costs nothing, because a session holding a task is woken to `working` by
   its next hook event anyway.
 
-  So bind is the verb for "this session owns that task, and its status should
-  not move". To resume *working* a settled task, reopen it and claim:
+  So bind is the verb for "this session is that task's owner, and its status
+  should not move". To resume *working* a settled task, reopen it and claim:
   `task update <id> --status revisit`, then `task claim <id>`.
 - **`endless task reopen` leaves the binding alone.** It changes task state and
   nothing else, so the session that did the work stays reachable afterwards.
@@ -758,7 +758,7 @@ below — it still works for one release, warning as it goes.
 Foreground flow:
 
 1. Validates tmux is running (fails otherwise).
-2. Refuses if the task is in a done-ish status (`unverified`/`confirmed`/`declined`/`obsolete`/`assumed`/`completed`), or if another live session already owns the task. There is no flag that clears the status half: on the reopenable subset (`assumed`/`confirmed`/`completed`) the refusal routes to `session goto <id> --resume --revisit`, because a second session on settled work is rarely what you want, and otherwise it names the reopen-then-spawn route — `task update <id> --status revisit` (or `unplanned`, from `declined`/`obsolete`), then an ordinary spawn. A task with no plan, or with open questions, is refused as well — see **Plans and open questions gate spawning** in `endless guide tasks`.
+2. Refuses if the task is in a done-ish status (`unverified`/`confirmed`/`declined`/`obsolete`/`assumed`/`completed`), or if another live session has already claimed the task. There is no flag that clears the status half: on the reopenable subset (`assumed`/`confirmed`/`completed`) the refusal routes to `session goto <id> --resume --revisit`, because a second session on settled work is rarely what you want, and otherwise it names the reopen-then-spawn route — `task update <id> --status revisit` (or `unplanned`, from `declined`/`obsolete`), then an ordinary spawn. A task with no plan, or with open questions, is refused as well — see **Plans and open questions gate spawning** in `endless guide tasks`.
 2. Refuses if **any** session ever claimed the task — live or long since ended. Ownership is read off `sessions.task_id`, which is write-once, so the record survives the claiming session's death. The refusal names that session and routes to `endless session goto <id> --resume`; with several claimants it names the most recent and lists the rest. There is **no** override, and none to reach for — `--force` is deprecated (see below) and never governed this — because a claim cannot be released. To work a task a prior session claimed, resume that session — starting a second one throws away the reasoning that only exists there.
 3. **Pre-claims the task**: flips status to `underway` (emitting `task.status_changed`) and creates the per-task worktree at `.endless/worktrees/e-<id>/`.
 4. Renders the handoff from the template and writes it to a temp file.

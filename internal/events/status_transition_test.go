@@ -398,7 +398,7 @@ func TestTheHappyPathRunsUnimpeded(t *testing.T) {
 
 // TestFindingsPathRunsUnimpeded is the other lane: research work terminates via
 // `completed` and never enters verification. E-2016 put `unreviewed` in the
-// path — the outcome is written, then the owner reads it — so the walk is one
+// path — the outcome is written, then the user reads it — so the walk is one
 // step longer than it was.
 func TestFindingsPathRunsUnimpeded(t *testing.T) {
 	db := newDerivationDB(t)

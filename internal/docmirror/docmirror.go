@@ -28,7 +28,7 @@
 // holding task content" — which went stale once already — becomes one glob,
 // `.endless/tasks/e-*/*.md`, that no future content kind can invalidate.
 //
-// Decisions do NOT move. `ED-NNNN` has no owning task, so it is not task-scoped,
+// Decisions do NOT move. `ED-NNNN` belongs to no task, so it is not task-scoped,
 // and E-1868 is about to renumber every decision id: moving those files now
 // would move each one twice and land it at a name that is about to be wrong.
 package docmirror

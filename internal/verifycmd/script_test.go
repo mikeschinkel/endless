@@ -13,7 +13,7 @@ import (
 )
 
 // enterScriptSuite chdirs into a fresh project holding one script suite, with a
-// temp HOME so the CTRF artifact lands in a temp dir and the ownership guard
+// temp HOME so the CTRF artifact lands in a temp dir and the own-task-only guard
 // finds no main database (fail-open, which is what every test here wants).
 func enterScriptSuite(t *testing.T, id, body string) (root string) {
 	t.Helper()

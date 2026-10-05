@@ -7,7 +7,7 @@ import (
 )
 
 // TestResolve pins the one question every mirror reader asks: git hands me a
-// changed file — which task and content name own what it should say?
+// changed file — which task and content name does what it should say come from?
 //
 // The consolidated and legacy shapes must resolve to the SAME source, because
 // the whole point of keeping the legacy recognizer is that a file in the old

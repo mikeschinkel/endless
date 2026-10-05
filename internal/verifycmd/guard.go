@@ -22,8 +22,9 @@ import (
 type ForeignLandedSuite struct {
 	// Requested is the task whose suite was asked for, in canonical form.
 	Requested string
-	// Owned are the tasks the caller may verify, and Sources says where each
-	// came from (index-aligned).
+	// Owned are the tasks the caller may verify — the name is a misnomer under
+	// ED-1605; nothing here is ownership — and Sources says where each came
+	// from (index-aligned).
 	Owned   []string
 	Sources []string
 	// SuitesDir is the directory the rules for these suites are documented in.

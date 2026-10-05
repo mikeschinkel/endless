@@ -89,7 +89,7 @@ The CLI:
 The natural attach points:
 
 - **End-of-turn summaries** — when you'd otherwise write a "Final state" markdown table in chat.
-- **Post-land moments** — right after `just land` succeeds for a task you owned.
+- **Post-land moments** — right after the land succeeds for a task you claimed.
 - **Phase shifts** — moving from one task family to another, especially when leaving things in `unverified` for the user.
 - **Discovering structural change** — a new design framing that should outlive this conversation.
 
@@ -189,7 +189,7 @@ E-113 <> E-114
 | dim id | Already in flight (a session is on it), or a repeat of an id drawn on an earlier line. |
 | `cycle: A, B` | The relations form a cycle. That is a data error to fix, never silently dropped. |
 
-Which tasks appear: your session's rows, minus your own task, the spawning task, the parent row, anything in flight or owned by another session, hidden rows, phase `later`, and anything finished — then **plus** every open task that blocks one of those, even when that blocker is `later` or in flight, because it is the reason its dependent is not available. `unverified` and `unreviewed` blockers still block and appear; finished ones impose no order and do not. A task appears only when it has an edge of some kind; a session with none draws nothing — no header, no blank line.
+Which tasks appear: your session's rows, minus your own task, the spawning task, the parent row, anything in flight or stewarded by another session, hidden rows, phase `later`, and anything finished — then **plus** every open task that blocks one of those, even when that blocker is `later` or in flight, because it is the reason its dependent is not available. `unverified` and `unreviewed` blockers still block and appear; finished ones impose no order and do not. A task appears only when it has an edge of some kind; a session with none draws nothing — no header, no blank line.
 
 Line order is derived, never authored: a topological order over both arrows, ties broken by the longest chain leading on, then lowest id — so the first line leads with the task to start on.
 
@@ -244,19 +244,19 @@ endless session task remove E-101      # a capture that shouldn't have happened
 
 Two more kinds of row render dimmed because neither is actionable from your board: `⟳ doing` rows, which another live session is working, and the `↑ parent` row, in every phase — both even when they wear `◆`, since landing them is not this board's job. `☑ verify` rows stay bright — verifying is your user's action — and your claimed task never dims. A highlighted id (focus, duplicate, unblocked) keeps its full colour on a dimmed row.
 
-### Focus, and a task on more than one board
+### Focus, and a task's steward
 
 Your session's **focused** task is the one it last claimed, filed or updated (including `touch`) — what the conversation is on right now, which is often not the task you claimed. Queueing or reading a task does not move focus. `session status` / `session monitor` highlight it: the id in inverse video, and `◼︎` between the type letter and the id. Your claimed task never shows `◼︎` — when it has focus, the colour says so, and in plain text no `◼︎` anywhere means the same thing. `--json` carries `focus` on the frame and `focused` on each row. A focused task is shown even if you hid it.
 
-When the same task sits on several live sessions' boards, only its **owner** shows it — decided each time the board is drawn, never stored, so it corrects itself when a session ends:
+When the same task would show in several live sessions' status views, only its **steward** shows it — the session that keeps it in view so it gets spawned or rejected. The steward is not the task's **owner**: the owner is the session that claimed it, and a task normally has a steward long before it has an owner. Stewardship is decided each time the view is drawn, never stored, so it corrects itself when a session ends:
 
 1. The live session that filed it.
 2. Otherwise, the only live session that updated it.
-3. Otherwise (two or more live updaters) nobody owns it, and it stays on each board with the duplicate mark.
+3. Otherwise (two or more live updaters) there is no steward, and it stays in each view with the duplicate mark.
 
-Updating a task never takes it from the session that filed it. Hiding it does give it up: a session that ran `session hide --task` on a task no longer counts as its filer or updater, so it neither owns the task nor makes it ambiguous — hide means "not mine". The exception is focus: if the hiding session has the task in focus again, it counts, because touching the task again is exactly when duplicate work is possible. The task's claiming session is left out: working the task you claimed is the expected case, and it already shows as ⟳ doing on other boards. Dead sessions own nothing. Your claimed task, its parent and its spawner are never hidden this way.
+Updating a task never takes stewardship from the session that filed it. Hiding it does give it up: a session that ran `session hide --task` on a task no longer counts as its filer or updater, so it neither stewards the task nor makes it ambiguous — hide means "not mine". The exception is focus: if the hiding session has the task in focus again, it counts, because touching the task again is exactly when duplicate work is possible. The task's claiming session is left out: working the task you claimed is the expected case, and it already shows as ⟳ doing in other views. The steward stays the steward after a spawn; the row is dimmed. Dead sessions steward nothing. Your claimed task, its parent and its spawner are never hidden this way.
 
-The **duplicate** mark — `◫`, and the id near-black on red (256-colour 232 on 160) — warns that another session may already have done real work on the task. It appears on both boards when a task is focused in one session and owned by another, and on every board when ownership is ambiguous. Stop and decide which session keeps it. `--json` carries `duplicate_work` and `owned_elsewhere` on every row, including rows the table omits.
+The **duplicate** mark — `◫`, and the id near-black on red (256-colour 232 on 160) — warns that another session may already have done real work on the task. It appears in both views when a task is focused in one session and stewarded by another, and in every view when stewardship is ambiguous. Stop and decide which session keeps it. `--json` carries `duplicate_work` and `stewarded_elsewhere` on every row, including rows the table omits.
 
 The **unblocked** mark — `▷`, and the id near-black on green (232 on 118) — is news: a task that was blocked has had a blocker released (a terminal status), nothing still holds it, and nobody has claimed it. It stays until someone claims or spawns it; it is computed each draw, not delivered once. On one id, duplicate outranks unblocked, which outranks focus. `--json` carries it as `spawnable`.
 

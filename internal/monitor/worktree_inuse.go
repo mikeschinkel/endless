@@ -38,7 +38,7 @@ const (
 // non-Claude process standing in it. Either alone leaves a hole through which a
 // live session's cwd gets deleted.
 //
-// taskID <= 0 means the directory has no owning task (nothing to look up in
+// taskID <= 0 means the directory belongs to no task (nothing to look up in
 // sessions), so only the live-process probe runs. Callers that know the task —
 // every endless-managed `e-NNN` worktree — must pass it.
 //

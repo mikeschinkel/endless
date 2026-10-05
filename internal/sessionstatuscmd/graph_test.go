@@ -251,7 +251,7 @@ func TestGraphSeeds_Exclusions(t *testing.T) {
 		{ID: 5, Status: "ready", Phase: "now", Hidden: true},
 		{ID: 6, Status: "ready", Phase: "later"},
 		{ID: 7, Status: "confirmed", Phase: "now"},
-		{ID: 8, Status: "ready", Phase: "now", OwnedElsewhere: true},
+		{ID: 8, Status: "ready", Phase: "now", StewardedElsewhere: true},
 		{ID: 9, Status: "ready", Phase: "now"},
 		{ID: 10, Status: "unplanned", Phase: "next"},
 	}

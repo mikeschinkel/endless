@@ -20,8 +20,8 @@ import (
 // read it in prose first; a predicate that quietly stops matching would restore
 // exactly that state while the gate still looks installed.
 
-// TestSuiteTaskFromPath is Arm 1's matcher: which task, if any, owns the file
-// this Write/Edit is aimed at.
+// TestSuiteTaskFromPath is Arm 1's matcher: which task, if any, the file this
+// Write/Edit is aimed at belongs to.
 //
 // The NOT-matched table is where this gate is most easily got wrong, and two
 // entries in it are load-bearing in opposite directions. The project-level
@@ -306,7 +306,7 @@ func seedLandings(t *testing.T, landed ...int64) {
 	}
 }
 
-// stubSessionTask replaces the session half of the ownership question, so the
+// stubSessionTask replaces the session half of the may-verify question, so the
 // conjunction can be driven without standing up a sessions table and the whole
 // schema behind it.
 func stubSessionTask(t *testing.T, taskID int64) {
@@ -372,7 +372,7 @@ func TestForeignLandedSuite(t *testing.T) {
 		}
 	})
 
-	t.Run("the worktree names an owner even with no session row", func(t *testing.T) {
+	t.Run("the worktree names the caller's task even with no session row", func(t *testing.T) {
 		// An agent's shell carries no ENDLESS_SESSION_ID, and a session row can
 		// fail to resolve. The checkout still says whose work this is, and that
 		// is the source the incident behind E-2023 could not fake.

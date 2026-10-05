@@ -724,7 +724,7 @@ def parse_task_id(value: str) -> int:
 
 
 def _main_root_for_task(task_id: int) -> Path | None:
-    """Return the registered main-checkout root of the project that owns this task."""
+    """Return the registered main-checkout root of the project this task belongs to."""
     row = db.query(
         "SELECT p.path FROM projects p "
         "JOIN live_tasks t ON t.project_id = p.id "
@@ -3234,9 +3234,9 @@ _OUTCOME_REQUIRED_TYPES = ("research", "brainstorm")
 
 
 # E-2016 put `unreviewed` in front of `completed` for these same two types, and
-# `unreviewed` means "outcome written, awaiting the owner's read". That is the
+# `unreviewed` means "outcome written, awaiting the user's read". That is the
 # step where the deliverable now actually arrives, so it is where the
-# requirement has to bite: an `unreviewed` task with no outcome hands the owner
+# requirement has to bite: an `unreviewed` task with no outcome hands the user
 # an empty gate to sign off on, which is a worse failure than the one E-2016
 # set out to fix. `completed` keeps the check too — a task can still arrive
 # there directly on a type not routed through the gate.
@@ -3283,7 +3283,7 @@ def _require_outcome_for_completed(
 # E-2016 adds the inverse half. The gate above only ever pointed one way —
 # findings types refused the verification lane — which left the review lane
 # open to everyone. `unreviewed` means "the outcome is written, awaiting the
-# owner's read", and that is not a state implementation work has: a todo or a
+# user's read", and that is not a state implementation work has: a todo or a
 # bugfix is gated by `unverified`, and routing it through a second gate would
 # say the two lanes are one. Both directions are now refused, so the tracks are
 # fully separated rather than half.
@@ -4568,12 +4568,12 @@ def _reset_session_choice_cache() -> None:
 
 
 def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
-    """Resolve the live ownership state of `item_id` from `current_eid`'s view.
+    """Resolve the live claim state of `item_id` from `current_eid`'s view.
 
-    Returns True if `current_eid` already owns the task (caller short-
+    Returns True if `current_eid` already claimed the task (caller short-
     circuits with an "already active" notice). Returns False if the task
     is free (or only stale sessions hold it). Refuses (REPORT) if a
-    *different* live session owns the task.
+    *different* live session has claimed the task.
     """
     # E-1807's ghost owner (a session that died without firing SessionEnd,
     # leaving a non-ended row on a now-dead pane) is handled by `_live_sessions`
@@ -4618,7 +4618,7 @@ def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
         raise agent_help.report(
             f"E-{item_id} is already active in session {eid} (tmux pane "
             f"{pane}). {NOTHING_CHANGED}",
-            "whether to continue the work in the live owning session or end "
+            "whether to continue the work in the live session that claimed it or end "
             "that session",
             text=(
                 f"E-{item_id} is already active in session {eid} "
@@ -4734,7 +4734,7 @@ def _task_claimants(item_id: int) -> list[dict]:
     """Every session that ever claimed `item_id`, most recently active first.
 
     Reads `sessions.task_id`, which per ED-1560 is write-once — set at claim,
-    never cleared, never repointed — and so is the DURABLE record of who owned
+    never cleared, never repointed — and so is the DURABLE record of who claimed
     the task. Deliberately unfiltered by `state`: an `ended` session is the whole
     point, because the session that worked a task is almost never still live by
     the time someone tries to spawn onto it again. The column carries no UNIQUE
@@ -4847,7 +4847,7 @@ def _perform_claim_work(
     """Emit claim events, print status/binding/worktree lines, create the worktree.
 
     Returns (wt_path, created). Caller has already validated the
-    done-ish-status gate and the multi-owner refusal — this helper only
+    done-ish-status gate and the already-claimed refusal — this helper only
     does the mutation half of a claim.
 
     target_session=None is the spawn pre-claim case (Claude not yet
@@ -5224,7 +5224,7 @@ def claim_item(item_id: int, unattended: bool = False, force: bool = False):
         owns = False
     if owns:
         from endless.worktree_cmd import create_task_worktree, _project_root
-        # A re-claim by the session that already owns the task. Nothing to
+        # A re-claim by the session that already claimed the task. Nothing to
         # change, so this reports rather than updates — but it reports in the
         # same aligned shape (E-1428), and without naming the session, which on
         # this path is the caller itself.
@@ -5256,8 +5256,8 @@ def claim_item(item_id: int, unattended: bool = False, force: bool = False):
         )
         return
 
-    # E-1993: after the re-claim branch above, deliberately — the owning
-    # session picking its own task back up is not starting it.
+    # E-1993: after the re-claim branch above, deliberately — the task's
+    # owner picking its own task back up is not starting it.
     _require_spawnable(item_id, "claim")
 
     wt_path, _created = _perform_claim_work(
@@ -5358,7 +5358,7 @@ def _echo_claim_next_step(
       - `--unattended` — the caller said there is no Claude session and does not
         want one. The worktree path is the whole answer.
       - a shell that BOUND a Claude session in another pane (E-1242) — the
-        session exists and now owns the task; what the caller needs is the way
+        session exists and is now the task's owner; what the caller needs is the way
         to it, which is `session goto`.
       - a shell that bound nothing — a shell cannot become the session, so one
         is started, in a window of its own so the caller's shell survives.
@@ -5423,7 +5423,7 @@ def bind_item(item_id: int) -> None:
 
     FIRST-SET-ONLY (E-1968, per ED-1560). `sessions.task_id` is
     write-once: bind may fill a session that holds no task, but it may not move
-    a session from one task to another. A session owns exactly one task for its
+    a session from one task to another. A session claims exactly one task for its
     lifetime; work on a different task is a different session. The refusal is
     here rather than only at the DB because E-1969's write-once trigger raises
     a SQLite abort, which is not an answer a user can act on.
@@ -7705,7 +7705,7 @@ def spawn_plan(item_id: int, project_name: str | None = None,
             ),
         )
 
-    # Refuse if another live session already owns the task. Passing
+    # Refuse if another live session has already claimed the task. Passing
     # current_eid=None treats any owner as "other" — spawn never claims
     # ownership for the spawning session. The reopen path already ran its own
     # liveness guard above (it navigates instead of raising), so this

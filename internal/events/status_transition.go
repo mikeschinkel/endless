@@ -143,7 +143,7 @@ func ValidateStatusActor(db dbQuerier, taskID int64, to taskstatus.Status, actor
 			// record that.
 			return refusal.ReportIf(
 				fmt.Sprintf(
-					"events: session %s holds task %d, so it may not set task %d to %q; a session owns one task for its lifetime — spawn a session on E-%d instead (endless task spawn E-%d)",
+					"events: session %s holds task %d, so it may not set task %d to %q; a session claims one task for its lifetime — spawn a session on E-%d instead (endless task spawn E-%d)",
 					actor.SessionID, *held, taskID, to, taskID, taskID),
 				fmt.Sprintf("the work on E-%d was already done in this session rather than still waiting to be done", taskID),
 				fmt.Sprintf("spawn a session on E-%d with `endless task spawn E-%d` and set the status from there", taskID, taskID),

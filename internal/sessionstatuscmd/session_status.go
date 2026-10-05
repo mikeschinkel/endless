@@ -514,10 +514,10 @@ func renderSnapshot(w io.Writer, a anchor, all bool, cols int, color bool, hm hi
 	if err := annotateRelation(rows, a.emittingSession); err != nil {
 		return 0, err
 	}
-	// Layer the VIEWING session's focus and the display-time ownership verdicts
+	// Layer the VIEWING session's focus and the display-time stewardship verdicts
 	// on (E-2188). Annotated for the same reason as the two above: both depend
 	// on who is looking, and the row set must not.
-	if err := annotateOwnership(rows, a.emittingSession, a.focal); err != nil {
+	if err := annotateStewardship(rows, a.emittingSession, a.focal); err != nil {
 		return 0, err
 	}
 	graph, err := gatherGraph(rows)
@@ -540,7 +540,7 @@ func renderGraphOnly(w io.Writer, a anchor, all bool, cols int, color bool) erro
 	if err = annotateHidden(rows, a.emittingSession); err != nil {
 		return err
 	}
-	if err = annotateOwnership(rows, a.emittingSession, a.focal); err != nil {
+	if err = annotateStewardship(rows, a.emittingSession, a.focal); err != nil {
 		return err
 	}
 	graph, err := gatherGraph(rows)
@@ -564,9 +564,9 @@ var annotateHidden = monitor.AnnotateSessionStatusHidden
 // on the same rule as annotateHidden so the tier is testable without a DB.
 var annotateRelation = monitor.AnnotateSessionStatusRelation
 
-// annotateOwnership is the focus/ownership source (E-2188), seamed on the same
-// rule as annotateHidden so the renderer's handling is testable without a DB.
-var annotateOwnership = monitor.AnnotateSessionStatusOwnership
+// annotateStewardship is the focus/stewardship source (E-2188), seamed on the
+// same rule as annotateHidden so the renderer's handling is testable without a DB.
+var annotateStewardship = monitor.AnnotateSessionStatusStewardship
 
 // monitorFrame produces one live-monitor frame: refresh the anchor, then render
 // against it. Split out of monitorLoop so tests can drive the resolve→render
@@ -825,15 +825,15 @@ func renderFrame(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTa
 // Two E-2188 rules apply in every mode. A FOCUSED row is never suppressed by a
 // hide — the task the conversation is on right now is the last row that should
 // vanish, and a manual `session hide --task` does not outrank it; it still wears
-// ⊘, because the hide is still recorded. And a row another live session OWNS is
-// omitted outright, and uncounted: the footer reports what this session hid, and
-// ownership is not something it did. It is still on the owner's board, and in
-// --json with `owned_elsewhere`.
+// ⊘, because the hide is still recorded. And a row another live session
+// STEWARDS is omitted outright, and uncounted: the footer reports what this
+// session hid, and stewardship is not something it did. It is still on the
+// steward's board, and in --json with `stewarded_elsewhere`.
 func applyHiddenMode(rows []monitor.SessionStatusRow, hm hiddenMode) ([]monitor.SessionStatusRow, int) {
 	out := make([]monitor.SessionStatusRow, 0, len(rows))
 	suppressed := 0
 	for _, r := range rows {
-		if r.OwnedElsewhere {
+		if r.StewardedElsewhere {
 			continue
 		}
 		if hm == hiddenShow || r.Hidden == (hm == hiddenOnly) || (hm == hiddenOmit && r.Focused) {
@@ -1059,7 +1059,7 @@ const (
 // columnFourMark is the glyph between the type letter and the id. ◫ duplicate,
 // ▷ spawnable and ◼︎ focus displace the unsettled mark there (E-2188, E-2204),
 // in the order the id highlight uses: duplicate is a warning, spawnable is news,
-// focus is orientation. A task can be both focused here and owned elsewhere.
+// focus is orientation. A task can be both focused here and stewarded elsewhere.
 //
 // The board's claimed-task row is the exception and keeps its unsettled mark:
 // it cannot be a duplicate by definition, and when it is the focus the colour

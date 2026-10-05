@@ -1,6 +1,6 @@
 package monitor
 
-// Focus and ownership for the session-status board (E-2188).
+// Focus and stewardship for the session-status board (E-2188).
 //
 // Two display-time annotations, layered on a row set the same way hides
 // (session_hidden.go) and relations (session_relation.go) are: the row query
@@ -9,30 +9,33 @@ package monitor
 // FOCUS is the viewing session's sessions.focus_task_id — the task its
 // conversation touched last. The renderer highlights it, and it overrides every
 // kind of suppression: a focused task is shown even when hidden, and even when
-// another session owns it.
+// another session is its steward.
 //
-// OWNERSHIP answers "the same task is on several sessions' boards — which one
-// keeps it?". It is computed here, every time a board is drawn, and never
+// STEWARDSHIP answers "the same task is on several sessions' boards — which one
+// keeps it?" (ED-1605: the steward is the session whose monitor shows the task
+// so it gets spawned or rejected; the OWNER is the session that claimed it, a
+// different thing). It is computed here, every time a board is drawn, and never
 // written anywhere, so it corrects itself the moment a session ends. The rules:
 //
 //   - Only LIVE sessions count, by the same state test the ⟳ in-flight column
-//     uses. A dead session neither owns a task nor takes one off a live board.
+//     uses. A dead session neither stewards a task nor takes one off a live
+//     board.
 //   - A task's CLAIMING session is left out of the count entirely: being worked
 //     by the session that claimed it is the expected case, not a duplicate, and
 //     it already shows as ⟳ doing everywhere else. So is that session's focus on
 //     its own claimed task.
-//   - The owner is the live session that surfaced (filed) the task; failing
+//   - The steward is the live session that surfaced (filed) the task; failing
 //     that, the ONLY live session that revisited (updated) it. Two or more
-//     candidates on the deciding rung is AMBIGUOUS: nobody owns it, and it is
-//     marked on every board that shows it.
-//   - An update never takes ownership from a filer: adding a note to someone
+//     candidates on the deciding rung is AMBIGUOUS: there is no steward, and it
+//     is marked on every board that shows it.
+//   - An update never takes stewardship from a filer: adding a note to someone
 //     else's task is ordinary and must not move it.
 //
-// A board shows a task unless another live session owns it — and even then it
-// shows a task it has in focus. The DUPLICATE-WORK mark warns that another
-// session may already have done real work on the task, and is set when the
-// task is ambiguous, or is focused on one board and owned by another (on both
-// of those boards).
+// A board shows a task unless another live session is its steward — and even
+// then it shows a task it has in focus. The DUPLICATE-WORK mark warns that
+// another session may already have done real work on the task, and is set when
+// the task is ambiguous, or is focused on one board and stewarded by another (on
+// both of those boards).
 //
 // The claimed task's own row, its parent and its spawner are never hidden and
 // never marked: they are the board's frame, not entries on it.
@@ -43,18 +46,18 @@ import (
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 )
 
-// taskOwnership is what the live sessions other than a task's claimer have
+// taskStewardship is what the live sessions other than a task's claimer have
 // recorded against it.
-type taskOwnership struct {
+type taskStewardship struct {
 	surfacers  []int64
 	revisiters []int64
 	focusers   []int64
 }
 
-// owner applies the ladder: the single surfacer, else the single revisiter.
-// ambiguous is true when the deciding rung has more than one session; owner is
+// steward applies the ladder: the single surfacer, else the single revisiter.
+// ambiguous is true when the deciding rung has more than one session; steward is
 // then 0, as it is when no live session has any claim at all.
-func (o taskOwnership) owner() (owner int64, ambiguous bool) {
+func (o taskStewardship) steward() (steward int64, ambiguous bool) {
 	for _, rung := range [][]int64{o.surfacers, o.revisiters} {
 		switch len(rung) {
 		case 0:
@@ -68,16 +71,16 @@ func (o taskOwnership) owner() (owner int64, ambiguous bool) {
 	return 0, false
 }
 
-// AnnotateSessionStatusOwnership fills Focused, DuplicateWork and OwnedElsewhere
-// on each row for the board of `viewer` anchored on `focal` (0 for the no-goal
+// AnnotateSessionStatusStewardship fills Focused, DuplicateWork and
+// StewardedElsewhere on each row for the board of `viewer` anchored on `focal` (0 for the no-goal
 // view). The board's own sessions are the viewer plus every live session that
 // claimed `focal` — the same sessions whose session_tasks rows SessionStatusRows
-// draws the board from — so ownership held by any of them is ownership HERE.
+// draws the board from — so stewardship held by any of them is stewardship HERE.
 //
 // viewer == 0 (no session resolved) annotates nothing, on the rule the hide
 // annotator follows: a board that cannot identify its viewer must never
 // suppress rows on some other session's behalf.
-func AnnotateSessionStatusOwnership(rows []SessionStatusRow, viewer, focal int64) error {
+func AnnotateSessionStatusStewardship(rows []SessionStatusRow, viewer, focal int64) error {
 	if len(rows) == 0 || viewer == 0 {
 		return nil
 	}
@@ -102,7 +105,7 @@ func AnnotateSessionStatusOwnership(rows []SessionStatusRow, viewer, focal int64
 			candidates = append(candidates, rows[i].ID)
 		}
 	}
-	owned, err := liveOwnership(db, candidates)
+	stewarded, err := liveStewardship(db, candidates)
 	if err != nil {
 		return err
 	}
@@ -112,19 +115,19 @@ func AnnotateSessionStatusOwnership(rows []SessionStatusRow, viewer, focal int64
 		if isBoardFrame(*r) {
 			continue
 		}
-		o := owned[r.ID]
-		owner, ambiguous := o.owner()
+		o := stewarded[r.ID]
+		steward, ambiguous := o.steward()
 		switch {
 		case ambiguous:
 			r.DuplicateWork = true
-		case owner == 0:
+		case steward == 0:
 			// Nobody live has a claim on it: it belongs to whichever board
 			// surfaced it (an epic child, a dependent, a blocker).
-		case !board[owner]:
+		case !board[steward]:
 			if r.Focused {
 				r.DuplicateWork = true
 			} else {
-				r.OwnedElsewhere = true
+				r.StewardedElsewhere = true
 			}
 		default:
 			for _, s := range o.focusers {
@@ -138,7 +141,7 @@ func AnnotateSessionStatusOwnership(rows []SessionStatusRow, viewer, focal int64
 	return nil
 }
 
-// isBoardFrame reports whether a row is one ownership never touches: the
+// isBoardFrame reports whether a row is one stewardship never touches: the
 // board's claimed task, its parent, and its spawner.
 func isBoardFrame(r SessionStatusRow) bool {
 	return r.IsFocal || r.IsParent || r.IsFrom
@@ -159,7 +162,7 @@ func sessionFocusTask(db *sql.DB, sessionID int64) (int64, error) {
 	return focus.Int64, nil
 }
 
-// boardSessions is the set of sessions whose ownership counts as this board's:
+// boardSessions is the set of sessions whose stewardship counts as this board's:
 // the viewer, plus every live session that claimed the focal task.
 func boardSessions(db *sql.DB, viewer, focal int64) (map[int64]bool, error) {
 	board := map[int64]bool{viewer: true}
@@ -184,12 +187,12 @@ func boardSessions(db *sql.DB, viewer, focal int64) (map[int64]bool, error) {
 	return board, rows.Err()
 }
 
-// liveOwnership gathers, for each task id, the surfacers, revisiters and
+// liveStewardship gathers, for each task id, the surfacers, revisiters and
 // focusers among live sessions — excluding each task's own claiming session,
 // and excluding from surfacers and revisiters any session that hid the task.
 // Tasks nobody live has touched are simply absent from the map.
-func liveOwnership(db *sql.DB, taskIDs []int64) (map[int64]taskOwnership, error) {
-	out := make(map[int64]taskOwnership)
+func liveStewardship(db *sql.DB, taskIDs []int64) (map[int64]taskStewardship, error) {
+	out := make(map[int64]taskStewardship)
 	ph, args := intPlaceholders(taskIDs)
 	if ph == "" {
 		return out, nil

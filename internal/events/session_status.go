@@ -292,7 +292,7 @@ func renderSessionStatusMarkdown(p *SessionStatusRecordedPayload) string {
 //
 // The last two are siblings — work its author has finished, waiting on someone
 // else — but they ask different questions ("does it work" against "has the
-// owner read it") and they get one bucket each, named for the status it holds
+// user read it") and they get one bucket each, named for the status it holds
 // (E-2016). Sharing a bucket would have needed a heading that names neither.
 //
 // There is no Blocked bucket: `blocked` left the status vocabulary in E-2018,

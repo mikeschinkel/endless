@@ -52,7 +52,7 @@ const (
 	Primed
 	// Do: a `ready` task — reviewed, waiting to start.
 	Do
-	// Review: a `submitted` task — a plan waiting for the owner's review. Its
+	// Review: a `submitted` task — a plan waiting for the user's review. Its
 	// label is "approve", the act `task approve` performs, because "review"
 	// belongs to Read (E-2156). Spawn
 	// and claim accept it exactly as they accept `ready` (E-2200: the plan and
@@ -65,10 +65,10 @@ const (
 	Review
 	// Plan: a task with no usable plan — `unplanned` or `revisit`.
 	Plan
-	// Verify: an `unverified` task, implementation awaiting the owner's verdict.
+	// Verify: an `unverified` task, implementation awaiting the user's verdict.
 	Verify
 	// Read: an `unreviewed` task — a research or brainstorm outcome delivered and
-	// awaiting the owner's review. Distinct from Verify because the act is
+	// awaiting the user's review. Distinct from Verify because the act is
 	// different: read a document, not run a command. » (U+00BB) is Latin-1 and
 	// one column in every font; ☰ (U+2630), its first glyph, rendered wider than
 	// one column in real terminals.

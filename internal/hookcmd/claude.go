@@ -372,7 +372,7 @@ func runClaude(args []string) (err error) {
 		logWindowTaskDisagreement(projectID, payload)
 		// Worktree adoption (E-971 Layer D). If cwd is inside an
 		// endless-managed worktree, claim the lock or refuse if
-		// already owned by a live session.
+		// a live session already holds it.
 		if refusal, err := handleWorktreeAdoption(projectID, payload); err != nil {
 			return fmt.Errorf("worktree adoption: %w", err)
 		} else if refusal != "" {
@@ -447,7 +447,7 @@ func runClaude(args []string) (err error) {
 	case "SessionEnd":
 		// Final parse
 		monitor.ParseTranscript(payload.SessionID, payload.TranscriptPath)
-		// Release any worktree lock owned by this session (E-971 Layer D).
+		// Release any worktree lock held by this session (E-971 Layer D).
 		// Use session-id scan rather than walk-up: the user may have cd'd
 		// out before /quit, or the lock may live in a worktree the session
 		// claimed but never entered.
@@ -929,7 +929,7 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 	}
 
 	// E-1586: cwd-invariant gate for ALL tools (no allowlist). If this session
-	// owns a live (claimed) worktree but its cwd has drifted outside it, refuse
+	// has a live (claimed) worktree but its cwd has drifted outside it, refuse
 	// the tool and direct it to `/cd` so the *default* working directory is the
 	// worktree, not main. Runs before the write-tool gate so Bash and every
 	// other tool that defaults to cwd are covered, not just file writes.
@@ -977,7 +977,7 @@ func handlePreToolUse(projectID int64, isRegistered bool, payload claudePayload)
 
 	// Worktree gate (E-971 Layer D). Independent of tracking_mode, like
 	// E-1012: even with per-task tracking off, edits in main and edits
-	// to a worktree owned by another session are refused.
+	// to a worktree whose lock another session holds are refused.
 	enforceWorktreeGate(projectID, payload)
 
 	// Check tracking mode
@@ -1832,7 +1832,7 @@ func logSessionBind(sessionID string, snap monitor.SessionSnapshot, taskID int64
 // spawn-marker path to defer to.
 //
 // Skipped for Agent-tool subagents — they share the parent's cwd but represent
-// tool use, not user claim intent; binding them would create a phantom co-owner.
+// tool use, not user claim intent; binding them would create a phantom second claimant.
 // Skipped for background agents (E-1568): their dispatch row already carries
 // task_id/epic_id, and the tmux-oriented bind is meaningless for a headless
 // agent. Bind only; task status is unchanged.
@@ -1872,12 +1872,12 @@ func autoBindFromCwd(projectID int64, payload claudePayload) {
 		session != nil && session.TaskID != nil && *session.TaskID != taskID {
 		return
 	}
-	// E-1856: never bind into a worktree a LIVE sibling session already owns.
+	// E-1856: never bind into a worktree whose lock a LIVE sibling session holds.
 	// handleWorktreeAdoption refuses this case upstream and short-circuits
 	// SessionStart, but the auto-bind must be correct in isolation rather than
 	// trusting that call order — otherwise any path that reaches it (or a future
-	// re-order) would silently make the incoming session a phantom co-owner of
-	// the task, stealing its task_id pointer.
+	// re-order) would silently make the incoming session a phantom second claimant
+	// of the task, stealing its task_id pointer.
 	if worktreeOwnedByLiveOther(projectRoot, payload.CWD, payload.SessionID) {
 		return
 	}
@@ -1927,10 +1927,10 @@ var tmuxWindowAutoSpawned = func() bool {
 }
 
 // worktreeOwnedByLiveOther reports whether the worktree containing cwd holds a
-// worktree lock owned by a DIFFERENT, still-alive session. It gates the cwd
+// worktree lock held by a DIFFERENT, still-alive session. It gates the cwd
 // auto-bind (E-1856). Returns false when cwd is not inside a worktree, the lock
 // is absent or stale, or the lock is held by selfSession — none of which
-// represent a live sibling owner to defer to.
+// represent a live sibling lock holder to defer to.
 func worktreeOwnedByLiveOther(projectRoot, cwd, selfSession string) bool {
 	worktreeRoot, err := monitor.FindWorktreeRoot(cwd, projectRoot)
 	if err != nil || worktreeRoot == "" {
@@ -1978,8 +1978,8 @@ func resolveCwdTaskID(projectRoot, cwd string) int64 {
 
 // handleWorktreeAdoption is called from SessionStart. It walks up from
 // payload.CWD to find a worktree companion, then either claims the lock
-// (case A: unowned or stale, or self-re-entry idempotent), or returns a
-// refusal message (case A: owned by another live session). Returns ("", nil)
+// (case A: unheld or stale, or self-re-entry idempotent), or returns a
+// refusal message (case A: held by another live session). Returns ("", nil)
 // when there is nothing to adopt (case B: cwd is in main, foreign, or
 // elsewhere) — the caller proceeds normally.
 func handleWorktreeAdoption(projectID int64, payload claudePayload) (string, error) {
@@ -2039,11 +2039,11 @@ func handleWorktreeAdoption(projectID int64, payload claudePayload) (string, err
 		return "", nil
 
 	default:
-		// Owned by a live session. Refuse with an actionable message.
+		// Held by a live session. Refuse with an actionable message.
 		return fmt.Sprintf(
-			"This worktree is already owned by session %s (PID %d).\n\n"+
+			"This worktree's lock is already held by session %s (PID %d).\n\n"+
 				"Open a new shell in a different worktree (or in main) and start\n"+
-				"a Claude session there. The owning session must end before this\n"+
+				"a Claude session there. The lock holder must end before this\n"+
 				"worktree can be reclaimed.\n\n"+
 				"  endless worktree current\n"+
 				"  endless worktree list",
@@ -2104,7 +2104,7 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 
 	// We are inside an endless-managed worktree. Three checks.
 
-	// (a) Lock-owner check: refuse if the lock is owned by a different session.
+	// (a) Lock-holder check: refuse if the lock is held by a different session.
 	lock, err := monitor.ReadWorktreeLock(worktreePath)
 	if err == nil && lock != nil && lock.SessionID != payload.SessionID {
 		ownerHint := fmt.Sprintf("session %s (PID %d)", lock.SessionID, lock.PID)
@@ -2124,7 +2124,7 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 			}
 		}
 		ownerBody := fmt.Sprintf(
-			"This worktree is owned by %s, not this session.\n\n"+
+			"This worktree is locked by %s, not this session.\n\n"+
 				"Restart this Claude session inside this worktree (a fresh SessionStart\n"+
 				"reclaims a stale lock), or move to a different worktree.\n\n"+
 				"  endless worktree current\n"+
@@ -2199,14 +2199,14 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 // main. Unlike enforceWorktreeGate this is not limited to write tools (Bash and
 // everything else default to cwd too).
 //
-// Keyed on the active task's status, not on lock ownership: the worktree lock is
+// Keyed on the active task's status, not on who holds the lock: the worktree lock is
 // claimed by a SessionStart *inside* the worktree (worktree adoption), which
 // does not fire for the common "claim in main, then /cd" flow — so requiring the
 // lock would leave that flow ungated. Instead we gate any non-terminal active
 // task (the status `claim` sets is underway), which excludes a display-only
 // `bind` of a done task and a landed/retained worktree (both terminal). The lock
-// is consulted only to *avoid* redirecting into a worktree another live session
-// owns.
+// is consulted only to *avoid* redirecting into a worktree whose lock another live
+// session holds.
 func enforceClaimedCwd(projectID int64, payload claudePayload) {
 	taskID, worktreePath := sessionOwnedWorktree(projectID, payload)
 	if worktreePath == "" {
@@ -2356,7 +2356,7 @@ func unboundWorktreeInstruction(projectRoot, cwd, taskRef string) string {
 }
 
 // cdRedirect builds the E-1586 block message: cwd has drifted out of the
-// session's owned worktree, so direct Claude to move its working directory back
+// session's claimed worktree, so direct Claude to move its working directory back
 // with `/cd`. Display paths render home-relative; the literal `/cd <path>` stays
 // absolute for paste-safety.
 func cdRedirect(taskID int64, worktreePath, cwd string) *refusal.Error {

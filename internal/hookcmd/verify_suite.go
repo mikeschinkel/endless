@@ -245,9 +245,9 @@ func (c suiteCaller) holds(taskID int64) bool {
 // is working on, read from the row rather than inferred from an environment.
 //
 // The union is deliberate, and it is the fail-open direction. A session whose
-// cwd has drifted out of its worktree still owns its claimed task; a session
-// working in a worktree whose session row never resolved still owns the task
-// that worktree names. Disagreement between the sources is a reason to allow,
+// cwd has drifted out of its worktree is still its claimed task's owner; a
+// session working in a worktree whose session row never resolved is still
+// working the task that worktree names. Disagreement between the sources is a reason to allow,
 // not to refuse work somebody is plainly doing.
 func suiteCallerFor(own monitor.SuiteOwnership, payload claudePayload) (c suiteCaller) {
 	for i, id := range own.Tasks {
@@ -302,8 +302,8 @@ func landedSuiteRefusal(act landedSuiteAct, taskID int64, mine suiteCaller) *ref
 			"change is yours, what\nyou would be writing down is that your change did not " +
 			"break anything.\n\n")
 		b.WriteString("If your change breaks an assertion in a landed suite, leave the " +
-			"suite alone. Its\nowner's own run will tell them, on their schedule, with " +
-			"their context.\n\n")
+			"suite alone. That\ntask's own run will tell whoever works it, on their " +
+			"schedule, with their context.\n\n")
 	case landedSuiteRun:
 		fmt.Fprintf(&b, "BLOCKED: refusing to run E-%d's verification suite — "+
 			"it has landed, and it is not yours.\n\n", taskID)

@@ -335,7 +335,7 @@ def _check_worktree_lock_liveness(worktree_path: Path) -> tuple[str, dict | None
 
     Returns (state, lock_data) where state is one of:
       - "absent":    no lock file
-      - "alive":     lock owner's PID responds to kill(pid, 0)
+      - "alive":     lock holder's PID responds to kill(pid, 0)
       - "stale":     PID is gone (ESRCH) or invalid
       - "malformed": file present but unparseable
 
@@ -5028,7 +5028,7 @@ def _worktree_in_use_probe(worktree_path: Path) -> tuple[str, str]:
     from endless import config
 
     task_id = _task_id_from_worktree_path(worktree_path)
-    # `--task 0` means "no owning task", which the verb reads as "run only the
+    # `--task 0` means "belongs to no task", which the verb reads as "run only the
     # live-process probe". A worktree outside the e-NNN convention has no task
     # row to look up, so that is the whole answer available for it.
     task_arg = task_id.removeprefix("E-") if task_id else "0"

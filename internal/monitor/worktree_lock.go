@@ -16,7 +16,7 @@ import (
 // Each endless-managed git worktree carries two files at its root:
 //
 //   <worktree>/.endless/worktree.json   — companion: kind, task_id, branch, etc.
-//   <worktree>/.endless/worktree.lock   — ownership: which session is editing here
+//   <worktree>/.endless/worktree.lock   — lock holder: which session is editing here
 //
 // The companion is written by `endless pivot` (Layer F) or by hand. The
 // lock is written by SessionStart hook on adoption, deleted by SessionEnd.
@@ -42,8 +42,8 @@ type WorktreeCompanion struct {
 }
 
 // WorktreeLock is the parsed shape of <worktree>/.endless/worktree.lock.
-// One session owns the worktree at a time; ownership transfers via release
-// then re-claim, never shares.
+// One session holds the lock at a time; the lock passes via release then
+// re-claim, never shared.
 type WorktreeLock struct {
 	SessionID string `json:"session_id"`
 	PID       int    `json:"pid"`
@@ -128,7 +128,7 @@ func ReadWorktreeLock(worktreePath string) (*WorktreeLock, error) {
 	return &l, nil
 }
 
-// IsWorktreeLockStale reports whether the lock's owning PID is no longer
+// IsWorktreeLockStale reports whether the lock holder's PID is no longer
 // alive. Uses the canonical Unix idiom: kill(pid, 0) sends NO signal —
 // the kernel performs only the existence and permission checks. See
 // `man 2 kill`: "If sig is 0, then no signal is sent, but existence and

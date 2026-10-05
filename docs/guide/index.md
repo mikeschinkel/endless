@@ -70,7 +70,7 @@ stateDiagram-v2
     [*] --> unplanned
     [*] --> submitted
 
-    %% Planning and review — approval records that the owner reviewed the plan
+    %% Planning and review — approval records that the user reviewed the plan
     unplanned --> submitted: agent submits — plan attached
     submitted --> ready: user approves
     submitted --> unplanned: user sends back — the plan is not sufficient
@@ -167,7 +167,7 @@ stateDiagram-v2
 | `ready`       | Planned and reviewed: a human approved the plan. Approval is a review record, not a permission — `task claim` and `task spawn` accept `submitted` exactly as they accept `ready`. |
 | `underway` | A session has claimed the task and is working on it. Set automatically by `task claim`.                        |
 | `unverified`      | Implementation done, awaiting verification. **Still blocks dependents.**                                       |
-| `unreviewed`  | Research/brainstorm outcome written, awaiting the owner's read — the review lane's counterpart to `unverified`. Those two types reach `completed` only through it, so a session cannot declare its own findings finished. **Still blocks dependents**, and more sharply than `unverified`: the deliverable is information other tasks consume. Refused on `todo`/`bugfix`, which are gated by `unverified` instead. |
+| `unreviewed`  | Research/brainstorm outcome written, awaiting the user's read — the review lane's counterpart to `unverified`. Those two types reach `completed` only through it, so a session cannot declare its own findings finished. **Still blocks dependents**, and more sharply than `unverified`: the deliverable is information other tasks consume. Refused on `todo`/`bugfix`, which are gated by `unverified` instead. |
 | `confirmed`   | Verified and done. **Unblocks dependents.** Only the user confirms.                                            |
 | `assumed`     | Believed complete, will verify when used naturally. **Unblocks dependents.**                                   |
 | `completed`   | Findings work is done and accepted — the terminal of the review lane, as `confirmed`/`assumed` are of the verification lane. **Unblocks dependents.** Research and brainstorm reach it only through `unreviewed`, and only with an outcome. Epics reach it directly, self-completing from their children. `todo`/`bugfix` never reach it at all: completed-eligibility is a rule about task TYPE, not about the title's verb, and implementation work terminates via `confirmed`/`assumed`. |
@@ -228,7 +228,7 @@ endless decision add "Statement of the decision" --about <current_id>
 # Mark for replanning
 endless task update <id> --status revisit
 
-# Hand off to another session — a session owns ONE task for its lifetime, so
+# Hand off to another session — a session claims ONE task for its lifetime, so
 # handing off means a new session, never re-pointing yours.
 endless task update <id> --status revisit        # hand the task back, then: task claim <id>
 endless task spawn <id>                          # or spawn a fresh Claude session on it now
@@ -286,7 +286,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `task` | tasks | Task CRUD, field semantics (title/description/text/analysis/notes/outcome), status transitions, relations. |
 | `task claim` | orchestration | Claiming a task: creates the per-task worktree and binds your session. |
 | `task handoff` | orchestration | The generated handoff text for a spawned session. |
-| `task release` | orchestration | Why releasing a task is disabled — a session owns one task for its lifetime. |
+| `task release` | orchestration | Why releasing a task is disabled — a session claims one task for its lifetime. |
 {{if .report_gate}}| `task report` | tasks | The minimizer — write your whole draft, send its output verbatim, and the Stop hook that enforces both halves. |
 {{end}}| `task spawn` | orchestration | Spawning a session on a task: foreground/background, attach verbs, coordinator pattern. |
 | `task unlanded` | tasks | Which finished tasks claim to be done while their work has not reached the base branch. |

@@ -99,7 +99,7 @@ func TestWorktreeInUse_IdleWorktreeIsNotInUse(t *testing.T) {
 	}
 }
 
-// taskID 0 means "no owning task" — the sessions probe has nothing to look up
+// taskID 0 means "belongs to no task" — the sessions probe has nothing to look up
 // and must be skipped, leaving the live-process probe as the whole answer.
 func TestWorktreeInUse_ZeroTaskSkipsSessionProbe(t *testing.T) {
 	db := newReaperTestDB(t)

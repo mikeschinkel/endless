@@ -14,8 +14,8 @@ import (
 // relay_gate.go holds the Stop gate that makes `endless task report` an
 // enforcer instead of a suggestion.
 //
-// OWNED BY E-1953. The file was built by E-1901, parked by E-1911, and left
-// orphaned when E-1911 landed — no task owned it and nothing fired it. E-1953
+// BELONGS TO E-1953. The file was built by E-1901, parked by E-1911, and left
+// orphaned when E-1911 landed — no task covered it and nothing fired it. E-1953
 // adopts it explicitly: the machinery E-1901 built is exactly what the minimizer
 // needs, because both enforce the same shape of claim (the agent owes the user
 // one specific string as its final message) and differ only in where that string

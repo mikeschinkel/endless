@@ -69,14 +69,14 @@ type jsonRow struct {
 	SupersededBy []string `json:"superseded_by"`
 	// Duplicates is emitted on the same terms, for the same reason (E-1185).
 	Duplicates []string `json:"duplicates"`
-	// Focused, DuplicateWork and OwnedElsewhere are E-2188's focus and
-	// ownership verdicts for the frame's `viewer_session`. The table leaves the
-	// claimed task's focus to colour alone; here it is always stated. A row
-	// owned elsewhere is omitted from the table and emitted here, flagged, on
-	// the same data-not-a-rendering rule `hidden` follows.
-	Focused        bool `json:"focused"`
-	DuplicateWork  bool `json:"duplicate_work"`
-	OwnedElsewhere bool `json:"owned_elsewhere"`
+	// Focused, DuplicateWork and StewardedElsewhere are E-2188's focus and
+	// stewardship verdicts for the frame's `viewer_session`. The table leaves
+	// the claimed task's focus to colour alone; here it is always stated. A row
+	// stewarded elsewhere is omitted from the table and emitted here, flagged,
+	// on the same data-not-a-rendering rule `hidden` follows.
+	Focused            bool `json:"focused"`
+	DuplicateWork      bool `json:"duplicate_work"`
+	StewardedElsewhere bool `json:"stewarded_elsewhere"`
 	// Spawnable is E-2204's: a blocker has released the task, none still holds
 	// it, and nobody has claimed it. The table draws it as ▷ and a green id.
 	Spawnable bool `json:"spawnable"`
@@ -119,7 +119,7 @@ func renderJSON(w io.Writer, a anchor, all bool) error {
 	if err := annotateRelation(rows, a.emittingSession); err != nil {
 		return err
 	}
-	if err := annotateOwnership(rows, a.emittingSession, a.focal); err != nil {
+	if err := annotateStewardship(rows, a.emittingSession, a.focal); err != nil {
 		return err
 	}
 	sortRows(rows)
@@ -146,32 +146,32 @@ func renderJSON(w io.Writer, a anchor, all bool) error {
 			duplicates = append(duplicates, "E-"+strconv.FormatInt(id, 10))
 		}
 		out.Rows = append(out.Rows, jsonRow{
-			ID:             r.ID,
-			ProjectID:      r.ProjectID,
-			Title:          collapse(r.Title),
-			Status:         r.Status,
-			Phase:          r.Phase,
-			Type:           r.TypeSlug,
-			Action:         classify(r).Label(),
-			HasPlan:        r.HasPlan,
-			IsFocal:        r.IsFocal,
-			IsParent:       r.IsParent,
-			IsFrom:         r.IsFrom,
-			InFlight:       r.InFlight,
-			Landed:         r.Landed,
-			Unsettled:      r.Unsettled,
-			UnsettledKnown: r.UnsettledKnown,
-			Hidden:         r.Hidden,
-			HiddenAt:       r.HiddenAt,
-			Relation:       relationSlug(r),
-			BlockedByN:     r.BlockedByN,
-			BlocksN:        r.BlocksN,
-			SupersededBy:   superseded,
-			Duplicates:     duplicates,
-			Focused:        r.Focused,
-			DuplicateWork:  r.DuplicateWork,
-			OwnedElsewhere: r.OwnedElsewhere,
-			Spawnable:      r.Spawnable(),
+			ID:                 r.ID,
+			ProjectID:          r.ProjectID,
+			Title:              collapse(r.Title),
+			Status:             r.Status,
+			Phase:              r.Phase,
+			Type:               r.TypeSlug,
+			Action:             classify(r).Label(),
+			HasPlan:            r.HasPlan,
+			IsFocal:            r.IsFocal,
+			IsParent:           r.IsParent,
+			IsFrom:             r.IsFrom,
+			InFlight:           r.InFlight,
+			Landed:             r.Landed,
+			Unsettled:          r.Unsettled,
+			UnsettledKnown:     r.UnsettledKnown,
+			Hidden:             r.Hidden,
+			HiddenAt:           r.HiddenAt,
+			Relation:           relationSlug(r),
+			BlockedByN:         r.BlockedByN,
+			BlocksN:            r.BlocksN,
+			SupersededBy:       superseded,
+			Duplicates:         duplicates,
+			Focused:            r.Focused,
+			DuplicateWork:      r.DuplicateWork,
+			StewardedElsewhere: r.StewardedElsewhere,
+			Spawnable:          r.Spawnable(),
 		})
 		if r.Focused {
 			out.Focus = "E-" + strconv.FormatInt(r.ID, 10)

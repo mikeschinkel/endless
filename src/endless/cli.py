@@ -4792,7 +4792,7 @@ def worktree_reap():
     """Sweep stale settled worktrees.
 
     Removes worktree directories that are settled — clean, and holding no
-    commit whose content the base branch lacks — whose owning task has been
+    commit whose content the base branch lacks — whose task has been
     untouched for longer than worktree_ttl (.endless/config.json, default
     14d) AND that no live process holds a cwd inside. A recorded landing is
     not required: a branch sitting at the base with nothing to land is just

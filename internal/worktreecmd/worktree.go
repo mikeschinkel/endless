@@ -87,13 +87,13 @@ type inUseJSON struct {
 //
 //	endless-go worktree in-use --dir <path> [--task <id>] [--json]
 //
-// --task is optional: 0 (absent) means the directory has no owning task, so
+// --task is optional: 0 (absent) means the directory belongs to no task, so
 // only the live-process probe applies. Every endless-managed e-NNN worktree
 // has one and the caller passes it.
 func runInUse(args []string) int {
 	fs := refusal.NewFlags("in-use")
 	dir := fs.String("dir", "", "worktree directory to inspect (required)")
-	taskID := fs.Int64("task", 0, "owning task id; 0 skips the session probe")
+	taskID := fs.Int64("task", 0, "id of the task the directory belongs to; 0 skips the session probe")
 	asJSON := fs.Bool("json", false, "emit the verdict as JSON")
 	if err := fs.Parse(args); err != nil {
 		// A fault, not a usage error, and that is not a formality: the only

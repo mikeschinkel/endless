@@ -46,7 +46,7 @@ import (
 // `unknown` for its sessions, NOT `dead`. That is what bounds the blast radius
 // of a failed observation to zero rows: no consumer may treat `unknown` as
 // `dead`. The site that matters most is the spawn/claim ownership guard, which
-// must read `unknown` as STILL OWNED and refuse — a wrong refusal is an
+// must read `unknown` as STILL LIVE and refuse — a wrong refusal is an
 // annoyance, the inverse hands someone else a live worktree.
 //
 // `unbound` exists so a background agent, whose `process_id` is legitimately
@@ -91,7 +91,7 @@ const (
 
 // IsGone reports whether this state may be treated as "the session is over".
 // ONLY `dead` qualifies. Every consumer that has to decide something
-// consequential — freeing a task, dropping an owner — calls this rather than
+// consequential — freeing a task, treating its owner as gone — calls this rather than
 // comparing strings, so the `unknown != dead` rule is enforced in one place
 // instead of re-derived (correctly or not) at each site.
 func (l Liveness) IsGone() bool {

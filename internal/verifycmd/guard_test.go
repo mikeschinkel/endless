@@ -109,7 +109,7 @@ func TestGuard_AllowsAnUnlandedForeignTask(t *testing.T) {
 	}
 }
 
-// The session's own task is an owner even when the checkout is not a worktree —
+// The session's claimed task is verifiable even when the checkout is not a worktree —
 // the `esu`-exported ENDLESS_SESSION_ID names it.
 func TestGuard_SessionEnvNamesAnOwner(t *testing.T) {
 	mainDB(t, []int64{1603}, map[int64]int64{42: 1603})

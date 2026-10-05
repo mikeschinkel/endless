@@ -116,7 +116,7 @@ func paneProcessID(pane string) any {
 
 // ProcessIDsForPanes maps tmux pane ids to EXISTING processes.id values on the
 // server this call can currently reach. It never creates rows: it backs read
-// paths ("which session owns this pane?"), and a lookup that minted identities
+// paths ("which session is running in this pane?"), and a lookup that minted identities
 // would write on every status-line repaint.
 //
 // Panes with no processes row are silently absent from the result, so a caller

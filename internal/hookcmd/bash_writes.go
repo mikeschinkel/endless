@@ -1290,7 +1290,7 @@ var gitToplevel = func(dir string) string {
 
 // blockBashWriteTargetsIfApplicable refuses a Bash command with a recognized
 // write target that writeTargetDecision refuses. It applies only to a session
-// that owns a claimed worktree (E-940 decision 1): a taskless session keeps a
+// that holds a claimed worktree (E-940 decision 1): a taskless session keeps a
 // usable shell in main, and E-1586 recorded why extending main-checkout
 // refusals to Bash makes main unusable (`just install`, `git pull`, …).
 func blockBashWriteTargetsIfApplicable(projectID int64, payload claudePayload) {

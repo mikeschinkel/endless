@@ -31,7 +31,7 @@ LANGUAGE_EXTENSIONS = {
 # settled. `.endless/tmp/` is the sanctioned project-local scratch dir — agents
 # author throwaway content there (co-located with the work, survives reboot,
 # recoverable before a worktree drops) instead of system /tmp. `worktree.json`
-# (write-once identity) and `worktree.lock` (per-session ownership) are per-
+# (write-once identity) and `worktree.lock` (its per-session lock holder) are per-
 # worktree state that must never be committed — kept per ED-1530. NOT
 # `.endless/sessions/`: that companion-file path was pruned, so new projects must
 # never scaffold it.

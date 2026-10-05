@@ -26,7 +26,7 @@ func LiveSessionForPanes(panes []string) (int64, error) {
 	return sessionForPanes(panes)
 }
 
-// TaskProjectPath returns the resolved root of the project that owns taskID,
+// TaskProjectPath returns the resolved root of the project taskID belongs to,
 // or "" when the task or its project row does not exist.
 func TaskProjectPath(taskID int64) (string, error) {
 	db, err := DB()

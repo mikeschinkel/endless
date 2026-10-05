@@ -28,7 +28,7 @@ stateDiagram-v2
     [*] --> unplanned
     [*] --> submitted
 
-    %% Planning and review — approval records that the owner reviewed the plan
+    %% Planning and review — approval records that the user reviewed the plan
     unplanned --> submitted: agent submits — plan attached
     submitted --> ready: user approves
     submitted --> unplanned: user sends back — the plan is not sufficient

@@ -16,13 +16,13 @@ import (
 // The server scoping is E-2196. A pane id is only unique per server: a tmux
 // restart reissues "%45" to an unrelated pane, and a session from before the
 // crash (liveness `unknown` — its server is gone, not observed) stays listed
-// as an owner. Reporting its bare "%45" let every Python caller that matched
+// as live. Reporting its bare "%45" let every Python caller that matched
 // pane ids by string treat the restored pane as that old session's — which is
 // how `session resume E-2135`, typed into a restored window, refused with
 // "This pane is working E-2105". GetLiveSessionByProcess and
 // ProcessIDsForPanes already scope by server for exactly this reason; this
 // is the same rule at the row Python reads. Process still carries the raw
-// address, and the row itself is kept: ownership is unaffected.
+// address, and the row itself is kept: the claim is unaffected.
 type LiveSession struct {
 	SessionID        string  `json:"session_id"`
 	EndlessSessionID int64   `json:"endless_session_id"`
@@ -59,7 +59,7 @@ type LiveSession struct {
 // this list, and nothing was written to make that true.
 //
 // Sessions whose server could not be reached read 'unknown' and DELIBERATELY
-// remain in the list. They are still owners as far as anyone can prove, so the
+// remain in the list. They are still live as far as anyone can prove, so the
 // guard keeps refusing. A wrong refusal costs a retry; the inverse hands a live
 // worktree to a second session.
 func ListLiveSessions(projectID int64) ([]LiveSession, error) {

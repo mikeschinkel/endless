@@ -126,14 +126,14 @@ func (g orderGraph) empty() bool { return len(g.lines) == 0 }
 
 // graphSeeds picks the rows that seed the graph: the session's own backlog,
 // excluding the viewing session's task, the spawning task, the parent row, any
-// task another session is already on (in flight, or owned elsewhere), hidden
+// task another session is already on (in flight, or stewarded elsewhere), hidden
 // rows, phase `later`, and anything finished. What remains is the set of tasks
 // someone reading this view might pick up next.
 func graphSeeds(rows []monitor.SessionStatusRow) []int64 {
 	var ids []int64
 	for _, r := range rows {
 		switch {
-		case r.IsFocal, r.IsFrom, r.IsParent, r.InFlight, r.OwnedElsewhere, r.Hidden:
+		case r.IsFocal, r.IsFrom, r.IsParent, r.InFlight, r.StewardedElsewhere, r.Hidden:
 			continue
 		case r.Phase == "later", isTerminal(r.Status):
 			continue

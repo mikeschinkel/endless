@@ -46,7 +46,7 @@ type Status = string
 // abandonment states.
 //
 // The gates are one per lane and they are siblings, which is why they sit
-// adjacent: `unverified` asks "does it work", `unreviewed` asks "has the owner
+// adjacent: `unverified` asks "does it work", `unreviewed` asks "has the user
 // read it" (E-2016). Neither is terminal, and both hold a dependent.
 //
 // `blocked` is NOT here (E-2018). It was a status once, and a handful of rows
@@ -225,7 +225,7 @@ const (
 	// One member, and that asymmetry is real rather than an oversight.
 	// `unverified` has two terminals of its own because verification has two
 	// outcomes worth distinguishing — verified, or believed-done pending use.
-	// Review has one: the owner read the outcome and accepted it, which is
+	// Review has one: the user read the outcome and accepted it, which is
 	// `completed`. And `completed` cannot join this group, because it is NOT
 	// exclusive to findings work — a todo-typed audit finishes there too, on
 	// the strength of its title's lead verb rather than its type.
@@ -343,7 +343,7 @@ var labels = map[Status]string{
 //
 // ☐ (unreviewed) is the deliberate pair to ☑ (unverified): the same box, not
 // yet ticked. The two gates are siblings — one asks "does it work", the other
-// "has the owner read it" — and the glyphs say so at a glance (E-2016).
+// "has the user read it" — and the glyphs say so at a glance (E-2016).
 var glyphs = map[Status]string{
 	Unplanned:  "○",
 	Submitted:  "⚑",

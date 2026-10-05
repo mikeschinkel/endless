@@ -2159,7 +2159,7 @@ def _resolve_hide_session(session_value: str | None) -> int:
     An explicit positional value wins; otherwise it is the session running the
     command, resolved by the same four-layer lookup every other session-attributed
     CLI call uses. Hiding is per (session, task), so there is no sane fallback
-    when no session resolves — a hide with nobody to own it would be a global
+    when no session resolves — a hide with no session to belong to would be a global
     hide, which is the one thing this feature must never be.
     """
     if session_value:

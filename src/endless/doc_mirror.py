@@ -104,7 +104,7 @@ def legacy_task_doc_path(kind: Kind, task_id: int) -> str:
 def decision_doc_path(decision_id: int) -> str:
     """Repo-relative path of a decision body mirror.
 
-    Decisions do NOT move into the task tree: `ED-NNNN` has no owning task, so
+    Decisions do NOT move into the task tree: `ED-NNNN` belongs to no task, so
     it is not task-scoped, and E-1868 is about to renumber every decision id.
     """
     return f"{DECISIONS_DIR}/ED-{decision_id}.md"

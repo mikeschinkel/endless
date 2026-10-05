@@ -102,7 +102,7 @@ type QuestionTarget struct {
 }
 
 // ResolveQuestionTarget looks up a live task by id (taskID != 0) or the live
-// task that owns a question (questionID != 0). Exactly one must be given.
+// task a question belongs to (questionID != 0). Exactly one must be given.
 func ResolveQuestionTarget(taskID, questionID int64) (QuestionTarget, error) {
 	db, err := DB()
 	if err != nil {

@@ -30,7 +30,7 @@ import (
 // computed once per hook call by newWriteScope.
 type writeScope struct {
 	// taskID and worktree name the session's claimed, non-terminal task and its
-	// symlink-resolved worktree. worktree is "" when the session owns none — no
+	// symlink-resolved worktree. worktree is "" when the session holds none — no
 	// task, a terminal task, no worktree on disk, or one another live session
 	// holds — and then the containment rule has nothing to say.
 	taskID   int64
@@ -180,7 +180,7 @@ func isDeviceFile(target string) bool {
 //     location outside the project — always writable;
 //  4. containment — a session holding a claimed worktree writes inside it.
 //
-// 1 and 2 apply to every session. 3 and 4 apply only to a session that owns a
+// 1 and 2 apply to every session. 3 and 4 apply only to a session that holds a
 // worktree; a session with no claimed task keeps the rules it had.
 func writeTargetDecision(s writeScope, target string) (msg *refusal.Error, block bool) {
 	if target == "" {

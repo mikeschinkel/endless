@@ -141,7 +141,7 @@ var implementation = []tasktype.TaskType{tasktype.TaskTypeTask, tasktype.TaskTyp
 // downstream catches wrong: research and brainstorm. They route through
 // `unreviewed`, so a self-declared finish is not the last word. E-1817 is why —
 // a research task whose outcome changed materially through five rounds of the
-// owner's correction AFTER the session had marked it completed.
+// user's correction AFTER the session had marked it completed.
 //
 // `direct` reaches `completed` in one step, and is now epic-only. Epic status is
 // DERIVED from children (E-1541) and written directly, so an epic does not
@@ -189,7 +189,7 @@ var transitionGroups = []transitionGroup{
 		// Approval is a review RECORD, not a permission: spawn and claim accept
 		// `submitted` exactly as they accept `ready` (E-2200). What approving
 		// changes is what the board shows — ⚑ approve becomes ▶ do.
-		Name: "Planning and review — approval records that the owner reviewed the plan",
+		Name: "Planning and review — approval records that the user reviewed the plan",
 		Transitions: []Transition{
 			{From: Unplanned, To: Submitted, Actor: ActorAgent, Label: "submits — plan attached"},
 			{From: Submitted, To: Ready, Actor: ActorUser, Label: "approves"},

@@ -12,6 +12,9 @@ import (
 // own-task-only refusal is built from: has the requested task LANDED, and is it
 // one of the tasks this caller may verify?
 //
+// The name predates ED-1605 and is a misnomer: nothing here is ownership. It
+// answers "may this caller verify that task", nothing more.
+//
 // Both come from the MAIN database, deliberately and unconditionally — see
 // suiteOwnershipDB. Neither question has a meaningful answer anywhere else: a
 // per-worktree sandbox has no landings and no sessions, so asking it would
@@ -32,7 +35,8 @@ type SuiteOwnership struct {
 	// arrive at different notions of landed-ness.
 	Landed bool
 
-	// Owned is true when the requested task is one of Tasks.
+	// Owned is true when the requested task is one of Tasks — one this caller
+	// may verify. (Misnamed; see the type comment.)
 	Owned bool
 
 	// Tasks are the task ids this caller may verify, in resolution order. It is

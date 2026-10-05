@@ -101,10 +101,10 @@ func TestAutoBindFromCwd_ResumeDoesNotRebindDifferentTask(t *testing.T) {
 
 // TestSessionStart_LiveOwnedWorktreeRefusesAndDoesNotBind covers E-1856
 // behavior 1: when a session starts (or resumes) with its cwd inside a worktree
-// already owned by a LIVE sibling session (a non-stale worktree lock held by a
+// whose lock a LIVE sibling session holds (a non-stale worktree lock held by a
 // different session), the SessionStart flow must refuse with an actionable
 // message and must NOT bind the incoming session to that task — never creating a
-// phantom co-owner.
+// phantom second claimant.
 //
 // This drives the real SessionStart sequence from runClaude: handleWorktreeAdoption
 // first (which returns the refusal and short-circuits), then maybeCwdBind only if
@@ -122,13 +122,13 @@ func TestSessionStart_LiveOwnedWorktreeRefusesAndDoesNotBind(t *testing.T) {
 	}
 
 	// Task 1832's worktree, locked by a LIVE sibling session. PID = this test
-	// process, so IsWorktreeLockStale reports the owner alive.
+	// process, so IsWorktreeLockStale reports the lock holder alive.
 	worktree := seedWorktree(t, projectRoot, 1832)
 	if err := monitor.ClaimWorktreeLock(worktree, monitor.WorktreeLock{
-		SessionID: "sess-owner",
+		SessionID: "sess-holder",
 		PID:       os.Getpid(),
 	}); err != nil {
-		t.Fatalf("claim lock for live owner: %v", err)
+		t.Fatalf("claim lock for live holder: %v", err)
 	}
 
 	// A fresh, unbound session lands in that worktree.
@@ -147,7 +147,7 @@ func TestSessionStart_LiveOwnedWorktreeRefusesAndDoesNotBind(t *testing.T) {
 		t.Fatalf("handleWorktreeAdoption: %v", err)
 	}
 	if refusal == "" {
-		t.Fatal("expected a refusal for a live-owned worktree; got none")
+		t.Fatal("expected a refusal for a live-held worktree; got none")
 	}
 	maybeCwdBind(1, payload)
 
@@ -158,6 +158,6 @@ func TestSessionStart_LiveOwnedWorktreeRefusesAndDoesNotBind(t *testing.T) {
 		t.Fatalf("read session row: %v", err)
 	}
 	if taskID != nil {
-		t.Fatalf("task_id = %d, want NULL — the intruder must not co-own a live-owned task (E-1856)", *taskID)
+		t.Fatalf("task_id = %d, want NULL — the intruder must not claim a task whose worktree a live session holds (E-1856)", *taskID)
 	}
 }

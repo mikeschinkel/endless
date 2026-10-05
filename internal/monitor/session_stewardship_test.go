@@ -35,8 +35,8 @@ func ownBoard(t *testing.T, focal, viewer int64) map[int64]SessionStatusRow {
 	if err != nil {
 		t.Fatalf("SessionStatusRows(%d): %v", focal, err)
 	}
-	if err := AnnotateSessionStatusOwnership(rows, viewer, focal); err != nil {
-		t.Fatalf("AnnotateSessionStatusOwnership: %v", err)
+	if err := AnnotateSessionStatusStewardship(rows, viewer, focal); err != nil {
+		t.Fatalf("AnnotateSessionStatusStewardship: %v", err)
 	}
 	out := make(map[int64]SessionStatusRow, len(rows))
 	for _, r := range rows {
@@ -74,21 +74,21 @@ func TestOwnership_WorkedCase(t *testing.T) {
 	ownSetFocus(t, db, 2, 150)
 
 	a := ownBoard(t, 100, 1)[150]
-	if a.OwnedElsewhere || !a.DuplicateWork {
+	if a.StewardedElsewhere || !a.DuplicateWork {
 		t.Errorf("A's board while B is focused on it: %+v, want shown with the duplicate mark", a)
 	}
 	b := ownBoard(t, 101, 2)[150]
-	if b.OwnedElsewhere || !b.DuplicateWork || !b.Focused {
+	if b.StewardedElsewhere || !b.DuplicateWork || !b.Focused {
 		t.Errorf("B's board while focused on it: %+v, want focused, shown, duplicate mark", b)
 	}
 
 	ownSetFocus(t, db, 2, 101)
 	a = ownBoard(t, 100, 1)[150]
-	if a.OwnedElsewhere || a.DuplicateWork {
+	if a.StewardedElsewhere || a.DuplicateWork {
 		t.Errorf("A's board after B moved on: %+v, want shown, unmarked", a)
 	}
 	b = ownBoard(t, 101, 2)[150]
-	if !b.OwnedElsewhere || b.Focused {
+	if !b.StewardedElsewhere || b.Focused {
 		t.Errorf("B's board after B moved on: %+v, want owned elsewhere", b)
 	}
 }
@@ -101,11 +101,11 @@ func TestOwnership_UpdateNeverTakesOwnership(t *testing.T) {
 	snSessionTaskRel(t, db, 2, 150, ownRelRevisited)
 	snSessionTaskRel(t, db, 3, 150, ownRelRevisited)
 
-	if r := ownBoard(t, 100, 1)[150]; r.OwnedElsewhere || r.DuplicateWork {
+	if r := ownBoard(t, 100, 1)[150]; r.StewardedElsewhere || r.DuplicateWork {
 		t.Errorf("filer's board: %+v, want shown, unmarked (two updaters do not make it ambiguous)", r)
 	}
 	for _, s := range []struct{ focal, viewer int64 }{{101, 2}, {102, 3}} {
-		if r := ownBoard(t, s.focal, s.viewer)[150]; !r.OwnedElsewhere {
+		if r := ownBoard(t, s.focal, s.viewer)[150]; !r.StewardedElsewhere {
 			t.Errorf("updater %d's board: %+v, want owned elsewhere", s.viewer, r)
 		}
 	}
@@ -118,10 +118,10 @@ func TestOwnership_SoleUpdaterOwns(t *testing.T) {
 	// A has it only as queued, which is no claim to ownership.
 	snSessionTaskRel(t, db, 1, 151, ownRelQueued)
 
-	if r := ownBoard(t, 101, 2)[151]; r.OwnedElsewhere || r.DuplicateWork {
+	if r := ownBoard(t, 101, 2)[151]; r.StewardedElsewhere || r.DuplicateWork {
 		t.Errorf("sole updater's board: %+v, want shown, unmarked", r)
 	}
-	if r := ownBoard(t, 100, 1)[151]; !r.OwnedElsewhere {
+	if r := ownBoard(t, 100, 1)[151]; !r.StewardedElsewhere {
 		t.Errorf("queueing board: %+v, want owned elsewhere", r)
 	}
 }
@@ -135,7 +135,7 @@ func TestOwnership_Ambiguous(t *testing.T) {
 
 	for _, s := range []struct{ focal, viewer int64 }{{101, 2}, {102, 3}} {
 		r := ownBoard(t, s.focal, s.viewer)[151]
-		if r.OwnedElsewhere || !r.DuplicateWork {
+		if r.StewardedElsewhere || !r.DuplicateWork {
 			t.Errorf("board %d: %+v, want shown with the duplicate mark", s.viewer, r)
 		}
 	}
@@ -148,11 +148,11 @@ func TestOwnership_EndedSessionReleases(t *testing.T) {
 	snSessionTaskRel(t, db, 4, 152, ownRelSurfaced)
 	snSessionTaskRel(t, db, 1, 152, ownRelRevisited)
 
-	if r := ownBoard(t, 100, 1)[152]; !r.OwnedElsewhere {
+	if r := ownBoard(t, 100, 1)[152]; !r.StewardedElsewhere {
 		t.Fatalf("while D is live: %+v, want owned elsewhere", r)
 	}
 	ownSetState(t, db, 4, "ended")
-	if r := ownBoard(t, 100, 1)[152]; r.OwnedElsewhere || r.DuplicateWork {
+	if r := ownBoard(t, 100, 1)[152]; r.StewardedElsewhere || r.DuplicateWork {
 		t.Errorf("after D ended: %+v, want back on A's board, unmarked", r)
 	}
 }
@@ -168,11 +168,11 @@ func TestOwnership_ClaimerIsNotADuplicate(t *testing.T) {
 	ownSetFocus(t, db, 5, 153)
 
 	a := ownBoard(t, 100, 1)[153]
-	if a.OwnedElsewhere || a.DuplicateWork || !a.InFlight {
+	if a.StewardedElsewhere || a.DuplicateWork || !a.InFlight {
 		t.Errorf("filer's board: %+v, want the ⟳ row, shown, unmarked", a)
 	}
 	b := ownBoard(t, 153, 5)[153]
-	if b.OwnedElsewhere || b.DuplicateWork || !b.Focused || !b.IsFocal {
+	if b.StewardedElsewhere || b.DuplicateWork || !b.Focused || !b.IsFocal {
 		t.Errorf("claimer's board: %+v, want its own task, focused, unmarked", b)
 	}
 }
@@ -194,7 +194,7 @@ func TestOwnership_FrameRowsNeverHidden(t *testing.T) {
 		if !ok {
 			t.Fatalf("E-%d missing from the board", id)
 		}
-		if r.OwnedElsewhere || r.DuplicateWork {
+		if r.StewardedElsewhere || r.DuplicateWork {
 			t.Errorf("frame row E-%d: %+v, want never hidden or marked", id, r)
 		}
 	}
@@ -217,7 +217,7 @@ func TestOwnership_NoViewerAnnotatesNothing(t *testing.T) {
 	db := ownFixture(t)
 	snSessionTaskRel(t, db, 2, 150, ownRelSurfaced)
 	snSessionTaskRel(t, db, 1, 150, ownRelRevisited)
-	if r := ownBoard(t, 100, 0)[150]; r.OwnedElsewhere || r.DuplicateWork || r.Focused {
+	if r := ownBoard(t, 100, 0)[150]; r.StewardedElsewhere || r.DuplicateWork || r.Focused {
 		t.Errorf("viewer 0: %+v, want unannotated", r)
 	}
 }
@@ -238,10 +238,10 @@ func TestOwnership_HiddenRevisiterExcluded(t *testing.T) {
 	snSessionTaskRel(t, db, 3, 151, ownRelRevisited)
 	ownHide(t, 3, 151)
 
-	if r := ownBoard(t, 101, 2)[151]; r.OwnedElsewhere || r.DuplicateWork {
+	if r := ownBoard(t, 101, 2)[151]; r.StewardedElsewhere || r.DuplicateWork {
 		t.Errorf("remaining updater's board: %+v, want shown, unmarked", r)
 	}
-	if r := ownBoard(t, 102, 3)[151]; !r.OwnedElsewhere || r.DuplicateWork {
+	if r := ownBoard(t, 102, 3)[151]; !r.StewardedElsewhere || r.DuplicateWork {
 		t.Errorf("hider's board: %+v, want owned elsewhere, unmarked", r)
 	}
 }
@@ -254,10 +254,10 @@ func TestOwnership_HiddenSurfacerExcluded(t *testing.T) {
 	snSessionTaskRel(t, db, 2, 150, ownRelRevisited)
 	ownHide(t, 1, 150)
 
-	if r := ownBoard(t, 101, 2)[150]; r.OwnedElsewhere || r.DuplicateWork {
+	if r := ownBoard(t, 101, 2)[150]; r.StewardedElsewhere || r.DuplicateWork {
 		t.Errorf("updater's board: %+v, want shown, unmarked (it owns it now)", r)
 	}
-	if r := ownBoard(t, 100, 1)[150]; !r.OwnedElsewhere {
+	if r := ownBoard(t, 100, 1)[150]; !r.StewardedElsewhere {
 		t.Errorf("hiding filer's board: %+v, want owned elsewhere", r)
 	}
 }
@@ -271,7 +271,7 @@ func TestOwnership_HiddenNonFocuserExcluded(t *testing.T) {
 	snSessionTaskRel(t, db, 2, 150, ownRelSurfaced)
 	ownHide(t, 2, 150)
 
-	if r := ownBoard(t, 100, 1)[150]; r.OwnedElsewhere || r.DuplicateWork {
+	if r := ownBoard(t, 100, 1)[150]; r.StewardedElsewhere || r.DuplicateWork {
 		t.Errorf("filer's board: %+v, want shown, unmarked (two filers, one hid it)", r)
 	}
 }
@@ -286,10 +286,10 @@ func TestOwnership_HiddenButFocusedCounts(t *testing.T) {
 	ownHide(t, 2, 150)
 	ownSetFocus(t, db, 2, 150)
 
-	if r := ownBoard(t, 100, 1)[150]; r.OwnedElsewhere || !r.DuplicateWork {
+	if r := ownBoard(t, 100, 1)[150]; r.StewardedElsewhere || !r.DuplicateWork {
 		t.Errorf("filer's board: %+v, want shown with the duplicate mark", r)
 	}
-	if r := ownBoard(t, 101, 2)[150]; r.OwnedElsewhere || !r.DuplicateWork || !r.Focused {
+	if r := ownBoard(t, 101, 2)[150]; r.StewardedElsewhere || !r.DuplicateWork || !r.Focused {
 		t.Errorf("hider's board while focused: %+v, want focused, shown, duplicate mark", r)
 	}
 }

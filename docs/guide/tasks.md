@@ -338,7 +338,7 @@ Recording the grown scope is not optional. The commit message is found only by s
 
 - **What you observed**, and why it would matter to someone who was not in this session. Enough to understand the purpose and no more — not a repro transcript, not a diff, not a plan.
 - **The case for filing:** what goes unfixed or unremembered if it is dropped, who trips over it next, whether it compounds.
-- **The case against:** the review and scheduling cost, whether an existing task already owns the area, whether it is a symptom of something already filed, whether noticing it again later costs less than carrying the row.
+- **The case against:** the review and scheduling cost, whether an existing task already covers the area, whether it is a symptom of something already filed, whether noticing it again later costs less than carrying the row.
 - **Your recommendation**, so your user is ratifying a judgement rather than doing the triage themselves.
 
 They answer; you file or drop on that answer.
@@ -494,7 +494,7 @@ endless task approve <id> --risk medium              # ...overriding (or supplyi
 endless task claim <id>                              # ready → underway + create worktree
 endless task update <id> --status revisit            # hand the task back (see `task release`: disabled)
 endless task update <id> --status unverified             # work done, awaiting verification
-endless task update <id> --status unreviewed --outcome "..."   # research/brainstorm: outcome written, awaiting the owner's read
+endless task update <id> --status unreviewed --outcome "..."   # research/brainstorm: outcome written, awaiting the user's read
 endless task confirm <id> --outcome "..."            # user-only — sessions do not self-confirm
 endless task confirm <id> --cascade --outcome "..."  # confirm a task and descendants
 endless task assume <id> --outcome "..."             # believed complete, can't verify
