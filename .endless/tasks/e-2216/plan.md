@@ -52,11 +52,13 @@ cross-project), sessions (not project-specific), glossary terms and lessons
 - With parents same-project, `epic.status_derived` sharing the triggering
   event's project and writer is correct; no second writer.
 
-## 4. Home directory and the ignore list (Mike: yes, 2026-10-06)
+## 4. The home directory is never a project (Mike: yes, 2026-10-06)
 
 - Registration (Go auto-register `ensureAutoRegisteredProject`, Python
-  `project register`/`init`) refuses `$HOME` always, and any directory on the
-  global config's `ignore` list.
+  `project register`/`init`) refuses exactly `$HOME`, always. A rule in code,
+  not data: ignoring `~` as a subtree would ignore everything under it.
+- Ignored directories in general (config ignore list not enforced at
+  registration, e.g. h2 under `~/Projects/go-3rd-party`) moved to E-2251.
 - The cleanup (§5) runs `endless project unregister mikeschinkel` (path `~`;
   this DELETES the projects row — it holds 0 tasks, decisions and sessions)
   and removes `~/.endless` once its one line has moved (Mike: yes).
