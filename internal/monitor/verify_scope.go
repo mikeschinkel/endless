@@ -8,20 +8,17 @@ import (
 	"strings"
 )
 
-// SuiteOwnership is the answer to the only two questions the verify runner's
+// SuiteVerifyScope is the answer to the only two questions the verify runner's
 // own-task-only refusal is built from: has the requested task LANDED, and is it
 // one of the tasks this caller may verify?
 //
-// The name predates ED-1605 and is a misnomer: nothing here is ownership. It
-// answers "may this caller verify that task", nothing more.
-//
 // Both come from the MAIN database, deliberately and unconditionally — see
-// suiteOwnershipDB. Neither question has a meaningful answer anywhere else: a
+// suiteVerifyScopeDB. Neither question has a meaningful answer anywhere else: a
 // per-worktree sandbox has no landings and no sessions, so asking it would
 // return "not landed, no session" for every task and quietly disable the
 // refusal in exactly the self-dev case that produced the incidents behind
 // E-2023.
-type SuiteOwnership struct {
+type SuiteVerifyScope struct {
 	// Known is false when the main database could not be read at all — a fresh
 	// install before its first command, or a suite running under the verify
 	// runner's own isolated HOME. The caller must fail OPEN on it: refusing on
@@ -35,9 +32,9 @@ type SuiteOwnership struct {
 	// arrive at different notions of landed-ness.
 	Landed bool
 
-	// Owned is true when the requested task is one of Tasks — one this caller
-	// may verify. (Misnamed; see the type comment.)
-	Owned bool
+	// MayVerify is true when the requested task is one of Tasks — one this
+	// caller may verify.
+	MayVerify bool
 
 	// Tasks are the task ids this caller may verify, in resolution order. It is
 	// a SET rather than a single "active task" because the caller's identity has
@@ -53,13 +50,13 @@ type SuiteOwnership struct {
 	Source []string
 }
 
-// SuiteOwnershipFor answers whether taskID's verification suite may be run from
+// SuiteVerifyScopeFor answers whether taskID's verification suite may be run from
 // root (the checkout the runner resolved). It never fails the caller: a
 // database that cannot be read returns Known=false and a nil error, because the
 // refusal this feeds is a guard against a mistake, not a precondition for
 // working.
-func SuiteOwnershipFor(taskID int64, root string) (o SuiteOwnership, err error) {
-	db, err := suiteOwnershipDB()
+func SuiteVerifyScopeFor(taskID int64, root string) (o SuiteVerifyScope, err error) {
+	db, err := suiteVerifyScopeDB()
 	if err != nil || db == nil {
 		return o, err
 	}
@@ -68,19 +65,19 @@ func SuiteOwnershipFor(taskID int64, root string) (o SuiteOwnership, err error) 
 	o.Known = true
 	o.Landed, err = taskHasLanded(db, taskID)
 	if err != nil {
-		return SuiteOwnership{}, err
+		return SuiteVerifyScope{}, err
 	}
 	o.Tasks, o.Source = callerTasks(db, root)
 	for _, id := range o.Tasks {
 		if id == taskID {
-			o.Owned = true
+			o.MayVerify = true
 			break
 		}
 	}
 	return o, nil
 }
 
-// suiteOwnershipDB opens the deployed installation's database directly,
+// suiteVerifyScopeDB opens the deployed installation's database directly,
 // read-only, bypassing every routing decision this process made.
 //
 // It does NOT go through DB(). DB() applies schema and runs the enum integrity
@@ -93,7 +90,7 @@ func SuiteOwnershipFor(taskID int64, root string) (o SuiteOwnership, err error) 
 // A missing file returns (nil, nil): sql.Open would CREATE it, and a runner that
 // leaves an empty database behind as a side effect of a guard is worse than an
 // unanswered guard.
-func suiteOwnershipDB() (*sql.DB, error) {
+func suiteVerifyScopeDB() (*sql.DB, error) {
 	path := realDBPath()
 	if path == "" {
 		return nil, nil

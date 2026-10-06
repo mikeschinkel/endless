@@ -1878,7 +1878,7 @@ func autoBindFromCwd(projectID int64, payload claudePayload) {
 	// trusting that call order — otherwise any path that reaches it (or a future
 	// re-order) would silently make the incoming session a phantom second claimant
 	// of the task, stealing its task_id pointer.
-	if worktreeOwnedByLiveOther(projectRoot, payload.CWD, payload.SessionID) {
+	if worktreeLockHeldByLiveOther(projectRoot, payload.CWD, payload.SessionID) {
 		return
 	}
 	snap := monitor.SnapshotSession(payload.SessionID)
@@ -1926,12 +1926,12 @@ var tmuxWindowAutoSpawned = func() bool {
 	return strings.TrimSpace(string(out)) == "1"
 }
 
-// worktreeOwnedByLiveOther reports whether the worktree containing cwd holds a
+// worktreeLockHeldByLiveOther reports whether the worktree containing cwd holds a
 // worktree lock held by a DIFFERENT, still-alive session. It gates the cwd
 // auto-bind (E-1856). Returns false when cwd is not inside a worktree, the lock
 // is absent or stale, or the lock is held by selfSession — none of which
 // represent a live sibling lock holder to defer to.
-func worktreeOwnedByLiveOther(projectRoot, cwd, selfSession string) bool {
+func worktreeLockHeldByLiveOther(projectRoot, cwd, selfSession string) bool {
 	worktreeRoot, err := monitor.FindWorktreeRoot(cwd, projectRoot)
 	if err != nil || worktreeRoot == "" {
 		return false
@@ -2208,7 +2208,7 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 // is consulted only to *avoid* redirecting into a worktree whose lock another live
 // session holds.
 func enforceClaimedCwd(projectID int64, payload claudePayload) {
-	taskID, worktreePath := sessionOwnedWorktree(projectID, payload)
+	taskID, worktreePath := sessionClaimedWorktree(projectID, payload)
 	if worktreePath == "" {
 		return
 	}

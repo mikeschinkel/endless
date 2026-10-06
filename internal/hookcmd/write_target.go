@@ -68,7 +68,7 @@ func newWriteScope(projectID int64, payload claudePayload) writeScope {
 	if root, err := monitor.ProjectPath(projectID); err == nil && root != "" {
 		s.projectRoot = resolveExisting(root)
 	}
-	taskID, wt := sessionOwnedWorktree(projectID, payload)
+	taskID, wt := sessionClaimedWorktree(projectID, payload)
 	if wt != "" {
 		s.taskID = taskID
 		s.worktree = resolveExisting(wt)
@@ -106,13 +106,13 @@ func worktreeGitDirs(worktree string) []string {
 	return []string{admin, filepath.Join(common, "info", "endless")}
 }
 
-// sessionOwnedWorktree returns the session's claimed task and that task's
+// sessionClaimedWorktree returns the session's claimed task and that task's
 // worktree, or "" when any precondition fails: no session, no task, a terminal
 // task (a display-only bind of done work, a landed worktree), no worktree on
 // disk, or a worktree whose lock a different live session holds. Shared by
 // enforceClaimedCwd (the cwd invariant) and newWriteScope (the target
 // invariant), so both answer "which worktree is this session's?" the same way.
-func sessionOwnedWorktree(projectID int64, payload claudePayload) (taskID int64, worktreePath string) {
+func sessionClaimedWorktree(projectID int64, payload claudePayload) (taskID int64, worktreePath string) {
 	session, _ := monitor.GetActiveSession(payload.SessionID)
 	if session == nil || session.TaskID == nil {
 		return 0, ""

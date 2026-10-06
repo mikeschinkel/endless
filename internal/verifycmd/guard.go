@@ -22,11 +22,10 @@ import (
 type ForeignLandedSuite struct {
 	// Requested is the task whose suite was asked for, in canonical form.
 	Requested string
-	// Owned are the tasks the caller may verify — the name is a misnomer under
-	// ED-1605; nothing here is ownership — and Sources says where each came
-	// from (index-aligned).
-	Owned   []string
-	Sources []string
+	// Verifiable are the tasks the caller may verify, and Sources says where
+	// each came from (index-aligned).
+	Verifiable []string
+	Sources    []string
 	// SuitesDir is the directory the rules for these suites are documented in.
 	SuitesDir string
 }
@@ -46,11 +45,11 @@ func (v *ForeignLandedSuite) Error() (msg string) {
 	b.WriteString("nothing about your work. Acting on a failure in it means changing working\n")
 	b.WriteString("code to satisfy a check that no longer describes it.\n\n")
 
-	switch len(v.Owned) {
+	switch len(v.Verifiable) {
 	case 0:
 		b.WriteString("  yours:     nothing — no session task, and this is not a task worktree\n")
 	default:
-		for i, id := range v.Owned {
+		for i, id := range v.Verifiable {
 			label := "  yours:    "
 			if i > 0 {
 				label = "            "
@@ -61,11 +60,11 @@ func (v *ForeignLandedSuite) Error() (msg string) {
 	fmt.Fprintf(&b, "  requested: %s (landed)\n\n", v.Requested)
 
 	b.WriteString("Instead:\n")
-	switch len(v.Owned) {
+	switch len(v.Verifiable) {
 	case 0:
 		b.WriteString("  • run this from your task's worktree, and verify that task.\n")
 	default:
-		fmt.Fprintf(&b, "  • verify your own task:  endless task verify %s\n", v.Owned[0])
+		fmt.Fprintf(&b, "  • verify your own task:  endless task verify %s\n", v.Verifiable[0])
 	}
 	b.WriteString("  • coverage that must survive a land belongs in the project's own test\n")
 	b.WriteString("    suite, not in another task's land-time proof.\n\n")
@@ -96,8 +95,8 @@ func (v *ForeignLandedSuite) Error() (msg string) {
 // was written.
 func guardOwnTaskOnly(id string, root dt.DirPath) (err error) {
 	var num int64
-	var own monitor.SuiteOwnership
-	var owned []string
+	var scope monitor.SuiteVerifyScope
+	var verifiable []string
 
 	num, err = taskNumber(id)
 	if err != nil {
@@ -105,22 +104,22 @@ func guardOwnTaskOnly(id string, root dt.DirPath) (err error) {
 		goto end
 	}
 
-	own, err = monitor.SuiteOwnershipFor(num, string(root))
-	if err != nil || !own.Known || !own.Landed || own.Owned {
+	scope, err = monitor.SuiteVerifyScopeFor(num, string(root))
+	if err != nil || !scope.Known || !scope.Landed || scope.MayVerify {
 		// A read failure is reported, but never as a refusal: see above.
 		err = nil
 		goto end
 	}
 
-	owned = make([]string, len(own.Tasks))
-	for i, t := range own.Tasks {
-		owned[i] = fmt.Sprintf("E-%d", t)
+	verifiable = make([]string, len(scope.Tasks))
+	for i, t := range scope.Tasks {
+		verifiable[i] = fmt.Sprintf("E-%d", t)
 	}
 	err = &ForeignLandedSuite{
-		Requested: strings.ToUpper(id),
-		Owned:     owned,
-		Sources:   own.Source,
-		SuitesDir: verify.SuitesDir,
+		Requested:  strings.ToUpper(id),
+		Verifiable: verifiable,
+		Sources:    scope.Source,
+		SuitesDir:  verify.SuitesDir,
 	}
 end:
 	return err

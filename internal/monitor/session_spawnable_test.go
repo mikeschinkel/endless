@@ -68,7 +68,7 @@ func TestSpawnable_ClearsOnceClaimed(t *testing.T) {
 		t.Errorf("with a live session on it: %+v, want not spawnable", r)
 	}
 	spSetStatus(t, db, 200, "underway")
-	ownSetState(t, db, 2, "ended")
+	stewSetState(t, db, 2, "ended")
 	if r := spRow(t, 100, 200); r.Spawnable() {
 		t.Errorf("claimed (underway): %+v, want not spawnable", r)
 	}

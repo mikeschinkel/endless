@@ -436,7 +436,7 @@ func TestLandedSuiteDecisions(t *testing.T) {
 			".endless/verify.toml",                 // the shared project layer
 			".endless/tasks/_harness.sh",           // belongs to no task
 			".endless/tasks/e-1916/verify.sh",      // this session's own
-			"internal/monitor/verify_ownership.go", // a durable test's subject
+			"internal/monitor/verify_scope.go", // a durable test's subject
 		} {
 			if _, block := writeToolDecision(0, write("Edit", path)); block {
 				t.Errorf("an edit of %s was refused", path)

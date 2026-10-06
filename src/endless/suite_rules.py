@@ -68,7 +68,7 @@ there as the run passes. They are a record, kept forever: never hand-edit one,
 never `git add` one, never delete one.
 
 Decisions (`.endless/decisions/ED-<id>.md`) are mirrors under the same rules,
-and they do not live under `.endless/tasks/` because a decision has no owning
+and they do not live under `.endless/tasks/` because a decision belongs to no
 task.
 
 ## Run one with the runner, never by hand
@@ -134,8 +134,8 @@ people's land-time gates.
 
 It records what was true when that task landed. Retrofitting it to a later
 change rewrites that history. If your change alters a string or a behaviour a
-landed suite asserted, leave the suite alone — its owner's own run will tell
-them, on their schedule, with their context.
+landed suite asserted, leave the suite alone — that task's own run will tell
+whoever works it, on their schedule, with their context.
 
 Every suite says so in its own first lines, naming the task it belongs to, so
 you meet the rule when you open the file rather than after you have edited it.
@@ -178,7 +178,7 @@ is a complete proof for that task at land time.
 ## A second file of yours: `land.toml`
 
 `.endless/tasks/e-<id>/land.toml` is where a branch tells `endless worktree
-land` how it lands — task-owned like `verify.toml` and `verify.sh`, written and
+land` how it lands — per-task like `verify.toml` and `verify.sh`, written and
 committed on the task branch, and read from the landing branch at land time. It
 is optional: without one, the land uses its defaults. Settings live in tables,
 never at the top level, and a table or key the land does not understand refuses

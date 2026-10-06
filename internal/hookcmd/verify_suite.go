@@ -199,7 +199,7 @@ func landedSuiteDecision(payload claudePayload, act landedSuiteAct, taskID int64
 // somebody is making, not to be a precondition for working, and a false refusal
 // would block the one session doing the right thing.
 func foreignLandedSuite(payload claudePayload, taskID int64) (mine suiteCaller, foreign bool) {
-	own, err := monitor.SuiteOwnershipFor(taskID, payload.CWD)
+	own, err := monitor.SuiteVerifyScopeFor(taskID, payload.CWD)
 	if err != nil || !own.Known || !own.Landed {
 		return mine, false
 	}
@@ -238,7 +238,7 @@ func (c suiteCaller) holds(taskID int64) bool {
 
 // suiteCallerFor merges every honest answer to "whose task is this session on?"
 //
-// monitor.SuiteOwnershipFor supplies the two the verify runner resolves — the
+// monitor.SuiteVerifyScopeFor supplies the two the verify runner resolves — the
 // session named by ENDLESS_SESSION_ID, and the worktree the caller is standing
 // in. The hook adds the one only a hook has: Claude Code hands it a session id,
 // and that session's claimed task is the session's own declaration of what it
@@ -249,7 +249,7 @@ func (c suiteCaller) holds(taskID int64) bool {
 // session working in a worktree whose session row never resolved is still
 // working the task that worktree names. Disagreement between the sources is a reason to allow,
 // not to refuse work somebody is plainly doing.
-func suiteCallerFor(own monitor.SuiteOwnership, payload claudePayload) (c suiteCaller) {
+func suiteCallerFor(own monitor.SuiteVerifyScope, payload claudePayload) (c suiteCaller) {
 	for i, id := range own.Tasks {
 		c.add(id, own.Source[i])
 	}

@@ -14,7 +14,7 @@ import (
 // write to it — not by mistake, and not by a later edit that adds a statement
 // nobody notices is a write. Read-only is the structural version of that
 // promise, so it is pinned here rather than left to review.
-func TestSuiteOwnershipDB_OpensReadOnly(t *testing.T) {
+func TestSuiteVerifyScopeDB_OpensReadOnly(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", "") // main follows XDG first (E-2186)
@@ -31,9 +31,9 @@ func TestSuiteOwnershipDB_OpensReadOnly(t *testing.T) {
 	}
 	seed.Close()
 
-	db, err := suiteOwnershipDB()
+	db, err := suiteVerifyScopeDB()
 	if err != nil || db == nil {
-		t.Fatalf("suiteOwnershipDB: %v (db=%v)", err, db)
+		t.Fatalf("suiteVerifyScopeDB: %v (db=%v)", err, db)
 	}
 	defer db.Close()
 
@@ -64,14 +64,14 @@ func TestReadOnlyDSN(t *testing.T) {
 
 // A machine with no main database yet must not have one created as a side
 // effect of a guard that only wanted to read it.
-func TestSuiteOwnershipDB_NeverCreatesTheDatabase(t *testing.T) {
+func TestSuiteVerifyScopeDB_NeverCreatesTheDatabase(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_CONFIG_HOME", "") // main follows XDG first (E-2186)
 
-	db, err := suiteOwnershipDB()
+	db, err := suiteVerifyScopeDB()
 	if err != nil {
-		t.Fatalf("suiteOwnershipDB: %v", err)
+		t.Fatalf("suiteVerifyScopeDB: %v", err)
 	}
 	if db != nil {
 		db.Close()
