@@ -4,8 +4,8 @@
    handoffs differ from epic (strategy requirement, coordinator session,
    derived status, auto-spawn, triage), and how today's open epics are
    classified into epic or group.
-2. **Session monitor rendering.** Which glyph an epic (and a group, if
-   split) shows in place of the plan pencil; whether derived status is shown
+2. **Session monitor rendering.** Which glyph an epic and a group
+   each show in place of the plan pencil; whether derived status is shown
    at all; how to make a non-do task unmistakable at a glance so it is not
    mistaken for todo/bugfix work.
 3. **Enforcement.** Whether `task add` / `update` / approve refuse an
