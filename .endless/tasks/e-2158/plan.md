@@ -139,6 +139,6 @@ tests listed by the measurement.
   first version read (`DBVersion`, which every connect and `up` call first)
   creates `goose_db_version`, so a check that waited for Migrate would pass the
   database it is meant to refuse and would have modified it.
-- The new migration is 00015 (the next free number on main after E-1814,
-  E-2189, E-2203 and E-1994 took 00011-00014 while this branch was open), not
-  00002.
+- The new migration is 00016 (the next free number on main after E-1814,
+  E-2189, E-2203, E-1994 and E-2251 took 00011-00015 while this branch was
+  open), not 00002.
