@@ -1,0 +1,159 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 28,
+      "passed": 28,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "endless-go builds from this tree",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go test: the content vocabulary, Justification first",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go test: both write paths, and the section move",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest: the research gate and the justification write path",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest: justification as content: CLI, clear, display order",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest: context still renders first on an implementation task",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "THE DEFECT: research → todo → research with a new justification succeeds and stores the second text",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "--justification twice rewords it in place instead of refusing",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the gate reads the stored row: retyping back to research needs no restatement",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and a justification cleared in the same call leaves nothing to pass it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "--clear justification falls out of the clearable-content machinery",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "type gate: --justification on a todo add is refused, naming research and brainstorm",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "type gate: and on a todo update, writing nothing",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "brainstorm may carry one",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "writing a justification never touches notes",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "task show renders Justification before Context",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the move keeps other notes prose, deletes a notes row it empties, and is repeatable",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "--dry-run emits nothing",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "rebuilding from the ledger reproduces the moved content, including a task whose notes were rewritten after the heading was filed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "live apply and rebuild agree for every content name, justification included",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a section ends at the next heading; text around it is kept",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a task already holding a justification is skipped, never overwritten",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the heading composer and its regex are gone from the source",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no source builds a ## Justification heading",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the post-land script exists, is executable and parses",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it runs the move against main",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and names --db main explicitly",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "endless db move-section is a command",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
