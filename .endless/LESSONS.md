@@ -7181,3 +7181,7 @@ While planning E-2243, Mike chose to fail a verify run when its CTRF report cann
 ### [2026-10-06] No output-location option in Endless's verify runner
 While planning E-2243 (commit each passing verify run's CTRF report to main), I proposed adding a --ctrf <path> flag to endless-go verify so the Python wrapper could direct the report. Mike does not want Endless to offer any option to put the report somewhere other than its standardized location. Such an option may belong in the standalone tool when verify is extracted, not now. This is about E-2243's report location; I have not generalized it to other outputs.
 - **Project**: endless
+
+### [2026-10-06] A filed plan is not vetted just because it says so
+Situation: E-2216's plan was attached on 2026-10-05 by another session. It opens 'Scoped with Mike' but had not been fully vetted with him, and he spawned the task without realizing that. A primed session then judged the plan and asked questions as if its decisions were settled. Mike's reason: a plan filed without his review carries the filing agent's guesses as if they were agreements. In this case, before treating a plan's decisions as settled, check that Mike actually reviewed them, and reread the whole task (including the parent brainstorm's outcome) when resuming.
+- **Project**: endless
