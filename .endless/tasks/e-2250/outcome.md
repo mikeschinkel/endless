@@ -5,9 +5,9 @@ Settled with Mike on 2026-10-06 (questions EQ-20 to EQ-33).
 ## Two container types
 
 - **epic**: an initiative, usually a product feature. It carries two
-  task_content rows and never a plan:
-  - `objective`: what is true when the epic is done. It stays fixed; if it
-    changes, it is a different epic.
+  task_content rows, typically never a plan:
+  - `objective`: what is true when the epic is done. It typically stays fixed;
+    a nuance may change without making it a different epic.
   - `strategy`: the approach, which is expected to change.
 - **group**: a convenience grouping of tasks kept together for tracking. It
   needs only its title and description, and its completion derives from its
@@ -59,20 +59,23 @@ E-1537's plan stays as history. ED-1610, ED-1611 and ED-1612 replace its
 sections on what an epic is and how its status derives, and all three are
 linked to it.
 
-## Decisions (all proposed)
+## Decisions
+
+ED-1611 and ED-1612 are accepted; ED-1610 is still proposed.
+
 
 - ED-1610: an epic carries objective and strategy rows, required to claim or
-  spawn. Revised here: objective became its own row, and the gate was set at
-  claim/spawn.
+  spawn. Revised here: objective became its own row, the gate was set at
+  claim/spawn, and "never a plan" and "stays fixed" were softened to
+  "typically".
 - ED-1611: groupings get their own type, group. Extended here with the
   nesting, conversion and coordinator rules.
 - ED-1612: epics and groups show a container state ladder, not task actions.
 
-## Follow-ups (under E-1991, each cleans up E-2250)
+## Follow-up
 
-- E-2254: add the group type and epic objective and strategy rows (implements
-  ED-1610 and ED-1611).
-- E-2255: show epic and group states in the status views (implements ED-1612;
-  blocked by E-2254).
-- E-2256: sort the open epics into epics and groups, and move their plans
-  case by case (blocked by E-2254).
+- E-2254 (under E-1991, cleans up E-2250): one task for the whole change, per
+  ED-1550. It covers the group type, the objective and strategy rows with the
+  claim/spawn check, the container states and four sections in the status
+  views, and sorting the open epics. It implements all three decisions.
+  E-2255 and E-2256 were folded into it and superseded.
