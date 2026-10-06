@@ -7185,3 +7185,7 @@ While planning E-2243 (commit each passing verify run's CTRF report to main), I 
 ### [2026-10-06] A filed plan is not vetted just because it says so
 Situation: E-2216's plan was attached on 2026-10-05 by another session. It opens 'Scoped with Mike' but had not been fully vetted with him, and he spawned the task without realizing that. A primed session then judged the plan and asked questions as if its decisions were settled. Mike's reason: a plan filed without his review carries the filing agent's guesses as if they were agreements. In this case, before treating a plan's decisions as settled, check that Mike actually reviewed them, and reread the whole task (including the parent brainstorm's outcome) when resuming.
 - **Project**: endless
+
+### [2026-10-06] Move a handoff file rather than copy it
+While planning E-2243, the verify runner writes its CTRF report to the user cache and the Endless wrapper puts it at its committed location on main. I planned a copy, which leaves a cache file behind, and also left two CTRF: lines on screen (cache and destination). Mike asked why leave cruft that has to be cleaned up later, and why not one CTRF: line showing the destination. When a file is only a handoff between two steps, move it, and report only where it ends up.
+- **Project**: endless
