@@ -7201,3 +7201,7 @@ Situation: E-2216, deciding whether the project ignore list stays in the global 
 ### [2026-10-06] Keep a decision to its own subject
 While recording ED-1610 (an epic's strategy row) I added a sentence about what a 'grouping epic' requires. Mike: it is a separate 'group' task type, and a rule about it does not belong in a decision about the epic type. Record a rule about a different type in its own decision, and use Mike's term for it.
 - **Project**: endless
+
+### [2026-10-06] Don't cite the standard outcome file path
+On E-2250 (brainstorm handoff, 2026-10-06) I told Mike to read the synthesis with 'endless task show E-2250 --all-fields' and also gave the path .endless/tasks/e-2250/outcome.md. Mike: that is the standard location, so naming it is redundant once task show has been given. In handoffs, point to task show only.
+- **Project**: endless
