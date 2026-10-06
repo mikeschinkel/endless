@@ -46,7 +46,6 @@ NO_SESSION: bool = False
 DEFAULT_CONFIG = {
     "roots": ["~/Projects"],
     "scan_interval": 300,
-    "ignore": [],
 }
 
 
@@ -163,35 +162,91 @@ def get_roots() -> list[Path]:
     return roots
 
 
+# "Not a project" lives on projects rows with this status, plus an optional
+# marker file on disk (E-2251). Both cover the directory's subtree, and the
+# nearest registered-or-ignored ancestor wins, so an ignored ~/Projects and a
+# registered ~/Projects/endless coexist. The answer comes from `endless-go
+# project resolve` — one implementation for the hook and the CLI. The global
+# config's old `ignore` list was imported by schema migration 15 and is no longer
+# read.
+IGNORED_STATUS = "ignored"
+IGNORE_MARKER = ".endless-ignore"
+
+# Verdicts already fetched this invocation, keyed by resolved path. Filled in
+# bulk by prime_ignored() so a walk over many directories (discover) is one
+# shellout rather than one per directory.
+_ignored_cache: dict[str, bool] = {}
+
+
+def prime_ignored(paths) -> None:
+    """Fetch the ignore verdict for many directories in one call."""
+    from endless.event_bridge import project_registry
+
+    todo = [str(p) for p in paths if str(p) not in _ignored_cache]
+    if not todo:
+        return
+    for v in project_registry("resolve", *todo):
+        _ignored_cache[v["path"]] = v["kind"] == IGNORED_STATUS
+    # Go answers in RESOLVED form; remember the spelling asked about too.
+    for p in todo:
+        if p not in _ignored_cache:
+            r = str(Path(p).resolve())
+            if r in _ignored_cache:
+                _ignored_cache[p] = _ignored_cache[r]
+
+
 def is_ignored(path: Path) -> bool:
-    """Check if a path or any of its ancestors is in the ignore list."""
-    cfg = load_config()
-    ignore_list = cfg.get("ignore", [])
-    if not ignore_list:
-        return False
-    home = str(Path.home())
-    # Check the path itself and all its parents
-    check = path
-    while True:
-        check_str = str(check)
-        check_short = check_str.replace(home, "~")
-        if check_str in ignore_list or check_short in ignore_list:
-            return True
-        parent = check.parent
-        if parent == check:
-            break
-        check = parent
-    return False
+    """Whether path is, or sits under, a directory Endless ignores — the
+    nearest registered or ignored ancestor deciding."""
+    key = str(path)
+    if key not in _ignored_cache:
+        prime_ignored([path])
+    return _ignored_cache.get(key, False)
 
 
 def add_ignore(path: Path):
-    if is_ignored(path):
-        return
-    cfg = load_config()
-    short = str(path).replace(str(Path.home()), "~")
-    cfg.setdefault("ignore", []).append(short)
-    cfg["ignore"] = sorted(set(cfg["ignore"]))
-    save_config(cfg)
+    """Record path as not a project: an ignored projects row (E-2251)."""
+    from endless.event_bridge import project_registry
+
+    project_registry("ignore", str(path))
+    _ignored_cache.clear()
+
+
+def write_ignore_marker(path: Path) -> list[str]:
+    """Drop the on-disk marker in path; inside a git repo, keep it out of
+    commits via .git/info/exclude. Returns what was written, for display."""
+    import subprocess
+
+    written = []
+    marker = path / IGNORE_MARKER
+    if not marker.exists():
+        marker.write_text("")
+        written.append(str(marker))
+    try:
+        top = subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "--show-toplevel"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+        exclude = subprocess.run(
+            ["git", "-C", str(path), "rev-parse", "--git-path", "info/exclude"],
+            capture_output=True, text=True, check=True,
+        ).stdout.strip()
+    except (FileNotFoundError, subprocess.CalledProcessError):
+        return written
+    exclude_path = Path(exclude)
+    if not exclude_path.is_absolute():
+        exclude_path = path / exclude_path
+    rel = marker.resolve().relative_to(Path(top).resolve()).as_posix()
+    entry = "/" + rel
+    existing = exclude_path.read_text().splitlines() if exclude_path.exists() else []
+    if entry not in existing:
+        exclude_path.parent.mkdir(parents=True, exist_ok=True)
+        with exclude_path.open("a") as f:
+            if existing and existing[-1] != "":
+                f.write("\n")
+            f.write(entry + "\n")
+        written.append(f"{exclude_path} ({entry})")
+    return written
 
 
 def endless_config_path(dir_path: Path) -> Path:

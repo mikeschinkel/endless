@@ -377,7 +377,7 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 
 func resolveProjectID(db dbQuerier, name string) (int64, error) {
 	var id int64
-	err := db.QueryRow("SELECT id FROM projects WHERE name = ?", name).Scan(&id)
+	err := db.QueryRow("SELECT id FROM live_projects WHERE name = ?", name).Scan(&id)
 	if err != nil {
 		// Two readings, and the row cannot distinguish them: the project may be
 		// genuinely unregistered here, or the invocation may simply be pointed at

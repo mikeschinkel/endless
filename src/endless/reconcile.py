@@ -27,7 +27,7 @@ def reconcile():
         _scan_dir_for_projects(root, found_on_disk)
 
     # Get all projects in DB
-    db_rows = db.query("SELECT id, name, path FROM projects")
+    db_rows = db.query("SELECT id, name, path, status FROM projects")
     db_by_name: dict[str, dict] = {
         row["name"]: dict(row) for row in db_rows
     }
@@ -40,6 +40,9 @@ def reconcile():
     }
 
     now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S")
+
+    # One resolve call for every directory found, not one per directory.
+    config.prime_ignored(p for p, _ in found_on_disk.values())
 
     # Reconcile: disk → DB
     for name, (disk_path, cfg) in found_on_disk.items():
@@ -66,7 +69,7 @@ def reconcile():
                      now, db_entry["id"]),
                 )
             # Also sync any config changes
-            _sync_config_to_db(db_entry["id"], cfg, now)
+            _sync_config_to_db(db_entry, cfg, now)
         elif resolved_str in db_by_path:
             # Same path but name changed → update name
             db_entry = db_by_path[resolved_str]
@@ -75,15 +78,22 @@ def reconcile():
                 "WHERE id=?",
                 (name, now, db_entry["id"]),
             )
-            _sync_config_to_db(db_entry["id"], cfg, now)
+            _sync_config_to_db(db_entry, cfg, now)
         else:
             # New project on disk, not in DB → insert
-            # But skip if status is "unregistered"
-            if cfg.get("status") != "unregistered":
+            # But skip if status is "unregistered", or if the directory is
+            # ignored (E-2251): reconcile is an automatic path, and only an
+            # explicit `project register` may register under an ignored tree.
+            if (cfg.get("status") != "unregistered"
+                    and not config.is_ignored(disk_path)):
                 _insert_from_config(disk_path, cfg, now)
 
     # Reconcile: DB entries whose paths no longer exist
     for row in db_rows:
+        # An ignored row records the user's intent about a path, which holds
+        # whether or not the directory exists right now (E-2251).
+        if row["status"] == config.IGNORED_STATUS:
+            continue
         path = resolved(row["path"])
         if not path.exists():
             # Path gone and name not found elsewhere on disk
@@ -220,8 +230,16 @@ def _detect_group(project_path: Path) -> str | None:
     return parent.name
 
 
-def _sync_config_to_db(project_id: int, cfg: dict, now: str):
-    """Update DB fields from config values."""
+def _sync_config_to_db(db_entry: dict, cfg: dict, now: str):
+    """Update DB fields from config values.
+
+    An ignored row is left alone (E-2251): its on-disk config may still say
+    `unregistered` or `active`, and only `project register` makes it a project
+    again.
+    """
+    if db_entry.get("status") == config.IGNORED_STATUS:
+        return
+    project_id = db_entry["id"]
     db.execute(
         "UPDATE projects SET "
         "label=?, description=?, language=?, status=?, "

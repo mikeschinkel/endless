@@ -412,6 +412,15 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE VIEW IF NOT EXISTS live_tasks AS
     SELECT * FROM tasks WHERE removed = 0;
 
+-- live_projects (E-2251) is every row that IS a project. A row with status
+-- 'ignored' marks a directory, and its subtree, as not a project: the walk that
+-- resolves a directory to its project stops there and never auto-registers it.
+-- Readers that list or look up projects read this view; the resolvers that walk
+-- a directory up to its project read projects, because the ignored row is what
+-- stops them.
+CREATE VIEW IF NOT EXISTS live_projects AS
+    SELECT * FROM projects WHERE status != 'ignored';
+
 -- task_tree (E-2161) is live_tasks plus one derived column: effective_parent_id,
 -- the nearest ancestor that is not removed.
 --

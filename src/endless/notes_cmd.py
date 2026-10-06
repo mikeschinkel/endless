@@ -27,7 +27,7 @@ def _resolve_project(name: str | None) -> tuple[int, str]:
             )
 
     row = db.query(
-        "SELECT id, name FROM projects WHERE name = ?",
+        "SELECT id, name FROM live_projects WHERE name = ?",
         (name,),
     )
     if not row:

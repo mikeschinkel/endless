@@ -6,18 +6,20 @@ from pathlib import Path
 import click
 
 from endless import agent_help, db, config
+from endless.event_bridge import project_registry
 from endless.project_path import resolved
 
 
 def unregister_project(name: str):
-    """Set project status to unregistered and remove from DB.
+    """Mark the project's directory ignored (E-2251).
 
-    Keeps .endless/config.json on disk (with status=unregistered)
-    so the project's metadata is preserved.
-    Does NOT add to ignore list — discover can offer to re-register.
+    The row stays — with its name, tasks, notes and dependencies — and only its
+    status changes, so nothing that references it dangles and `project
+    register` brings it back whole. Keeps .endless/config.json on disk (with
+    status=unregistered) so the project's metadata is preserved.
     """
     row = db.query(
-        "SELECT id, name, path FROM projects WHERE name = ?",
+        "SELECT id, name, path FROM live_projects WHERE name = ?",
         (name,),
     )
     if not row:
@@ -29,7 +31,6 @@ def unregister_project(name: str):
         )
 
     project_path = resolved(row[0]["path"])
-    project_id = row[0]["id"]
 
     # Update config on disk to status=unregistered
     cfg = config.project_config_read(project_path)
@@ -45,36 +46,25 @@ def unregister_project(name: str):
             )
         )
 
-    # Remove from DB
-    db.execute(
-        "DELETE FROM notes WHERE project_id = ?",
-        (project_id,),
-    )
-    db.execute(
-        "DELETE FROM project_deps "
-        "WHERE project_id = ? OR depends_on_id = ?",
-        (project_id, project_id),
-    )
-    db.execute(
-        "DELETE FROM projects WHERE id = ?",
-        (project_id,),
-    )
+    project_registry("ignore", str(project_path))
 
     click.echo(
         click.style("•", fg="cyan")
         + f" Unregistered {click.style(name, bold=True)}"
-        + " (config preserved on disk)"
+        + " (now ignored; config preserved on disk — "
+        + "`endless project register` brings it back)"
     )
 
 
 def purge_project(name: str):
-    """Delete .endless/ directory entirely and add to ignore list.
+    """Delete .endless/ directory entirely and mark the directory ignored.
 
-    This is the nuclear option — removes all Endless metadata
-    and prevents discover from suggesting re-registration.
+    This is the nuclear option — removes all Endless metadata on disk and
+    prevents every registration path from picking it up again. The projects
+    row stays, as ignored, so tasks recorded against it keep their project.
     """
     row = db.query(
-        "SELECT id, name, path FROM projects WHERE name = ?",
+        "SELECT id, name, path FROM live_projects WHERE name = ?",
         (name,),
     )
     if not row:
@@ -85,29 +75,15 @@ def purge_project(name: str):
         )
 
     project_path = resolved(row[0]["path"])
-    project_id = row[0]["id"]
 
     # Confirm
     click.confirm(
         f"This will delete {project_path / '.endless'} "
-        f"and add to ignore list. Continue?",
+        f"and mark the directory ignored. Continue?",
         abort=True,
     )
 
-    # Remove from DB
-    db.execute(
-        "DELETE FROM notes WHERE project_id = ?",
-        (project_id,),
-    )
-    db.execute(
-        "DELETE FROM project_deps "
-        "WHERE project_id = ? OR depends_on_id = ?",
-        (project_id, project_id),
-    )
-    db.execute(
-        "DELETE FROM projects WHERE id = ?",
-        (project_id,),
-    )
+    project_registry("ignore", str(project_path))
 
     # Delete .endless directory
     endless_dir = project_path / ".endless"
@@ -118,11 +94,8 @@ def purge_project(name: str):
             + f" Removed {click.style(str(endless_dir), dim=True)}"
         )
 
-    # Add to ignore list
-    config.add_ignore(project_path)
-
     click.echo(
         click.style("•", fg="cyan")
         + f" Purged {click.style(name, bold=True)}"
-        + " (added to ignore list)"
+        + " (directory now ignored)"
     )

@@ -28,6 +28,24 @@ def _is_registered(path: Path) -> bool:
     return match_project_path(path) is not None
 
 
+def _candidate_dirs(root: Path) -> list[Path]:
+    """The non-hidden directories discover may visit under root: its children
+    and their children."""
+    out = []
+    for child in root.iterdir():
+        if not child.is_dir() or child.name.startswith("."):
+            continue
+        out.append(child)
+        try:
+            out.extend(
+                sub for sub in child.iterdir()
+                if sub.is_dir() and not sub.name.startswith(".")
+            )
+        except OSError:
+            pass
+    return out
+
+
 def _print_tier_table(entries: list[Signal]):
     rows = [
         [sig.name, sig.language or "-", sig.description, sig.age_str]
@@ -205,6 +223,10 @@ def run_discover(
     not_mine = 0
 
     for root in roots:
+        if not reset:
+            # One resolve call for every directory this walk may ask about,
+            # rather than one shellout per directory (E-2251).
+            config.prime_ignored(_candidate_dirs(root))
         for child in sorted(root.iterdir()):
             if not child.is_dir() or child.name.startswith("."):
                 continue

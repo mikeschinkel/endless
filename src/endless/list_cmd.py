@@ -35,7 +35,7 @@ def list_projects(status_filter: str | None = None, group: bool = False,
         f"COALESCE(p.group_name,'') as group_name, p.path, "
         f"(SELECT count(*) FROM notes n "
         f"WHERE n.project_id = p.id AND n.resolved = 0) as pending_notes "
-        f"FROM projects p {where} {order}",
+        f"FROM live_projects p {where} {order}",
         params,
     )
 

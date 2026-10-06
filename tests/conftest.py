@@ -231,7 +231,6 @@ def isolated_env(tmp_path, monkeypatch):
     cfg = {
         "roots": [str(projects_root)],
         "scan_interval": 300,
-        "ignore": [],
     }
     with open(config_dir / "config.json", "w") as f:
         json.dump(cfg, f)

@@ -272,7 +272,7 @@ func projectRootByName(name string) (string, error) {
 		return "", err
 	}
 	var path string
-	err = db.QueryRow("SELECT path FROM projects WHERE name = ?", name).Scan(&path)
+	err = db.QueryRow("SELECT path FROM live_projects WHERE name = ?", name).Scan(&path)
 	if err != nil {
 		// Two callers pass --project, and only one of them reads what is printed
 		// here: the triage job passes a name it read from this same database,

@@ -66,6 +66,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/markdowncmd"
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/outputstylecmd"
+	"github.com/mikeschinkel/endless/internal/projectcmd"
 	"github.com/mikeschinkel/endless/internal/projectstatuscmd"
 	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/resumewindowscmd"
@@ -246,6 +247,8 @@ func main() {
 		sessionstatuscmd.Run(rest)
 	case "session-monitor":
 		sessionmonitorcmd.Run(rest)
+	case "project":
+		projectcmd.Run(rest)
 	case "project-status", "project-window":
 		projectstatuscmd.Run(sub, rest)
 	case "spawn-window", "spawn-layout", "spawn-launch":
@@ -346,6 +349,7 @@ func usageText() string {
 	fmt.Fprintln(w, "  worktree       in-use  (is this worktree still in use?)")
 	fmt.Fprintln(w, "  session-status render the per-session status view (--monitor loops it)")
 	fmt.Fprintln(w, "  session-monitor restart  (respawn every session-monitor pane in place)")
+	fmt.Fprintln(w, "  project        resolve|ignore|activate|clear|list-ignored  (ignored directories)")
 	fmt.Fprintln(w, "  project-status render the project status view (--monitor loops it)")
 	fmt.Fprintln(w, "  project-window create the two-pane tmux session behind project monitor --tmux")
 	fmt.Fprintln(w, "  spawn-window   create the tmux window that launches Claude on a task")

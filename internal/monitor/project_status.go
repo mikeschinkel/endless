@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"github.com/mikeschinkel/endless/internal/sessionstate"
@@ -71,7 +70,7 @@ func ProjectByName(name string) (id int64, resolved string, err error) {
 		return 0, "", err
 	}
 	err = db.QueryRow(
-		"SELECT id, name FROM projects WHERE name = ?", name,
+		"SELECT id, name FROM live_projects WHERE name = ?", name,
 	).Scan(&id, &resolved)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, "", fmt.Errorf("%w: %q", ErrNoProject, name)
@@ -90,10 +89,9 @@ func ProjectByName(name string) (id int64, resolved string, err error) {
 // literal cwd alone — which is all MatchProjectPath does — reports "not inside a
 // registered project" from inside the project.
 //
-// The walk climbs RESOLVED ancestors (the only form filepath.Dir can climb) and
-// queries each in STORED form, which is what the indexed column holds (E-2011);
-// only when every rung misses does it fall back to MatchProjectPath's scan for a
-// row written in an older spelling.
+// The walk is ResolveDirectory's: it climbs RESOLVED ancestors and queries each
+// in STORED form (E-2011), and the nearest row or IgnoreMarker decides — so a
+// cwd under an ignored directory is not inside a project (E-2251).
 //
 // Read-only, on the same rule as ProjectByName: the otherwise-identical
 // ProjectIDForPath auto-registers an anonymous project when the walk misses,
@@ -113,43 +111,15 @@ func ProjectForCwd() (id int64, name string, err error) {
 	if err != nil {
 		return 0, "", err
 	}
-	home, err := resolvedHomeDir()
+	v, err := ResolveDirectory(db, dir)
 	if err != nil {
 		return 0, "", err
 	}
-
-	for check := dir; ; {
-		err = db.QueryRow(
-			"SELECT id, name FROM projects WHERE path = ? ORDER BY id LIMIT 1",
-			homeRelative(check, home),
-		).Scan(&id, &name)
-		if err == nil {
-			return id, name, nil
-		}
-		if !errors.Is(err, sql.ErrNoRows) {
-			return 0, "", err
-		}
-		parent := filepath.Dir(check)
-		if parent == check {
-			break
-		}
-		check = parent
-	}
-
-	stored, ok, err := MatchProjectPath(db, dir)
-	if err != nil {
-		return 0, "", err
-	}
-	if ok {
-		err = db.QueryRow(
-			"SELECT id, name FROM projects WHERE path = ? ORDER BY id LIMIT 1", stored,
-		).Scan(&id, &name)
-		if err == nil {
-			return id, name, nil
-		}
-		if !errors.Is(err, sql.ErrNoRows) {
-			return 0, "", err
-		}
+	switch v.Kind {
+	case VerdictProject:
+		return v.ProjectID, v.Name, nil
+	case VerdictIgnored:
+		return 0, "", fmt.Errorf("%w: %s is ignored by Endless (at %s)", ErrNoProject, cwd, v.At)
 	}
 	return 0, "", fmt.Errorf("%w: no registered project encloses %s", ErrNoProject, cwd)
 }

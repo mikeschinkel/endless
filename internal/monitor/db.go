@@ -938,8 +938,9 @@ func ProjectPath(id int64) (string, error) {
 // which is what the indexed column holds (E-2011). Home is looked up once for
 // the whole walk rather than per rung.
 //
-// Only when the whole walk misses does projectIDForResolvedPath scan for a row
-// written in an older spelling.
+// The walk is ResolveDirectory's, which also stops at an ignored row or an
+// IgnoreMarker: such a directory returns ErrIgnoredDirectory and is never
+// auto-registered (E-2251).
 func ProjectIDForPath(dir string) (int64, bool, error) {
 	db, err := DB()
 	if err != nil {
@@ -950,41 +951,22 @@ func ProjectIDForPath(dir string) (int64, bool, error) {
 	if err != nil {
 		return 0, false, err
 	}
-	home, err := resolvedHomeDir()
+	// The nearest registered or ignored rung decides (E-2251). An ignored
+	// directory is never auto-registered: it is a directory the user said is
+	// not a project, and the hook's job there is to record nothing.
+	v, err := ResolveDirectory(db, dir)
 	if err != nil {
 		return 0, false, err
 	}
-
-	// Walk up looking for a registered project
-	check := dir
-	for {
-		var id int64
-		err = db.QueryRow(
-			"SELECT id FROM projects WHERE path = ?", homeRelative(check, home),
-		).Scan(&id)
-		if err == nil {
-			return id, true, nil
-		}
-
-		parent := filepath.Dir(check)
-		if parent == check {
-			break
-		}
-		check = parent
-	}
-
-	// Nothing stored in canonical form matched — a row may predate E-2011 or
-	// E-2002 and hold another spelling that denotes this directory anyway.
-	id, found, err := projectIDForResolvedPath(db, dir)
-	if err != nil {
-		return 0, false, err
-	}
-	if found {
-		return id, true, nil
+	switch v.Kind {
+	case VerdictProject:
+		return v.ProjectID, true, nil
+	case VerdictIgnored:
+		return 0, false, fmt.Errorf("%w: %s (at %s)", ErrIgnoredDirectory, dir, v.At)
 	}
 
 	// No registered project found — auto-register as active
-	id, err = ensureAutoRegisteredProject(db, dir)
+	id, err := ensureAutoRegisteredProject(db, dir)
 	if err != nil {
 		return 0, false, err
 	}

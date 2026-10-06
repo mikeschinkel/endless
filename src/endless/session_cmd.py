@@ -9,7 +9,7 @@ from pathlib import Path
 import click
 
 from endless import agent_help, db, provenance, rowcap, session_states, statuses
-from endless.project_path import match_project_path, resolved
+from endless.project_path import match_project_row, resolved
 
 
 def _refuse_on_stderr(refusal) -> None:
@@ -2405,17 +2405,23 @@ def _project_root_for_cwd() -> Path:
     cwd itself if not registered (companion files are still per-project).
 
     Both sides of the comparison are normalized (E-2002): cwd on the way in,
-    and each candidate row inside match_project_path, so a project reached
+    and each candidate row inside match_project_row, so a project reached
     through a symlink resolves to its registered root instead of falling
     through to cwd. The return is the RESOLVED form — this is a directory,
     not the `~/...` the column holds (E-2011).
     """
+    from endless import config
+
     cwd = resolved(Path.cwd())
     candidate = cwd
     while True:
-        stored_path = match_project_path(candidate)
-        if stored_path is not None:
-            return resolved(stored_path)
+        row = match_project_row(candidate)
+        if row is not None:
+            # The nearest row decides (E-2251): an ignored one means cwd is in
+            # no project, so the walk stops rather than reaching past it.
+            if row[1] == config.IGNORED_STATUS:
+                return cwd
+            return resolved(row[0])
         if candidate.parent == candidate:
             break
         candidate = candidate.parent

@@ -26,7 +26,7 @@ def resolve_project(name: str, path_hint: str | None = None) -> dict:
     rows = db.query(
         "SELECT id, name, label, path, group_name, description, "
         "status, language, created_at, updated_at "
-        "FROM projects WHERE name = ?",
+        "FROM live_projects WHERE name = ?",
         (name,),
     )
 

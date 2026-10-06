@@ -706,7 +706,7 @@ func GetTrackingMode(projectID int64) string {
 	if err != nil {
 		return "off"
 	}
-	if status == "anonymous" {
+	if status == "anonymous" || status == ProjectStatusIgnored {
 		return "off"
 	}
 

@@ -341,6 +341,30 @@ def apply_change(path: str, endless_go_bin: str | None = None) -> dict:
     return json.loads(result.stdout.strip())
 
 
+def project_registry(verb: str, *args: str):
+    """Shell out to `endless-go project <verb> <args...>` and return its answer.
+
+    The Go owner of the projects registry's "not a project" state (E-2251):
+    `resolve` answers whether directories are projects, ignored or neither;
+    `ignore`, `activate` and `clear` write the status; `list-ignored` lists it.
+    Machine-local registry writes, so no event and no ledger line.
+
+    A list payload comes back unwrapped (provenance.rows_of), an object as-is.
+    A non-zero exit relays Go's own refusal.
+    """
+    from endless import provenance
+
+    config.require_db_context()  # E-1429
+    cmd = [_resolve_endless_go(), *config.go_db_context_args(), "project", verb, *args]
+    result = subprocess.run(cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise _child_refusal(result.stderr, result.returncode, f"project {verb}")
+    payload = json.loads(result.stdout) if result.stdout.strip() else {}
+    if isinstance(payload, dict) and "rows" in payload:
+        return provenance.rows_of(payload)
+    return payload
+
+
 def init_schema(endless_go_bin: str | None = None) -> dict:
     """Shell out to `endless-go event migrate` to build or update the schema.
 

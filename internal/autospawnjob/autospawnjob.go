@@ -375,7 +375,7 @@ func registeredProjects(db *sql.DB) (out []projectRow, err error) {
 	var pr projectRow
 	var stored string
 
-	rows, err = db.Query(`SELECT id, name, path FROM projects ORDER BY id`)
+	rows, err = db.Query(`SELECT id, name, path FROM live_projects ORDER BY id`)
 	if err != nil {
 		err = fmt.Errorf("listing projects: %w", err)
 		goto end

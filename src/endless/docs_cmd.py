@@ -33,7 +33,7 @@ def _resolve_project(name: str | None) -> tuple[int, str, str]:
             )
 
     row = db.query(
-        "SELECT id, name, path FROM projects WHERE name = ?",
+        "SELECT id, name, path FROM live_projects WHERE name = ?",
         (name,),
     )
     if not row:

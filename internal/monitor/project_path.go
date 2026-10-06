@@ -220,55 +220,6 @@ func MatchProjectPath(db *sql.DB, dir string) (string, bool, error) {
 	return "", false, rows.Err()
 }
 
-// projectIDForResolvedPath is the legacy-row half of ProjectIDForPath's lookup,
-// run only after the indexed walk up dir's ancestors has missed. It scans the
-// projects table once, resolves each stored path, and returns the DEEPEST row
-// that is dir or an ancestor of it — the same nearest-enclosing-project answer
-// the walk gives, reached without an index.
-//
-// dir arrives already RESOLVED, and each candidate is resolved to match: this is
-// the comparison that has to see through every stored spelling at once, so it
-// runs in the form they all mean rather than the form they are written in.
-//
-// Deepest, not first, because projects nest: a row for ~/Projects and a row for
-// ~/Projects/endless must both be reachable, and a cwd inside the latter
-// belongs to the latter. Ties (two rows denoting the same directory) go to the
-// lower id, matching MatchProjectPath.
-func projectIDForResolvedPath(db *sql.DB, dir string) (int64, bool, error) {
-	rows, err := db.Query("SELECT id, path FROM projects ORDER BY id")
-	if err != nil {
-		return 0, false, err
-	}
-	defer rows.Close()
-
-	var bestID int64
-	bestLen := -1
-	for rows.Next() {
-		var id int64
-		var path string
-		if err = rows.Scan(&id, &path); err != nil {
-			return 0, false, err
-		}
-		resolved, rerr := ResolvedProjectPath(path)
-		if rerr != nil {
-			return 0, false, rerr
-		}
-		if resolved != dir && !strings.HasPrefix(dir, resolved+string(filepath.Separator)) {
-			continue
-		}
-		if len(resolved) > bestLen {
-			bestID, bestLen = id, len(resolved)
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return 0, false, err
-	}
-	if bestLen < 0 {
-		return 0, false, nil
-	}
-	return bestID, true, nil
-}
-
 // ProjectPathRepair reports what RepairProjectPaths changed.
 type ProjectPathRepair struct {
 	Merged    int // duplicate rows folded into the row that kept the directory

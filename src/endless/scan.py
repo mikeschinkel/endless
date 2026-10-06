@@ -40,7 +40,7 @@ def run_scan(project_name: str | None = None, docs_only: bool = False):
 
     if project_name:
         rows = db.query(
-            "SELECT id, name, path FROM projects WHERE name=?",
+            "SELECT id, name, path FROM live_projects WHERE name=?",
             (project_name,),
         )
         if not rows:
@@ -52,7 +52,7 @@ def run_scan(project_name: str | None = None, docs_only: bool = False):
             )
     else:
         rows = db.query(
-            "SELECT id, name, path FROM projects "
+            "SELECT id, name, path FROM live_projects "
             "WHERE status != 'archived' ORDER BY name"
         )
 

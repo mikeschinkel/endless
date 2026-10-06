@@ -804,7 +804,8 @@ project_cmd.add_command(init, name="register")
 @project_cmd.command("unregister")
 @click.argument("name")
 def unregister(name):
-    """Unregister a project (preserves .endless config on disk)."""
+    """Unregister a project: its directory becomes ignored (preserves .endless
+    config on disk; `project register` brings it back)."""
     from endless.unregister import unregister_project
     unregister_project(name)
 
@@ -812,9 +813,43 @@ def unregister(name):
 @project_cmd.command("purge")
 @click.argument("name")
 def purge(name):
-    """Delete .endless/ directory and add to ignore list."""
+    """Delete .endless/ directory and mark the directory ignored."""
     from endless.unregister import purge_project
     purge_project(name)
+
+
+@project_cmd.command("ignore")
+@click.argument("path", required=False, type=click.Path(exists=True, file_okay=False))
+@click.option("--marker", is_flag=True,
+              help="Also write an .endless-ignore file in the directory "
+                   "(kept out of git via .git/info/exclude)")
+def ignore_cmd(path, marker):
+    """Mark a directory, and everything under it, as not a project.
+
+    Nothing under it is auto-registered; a project registered inside it stays
+    a project. With no PATH, list the ignored directories."""
+    from endless import ignore_cmd as ic
+    if path is None:
+        if marker:
+            from endless import agent_help
+            raise agent_help.no_report(
+                "--marker writes a file into a directory, and no PATH was given. "
+                "Nothing was changed.",
+                "Retry with the directory to ignore: "
+                "`endless project ignore <path> --marker`",
+                text="--marker needs a PATH",
+            )
+        ic.list_ignored()
+        return
+    ic.ignore(Path(path), marker)
+
+
+@project_cmd.command("unignore")
+@click.argument("path", type=click.Path(exists=True, file_okay=False))
+def unignore_cmd(path):
+    """Stop ignoring a directory (removes its ignored row and marker file)."""
+    from endless import ignore_cmd as ic
+    ic.unignore(Path(path))
 
 
 @project_cmd.command("set")

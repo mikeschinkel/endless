@@ -103,6 +103,19 @@ def register_project(
         )
     stored_path = stored(project_path)
 
+    # A marker on disk is the user saying "leave this directory alone" (E-2251).
+    # Explicit registration is allowed UNDER an ignored directory — that is how
+    # a project inside an ignored tree gets registered — but not of a directory
+    # that carries the marker itself; the marker is the thing to remove.
+    marker = project_path / config.IGNORE_MARKER
+    if marker.is_file():
+        raise agent_help.no_report(
+            f"{project_path} carries {config.IGNORE_MARKER}, which marks it as "
+            "not a project. Nothing was registered.",
+            f"Delete {marker} if this directory should be a project, then retry",
+            text=f"Ignored by marker: {marker}",
+        )
+
     # Check if already registered
     existing = db.query(
         "SELECT id, name, label, description, language, status "
@@ -131,6 +144,13 @@ def register_project(
         default_desc = row["description"] or ""
         default_lang = row["language"] or detected_lang
         default_status = row["status"]
+        if default_status == config.IGNORED_STATUS:
+            # Registering an ignored directory re-activates it (E-2251). A row
+            # that never was a project is named by its path; offer the
+            # directory's name instead.
+            default_status = "active"
+            if default_name == stored_path:
+                default_name = dir_name
     else:
         default_name = dir_name
         default_label = ""

@@ -119,8 +119,9 @@ def stored(path: Path | str) -> str:
         return str(target)
 
 
-def match_project_path(path: Path | str) -> str | None:
-    """The `projects.path` AS STORED for the row denoting `path`, else None.
+def match_project_row(path: Path | str) -> tuple[str, str] | None:
+    """(stored path, status) of the projects row denoting `path`, else None —
+    ignored rows included (E-2251), for the walks that must stop at one.
 
     Exact match on the stored form first — the indexed fast path every
     canonically-written row takes — then a comparison in resolved form across
@@ -130,15 +131,24 @@ def match_project_path(path: Path | str) -> str | None:
     rather than the auto-registered duplicate.
     """
     rows = db.query(
-        "SELECT path FROM projects WHERE path = ?", (stored(path),)
+        "SELECT path, status FROM projects WHERE path = ?", (stored(path),)
     )
     if rows:
-        return rows[0]["path"]
+        return rows[0]["path"], rows[0]["status"]
     target = resolved(path)
-    for row in db.query("SELECT path FROM projects ORDER BY id"):
+    for row in db.query("SELECT path, status FROM projects ORDER BY id"):
         if resolved(row["path"]) == target:
-            return row["path"]
+            return row["path"], row["status"]
     return None
+
+
+def match_project_path(path: Path | str) -> str | None:
+    """The `projects.path` AS STORED for the PROJECT row denoting `path`, else
+    None. A row marking the directory ignored (E-2251) is not a project."""
+    row = match_project_row(path)
+    if row is None or row[1] == config.IGNORED_STATUS:
+        return None
+    return row[0]
 
 
 def project_name_for_cwd(cwd: Path | str) -> str | None:
@@ -151,7 +161,9 @@ def project_name_for_cwd(cwd: Path | str) -> str | None:
     registered row whose path denotes cwd.
     """
     pcfg = config.project_config_read(Path(cwd))
-    if pcfg and pcfg.get("name"):
+    # An unregistered project keeps its config on disk, marked as such; its
+    # name no longer names a project (E-2251).
+    if pcfg and pcfg.get("name") and pcfg.get("status") != "unregistered":
         return pcfg["name"]
     stored_path = match_project_path(cwd)
     if stored_path is None:

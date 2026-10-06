@@ -397,7 +397,7 @@ func projectRootByName(name string) (string, error) {
 		return "", err
 	}
 	var path string
-	if err := db.QueryRow("SELECT path FROM projects WHERE name = ?", name).Scan(&path); err != nil {
+	if err := db.QueryRow("SELECT path FROM live_projects WHERE name = ?", name).Scan(&path); err != nil {
 		// Every Scan failure reads as "not found", including a locked database
 		// or schema drift. That masking predates this change and is left as it
 		// stands; the class follows the message, which sends the caller back to

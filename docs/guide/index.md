@@ -274,7 +274,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 {{end}}| `note` | _(none yet)_ | project notes aren't covered by the guide yet. |
 | `notes` | _(none yet)_ | project notes aren't covered by the guide yet. |
 | `plan` | tasks | 'plan' is the former name for 'task' (renamed); use 'task'. |
-| `project` | reference | Managing registered projects (register, list, status, set, rename, scan, discover, purge, unregister). |
+| `project` | reference | Managing registered projects (register, list, status, set, rename, scan, discover, purge, unregister, ignore, unignore). |
 | `question` | tasks | Open questions on a task — asking a series, answering (and saying who answered), withdrawing, rejecting, superseding, listing. |
 | `rater` | tasks | The rater job that proposes complexity and risk for submitted tasks nobody rated, and running it by hand. |
 | `sandbox` | orchestration | Resetting the worktree's sandbox to its seeded state (the seed-sandbox hook). |

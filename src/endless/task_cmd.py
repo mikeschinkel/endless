@@ -835,7 +835,7 @@ def _resolve_project(name: str | None) -> tuple[int, str]:
                 "registering a project is the user's choice",
             )
     row = db.query(
-        "SELECT id, name FROM projects WHERE name = ?",
+        "SELECT id, name FROM live_projects WHERE name = ?",
         (name,),
     )
     if not row:
@@ -1952,7 +1952,7 @@ def _unlanded_targets(project_name: str | None,
     """
     if not show_all:
         return [_resolve_project(project_name)]
-    rows = db.query("SELECT id, name FROM projects ORDER BY name")
+    rows = db.query("SELECT id, name FROM live_projects ORDER BY name")
     return [(r["id"], r["name"]) for r in rows]
 
 

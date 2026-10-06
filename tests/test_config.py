@@ -9,7 +9,9 @@ from endless import config
 def test_load_config_returns_defaults(isolated_env):
     cfg = config.load_config()
     assert "roots" in cfg
-    assert "ignore" in cfg
+    # The ignore list moved onto projects rows (E-2251); a fresh config no
+    # longer carries one.
+    assert "ignore" not in cfg
     assert cfg["scan_interval"] == 300
 
 
@@ -28,31 +30,53 @@ def test_get_roots_expands_paths(isolated_env):
     assert roots[0].is_dir()
 
 
+def _ignored_rows(path):
+    from endless import db
+    from endless.project_path import stored
+    return db.query(
+        "SELECT name, status FROM projects WHERE path = ?", (stored(path),)
+    )
+
+
 def test_add_ignore_and_check(isolated_env):
     path = isolated_env["projects_root"] / "some-dir"
+    path.mkdir()
     assert not config.is_ignored(path)
 
     config.add_ignore(path)
     assert config.is_ignored(path)
+    # Recorded on a projects row, not in the config file (E-2251).
+    rows = _ignored_rows(path)
+    assert [r["status"] for r in rows] == ["ignored"]
+    assert "ignore" not in config.load_config()
 
 
 def test_ignore_is_idempotent(isolated_env):
     path = isolated_env["projects_root"] / "some-dir"
+    path.mkdir()
     config.add_ignore(path)
     config.add_ignore(path)
 
-    cfg = config.load_config()
-    # Should only appear once
-    short = str(path).replace(str(Path.home()), "~")
-    assert cfg["ignore"].count(short) <= 1
+    assert len(_ignored_rows(path)) == 1
 
 
 def test_child_of_ignored_is_ignored(isolated_env):
     parent = isolated_env["projects_root"] / "parent-dir"
     child = parent / "child-dir"
+    child.mkdir(parents=True)
 
     config.add_ignore(parent)
     assert config.is_ignored(child)
+
+
+def test_marker_file_ignores_its_subtree(isolated_env):
+    parent = isolated_env["projects_root"] / "vendored"
+    child = parent / "pkg"
+    child.mkdir(parents=True)
+    (parent / config.IGNORE_MARKER).write_text("")
+
+    assert config.is_ignored(child)
+    assert _ignored_rows(parent) == []
 
 
 def test_project_config_write_and_read(isolated_env):

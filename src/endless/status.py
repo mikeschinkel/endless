@@ -37,7 +37,7 @@ def show_status(name: str | None = None):
     row = db.query(
         "SELECT id, name, label, description, status, language, "
         "group_name, path, created_at, updated_at "
-        "FROM projects WHERE name = ?",
+        "FROM live_projects WHERE name = ?",
         (name,),
     )
     if not row:

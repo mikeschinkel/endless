@@ -50,5 +50,6 @@ func Go() []*goose.Migration {
 		addSessionFocusTask(),
 		addAutoSpawn(),
 		addPrime(),
+		ignoredProjects(),
 	}
 }
