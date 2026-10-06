@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"testing"
 
@@ -27,6 +28,7 @@ func enterScriptSuite(t *testing.T, id, body string) (root string) {
 	t.Chdir(root)
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", "") // main follows XDG first (E-2186)
+	t.Setenv("XDG_CACHE_HOME", "")  // so reports land under the temp HOME (E-2243)
 	return root
 }
 
@@ -206,15 +208,16 @@ exit 0
 	}
 }
 
-// readCTRF reads back the merged report the run wrote, which is where the
-// normalized results actually land.
+// readCTRF reads back the merged report the most recent run wrote, which is
+// where the normalized results actually land. Each run writes its own
+// timestamped file (E-2243), and the names sort in run order.
 func readCTRF(t *testing.T, id string) (rpt *verify.Report) {
 	t.Helper()
-	cache, err := os.UserCacheDir()
-	if err != nil {
-		t.Fatalf("UserCacheDir: %v", err)
+	reports := cachedReports(t, id)
+	if len(reports) == 0 {
+		t.Fatalf("no CTRF report was written for %s", id)
 	}
-	data, err := os.ReadFile(filepath.Join(cache, "endless", "verify", id, "ctrf.json"))
+	data, err := os.ReadFile(reports[len(reports)-1])
 	if err != nil {
 		t.Fatalf("read CTRF: %v", err)
 	}
@@ -223,4 +226,19 @@ func readCTRF(t *testing.T, id string) (rpt *verify.Report) {
 		t.Fatalf("parse CTRF: %v", err)
 	}
 	return rpt
+}
+
+// cachedReports lists the task's per-run reports in the cache, oldest first.
+func cachedReports(t *testing.T, id string) (paths []string) {
+	t.Helper()
+	dir, err := reportDir(id)
+	if err != nil {
+		t.Fatalf("reportDir: %v", err)
+	}
+	paths, err = filepath.Glob(filepath.Join(string(dir), "*"+ReportFileSuffix))
+	if err != nil {
+		t.Fatalf("glob: %v", err)
+	}
+	sort.Strings(paths)
+	return paths
 }

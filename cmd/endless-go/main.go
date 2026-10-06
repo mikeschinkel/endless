@@ -357,7 +357,7 @@ func usageText() string {
 	fmt.Fprintln(w, "  task-content   names  (the task content-kind vocabulary)")
 	fmt.Fprintln(w, "  session-state  groups|get|has|sql-list|rank|label|glyph  (the session state vocabulary)")
 	fmt.Fprintln(w, "  session-prime  mark the calling Claude session primed (the end of a read-in)")
-	fmt.Fprintln(w, "  verify         [--keep] <task-id>  (run a task's Tier-0 verification suite)")
+	fmt.Fprintln(w, "  verify         [--keep|--report-dir] <task-id>  (run a task's Tier-0 verification suite)")
 	fmt.Fprintln(w, "  jobs           list|run|retry  (the fire-once background job runner)")
 	fmt.Fprintln(w, "  errors         list|show|clear|codes  (machine-local fault record)")
 	return b.String()

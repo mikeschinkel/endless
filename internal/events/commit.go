@@ -79,6 +79,31 @@ func CommitDoc(projectRoot, relPath, subject string) error {
 	return commitPaths(projectRoot, []string{relPath}, subject, excludeGlob)
 }
 
+// VerifyReportSubject is the commit subject for one recorded verify run
+// (E-2243): `Endless: verify E-NNNN <report filename>`. The filename carries the
+// run's timestamp and the SHA it tested, so every run's subject is unique —
+// which is what keeps canAmend (subject must equal HEAD's) from ever folding one
+// run's record into another's. It is deliberately absent from
+// worktree_cmd.AMENDABLE_COMMIT_SUBJECTS for the same reason.
+func VerifyReportSubject(taskID, relPath string) string {
+	return fmt.Sprintf("Endless: verify %s %s", taskID, path.Base(relPath))
+}
+
+// CommitVerifyReport commits one passing verify run's CTRF report
+// (`.endless/tasks/e-NNNN/verify-<timestamp>-<sha>.ctrf.json`) on the project's
+// main checkout, as a new commit of its own (E-2243). Thin wrapper around
+// commitPaths, so it inherits main-checkout enforcement, the index.lock retry,
+// git-env stripping, and leaving anything else that is staged alone.
+//
+// A history of runs is the point, so a run never amends an earlier one: the
+// subject is unique per report (VerifyReportSubject), and canAmend requires an
+// exact subject match.
+func CommitVerifyReport(projectRoot, relPath, taskID string) error {
+	excludeGlob := path.Dir(relPath) + "/*.ctrf.json"
+	return commitPaths(projectRoot, []string{relPath},
+		VerifyReportSubject(taskID, relPath), excludeGlob)
+}
+
 // CommitDocPaths commits several document mirror files as ONE commit, under a
 // subject of the caller's choosing. The sweep that relocates mirrors into the
 // consolidated layout (E-2137) uses it: relocating four hundred files as four

@@ -358,6 +358,7 @@ Endless auto-commits a fixed, narrow set of its own files — and none of them i
 | `.endless/db-ledger/*.jsonl`                         | endless, on the main checkout, via the event hook  |
 | `.endless/LESSONS.md`                                | endless, on the main checkout, at write time       |
 | `.endless/tasks/e-<id>/*.md`                         | endless, on the main checkout, at write time       |
+| `.endless/tasks/e-<id>/verify-*.ctrf.json`           | endless, on the main checkout, on a passing `task verify` |
 | `.endless/decisions/ED-<id>.md`                      | endless, on the main checkout, at write time       |
 | **everything else — source, docs, tests, config**    | **you, with `git commit`**                          |
 
@@ -1094,6 +1095,10 @@ This is the only front door, and it is the front door for both forms — which i
 **It is sufficient on its own — no `cd` first, and nothing to remember.** With no id it takes the session's active task, falling back to the task whose worktree you are standing in (the same two sources `just land` uses, and the second needs no database, so it works outside tmux and in a self-dev worktree with no `--db`). Having resolved the task it runs the suite **in that task's worktree**, because a suite is a pre-land gate and has to prove the candidate tree — asking from the main checkout would otherwise run main's copy against code the task hasn't landed.
 
 The runner exports three variables into the suite's environment: `ENDLESS_VERIFY_TASK` (the id), `ENDLESS_VERIFY_DIR` (the suite's own directory — read files you ship beside a suite from here rather than typing the path), and `ENDLESS_VERIFY_RUN` (the per-run temp dir, whose presence is what proves the runner started you).
+
+**Commit before you verify.** Every run is refused, before anything executes, while the worktree has uncommitted changes — anything `git status` lists other than Endless's own `.endless/verbs.jsonl` and `.endless/db-ledger/`. The refusal lists them. This is what makes a run's record name exactly the code it tested.
+
+**Every passing run is recorded on main.** The runner writes each run's merged [CTRF](https://ctrf.io) report to the user cache as a new file, never overwriting an earlier one. When the run passes, `task verify` **moves** that report onto the main checkout as `.endless/tasks/e-<id>/verify-<UTC timestamp>-<short sha>.ctrf.json`, commits it there as a commit of its own (`Endless: verify E-<id> <filename>`), and deletes the task's earlier reports from the cache. A failing run's report stays in the cache for diagnosis until the task passes. Either way, one `CTRF:` line names where that run's report ended up. If a passing run's report cannot be moved or committed, the command fails even though the suite passed, naming where the report now sits — the run is not recorded, and that is not to be papered over. Committed reports are kept forever; any CTRF-aware tool can read a task's history from them.
 
 Running a `verify.sh` directly is not a shortcut, it is a different (and worse) thing: it skips the isolation, and it skips the check that the suite is yours. Every suite refuses a direct run and names the command to use instead.
 

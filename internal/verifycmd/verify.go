@@ -50,14 +50,17 @@ type checkResult struct {
 // task id is required: resolving "the cwd's task" is the Python CLI's job (it
 // owns session/worktree context) and it passes the id through explicitly.
 func Run(args []string) {
-	var keep *bool
+	var keep, printDir *bool
 	var rest []string
+	var dir dt.DirPath
 	var code int
 	var err error
 
 	fs := refusal.NewFlags("verify")
 	keep = fs.Bool("keep", false,
 		"Keep the per-run temp dir (isolated HOME/XDG + intermediates) for debugging")
+	printDir = fs.Bool("report-dir", false,
+		"Print the directory this task's run reports are written to, and run nothing")
 	if err = fs.Parse(args); err != nil {
 		// flag.ExitOnError used to print and exit from inside the flag package,
 		// which is why there was nothing to classify at this line before. Both
@@ -76,9 +79,20 @@ func Run(args []string) {
 		// run_verify always passes exactly one id, so a wrong count is somebody
 		// invoking the binary by hand.
 		refusal.NoReport(
-			"Usage: endless-go verify [--keep] <task-id>",
+			"Usage: endless-go verify [--keep|--report-dir] <task-id>",
 			"Pass exactly one task id and retry",
 		).Command("verify").Exit(2)
+	}
+
+	if *printDir {
+		// `endless task verify` asks rather than re-deriving the cache dir, so
+		// where reports live has one definition: reportDir (E-2243).
+		dir, err = reportDir(rest[0])
+		if err != nil {
+			classify(err).Exit(1)
+		}
+		fmt.Println(string(dir))
+		os.Exit(0)
 	}
 
 	code, err = run(rest[0], *keep)

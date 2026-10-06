@@ -4,12 +4,13 @@ One directory per task: `.endless/tasks/e-<id>/`. `_harness.sh` is the shared
 shell harness a script suite sources, and `_guard.sh` is the guard the harness
 sources; both belong to no task.
 
-## Two kinds of file, and only one of them is yours
+## Three kinds of file, and only one of them is yours
 
 | In `e-<id>/`                                  | Whose          | Written by                     |
 |-----------------------------------------------|----------------|--------------------------------|
 | `verify.toml`, `verify.sh`, `land.toml`       | the task's     | you, on the task branch        |
 | `context.md`, `plan.md`, `analysis.md`, `outcome.md`, `reason.md`, `notes.md` | the database's | `endless task update`, on main |
+| `verify-<UTC timestamp>-<sha>.ctrf.json`      | the runner's   | `endless task verify`, on main |
 
 Those `.md` files are **document mirrors**: each is a projection of one piece
 of the task's content in the database, and is named after it. The database is
@@ -37,6 +38,12 @@ out like any other tracked file. They go stale as main moves on, exactly as
 `.endless/db-ledger/` already does. Nothing reads them, and nothing writes them
 here.
 
+The `.ctrf.json` files are **verify-run reports**: one per passing run of the
+task's suite, in the CTRF standard, named for when the run happened and the
+commit it tested. `endless task verify` moves each one onto main and commits it
+there as the run passes. They are a record, kept forever: never hand-edit one,
+never `git add` one, never delete one.
+
 Decisions (`.endless/decisions/ED-<id>.md`) are mirrors under the same rules,
 and they do not live under `.endless/tasks/` because a decision has no owning
 task.
@@ -52,6 +59,14 @@ task, runs in that task's worktree, builds the isolation a suite needs (a temp
 or the main database), and refuses a task's suite that is not yours. Executing a
 script directly skips all of it — which is why every suite here refuses to run
 that way.
+
+Every run is refused, before anything executes, while the worktree has
+uncommitted changes (Endless's own `.endless/verbs.jsonl` and
+`.endless/db-ledger/` aside): a recorded run names the commit it tested, so
+commit first. A passing run's report is moved onto main and committed there,
+and the `CTRF:` line names it. A failing run's report stays in the user cache,
+where the `CTRF:` line names it, until the task passes — then the task's
+failed reports are deleted.
 
 It exports two things into a suite's environment:
 

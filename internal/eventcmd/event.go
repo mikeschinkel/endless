@@ -41,6 +41,8 @@ func Run(args []string) {
 		runEmit(args[1:])
 	case "commit-doc":
 		runCommitDoc(args[1:])
+	case "commit-verify-report":
+		runCommitVerifyReport(args[1:])
 	case "validate-db":
 		runValidateDB(args[1:])
 	case "rebuild-db":
@@ -77,7 +79,7 @@ func Run(args []string) {
 func usageText() string {
 	return strings.Join([]string{
 		"Usage: endless-go event <command> [flags]",
-		"Commands: emit, validate-db, rebuild-db, migrate, upgrade, apply-change, backup, reap-worktrees, commit-doc",
+		"Commands: emit, validate-db, rebuild-db, migrate, upgrade, apply-change, backup, reap-worktrees, commit-doc, commit-verify-report",
 	}, "\n") + "\n"
 }
 
@@ -145,6 +147,30 @@ func runCommitDoc(args []string) {
 		// something the user has to hear about is decided where the error was
 		// built (commit.go), so it is relayed with the class it already carries.
 		exitRelay("event commit-doc", "endless-go event commit-doc: error: ", err)
+	}
+}
+
+// runCommitVerifyReport commits one passing verify run's CTRF report on the
+// project's main checkout (E-2243). `endless task verify` calls it right after
+// moving the report out of the user cache, so main is dirty only for the gap
+// between the move and this commit.
+func runCommitVerifyReport(args []string) {
+	fs := refusal.NewFlags("commit-verify-report")
+	projectRoot := fs.String("project-root", "", "Project root directory (main checkout)")
+	relPath := fs.String("path", "", "Repo-relative path of the report to commit")
+	taskID := fs.String("task", "", "Task the report verified, E-NNNN")
+	parseFlags(fs, "event commit-verify-report", args)
+
+	if *projectRoot == "" || *relPath == "" || *taskID == "" {
+		refusal.NoReport(
+			"endless-go event commit-verify-report: --project-root, --path, and --task are required",
+			"Pass all three flags and retry",
+		).Command("event commit-verify-report").Exit(1)
+	}
+	if err := events.CommitVerifyReport(*projectRoot, *relPath, *taskID); err != nil {
+		// Classified where it was built (commit.go): a git that will not commit
+		// is the user's to clear, and the caller turns this into a failed verify.
+		exitRelay("event commit-verify-report", "endless-go event commit-verify-report: error: ", err)
 	}
 }
 
