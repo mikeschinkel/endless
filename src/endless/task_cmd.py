@@ -2502,7 +2502,7 @@ def move_sections(
     """
     import json
 
-    from endless.event_bridge import _resolve_endless_go, emit_event
+    from endless.event_bridge import _child_refusal, _resolve_endless_go, emit_event
 
     _, proj_name = _resolve_project(project_name)
     args = ["section-moves", "--project", proj_name, "--from", from_name, "--to", to_name]
@@ -2514,8 +2514,9 @@ def move_sections(
         capture_output=True, text=True,
     )
     if result.returncode != 0:
-        raise click.ClickException(
-            result.stderr.strip() or f"section-moves exited {result.returncode}")
+        # endless-go classified this where it was raised; relaying is the job,
+        # as for every session-query read (see question_cmd._go).
+        raise _child_refusal(result.stderr, result.returncode, "session-query section-moves")
     plan = json.loads(result.stdout)
     moves, skips = plan.get("moves") or [], plan.get("skips") or []
 
