@@ -1,0 +1,99 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 16,
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test: resolver, migration 15 import, hook, events",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest: ignore/unignore/marker, register, unregister, reconcile",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the config entry became an ignored row named by its path",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "live_projects excludes it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a directory under the ignored one is ignored",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a registered project inside the ignored tree is a project",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "an uncovered directory is neither",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "hook in an ignored directory exits 0",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "…and writes no projects row",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "…and records no session",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "hook in an uncovered directory still auto-registers it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a marker file alone stops auto-registration",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "ignoring a project keeps its row and name",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "activate restores it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "clear refuses a registered project",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "clear drops a plain ignored row",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
