@@ -1,0 +1,159 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 28,
+      "passed": 28,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test ./internal/verifycmd/ ./internal/events/",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest tests/test_verify_cmd.py",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the report dir is the task's, in the user cache",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "under this run's HOME",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a dirty tree is refused",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the refusal names the uncommitted file",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "nothing ran: no report was written",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "first failing run exits 1",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a failing run names its cache report",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "second failing run exits 1",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "failing runs commit nothing",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "failed reports accumulate in the cache",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the passing run exits 0",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "exactly one report is recorded",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it is committed in the task's directory",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "its name carries the SHA it tested",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "as a commit of its own on main",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "on top of what was there",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the task's cache is emptied",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "one CTRF line",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "naming the committed report",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the report is CTRF",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a second passing run exits 0",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it is a second record",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a new commit, not an amend of the first",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it refuses",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "naming the linked worktree",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the task branch did not move",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
