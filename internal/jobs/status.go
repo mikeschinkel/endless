@@ -133,6 +133,42 @@ end:
 	return err
 }
 
+// LastOkAt is when the named job last finished without error. ok is false when
+// it never has, or has no scheduling row yet. Read during a run, it is the
+// PREVIOUS successful run: the runner stamps last_ok_at only after Run returns.
+func LastOkAt(name string) (at time.Time, ok bool, err error) {
+	var db *sql.DB
+	var lastOk sql.NullString
+
+	db, err = monitor.DB()
+	if err != nil {
+		err = doterr.NewErr(ErrJobs, ErrDatabase, err)
+		goto end
+	}
+	err = db.QueryRow(`SELECT last_ok_at FROM jobs WHERE name = ?`, name).Scan(&lastOk)
+	if err == sql.ErrNoRows {
+		err = nil
+		goto end
+	}
+	if err != nil {
+		err = doterr.NewErr(ErrJobs, ErrDatabase, ErrQuery, "name", name, err)
+		goto end
+	}
+	if lastOk.String == "" {
+		goto end
+	}
+	// UTC without a zone suffix, as DueIn documents.
+	at, err = time.ParseInLocation("2006-01-02T15:04:05", lastOk.String, time.UTC)
+	if err != nil {
+		err = doterr.NewErr(ErrJobs, ErrDatabase, "name", name, err)
+		goto end
+	}
+	ok = true
+
+end:
+	return at, ok, err
+}
+
 // scheduleRows reads every jobs row, keyed by name.
 func scheduleRows(db *sql.DB) (rows map[string]Status, err error) {
 	var result *sql.Rows

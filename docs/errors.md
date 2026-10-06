@@ -845,4 +845,15 @@ and on its first run in each process. A branch with no work of its own is not
 listed. Fingerprinted on the project, so one rewrite is one incident however
 many branches it strands.
 
-**What to do.** Run `git rebase main` in each worktree the incident names (`endless errors show <n> --detail` lists them all); git drops the copies main already holds and keeps each branch's own work. `endless worktree check`, run inside a worktree, says the same for that one branch. Do not rename or renumber any migration for this. Dismiss with `endless errors clear <id>` once the branches are rebased.
+**Reading it.** The summary names up to four branches; when there are more it
+says how many and points at `endless errors show <id> --detail`, which lists
+them all. Branches of finished tasks (confirmed, assumed, completed, superseded,
+declined, obsolete) are counted apart from open ones and listed in their own
+group in the detail: those branches are leftovers. For each branch the detail
+gives the task's status and whether its claiming session is live or ended, the
+date by which main rewrote the commits it duplicates, and the date of the commit
+it forked from. When every rewrite predates the job's previous successful run —
+or the job has never succeeded before — the summary says so, because a job that
+has just started watching reports an old rewrite exactly as it would a new one.
+
+**What to do.** Run `git rebase main` in each open task's worktree the incident names; git drops the copies main already holds and keeps each branch's own work. Rebase a finished task's branch only if its unlanded commits matter. `endless worktree check`, run inside a worktree, says the same for that one branch. Do not rename or renumber any migration for this. There is nothing to clear: while branches stay stranded the job re-checks every run and the incident names only those still stranded, and once none are left it clears itself.

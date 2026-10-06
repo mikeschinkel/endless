@@ -2,6 +2,8 @@ package mainsyncjob
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"io"
 	"log/slog"
 	"os"
@@ -10,6 +12,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/mikeschinkel/go-cfgstore"
 
@@ -19,6 +22,44 @@ import (
 
 func init() {
 	cfgstore.SetLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	// No test reaches a real database: the best-effort reads fail (and so drop
+	// their lines), and clearing succeeds without doing anything. A test that
+	// cares installs its own with stubReads.
+	readClaim = func(int64) (monitor.TaskClaim, error) { return monitor.TaskClaim{}, errNoDB }
+	previousOkAt = func() (time.Time, bool, error) { return time.Time{}, false, errNoDB }
+	clearFault = func(string, string, string) (int, error) { return 0, nil }
+}
+
+var errNoDB = errors.New("no database in tests")
+
+// reads is what stubReads makes the job's non-git reads and clears answer.
+type reads struct {
+	claims  map[int64]monitor.TaskClaim
+	prevOk  time.Time
+	ran     bool
+	clears  []string
+	clearOK bool
+}
+
+func stubReads(t *testing.T, r *reads) {
+	t.Helper()
+	pc, pp, pf := readClaim, previousOkAt, clearFault
+	readClaim = func(id int64) (monitor.TaskClaim, error) {
+		c, ok := r.claims[id]
+		if !ok {
+			return monitor.TaskClaim{}, errNoDB
+		}
+		return c, nil
+	}
+	previousOkAt = func() (time.Time, bool, error) { return r.prevOk, r.ran, nil }
+	clearFault = func(fp, since, by string) (int, error) {
+		r.clears = append(r.clears, fp)
+		if !r.clearOK {
+			return 0, errNoDB
+		}
+		return 1, nil
+	}
+	t.Cleanup(func() { readClaim, previousOkAt, clearFault = pc, pp, pf })
 }
 
 // isolateGit keeps the developer's own git config out of every repository
@@ -455,5 +496,228 @@ func TestTaskWorktrees(t *testing.T) {
 	got := taskWorktrees(porcelain)
 	if len(got) != 1 || got[0].branch != "task/1" || got[0].path != "/p/.endless/worktrees/e-1" {
 		t.Errorf("taskWorktrees = %+v", got)
+	}
+}
+
+// strand builds a project whose main was rebased under task branches 1..n,
+// each with work of its own, and returns it with each branch's worktree.
+func strand(t *testing.T, n int) (fixture, []string) {
+	t.Helper()
+	f := newFixture(t)
+	t.Cleanup(func() { tipMu.Lock(); delete(tipMemory, f.main); tipMu.Unlock() })
+	if err := os.WriteFile(filepath.Join(f.main, ".git", "info", "exclude"), []byte(".endless/\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	commit(t, f.main, "unpushed.txt")
+	var wts []string
+	for i := 1; i <= n; i++ {
+		wt := addTaskWorktree(t, f, fmt.Sprint(i))
+		commit(t, wt, fmt.Sprintf("work%d.txt", i))
+		wts = append(wts, wt)
+	}
+	commit(t, f.other, "host-edit.txt")
+	git(t, f.other, "push", "-q", "origin", "main")
+	git(t, f.main, "fetch", "-q", "origin")
+	git(t, f.main, "rebase", "-q", "origin/main")
+	return f, wts
+}
+
+func lastFault(t *testing.T, got *[]faults.Fault) faults.Fault {
+	t.Helper()
+	if len(*got) == 0 {
+		t.Fatal("no fault recorded")
+	}
+	return (*got)[len(*got)-1]
+}
+
+// TestRewritten_TruncatedSummaryPointsAtDetail: past four names the summary
+// says how many more there are and how to see them; at four it does not.
+func TestRewritten_TruncatedSummaryPointsAtDetail(t *testing.T) {
+	branches := func(n int) (out []StrandedBranch) {
+		for i := 1; i <= n; i++ {
+			out = append(out, StrandedBranch{Branch: fmt.Sprintf("task/%d", i), Copies: 1})
+		}
+		return out
+	}
+	got := captureFaults(t)
+
+	recordRewritten(1, "/p", Result{Branch: "main", Stranded: branches(6)}, "")
+	sum := lastFault(t, got).Summary
+	for _, want := range []string{"task/4, and 2 more", "`endless errors show <id> --detail`"} {
+		if !strings.Contains(sum, want) {
+			t.Errorf("truncated summary %q lacks %q", sum, want)
+		}
+	}
+	if strings.Contains(sum, "task/5") {
+		t.Errorf("summary %q names a fifth branch", sum)
+	}
+
+	recordRewritten(1, "/p", Result{Branch: "main", Stranded: branches(4)}, "")
+	if sum := lastFault(t, got).Summary; strings.Contains(sum, "--detail") || strings.Contains(sum, "more") {
+		t.Errorf("untruncated summary %q points at --detail", sum)
+	}
+}
+
+// TestRewritten_FinishedTasksAreGroupedApart: a finished task's branch is still
+// named, but in its own group and counted on its own; a branch whose task
+// could not be read stays with the open ones.
+func TestRewritten_FinishedTasksAreGroupedApart(t *testing.T) {
+	f, _ := strand(t, 3)
+	got := captureFaults(t)
+	stubReads(t, &reads{claims: map[int64]monitor.TaskClaim{
+		1: {Status: "underway", SessionID: 10, SessionState: "working"},
+		2: {Status: "confirmed", SessionID: 20, SessionState: "ended"},
+		// 3: unreadable
+	}, ran: true, clearOK: true})
+
+	res, err := sync1(t, f, systemGit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Stranded) != 3 {
+		t.Fatalf("stranded = %+v, want all three", res.Stranded)
+	}
+	fault := lastFault(t, got)
+	if !strings.Contains(fault.Summary, "2 open task branches and 1 finished task's branch") {
+		t.Errorf("summary does not count the groups apart: %q", fault.Summary)
+	}
+	stranded, _ := fault.Fields["stranded"].([]string)
+	if len(stranded) != 3 {
+		t.Errorf("fields stranded = %v, want all three named", fault.Fields["stranded"])
+	}
+	open, finished, ok := strings.Cut(fault.Detail, "Finished tasks —")
+	if !ok {
+		t.Fatalf("detail has no finished group:\n%s", fault.Detail)
+	}
+	if !strings.Contains(finished, "task/2") || strings.Contains(open, "task/2 ") {
+		t.Errorf("task/2 is not in the finished group:\n%s", fault.Detail)
+	}
+	for _, want := range []string{"task/1 ", "task/3 ", "E-1 underway; claimed by ES-10, live"} {
+		if !strings.Contains(open, want) {
+			t.Errorf("open group lacks %q:\n%s", want, fault.Detail)
+		}
+	}
+	if !strings.Contains(finished, "E-2 confirmed; claimed by ES-20, ended") {
+		t.Errorf("finished group lacks the claim line:\n%s", fault.Detail)
+	}
+	if strings.Contains(fault.Detail, "E-3") {
+		t.Errorf("an unreadable task got a claim line:\n%s", fault.Detail)
+	}
+	if !strings.Contains(fault.Detail, "main rewrote these commits no later than") ||
+		!strings.Contains(fault.Detail, "the branch forked from a commit dated") {
+		t.Errorf("detail lacks the divergence dates:\n%s", fault.Detail)
+	}
+}
+
+// TestRewritten_FailedReadsDoNotFailTheRun: with every task read failing the
+// run still succeeds and reports the branch, minus the claim line.
+func TestRewritten_FailedReadsDoNotFailTheRun(t *testing.T) {
+	f, _ := strand(t, 1)
+	got := captureFaults(t) // the package default: every read fails
+
+	res, err := sync1(t, f, systemGit)
+	if err != nil {
+		t.Fatalf("a failed read failed the run: %v", err)
+	}
+	if len(res.Stranded) != 1 || res.Stranded[0].ClaimKnown {
+		t.Fatalf("stranded = %+v, want task/1 with no claim", res.Stranded)
+	}
+	if d := lastFault(t, got).Detail; strings.Contains(d, "E-1") || !strings.Contains(d, "task/1") {
+		t.Errorf("detail:\n%s", d)
+	}
+}
+
+// TestRewritten_AgeNote: a rewrite older than the job's previous successful
+// run, or seen on its first run ever, is labelled as not new; one newer than
+// the previous run is not.
+func TestRewritten_AgeNote(t *testing.T) {
+	f, _ := strand(t, 1)
+	got := captureFaults(t)
+	r := &reads{ran: false, clearOK: true}
+	stubReads(t, r)
+
+	if _, err := sync1(t, f, systemGit); err != nil {
+		t.Fatal(err)
+	}
+	if sum := lastFault(t, got).Summary; !strings.Contains(sum, "found on this run; the rewrite predates it") {
+		t.Errorf("first-ever run summary %q does not say the rewrite predates it", sum)
+	}
+
+	r.ran, r.prevOk = true, time.Now().Add(time.Hour)
+	if _, err := sync1(t, f, systemGit); err != nil {
+		t.Fatal(err)
+	}
+	if sum := lastFault(t, got).Summary; !strings.Contains(sum, "predates this job's previous run") {
+		t.Errorf("summary %q does not say the rewrite predates the previous run", sum)
+	}
+
+	r.prevOk = time.Now().Add(-time.Hour)
+	if _, err := sync1(t, f, systemGit); err != nil {
+		t.Fatal(err)
+	}
+	if sum := lastFault(t, got).Summary; strings.Contains(sum, "predates") {
+		t.Errorf("a rewrite newer than the previous run is labelled old: %q", sum)
+	}
+}
+
+// TestRewritten_ResolvesItself: a re-check that finds fewer branches re-records
+// naming only those; one that finds none clears the incident; a clear that
+// fails keeps the check running so the next run tries again.
+func TestRewritten_ResolvesItself(t *testing.T) {
+	f, wts := strand(t, 2)
+	got := captureFaults(t)
+	r := &reads{ran: true, clearOK: false}
+	stubReads(t, r)
+
+	if _, err := sync1(t, f, systemGit); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := lastFault(t, got).Fields["stranded"].([]string); len(n) != 2 {
+		t.Fatalf("first run named %v, want two", n)
+	}
+
+	git(t, wts[0], "rebase", "-q", "main")
+	*got = nil
+	if _, err := sync1(t, f, systemGit); err != nil {
+		t.Fatal(err)
+	}
+	fault := lastFault(t, got)
+	if n, _ := fault.Fields["stranded"].([]string); len(n) != 1 || n[0] != "task/2" {
+		t.Errorf("after one rebase the incident names %v, want only task/2", n)
+	}
+	if strings.Contains(fault.Summary, "task/1") || strings.Contains(fault.Detail, "task/1 ") {
+		t.Errorf("the rebased branch is still named:\n%s\n%s", fault.Summary, fault.Detail)
+	}
+	if len(r.clears) != 0 {
+		t.Errorf("cleared while a branch was still stranded: %v", r.clears)
+	}
+
+	git(t, wts[1], "rebase", "-q", "main")
+	*got = nil
+	if _, err := sync1(t, f, systemGit); err != nil {
+		t.Fatal(err)
+	}
+	if len(*got) != 0 {
+		t.Errorf("recorded %+v with nothing stranded", *got)
+	}
+	want := "main-rewritten:" + f.main
+	if len(r.clears) != 1 || r.clears[0] != want {
+		t.Fatalf("clears = %v, want one of %q", r.clears, want)
+	}
+
+	// That clear failed, so the next run checks — and clears — again, though
+	// main has not moved; once it succeeds, the cheap gate is back.
+	r.clearOK = true
+	if _, err := sync1(t, f, systemGit); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.clears) != 2 {
+		t.Errorf("clears = %v, want a retry after the failed clear", r.clears)
+	}
+	if _, err := sync1(t, f, systemGit); err != nil {
+		t.Fatal(err)
+	}
+	if len(r.clears) != 2 {
+		t.Errorf("clears = %v, want no check once the clear succeeded", r.clears)
 	}
 }

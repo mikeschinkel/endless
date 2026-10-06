@@ -3,6 +3,8 @@ package monitor
 import (
 	"database/sql"
 	"fmt"
+
+	"github.com/mikeschinkel/endless/internal/sessionstate"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
 
@@ -48,4 +50,47 @@ func GetTaskStatus(taskID int64) (string, error) {
 // display-only bind of a done task, or a landed/retained worktree, never trips.
 func IsTerminalTaskStatus(status string) bool {
 	return taskstatus.Has(taskstatus.Terminal, status)
+}
+
+// TaskClaim is a task's status and the session bound to it — the newest
+// sessions row whose task_id is the task, the record `task show` reads its
+// `Claimed:` line from. SessionID is 0 when no session was ever bound, and
+// Status is empty when the task does not exist.
+type TaskClaim struct {
+	Status       string
+	SessionID    int64
+	SessionState string
+}
+
+// SessionLive reports whether the claiming session can still act. False when
+// there is none.
+func (c TaskClaim) SessionLive() bool {
+	return c.SessionID != 0 && sessionstate.Has(sessionstate.Live, c.SessionState)
+}
+
+// GetTaskClaim reads a task's status and claiming session in one query.
+func GetTaskClaim(taskID int64) (claim TaskClaim, err error) {
+	db, err := DB()
+	if err != nil {
+		return claim, err
+	}
+	var sessionID sql.NullInt64
+	var state sql.NullString
+	err = db.QueryRow(
+		`SELECT t.status, s.id, s.state
+		   FROM live_tasks t
+		   LEFT JOIN sessions s ON s.task_id = t.id
+		  WHERE t.id = ?
+		  ORDER BY s.id DESC
+		  LIMIT 1`, taskID,
+	).Scan(&claim.Status, &sessionID, &state)
+	if err == sql.ErrNoRows {
+		return TaskClaim{}, nil
+	}
+	if err != nil {
+		return TaskClaim{}, fmt.Errorf("loading task claim: %w", err)
+	}
+	claim.SessionID = sessionID.Int64
+	claim.SessionState = state.String
+	return claim, nil
 }

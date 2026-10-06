@@ -19,6 +19,7 @@
 //     count and both ways out, and let the user choose.
 //  5. Main was rewritten under open task branches: record WARN-0031 naming
 //     them, so each is rebased before its land is refused rather than after.
+//     Once a check finds none left, clear that warning: nobody has to.
 //
 // A failed fetch, fast-forward or push is the run's error: the runner records
 // it and backs off, so a missing credential is reported and decays toward the
@@ -58,6 +59,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/jobs"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
 
 // JobName keys this job's scheduling row. It must stay stable: changing it
@@ -178,11 +180,30 @@ type Result struct {
 	Stranded []StrandedBranch
 }
 
-// StrandedBranch is an open task branch that main was rewritten under.
+// StrandedBranch is a task branch that main was rewritten under.
 type StrandedBranch struct {
 	Branch   string
 	Worktree string
 	Copies   int
+	// RewrittenAt is the newest committer date among main's own copies of the
+	// commits this branch duplicates: main was rewritten under the branch no
+	// later than that. ForkedAt is the date of the commit the branch forked
+	// from. Either is zero when git could not say.
+	RewrittenAt, ForkedAt time.Time
+	// TaskID is the task the branch belongs to, read off its name; 0 when the
+	// name does not carry one. Claim is that task's status and claiming
+	// session, valid only when ClaimKnown: the read is best-effort.
+	TaskID     int64
+	Claim      monitor.TaskClaim
+	ClaimKnown bool
+}
+
+// Finished reports whether the branch belongs to a task that is done with —
+// confirmed, assumed, completed, superseded, declined or obsolete. A branch
+// whose task could not be read is not finished: not knowing must never move
+// live work into the leftovers group.
+func (s StrandedBranch) Finished() bool {
+	return s.ClaimKnown && taskstatus.Has(taskstatus.Terminal, s.Claim.Status)
 }
 
 // String is the run note for this project.
@@ -205,9 +226,16 @@ func (r Result) String() string {
 // Git runs git in dir and returns stdout.
 type Git func(ctx context.Context, dir string, args ...string) (string, error)
 
-// recordFault is faults.Record, held as a var so tests can observe what a run
-// reports without a bound fault store.
-var recordFault = faults.Record
+// The job's reads and writes outside git, held as vars so tests can observe
+// and steer them without a bound database. Everything but recordFault is
+// best-effort: a failed read leaves its line out of the report and never fails
+// the run.
+var (
+	recordFault  = faults.Record
+	clearFault   = faults.ClearFingerprintSince
+	readClaim    = monitor.GetTaskClaim
+	previousOkAt = func() (time.Time, bool, error) { return jobs.LastOkAt(JobName) }
+)
 
 // syncProject is one project's run. It is the whole algorithm; Run only picks
 // the projects.
@@ -279,12 +307,19 @@ func syncProject(ctx context.Context, projectID int64, root string, git Git) (re
 		recordDiverged(projectID, root, res)
 	}
 
-	res.Stranded, err = watchRewrite(ctx, root, res.Branch, git)
+	var checked bool
+	res.Stranded, checked, err = watchRewrite(ctx, root, res.Branch, git)
 	if err != nil {
 		return res, err
 	}
-	if len(res.Stranded) > 0 {
-		recordRewritten(projectID, root, res)
+	switch {
+	case len(res.Stranded) > 0:
+		// Recorded on every run that finds some, so the open incident always
+		// names exactly the branches still stranded: the upsert replaces the
+		// summary, and the newest detail line is the current list.
+		recordRewritten(projectID, root, res, ageNote(res.Stranded))
+	case checked:
+		clearRewritten(root)
 	}
 	return res, nil
 }
@@ -328,32 +363,181 @@ func recordDiverged(projectID int64, root string, res Result) {
 	})
 }
 
-func recordRewritten(projectID int64, root string, res Result) {
-	var names []string
-	var detail strings.Builder
-	fmt.Fprintf(&detail, "In %s, these open task branches still carry copies of "+
-		"commits %s holds under other SHAs:\n\n", root, res.Branch)
+// summaryNames is how many branch names the WARN-0031 summary shows before it
+// points at --detail for the rest.
+const summaryNames = 4
+
+func recordRewritten(projectID int64, root string, res Result, note string) {
+	var open, finished []StrandedBranch
 	for _, s := range res.Stranded {
+		if s.Finished() {
+			finished = append(finished, s)
+		} else {
+			open = append(open, s)
+		}
+	}
+	var names []string
+	for _, s := range append(append([]StrandedBranch{}, open...), finished...) {
 		names = append(names, s.Branch)
-		fmt.Fprintf(&detail, "  %s  (%s)\n    %s\n", s.Branch, s.Worktree,
-			monitor.BaseRewrittenDetail(res.Branch, s.Copies))
 	}
-	shown := names
-	if len(shown) > 4 {
-		shown = append(append([]string{}, shown[:4]...), "…")
+
+	var detail strings.Builder
+	fmt.Fprintf(&detail, "In %s, these task branches still carry copies of "+
+		"commits %s holds under other SHAs.\n", root, res.Branch)
+	if note != "" {
+		fmt.Fprintf(&detail, "%s.\n", upperFirst(note))
 	}
+	writeGroup(&detail, "Open tasks — rebase each before it lands:", res.Branch, open)
+	writeGroup(&detail, "Finished tasks — the branch is leftover; rebase only if "+
+		"its unlanded commits matter:", res.Branch, finished)
+
+	summary := fmt.Sprintf("%s was rewritten under %s (%s)",
+		res.Branch, branchCounts(len(open), len(finished)), shownNames(names))
+	switch {
+	case len(open) > 0 && len(finished) > 0:
+		summary += fmt.Sprintf(": land refuses each open one until `git rebase %s` runs in its worktree", res.Branch)
+	case len(open) > 0:
+		summary += fmt.Sprintf(": land refuses each until `git rebase %s` runs in its worktree", res.Branch)
+	default:
+		summary += ": all belong to finished tasks; rebase one only if its unlanded commits matter"
+	}
+	if note != "" {
+		summary += " — " + note
+	}
+
 	recordFault(faults.Fault{
 		Code:        faults.ErrCodeMainRewritten,
 		Source:      "job:" + JobName,
-		Fingerprint: "main-rewritten:" + root,
+		Fingerprint: rewrittenFingerprint(root),
 		ProjectID:   projectID,
-		Summary: fmt.Sprintf("%s was rewritten under %s (%s): land refuses each until "+
-			"`git rebase %s` runs in its worktree",
-			res.Branch, plural(len(res.Stranded), "open task branch"),
-			strings.Join(shown, ", "), res.Branch),
-		Detail: detail.String(),
-		Fields: map[string]any{"root": root, "branch": res.Branch, "stranded": names},
+		Summary:     summary,
+		Detail:      detail.String(),
+		Fields:      map[string]any{"root": root, "branch": res.Branch, "stranded": names},
 	})
+}
+
+func rewrittenFingerprint(root string) string {
+	return "main-rewritten:" + root
+}
+
+// clearRewritten resolves the open WARN-0031 once a check finds nothing
+// stranded, so a person never has to remember to clear it. A clear that fails
+// keeps the full check running each run, so the next one tries again.
+func clearRewritten(root string) {
+	if _, err := clearFault(rewrittenFingerprint(root), "", "job:"+JobName); err != nil {
+		keepChecking(root)
+	}
+}
+
+// writeGroup writes one group of stranded branches into the detail, or nothing
+// when the group is empty.
+func writeGroup(w *strings.Builder, heading, base string, group []StrandedBranch) {
+	if len(group) == 0 {
+		return
+	}
+	fmt.Fprintf(w, "\n%s\n\n", heading)
+	for _, s := range group {
+		fmt.Fprintf(w, "  %s  (%s)\n", s.Branch, s.Worktree)
+		if line := claimLine(s); line != "" {
+			fmt.Fprintf(w, "    %s\n", line)
+		}
+		if line := datesLine(base, s); line != "" {
+			fmt.Fprintf(w, "    %s\n", line)
+		}
+		fmt.Fprintf(w, "    %s\n", monitor.BaseRewrittenDetail(base, s.Copies))
+	}
+}
+
+// claimLine is "E-12 confirmed; claimed by ES-34, ended", or empty when the
+// task could not be read.
+func claimLine(s StrandedBranch) string {
+	if !s.ClaimKnown {
+		return ""
+	}
+	if s.Claim.Status == "" {
+		return fmt.Sprintf("E-%d: no such task", s.TaskID)
+	}
+	line := fmt.Sprintf("E-%d %s", s.TaskID, s.Claim.Status)
+	switch {
+	case s.Claim.SessionID == 0:
+		line += "; no session ever claimed it"
+	case s.Claim.SessionLive():
+		line += fmt.Sprintf("; claimed by ES-%d, live", s.Claim.SessionID)
+	default:
+		line += fmt.Sprintf("; claimed by ES-%d, ended", s.Claim.SessionID)
+	}
+	return line
+}
+
+// datesLine says when the branch diverged, as far as git can tell.
+func datesLine(base string, s StrandedBranch) string {
+	var parts []string
+	if !s.RewrittenAt.IsZero() {
+		parts = append(parts, fmt.Sprintf("%s rewrote these commits no later than %s",
+			base, formatTime(s.RewrittenAt)))
+	}
+	if !s.ForkedAt.IsZero() {
+		parts = append(parts, "the branch forked from a commit dated "+formatTime(s.ForkedAt))
+	}
+	return strings.Join(parts, "; ")
+}
+
+func formatTime(t time.Time) string {
+	return t.Local().Format("2006-01-02 15:04")
+}
+
+// branchCounts names the two groups for the summary.
+func branchCounts(open, finished int) string {
+	var parts []string
+	if open > 0 {
+		parts = append(parts, plural(open, "open task branch"))
+	}
+	switch {
+	case finished == 1:
+		parts = append(parts, "1 finished task's branch")
+	case finished > 1:
+		parts = append(parts, strconv.Itoa(finished)+" finished tasks' branches")
+	}
+	return strings.Join(parts, " and ")
+}
+
+// shownNames lists up to summaryNames names, then says how many more there
+// are and where they are. The incident's id is not known until Record has run,
+// so the command names it as a placeholder.
+func shownNames(names []string) string {
+	if len(names) <= summaryNames {
+		return strings.Join(names, ", ")
+	}
+	return fmt.Sprintf("%s, and %d more — `endless errors show <id> --detail`",
+		strings.Join(names[:summaryNames], ", "), len(names)-summaryNames)
+}
+
+// ageNote says the rewrite is not new, when git and the job's own history
+// both show it: the job has never succeeded before, or every branch's rewrite
+// is dated before its previous successful run. Without it, the first run of a
+// job that can see an old rewrite reads like a fresh one. Empty when any date
+// is unknown or any rewrite is newer — then it may well be new.
+func ageNote(stranded []StrandedBranch) string {
+	prev, ran, err := previousOkAt()
+	if err != nil {
+		return ""
+	}
+	if !ran {
+		return "found on this run; the rewrite predates it"
+	}
+	for _, s := range stranded {
+		if s.RewrittenAt.IsZero() || !s.RewrittenAt.Before(prev) {
+			return ""
+		}
+	}
+	return "not new: the rewrite predates this job's previous run, " + formatTime(prev)
+}
+
+func upperFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	return strings.ToUpper(s[:1]) + s[1:]
 }
 
 // tipMemory is main's tip as each project's last run saw it, and whether that
@@ -375,17 +559,20 @@ var (
 	tipMemory = map[string]tipState{}
 )
 
+// stranded is also set while a WARN-0031 is left to clear, so the check that
+// clears it keeps running until the clear succeeds.
 type tipState struct {
 	tip      string
 	stranded bool
 }
 
 // watchRewrite returns the open task branches main was rewritten under, running
-// the full check only when tipMemory says it can have changed.
-func watchRewrite(ctx context.Context, root, branch string, git Git) ([]StrandedBranch, error) {
+// the full check only when tipMemory says it can have changed. checked reports
+// whether the full check ran: only then does an empty result mean none.
+func watchRewrite(ctx context.Context, root, branch string, git Git) (stranded []StrandedBranch, checked bool, err error) {
 	tip, err := git(ctx, root, "rev-parse", "refs/heads/"+branch)
 	if err != nil {
-		return nil, fmt.Errorf("resolve %s: %w", branch, err)
+		return nil, false, fmt.Errorf("resolve %s: %w", branch, err)
 	}
 	tip = strings.TrimSpace(tip)
 
@@ -395,26 +582,35 @@ func watchRewrite(ctx context.Context, root, branch string, git Git) ([]Stranded
 
 	if seen && !prev.stranded {
 		if prev.tip == tip {
-			return nil, nil
+			return nil, false, nil
 		}
 		// Exit 0 means the old tip is an ancestor: main only moved forward.
 		if _, aerr := git(ctx, root, "merge-base", "--is-ancestor", prev.tip, tip); aerr == nil {
 			remember(root, tip, false)
-			return nil, nil
+			return nil, false, nil
 		}
 	}
 
-	stranded, err := strandedBranches(ctx, root, branch, git)
+	stranded, err = strandedBranches(ctx, root, branch, git)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	remember(root, tip, len(stranded) > 0)
-	return stranded, nil
+	return stranded, true, nil
 }
 
 func remember(root, tip string, stranded bool) {
 	tipMu.Lock()
 	tipMemory[root] = tipState{tip: tip, stranded: stranded}
+	tipMu.Unlock()
+}
+
+// keepChecking makes the next run do the full check whatever main's tip does.
+func keepChecking(root string) {
+	tipMu.Lock()
+	st := tipMemory[root]
+	st.stranded = true
+	tipMemory[root] = st
 	tipMu.Unlock()
 }
 
@@ -446,12 +642,58 @@ func strandedBranches(ctx context.Context, root, base string, git Git) ([]Strand
 			continue
 		}
 		if len(sides.Equivalent) > 0 && len(sides.Branch) > 0 {
-			stranded = append(stranded, StrandedBranch{
+			s := StrandedBranch{
 				Branch: wt.branch, Worktree: wt.path, Copies: len(sides.Equivalent),
-			})
+			}
+			describe(ctx, root, base, git, &s)
+			stranded = append(stranded, s)
 		}
 	}
 	return stranded, nil
+}
+
+var taskBranchRe = regexp.MustCompile(`^task/(\d+)$`)
+
+// describe fills in what the report says about one stranded branch beyond its
+// name: when it diverged, and whose it is. Every read is best-effort and
+// leaves its field zero on failure. It runs only for branches already found
+// stranded, so a clean project pays nothing for it.
+func describe(ctx context.Context, root, base string, git Git, s *StrandedBranch) {
+	head := "refs/heads/" + s.Branch
+	if out, err := git(ctx, root, "log", "--left-only", "--cherry-mark", "--no-merges",
+		"--format=%m %ct", base+"..."+head); err == nil {
+		for _, ln := range strings.Split(out, "\n") {
+			mark, ts, _ := strings.Cut(strings.TrimSpace(ln), " ")
+			if mark != "=" {
+				continue
+			}
+			if t := unixTime(ts); t.After(s.RewrittenAt) {
+				s.RewrittenAt = t
+			}
+		}
+	}
+	if fork, err := git(ctx, root, "merge-base", base, head); err == nil {
+		if out, lerr := git(ctx, root, "log", "-1", "--format=%ct", strings.TrimSpace(fork)); lerr == nil {
+			s.ForkedAt = unixTime(strings.TrimSpace(out))
+		}
+	}
+
+	m := taskBranchRe.FindStringSubmatch(s.Branch)
+	if m == nil {
+		return
+	}
+	s.TaskID, _ = strconv.ParseInt(m[1], 10, 64)
+	if claim, err := readClaim(s.TaskID); err == nil {
+		s.Claim, s.ClaimKnown = claim, true
+	}
+}
+
+func unixTime(s string) time.Time {
+	n, err := strconv.ParseInt(s, 10, 64)
+	if err != nil {
+		return time.Time{}
+	}
+	return time.Unix(n, 0)
 }
 
 type worktreeRef struct{ path, branch string }

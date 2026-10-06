@@ -495,3 +495,40 @@ func TestRegister_RejectsADuplicateName(t *testing.T) {
 	}()
 	Register(&fakeJob{name: "dupe", schedule: Schedule{Interval: time.Minute}})
 }
+
+// TestLastOkAt_ReadsThePreviousSuccessfulRun: nothing before a job has ever
+// succeeded, the run's time after, and a later failure does not move it.
+func TestLastOkAt_ReadsThePreviousSuccessfulRun(t *testing.T) {
+	newTestDB(t)
+	fail := false
+	register(t, &fakeJob{
+		name:     "sometimes",
+		schedule: Schedule{Interval: time.Nanosecond},
+		fn: func(context.Context) error {
+			if fail {
+				return errors.New("broken")
+			}
+			return nil
+		},
+	})
+
+	if _, ok, err := LastOkAt("sometimes"); err != nil || ok {
+		t.Fatalf("before any run: ok=%v err=%v, want not ok", ok, err)
+	}
+
+	before := time.Now().UTC().Truncate(time.Second)
+	if _, err := RunNamed(context.Background(), "sometimes"); err != nil {
+		t.Fatal(err)
+	}
+	at, ok, err := LastOkAt("sometimes")
+	if err != nil || !ok || at.Before(before) || at.After(time.Now().Add(time.Second)) {
+		t.Fatalf("after a success: %v ok=%v err=%v, want about now", at, ok, err)
+	}
+
+	fail = true
+	RunNamed(context.Background(), "sometimes")
+	again, ok, err := LastOkAt("sometimes")
+	if err != nil || !ok || !again.Equal(at) {
+		t.Errorf("after a failure: %v ok=%v err=%v, want unchanged %v", again, ok, err, at)
+	}
+}
