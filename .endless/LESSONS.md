@@ -7205,3 +7205,7 @@ While recording ED-1610 (an epic's strategy row) I added a sentence about what a
 ### [2026-10-06] Don't cite the standard outcome file path
 On E-2250 (brainstorm handoff, 2026-10-06) I told Mike to read the synthesis with 'endless task show E-2250 --all-fields' and also gave the path .endless/tasks/e-2250/outcome.md. Mike: that is the standard location, so naming it is redundant once task show has been given. In handoffs, point to task show only.
 - **Project**: endless
+
+### [2026-10-06] Hedge decision wording that the user may need to revise
+On E-2250, drafting ED-1610 (what an epic carries), I wrote that an epic has 'never a plan' and that its objective 'stays fixed (if it changes, it is a different epic)'. Mike asked for 'typically' in both places. His reason: as soon as a rule is locked in, a case turns up that needs it changed, and he then has to argue with the agent to change it. He can also see an objective's nuances changing without it becoming a different epic. This is about the absolutes I put in that decision. I think it applies to absolutes I add to decisions generally, but he hasn't said so.
+- **Project**: endless
