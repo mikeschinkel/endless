@@ -1,0 +1,1 @@
+Grouping epic created 2026-10-06 (Mike) for the cross-project link work that came out of the E-1883 follow-up on event attribution. Endless and go-cfgstore already link tasks across projects.
