@@ -7177,3 +7177,7 @@ While planning E-2243 (commit verify-run CTRF reports to main), I argued for rec
 ### [2026-10-05] How a failure is handled is separate from how much the artifact matters
 While planning E-2243, Mike chose to fail a verify run when its CTRF report cannot be committed to main, and also called the report a nice-to-have. I called those two answers a conflict. He disagreed: a commit that cannot happen means something is wrong and should be stopped and resolved, not papered over, whatever the artifact's importance; carrying on would also silently lose the artifact in cases that might matter more than expected. Do not infer the failure policy from how important the output seems.
 - **Project**: endless
+
+### [2026-10-06] No output-location option in Endless's verify runner
+While planning E-2243 (commit each passing verify run's CTRF report to main), I proposed adding a --ctrf <path> flag to endless-go verify so the Python wrapper could direct the report. Mike does not want Endless to offer any option to put the report somewhere other than its standardized location. Such an option may belong in the standalone tool when verify is extracted, not now. This is about E-2243's report location; I have not generalized it to other outputs.
+- **Project**: endless
