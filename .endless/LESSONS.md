@@ -7217,3 +7217,7 @@ While investigating WARN-0031 (main-sync's first run reporting 8 branches strand
 ### [2026-10-06] Never hand Mike a do-this-later step that lives only in chat
 After asking E-1562's session to rebase its branch, I told Mike to run 'endless errors clear 1542' once that finished. Mike rejected that: a follow-up that depends on him remembering is not a workflow, because instructions given in a session's reply are lost once the session ends. A follow-up must be written somewhere durable where something expects it: a task's plan, or better, code that resolves the condition itself (for example an incident that clears when its cause is gone).
 - **Project**: endless
+
+### [2026-10-06] A verify suite that pipes a payload into endless-go hook must set the Claude Code harness env
+While verifying E-2251, the suite passed in the agent's Claude Code session and failed from Mike's bare terminal: the hook no-ops outside a supported harness (agentenv, E-1962), so an auto-register assertion failed and the ignored-directory assertions passed vacuously. Run hook calls in a suite with CLAUDECODE=1 CLAUDE_CODE_ENTRYPOINT=cli (and TMUX/ENDLESS_SESSION_ID unset), and test the suite once with those vars removed from the outer env.
+- **Project**: endless
