@@ -1,0 +1,5 @@
+On 2026-10-06 the main-sync job (E-2233) ran for the first time and recorded WARN-0031 (incident 1542): "main was rewritten under 8 open task branches (task/1562, task/1803, task/1864, task/1865, …)". It read like main had just been rewritten. Nothing had been. All eight branches had been stranded since the 2026-10-05 `pull --rebase` (their duplicated commits are all dated 2026-10-04 or earlier), and this was simply the first run of a job that can see it.
+
+Diagnosing that took a manual pass through the reflog, `git cherry` on each branch, and `task show` on each task. That is information the job already has, or can get cheaply, and did not report. Three of the eight belonged to tasks that were already finished (confirmed, or assumed and superseded) and whose sessions had ended; they were listed exactly like live work.
+
+The summary also cut the branch list at four names with `…`. Truncating it is fine, but nothing said the full list is in `endless errors show <n> --detail`, and Mike did not know that flag existed.
