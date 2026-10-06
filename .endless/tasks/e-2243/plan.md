@@ -24,3 +24,7 @@ Decisions (settled with Mike):
 6. Tests:
    - Go: the commit verb makes a new commit per call (never amends, even after an earlier run's commit), refuses when the target is not the main checkout, and leaves unrelated staged files alone. The runner writes a new timestamped cache file per run without overwriting earlier ones, and prints `CTRF:` only on a failing run.
    - Python: a dirty worktree is refused before anything runs; an Endless-managed-only change is not refused; failing runs commit nothing and their reports accumulate in the cache; a passing run after them commits exactly one report at the expected path on main, leaves the task's cache directory empty, and prints exactly one `CTRF:` line naming the committed path; a commit failure makes the command exit non-zero and keeps the cache reports.
+
+Added during implementation:
+- `endless-go verify --report-dir <id>` prints the runner's per-task cache dir, so the Python wrapper asks for it instead of re-deriving `os.UserCacheDir` per platform. The cache location keeps one definition (verifycmd `reportDir`).
+- The verifycmd test fixture blanks `XDG_CACHE_HOME`, so per-run reports land under the temp HOME rather than a real cache on Linux.
