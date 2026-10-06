@@ -17,3 +17,15 @@ Positions Mike stated:
 - Whatever an epic requires instead of a plan (objective, strategy, or
   both) is a row in task_content, not the description.
 - At minimum an epic needs a different glyph from a task's plan pencil.
+
+## Settled later the same day (Mike)
+
+- ED-1610 (proposed): an initiative epic carries a `strategy` task_content
+  row, named strategy and never plan, because distinct names make an agent
+  behave differently and the epic/todo distinction must not depend on the
+  agent noticing the type. It opens with the objective (what is true when
+  done; fixed), then the approach (expected to change).
+- A grouping needs nothing beyond its title and description: a group's
+  "done when" is usually its children finishing (already derived) and its
+  membership is usually clear from its title.
+- New content rows are hidden in `task show` unless asked for (E-2252).
