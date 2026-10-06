@@ -62,9 +62,13 @@ printf '{"roots":["~/Projects"],"ignore":["~/Projects/vendor"]}\n' >"${DB}/confi
 GO=("${BIN}" --db-dir "${DB}")
 sql() { sqlite3 "${DB}/endless.db" "$1"; }
 kind() { "${GO[@]}" project resolve "$1" | python3 -c 'import json,sys; print(json.load(sys.stdin)["rows"][0]["kind"])'; }
+# The hook no-ops outside a supported harness (agentenv, E-1962), so it is run
+# as Claude Code runs it whatever shell this suite was started from. Without
+# this, every hook assertion below passes vacuously from a bare terminal.
 hook() {
     printf '{"session_id":"%s","hook_event_name":"UserPromptSubmit","cwd":"%s","prompt":"hi"}' "$1" "$2" \
-        | "${GO[@]}" hook claude >/dev/null 2>"${TMP}/hook.err"
+        | env -u TMUX -u TMUX_PANE -u ENDLESS_SESSION_ID CLAUDECODE=1 CLAUDE_CODE_ENTRYPOINT=cli \
+            "${GO[@]}" hook claude >/dev/null 2>"${TMP}/hook.err"
 }
 
 "${GO[@]}" event migrate >"${TMP}/migrate.log" 2>&1 || setup_error "migrate: $(tail -10 "${TMP}/migrate.log")"
