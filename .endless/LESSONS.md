@@ -7197,3 +7197,7 @@ While planning E-2243 (commit each passing verify run's CTRF report to main), I 
 ### [2026-10-06] Argue architecture, not legacy or process
 Situation: E-2216, deciding whether the project ignore list stays in the global config file or moves into the machine database, and whether 'unregister' should delete the projects row or keep a marked row. I argued for the config file because it is what Mike edits and Go already reads it, and against a status row because it would 'change how projects work' and belongs to another task. Then I asked him to choose anyway. Mike's reason: those are legacy and process arguments, not architectural ones; changing how something works is not a cost in itself. In this case, weigh the options on architecture (where the state belongs, who reads it, what breaks or gets simpler), name the option that achieves the objective, and don't argue against an option and then ask him to pick it.
 - **Project**: endless
+
+### [2026-10-06] Keep a decision to its own subject
+While recording ED-1610 (an epic's strategy row) I added a sentence about what a 'grouping epic' requires. Mike: it is a separate 'group' task type, and a rule about it does not belong in a decision about the epic type. Record a rule about a different type in its own decision, and use Mike's term for it.
+- **Project**: endless
