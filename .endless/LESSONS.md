@@ -7209,3 +7209,7 @@ On E-2250 (brainstorm handoff, 2026-10-06) I told Mike to read the synthesis wit
 ### [2026-10-06] Hedge decision wording that the user may need to revise
 On E-2250, drafting ED-1610 (what an epic carries), I wrote that an epic has 'never a plan' and that its objective 'stays fixed (if it changes, it is a different epic)'. Mike asked for 'typically' in both places. His reason: as soon as a rule is locked in, a case turns up that needs it changed, and he then has to argue with the agent to change it. He can also see an objective's nuances changing without it becoming a different epic. This is about the absolutes I put in that decision. I think it applies to absolutes I add to decisions generally, but he hasn't said so.
 - **Project**: endless
+
+### [2026-10-06] Treat an incident's missing diagnostics as a defect, not a nicety
+While investigating WARN-0031 (main-sync's first run reporting 8 branches stranded by the 2026-10-05 rewrite), I called the misleading wording a minor UX point and suggested leaving it. Mike corrected that: any warning is a five-alarm fire to him, so information the reporting code already knows but does not print (when the rewrite actually happened, that this is a first-run backlog rather than a new event) is critical for diagnosing and resolving it. Truncating the list of affected items in the summary (it showed 4 of 8 with an ellipsis) is the same failure. When reviewing or writing incident text, propose fixing omitted or truncated diagnostics rather than downplaying them.
+- **Project**: endless
