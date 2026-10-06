@@ -7,3 +7,10 @@ All in internal/mainsyncjob (recordRewrite and its detail), plus the WARN-0031 e
 5. The incident resolves itself. The job already re-checks every run while its previous check found stranded branches (`remember`). When such a re-check finds none, clear the open WARN-0031 for this root with `faults.ClearFingerprintSince("main-rewritten:"+root, "", "job:"+JobName)`. When it finds fewer than before, re-record so the incident names only the branches still stranded. A person never has to remember to run `endless errors clear` for this warning; the WARN-0031 entry in docs/errors.md says so in place of "Dismiss with endless errors clear".
 
 6. Tests: truncated summary carries the --detail hint and an untruncated one does not; a branch whose divergence predates the previous run is labelled as predating; a finished task's branch lands in its own group; a failing status/session read does not fail the run; a re-check that finds no stranded branches clears the open incident, and one that finds fewer leaves an incident naming only those.
+
+## As built (scope notes)
+
+- Two small readers were added outside internal/mainsyncjob, each with its own test: `monitor.GetTaskClaim` (task status + newest bound session, one query) and `jobs.LastOkAt` (the job's previous successful run).
+- Step 5 clears the incident whenever a FULL check finds nothing stranded, not only a re-check that follows one that found some. A process restart loses the in-process memory of "previous check found some", so limiting the clear to re-checks would leave an incident open forever if its branches were rebased across a restart. A clear that fails keeps the full check running each run until one succeeds.
+- The WARN-0031 remedy in internal/faults/codes.go is held byte-identical to docs/errors.md by an existing test, so it changed with the doc; docs/guide/reference.md gained one sentence.
+- Age wording: with no previous successful run, "found on this run; the rewrite predates it"; when every rewrite predates the previous run, "not new: the rewrite predates this job's previous run, <date>" (the run-1 wording would be false on every later re-record).
