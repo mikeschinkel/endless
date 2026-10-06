@@ -7213,3 +7213,7 @@ On E-2250, drafting ED-1610 (what an epic carries), I wrote that an epic has 'ne
 ### [2026-10-06] Treat an incident's missing diagnostics as a defect, not a nicety
 While investigating WARN-0031 (main-sync's first run reporting 8 branches stranded by the 2026-10-05 rewrite), I called the misleading wording a minor UX point and suggested leaving it. Mike corrected that: any warning is a five-alarm fire to him, so information the reporting code already knows but does not print (when the rewrite actually happened, that this is a first-run backlog rather than a new event) is critical for diagnosing and resolving it. Truncating the list of affected items in the summary (it showed 4 of 8 with an ellipsis) is the same failure. When reviewing or writing incident text, propose fixing omitted or truncated diagnostics rather than downplaying them.
 - **Project**: endless
+
+### [2026-10-06] Never hand Mike a do-this-later step that lives only in chat
+After asking E-1562's session to rebase its branch, I told Mike to run 'endless errors clear 1542' once that finished. Mike rejected that: a follow-up that depends on him remembering is not a workflow, because instructions given in a session's reply are lost once the session ends. A follow-up must be written somewhere durable where something expects it: a task's plan, or better, code that resolves the condition itself (for example an incident that clears when its cause is gone).
+- **Project**: endless
