@@ -1,0 +1,99 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 16,
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test: monitor, sessionstatuscmd, templatecmd",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestRenderJSON_CarriesFocus",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestApplyHiddenMode_FocusAndStewardship",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestRender_Handoff_WorktreeRemovalIsCategorical",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the updater's --json flags the row stewarded_elsewhere",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and carries no owned_elsewhere field",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the steward's own --json does not flag it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no row anywhere carries owned_elsewhere",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no handoff template still says the spawning session owns landing",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no handoff template still says to land without asking",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the shared partial carries the landing rule",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and tells the session not to land itself",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no source still names OwnedElsewhere / owned_elsewhere / the ownership annotator",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "session_ownership.go is renamed to session_stewardship.go",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the sessions guide names the steward",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and no longer calls one session's view a board in that title",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
