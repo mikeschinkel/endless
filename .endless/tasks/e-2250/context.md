@@ -25,7 +25,6 @@ Positions Mike stated:
   behave differently and the epic/todo distinction must not depend on the
   agent noticing the type. It opens with the objective (what is true when
   done; fixed), then the approach (expected to change).
-- A grouping needs nothing beyond its title and description: a group's
-  "done when" is usually its children finishing (already derived) and its
-  membership is usually clear from its title.
+- ED-1611 (proposed): groupings get their own task type, `group`. A group
+  needs nothing beyond its title and description.
 - New content rows are hidden in `task show` unless asked for (E-2252).
