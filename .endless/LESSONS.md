@@ -7221,3 +7221,7 @@ After asking E-1562's session to rebase its branch, I told Mike to run 'endless 
 ### [2026-10-06] A verify suite that pipes a payload into endless-go hook must set the Claude Code harness env
 While verifying E-2251, the suite passed in the agent's Claude Code session and failed from Mike's bare terminal: the hook no-ops outside a supported harness (agentenv, E-1962), so an auto-register assertion failed and the ignored-directory assertions passed vacuously. Run hook calls in a suite with CLAUDECODE=1 CLAUDE_CODE_ENTRYPOINT=cli (and TMUX/ENDLESS_SESSION_ID unset), and test the suite once with those vars removed from the outer env.
 - **Project**: endless
+
+### [2026-10-06] Phrase a design question as the general rule it decides, not as the one instance that prompted it
+In E-2251 I asked whether h2 should be kept 'as an explicit exception'; Mike read it as hardcoding h2 into Endless. The real question was the rule (may explicit register create a project under an ignored parent?), with h2 as its consequence. Ask the rule first, then say what it means for the instance.
+- **Project**: endless
