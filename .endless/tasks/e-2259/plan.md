@@ -1,0 +1,7 @@
+All in internal/mainsyncjob (recordRewrite and its detail), plus the WARN-0031 entry in docs/errors.md.
+
+1. Summary: keep the 4-name cap, but when it truncates, end the summary with how to see the rest: "(N more — `endless errors show <id> --detail`)". If the incident id is not known when the summary is built, name the command without it.
+2. Say when each branch diverged: per stranded branch in the detail, the date of the newest commit main holds under another SHA (the rewrite is no later than that), and the branch's fork-point date. In the summary, when every branch's divergence predates the job's previous successful run (or there is no previous run), say so: "found on this run; the rewrite predates it", so a first run is not read as a fresh rewrite.
+3. Per branch in the detail: the task's status and whether its claiming session is live or ended, read best-effort (a failed read leaves the line out, it never fails the run).
+4. Do NOT drop branches of finished tasks (confirmed, assumed, completed, superseded, declined, obsolete). List them in their own group in the detail ("finished tasks — the branch is leftover; rebase only if its unlanded commits matter"), still named in `stranded`, so nothing the job knows is hidden. The summary counts the two groups separately.
+5. Tests: truncated summary carries the --detail hint and an untruncated one does not; a branch whose divergence predates the previous run is labelled as predating; a finished task's branch lands in its own group; a failing status/session read does not fail the run.
