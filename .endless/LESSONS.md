@@ -7189,3 +7189,7 @@ Situation: E-2216's plan was attached on 2026-10-05 by another session. It opens
 ### [2026-10-06] Move a handoff file rather than copy it
 While planning E-2243, the verify runner writes its CTRF report to the user cache and the Endless wrapper puts it at its committed location on main. I planned a copy, which leaves a cache file behind, and also left two CTRF: lines on screen (cache and destination). Mike asked why leave cruft that has to be cleaned up later, and why not one CTRF: line showing the destination. When a file is only a handoff between two steps, move it, and report only where it ends up.
 - **Project**: endless
+
+### [2026-10-06] Keep failed verify reports until the task passes
+While planning E-2243 (commit each passing verify run's CTRF report to main), I had the wrapper delete a failing run's cache report to avoid cruft. Mike said no: a failed run is exactly when the report may be needed for diagnosis. Keep failed reports; when a run passes, move that report to main and delete the task's failed ones then. 'Leave no cruft' means clean up once the files have stopped being useful, not as soon as they are written.
+- **Project**: endless
