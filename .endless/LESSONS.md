@@ -7193,3 +7193,7 @@ While planning E-2243, the verify runner writes its CTRF report to the user cach
 ### [2026-10-06] Keep failed verify reports until the task passes
 While planning E-2243 (commit each passing verify run's CTRF report to main), I had the wrapper delete a failing run's cache report to avoid cruft. Mike said no: a failed run is exactly when the report may be needed for diagnosis. Keep failed reports; when a run passes, move that report to main and delete the task's failed ones then. 'Leave no cruft' means clean up once the files have stopped being useful, not as soon as they are written.
 - **Project**: endless
+
+### [2026-10-06] Argue architecture, not legacy or process
+Situation: E-2216, deciding whether the project ignore list stays in the global config file or moves into the machine database, and whether 'unregister' should delete the projects row or keep a marked row. I argued for the config file because it is what Mike edits and Go already reads it, and against a status row because it would 'change how projects work' and belongs to another task. Then I asked him to choose anyway. Mike's reason: those are legacy and process arguments, not architectural ones; changing how something works is not a cost in itself. In this case, weigh the options on architecture (where the state belongs, who reads it, what breaks or gets simpler), name the option that achieves the objective, and don't argue against an option and then ask him to pick it.
+- **Project**: endless
