@@ -727,17 +727,17 @@ var (
 	// Warning rather than error: nothing has failed yet. It is raised so the
 	// rebase happens before a land is refused, not after. Fingerprinted on the
 	// project, so one rewrite is one incident however many branches it strands,
-	// and the job clears it itself once none are left (E-2259).
+	// and the job clears it itself once none are left. Finished tasks' branches
+	// never raise it: they are retained leftovers, named in the run note (E-2259).
 	ErrCodeMainRewritten = Code{
 		ID:       "WARN-0031",
 		Slug:     "main-rewritten",
 		Severity: SeverityWarning,
 		Title:    "Main was rewritten under open task branches",
-		Remedy: "Run `git rebase main` in each open task's worktree the incident " +
-			"names; git drops the copies main already holds and keeps each " +
-			"branch's own work. Rebase a finished task's branch only if its " +
-			"unlanded commits matter. `endless worktree check`, run inside a " +
-			"worktree, says the same for that one branch. Do not rename or " +
+		Remedy: "Run `git rebase main` in each worktree the incident names; git " +
+			"drops the copies main already holds and keeps each branch's own " +
+			"work. `endless worktree check`, run inside a worktree, says the " +
+			"same for that one branch. Do not rename or " +
 			"renumber any migration for this. There is nothing to clear: while " +
 			"branches stay stranded the job re-checks every run and the incident " +
 			"names only those still stranded, and once none are left it clears " +

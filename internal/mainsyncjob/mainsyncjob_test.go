@@ -558,10 +558,10 @@ func TestRewritten_TruncatedSummaryPointsAtDetail(t *testing.T) {
 	}
 }
 
-// TestRewritten_FinishedTasksAreGroupedApart: a finished task's branch is still
-// named, but in its own group and counted on its own; a branch whose task
-// could not be read stays with the open ones.
-func TestRewritten_FinishedTasksAreGroupedApart(t *testing.T) {
+// TestRewritten_FinishedTasksStayOutOfTheWarning: a finished task's branch is
+// a retained leftover, so it is named in the run note and never in WARN-0031;
+// a branch whose task could not be read stays in the warning.
+func TestRewritten_FinishedTasksStayOutOfTheWarning(t *testing.T) {
 	f, _ := strand(t, 3)
 	got := captureFaults(t)
 	stubReads(t, &reads{claims: map[int64]monitor.TaskClaim{
@@ -574,38 +574,62 @@ func TestRewritten_FinishedTasksAreGroupedApart(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(res.Stranded) != 3 {
-		t.Fatalf("stranded = %+v, want all three", res.Stranded)
+	if len(res.Stranded) != 2 || len(res.Leftover) != 1 || res.Leftover[0].Branch != "task/2" {
+		t.Fatalf("stranded = %+v, leftover = %+v; want task/1 and task/3, then task/2", res.Stranded, res.Leftover)
 	}
 	fault := lastFault(t, got)
-	if !strings.Contains(fault.Summary, "2 open task branches and 1 finished task's branch") {
-		t.Errorf("summary does not count the groups apart: %q", fault.Summary)
+	if !strings.Contains(fault.Summary, "2 open task branches (task/1, task/3)") {
+		t.Errorf("summary = %q", fault.Summary)
 	}
-	stranded, _ := fault.Fields["stranded"].([]string)
-	if len(stranded) != 3 {
-		t.Errorf("fields stranded = %v, want all three named", fault.Fields["stranded"])
+	if strings.Contains(fault.Summary+fault.Detail, "task/2") {
+		t.Errorf("the finished task's branch reached the warning:\n%s\n%s", fault.Summary, fault.Detail)
 	}
-	open, finished, ok := strings.Cut(fault.Detail, "Finished tasks —")
-	if !ok {
-		t.Fatalf("detail has no finished group:\n%s", fault.Detail)
+	if stranded, _ := fault.Fields["stranded"].([]string); len(stranded) != 2 {
+		t.Errorf("fields stranded = %v, want the two open branches", fault.Fields["stranded"])
 	}
-	if !strings.Contains(finished, "task/2") || strings.Contains(open, "task/2 ") {
-		t.Errorf("task/2 is not in the finished group:\n%s", fault.Detail)
-	}
-	for _, want := range []string{"task/1 ", "task/3 ", "E-1 underway; claimed by ES-10, live"} {
-		if !strings.Contains(open, want) {
-			t.Errorf("open group lacks %q:\n%s", want, fault.Detail)
-		}
-	}
-	if !strings.Contains(finished, "E-2 confirmed; claimed by ES-20, ended") {
-		t.Errorf("finished group lacks the claim line:\n%s", fault.Detail)
-	}
-	if strings.Contains(fault.Detail, "E-3") {
-		t.Errorf("an unreadable task got a claim line:\n%s", fault.Detail)
+	if !strings.Contains(fault.Detail, "E-1 underway; claimed by ES-10, live") || strings.Contains(fault.Detail, "E-3") {
+		t.Errorf("claim lines wrong:\n%s", fault.Detail)
 	}
 	if !strings.Contains(fault.Detail, "main rewrote these commits no later than") ||
 		!strings.Contains(fault.Detail, "the branch forked from a commit dated") {
 		t.Errorf("detail lacks the divergence dates:\n%s", fault.Detail)
+	}
+	if note := res.String(); !strings.Contains(note, "1 finished task branch(es) still carry copies of rewritten main commits (task/2)") {
+		t.Errorf("run note does not name the leftover: %q", note)
+	}
+}
+
+// TestRewritten_OnlyFinishedLeftoversClearTheWarning: when every stranded
+// branch is a finished task's, nothing is recorded, an open warning is
+// cleared, and the cheap gate comes back rather than a full check every run.
+func TestRewritten_OnlyFinishedLeftoversClearTheWarning(t *testing.T) {
+	f, _ := strand(t, 1)
+	got := captureFaults(t)
+	r := &reads{claims: map[int64]monitor.TaskClaim{
+		1: {Status: "assumed", SessionID: 20, SessionState: "ended"},
+	}, ran: true, clearOK: true}
+	stubReads(t, r)
+
+	res, err := sync1(t, f, systemGit)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Stranded) != 0 || len(res.Leftover) != 1 {
+		t.Fatalf("stranded = %+v, leftover = %+v", res.Stranded, res.Leftover)
+	}
+	if len(*got) != 0 {
+		t.Errorf("recorded %+v for a finished task's leftover", *got)
+	}
+	if len(r.clears) != 1 {
+		t.Errorf("clears = %v, want the open warning cleared", r.clears)
+	}
+
+	rec := &recorder{}
+	if _, err := sync1(t, f, rec.git); err != nil {
+		t.Fatal(err)
+	}
+	if rec.ran("log") {
+		t.Errorf("a leftover kept the full check running: %v", rec.runs)
 	}
 }
 

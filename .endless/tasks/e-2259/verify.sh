@@ -6,8 +6,9 @@
 #
 # E-2259: main-sync's WARN-0031 explains the divergence it reports — when each
 # branch diverged, whether the rewrite predates the job's previous run, whose
-# task each branch is and whether that task is finished — points at --detail
-# when the summary truncates, and clears itself once nothing is stranded.
+# task each branch is — points at --detail when the summary truncates, keeps
+# finished tasks' leftover branches out of the error system, and clears itself
+# once no open branch is stranded.
 #
 # The job checks run against throwaway git repositories the Go tests build
 # under their own temp dirs; the database reads are stubbed there, and the two
@@ -45,9 +46,11 @@ run_go "first-ever run, and a rewrite older than the previous run, are labelled 
 run_go "the job's previous successful run is read from its scheduling row" \
     ./internal/jobs/ -run '^TestLastOkAt_ReadsThePreviousSuccessfulRun$'
 
-section "Plan 3 + 4: whose branch it is; finished tasks grouped apart"
-run_go "status and live/ended claiming session per branch; finished task's branch in its own group, still named" \
-    ./internal/mainsyncjob/ -run '^TestRewritten_FinishedTasksAreGroupedApart$'
+section "Plan 3 + 4: whose branch it is; finished tasks' leftovers stay out of the error system"
+run_go "status and live/ended claiming session per branch; a finished task's branch only in the run note" \
+    ./internal/mainsyncjob/ -run '^TestRewritten_FinishedTasksStayOutOfTheWarning$'
+run_go "only finished leftovers: nothing recorded, the open warning cleared, the cheap gate back" \
+    ./internal/mainsyncjob/ -run '^TestRewritten_OnlyFinishedLeftoversClearTheWarning$'
 run_go "a task's status and newest bound session read in one query" \
     ./internal/monitor/ -run '^TestGetTaskClaim$'
 run_go "failing task reads leave their line out and never fail the run" \

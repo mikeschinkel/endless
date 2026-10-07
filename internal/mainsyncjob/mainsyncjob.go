@@ -20,6 +20,8 @@
 //  5. Main was rewritten under open task branches: record WARN-0031 naming
 //     them, so each is rebased before its land is refused rather than after.
 //     Once a check finds none left, clear that warning: nobody has to.
+//     Finished tasks' branches in the same state are named in the run note
+//     only: they are retained leftovers, not something a person must act on.
 //
 // A failed fetch, fast-forward or push is the run's error: the runner records
 // it and backs off, so a missing credential is reported and decays toward the
@@ -178,6 +180,11 @@ type Result struct {
 	// main holds under other SHAs. Empty unless a rewrite check ran and found
 	// some.
 	Stranded []StrandedBranch
+	// Leftover is the same for branches of finished tasks. Retention keeps
+	// those worktrees, so after a rewrite they stay this way indefinitely: that
+	// is routine state, not a problem for a person, so they appear only in the
+	// run note and never in WARN-0031.
+	Leftover []StrandedBranch
 }
 
 // StrandedBranch is a task branch that main was rewritten under.
@@ -200,8 +207,8 @@ type StrandedBranch struct {
 
 // Finished reports whether the branch belongs to a task that is done with —
 // confirmed, assumed, completed, superseded, declined or obsolete. A branch
-// whose task could not be read is not finished: not knowing must never move
-// live work into the leftovers group.
+// whose task could not be read is not finished: not knowing must never take
+// live work out of the warning.
 func (s StrandedBranch) Finished() bool {
 	return s.ClaimKnown && taskstatus.Has(taskstatus.Terminal, s.Claim.Status)
 }
@@ -219,6 +226,14 @@ func (r Result) String() string {
 	}
 	if len(r.Stranded) > 0 {
 		s += fmt.Sprintf("; %d task branch(es) need `git rebase %s`", len(r.Stranded), r.Branch)
+	}
+	if len(r.Leftover) > 0 {
+		var names []string
+		for _, l := range r.Leftover {
+			names = append(names, l.Branch)
+		}
+		s += fmt.Sprintf("; %d finished task branch(es) still carry copies of rewritten %s commits (%s)",
+			len(r.Leftover), r.Branch, strings.Join(names, ", "))
 	}
 	return s
 }
@@ -308,10 +323,12 @@ func syncProject(ctx context.Context, projectID int64, root string, git Git) (re
 	}
 
 	var checked bool
-	res.Stranded, checked, err = watchRewrite(ctx, root, res.Branch, git)
+	var found []StrandedBranch
+	found, checked, err = watchRewrite(ctx, root, res.Branch, git)
 	if err != nil {
 		return res, err
 	}
+	res.Stranded, res.Leftover = splitFinished(found)
 	switch {
 	case len(res.Stranded) > 0:
 		// Recorded on every run that finds some, so the open incident always
@@ -322,6 +339,18 @@ func syncProject(ctx context.Context, projectID int64, root string, git Git) (re
 		clearRewritten(root)
 	}
 	return res, nil
+}
+
+// splitFinished separates the branches of finished tasks from the rest.
+func splitFinished(found []StrandedBranch) (open, finished []StrandedBranch) {
+	for _, s := range found {
+		if s.Finished() {
+			finished = append(finished, s)
+		} else {
+			open = append(open, s)
+		}
+	}
+	return open, finished
 }
 
 var countsRe = regexp.MustCompile(`^(\d+)\s+(\d+)$`)
@@ -367,40 +396,32 @@ func recordDiverged(projectID int64, root string, res Result) {
 // points at --detail for the rest.
 const summaryNames = 4
 
+// recordRewritten records WARN-0031 for res.Stranded, the open task branches.
+// Finished tasks' branches never reach it; see Result.Leftover.
 func recordRewritten(projectID int64, root string, res Result, note string) {
-	var open, finished []StrandedBranch
-	for _, s := range res.Stranded {
-		if s.Finished() {
-			finished = append(finished, s)
-		} else {
-			open = append(open, s)
-		}
-	}
 	var names []string
-	for _, s := range append(append([]StrandedBranch{}, open...), finished...) {
-		names = append(names, s.Branch)
-	}
-
 	var detail strings.Builder
-	fmt.Fprintf(&detail, "In %s, these task branches still carry copies of "+
+	fmt.Fprintf(&detail, "In %s, these open task branches still carry copies of "+
 		"commits %s holds under other SHAs.\n", root, res.Branch)
 	if note != "" {
 		fmt.Fprintf(&detail, "%s.\n", upperFirst(note))
 	}
-	writeGroup(&detail, "Open tasks — rebase each before it lands:", res.Branch, open)
-	writeGroup(&detail, "Finished tasks — the branch is leftover; rebase only if "+
-		"its unlanded commits matter:", res.Branch, finished)
-
-	summary := fmt.Sprintf("%s was rewritten under %s (%s)",
-		res.Branch, branchCounts(len(open), len(finished)), shownNames(names))
-	switch {
-	case len(open) > 0 && len(finished) > 0:
-		summary += fmt.Sprintf(": land refuses each open one until `git rebase %s` runs in its worktree", res.Branch)
-	case len(open) > 0:
-		summary += fmt.Sprintf(": land refuses each until `git rebase %s` runs in its worktree", res.Branch)
-	default:
-		summary += ": all belong to finished tasks; rebase one only if its unlanded commits matter"
+	detail.WriteString("\n")
+	for _, s := range res.Stranded {
+		names = append(names, s.Branch)
+		fmt.Fprintf(&detail, "  %s  (%s)\n", s.Branch, s.Worktree)
+		if line := claimLine(s); line != "" {
+			fmt.Fprintf(&detail, "    %s\n", line)
+		}
+		if line := datesLine(res.Branch, s); line != "" {
+			fmt.Fprintf(&detail, "    %s\n", line)
+		}
+		fmt.Fprintf(&detail, "    %s\n", monitor.BaseRewrittenDetail(res.Branch, s.Copies))
 	}
+
+	summary := fmt.Sprintf("%s was rewritten under %s (%s): land refuses each until "+
+		"`git rebase %s` runs in its worktree",
+		res.Branch, plural(len(res.Stranded), "open task branch"), shownNames(names), res.Branch)
 	if note != "" {
 		summary += " — " + note
 	}
@@ -426,25 +447,6 @@ func rewrittenFingerprint(root string) string {
 func clearRewritten(root string) {
 	if _, err := clearFault(rewrittenFingerprint(root), "", "job:"+JobName); err != nil {
 		keepChecking(root)
-	}
-}
-
-// writeGroup writes one group of stranded branches into the detail, or nothing
-// when the group is empty.
-func writeGroup(w *strings.Builder, heading, base string, group []StrandedBranch) {
-	if len(group) == 0 {
-		return
-	}
-	fmt.Fprintf(w, "\n%s\n\n", heading)
-	for _, s := range group {
-		fmt.Fprintf(w, "  %s  (%s)\n", s.Branch, s.Worktree)
-		if line := claimLine(s); line != "" {
-			fmt.Fprintf(w, "    %s\n", line)
-		}
-		if line := datesLine(base, s); line != "" {
-			fmt.Fprintf(w, "    %s\n", line)
-		}
-		fmt.Fprintf(w, "    %s\n", monitor.BaseRewrittenDetail(base, s.Copies))
 	}
 }
 
@@ -484,21 +486,6 @@ func datesLine(base string, s StrandedBranch) string {
 
 func formatTime(t time.Time) string {
 	return t.Local().Format("2006-01-02 15:04")
-}
-
-// branchCounts names the two groups for the summary.
-func branchCounts(open, finished int) string {
-	var parts []string
-	if open > 0 {
-		parts = append(parts, plural(open, "open task branch"))
-	}
-	switch {
-	case finished == 1:
-		parts = append(parts, "1 finished task's branch")
-	case finished > 1:
-		parts = append(parts, strconv.Itoa(finished)+" finished tasks' branches")
-	}
-	return strings.Join(parts, " and ")
 }
 
 // shownNames lists up to summaryNames names, then says how many more there
@@ -595,7 +582,10 @@ func watchRewrite(ctx context.Context, root, branch string, git Git) (stranded [
 	if err != nil {
 		return nil, false, err
 	}
-	remember(root, tip, len(stranded) > 0)
+	// Only open branches keep the full check running: a finished task's
+	// leftover can stay stranded indefinitely, and nothing is waiting on it.
+	open, _ := splitFinished(stranded)
+	remember(root, tip, len(open) > 0)
 	return stranded, true, nil
 }
 
