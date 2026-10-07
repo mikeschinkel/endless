@@ -1,0 +1,1 @@
+Mike sets almost every landed task to assumed by hand. Settling on land should be a property of the task type, true today for todo and bugfix and for the planned docs type, not a hard-coded list. A --keep-status style flag suffices while only Mike runs land; the per-task field belongs to the auto-land child.
