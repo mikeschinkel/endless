@@ -1,0 +1,1 @@
+During the E-2225 session GitHub was briefly unreachable. Mike wants a verify started before bed to survive a temporary outage, of the internet or of one site a run depends on, instead of failing on the first try and stalling the task. The waiting happens inside the command, so an agent running it as a background command spends no tokens while it waits.
