@@ -1,0 +1,1 @@
+Mike has often reported a failed verify that the agent had just run green, and agents have explained the difference in those sessions. A probe in the E-2225 session found agent-only variables (CLAUDECODE, AI_AGENT, CLAUDE_CODE_*) that Endless reads in agentenv, and a different PATH order that resolves to the same binaries.
