@@ -7225,3 +7225,7 @@ While verifying E-2251, the suite passed in the agent's Claude Code session and 
 ### [2026-10-06] Phrase a design question as the general rule it decides, not as the one instance that prompted it
 In E-2251 I asked whether h2 should be kept 'as an explicit exception'; Mike read it as hardcoding h2 into Endless. The real question was the rule (may explicit register create a project under an ignored parent?), with h2 as its consequence. Ask the rule first, then say what it means for the instance.
 - **Project**: endless
+
+### [2026-10-07] Raise plan deviations before implementing, not after handoff
+On E-2225 (ownership wording sweep) I finished, handed Mike the verify/land command, and only THEN listed choices I had made that differed from the plan or left open (moving the landing rule into the shared partial instead of each wrapper, leaving hookcmd 'owner' identifiers, an extra field rename beyond the approved table). Mike said this workflow is backwards and has become a consistent pattern: a decision that differs from the plan must be raised BEFORE implementing it, and if the need is discovered mid-implementation, stop and get permission before continuing. Presenting leftover choices at handoff also signals the work is not done. Mike suspects the handoff and/or plan structure causes this and intends to file a task about it.
+- **Project**: endless
