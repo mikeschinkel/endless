@@ -1,0 +1,74 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 11,
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "mainsyncjob, faults (docs/remedy sync), jobs and monitor build and pass",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "past four names: 'and N more — endless errors show \u003cid\u003e --detail'; at four, no hint",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "first-ever run, and a rewrite older than the previous run, are labelled not new; a newer one is not",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the job's previous successful run is read from its scheduling row",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "status and live/ended claiming session per branch; finished task's branch in its own group, still named",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a task's status and newest bound session read in one query",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "failing task reads leave their line out and never fail the run",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "fewer stranded re-records naming only those; none clears it; a failed clear is retried",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "E-2233's own rewrite behaviour still holds",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "docs say the warning clears itself",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "docs no longer tell anyone to clear it",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
