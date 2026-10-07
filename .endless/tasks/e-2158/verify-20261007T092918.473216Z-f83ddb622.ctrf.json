@@ -1,0 +1,244 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 45,
+      "passed": 45,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "just go \u0026\u0026 just migrate-bin",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go test: endless-migrate, schema, eventcmd, events, monitor",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest: land, db diagnostics, db gate, event bridge, guide",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "internal/schema/changes tracks no files",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "internal/schemachange tracks no files",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no file outside .endless/ names the retired mechanism",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go: TestMigrateExecutable_LinksNothingButTheMigrationMachinery",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go: TestMigrateExecutable_OffersOnlyUp",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go: TestMigrateExecutable_HasNoApplicationSurface",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go: TestMigrateExecutable_UpRefusesADatabaseOlderThanBothVersioningSchemes",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go: TestMigrate_MatchesSchemaSQL",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go: TestMigrate_FreshDatabaseReachesLatest",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go: TestMigrate_LeavesAPreVersioningDatabaseIntact",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go: TestMigrate_RefusesADatabaseOlderThanBothVersioningSchemes",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go: TestMigrate_AGooseDatabaseAtUserVersionZeroMigrates",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "py: test_missing_or_empty_land_toml_lands",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "py: test_retired_schema_order_is_refused_by_name",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "py: test_land_toml_refusals_name_the_file_and_the_offender",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "py: test_invalid_land_toml_refuses_before_the_merge",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "py: test_up_runs_after_the_merge_and_before_the_record",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "py: test_missing_column_names_the_column_and_db_upgrade",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "py: test_python_read_does_not_modify_a_user_version_zero_db",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "endless-migrate --help offers no apply",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "endless-migrate apply is an unknown command",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the _schema_version drop is the newest migration",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a fresh database reaches the latest version (16)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a fresh database has no _schema_version",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "endless-migrate up refuses a pre-versioning database",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the refusal names the database",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the refusal names its user_version",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the refusal says it is too old",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "endless-migrate left the database untouched",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "endless-go's connect refuses it with the too-old message",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "endless-go left the database untouched",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a goose database at user_version 0 migrates normally",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "fixed: the database starts with _schema_version",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "fixed: the land completes",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "fixed: main advances",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "fixed: the database reaches 16",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "fixed: _schema_version is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "fixed: the landing is recorded in the same run",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "retired: the land is refused, naming the retired key",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "retired: refused before the merge",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "retired: the database was not migrated",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "retired: nothing was recorded",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
