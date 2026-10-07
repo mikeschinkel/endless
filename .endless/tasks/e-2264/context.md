@@ -1,0 +1,1 @@
+Mike wants to let agents land once verify-in-tmux has been dogfooded, while keeping some tasks for a planned or careful land. Today ED-1605 says the user lands from the owner's side, so it must be amended first.
