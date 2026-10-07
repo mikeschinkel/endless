@@ -2107,9 +2107,9 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 	// (a) Lock-holder check: refuse if the lock is held by a different session.
 	lock, err := monitor.ReadWorktreeLock(worktreePath)
 	if err == nil && lock != nil && lock.SessionID != payload.SessionID {
-		ownerHint := fmt.Sprintf("session %s (PID %d)", lock.SessionID, lock.PID)
+		holderHint := fmt.Sprintf("session %s (PID %d)", lock.SessionID, lock.PID)
 		if monitor.IsWorktreeLockStale(lock) {
-			ownerHint += " [stale]"
+			holderHint += " [stale]"
 		}
 		// The TSV files this CONDITIONAL — REPORT when the worktree belongs to
 		// the agent's own task, NO-REPORT when it is somebody else's — and it
@@ -2123,28 +2123,28 @@ func enforceWorktreeGate(projectID int64, payload claudePayload) {
 				ownWorktree = n == *session.TaskID
 			}
 		}
-		ownerBody := fmt.Sprintf(
+		holderBody := fmt.Sprintf(
 			"This worktree is locked by %s, not this session.\n\n"+
 				"Restart this Claude session inside this worktree (a fresh SessionStart\n"+
 				"reclaims a stale lock), or move to a different worktree.\n\n"+
 				"  endless worktree current\n"+
 				"  endless worktree list",
-			ownerHint)
-		ownerSummary := fmt.Sprintf(
+			holderHint)
+		holderSummary := fmt.Sprintf(
 			"BLOCKED: this worktree is locked by %s, not this session; nothing "+
-				"was written.", ownerHint)
+				"was written.", holderHint)
 		if ownWorktree {
 			// Own task: only a fresh session reclaims the lock, and starting
 			// one is the user's act at their own terminal.
-			blockToolUse(refusal.Report(ownerSummary,
+			blockToolUse(refusal.Report(holderSummary,
 				"whether to restart this Claude session inside the worktree — "+
 					"only a fresh session reclaims the lock",
-			).Command("PreToolUse").Text(ownerBody))
+			).Command("PreToolUse").Text(holderBody))
 		}
-		blockToolUse(refusal.NoReport(ownerSummary,
+		blockToolUse(refusal.NoReport(holderSummary,
 			"Move to the worktree for your own task (`endless worktree current`, "+
 				"`endless worktree list`) and work there",
-		).Command("PreToolUse").Text(ownerBody))
+		).Command("PreToolUse").Text(holderBody))
 	}
 
 	// (b) Task mismatch: worktree's identity (from path convention,

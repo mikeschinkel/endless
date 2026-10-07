@@ -65,7 +65,7 @@ func TestSuiteTaskFromPath(t *testing.T) {
 		{"the suite directory itself", ".endless/tasks/e-1916", 0},
 		// What a manifest's [[check]] entries name: the project's durable
 		// tests. These must stay editable forever.
-		{"a gotest a manifest points at", "internal/monitor/verify_ownership_test.go", 0},
+		{"a gotest a manifest points at", "internal/monitor/verify_scope_test.go", 0},
 		{"a pytest a manifest points at", "tests/test_suite_guard.py", 0},
 		// Neighbours and near-misses.
 		{"plan mirror", ".endless/plans/E-1916.md", 0},
@@ -433,9 +433,9 @@ func TestLandedSuiteDecisions(t *testing.T) {
 		seedLandings(t, 101)
 		stubSessionTask(t, 1916)
 		for _, path := range []string{
-			".endless/verify.toml",                 // the shared project layer
-			".endless/tasks/_harness.sh",           // belongs to no task
-			".endless/tasks/e-1916/verify.sh",      // this session's own
+			".endless/verify.toml",             // the shared project layer
+			".endless/tasks/_harness.sh",       // belongs to no task
+			".endless/tasks/e-1916/verify.sh",  // this session's own
 			"internal/monitor/verify_scope.go", // a durable test's subject
 		} {
 			if _, block := writeToolDecision(0, write("Edit", path)); block {

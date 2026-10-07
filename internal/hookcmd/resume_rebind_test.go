@@ -99,7 +99,7 @@ func TestAutoBindFromCwd_ResumeDoesNotRebindDifferentTask(t *testing.T) {
 	}
 }
 
-// TestSessionStart_LiveOwnedWorktreeRefusesAndDoesNotBind covers E-1856
+// TestSessionStart_LiveHeldWorktreeRefusesAndDoesNotBind covers E-1856
 // behavior 1: when a session starts (or resumes) with its cwd inside a worktree
 // whose lock a LIVE sibling session holds (a non-stale worktree lock held by a
 // different session), the SessionStart flow must refuse with an actionable
@@ -110,7 +110,7 @@ func TestAutoBindFromCwd_ResumeDoesNotRebindDifferentTask(t *testing.T) {
 // first (which returns the refusal and short-circuits), then maybeCwdBind only if
 // there was no refusal. The test asserts the two guarantees together — refusal
 // text present AND the incoming session left unbound.
-func TestSessionStart_LiveOwnedWorktreeRefusesAndDoesNotBind(t *testing.T) {
+func TestSessionStart_LiveHeldWorktreeRefusesAndDoesNotBind(t *testing.T) {
 	db := newBindTestDB(t)
 
 	projectRoot := t.TempDir()
