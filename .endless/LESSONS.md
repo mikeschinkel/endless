@@ -7301,3 +7301,7 @@ In E-2266 I committed a throwaway probe verify suite and then a second commit re
 ### [2026-10-08] Do not report being unable to delete cache files when the only concern is housekeeping
 In E-2266 a worktree hook blocked me from deleting failed verify reports under the user cache dir, and I listed that as something Mike should know. Mike: there is no need to report not being able to delete caches when the only concern is housekeeping.
 - **Project**: endless
+
+### [2026-10-08] A verify suite must exercise both the person's and the agent's experience
+In E-2266 I proposed that the verify runner strip agent and user identity variables so agent and user runs match. Mike: a verify test should test BOTH the user's experience and the agent's experience, so changing the environment applies only to the user side, not the agent side. For self_dev, verify before and after the milestone both need to reproduce both environments when the two experiences differ.
+- **Project**: endless
