@@ -93,12 +93,20 @@ PROBE="${TMP}/config"
 mkdir -p "${PROBE}"
 GO=("${BIN}" --db-dir "${PROBE}")
 
-person() {
+# Every variable that marks a process as an agent's, or picks a refusal's
+# audience, is cleared first, so this suite answers the same whoever runs it. A
+# person reads a refusal's summary only — the remedy line is the agent's — so
+# person() pins the human rendering, the one a person typing these sees.
+clean() {
     env -u CLAUDE_CODE_ENTRYPOINT -u __CFBundleIdentifier -u CLAUDECODE \
-        -u CLAUDE_CODE_SESSION_ID -u ENDLESS_SESSION_ID "$@"
+        -u CLAUDE_CODE_SESSION_ID -u ENDLESS_SESSION_ID -u ENDLESS_AUDIENCE \
+        -u AI_AGENT "$@"
+}
+person() {
+    clean ENDLESS_AUDIENCE=human "$@"
 }
 agent() {
-    person CLAUDE_CODE_ENTRYPOINT=cli "$@"
+    clean CLAUDE_CODE_ENTRYPOINT=cli "$@"
 }
 
 (cd "${TMP}" && person "${GO[@]}" errors raise --summary "e-2272 primer") >"${TMP}/primer.txt" 2>&1 \

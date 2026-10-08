@@ -141,7 +141,8 @@ func answeringSession(verb string, explicit int64) (sessionID int64) {
 	sessionID = faults.ResolveRaiser(faults.Raiser{SessionID: explicit}).SessionID
 	if sessionID == 0 {
 		refusal.NoReport(
-			fmt.Sprintf("endless-go errors: %s records which session answered, and no agent session is running this command", verb),
+			fmt.Sprintf("endless-go errors: %s records which session answered, and no agent session is running this command; "+
+				"name one with --session <N> (the number of its ES-N)", verb),
 			"Run it from the Claude session that is answering, or name it with --session <N> (the number of its ES-N)",
 		).Command("errors " + verb).Exit(2)
 	}
