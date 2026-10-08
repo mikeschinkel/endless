@@ -1,0 +1,44 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 5,
+      "passed": 5,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "TestSync_AmendableTipStaysLocal ran and passed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestSync_PushesTheTipItInspected ran and passed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestSync_OnlyAnAmendableTipIsHeldBack ran and passed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "events.MayAmend matches exactly the auto-commit subjects",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go test ./internal/mainsyncjob/",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
