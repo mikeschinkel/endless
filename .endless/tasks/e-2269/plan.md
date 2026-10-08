@@ -1,6 +1,7 @@
 Settled by Mike (2026-10-07), not open:
 - The goal is that an error reaching Mike is already being fixed. Every error that surfaces costs him a step backwards from work he thought was done.
-- Auto-spawning a fix is wanted, including skipping the plan-approval gate: a spawned session almost always stops and presents open questions anyway.
+- Auto-spawning a fix is wanted, including skipping the plan-approval gate: a spawned session almost always stops and presents open questions anyway. Mike's standing concern is being overwhelmed by spawned tasks (agents file many), so spawning is justified here because it should be rare. The highest-value case is an obvious bug caught while the session that introduced it is still alive: nipping it there is sooner and cheaper than any spawn.
+- A live session is told through a real message that wakes it and tasks it with the fix (Claude Code's SendMessage), not a queued notice. Most sessions that are not in focus are idle, so a notice would sit until Mike next opens that session, and that session would then hold two diverging sets of instructions. Endless cannot call SendMessage today; candidate routes are `claude -p` or a Claude Code mod (planned soon).
 - Attribution (E-2268) is the prerequisite for routing to a session.
 
 ## Q1. Which incidents does the job act on?
@@ -9,11 +10,12 @@ Settled by Mike (2026-10-07), not open:
 - C. Only incidents that recur past a threshold. Pro: one-off blips are ignored. Con: a real bug waits for its Nth occurrence.
 Recommendation: B.
 
-## Q2. Attributed to a live session: how does it reach that session?
-- A. A session notice (the same queue as the "FYI —" task-change notices), delivered at the session's next prompt. No model call by the job; the session's own model acts on it. Pro: exists today. Con: an idle session sees it only when someone next prompts it.
-- B. A notice, plus a nudge into an idle session's tmux pane (send-keys of a short prompt) so it takes a turn now. Pro: the fix starts without Mike. Con: typing into a pane can collide with a person typing there.
-- C. Ignore the live session and spawn a new fix task. Pro: no interruption. Con: the session that has the context is bypassed.
-Recommendation: B, nudging only a session whose state is idle.
+## Q2. Attributed to a live session: which route delivers the message?
+Settled that it must wake the session and task it (see above). Open: the mechanism.
+- A. A Claude Code mod running inside each session, which Endless signals (database row, file, socket) and which injects the message into its own session. Pro: the mod is planned anyway; delivery stays inside the session it targets. Con: waits on the mod work.
+- B. `claude -p` resuming the target session with the fix prompt. Pro: available now. Con: a second process driving a session that is already open in a pane, which may conflict with the live one.
+- C. A until the mod exists, with no interim delivery (attributed faults wait). Con: no routing to live sessions until then.
+Recommendation: A; check B against a scratch session before relying on it as an interim.
 
 ## Q3. Attributed to a session that has ended
 - A. Set the task that raised it to revisit and spawn a session on it. Pro: the fix lands where the bug was introduced. Con: reopens a task Mike may already have confirmed and landed.
@@ -39,3 +41,5 @@ Recommendation: A.
 ## Q7. A fault that is a reporting problem rather than a bug (ED-1614)
 When the diagnosis is "this condition is routine and should not be a fault" (incidents 1542 and 1608 were both this), the fix is to the fault's producer, not to the reported condition.
 Recommendation: no special case: the spawned session's task context cites ED-1614, so its plan can make that call.
+
+
