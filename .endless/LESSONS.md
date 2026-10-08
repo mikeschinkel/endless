@@ -7273,3 +7273,7 @@ In the E-2269 brainstorm I listed the task plan's recommendations Mike hadn't co
 ### [2026-10-08] Brainstorm E-2269: don't over-qualify 'immediately'
 In the E-2269 brainstorm Mike proposed 'errors escalate' to message a session immediately. I asked at length whether 'immediately' was even possible, depending on PoC results. Mike called it pedantic: immediately means as soon as possible once the user escalates; do what is possible and don't try to do impossible things. When a requirement is plainly 'as soon as feasible', take it that way and don't make him rule on edge cases that only limit how fast it can be.
 - **Project**: endless
+
+### [2026-10-08] Brainstorm E-2269: retire my own redundant tasks instead of handing them to Mike
+In the E-2269 brainstorm I filed a PoC task (E-2271), then ran the PoC directly, and told Mike that retiring the now-redundant task was his to do. Mike said to retire it myself and not burden him with it. In this case the task was one I had filed myself, its answer was already recorded, and he had already said it shouldn't have been filed (ED-1550).
+- **Project**: endless
