@@ -7261,3 +7261,7 @@ In the E-2259 session I linked E-2268 (fault attribution) to E-2269 (the error-r
 ### [2026-10-07] File a task with its plan when it is ready to plan
 In the E-2259 session Mike told me to file E-2270 (show unfinished preceding tasks at claim/spawn). I filed it with only a description and context, and told him it still needed a plan. Mike: why file without a plan, when a task cannot be spawned without one? When a filed task is small and its design is already clear from the conversation, write the plan in the same step as filing, so it is spawnable the moment it exists. Leave it unplanned only when the plan genuinely needs his answers, and then say which questions.
 - **Project**: endless
+
+### [2026-10-07] Brainstorm E-2269: no tmux send-keys for delivering messages to sessions
+In the E-2269 brainstorm I proposed delivering a fix request to a live Claude session by pasting into its tmux pane (load-buffer/paste-buffer/send-keys). Mike rejected it: tmux send-keys is unreliable and causes all kinds of usability problems. The delivery route under consideration is SendMessage from a throwaway claude -p process, which needs a PoC first. Mike also noted that many Endless commands already know which pane is which, so I should look in the codebase before treating pane identification as an open problem.
+- **Project**: endless
