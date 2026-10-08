@@ -7257,3 +7257,7 @@ In the E-2269 brainstorm I proposed that an ended session, resumed to fix a bug 
 ### [2026-10-07] Use blocks, not precedes, when the order is real
 In the E-2259 session I linked E-2268 (fault attribution) to E-2269 (the error-routing brainstorm) with 'precedes'. precedes is advisory only: spawn and claim never consult it, so Mike spawned E-2269 first with nothing telling him E-2268 should go first. When one piece of work cannot be built until another exists, link with blocks/blocked_by on the task that actually depends on it (here, a future routing implementation, not the brainstorm), and say in the reply which task must go first rather than relying on the relation to surface it.
 - **Project**: endless
+
+### [2026-10-07] File a task with its plan when it is ready to plan
+In the E-2259 session Mike told me to file E-2270 (show unfinished preceding tasks at claim/spawn). I filed it with only a description and context, and told him it still needed a plan. Mike: why file without a plan, when a task cannot be spawned without one? When a filed task is small and its design is already clear from the conversation, write the plan in the same step as filing, so it is spawnable the moment it exists. Leave it unplanned only when the plan genuinely needs his answers, and then say which questions.
+- **Project**: endless
