@@ -1,0 +1,1 @@
+Mike wants work on every error to start as soon as it surfaces. E-2269 settled the design and proved delivery to a live session with a throwaway claude -p calling SendMessage.
