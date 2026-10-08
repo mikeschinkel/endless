@@ -2,7 +2,7 @@
 
 ## Answer
 
-The largest cause, 13 of 31 cases and the only one specific to agents: **the verify runner passes the agent's own environment through to the suite.** `isolatedEnv` (internal/verifycmd/env.go) starts from `os.Environ()` and replaces only `HOME` and `XDG_CONFIG_HOME`. Everything else reaches the suite, including every variable Endless uses to tell an agent from a person. On top of that, the Python front door exports `ENDLESS_AUDIENCE=agent` before it starts the runner (cli.py, `agent_facing()` → `os.environ`). The suite therefore runs *as the agent*: the hook gate is open, refusals and footers render in agent form, and session resolution goes through `CLAUDE_CODE_SESSION_ID`. When Mike runs the same suite, none of that happens. The runner never fixed this at the source. Each of the 11 env-var cases was patched separately in its own suite, `conftest.py` or test, and the same lesson ("strip the agent env") was written down again each time.
+The largest cause, 14 of 32 cases and the only one specific to agents: **the verify runner passes the agent's own environment through to the suite.** `isolatedEnv` (internal/verifycmd/env.go) starts from `os.Environ()` and replaces only `HOME` and `XDG_CONFIG_HOME`. Everything else reaches the suite, including every variable Endless uses to tell an agent from a person. On top of that, the Python front door exports `ENDLESS_AUDIENCE=agent` before it starts the runner (cli.py, `agent_facing()` → `os.environ`). The suite therefore runs *as the agent*: the hook gate is open, refusals and footers render in agent form, and session resolution goes through `CLAUDE_CODE_SESSION_ID`. When Mike runs the same suite, none of that happens. The runner never fixed this at the source. Each env-var case was patched separately in its own suite, `conftest.py` or test, and the same lesson ("strip the agent env") was written down again each time.
 
 Endless *intends* to behave differently for agents. The bug is that the runner lets the caller's identity decide what the suite tests.
 
@@ -63,6 +63,7 @@ From 529 transcripts since the runner first existed (2026-07-10), a regex prefil
 | 29 | E-2232 | 10-05 | `verify.sh: line 99: syntax error` | agent rewrote `verify.sh` mid-run; bash reads scripts incrementally | partly | concurrency | **yes** |
 | 30 | E-2251 (2nd) | 10-06 | 1/2 pytest | unknown; the failed report was deleted when a later run passed | guess | concurrency (unconfirmed) | yes |
 | 31 | E-1975 (2nd) | 08-21 | 2 minimizer invariants | nondeterministic LLM output exposed real bugs (fixed) | demo | real product bug | fixed |
+| 32 | E-2272 | 10-08 | "told to name one": `--session` missing from a person's refusal | the suite's own person() helper stripped `CLAUDE_CODE_*`, `CLAUDECODE` and `ENDLESS_SESSION_ID` but not `ENDLESS_AUDIENCE` or `AI_AGENT`, so the binary still rendered for an agent and printed the remedy. A person sees only the summary. | demo (pre-fix binary, `ENDLESS_AUDIENCE=human`) | runner env leak; it also exposed a real UX bug (the remedy was hidden from people), fixed in d40cd69a9 | yes |
 
 Borderline, not counted above:
 - E-1966: a second agent, not Mike, saw case 3's failure.
@@ -77,7 +78,7 @@ Older causes that can no longer happen:
 
 | Cause | Cases | Specific to agent vs user? | Status |
 |---|---|---|---|
-| Runner passes the caller's harness/session env to the suite | 13 (1–13) | **yes**, the main cause | live, unfixed at the runner |
+| Runner passes the caller's harness/session env to the suite | 14 (1–13, 32) | **yes**, the main cause | live, unfixed at the runner |
 | Tree changed between the two runs (uncommitted, later edits, rebase, post-land) | 6 (14–19) | no, timing | mostly closed by E-2243's clean-tree rule; post-land is intended |
 | Stale or mismatched binary vs tree | 4 (20–23) | no | live whenever a worktree drifts |
 | Load / timing, amplified by a cold Go cache under the temp HOME | 3 (24–26) | no, load at run time | live |
@@ -91,7 +92,7 @@ What a suite inherits today, and what each variable switches:
 
 - `CLAUDE_CODE_ENTRYPOINT` → `agentenv.Supported()` opens the hook gate (`supportedAgent()` callers in internal/hookcmd/claude.go: the hook entry and `reportChannelOn`). Without it, the hook is a silent no-op. Cause of 9 cases.
 - `agentenv.Present()` (entrypoint or `__CFBundleIdentifier`) → `refusal.Agent()` (Go refusal rendering), `events.DetectedHarness()` (stamps `actor.harness` on every event a suite emits), and Python `agent_help.agent_facing()` (refusal form, `--help` directives, the `# db:` footer, the authority line, the claim handoff in task_cmd.py, `if not agent_env.present()`).
-- `ENDLESS_AUDIENCE=agent`: set by the Python front door itself (cli.py, the root group, `os.environ[agent_help.AUDIENCE_VAR] = ...`) when an agent runs `endless task verify`, and inherited by every `endless` call inside the suite. Even a suite that strips `CLAUDE*` still gets agent rendering through this variable.
+- `ENDLESS_AUDIENCE=agent`: set by the Python front door itself (cli.py, the root group, `os.environ[agent_help.AUDIENCE_VAR] = ...`) when an agent runs `endless task verify`, and inherited by every `endless` call inside the suite. Even a suite that strips `CLAUDE*` still gets agent rendering through this variable. Case 32 (E-2272, today) is exactly this: the suite deliberately simulated a person, missed this one variable, and passed for the agent only. A suite cannot reliably clean up after the runner: the list of variables to strip is long, and it keeps growing.
 - `CLAUDECODE` + `CLAUDE_CODE_SESSION_ID` → layer 2 of `_current_endless_session_id` (`_current_endless_session_id` in task_cmd.py). Also `seedFromWorktree` (internal/sandboxcmd/seed_worktree.go) seeds the sandbox session row with the agent's real UUID. A person gets the null UUID. The sandbox reset runs *before* isolation under the caller's env (verifycmd/sandbox.go), so the seeded sandbox already differs by caller.
 - `ENDLESS_SESSION_ID` (from Mike's `esu`) → layer 1 of session resolution, `callerTasks` in monitor/verify_scope.go, and the shell helpers. Cause of case 13.
 - `TMUX_PANE` / the tmux window's `@endless_session_uuid` → layers 3–4. The probe got three different answers from three contexts.
