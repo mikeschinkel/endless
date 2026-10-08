@@ -1,0 +1,1 @@
+Folded into E-2035, which already covers sandbox commands writing into real checkouts; the worktree-creation finding is recorded in its notes.
