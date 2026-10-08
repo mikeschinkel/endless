@@ -7249,3 +7249,7 @@ In the E-2269 brainstorm (routing errors to a fixing session) I claimed that wak
 ### [2026-10-07] Brainstorm E-2269: over-indexed on a concern the seed had already settled
 In the E-2269 brainstorm I pushed back on whether auto-spawned fixes would be 'rare', after the seed recorded Mike's decision that spawning is acceptable here. Mike said I was over-indexing; a simple throttle (one error auto-spawn at a time) is enough. He also corrected my framing of the goal: errors should reach him ASAP, and work on them should start ASAP too. The goal is not to hold an error back until a fix is underway. In this brainstorm, treat concerns the seed marks as settled as settled unless there is new evidence, and offer a cheap mitigation instead of reopening them.
 - **Project**: endless
+
+### [2026-10-07] Brainstorm E-2269: a session works on exactly one task
+In the E-2269 brainstorm I proposed that an ended session, resumed to fix a bug it caused, should file a new bugfix task (cleaning up its original) and work on it. Mike corrected me: that breaks the invariant that a Claude session never works on implementing more than one task. A session may discuss, file, and update many tasks through the endless CLI, but it implements only its own. Working a new task means spawning it. So a resumed session can only reopen and continue its own task. Mike would resume it with --no-revisit and let the session itself set revisit if it accepts responsibility, since it might not.
+- **Project**: endless
