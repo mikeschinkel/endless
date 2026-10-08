@@ -7277,3 +7277,7 @@ In the E-2269 brainstorm Mike proposed 'errors escalate' to message a session im
 ### [2026-10-08] Brainstorm E-2269: retire my own redundant tasks instead of handing them to Mike
 In the E-2269 brainstorm I filed a PoC task (E-2271), then ran the PoC directly, and told Mike that retiring the now-redundant task was his to do. Mike said to retire it myself and not burden him with it. In this case the task was one I had filed myself, its answer was already recorded, and he had already said it shouldn't have been filed (ED-1550).
 - **Project**: endless
+
+### [2026-10-08] Decisions: lock in only the part Mike actually made binding
+When filing ED-1615 from the E-2269 brainstorm, I wrote the current interim mechanism (claude -p + SendMessage) into the decision as how Endless delivers messages, and added an unrelated point (claude -p --resume). Mike said this puts a stake in the ground he'll later have to argue against: claude -p is a stopgap that Claude Code mods are meant to replace. The only binding part was 'never tmux send-keys'. Before filing a decision, strip out today's chosen implementation and anything off the title's subject, and keep only what Mike ruled must hold.
+- **Project**: endless
