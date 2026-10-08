@@ -25,7 +25,9 @@
 //
 // A failed fetch, fast-forward or push is the run's error: the runner records
 // it and backs off, so a missing credential is reported and decays toward the
-// cap instead of retrying at full rate forever.
+// cap instead of retrying at full rate forever. A fetch or push that could not
+// reach the remote at all is marked transient, and the runner reports it only
+// once it has repeated (E-2260).
 //
 // # What it never does
 //
@@ -132,6 +134,7 @@ func (job) Run(ctx context.Context) (err error) {
 func runProjects(ctx context.Context, projects []monitor.ProjectRef,
 	isEnabled func(root string) bool, git Git) (note string, err error) {
 	var notes, failures []string
+	transient := true
 	for _, p := range projects {
 		if !isEnabled(p.Root) {
 			continue
@@ -139,6 +142,7 @@ func runProjects(ctx context.Context, projects []monitor.ProjectRef,
 		res, serr := syncProject(ctx, p.ID, p.Root, git)
 		if serr != nil {
 			failures = append(failures, filepath.Base(p.Root)+": "+serr.Error())
+			transient = transient && jobs.IsTransient(serr)
 		} else {
 			notes = append(notes, filepath.Base(p.Root)+": "+res.String())
 		}
@@ -154,6 +158,11 @@ func runProjects(ctx context.Context, projects []monitor.ProjectRef,
 	note = strings.TrimPrefix(note, "; ")
 	if len(failures) > 0 {
 		err = errors.New(strings.Join(failures, "; "))
+		// The run is transient only when every failure in it is: one
+		// project's rejected push must not wait behind another's outage.
+		if transient {
+			err = jobs.Transient(err)
+		}
 	}
 	return note, err
 }
@@ -285,7 +294,7 @@ func syncProject(ctx context.Context, projectID int64, root string, git Git) (re
 
 	// Fetch first: every decision below is about the remote as it is now.
 	if _, err = run("fetch", "--quiet", remote); err != nil {
-		return res, fmt.Errorf("fetch %s: %w", remote, err)
+		return res, unreachable(fmt.Errorf("fetch %s: %w", remote, err))
 	}
 	res.Upstream, err = run("rev-parse", "--abbrev-ref", upstreamRef)
 	if err != nil {
@@ -314,7 +323,7 @@ func syncProject(ctx context.Context, projectID int64, root string, git Git) (re
 		// cannot send something else. No --force of any kind: a push the remote
 		// rejects is a failure to report, never one to overrule.
 		if _, err = run("push", "--quiet", remote, "refs/heads/"+res.Branch+":"+mergeRef); err != nil {
-			return res, fmt.Errorf("push %s to %s: %w", res.Branch, res.Upstream, err)
+			return res, unreachable(fmt.Errorf("push %s to %s: %w", res.Branch, res.Upstream, err))
 		}
 		res.Action = Pushed
 	default:
@@ -339,6 +348,32 @@ func syncProject(ctx context.Context, projectID int64, root string, git Git) (re
 		clearRewritten(root)
 	}
 	return res, nil
+}
+
+// unreachablePhrases are what git and ssh print when the remote could not be
+// reached at all: a DNS failure, a refused connection, an unreachable network,
+// a timeout. A brief outage produces them and passes on its own, so they are
+// marked transient and the runner waits for repeats before saying so (E-2260).
+// Everything else — a rejected push, a failed authentication — is not.
+var unreachablePhrases = []string{
+	"could not resolve hostname", // ssh
+	"could not resolve host",     // curl, for an https remote
+	"connection refused",
+	"network is unreachable",
+	"operation timed out",
+	"connection timed out",
+}
+
+// unreachable marks a failed fetch or push transient when its message shows the
+// remote could not be reached, and returns every other error as it was.
+func unreachable(err error) error {
+	text := strings.ToLower(err.Error())
+	for _, phrase := range unreachablePhrases {
+		if strings.Contains(text, phrase) {
+			return jobs.Transient(err)
+		}
+	}
+	return err
 }
 
 // splitFinished separates the branches of finished tasks from the rest.

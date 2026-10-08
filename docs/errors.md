@@ -860,3 +860,21 @@ retained leftover with nothing waiting on it, so it is named only in the job's
 run note (`endless jobs list`).
 
 **What to do.** Run `git rebase main` in each worktree the incident names; git drops the copies main already holds and keeps each branch's own work. `endless worktree check`, run inside a worktree, says the same for that one branch. Do not rename or renumber any migration for this. There is nothing to clear: while branches stay stranded the job re-checks every run and the incident names only those still stranded, and once none are left it clears itself.
+
+## WARN-0032 — job-unreachable
+
+**Severity:** warning · **Raised by:** the background job runner, for a job
+that marks its failures transient — today the `main-sync` job (E-2260)
+
+A job failed the same likely-transient way — a DNS failure, a refused
+connection, an unreachable network, a timeout — four runs in a row. The runner
+records nothing for the first three: a brief outage passes on its own, the job
+backs off and retries meanwhile, and `endless jobs list` shows the failure
+count and the last error. A failure the job does not mark transient — a
+rejected push, a failed authentication, a missing upstream — is still WARN-0001
+on its first occurrence.
+
+Fingerprinted on the job, so an outage that lasts is one incident with a
+rising occurrence count.
+
+**What to do.** Check the network, any VPN, and the remote's credentials; the summary names the job, how many times in a row it has failed, and the first line of the cause. The job keeps retrying on its own and this warning clears itself on its next successful run. Once the cause is fixed, run `endless jobs retry <name>` to retry now rather than waiting out the backoff.

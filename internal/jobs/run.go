@@ -418,9 +418,61 @@ func complete(db *sql.DB, job Job, owner string, priorFailCount int, runErr erro
 	}
 
 end:
-	if runErr != nil {
+	switch {
+	case runErr == nil:
+		clearUnreachable(job.Name())
+	case IsTransient(runErr) && failCount < TransientThreshold:
+		// A failure the job expects to pass on retry, not yet repeated often
+		// enough to need a person (E-2260). The backoff above is already
+		// retrying it, and `jobs list` shows the count and the error meanwhile.
+	case IsTransient(runErr):
+		recordUnreachable(job, runErr, capturedLog, failCount, schedule.nextDelay(failCount))
+	default:
 		recordRunFault(job, runErr, capturedLog, failCount, schedule.nextDelay(failCount))
 	}
+}
+
+// clearFingerprint is faults.ClearFingerprintSince, held as a var so a test can
+// make the clear fail.
+var clearFingerprint = faults.ClearFingerprintSince
+
+// unreachableFingerprint keys a job's WARN-0032, one incident per job.
+func unreachableFingerprint(name string) string {
+	return faults.ErrCodeJobUnreachable.Slug + ":" + name
+}
+
+// clearUnreachable resolves a job's open WARN-0032 once a run succeeds, so the
+// warning for an outage that has passed goes away without a person clearing it.
+// Best-effort: a failed clear is not the run's error, and the next successful
+// run tries again.
+func clearUnreachable(name string) {
+	_, _ = clearFingerprint(unreachableFingerprint(name), "", "job:"+name)
+}
+
+// recordUnreachable records WARN-0032 for a job whose transient failures have
+// reached TransientThreshold in a row. It replaces WARN-0001 for these: the
+// remedy is the network, not the job.
+func recordUnreachable(job Job, runErr error, capturedLog string, failCount int, nextIn time.Duration) {
+	var detail string
+
+	detail = runErr.Error()
+	if capturedLog != "" {
+		detail += "\n\n--- job log output ---\n" + capturedLog
+	}
+
+	faults.Record(faults.Fault{
+		Code:        faults.ErrCodeJobUnreachable,
+		Source:      "job:" + job.Name(),
+		Fingerprint: unreachableFingerprint(job.Name()),
+		Summary: `job "` + job.Name() + `" failed ` + strconv.Itoa(failCount) +
+			` times in a row: ` + firstLine(runErr.Error()),
+		Detail: detail,
+		Fields: map[string]any{
+			"job":                 job.Name(),
+			"consecutiveFailures": failCount,
+			"nextAttemptIn":       nextIn.String(),
+		},
+	})
 }
 
 // recordRunFault classifies a failed run and records it. The captured log output

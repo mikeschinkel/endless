@@ -743,6 +743,28 @@ var (
 			"names only those still stranded, and once none are left it clears " +
 			"itself.",
 	}
+
+	// ErrCodeJobUnreachable covers a job whose failures it marked transient
+	// (jobs.Transient: a DNS failure, a refused connection, a timeout) reaching
+	// jobs.TransientThreshold in a row (E-2260). Below that the runner records
+	// nothing, because a brief outage passes on its own; this is raised once it
+	// has not.
+	//
+	// Warning rather than error: the job keeps retrying on its backoff and
+	// nothing is lost meanwhile. Fingerprinted on the job, and the runner clears
+	// it itself on the job's next successful run.
+	ErrCodeJobUnreachable = Code{
+		ID:       "WARN-0032",
+		Slug:     "job-unreachable",
+		Severity: SeverityWarning,
+		Title:    "A background job could not reach the network",
+		Remedy: "Check the network, any VPN, and the remote's credentials; the " +
+			"summary names the job, how many times in a row it has failed, and " +
+			"the first line of the cause. The job keeps retrying on its own and " +
+			"this warning clears itself on its next successful run. Once the " +
+			"cause is fixed, run `endless jobs retry <name>` to retry now rather " +
+			"than waiting out the backoff.",
+	}
 )
 
 // catalog indexes every registered Code by ID. Built once at init from the
@@ -779,6 +801,7 @@ var catalog = buildCatalog(
 	ErrCodeRateFailed,
 	ErrCodeMainDiverged,
 	ErrCodeMainRewritten,
+	ErrCodeJobUnreachable,
 )
 
 // buildCatalog indexes codes by ID. It panics on a duplicate ID: a collision is
