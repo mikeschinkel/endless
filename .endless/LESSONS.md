@@ -7265,3 +7265,7 @@ In the E-2259 session Mike told me to file E-2270 (show unfinished preceding tas
 ### [2026-10-07] Brainstorm E-2269: no tmux send-keys for delivering messages to sessions
 In the E-2269 brainstorm I proposed delivering a fix request to a live Claude session by pasting into its tmux pane (load-buffer/paste-buffer/send-keys). Mike rejected it: tmux send-keys is unreliable and causes all kinds of usability problems. The delivery route under consideration is SendMessage from a throwaway claude -p process, which needs a PoC first. Mike also noted that many Endless commands already know which pane is which, so I should look in the codebase before treating pane identification as an open problem.
 - **Project**: endless
+
+### [2026-10-08] Brainstorm E-2269: recommendations Mike doesn't comment on are accepted
+In the E-2269 brainstorm I listed the task plan's recommendations Mike hadn't commented on as 'still open' and asked him to rule on them. Mike said he had already read them and accepted them; he only comments on the ones he doesn't accept. In this brainstorm, treat a recommendation he read and didn't object to as accepted. He also asked me not to use 'seed' for a task's framing, because he finds it too ambiguous; call it the plan (or name the field).
+- **Project**: endless
