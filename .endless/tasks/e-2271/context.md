@@ -1,0 +1,1 @@
+Error routing (E-2269) wakes the session suspected of raising an error and asks it to confirm and fix. Mike ruled out tmux send-keys as unreliable. Endless cannot call SendMessage itself; a headless claude -p acting only as the sender would avoid resuming the target's transcript in a second process.
