@@ -10,7 +10,7 @@ The causes in the other cases are mostly not specific to agents (see the table).
 
 ## Reproduced today (minimal probe, not an old suite)
 
-I committed a probe `verify.sh` that fails on purpose, so nothing could be recorded onto main. I ran it through `endless task verify E-2266` in three contexts, then removed it (commits 06d97b6d3 and 8084add03 on task/2266). The two user contexts were simulated by unsetting every `CLAUDE*`, `AI_AGENT` and `ENDLESS_AUDIENCE` variable, with and without `TMUX_PANE`. The tmux sibling-pane method from the E-2225 probe was refused by this session's auto-mode permission classifier.
+I committed a probe `verify.sh` that fails on purpose, so nothing could be recorded onto main. I ran it through `endless task verify E-2266` in three contexts, then dropped both commits from task/2266. The two user contexts were simulated by unsetting every `CLAUDE*`, `AI_AGENT` and `ENDLESS_AUDIENCE` variable, with and without `TMUX_PANE`. The tmux sibling-pane method from the E-2225 probe was refused by this session's auto-mode permission classifier.
 
 | What the suite saw | Agent | User (in this tmux window) | User (no tmux) |
 |---|---|---|---|
@@ -103,19 +103,13 @@ What a suite inherits today, and what each variable switches:
 - **Editing a script mid-run.** The runner executes `verify.sh` in place, and bash reads it incrementally, so an agent editing its suite while Mike runs it breaks Mike's run (case 29).
 - **Evidence is deleted.** A later passing run clears the task's earlier failed reports, so a failure Mike saw can no longer be inspected once the agent re-runs green (case 30). E-2243 designed it this way; it costs evidence in exactly these disputes.
 
-## Proposed bugfix tasks (for Mike to approve; none filed)
+## Filed and folded (agreed with Mike 2026-10-08, consolidated per ED-1550)
 
-1. **Runner: build the suite env from an explicit denylist of caller identity.** Before running anything, including the sandbox reset/seed, drop `CLAUDECODE`, `CLAUDE_CODE_*`, `CLAUDE_*`, `AI_AGENT`, `__CFBundleIdentifier`, `ENDLESS_AUDIENCE`, `ENDLESS_SESSION_ID`, `TMUX`, `TMUX_PANE`. A suite that needs a harness or session sets it on the one call that needs it, as the 9 patched suites already do. This makes agent and user runs identical at the source. It also changes E-2263's premise: running in the user's context is no longer needed for *correctness*, only for land authority.
-   - PRODUCT: in someone else's project, any test tool that changes behaviour under `CLAUDECODE` (the variable exists for exactly that reason) diverges the same way, so the strip is generic, not Endless-specific.
-   - Design choice for you: whether `TMUX`/`TMUX_PANE` go, since a few suites test tmux behaviour. They could opt back in.
-   - Front-door half: `endless task verify` should not export `ENDLESS_AUDIENCE` into the runner's environment.
-   - Small; recommend filing under E-2261, ahead of E-2263.
-2. **Runner: keep build caches warm across the temp HOME.** Resolve `GOCACHE`, `GOMODCACHE` and `UV_CACHE_DIR` from the caller's real `HOME` before replacing it, and pass them through explicitly. These are caches, not config, so ED-1583's isolation goal is unaffected. Small. Either file it or fold it into E-1908.
-3. **Runner: execute a snapshot of `verify.sh`.** Copy it into the run dir and run the copy. A couple of lines; removes case 29's class.
-4. *(Optional, lower value)* When a pass clears earlier failed reports, keep failures from runs at a different commit than the passing one, or from a different caller. My recommendation is to drop this one; 1–3 remove most of the disputes it would help settle.
+- **E-2278** (new, under E-2261): give every verify suite a person's environment by default, whoever runs it, plus an `as_agent` wrapper (and a per-check `verify.toml` key) for checks that test the agent's side. `endless task verify` stops passing `ENDLESS_AUDIENCE` down. It also runs a snapshot of `verify.sh`, so a mid-run edit cannot break a run (E-2232's class). Landed suites are explicitly out of scope. Covers cases 1–13, 29 and 32. Mike's direction: a suite tests both the person's and the agent's experience, before and after the milestone. Stripping the caller's identity is only the default, not a replacement for testing the agent's side. Open question in its plan: whether `TMUX`/`TMUX_PANE` are stripped by default (recommended).
+- **E-1908** (widened): one cause, a redirected `HOME` emptying `GOCACHE` before `go build`, now covers the `livewriters` tests, the `destroy_test.go` test from E-2219 (superseded into it), and the verify runner's per-run temp HOME (cases 24–26).
+- Not filed: keeping a failed report from a different caller when a later run passes. Low value once E-2278 makes the two runs agree.
 
 ## Method and limits
 
 - Scan script: scratchpad `scan.py` (regex prefilter over 529 transcripts since 2026-07-10, user-side failure reports plus agent-side explanations). Four subagents then read the 243 candidate sessions in context. Cases where Mike described a failure without the words the regex matched may be missed.
 - Reproduction emulated the user's context by stripping variables, because the tmux sibling-pane spawn was refused by the permission classifier. The table shows the variables really are absent in the "user" columns.
-- Five failed probe reports remain in `~/Library/Caches/endless/verify/E-2266/`. A worktree hook blocked removing them. They are ordinary failed-run cache files and safe to delete.
