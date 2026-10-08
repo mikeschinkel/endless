@@ -579,7 +579,7 @@ func execTaskStatusChanged(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 				SELECT id FROM tasks WHERE id = ?
 				UNION ALL
 				SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id
-			) UPDATE tasks SET status = ?, completed_at = ?
+			) UPDATE tasks SET status = ?, completed_at = ?, verified_sha = NULL
 			WHERE id IN (SELECT id FROM tree) AND status != ?`,
 			taskID, p.NewStatus, completedAt, p.NewStatus,
 		)
@@ -592,13 +592,13 @@ func execTaskStatusChanged(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 		// The CASE reads the row's OLD status, so it fires only on a move from
 		// before judgment — the same rule execTaskFieldsUpdated applies.
 		_, err := db.Exec(
-			`UPDATE tasks SET status = ?, completed_at = ?,
+			`UPDATE tasks SET status = ?, completed_at = ?, verified_sha = ?,
 			        prime_requested = CASE
 			            WHEN ? = '`+string(taskstatus.Submitted)+`'
 			             AND status IN (`+taskstatus.SQLList(taskstatus.PreJudgment)+`)
 			            THEN 1 ELSE prime_requested END
 			  WHERE id = ?`,
-			p.NewStatus, completedAt, p.NewStatus, taskID,
+			p.NewStatus, completedAt, p.verifiedSHA(), p.NewStatus, taskID,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("events: status change: %w", err)
@@ -848,6 +848,9 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 			args = append(args, now())
 		} else {
 			setClauses = append(setClauses, "completed_at = NULL")
+		}
+		if clearsVerifiedSHA(statusStr) {
+			setClauses = append(setClauses, "verified_sha = NULL")
 		}
 	}
 

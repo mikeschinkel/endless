@@ -77,6 +77,50 @@ func (t TaskType) AutoSpawnable() bool {
 	}
 }
 
+// Lands reports whether `endless worktree land` accepts a task of this type at
+// all (E-2262). research and brainstorm deliver their outcome text, never files,
+// so there is nothing on a branch for a land to merge.
+//
+// Mirrored into task_types.lands; VerifyIntegrity fails closed on drift.
+func (t TaskType) Lands() bool {
+	switch t {
+	case TaskTypeResearch, TaskTypeBrainstorm:
+		return false
+	default:
+		return true
+	}
+}
+
+// RequiresVerifySuite reports whether a land needs a passing user verify — the
+// task at `unlanded` — even when the task has no suite (E-2262). True for the
+// implementation types, whose deliverable is behavior a suite can prove. A type
+// without it is still gated when the task HAS a suite and the type's lifecycle
+// includes `unlanded`; it just may land without one.
+//
+// Mirrored into task_types.requires_verify_suite.
+func (t TaskType) RequiresVerifySuite() bool {
+	switch t {
+	case TaskTypeTask, TaskTypeBug:
+		return true
+	default:
+		return false
+	}
+}
+
+// SettlesOnLand reports whether a successful land sets a task of this type to
+// `assumed` (E-2262): the work is merged and verified, and further confirmation
+// comes from use.
+//
+// Mirrored into task_types.settles_on_land.
+func (t TaskType) SettlesOnLand() bool {
+	switch t {
+	case TaskTypeTask, TaskTypeBug:
+		return true
+	default:
+		return false
+	}
+}
+
 // Parse converts a slug from CLI / external input to a TaskType. Returns an
 // error for unknown slugs.
 //
@@ -119,18 +163,22 @@ func All() []TaskType {
 
 // VerifyIntegrity asserts that the task_types SQL table matches the Go enum.
 // Runs once at startup (from monitor.DB() after schema.SQL applies). Returns
-// an error on any drift: an enum constant with no matching row, a slug, label
-// or auto_spawnable mismatch, or a task_types row whose id does not match any
-// constant.
+// an error on any drift: an enum constant with no matching row, a slug, label,
+// auto_spawnable or land-property mismatch, or a task_types row whose id does
+// not match any constant.
 // Callers are expected to hard-fail the process.
 func VerifyIntegrity(db *sql.DB) error {
 	type row struct {
-		id            int
-		slug          string
-		label         string
-		autoSpawnable bool
+		id                  int
+		slug                string
+		label               string
+		autoSpawnable       bool
+		lands               bool
+		requiresVerifySuite bool
+		settlesOnLand       bool
 	}
-	rows, err := db.Query("SELECT id, slug, label, auto_spawnable FROM task_types")
+	rows, err := db.Query(`SELECT id, slug, label, auto_spawnable,
+		lands, requires_verify_suite, settles_on_land FROM task_types`)
 	if err != nil {
 		return fmt.Errorf("tasktype: query task_types: %w", err)
 	}
@@ -139,7 +187,8 @@ func VerifyIntegrity(db *sql.DB) error {
 	byID := make(map[int]row)
 	for rows.Next() {
 		var r row
-		if err := rows.Scan(&r.id, &r.slug, &r.label, &r.autoSpawnable); err != nil {
+		if err := rows.Scan(&r.id, &r.slug, &r.label, &r.autoSpawnable,
+			&r.lands, &r.requiresVerifySuite, &r.settlesOnLand); err != nil {
 			return fmt.Errorf("tasktype: scan task_types row: %w", err)
 		}
 		byID[r.id] = r
@@ -165,6 +214,19 @@ func VerifyIntegrity(db *sql.DB) error {
 		if r.autoSpawnable != tt.AutoSpawnable() {
 			return fmt.Errorf("tasktype: id=%d auto_spawnable mismatch: enum=%t, table=%t",
 				int(tt), tt.AutoSpawnable(), r.autoSpawnable)
+		}
+		for _, f := range []struct {
+			column      string
+			enum, table bool
+		}{
+			{"lands", tt.Lands(), r.lands},
+			{"requires_verify_suite", tt.RequiresVerifySuite(), r.requiresVerifySuite},
+			{"settles_on_land", tt.SettlesOnLand(), r.settlesOnLand},
+		} {
+			if f.enum != f.table {
+				return fmt.Errorf("tasktype: id=%d %s mismatch: enum=%t, table=%t",
+					int(tt), f.column, f.enum, f.table)
+			}
 		}
 		delete(byID, int(tt))
 	}

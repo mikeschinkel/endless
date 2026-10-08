@@ -344,7 +344,8 @@ func eligibleArgs(projectIDs []int64) []any {
 }
 
 // outstandingAutoSpawned counts the project's auto-spawned tasks that have not
-// settled: underway or unverified, claimed by a session flagged auto_spawned.
+// settled: underway, unverified or unlanded (E-2262), claimed by a session
+// flagged auto_spawned.
 // A session stalled on a permission prompt still counts (E-1815) — the cap
 // measures claims on the user's attention, and a stalled session is one.
 func outstandingAutoSpawned(db *sql.DB, projectID int64) (n int, err error) {
@@ -353,7 +354,7 @@ func outstandingAutoSpawned(db *sql.DB, projectID int64) (n int, err error) {
 		  FROM live_tasks t
 		  JOIN sessions s ON s.task_id = t.id
 		 WHERE t.project_id = ?
-		   AND t.status IN ('`+string(taskstatus.Underway)+`', '`+string(taskstatus.Unverified)+`')
+		   AND t.status IN ('`+string(taskstatus.Underway)+`', '`+string(taskstatus.Unverified)+`', '`+string(taskstatus.Unlanded)+`')
 		   AND s.auto_spawned = 1`, projectID,
 	).Scan(&n)
 	if err != nil {

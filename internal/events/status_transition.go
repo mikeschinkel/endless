@@ -81,7 +81,7 @@ func ValidateStatusTransition(from, to taskstatus.Status, tt tasktype.TaskType) 
 // ValidateStatusActor refuses a work-progress status the acting agent has no
 // standing to set.
 //
-// Two rules, both computed from data Endless already had:
+// Three rules, all computed from data Endless already had:
 //
 //   - A session may not move a task it does not hold into `underway` or
 //     `unverified`. sessions.task_id is write-once (ED-1560), so "does this
@@ -89,6 +89,8 @@ func ValidateStatusTransition(from, to taskstatus.Status, tt tasktype.TaskType) 
 //   - `unverified` additionally requires that SOME session claimed the task at
 //     some point. "Implementation done" about work no session ever picked up
 //     is the reported defect stated exactly.
+//   - No agent may set `unlanded` at all (E-2262): it records a verify the
+//     user ran in their own context, and it is what unlocks the land.
 //
 // # Who is exempt
 //
@@ -106,6 +108,16 @@ func ValidateStatusTransition(from, to taskstatus.Status, tt tasktype.TaskType) 
 func ValidateStatusActor(db dbQuerier, taskID int64, to taskstatus.Status, actor Actor) error {
 	if actor.Harness == "" {
 		return nil
+	}
+	if to == taskstatus.Unlanded {
+		// E-2262: `unlanded` says the USER's verify passed — it is what unlocks
+		// the land. Only `endless task verify`, run outside an agent, sets it.
+		return refusal.Report(
+			fmt.Sprintf(
+				"events: an agent may not set task %d to %q — that status records a passing verify the user ran in their own context, and only `endless task verify E-%d` run by the user sets it",
+				taskID, to, taskID),
+			fmt.Sprintf("running `endless task verify E-%d` is the user's to do", taskID),
+		)
 	}
 	if to != taskstatus.Underway && to != taskstatus.Unverified {
 		return nil

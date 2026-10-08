@@ -388,12 +388,15 @@ Why it is the user's call and not yours:
 
 So: reach `unverified`, hand over the one command that verifies it, and stop. Landing is what happens after your user says so.
 
-When your user has said to land, and the task is verified (or you're using `assume`):
+When your user has said to land:
 
 ```bash
 endless worktree land <id>
 endless worktree land <id> --dry-run        # preview without making changes
+endless worktree land <id> --keep-status    # land, but leave the status as it is
 ```
+
+**A land settles the task, and only a verified task lands.** A `todo` or `bugfix` task lands only from `unlanded` — which the user's own `endless task verify` sets on a pass, at the commit it tested, and an agent's run never does — and only while the branch holds no change past that commit other than Endless's own ledger files. A commit after the pass returns the task to `unverified`, and `task show`, `task list`, `task next`, `task active` and `task verify` say so when they notice. A successful land then sets the task to `assumed`, unless `--keep-status`. A `todo`/`bugfix` task with no verify suite cannot land at all. A `research` or `brainstorm` task is refused outright: its deliverable is the outcome text, never files. Any other type lands without the gate unless it has a suite.
 
 `--dry-run` is the exception to the rule above: it changes nothing, so use it freely to preview what a land would do. It **rehearses the rebase** — on a throwaway branch in a throwaway checkout, both deleted afterwards — so it answers the only question about a land that is actually in doubt: whether the rebase conflicts, and if so what kind of conflict it is. Your branch, the base branch and the database are untouched either way. It exits non-zero when it predicts a conflict.
 

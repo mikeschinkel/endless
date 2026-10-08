@@ -17,7 +17,20 @@ from pathlib import Path
 import click
 import pytest
 
-from endless import verify_cmd
+from endless import unlanded, verify_cmd
+
+
+@pytest.fixture(autouse=True)
+def stub_unlanded(monkeypatch):
+    """Take the `unlanded` bookkeeping (E-2262) out of these tests: they pin how
+    the runner is invoked and how a pass is recorded on main, and fake
+    subprocess.run in ways the verify-state call cannot answer. Its own
+    behavior is pinned in test_unlanded.py. Returns the passes recorded."""
+    passes: list = []
+    monkeypatch.setattr(unlanded, "reconcile_quietly", lambda *a: None)
+    monkeypatch.setattr(unlanded, "record_pass",
+                        lambda task, sha: passes.append((task, sha)))
+    return passes
 
 
 class _FakeProc:
@@ -50,7 +63,7 @@ def _stub_git_side(monkeypatch) -> None:
     """
     monkeypatch.setattr(verify_cmd, "_resolve_endless_go", lambda: "endless-go")
     monkeypatch.setattr(verify_cmd, "_require_clean_tree", lambda *a: None)
-    monkeypatch.setattr(verify_cmd, "_head_sha", lambda *a: "abc1234")
+    monkeypatch.setattr(verify_cmd, "_head_sha", lambda *a, **k: "abc1234")
     monkeypatch.setattr(verify_cmd, "_record_passing_run", lambda *a: None)
 
 
@@ -303,6 +316,20 @@ def test_passing_run_commits_one_report_and_empties_the_cache(project, monkeypat
     out = capsys.readouterr().out
     assert out.count("CTRF:") == 1
     assert out.strip().endswith(rel)
+
+
+def test_only_a_recorded_pass_reaches_unlanded_with_the_full_commit(
+        project, monkeypatch, stub_unlanded):
+    """E-2262: a failing run marks nothing; a passing run hands `unlanded` the
+    FULL commit it tested — what `worktree land` compares the branch against."""
+    full = _git(project["wt"], "rev-parse", "HEAD")
+    _fake_go(monkeypatch, project, exit_codes=[1, 0])
+
+    _verify()
+    assert stub_unlanded == []
+
+    assert _verify() == 0
+    assert stub_unlanded == [(TASK, full)]
 
 
 def test_commit_failure_fails_the_command_and_keeps_the_cache(project, monkeypatch):

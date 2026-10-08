@@ -49,6 +49,12 @@ type Status = string
 // adjacent: `unverified` asks "does it work", `unreviewed` asks "has the user
 // read it" (E-2016). Neither is terminal, and both hold a dependent.
 //
+// `unlanded` sits between `unverified` and its terminals (E-2262): the user's
+// own `task verify` passed at a recorded commit, and the work is waiting only on
+// `worktree land`, which settles it to `assumed`. It is not a third gate — the
+// verification already happened — so it joins every group `unverified` is in.
+// A commit to the branch after the pass returns it to `unverified`.
+//
 // `blocked` is NOT here (E-2018). It was a status once, and a handful of rows
 // still carried it, but blockedness is the `blocked_by` relation and always
 // has been: `endless task block` writes a relation and never touches status,
@@ -64,6 +70,7 @@ const (
 	Ready      Status = "ready"
 	Underway   Status = "underway"
 	Unverified Status = "unverified"
+	Unlanded   Status = "unlanded"
 	Unreviewed Status = "unreviewed"
 	Confirmed  Status = "confirmed"
 	Assumed    Status = "assumed"
@@ -249,17 +256,17 @@ const (
 var groups = map[Group][]Status{
 	All: {
 		Unplanned, Submitted, Ready, Underway,
-		Unverified, Unreviewed, Confirmed, Assumed, Completed,
+		Unverified, Unlanded, Unreviewed, Confirmed, Assumed, Completed,
 		Revisit, Declined, Obsolete, Superseded,
 	},
 	Actionable:    {Unplanned, Ready, Revisit},
-	NotActionable: {Submitted, Underway, Unverified, Unreviewed, Confirmed, Assumed, Completed, Declined, Obsolete, Superseded},
-	Active:        {Underway, Unverified, Unreviewed},
-	AwaitsUser:    {Unverified, Unreviewed, Submitted},
+	NotActionable: {Submitted, Underway, Unverified, Unlanded, Unreviewed, Confirmed, Assumed, Completed, Declined, Obsolete, Superseded},
+	Active:        {Underway, Unverified, Unlanded, Unreviewed},
+	AwaitsUser:    {Unverified, Unlanded, Unreviewed, Submitted},
 	ClaimPromotes: {Unplanned, Submitted, Ready, Revisit},
 	Open:          {Unplanned, Submitted, Ready, Underway},
 	ChildrenStateOrder: {
-		Unplanned, Submitted, Ready, Underway, Revisit, Unverified, Unreviewed,
+		Unplanned, Submitted, Ready, Underway, Revisit, Unverified, Unlanded, Unreviewed,
 	},
 	DerivationPrecedence: {Underway, Ready, Submitted, Unplanned},
 	DescriptionResetFrom: {},
@@ -269,14 +276,14 @@ var groups = map[Group][]Status{
 	ReviewTrack:          {Unreviewed},
 	SessionPending:       {Unplanned, Submitted, Ready, Underway, Revisit},
 	SetsCompletedAt:      {Confirmed, Completed},
-	Settled:              {Unverified, Unreviewed, Confirmed, Assumed, Completed, Declined, Obsolete, Superseded},
-	Shipped:              {Unverified, Unreviewed, Confirmed, Assumed, Completed},
+	Settled:              {Unverified, Unlanded, Unreviewed, Confirmed, Assumed, Completed, Declined, Obsolete, Superseded},
+	Shipped:              {Unverified, Unlanded, Unreviewed, Confirmed, Assumed, Completed},
 	ShippedTerminal:      {Confirmed, Assumed, Completed},
 	StickyOverride:       {Revisit, Declined, Obsolete, Superseded},
 	SubmittableFrom:      {Unplanned, Revisit},
 	Terminal:             {Confirmed, Assumed, Completed, Declined, Obsolete, Superseded},
 	VerificationTerminal: {Confirmed, Assumed},
-	VerificationTrack:    {Unverified, Confirmed, Assumed},
+	VerificationTrack:    {Unverified, Unlanded, Confirmed, Assumed},
 	Abandoned:            {Declined, Obsolete, Superseded},
 }
 
@@ -318,6 +325,7 @@ var labels = map[Status]string{
 	Ready:      "Ready",
 	Underway:   "Underway",
 	Unverified: "Unverified",
+	Unlanded:   "Unlanded",
 	Unreviewed: "Unreviewed",
 	Confirmed:  "Confirmed",
 	Assumed:    "Assumed",
@@ -341,6 +349,8 @@ var labels = map[Status]string{
 // third in that family: the same ringed mark, but an equals sign — something
 // else now stands in its place.
 //
+// ⇥ (unlanded) is "ready to move across": verified, waiting only for the land.
+//
 // ☐ (unreviewed) is the deliberate pair to ☑ (unverified): the same box, not
 // yet ticked. The two gates are siblings — one asks "does it work", the other
 // "has the user read it" — and the glyphs say so at a glance (E-2016).
@@ -350,6 +360,7 @@ var glyphs = map[Status]string{
 	Ready:      "●",
 	Underway:   "◉",
 	Unverified: "☑",
+	Unlanded:   "⇥",
 	Unreviewed: "☐",
 	Confirmed:  "✔",
 	Assumed:    "✓",

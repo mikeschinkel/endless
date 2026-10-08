@@ -92,7 +92,7 @@ func newSeededDB(t *testing.T) *sql.DB {
 		t.Fatalf("open db: %v", err)
 	}
 	t.Cleanup(func() { db.Close() })
-	if _, err := db.Exec(`CREATE TABLE task_types (id INTEGER PRIMARY KEY, slug TEXT UNIQUE NOT NULL, label TEXT NOT NULL, auto_spawnable INTEGER NOT NULL DEFAULT 0)`); err != nil {
+	if _, err := db.Exec(`CREATE TABLE task_types (id INTEGER PRIMARY KEY, slug TEXT UNIQUE NOT NULL, label TEXT NOT NULL, auto_spawnable INTEGER NOT NULL DEFAULT 0, lands INTEGER NOT NULL DEFAULT 1, requires_verify_suite INTEGER NOT NULL DEFAULT 0, settles_on_land INTEGER NOT NULL DEFAULT 0)`); err != nil {
 		t.Fatalf("create table: %v", err)
 	}
 	return db
@@ -100,10 +100,10 @@ func newSeededDB(t *testing.T) *sql.DB {
 
 func seedAll(t *testing.T, db *sql.DB) {
 	t.Helper()
-	_, err := db.Exec(`INSERT INTO task_types (id, slug, label, auto_spawnable) VALUES
-		(1, 'todo', 'Todo', 1), (2, 'bugfix', 'Bugfix', 1),
-		(3, 'research', 'Research', 0), (4, 'epic', 'Epic', 0),
-		(5, 'brainstorm', 'Brainstorm', 0)`)
+	_, err := db.Exec(`INSERT INTO task_types (id, slug, label, auto_spawnable, lands, requires_verify_suite, settles_on_land) VALUES
+		(1, 'todo', 'Todo', 1, 1, 1, 1), (2, 'bugfix', 'Bugfix', 1, 1, 1, 1),
+		(3, 'research', 'Research', 0, 0, 0, 0), (4, 'epic', 'Epic', 0, 1, 0, 0),
+		(5, 'brainstorm', 'Brainstorm', 0, 0, 0, 0)`)
 	if err != nil {
 		t.Fatalf("seed: %v", err)
 	}
@@ -119,7 +119,7 @@ func TestVerifyIntegrity_OK(t *testing.T) {
 
 func TestVerifyIntegrity_MissingEnumRow(t *testing.T) {
 	db := newSeededDB(t)
-	if _, err := db.Exec(`INSERT INTO task_types (id, slug, label, auto_spawnable) VALUES (1, 'todo', 'Todo', 1), (2, 'bugfix', 'Bugfix', 1), (3, 'research', 'Research', 0)`); err != nil {
+	if _, err := db.Exec(`INSERT INTO task_types (id, slug, label, auto_spawnable, lands, requires_verify_suite, settles_on_land) VALUES (1, 'todo', 'Todo', 1, 1, 1, 1), (2, 'bugfix', 'Bugfix', 1, 1, 1, 1), (3, 'research', 'Research', 0, 0, 0, 0)`); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	err := tasktype.VerifyIntegrity(db)
@@ -191,5 +191,43 @@ func TestVerifyIntegrity_AutoSpawnableMismatch(t *testing.T) {
 	err := tasktype.VerifyIntegrity(db)
 	if err == nil || !strings.Contains(err.Error(), "auto_spawnable mismatch") {
 		t.Errorf("expected auto_spawnable-mismatch error, got %v", err)
+	}
+}
+
+// TestLandProperties pins how `worktree land` treats each type (E-2262): the
+// implementation types need a user verify and settle on land; the findings
+// types never land; an epic lands ungated and unsettled.
+func TestLandProperties(t *testing.T) {
+	type props struct{ lands, requires, settles bool }
+	want := map[tasktype.TaskType]props{
+		tasktype.TaskTypeTask:       {true, true, true},
+		tasktype.TaskTypeBug:        {true, true, true},
+		tasktype.TaskTypeResearch:   {false, false, false},
+		tasktype.TaskTypeEpic:       {true, false, false},
+		tasktype.TaskTypeBrainstorm: {false, false, false},
+	}
+	for _, tt := range tasktype.All() {
+		got := props{tt.Lands(), tt.RequiresVerifySuite(), tt.SettlesOnLand()}
+		if got != want[tt] {
+			t.Errorf("%s land properties = %+v, want %+v", tt, got, want[tt])
+		}
+	}
+}
+
+// TestVerifyIntegrity_LandPropertyMismatch is the drift gate for the three
+// land columns, as AutoSpawnableMismatch is for theirs.
+func TestVerifyIntegrity_LandPropertyMismatch(t *testing.T) {
+	for _, column := range []string{"lands", "requires_verify_suite", "settles_on_land"} {
+		t.Run(column, func(t *testing.T) {
+			db := newSeededDB(t)
+			seedAll(t, db)
+			if _, err := db.Exec(`UPDATE task_types SET ` + column + ` = 1 - ` + column + ` WHERE slug = 'todo'`); err != nil {
+				t.Fatalf("update: %v", err)
+			}
+			err := tasktype.VerifyIntegrity(db)
+			if err == nil || !strings.Contains(err.Error(), column+" mismatch") {
+				t.Errorf("expected %s-mismatch error, got %v", column, err)
+			}
+		})
 	}
 }

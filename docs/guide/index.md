@@ -92,6 +92,11 @@ stateDiagram-v2
     underway --> confirmed: user verifies work still in flight (todo/bugfix)
     underway --> assumed: agent believes done, verify on use (todo/bugfix)
 
+    %% Landing — a passing user verify unlocks the land, and the land settles it
+    unverified --> unlanded: user passes verify in their own context (todo/bugfix)
+    unlanded --> assumed: user lands the work (todo/bugfix)
+    unlanded --> unverified: system resets when the branch moves past the passed commit (todo/bugfix)
+
     %% Findings lane — work whose deliverable IS the outcome text
     underway --> unreviewed: agent delivers the findings as an outcome (research/brainstorm)
     ready --> unreviewed: agent delivers the findings as an outcome (research/brainstorm)
@@ -105,6 +110,7 @@ stateDiagram-v2
     ready --> revisit: agent reopens — needs re-evaluation
     underway --> revisit: session hands the task back
     unverified --> revisit: user reopens — verification failed
+    unlanded --> revisit: user reopens — the verified work is wrong after all
     unreviewed --> revisit: user reopens — the outcome needs more work
     confirmed --> revisit: user reopens — shipped work found wrong
     assumed --> revisit: user reopens — shipped work found wrong
@@ -117,6 +123,7 @@ stateDiagram-v2
     underway --> declined: user declines
     revisit --> declined: user declines
     unverified --> declined: user declines — the shipped work is not being kept
+    unlanded --> declined: user declines — the shipped work is not being kept
     unreviewed --> declined: user declines — the shipped work is not being kept
     confirmed --> declined: user declines — the shipped work is not being kept
     assumed --> declined: user declines — the shipped work is not being kept
@@ -129,6 +136,7 @@ stateDiagram-v2
     underway --> obsolete: user retires — it no longer needs doing
     revisit --> obsolete: user retires — it no longer needs doing
     unverified --> obsolete: user retires — the shipped work is no longer in use
+    unlanded --> obsolete: user retires — the shipped work is no longer in use
     unreviewed --> obsolete: user retires — the shipped work is no longer in use
     confirmed --> obsolete: user retires — the shipped work is no longer in use
     assumed --> obsolete: user retires — the shipped work is no longer in use
@@ -167,6 +175,7 @@ stateDiagram-v2
 | `ready`       | Planned and reviewed: a human approved the plan. Approval is a review record, not a permission — `task claim` and `task spawn` accept `submitted` exactly as they accept `ready`. |
 | `underway` | A session has claimed the task and is working on it. Set automatically by `task claim`.                        |
 | `unverified`      | Implementation done, awaiting verification. **Still blocks dependents.**                                       |
+| `unlanded`    | The user's own `endless task verify` passed at a recorded commit; only the land is left. Set only by that command, run by the user — never by an agent, and never by an agent's own verify run. `worktree land` lands a `todo`/`bugfix` task only from here, and settles it as `assumed`. Any commit to the branch after the pass (other than Endless's own ledger files) returns it to `unverified`. **Still blocks dependents** — the work is not merged yet. |
 | `unreviewed`  | Research/brainstorm outcome written, awaiting the user's read — the review lane's counterpart to `unverified`. Those two types reach `completed` only through it, so a session cannot declare its own findings finished. **Still blocks dependents**, and more sharply than `unverified`: the deliverable is information other tasks consume. Refused on `todo`/`bugfix`, which are gated by `unverified` instead. |
 | `confirmed`   | Verified and done. **Unblocks dependents.** Only the user confirms.                                            |
 | `assumed`     | Believed complete, will verify when used naturally. **Unblocks dependents.**                                   |
@@ -186,7 +195,7 @@ The agent sets `submitted` (via `task submit`, or by attaching a plan); a human 
 
 Use `assumed` (not `unverified`) when the only way to test the work is by using it in a downstream task — set `--outcome` explaining what was done and how confidence was established.
 
-**`task update --status` enforces the lifecycle above.** A status change that is not an edge of the diagram is refused, and the refusal lists the statuses that ARE reachable from the current one — so the next move is in the message. Two further rules apply to an agent (a person at a terminal is exempt from both): a session may not set `underway` or `unverified` on a task it does not hold, and `unverified` requires that some session claimed the task, because "implementation done" about work nobody picked up is not a status, it is a mistake. There is no `--force`: the fix is to correct the call.
+**`task update --status` enforces the lifecycle above.** A status change that is not an edge of the diagram is refused, and the refusal lists the statuses that ARE reachable from the current one — so the next move is in the message. Three further rules apply to an agent (a person at a terminal is exempt from all three): a session may not set `underway` or `unverified` on a task it does not hold; `unverified` requires that some session claimed the task, because "implementation done" about work nobody picked up is not a status, it is a mistake; and no agent may set `unlanded`, which records the user's own passing verify. There is no `--force`: the fix is to correct the call.
 
 ## Task phases
 
@@ -205,6 +214,7 @@ Don't conflate blocked ("will do when X resolves") with `maybe` ("might do at al
 When task A is blocked by task B (`endless task block A --by B`):
 
 - B in `unverified` → A is **still blocked**. Unverified means "not yet trusted."
+- B in `unlanded` → A is **still blocked**. Verified, but not merged yet.
 - B in `unreviewed` → A is **still blocked**, and this is the sharper case: B's deliverable is information A would consume, and nobody has read it yet.
 - B in `confirmed`, `assumed` or `completed` → A is **unblocked**.
 - B in `declined` or `obsolete` → A is **unblocked**.
@@ -216,7 +226,7 @@ In `task show`, blocking relations appear in the **This task:** section, where e
 ```bash
 # Find work
 endless task next                                # actionable tasks, ranked
-endless task active                              # underway + unverified + unreviewed
+endless task active                              # underway + unverified + unlanded + unreviewed
 endless task recent                              # recently updated
 
 # Record a new task discovered during work — use the literal ID printed

@@ -2549,7 +2549,9 @@ def task_list(project, show_all, status, phase, complexity, risk, parent_id, rel
     every one. --json is uncapped unless you ask for a limit.
     """
     from endless.task_cmd import show_plan, parse_parent_filter
+    from endless.unlanded import reconcile_quietly
     parent_val = parse_parent_filter(parent_id) if parent_id else None
+    reconcile_quietly()
     show_plan(project_name=project, show_all=show_all,
               status_filter=status, phase_filter=phase,
               complexity_filter=ratings.normalize(complexity),
@@ -2603,9 +2605,11 @@ def task_show(item_ids, no_description, show_context, show_analysis, show_plan_f
     show_content = _shown_content(
         all_fields, context=show_context, analysis=show_analysis, plan=show_plan_field,
         outcome=show_outcome, reason=show_reason, notes=show_notes)
+    from endless.unlanded import reconcile_quietly
     if all_fields:
         show_children = True
     for item_id in item_ids:
+        reconcile_quietly(item_id)
         detail_item(item_id, show_description=not no_description,
                     show_content=show_content, show_children=show_children,
                     agent=agent, as_json=as_json, paged=paged, no_color=no_color,
@@ -2655,7 +2659,9 @@ def task_next(ctx, project, show_all, limit, agent, as_json, complexity, risk, p
     if ctx.invoked_subcommand is not None:
         return
     from endless.task_cmd import next_tasks, parse_parent_filter
+    from endless.unlanded import reconcile_quietly
     parent_val = parse_parent_filter(parent_id) if parent_id else None
+    reconcile_quietly()
     next_tasks(project_name=project, show_all=show_all,
                limit=limit, no_limit=no_limit, agent=agent, as_json=as_json,
                complexity=ratings.normalize(complexity),
@@ -2672,9 +2678,11 @@ def task_next(ctx, project, show_all, limit, agent, as_json, complexity, risk, p
 @click.option("--parent", "parent_id", default=None,
               help="Filter to children of this task (e.g. E-101), or 'none' for root tasks")
 def task_active(project, show_all, agent, as_json, parent_id):
-    """Show underway and unverified tasks."""
+    """Show underway, unverified, unlanded and unreviewed tasks."""
     from endless.task_cmd import active_tasks, parse_parent_filter
+    from endless.unlanded import reconcile_quietly
     parent_val = parse_parent_filter(parent_id) if parent_id else None
+    reconcile_quietly()
     active_tasks(project_name=project, show_all=show_all,
                  agent=agent, as_json=as_json, parent_id=parent_val)
 
@@ -4787,10 +4795,20 @@ worktree_sandbox.stdout_is_captured = True
               help="Merge commit SHA for --record-only.")
 @click.option("--at", default=None,
               help="Landing timestamp (RFC3339) for --record-only; default: the --sha commit date.")
-def worktree_land(task_id, dry_run, record_only, sha, at):
-    """Auto-commit endless-managed modifications, rebase, ff-merge, remove worktree."""
+@click.option("--keep-status", is_flag=True,
+              help="Leave the task's status as it is after landing, rather "
+                   "than settling it as assumed.")
+def worktree_land(task_id, dry_run, record_only, sha, at, keep_status):
+    """Auto-commit endless-managed modifications, rebase, ff-merge, settle the task.
+
+    A todo or bugfix task lands only from `unlanded` — after a passing
+    `endless task verify` you ran yourself, at the branch's current code — and
+    a successful land sets it to `assumed` unless --keep-status. A research or
+    brainstorm task never lands: its deliverable is the outcome text.
+    """
     from endless.worktree_cmd import land_worktree
-    land_worktree(task_id, dry_run, record_only=record_only, sha=sha, at=at)
+    land_worktree(task_id, dry_run, record_only=record_only, sha=sha, at=at,
+                  keep_status=keep_status)
 
 
 @worktree_cmd.command("diagnose")

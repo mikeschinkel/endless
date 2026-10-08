@@ -296,7 +296,7 @@ func replayTaskStatusChanged(db *sql.DB, evt *Event, result *ProjectResult) erro
 				SELECT id FROM tasks WHERE id = ?
 				UNION ALL
 				SELECT t.id FROM tasks t JOIN tree ON t.parent_id = tree.id
-			) UPDATE tasks SET status = ?, completed_at = ?
+			) UPDATE tasks SET status = ?, completed_at = ?, verified_sha = NULL
 			WHERE id IN (SELECT id FROM tree) AND status != ?`,
 			taskID, p.NewStatus, completedAt, p.NewStatus,
 		)
@@ -305,8 +305,8 @@ func replayTaskStatusChanged(db *sql.DB, evt *Event, result *ProjectResult) erro
 		}
 	} else {
 		_, err := db.Exec(
-			"UPDATE tasks SET status = ?, completed_at = ? WHERE id = ?",
-			p.NewStatus, completedAt, taskID,
+			"UPDATE tasks SET status = ?, completed_at = ?, verified_sha = ? WHERE id = ?",
+			p.NewStatus, completedAt, p.verifiedSHA(), taskID,
 		)
 		if err != nil {
 			return err
@@ -443,6 +443,9 @@ func replayTaskFieldsUpdated(db *sql.DB, evt *Event, result *ProjectResult) erro
 			args = append(args, kairosToISO(evt.TS))
 		} else {
 			setClauses = append(setClauses, "completed_at = NULL")
+		}
+		if clearsVerifiedSHA(statusStr) {
+			setClauses = append(setClauses, "verified_sha = NULL")
 		}
 	}
 

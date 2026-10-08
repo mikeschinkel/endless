@@ -17,6 +17,7 @@
 // `ledger-orphans` opens no database at all: it is pure git, so its caller
 // threads nothing and the resolved context is simply unused. `land-gate` opens
 // no database either: it is git, the project config and the project's hook.
+// `verify-state` READS tasks, so like `in-use` it takes the caller's context.
 package worktreecmd
 
 import (
@@ -54,6 +55,8 @@ func Run(args []string) {
 		os.Exit(runLedgerOrphans(args[1:]))
 	case "land-gate":
 		os.Exit(runLandGate(args[1:]))
+	case "verify-state":
+		os.Exit(runVerifyState(args[1:]))
 	case "-h", "--help", "help":
 		fmt.Fprint(os.Stdout, usageText())
 	default:
@@ -66,7 +69,7 @@ func Run(args []string) {
 		refusal.ReportIf(
 			fmt.Sprintf("endless-go worktree: unknown verb %q", args[0]),
 			"this came from `endless worktree drop` or `endless worktree land` rather than from a verb you typed",
-			"retry with in-use, ledger-orphans or land-gate",
+			"retry with in-use, ledger-orphans, land-gate or verify-state",
 			"the installed endless-go is older than the endless CLI calling it, and only the user can reinstall a matching pair",
 		).Command("worktree").Detail(usageText()).Exit(exitUsage)
 	}
@@ -277,5 +280,8 @@ func usageText() string {
 		"  land-gate --project <path> --worktree <path> --base <branch> --task <E-NNN>",
 		"         JSON verdict on stdout: may this land proceed (migration",
 		"         collision check, then .endless/hooks/pre-land.sh)",
+		"  verify-state [--task <id>]",
+		"         JSON on stdout: land properties, status and passed-verify",
+		"         staleness for one task, or for every unlanded task",
 	}, "\n") + "\n"
 }

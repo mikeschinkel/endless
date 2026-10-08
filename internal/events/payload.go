@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/mikeschinkel/endless/internal/rating"
+	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
 
 // legacyPlanKey is the pre-E-1000 spelling of the plan field in event payloads.
@@ -110,6 +111,32 @@ type TaskStatusChangedPayload struct {
 	// did.
 	Outcome string `json:"outcome,omitempty"`
 	Reason  string `json:"reason,omitempty"`
+
+	// VerifiedSHA is the full commit a user's passing `task verify` ran at,
+	// carried only on the move to `unlanded` (E-2262) and projected into
+	// tasks.verified_sha. Every other status change clears that column.
+	VerifiedSHA string `json:"verified_sha,omitempty"`
+}
+
+// verifiedSHA is the value tasks.verified_sha takes after this change: the
+// passed commit on arrival at `unlanded`, NULL on any other status.
+func (p TaskStatusChangedPayload) verifiedSHA() any {
+	if p.NewStatus == taskstatus.Unlanded && p.VerifiedSHA != "" {
+		return p.VerifiedSHA
+	}
+	return nil
+}
+
+// clearsVerifiedSHA reports whether a task.fields_updated status write clears
+// tasks.verified_sha (E-2262). Only `task verify` records a passed commit, and
+// only through task.status_changed, so this path never sets one. It clears on
+// every status but `unlanded` itself: a --keep-status self-write on an
+// `unlanded` task must keep its pass, and a person setting `unlanded` by hand
+// arrives from a status that already cleared it — so the land gate reads that
+// task as unproven, which it is. Both write paths call this, which keeps
+// projection(ledger) equal to the live database without reading prior state.
+func clearsVerifiedSHA(newStatus string) bool {
+	return newStatus != taskstatus.Unlanded
 }
 
 type TaskFieldsUpdatedPayload struct {

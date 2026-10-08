@@ -323,6 +323,27 @@ def stub_sandbox_reset_after_create(monkeypatch, request):
 
 
 @pytest.fixture(autouse=True)
+def stub_land_gate(monkeypatch, request):
+    """E-2262: `worktree land` asks endless-go for the task's verify state and
+    refuses a todo/bugfix task that is not `unlanded`. The land tests drive a
+    land for a task their database does not hold, and most fake
+    subprocess.run, so the gate is opened for them: it reports a task that is
+    landable and does not settle. Tests of the gate itself opt out with the
+    `@pytest.mark.real_land_gate` marker.
+    """
+    if request.node.get_closest_marker("real_land_gate"):
+        return
+    from endless import unlanded
+
+    def landable(task_num, worktree):
+        return {"task_id": task_num, "status": "unlanded", "lands": True,
+                "requires_verify_suite": False, "settles_on_land": False,
+                "unlanded_lane": True, "stale": False}
+
+    monkeypatch.setattr(unlanded, "require_landable", landable)
+
+
+@pytest.fixture(autouse=True)
 def stub_current_session_id(monkeypatch, request):
     """E-1401: provide a deterministic session id so emit_event's attribution
     gate doesn't fire in tests.

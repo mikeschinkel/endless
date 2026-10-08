@@ -270,20 +270,28 @@ END;
 -- auto_spawnable (E-1814) mirrors tasktype.TaskType.AutoSpawnable(): whether
 -- the auto-spawn job may pick a task of this type. Spelled on the closing line
 -- because that is where migration 00011's ALTER TABLE splices it.
+--
+-- lands, requires_verify_suite and settles_on_land (E-2262) mirror the
+-- tasktype methods of the same names: whether `worktree land` accepts a task of
+-- this type at all, whether it needs a passing user verify first, and whether a
+-- successful land sets it `assumed`. Spliced after auto_spawnable by migration
+-- 00019, so they follow it on the same closing line.
 CREATE TABLE IF NOT EXISTS task_types (
     id    INTEGER PRIMARY KEY,
     slug  TEXT UNIQUE NOT NULL,
     label TEXT NOT NULL
-, auto_spawnable INTEGER NOT NULL DEFAULT 0);
+, auto_spawnable INTEGER NOT NULL DEFAULT 0, lands INTEGER NOT NULL DEFAULT 1, requires_verify_suite INTEGER NOT NULL DEFAULT 0, settles_on_land INTEGER NOT NULL DEFAULT 0);
 
-INSERT INTO task_types (id, slug, label, auto_spawnable) VALUES
-    (1, 'todo',       'Todo',       1),
-    (2, 'bugfix',     'Bugfix',     1),
-    (3, 'research',   'Research',   0),
-    (4, 'epic',       'Epic',       0),
-    (5, 'brainstorm', 'Brainstorm', 0)
+INSERT INTO task_types (id, slug, label, auto_spawnable, lands, requires_verify_suite, settles_on_land) VALUES
+    (1, 'todo',       'Todo',       1, 1, 1, 1),
+    (2, 'bugfix',     'Bugfix',     1, 1, 1, 1),
+    (3, 'research',   'Research',   0, 0, 0, 0),
+    (4, 'epic',       'Epic',       0, 1, 0, 0),
+    (5, 'brainstorm', 'Brainstorm', 0, 0, 0, 0)
 ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label,
-    auto_spawnable = excluded.auto_spawnable;
+    auto_spawnable = excluded.auto_spawnable, lands = excluded.lands,
+    requires_verify_suite = excluded.requires_verify_suite,
+    settles_on_land = excluded.settles_on_land;
 
 -- Rating levels (E-1813, implementing ED-1538/ED-1539). SQL mirrors of the
 -- rating.Level Go enum, one table per axis so each tasks column has its own FK
@@ -329,7 +337,13 @@ ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
 -- the executor's unplanned→submitted inference sets it, at creation or on
 -- update — and is never cleared. It asks the `prime` job to start the task's
 -- session ahead of need; the job stops asking once any session has bound to the
--- task, so nothing has to reset it. Declared last for 00014's ADD COLUMN.
+-- task, so nothing has to reset it. Declared after risk_id for 00014's ADD
+-- COLUMN.
+--
+-- verified_sha (E-2262) is the full commit a user's passing `task verify` ran
+-- at, written with the move to `unlanded` and cleared by every other status
+-- change. `worktree land` requires the branch to hold no change past it outside
+-- Endless's own ledger files. Declared last for 00019's ADD COLUMN.
 CREATE TABLE IF NOT EXISTS tasks (
     id INTEGER PRIMARY KEY,
     project_id INTEGER NOT NULL,
@@ -348,6 +362,7 @@ CREATE TABLE IF NOT EXISTS tasks (
     complexity_id INTEGER REFERENCES complexity_levels(id),
     risk_id INTEGER REFERENCES risk_levels(id),
     prime_requested INTEGER NOT NULL DEFAULT 0,
+    verified_sha TEXT,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (parent_id) REFERENCES tasks(id) ON DELETE SET NULL
 );

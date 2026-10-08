@@ -42,7 +42,7 @@ from pathlib import Path
 
 import click
 
-from endless import agent_help, doc_mirror, land_conflict, provenance, rowcap
+from endless import agent_help, doc_mirror, land_conflict, provenance, rowcap, unlanded
 from endless.task_cmd import _display_path, _resolve_project
 from endless.project_path import resolved
 
@@ -4220,12 +4220,18 @@ def land_worktree(
     record_only: bool = False,
     sha: str | None = None,
     at: str | None = None,
+    keep_status: bool = False,
 ) -> None:
     """Land the worktree for <task-id> into main per E-987 + E-1337.
 
     With record_only (E-1719), skips all git work and just emits `task.landed`
     for the given (task, --sha) pair — used to backfill historical landings
     whose worktree is gone. See _record_only_landing.
+
+    Before anything moves (E-2262): refuse a research or brainstorm task, and
+    a todo or bugfix task that is not `unlanded` at the branch's current code
+    (endless.unlanded.require_landable). --record-only skips this and the
+    settle in Step 6.1: it records a land that already happened.
 
     Loop:
       1. Partition git status into auto-commit vs user-work.
@@ -4253,6 +4259,8 @@ def land_worktree(
          after the migration, so no reader meets a database ahead of it.
       6. Emit task.landed event. Worktree dir and branch stay; a
          separate reaper sweep removes them after worktree_ttl.
+      6.1 Settle the task as `assumed` when its type settles on land, unless
+         --keep-status (E-2262).
 
     Step 4.2 is why there is no behind-base refusal: rather than gating on a
     proxy for staleness, the land removes the staleness (E-1941).
@@ -4326,6 +4334,11 @@ def land_worktree(
     # would have rebased onto a branch that is not the one being landed into.
     base_branch = (target["companion"] or {}).get("base_branch") \
         or _default_base_branch(main_root)
+
+    # E-2262: before the dry run's report and before anything moves — after
+    # the rebase, the branch differs from the passed commit by everything the
+    # base gained, and a land the task may not take must not start.
+    land_state = unlanded.require_landable(int(canonical[2:]), worktree_path)
 
     if dry_run:
         click.echo(f"Would land: {canonical}")
@@ -4842,6 +4855,10 @@ def land_worktree(
             click.style("•", fg="green")
             + f" Landed {canonical} ({branch}) into {base_branch}"
         )
+
+        # Step 6.1 (E-2262): the land is recorded, so the work is merged and
+        # was verified by the user — settle it. Never unwinds the land.
+        unlanded.settle(land_state, keep_status, endless_go_bin=endless_go_bin)
 
         # E-2205: clear the ERR-0020 a reader recorded in the instant between
         # Step 5.5's migration and Step 5.6's swap. After the record, so any

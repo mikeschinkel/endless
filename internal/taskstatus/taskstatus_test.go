@@ -118,6 +118,7 @@ func TestSessionDispositionsPartitionAll(t *testing.T) {
 	partition(t, "session dispositions",
 		taskstatus.Get(taskstatus.Terminal),
 		[]string{taskstatus.Unverified},
+		[]string{taskstatus.Unlanded},
 		[]string{taskstatus.Unreviewed},
 		taskstatus.Get(taskstatus.SessionPending),
 	)
@@ -129,7 +130,7 @@ func TestSessionDispositionsPartitionAll(t *testing.T) {
 // what was "plus unverified" is now "plus both gates".
 func TestSettledIsTerminalPlusTheGates(t *testing.T) {
 	want := append(taskstatus.Get(taskstatus.Terminal),
-		taskstatus.Unverified, taskstatus.Unreviewed)
+		taskstatus.Unverified, taskstatus.Unlanded, taskstatus.Unreviewed)
 	got := taskstatus.Get(taskstatus.Settled)
 	sort.Strings(want)
 	sort.Strings(got)
@@ -178,7 +179,7 @@ func TestTheTwoLanesAreDisjoint(t *testing.T) {
 // definitional relationship between groups: the verification track is the two
 // ways user-testable work finishes, plus the gate they pass through.
 func TestVerificationTrackIsItsTerminalsPlusUnverified(t *testing.T) {
-	want := append(taskstatus.Get(taskstatus.VerificationTerminal), taskstatus.Unverified)
+	want := append(taskstatus.Get(taskstatus.VerificationTerminal), taskstatus.Unverified, taskstatus.Unlanded)
 	got := taskstatus.Get(taskstatus.VerificationTrack)
 	sort.Strings(want)
 	sort.Strings(got)
@@ -375,14 +376,14 @@ func TestParseGroupRejectsUnknown(t *testing.T) {
 func TestGroupMembershipIsPinned(t *testing.T) {
 	want := map[string][]string{
 		"abandoned":              {"declined", "obsolete", "superseded"},
-		"all":                    {"unplanned", "submitted", "ready", "underway", "unverified", "unreviewed", "confirmed", "assumed", "completed", "revisit", "declined", "obsolete", "superseded"},
+		"all":                    {"unplanned", "submitted", "ready", "underway", "unverified", "unlanded", "unreviewed", "confirmed", "assumed", "completed", "revisit", "declined", "obsolete", "superseded"},
 		"actionable":             {"unplanned", "ready", "revisit"},
-		"not-actionable":         {"submitted", "underway", "unverified", "unreviewed", "confirmed", "assumed", "completed", "declined", "obsolete", "superseded"},
-		"active":                 {"underway", "unverified", "unreviewed"},
-		"awaits-user":            {"unverified", "unreviewed", "submitted"},
+		"not-actionable":         {"submitted", "underway", "unverified", "unlanded", "unreviewed", "confirmed", "assumed", "completed", "declined", "obsolete", "superseded"},
+		"active":                 {"underway", "unverified", "unlanded", "unreviewed"},
+		"awaits-user":            {"unverified", "unlanded", "unreviewed", "submitted"},
 		"claim-promotes":         {"unplanned", "submitted", "ready", "revisit"},
 		"open":                   {"unplanned", "submitted", "ready", "underway"},
-		"children-state-order":   {"unplanned", "submitted", "ready", "underway", "revisit", "unverified", "unreviewed"},
+		"children-state-order":   {"unplanned", "submitted", "ready", "underway", "revisit", "unverified", "unlanded", "unreviewed"},
 		"derivation-precedence":  {"underway", "ready", "submitted", "unplanned"},
 		"description-reset-from": {}, // retired by E-1993; empty on purpose
 		"pre-judgment":           {"unplanned"},
@@ -391,14 +392,14 @@ func TestGroupMembershipIsPinned(t *testing.T) {
 		"review-track":           {"unreviewed"},
 		"session-pending":        {"unplanned", "submitted", "ready", "underway", "revisit"},
 		"sets-completed-at":      {"confirmed", "completed"},
-		"settled":                {"unverified", "unreviewed", "confirmed", "assumed", "completed", "declined", "obsolete", "superseded"},
-		"shipped":                {"unverified", "unreviewed", "confirmed", "assumed", "completed"},
+		"settled":                {"unverified", "unlanded", "unreviewed", "confirmed", "assumed", "completed", "declined", "obsolete", "superseded"},
+		"shipped":                {"unverified", "unlanded", "unreviewed", "confirmed", "assumed", "completed"},
 		"shipped-terminal":       {"confirmed", "assumed", "completed"},
 		"sticky-override":        {"revisit", "declined", "obsolete", "superseded"},
 		"submittable-from":       {"unplanned", "revisit"},
 		"terminal":               {"confirmed", "assumed", "completed", "declined", "obsolete", "superseded"},
 		"verification-terminal":  {"confirmed", "assumed"},
-		"verification-track":     {"unverified", "confirmed", "assumed"},
+		"verification-track":     {"unverified", "unlanded", "confirmed", "assumed"},
 	}
 	for _, g := range taskstatus.AllGroups() {
 		slug := taskstatus.GroupSlug(g)

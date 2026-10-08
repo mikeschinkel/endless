@@ -280,14 +280,15 @@ func renderSessionStatusMarkdown(p *SessionStatusRecordedPayload) string {
 	return b.String()
 }
 
-// renderTasksGrouped walks the flat <task> list and emits 4 sections
-// (Resolved / Pending / Unverified / Unreviewed), with each task placed by a
+// renderTasksGrouped walks the flat <task> list and emits 5 sections
+// (Resolved / Pending / Unverified / Unlanded / Unreviewed), with each task placed by a
 // status→disposition mapping. Sections with no tasks render `(empty)`.
 //
 // Status → disposition mapping:
 //   - resolved:   confirmed, assumed, completed, obsolete, declined
 //   - pending:    unplanned, submitted, ready, underway, revisit
 //   - unverified: unverified
+//   - unlanded:   unlanded — the user's verify passed; only the land is left (E-2262)
 //   - unreviewed: unreviewed
 //
 // The last two are siblings — work its author has finished, waiting on someone
@@ -307,6 +308,7 @@ func renderTasksGrouped(b *strings.Builder, body string) {
 		"Resolved":   nil,
 		"Pending":    nil,
 		"Unverified": nil,
+		"Unlanded":   nil,
 		"Unreviewed": nil,
 	}
 	if body != "" {
@@ -317,7 +319,7 @@ func renderTasksGrouped(b *strings.Builder, body string) {
 			)
 		}
 	}
-	for _, heading := range []string{"Resolved", "Pending", "Unverified", "Unreviewed"} {
+	for _, heading := range []string{"Resolved", "Pending", "Unverified", "Unlanded", "Unreviewed"} {
 		b.WriteString("## ")
 		b.WriteString(heading)
 		b.WriteString("\n")
@@ -357,6 +359,8 @@ func statusToDisposition(status string) string {
 		return "Resolved"
 	case status == taskstatus.Unverified:
 		return "Unverified"
+	case status == taskstatus.Unlanded:
+		return "Unlanded"
 	case status == taskstatus.Unreviewed:
 		return "Unreviewed"
 	default:

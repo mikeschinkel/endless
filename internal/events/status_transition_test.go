@@ -314,6 +314,36 @@ func TestNoHarnessIsExempt(t *testing.T) {
 	}
 }
 
+// TestAgentMayNotSetUnlanded pins E-2262's guard: `unlanded` records a verify
+// the USER ran, and it is what unlocks the land, so an agent — even one holding
+// the task — may not write it through `task update --status`.
+func TestAgentMayNotSetUnlanded(t *testing.T) {
+	db := newDerivationDB(t)
+	seedTask(t, db, 85, nil, int(tasktype.TaskTypeTask), taskstatus.Unverified)
+	seedHolderSession(t, db, 907, 85)
+
+	_, err := execTaskFieldsUpdated(db, statusUpdate(t, 85, taskstatus.Unlanded, "907"), nil)
+	if err == nil {
+		t.Fatal("an agent set `unlanded` by hand")
+	}
+	if !strings.Contains(err.Error(), "endless task verify E-85") {
+		t.Errorf("refusal does not name the command that sets it: %v", err)
+	}
+}
+
+// TestPersonMaySetUnlanded is the other half: the guard is about agents.
+func TestPersonMaySetUnlanded(t *testing.T) {
+	db := newDerivationDB(t)
+	seedTask(t, db, 86, nil, int(tasktype.TaskTypeTask), taskstatus.Unverified)
+
+	evt := fieldsUpdate(t, 86, map[string]any{"status": taskstatus.Unlanded}, Actor{
+		Kind: ActorCLI, ID: "mike", Harness: "",
+	})
+	if _, err := execTaskFieldsUpdated(db, evt, nil); err != nil {
+		t.Fatalf("a person was refused `unlanded`: %v", err)
+	}
+}
+
 // TestTransitionLegalityStillAppliesToAPerson pins that the exemption is
 // narrow: it covers actor reality only. An illegal EDGE is a mistake whoever
 // typed it.

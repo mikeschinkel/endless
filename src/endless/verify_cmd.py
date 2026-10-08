@@ -19,6 +19,10 @@ committed there by `endless-go event commit-verify-report`. For the SHA in that
 name to be exactly the code the suite tested, a run is refused before anything
 executes while the tree it would test has uncommitted changes. The runner
 itself never learns any of this, so it stays extractable as a standalone tool.
+
+A passing run the user made — not an agent's — also moves the task to
+`unlanded` at the commit it tested, which is what lets `worktree land` proceed
+(E-2262, endless.unlanded).
 """
 
 import re
@@ -26,7 +30,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from endless import agent_help
+from endless import agent_help, config, unlanded
 from endless.event_bridge import _display_path, _resolve_endless_go
 from endless.main_commit import sanitized_git_env
 from endless.task_cmd import _current_session_task_id
@@ -69,12 +73,18 @@ def run_verify(item_id: int | None, keep: bool) -> None:
         )
 
     task_id = f"E-{resolved}"
+    # E-2262: a pass moves the task to `unlanded`, a fact about the work that
+    # belongs in the database the task lives in — wherever this was run from —
+    # the same pin `worktree land` takes. An explicit --db still wins.
+    config.default_db_to_main()
+    unlanded.reconcile_quietly(resolved)
     binary = _resolve_endless_go()
     run_dir = _run_dir(resolved)
     tree = Path(run_dir) if run_dir is not None else Path.cwd()
 
     _require_clean_tree(task_id, tree)
     sha = _head_sha(tree)
+    full_sha = _head_sha(tree, short=False)
 
     cmd = [binary, "verify"]
     if keep:
@@ -88,6 +98,7 @@ def run_verify(item_id: int | None, keep: bool) -> None:
     # already named it. Only a pass has more to do: record it.
     if result.returncode == 0:
         _record_passing_run(binary, task_id, resolved, sha, tree)
+        unlanded.record_pass(resolved, full_sha)
     agent_help.passthrough_exit(result.returncode)
 
 
@@ -153,9 +164,13 @@ def _require_clean_tree(task_id: str, tree: Path) -> None:
     )
 
 
-def _head_sha(tree: Path) -> str:
-    """The short SHA of tree's HEAD: the code a run in tree tests."""
-    res = _git(tree, "rev-parse", "--short", "HEAD")
+def _head_sha(tree: Path, short: bool = True) -> str:
+    """The SHA of tree's HEAD: the code a run in tree tests.
+
+    Short for the report's filename; full for the commit `unlanded` records,
+    which `worktree land` compares the branch against (E-2262).
+    """
+    res = _git(tree, "rev-parse", *(["--short"] if short else []), "HEAD")
     if res.returncode != 0:
         raise agent_help.report(
             f"Cannot resolve HEAD in {_display_path(str(tree))}, so nothing "

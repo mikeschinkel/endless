@@ -234,6 +234,19 @@ var transitionGroups = []transitionGroup{
 		},
 	},
 	{
+		// E-2262. `task verify` sets `unlanded` only on a pass the user ran in
+		// their own context, never an agent's (agentenv.Present), and records
+		// the commit it passed at. `worktree land` is allowed only from here, and
+		// settles the task as `assumed`. Any change to the branch past the
+		// passed commit, other than Endless's own ledger files, sends it back.
+		Name: "Landing — a passing user verify unlocks the land, and the land settles it",
+		Transitions: []Transition{
+			{From: Unverified, To: Unlanded, Actor: ActorUser, Types: implementation, Label: "passes verify in their own context"},
+			{From: Unlanded, To: Assumed, Actor: ActorUser, Types: implementation, Label: "lands the work"},
+			{From: Unlanded, To: Unverified, Actor: ActorSystem, Types: implementation, Label: "resets when the branch moves past the passed commit"},
+		},
+	},
+	{
 		// Reachable from `ready` as well as `underway` because findings work
 		// needs no worktree to produce.
 		//
@@ -259,6 +272,7 @@ var transitionGroups = []transitionGroup{
 			{From: Ready, To: Revisit, Actor: ActorAgent, Label: "reopens — needs re-evaluation"},
 			{From: Underway, To: Revisit, Actor: ActorSession, Label: "hands the task back"},
 			{From: Unverified, To: Revisit, Actor: ActorUser, Label: "reopens — verification failed"},
+			{From: Unlanded, To: Revisit, Actor: ActorUser, Label: "reopens — the verified work is wrong after all"},
 			{From: Unreviewed, To: Revisit, Actor: ActorUser, Label: "reopens — the outcome needs more work"},
 			{From: Confirmed, To: Revisit, Actor: ActorUser, Label: "reopens — shipped work found wrong"},
 			{From: Assumed, To: Revisit, Actor: ActorUser, Label: "reopens — shipped work found wrong"},
@@ -278,6 +292,7 @@ var transitionGroups = []transitionGroup{
 			{From: Underway, To: Declined, Actor: ActorUser, Label: "declines"},
 			{From: Revisit, To: Declined, Actor: ActorUser, Label: "declines"},
 			{From: Unverified, To: Declined, Actor: ActorUser, Label: "declines — the shipped work is not being kept"},
+			{From: Unlanded, To: Declined, Actor: ActorUser, Label: "declines — the shipped work is not being kept"},
 			{From: Unreviewed, To: Declined, Actor: ActorUser, Label: "declines — the shipped work is not being kept"},
 			{From: Confirmed, To: Declined, Actor: ActorUser, Label: "declines — the shipped work is not being kept"},
 			{From: Assumed, To: Declined, Actor: ActorUser, Label: "declines — the shipped work is not being kept"},
@@ -319,6 +334,7 @@ var transitionGroups = []transitionGroup{
 			{From: Underway, To: Obsolete, Actor: ActorUser, Label: "retires — it no longer needs doing"},
 			{From: Revisit, To: Obsolete, Actor: ActorUser, Label: "retires — it no longer needs doing"},
 			{From: Unverified, To: Obsolete, Actor: ActorUser, Label: "retires — the shipped work is no longer in use"},
+			{From: Unlanded, To: Obsolete, Actor: ActorUser, Label: "retires — the shipped work is no longer in use"},
 			{From: Unreviewed, To: Obsolete, Actor: ActorUser, Label: "retires — the shipped work is no longer in use"},
 			{From: Confirmed, To: Obsolete, Actor: ActorUser, Label: "retires — the shipped work is no longer in use"},
 			{From: Assumed, To: Obsolete, Actor: ActorUser, Label: "retires — the shipped work is no longer in use"},

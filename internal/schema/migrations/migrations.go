@@ -52,5 +52,6 @@ func Go() []*goose.Migration {
 		addPrime(),
 		ignoredProjects(),
 		faultRaisers(),
+		landSettles(),
 	}
 }

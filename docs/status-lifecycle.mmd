@@ -50,6 +50,11 @@ stateDiagram-v2
     underway --> confirmed: user verifies work still in flight (todo/bugfix)
     underway --> assumed: agent believes done, verify on use (todo/bugfix)
 
+    %% Landing — a passing user verify unlocks the land, and the land settles it
+    unverified --> unlanded: user passes verify in their own context (todo/bugfix)
+    unlanded --> assumed: user lands the work (todo/bugfix)
+    unlanded --> unverified: system resets when the branch moves past the passed commit (todo/bugfix)
+
     %% Findings lane — work whose deliverable IS the outcome text
     underway --> unreviewed: agent delivers the findings as an outcome (research/brainstorm)
     ready --> unreviewed: agent delivers the findings as an outcome (research/brainstorm)
@@ -63,6 +68,7 @@ stateDiagram-v2
     ready --> revisit: agent reopens — needs re-evaluation
     underway --> revisit: session hands the task back
     unverified --> revisit: user reopens — verification failed
+    unlanded --> revisit: user reopens — the verified work is wrong after all
     unreviewed --> revisit: user reopens — the outcome needs more work
     confirmed --> revisit: user reopens — shipped work found wrong
     assumed --> revisit: user reopens — shipped work found wrong
@@ -75,6 +81,7 @@ stateDiagram-v2
     underway --> declined: user declines
     revisit --> declined: user declines
     unverified --> declined: user declines — the shipped work is not being kept
+    unlanded --> declined: user declines — the shipped work is not being kept
     unreviewed --> declined: user declines — the shipped work is not being kept
     confirmed --> declined: user declines — the shipped work is not being kept
     assumed --> declined: user declines — the shipped work is not being kept
@@ -87,6 +94,7 @@ stateDiagram-v2
     underway --> obsolete: user retires — it no longer needs doing
     revisit --> obsolete: user retires — it no longer needs doing
     unverified --> obsolete: user retires — the shipped work is no longer in use
+    unlanded --> obsolete: user retires — the shipped work is no longer in use
     unreviewed --> obsolete: user retires — the shipped work is no longer in use
     confirmed --> obsolete: user retires — the shipped work is no longer in use
     assumed --> obsolete: user retires — the shipped work is no longer in use

@@ -359,7 +359,7 @@ func TestReachableFromIsInVocabularyOrder(t *testing.T) {
 	// `obsolete` is here because E-2144 removed the gate that refused it on
 	// shipped work: the axis is whether anything REPLACED the work, not whether
 	// it shipped. It sorts last, which is what this test is actually about.
-	want := []string{"confirmed", "assumed", "revisit", "declined", "obsolete"}
+	want := []string{"unlanded", "confirmed", "assumed", "revisit", "declined", "obsolete"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("ReachableFrom(unverified, todo) = %v, want %v", got, want)
 	}

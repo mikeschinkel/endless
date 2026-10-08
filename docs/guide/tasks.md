@@ -142,7 +142,7 @@ endless task next --agent
 # Other reads
 endless task id                                      # the task THIS session is on
 endless task recent                                  # recently updated
-endless task active                                  # underway + unverified + unreviewed
+endless task active                                  # underway + unverified + unlanded + unreviewed
 endless task search "query"                          # ID, title, description
 endless task search "query" --plan                   # also search the plan field
 endless task handoff <id>                            # render the spawn handoff
