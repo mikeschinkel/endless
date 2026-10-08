@@ -64,7 +64,7 @@ cd "${PROJ}" || setup_error "cannot cd to ${PROJ}"
 
 add() {
     "${ENDLESS}" task add "$1" --description "$1 for the E-2270 suite." \
-        --plan "# Plan" --complexity low --risk low "${@:2}" >"${TMP}/add.log" 2>&1
+        --plan "# Plan" --complexity low --risk low "${@:2}" >"${TMP}/add.log" 2>&1 || cp "${TMP}/add.log" "${TMP}/add-failed.log"
     grep -oE 'Added E-[0-9]+' "${TMP}/add.log" | head -1 | cut -d' ' -f2
 }
 status_of() {
@@ -74,7 +74,7 @@ status_of() {
 
 A="$(add "Fix the first thing")"
 B="$(add "Fix the second thing" --preceded-by "${A}")"
-[[ -n "${A}" && -n "${B}" ]] || setup_error "could not file the two tasks (A=${A} B=${B}): $(tail -5 "${TMP}/add.log")"
+[[ -n "${A}" && -n "${B}" ]] || setup_error "could not file the two tasks (A=${A} B=${B}): $(tail -8 "${TMP}/add-failed.log" 2>/dev/null)"
 
 OUT="$("${ENDLESS}" task claim "${B}" --unattended 2>&1)"
 RC=$?
