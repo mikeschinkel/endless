@@ -73,6 +73,7 @@ status_of() {
 }
 
 A="$(add "Fix the first thing")"
+[[ -n "${A}" ]] || setup_error "could not file the first task: $(tail -8 "${TMP}/add.log")"
 B="$(add "Fix the second thing" --preceded-by "${A}")"
 [[ -n "${A}" && -n "${B}" ]] || setup_error "could not file the two tasks (A=${A} B=${B}): $(tail -8 "${TMP}/add-failed.log" 2>/dev/null)"
 
