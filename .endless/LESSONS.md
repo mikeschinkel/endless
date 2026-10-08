@@ -7269,3 +7269,7 @@ In the E-2269 brainstorm I proposed delivering a fix request to a live Claude se
 ### [2026-10-08] Brainstorm E-2269: recommendations Mike doesn't comment on are accepted
 In the E-2269 brainstorm I listed the task plan's recommendations Mike hadn't commented on as 'still open' and asked him to rule on them. Mike said he had already read them and accepted them; he only comments on the ones he doesn't accept. In this brainstorm, treat a recommendation he read and didn't object to as accepted. He also asked me not to use 'seed' for a task's framing, because he finds it too ambiguous; call it the plan (or name the field).
 - **Project**: endless
+
+### [2026-10-08] Brainstorm E-2269: don't over-qualify 'immediately'
+In the E-2269 brainstorm Mike proposed 'errors escalate' to message a session immediately. I asked at length whether 'immediately' was even possible, depending on PoC results. Mike called it pedantic: immediately means as soon as possible once the user escalates; do what is possible and don't try to do impossible things. When a requirement is plainly 'as soon as feasible', take it that way and don't make him rule on edge cases that only limit how fast it can be.
+- **Project**: endless
