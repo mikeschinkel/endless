@@ -1,0 +1,74 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 11,
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "pytest: the precedes refusal, its override, and the gates beside it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go test: auto-spawn and auto-prime skip a task with an unfinished predecessor",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "claim of the follower exits 1",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it names the unfinished predecessor and its status",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it offers the override",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the follower's status did not move",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "claim --out-of-order exits 0",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it lists the predecessor",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the follower is underway",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "task spawn --help offers --out-of-order",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "task prime --help offers --out-of-order",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
