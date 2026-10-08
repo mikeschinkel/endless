@@ -47,6 +47,11 @@ func TestPrimeSelect_EachConditionExcludes(t *testing.T) {
 			mustExec(t, db, `INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type)
 			             VALUES ('task', 900, 'task', 100, 'blocks')`)
 		}},
+		{"5. preceded by a non-terminal task (E-2270)", nil, func(t *testing.T, db *sql.DB) {
+			seedTask(t, db, taskSpec{id: 900, project: projA, status: "unverified", phase: "later", typeID: 1, created: "2026-01-01T00:00:00"})
+			mustExec(t, db, `INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type)
+			             VALUES ('task', 900, 'task', 100, 'precedes')`)
+		}},
 		{"6. an open question", nil, func(t *testing.T, db *sql.DB) {
 			mustExec(t, db, `INSERT INTO task_questions (task_id, series, question, status) VALUES (100, 1, 'which?', 'open')`)
 		}},

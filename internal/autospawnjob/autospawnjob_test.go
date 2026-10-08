@@ -136,6 +136,11 @@ func TestSelect_EachConditionExcludes(t *testing.T) {
 			mustExec(t, db, `INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type)
 			             VALUES ('task', 900, 'task', 100, 'blocks')`)
 		}},
+		{"6. preceded by a non-terminal task (E-2270)", nil, func(t *testing.T, db *sql.DB) {
+			seedTask(t, db, taskSpec{id: 900, project: projA, status: "unverified", phase: "later", typeID: 1, created: "2026-01-01T00:00:00"})
+			mustExec(t, db, `INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type)
+			             VALUES ('task', 900, 'task', 100, 'precedes')`)
+		}},
 		{"7. no plan", func(s *taskSpec) { s.plan = "" }, nil},
 		{"7. whitespace-only plan", func(s *taskSpec) { s.plan = " \n\t\n" }, nil},
 		{"7. an open question", nil, func(t *testing.T, db *sql.DB) {
@@ -186,6 +191,10 @@ func TestSelect_EligiblePickedWithProjectDir(t *testing.T) {
 		seedTask(t, db, taskSpec{id: 900, project: projA, status: "confirmed", phase: "later", typeID: 1, created: "2026-01-01T00:00:00"})
 		mustExec(t, db, `INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type)
 		             VALUES ('task', 900, 'task', 100, 'blocks')`)
+		// Nor does a predecessor that has settled (E-2270).
+		seedTask(t, db, taskSpec{id: 901, project: projA, status: "superseded", phase: "later", typeID: 1, created: "2026-01-01T00:00:00"})
+		mustExec(t, db, `INSERT INTO task_deps (source_type, source_id, target_type, target_id, dep_type)
+		             VALUES ('task', 901, 'task', 100, 'precedes')`)
 		// A question that was answered does not park it.
 		mustExec(t, db, `INSERT INTO task_questions (task_id, series, question, status) VALUES (100, 1, 'q', 'answered')`)
 

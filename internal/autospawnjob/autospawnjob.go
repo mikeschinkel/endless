@@ -21,7 +21,8 @@
 //  3. phase `now` or `urgent`;
 //  4. its type is auto-spawnable (task_types.auto_spawnable);
 //  5. its project opted in (`auto_spawn.enabled` in the project's own config);
-//  6. nothing non-terminal blocks it;
+//  6. nothing non-terminal blocks it or precedes it (E-2270: the job never
+//     passes --out-of-order, so an unfinished predecessor parks it too);
 //  7. it has a plan and no open question;
 //  8. no session ever claimed it.
 //
@@ -316,7 +317,7 @@ func eligibleQuery(n int) string {
 		        WHERE d.source_type = 'task'
 		          AND d.target_type = 'task'
 		          AND d.target_id = t.id
-		          AND d.dep_type = 'blocks'
+		          AND d.dep_type IN ('blocks', 'precedes')
 		          AND b.status NOT IN (` + taskstatus.SQLList(taskstatus.Terminal) + `))
 		   AND EXISTS (
 		       SELECT 1

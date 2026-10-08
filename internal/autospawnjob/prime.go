@@ -19,7 +19,7 @@ package autospawnjob
 //  2. status `submitted` or `ready` — nobody has started it;
 //  3. phase `now` or `urgent`;
 //  4. its project opted in (`prime.enabled`) and is under `prime.cap`;
-//  5. nothing non-terminal blocks it;
+//  5. nothing non-terminal blocks it or precedes it (E-2270, as for spawn);
 //  6. no open question — a task waiting on a person is waiting already;
 //  7. no session has ever bound to it. This is also what retires the request:
 //     the primed session binds from its worktree, so the task drops out here
@@ -223,7 +223,7 @@ func primeEligibleQuery(n int) string {
 		        WHERE d.source_type = 'task'
 		          AND d.target_type = 'task'
 		          AND d.target_id = t.id
-		          AND d.dep_type = 'blocks'
+		          AND d.dep_type IN ('blocks', 'precedes')
 		          AND b.status NOT IN (` + taskstatus.SQLList(taskstatus.Terminal) + `))
 		   AND EXISTS (
 		       SELECT 1

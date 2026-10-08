@@ -182,7 +182,7 @@ E-113 <> E-114
 | Notation | Reads |
 |---|---|
 | `A => B` | A **blocks** B: B cannot start until A is done. |
-| `A -> B` | A **should precede** B (the `precedes` relation). Advisory; nothing is blocked. |
+| `A -> B` | A **should precede** B (the `precedes` relation). Starting B while A is unfinished is refused unless `--out-of-order` is passed. |
 | `A => B \| C` | B and C both stand in that relation. `\|` binds tighter than either arrow, so `A => B \| C => D` reads `A => (B \| C) => D`; a group only ever claims what is true of every member. |
 | `A <> B` | A and B **must not run at the same time**. Symmetric, and never chained: `A <> B` and `B <> C` do not mean `A <> C`. |
 | `<> A \| B \| C` | A mutual-exclusion set: no two of these may run at the same time. |

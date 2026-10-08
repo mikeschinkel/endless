@@ -10,7 +10,8 @@ package sessionstatuscmd
 //	<> E-2142 | E-2159 | E-2164
 //	E-2020 <> E-2158
 //
-// `=>` blocks, `->` should precede (advisory), `|` groups tasks that stand in
+// `=>` blocks, `->` should precede (starting out of order needs
+// --out-of-order), `|` groups tasks that stand in
 // the same relation to everything on their left and right on that line (it
 // binds tighter than either arrow), `<>` marks two tasks that must not run
 // concurrently, and a line opening with `<>` is a set of which no two may.

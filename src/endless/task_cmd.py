@@ -58,7 +58,7 @@ CANONICAL_DEP_TYPES: dict[str, tuple[str, bool]] = {
     "reversed_by":     ("reverses",   True),
     "modifies":        ("modifies",   False),  # source modifies target (decision↔decision; target partially still in effect)
     "modified_by":     ("modifies",   True),
-    "precedes":        ("precedes",   False),  # source should be done before target — advisory, never blocks
+    "precedes":        ("precedes",   False),  # source should be done before target — refuses claim/spawn/prime of target unless --out-of-order (E-2270)
     "preceded_by":     ("precedes",   True),
     "conflicts_with":  ("conflicts_with", False),  # symmetric — must not run concurrently; advisory, never blocks
     "relates_to":      ("relates_to", False),  # symmetric
@@ -79,9 +79,10 @@ STORED_DEP_TYPES = (
 # Display order for `task show` — actionability descending; symmetric last.
 # `duplicates` sits with `supersedes`: both say "this one is not the task to do,
 # that one is", and reading them adjacently is how you tell them apart. The
-# advisory ordering pair and conflicts_with sit directly below the blocking
-# rows (E-2164): they answer the same question — what to do before what — only
-# without the force of a block.
+# ordering pair and conflicts_with sit directly below the blocking rows
+# (E-2164): they answer the same question — what to do before what — only
+# without the force of a block (precedes refuses, but --out-of-order
+# overrides it, E-2270).
 RELATION_DISPLAY_ORDER = (
     "blocked_by", "blocks",
     "preceded_by", "precedes",
@@ -5031,8 +5032,64 @@ def _task_type_slug(item_id: int) -> str:
     return rows[0]["slug"] if rows else ""
 
 
-def _require_spawnable(item_id: int, verb: str, require_plan: bool = True) -> None:
-    """Refuse to claim or spawn a task that has no plan or has open questions.
+def _unfinished_predecessors(item_id: int) -> list[dict]:
+    """Every task linked as preceding this one whose status is not terminal.
+
+    E-2270. Read through `get_all_relations` — the query `show_relations`
+    renders — so the refusal and the relations view cannot disagree about what
+    the links are. Each row is {id, title, status}, id-ascending.
+    """
+    rows = get_all_relations(item_id).get("preceded_by", [])
+    return sorted(
+        (r for r in rows if r["status"] not in _TERMINAL_STATUSES),
+        key=lambda r: r["id"],
+    )
+
+
+def _require_in_order(item_id: int, verb: str, out_of_order: bool) -> None:
+    """Refuse to start a task while a task that should precede it is unfinished.
+
+    E-2270. `precedes` was advisory and surfaced only in the session-status
+    graph, never at the one moment the order matters. Now it refuses, but —
+    unlike `blocks`, the hard dependency — `--out-of-order` overrides it. The
+    override still names each predecessor, so running out of order is never
+    silent. REPORT: the order is the user's call, so an agent stops and asks
+    rather than passing the flag itself.
+    """
+    preds = _unfinished_predecessors(item_id)
+    if not preds:
+        return
+    tid = task_id_display(item_id)
+    if out_of_order:
+        # A notice, not a warning to act on: the user's call was the flag.
+        for p in preds:
+            agent_help.info(click.style(
+                f"Starting {tid} out of order: {task_id_display(p['id'])} "
+                f"[{p['status']}] should come first — {p['title']}",
+                fg="yellow"), err=True)
+        return
+    rows = "\n".join(
+        f"  {task_id_display(p['id'])}  {p['status']}  {p['title']}"
+        for p in preds)
+    named = ", ".join(
+        f"{task_id_display(p['id'])} [{p['status']}]" for p in preds)
+    raise agent_help.report(
+        f"Cannot {verb} {tid}: tasks that should come first are not finished: "
+        f"{named}. {NOTHING_CHANGED}",
+        "whether to start this task before the tasks that should precede it",
+        text=(
+            f"Cannot {verb} {tid}: tasks that should come first are not finished:\n"
+            f"{rows}\n"
+            f"Start those first, or run it anyway:\n"
+            f"    endless task {verb} {tid} --out-of-order"
+        ),
+    )
+
+
+def _require_spawnable(item_id: int, verb: str, require_plan: bool = True,
+                       out_of_order: bool = False) -> None:
+    """Refuse to claim or spawn a task that has no plan or has open questions,
+    or (E-2270) whose predecessors are unfinished unless `out_of_order`.
 
     E-1993. Filing stays cheap — a task may be filed with no plan and with
     questions nobody can answer yet — but a session works from a plan, and a
@@ -5079,6 +5136,9 @@ def _require_spawnable(item_id: int, verb: str, require_plan: bool = True) -> No
         )
         problems.append("\n".join(lines))
     if not problems:
+        # E-2270: after the plan and question refusals, which --out-of-order
+        # does not touch — so the override never lets either through.
+        _require_in_order(item_id, verb, out_of_order)
         return
     message = (
         f"Cannot {verb} {tid}: it is not ready to be worked.\n"
@@ -5112,7 +5172,8 @@ def _require_spawnable(item_id: int, verb: str, require_plan: bool = True) -> No
     )
 
 
-def claim_item(item_id: int, unattended: bool = False, force: bool = False):
+def claim_item(item_id: int, unattended: bool = False, force: bool = False,
+               out_of_order: bool = False):
     """Claim ownership of a task and bind a Claude session to it.
 
     `unattended` (E-2093) claims with NO Claude session bound: manual work at a
@@ -5258,7 +5319,7 @@ def claim_item(item_id: int, unattended: bool = False, force: bool = False):
 
     # E-1993: after the re-claim branch above, deliberately — the task's
     # owner picking its own task back up is not starting it.
-    _require_spawnable(item_id, "claim")
+    _require_spawnable(item_id, "claim", out_of_order=out_of_order)
 
     wt_path, _created = _perform_claim_work(
         item_id=item_id,
@@ -7550,7 +7611,7 @@ def spawn_plan(item_id: int, project_name: str | None = None,
                name: str | None = None, auto: bool = False,
                target_session: str | None = None,
                no_refocus: bool = False, placement: str = "first",
-               tmux_session: str | None = None):
+               tmux_session: str | None = None, out_of_order: bool = False):
     """Spawn a new tmux window with Claude working on a task's prompt.
 
     Pre-claims the task (status flip + worktree creation) BEFORE launching
@@ -7718,7 +7779,7 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     _check_prior_claim(item_id, current_status)
 
     # E-1993: a task with no plan, or with open questions, is not spawnable.
-    _require_spawnable(item_id, "spawn")
+    _require_spawnable(item_id, "spawn", out_of_order=out_of_order)
 
     # Pre-claim: emit status_changed, create worktree. No session binding
     # yet — Claude hasn't started. SessionStart's @endless_spawned_by
@@ -7838,7 +7899,7 @@ _PRIMEABLE_STATUSES: frozenset[str] = frozenset(
 def prime_task(item_id: int, permission_mode: str = "auto",
                model: str | None = None, auto: bool = False,
                target_session: str | None = None,
-               placement: str = "first") -> None:
+               placement: str = "first", out_of_order: bool = False) -> None:
     """Start a session that reads a task in now and waits for its user (E-1994).
 
     `task spawn`'s launch path with three differences, each the point:
@@ -7899,7 +7960,8 @@ def prime_task(item_id: int, permission_mode: str = "auto",
     # holds or once held this task has the reasoning a new one would lack.
     _check_task_ownership(item_id, current_eid=None)
     _check_prior_claim(item_id, item["status"])
-    _require_spawnable(item_id, "prime", require_plan=False)
+    _require_spawnable(item_id, "prime", require_plan=False,
+                       out_of_order=out_of_order)
 
     content = db.task_content(item_id)
     drafting = (

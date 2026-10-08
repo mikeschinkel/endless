@@ -1609,7 +1609,8 @@ def session_status(show_all, tree, graph, show_hidden, only_hidden, as_json):
     Under the table, the ordering graph: which of these tasks to do before
     which. --graph renders it alone; --json carries it as a `graph` object.
       E-1 => E-2        E-1 blocks E-2: E-2 cannot start until E-1 is done
-      E-1 -> E-2        E-1 should precede E-2 (advisory; never blocks)
+      E-1 -> E-2        E-1 should precede E-2 (starting E-2 first needs
+                        --out-of-order)
       E-1 => E-2 | E-3  E-2 and E-3 both stand in that relation ('|' binds
                         tighter than either arrow)
       E-1 <> E-2        must not run at the same time (declared with
@@ -3312,11 +3313,11 @@ def _apply_clear_flags(clear_fields, resolved):
 @click.option("--blocked-by", "blocked_by_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) that block this new task (repeatable)")
 @click.option("--precedes", "precedes_ids", type=TASK_ID, multiple=True,
-              help="Task ID(s) this new task should be done before — advisory "
-                   "order only, never blocks (repeatable)")
+              help="Task ID(s) this new task should be done before — starting "
+                   "them first needs --out-of-order (repeatable)")
 @click.option("--preceded-by", "preceded_by_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) that should be done before this new task — "
-                   "advisory order only, never blocks (repeatable)")
+                   "starting it first needs --out-of-order (repeatable)")
 @click.option("--conflicts-with", "conflicts_with_ids", type=TASK_ID, multiple=True,
               help="Task ID(s) that must not run concurrently with this new task "
                    "(they touch the same files) — advisory, never blocks (repeatable)")
@@ -3788,11 +3789,15 @@ def task_complete_cmd(item_ids, outcome, outcome_file, allow_paths):
 # out. Hidden and warning for one release (it still does what it did), then
 # deleted. It must NOT survive as an alias for either half: an alias that
 # still spells two decisions is the defect.
+@click.option("--out-of-order", "out_of_order", is_flag=True,
+              help="Start it even though a task that should precede it is "
+                   "unfinished. Those tasks are still listed.")
 @click.option("--force", is_flag=True, hidden=True)
-def task_claim(item_id, unattended, force):
+def task_claim(item_id, unattended, out_of_order, force):
     """Claim ownership of a task for this session."""
     from endless.task_cmd import claim_item
-    claim_item(item_id, unattended=unattended, force=force)
+    claim_item(item_id, unattended=unattended, force=force,
+               out_of_order=out_of_order)
 
 
 @task_cmd.command("release")
@@ -3954,10 +3959,13 @@ def task_handoff(item_id):
 # because it runs in a monitor's session, not the one the user is looking at.
 @click.option("--auto", "auto", is_flag=True, hidden=True)
 @click.option("--target-session", "target_session", default=None, hidden=True)
+@click.option("--out-of-order", "out_of_order", is_flag=True,
+              help="Start it even though a task that should precede it is "
+                   "unfinished. Those tasks are still listed.")
 def task_spawn(item_id, project, permission_mode, model, session_name,
                worktree, no_refocus, to_first, to_last, to_left, to_right,
                tmux_session, force, reopen, print_decision, bg, attach,
-               new_session, auto, target_session):
+               new_session, auto, target_session, out_of_order):
     """Spawn Claude working on a task in a new tmux window.
 
     Spawns launch Claude as the tmux window's command and deliver the
@@ -4013,7 +4021,7 @@ def task_spawn(item_id, project, permission_mode, model, session_name,
                name=session_name, auto=auto, target_session=target_session,
                no_refocus=no_refocus,
                placement=chosen[0] if chosen else "first",
-               tmux_session=tmux_session)
+               tmux_session=tmux_session, out_of_order=out_of_order)
 
 
 @task_cmd.command("prime")
@@ -4029,7 +4037,11 @@ def task_spawn(item_id, project, permission_mode, model, session_name,
 @click.option("--target-session", "target_session", default=None, hidden=True)
 @click.option("--placement", "placement", default="first", hidden=True,
               type=click.Choice(["first", "last", "left", "right"]))
-def task_prime(item_id, permission_mode, model, auto, target_session, placement):
+@click.option("--out-of-order", "out_of_order", is_flag=True,
+              help="Start it even though a task that should precede it is "
+                   "unfinished. Those tasks are still listed.")
+def task_prime(item_id, permission_mode, model, auto, target_session, placement,
+               out_of_order):
     """Start a session that reads a task in now and waits for you.
 
     The session reads the plan and the code — drafting a plan first when the
@@ -4042,7 +4054,8 @@ def task_prime(item_id, permission_mode, model, auto, target_session, placement)
     """
     from endless.task_cmd import prime_task
     prime_task(item_id, permission_mode=permission_mode, model=model,
-               auto=auto, target_session=target_session, placement=placement)
+               auto=auto, target_session=target_session, placement=placement,
+               out_of_order=out_of_order)
 
 
 @task_cmd.command("reopen")

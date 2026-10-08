@@ -13,7 +13,8 @@ import (
 // layout stays testable without a database.
 
 // Stored task_deps types the ordering graph reads. `blocks` is the hard
-// constraint, `precedes` the advisory order, `conflicts_with` the declared
+// constraint, `precedes` the order a start refuses to break
+// without --out-of-order, `conflicts_with` the declared
 // mutual exclusion — stored once and read from either end.
 const (
 	DepBlocks        = "blocks"

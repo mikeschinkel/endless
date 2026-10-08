@@ -249,6 +249,18 @@ def test_prime_launches_detached_and_claims_nothing(seeded_project_at_cwd, prime
     assert _status(item_id) == "submitted", "priming never moves status"
 
 
+def test_prime_out_of_order_launches_past_a_predecessor(seeded_project_at_cwd, prime_env):
+    """E-2270: the override reaches prime_task, and the launch goes ahead."""
+    calls, _, _, arm = prime_env
+    pred = task_cmd.add_item(title="Fix it first", description="d", plan="# Plan")
+    item_id = task_cmd.add_item(title="Fix a thing", description="d", plan="# Plan")
+    task_cmd.link_tasks(pred, item_id, "precedes")
+    arm()
+    task_cmd.prime_task(item_id, out_of_order=True)
+    assert [c for c in calls if "spawn-window" in c]
+    assert _status(item_id) == "submitted"
+
+
 def test_prime_drafts_for_a_planless_task(seeded_project_at_cwd, prime_env):
     calls, rendered, _, arm = prime_env
     item_id = task_cmd.add_item(title="Fix a thing", description="d")
