@@ -7309,3 +7309,7 @@ In E-2266 I proposed that the verify runner strip agent and user identity variab
 ### [2026-10-08] A verify suite's person-run checks must pin the human refusal rendering
 E-2272: my verify suite passed for me and failed for Mike on one check. A refusal shows a person only its summary; the remedy line renders only for an agent. The suite's person() helper stripped CLAUDE_CODE_* markers but not ENDLESS_AUDIENCE/AI_AGENT, so under an agent run the binary still rendered the agent text and the assertion matched text a person never sees. Fix: clear every agent/audience marker and set ENDLESS_AUDIENCE=human in person(); and put anything a person must know (e.g. a flag to retry with) in the refusal summary, not only the remedy.
 - **Project**: endless
+
+### [2026-10-08] Resolve duplicate tasks myself when the evidence decides it
+In E-2266, consolidating fixes per ED-1550, I found E-1908 and E-2219 had the same cause (t.Setenv HOME before an in-test go build) in the same package and told Mike 'that's yours to settle'. Mike asked why I could not decide or resolve it myself. When the code shows two open tasks share one cause, decide which survives, fold the other in with a recorded reason, and report what I did, rather than handing the call back.
+- **Project**: endless
