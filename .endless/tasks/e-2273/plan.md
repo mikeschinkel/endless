@@ -11,3 +11,11 @@ C. Stop amending once published, re-checked after the commit. After amending, ve
 Recommendation: B — single-package change, no cross-process lock, and it removes the window by construction; or A if B's one-run delay matters.
 
 Tests: a fake-git or temp-repo test where a push lands between canAmend and the commit (A), or where main-sync is run with an amendable ledger tip and must not publish it (B); plus a regression that a normal non-ledger tip still pushes.
+
+
+
+## Decided in review (2026-10-08)
+
+- Option B. "Amendable" means any subject that starts with `Endless: ` (`events.MayAmend`), because every subject commitPaths is given carries that prefix.
+- Found while reproducing: the push named `refs/heads/main`, so git resolved the branch again at push time and could publish a ledger commit added after the check. main-sync now resolves the tip once and pushes that SHA. Without this, B alone would not close the race.
+- When main's only unpushed commit is amendable, the run reports a new `held back` action and pushes nothing.
