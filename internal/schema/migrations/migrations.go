@@ -51,5 +51,6 @@ func Go() []*goose.Migration {
 		addAutoSpawn(),
 		addPrime(),
 		ignoredProjects(),
+		faultRaisers(),
 	}
 }

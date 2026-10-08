@@ -63,9 +63,10 @@ func bindFaultStoreWithProjects(t *testing.T) (alpha, beta int64) {
 				}
 				return id, ""
 			},
+			nil,
 		)
 	}
-	t.Cleanup(func() { faults.Bind(nil, nil, nil) })
+	t.Cleanup(func() { faults.Bind(nil, nil, nil, nil) })
 
 	// Two projects fail, and so does the machine itself.
 	bind(1)

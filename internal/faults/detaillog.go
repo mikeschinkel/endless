@@ -67,6 +67,13 @@ const detailLogFile = "errors.jsonl"
 // Lines written before E-1960 simply lack the key, and decode with Project "".
 // Nothing rewrites them: the log is append-only history, and a fault's project
 // cannot be reconstructed from a line that never recorded one.
+//
+// TaskID and SessionID name who raised THIS occurrence (E-2268). The incident
+// row keeps only the latest raiser and errors_sources one row per distinct
+// raiser, so the line is the one place every occurrence's raiser survives. Ids,
+// not names, unlike Project: a task and a session are addressed by id
+// everywhere else, and E-N / ES-N need no database to read. Omitted when 0, and
+// absent from every line written before E-2268.
 type Detail struct {
 	Kind        string         `json:"kind"` // always "fault"
 	TS          string         `json:"ts"`
@@ -76,7 +83,9 @@ type Detail struct {
 	IndexError  string         `json:"index_error,omitempty"`
 	Code        string         `json:"code"`
 	Severity    string         `json:"severity"`
-	Project     string         `json:"project,omitempty"` // project NAME; absent when unattributed
+	Project     string         `json:"project,omitempty"`    // project NAME; absent when unattributed
+	TaskID      int64          `json:"task_id,omitempty"`    // raising task; absent when unknown
+	SessionID   int64          `json:"session_id,omitempty"` // raising session (sessions.id); absent when unknown
 	Source      string         `json:"source"`
 	Fingerprint string         `json:"fingerprint"`
 	Summary     string         `json:"summary"`
@@ -93,7 +102,7 @@ type Detail struct {
 // BECAUSE the database failed cannot be recorded through the database, so until
 // this call moved off Record's success path it was written nowhere at all —
 // the one failure mode where losing the report costs most.
-func appendDetail(f Fault, id *int64, occurrence int64, project string, indexErr string) {
+func appendDetail(f Fault, id *int64, occurrence int64, project string, raiser Raiser, indexErr string) {
 	var dir string
 	var path string
 	var data []byte
@@ -120,6 +129,8 @@ func appendDetail(f Fault, id *int64, occurrence int64, project string, indexErr
 		Code:        f.Code.ID,
 		Severity:    string(f.Code.Severity),
 		Project:     project,
+		TaskID:      raiser.TaskID,
+		SessionID:   raiser.SessionID,
 		Source:      f.Source,
 		Fingerprint: f.Fingerprint,
 		Summary:     f.Summary,

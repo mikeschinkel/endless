@@ -293,3 +293,16 @@ def test_the_rater_never_touches_sqlite():
             imported |= {f"{node.module}.{a.name}" for a in node.names}
     assert "sqlite3" not in imported
     assert "endless.db" not in imported
+
+
+def test_report_failure_names_the_task_it_is_about(monkeypatch):
+    """E-2268: a failed rating is a fault ABOUT that task, so the rater passes
+    it as the raiser; the unreadable queue is about no task and passes none."""
+    calls = []
+    monkeypatch.setattr(rater, "_endless_go", lambda args, stdin=None: calls.append(args) or "")
+
+    rater.report_failure(2259, "claude is missing")
+    rater.report_failure(0, "queue unreadable")
+
+    assert calls[0][-2:] == ["--task", "2259"]
+    assert "--task" not in calls[1]

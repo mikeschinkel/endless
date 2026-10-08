@@ -325,6 +325,9 @@ def report_failure(task_id: int, detail: str) -> None:
             # Group by CAUSE, not by task: "claude is missing" is one incident
             # however many tasks hit it.
             "--fingerprint", f"rate-failed:{detail[:80]}",
+            # The task it failed to rate is who this fault is about (E-2268);
+            # 0 — the queue itself — is about no task, and is left to resolve.
+            *(["--task", str(task_id)] if task_id else []),
         ])
     except RaterError:
         pass

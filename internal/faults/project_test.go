@@ -47,6 +47,7 @@ func bindProject(t *testing.T, db *sql.DB, logDir string, id int64, name string)
 			}
 			return id, name
 		},
+		nil,
 	)
 }
 
@@ -216,7 +217,7 @@ func TestList_ProjectScopeIncludesUnattributed(t *testing.T) {
 	faults.Record(faults.Fault{Code: faults.ErrCodeJobFailed, Source: "job:a", Summary: "alpha's job failed"})
 	bindProject(t, db, logDir, beta, "beta")
 	faults.Record(faults.Fault{Code: faults.ErrCodeJobFailed, Source: "job:b", Summary: "beta's job failed"})
-	faults.Bind(func() (*sql.DB, error) { return db, nil }, func() string { return logDir }, nil)
+	faults.Bind(func() (*sql.DB, error) { return db, nil }, func() string { return logDir }, nil, nil)
 	faults.Record(faults.Fault{Code: faults.ErrCodeJobScheduling, Source: "jobs", Summary: "the runner could not open the database"})
 
 	scoped, err := faults.List(faults.ProjectScope(alpha), false, 0)
@@ -250,7 +251,7 @@ func TestClear_ScopedClearAllLeavesOtherProjects(t *testing.T) {
 	faults.Record(faults.Fault{Code: faults.ErrCodeJobFailed, Source: "job:a", Summary: "alpha's job failed"})
 	bindProject(t, db, logDir, beta, "beta")
 	faults.Record(faults.Fault{Code: faults.ErrCodeJobFailed, Source: "job:b", Summary: "beta's job failed"})
-	faults.Bind(func() (*sql.DB, error) { return db, nil }, func() string { return logDir }, nil)
+	faults.Bind(func() (*sql.DB, error) { return db, nil }, func() string { return logDir }, nil, nil)
 	faults.Record(faults.Fault{Code: faults.ErrCodeJobScheduling, Source: "jobs", Summary: "the runner could not open the database"})
 
 	cleared, err := faults.Clear(faults.ProjectScope(alpha), nil, "tester")

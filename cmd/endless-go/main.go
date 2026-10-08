@@ -60,6 +60,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/claimhandoffcmd"
 	"github.com/mikeschinkel/endless/internal/errorscmd"
 	"github.com/mikeschinkel/endless/internal/eventcmd"
+	"github.com/mikeschinkel/endless/internal/events"
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/hookcmd"
 	"github.com/mikeschinkel/endless/internal/jobscmd"
@@ -216,7 +217,7 @@ func main() {
 	// that connection, so the refusal lands as one deduplicated incident.
 	faults.Bind(monitor.FaultDB, func() string {
 		return filepath.Join(monitor.ConfigDir(), "log")
-	}, resolveFaultProject)
+	}, resolveFaultProject, resolveFaultRaiser)
 
 	// session-status pins main itself, but only on its normal tmux-resolved path;
 	// with --task (headless/tests) it deliberately reads the resolved sandbox
@@ -333,6 +334,23 @@ func resolveFaultProject(explicit int64) (projectID int64, name string) {
 		return 0, ""
 	}
 	return id, resolved
+}
+
+// resolveFaultRaiser is the faults package's RaiserResolver (E-2268). The policy
+// is monitor.ResolveFaultRaiser; this gathers the process facts it decides from,
+// which only main can: whether this process is handling a hook, whether an agent
+// harness runs it, and its environment and working directory.
+//
+// Here rather than in internal/faults for resolveFaultProject's reasons.
+func resolveFaultRaiser(explicit faults.Raiser) faults.Raiser {
+	cwd, _ := os.Getwd()
+	return monitor.ResolveFaultRaiser(explicit, monitor.RaiserEnv{
+		HookSession:    hookcmd.CallingSession(),
+		Agent:          events.DetectedHarness() != "",
+		ClaudeSession:  os.Getenv("CLAUDE_CODE_SESSION_ID"),
+		EndlessSession: os.Getenv("ENDLESS_SESSION_ID"),
+		Cwd:            cwd,
+	})
 }
 
 func usageText() string {

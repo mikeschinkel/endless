@@ -47,8 +47,9 @@ func stopFailureEnv(t *testing.T, state string) (db *sql.DB, projectPath string)
 		func() (*sql.DB, error) { return db, nil },
 		func() string { return logDir },
 		nil,
+		nil,
 	)
-	t.Cleanup(func() { faults.Bind(nil, nil, nil) })
+	t.Cleanup(func() { faults.Bind(nil, nil, nil, nil) })
 
 	if _, err := db.Exec(
 		"INSERT INTO projects (id, name, path) VALUES (1, 'proj', ?)", projectPath,

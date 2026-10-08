@@ -24,6 +24,7 @@ func warned() faults.Incident {
 		Project: "endless", Source: "job:triage",
 		Summary:     "job scheduling row could not be created after three attempts, each behind the connection's five-second busy timeout",
 		Occurrences: 12, FirstSeenAt: "2026-09-01T09:00:00", LastSeenAt: "2026-09-19T06:00:00",
+		TaskID: 2259, SessionID: 1299, Raisers: 3,
 	}
 }
 
@@ -235,7 +236,7 @@ func TestListingLines_ShedWholeColumnsInAFixedOrder(t *testing.T) {
 	shedAt := map[string]int{}
 	for _, cols := range widths() {
 		head := listingLines(incidents, true, true, cols)[0]
-		for _, name := range []string{"SOURCE", "LAST SEEN", "PROJECT", "STATUS", "COUNT"} {
+		for _, name := range []string{"SOURCE", "LAST SEEN", "BY", "PROJECT", "STATUS", "COUNT"} {
 			if !strings.Contains(head, name) {
 				if _, seen := shedAt[name]; !seen {
 					shedAt[name] = cols
@@ -250,7 +251,7 @@ func TestListingLines_ShedWholeColumnsInAFixedOrder(t *testing.T) {
 		}
 	}
 
-	order := []string{"SOURCE", "LAST SEEN", "PROJECT", "STATUS", "COUNT"}
+	order := []string{"SOURCE", "LAST SEEN", "BY", "PROJECT", "STATUS", "COUNT"}
 	for i := 1; i < len(order); i++ {
 		if shedAt[order[i-1]] < shedAt[order[i]] {
 			t.Errorf("%s sheds before %s (at cols %d and %d); the order is wrong",

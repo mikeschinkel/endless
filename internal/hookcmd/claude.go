@@ -160,6 +160,24 @@ type preToolUseBlock struct {
 	HookSpecificOutput hookContextOutput `json:"hookSpecificOutput"`
 }
 
+// callingSession is the Claude session id the payload of the hook this process
+// is handling names, or "" before one is parsed (and in every process that is
+// not a hook). See CallingSession.
+var callingSession string
+
+// CallingSession returns the Claude session id of the hook event this process is
+// handling, or "" when it is not handling one.
+//
+// It exists for fault attribution (E-2268): a fault a hook raises was raised BY
+// that hook's session, and the payload is the one source that says so without
+// depending on which variables the harness passes to a hook's environment. A
+// hook is an agent's by construction — runClaude returns before parsing on any
+// harness it does not support — so the caller need not ask whether an agent ran
+// this process.
+func CallingSession() string {
+	return callingSession
+}
+
 func runClaude(args []string) (err error) {
 	// E-1962: on an unsupported harness the whole hook is a no-op — silently,
 	// and before stdin is even read.
@@ -194,6 +212,7 @@ func runClaude(args []string) (err error) {
 	if err := json.Unmarshal(data, &payload); err != nil {
 		return payloadUnreadable(fmt.Errorf("parsing payload: %w", err))
 	}
+	callingSession = payload.SessionID
 
 	// E-1661: label every failure below with the event that fired. The exit
 	// code a hook must use to reach the agent is a property of the event, and

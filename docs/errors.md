@@ -138,6 +138,43 @@ their own project's open incidents plus the unattributed ones, while
 `session status` and `session monitor` stay machine-wide — they render every live
 session on the box, whatever project each is in.
 
+## Who raised an error
+
+Every occurrence also records **who raised it**: the task and the session that
+were active. `errors list` shows the latest raiser in a `BY` column, and a `+N`
+when N others raised the same incident; `errors show` lists every one of them,
+most recent first:
+
+```
+ID  CODE       COUNT  BY                   LAST SEEN            SUMMARY
+12  WARN-0001  41     ES-1299 (E-2259) +2  2026-10-07T14:02:11  job "rater" failed: …
+
+Raised by:
+  ES-1299 (E-2259)  38 occurrence(s), first 2026-10-07T09:12:40, last 2026-10-07T14:02:11
+  ES-1302 (E-2268)  2 occurrence(s), first …
+  E-2270            1 occurrence(s), first …
+```
+
+`ES-N (E-N)` is a session and the task it was working on; `E-N` alone is a task
+with no session; `-` means neither could be told. `show --detail` adds each
+occurrence's own raiser.
+
+- **A session is recorded only when an agent ran the command.** A hook, or a
+  command run under an agent harness, names its session; a command you type in
+  your own shell names none, even inside a tmux window beside a session or
+  after `esu`. The session is what an error would be routed back to, and an
+  error you caused must not be routed to an agent.
+- **The task** is the one the fault is about when its producer knows it (the
+  worktree reaper, the unsettled probe, a failed rating), else the session's
+  task, else the task whose worktree the command ran in.
+- **A background job's own failure names no one** unless it is about one task:
+  nothing was working on anything when it ran.
+
+The incident keeps only its latest raiser — the one to route to. One row per
+distinct raiser is kept beside it, so `+2` means three sessions or tasks hit the
+same fault, not three occurrences. Errors recorded before raisers were tracked
+show `-`.
+
 ## Where the detail lives
 
 The `errors` table holds only the index — project, code, source, summary, counts.
@@ -151,6 +188,8 @@ Detail lines carry the project by NAME (`"project": "acme"`), because that file
 is read without a database — one log holds every project on the machine. Lines
 written before projects were recorded simply have no `project` key; nothing
 rewrites them, since a fault's project cannot be reconstructed after the fact.
+They carry the raiser as ids (`"task_id": 2259, "session_id": 1299`), each
+omitted when not known.
 
 That file is machine-local. It is not the shareable db-ledger, it is never
 replayed into the database, and faults emit no ledger events.

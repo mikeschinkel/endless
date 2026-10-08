@@ -28,8 +28,9 @@ func bindBrokenStore(t *testing.T) {
 		func() (*sql.DB, error) { return nil, os.ErrPermission },
 		func() string { return logDir },
 		nil,
+		nil,
 	)
-	t.Cleanup(func() { faults.Bind(nil, nil, nil) })
+	t.Cleanup(func() { faults.Bind(nil, nil, nil, nil) })
 }
 
 func TestRender_NoticeWhenTheStoreCannotBeRead(t *testing.T) {
@@ -112,7 +113,7 @@ func TestRender_SilentWhenEverythingIsFine(t *testing.T) {
 }
 
 func TestRender_SilentWhenTheStoreIsUnbound(t *testing.T) {
-	faults.Bind(nil, nil, nil)
+	faults.Bind(nil, nil, nil, nil)
 
 	var out strings.Builder
 	Render(&out, 100, false, faults.AllProjects)

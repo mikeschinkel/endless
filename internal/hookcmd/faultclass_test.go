@@ -43,8 +43,9 @@ func bindFaultStore(t *testing.T) *sql.DB {
 		func() (*sql.DB, error) { return db, nil },
 		func() string { return logDir },
 		nil,
+		nil,
 	)
-	t.Cleanup(func() { faults.Bind(nil, nil, nil) })
+	t.Cleanup(func() { faults.Bind(nil, nil, nil, nil) })
 
 	return db
 }
@@ -270,7 +271,7 @@ func TestRecordHookFault_LeavesTheExitCodeAlone(t *testing.T) {
 }
 
 func TestRecordHookFault_SurvivesAnUnboundStore(t *testing.T) {
-	faults.Bind(nil, nil, nil)
+	faults.Bind(nil, nil, nil, nil)
 
 	// A hook runs in processes that never wired a fault store. Recording is
 	// best-effort by contract, so this must be a silent no-op rather than a
@@ -284,8 +285,9 @@ func TestRecordHookFault_RecordsWhenTheDatabaseIsTheThingThatFailed(t *testing.T
 		func() (*sql.DB, error) { return nil, os.ErrPermission },
 		func() string { return logDir },
 		nil,
+		nil,
 	)
-	t.Cleanup(func() { faults.Bind(nil, nil, nil) })
+	t.Cleanup(func() { faults.Bind(nil, nil, nil, nil) })
 
 	// The case the whole fallback exists for: the hook failed BECAUSE the
 	// database is unreachable, so the fault cannot be indexed in it. The report

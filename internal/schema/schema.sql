@@ -1412,7 +1412,25 @@ CREATE TABLE IF NOT EXISTS errors (
     last_seen_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     cleared_at    TEXT,
     cleared_by    TEXT
-);
+, task_id INTEGER, session_id INTEGER);
+
+-- task_id and session_id (E-2268) name who raised the LATEST occurrence, and are
+-- rewritten on every repeat: the session to route an incident to is the one
+-- that raised it most recently. Every distinct raiser, with its own count and
+-- window, is in errors_sources below; every single occurrence is in the detail
+-- log. Spelled on the closing line because that is where migration 00016's
+-- ALTER TABLE splices them, and TestMigrate_MatchesSchemaSQL compares the texts.
+--
+-- session_id is set only when an agent harness ran the process: a fault raised
+-- from a person's shell names no session, so it is never routed to an agent.
+-- task_id is the producer's explicit task, else the session's task, else the
+-- task whose worktree the process ran in. NULL in either means "not known".
+--
+-- Plain INTEGERs, not foreign keys. Attribution is a refinement of a fault
+-- report and the report is the payload: a key that rejected the write over a
+-- task or session the database being written does not hold — a sandbox that was
+-- never seeded with it, a row since removed — would lose the report along with
+-- its attribution, the failure faults.Record exists to prevent.
 
 -- COALESCE(project_id, 0), not project_id, and that is load-bearing: SQLite
 -- treats NULLs as DISTINCT in a unique index, so a bare project_id column would
@@ -1436,6 +1454,28 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_errors_open_uniq
  WHERE cleared_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_errors_open
     ON errors(cleared_at, severity);
+
+-- Errors sources (E-2268). One row per DISTINCT raiser of an incident — a
+-- (session, task) pair, with every unattributed occurrence sharing one
+-- (NULL, NULL) row — so the table grows with how broadly a fault was raised,
+-- not with how often. Upserted in the same transaction as the incident it
+-- belongs to. `errors show` lists them as "Raised by"; `errors list` shows the
+-- latest raiser from errors itself and a +N marker when there are others.
+--
+-- The unique index folds NULL to 0 for the reason idx_errors_open_uniq does:
+-- NULLs are distinct in a unique index, and without the fold every unattributed
+-- repeat would add a row instead of bumping one.
+CREATE TABLE IF NOT EXISTS errors_sources (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    error_id      INTEGER NOT NULL REFERENCES errors(id) ON DELETE CASCADE,
+    session_id    INTEGER,
+    task_id       INTEGER,
+    occurrences   INTEGER NOT NULL DEFAULT 1,
+    first_seen_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
+    last_seen_at  TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_errors_sources_uniq
+    ON errors_sources(error_id, COALESCE(session_id, 0), COALESCE(task_id, 0));
 
 -- ─── The minimizer autoresearch loop (E-1975) ────────────────────────────────
 --

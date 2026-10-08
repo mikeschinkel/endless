@@ -50,8 +50,9 @@ func bindFaultStore(t *testing.T) {
 		func() (*sql.DB, error) { return db, nil },
 		func() string { return logDir },
 		nil,
+		nil,
 	)
-	t.Cleanup(func() { faults.Bind(nil, nil, nil) })
+	t.Cleanup(func() { faults.Bind(nil, nil, nil, nil) })
 }
 
 // oneRow is the minimal row set that exercises the normal (non-empty) render
@@ -230,7 +231,7 @@ func faultRowLineOf(frame string) string {
 }
 
 func TestRenderFaultRow_SurvivesAnUnboundFaultStore(t *testing.T) {
-	faults.Bind(nil, nil, nil)
+	faults.Bind(nil, nil, nil, nil)
 
 	// A diagnostics surface must never be able to take down the view it
 	// annotates: with no fault store reachable the frame renders as normal,

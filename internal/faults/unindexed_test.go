@@ -34,8 +34,9 @@ func newBrokenStore(t *testing.T) (logDir string) {
 		func() (*sql.DB, error) { return nil, os.ErrPermission },
 		func() string { return logDir },
 		nil,
+		nil,
 	)
-	t.Cleanup(func() { faults.Bind(nil, nil, nil) })
+	t.Cleanup(func() { faults.Bind(nil, nil, nil, nil) })
 
 	return logDir
 }
@@ -199,6 +200,7 @@ func TestClearUnindexed_MovesTheWatermarkAndItPersists(t *testing.T) {
 	faults.Bind(
 		func() (*sql.DB, error) { return nil, os.ErrPermission },
 		func() string { return logDir },
+		nil,
 		nil,
 	)
 	if n := faults.UnindexedCount(); n != 0 {

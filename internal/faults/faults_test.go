@@ -40,8 +40,9 @@ func newBoundStore(t *testing.T) (*sql.DB, string) {
 		func() (*sql.DB, error) { return db, nil },
 		func() string { return logDir },
 		nil,
+		nil,
 	)
-	t.Cleanup(func() { faults.Bind(nil, nil, nil) })
+	t.Cleanup(func() { faults.Bind(nil, nil, nil, nil) })
 
 	return db, logDir
 }
@@ -332,7 +333,7 @@ func TestOpen_IsEmptyWhenEverythingIsCleared(t *testing.T) {
 }
 
 func TestRecord_IsASilentNoOpWhenUnbound(t *testing.T) {
-	faults.Bind(nil, nil, nil)
+	faults.Bind(nil, nil, nil, nil)
 
 	// Record's contract is that it NEVER fails: it is called from a live TUI's
 	// render tick, where a diagnostic failure must not become a user-visible

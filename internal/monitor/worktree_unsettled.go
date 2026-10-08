@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/mikeschinkel/endless/internal/faults"
@@ -436,6 +437,7 @@ func recordProbeFault(d UnsettledDetail, command, detail string, err error) {
 		Code:        faults.ErrCodeWorktreeProbeFailed,
 		Source:      "worktree:unsettled",
 		Fingerprint: d.WorktreePath + "\x00" + command,
+		TaskID:      worktreeTaskID(d.WorktreePath),
 		Summary: fmt.Sprintf("%s: %s failed for its worktree",
 			worktreeTaskLabel(d.WorktreePath), command),
 		Detail: detail,
@@ -463,6 +465,7 @@ func recordDefaultBranchFault(d UnsettledDetail, err error) {
 		Code:        faults.ErrCodeDefaultBranchUnresolved,
 		Source:      "worktree:unsettled",
 		Fingerprint: d.WorktreePath,
+		TaskID:      worktreeTaskID(d.WorktreePath),
 		Summary: fmt.Sprintf("%s: the repository's default branch could not be resolved",
 			worktreeTaskLabel(d.WorktreePath)),
 		Detail: err.Error(),
@@ -479,6 +482,16 @@ func recordDefaultBranchFault(d UnsettledDetail, err error) {
 // directory's base name when it does not follow the convention. Every fault
 // summary opens with it: the incident list is read to find out WHICH task is
 // unverifiable, and a bare path buries that.
+// worktreeTaskID is the task a worktree directory names, or 0 when its name is
+// not e-NNNN. A probe of one worktree is a fault ABOUT that task (E-2268),
+// whichever process happened to run the probe.
+func worktreeTaskID(worktreePath string) (taskID int64) {
+	if m := worktreeDirRe.FindStringSubmatch(filepath.Base(worktreePath)); m != nil {
+		taskID, _ = strconv.ParseInt(m[1], 10, 64)
+	}
+	return taskID
+}
+
 func worktreeTaskLabel(worktreePath string) string {
 	if m := worktreeDirRe.FindStringSubmatch(filepath.Base(worktreePath)); m != nil {
 		return "E-" + m[1]
@@ -511,6 +524,7 @@ func TaskWorktreeUnsettledDetail(ctx context.Context, projectID, taskID int64) U
 			// resolution would file the failure under the wrong project, which is
 			// worse than filing it under none.
 			ProjectID:   projectID,
+			TaskID:      taskID,
 			Source:      "worktree:unsettled",
 			Fingerprint: fmt.Sprintf("task:%d\x00lookup", taskID),
 			Summary:     fmt.Sprintf("E-%d: worktree lookup failed", taskID),

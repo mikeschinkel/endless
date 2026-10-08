@@ -562,6 +562,7 @@ func recordReapDefaultBranchFault(dir string, taskID int64, err error) {
 		Code:        faults.ErrCodeDefaultBranchUnresolved,
 		Source:      "worktree:reap",
 		Fingerprint: dir,
+		TaskID:      taskID,
 		Summary:     fmt.Sprintf("E-%d: no default branch, worktree cannot be reaped", taskID),
 		Detail:      err.Error(),
 		Fields: map[string]any{

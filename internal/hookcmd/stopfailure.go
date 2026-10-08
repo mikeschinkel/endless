@@ -143,9 +143,15 @@ func recordTurnFailure(projectID int64, payload claudePayload) {
 	// Best-effort: an unbound session, or a lookup that fails, costs the task
 	// label on the detail line and nothing else. The incident is about the turn,
 	// not about the task, so it must not depend on there being one.
-	if session, serr := monitor.GetActiveSession(payload.SessionID); serr == nil &&
-		session != nil && session.TaskID != nil {
-		fields["task_id"] = *session.TaskID
+	var raiser faults.Raiser
+	if session, serr := monitor.GetActiveSession(payload.SessionID); serr == nil && session != nil {
+		// The payload names the session that hit the error, so it is the raiser
+		// by definition (E-2268), not something to infer from the process.
+		raiser.SessionID = session.ID
+		if session.TaskID != nil {
+			fields["task_id"] = *session.TaskID
+			raiser.TaskID = *session.TaskID
+		}
 	}
 
 	faults.Record(faults.Fault{
@@ -153,6 +159,8 @@ func recordTurnFailure(projectID int64, payload claudePayload) {
 		Source:    "hook:stopfailure",
 		Summary:   fmt.Sprintf("a turn ended on an API error: %s", errorType),
 		ProjectID: projectID,
+		TaskID:    raiser.TaskID,
+		SessionID: raiser.SessionID,
 		Fields:    fields,
 	})
 }

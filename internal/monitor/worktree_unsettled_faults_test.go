@@ -38,8 +38,9 @@ func bindFaultsForTest(t *testing.T) *sql.DB {
 		func() (*sql.DB, error) { return db, nil },
 		func() string { return logDir },
 		nil,
+		nil,
 	)
-	t.Cleanup(func() { faults.Bind(nil, nil, nil) })
+	t.Cleanup(func() { faults.Bind(nil, nil, nil, nil) })
 	return db
 }
 

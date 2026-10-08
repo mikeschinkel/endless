@@ -29,6 +29,24 @@ type Incident struct {
 	LastSeenAt  string
 	ClearedAt   string
 	ClearedBy   string
+
+	// TaskID and SessionID are the LATEST occurrence's raiser (E-2268); 0 when
+	// it was not known. Raisers is how many distinct raisers the incident has
+	// had — its errors_sources row count — so a reader can tell "one session,
+	// forty times" from "forty sessions".
+	TaskID    int64
+	SessionID int64
+	Raisers   int64
+}
+
+// Source is one distinct raiser of an incident: a row of errors_sources.
+// TaskID and SessionID are 0 for the shared unattributed row.
+type Source struct {
+	TaskID      int64
+	SessionID   int64
+	Occurrences int64
+	FirstSeenAt string
+	LastSeenAt  string
 }
 
 // ProjectScope selects which projects' incidents a read or a clear covers
@@ -369,12 +387,16 @@ func query(db *sql.DB, where string, limit int, args ...any) (incidents []Incide
 	var projectName sql.NullString
 	var clearedAt sql.NullString
 	var clearedBy sql.NullString
+	var taskID sql.NullInt64
+	var sessionID sql.NullInt64
 	var stmt string
 	var closeErr error
 
 	stmt = `SELECT e.id, e.project_id, p.name, e.code, e.severity, e.source,
 	               e.fingerprint, e.summary, e.occurrences, e.first_seen_at,
-	               e.last_seen_at, e.cleared_at, e.cleared_by
+	               e.last_seen_at, e.cleared_at, e.cleared_by,
+	               e.task_id, e.session_id,
+	               (SELECT count(*) FROM errors_sources s WHERE s.error_id = e.id)
 	          FROM errors e
 	          LEFT JOIN projects p ON p.id = e.project_id ` + where + `
 	         ORDER BY e.last_seen_at DESC, e.id DESC`
@@ -395,7 +417,7 @@ func query(db *sql.DB, where string, limit int, args ...any) (incidents []Incide
 			&incident.ID, &projectID, &projectName, &incident.Code, &severity,
 			&incident.Source, &incident.Fingerprint, &incident.Summary,
 			&incident.Occurrences, &incident.FirstSeenAt, &incident.LastSeenAt,
-			&clearedAt, &clearedBy,
+			&clearedAt, &clearedBy, &taskID, &sessionID, &incident.Raisers,
 		)
 		if err != nil {
 			err = doterr.NewErr(ErrFaults, ErrScanning, err)
@@ -406,6 +428,8 @@ func query(db *sql.DB, where string, limit int, args ...any) (incidents []Incide
 		incident.Project = projectName.String
 		incident.ClearedAt = clearedAt.String
 		incident.ClearedBy = clearedBy.String
+		incident.TaskID = taskID.Int64
+		incident.SessionID = sessionID.Int64
 		incidents = append(incidents, incident)
 	}
 	if err == nil {
@@ -425,4 +449,61 @@ func query(db *sql.DB, where string, limit int, args ...any) (incidents []Incide
 
 end:
 	return incidents, err
+}
+
+// Sources returns every distinct raiser of one incident, most recently seen
+// first (E-2268). An incident recorded before errors_sources existed has none,
+// which is an empty result rather than an error.
+func Sources(id int64) (sources []Source, err error) {
+	var db *sql.DB
+	var rows *sql.Rows
+	var source Source
+	var taskID sql.NullInt64
+	var sessionID sql.NullInt64
+	var closeErr error
+
+	db, err = database()
+	if err != nil {
+		goto end
+	}
+
+	rows, err = db.Query(
+		`SELECT session_id, task_id, occurrences, first_seen_at, last_seen_at
+		   FROM errors_sources
+		  WHERE error_id = ?
+		  ORDER BY last_seen_at DESC, id DESC`, id)
+	if err != nil {
+		err = doterr.NewErr(ErrFaults, ErrQuery, err)
+		goto end
+	}
+
+	for rows.Next() {
+		source = Source{}
+		err = rows.Scan(&sessionID, &taskID, &source.Occurrences,
+			&source.FirstSeenAt, &source.LastSeenAt)
+		if err != nil {
+			err = doterr.NewErr(ErrFaults, ErrScanning, err)
+			break
+		}
+		source.TaskID = taskID.Int64
+		source.SessionID = sessionID.Int64
+		sources = append(sources, source)
+	}
+	if err == nil {
+		err = rows.Err()
+		if err != nil {
+			err = doterr.NewErr(ErrFaults, ErrQuery, err)
+		}
+	}
+
+	closeErr = rows.Close()
+	if err == nil && closeErr != nil {
+		err = doterr.NewErr(ErrFaults, ErrQuery, closeErr)
+	}
+	if err != nil {
+		sources = nil
+	}
+
+end:
+	return sources, err
 }

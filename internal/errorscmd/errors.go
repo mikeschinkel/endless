@@ -429,6 +429,11 @@ func printTable(w io.Writer, incidents []faults.Incident, wide, includeCleared b
 // STATUS appears only under --all, which is the only mode in which a row can be
 // anything but open. It is what the severity column's "(cleared)" suffix became,
 // and it says the same thing in its own column instead of inside another one's.
+//
+// BY (E-2268) is who raised the latest occurrence, with a +N when others raised
+// it too — see byText. It sheds after SOURCE and LAST SEEN and before PROJECT:
+// who caused an incident is worth more width than when it last happened, and
+// less than which project it is in on a listing spanning several.
 func listingColumns(incidents []faults.Incident, wide, includeCleared bool) (cols []listColumn) {
 	add := func(head string, shed int, cell func(faults.Incident) string) {
 		col := listColumn{head: head, shed: shed}
@@ -448,8 +453,9 @@ func listingColumns(incidents []faults.Incident, wide, includeCleared bool) (col
 		add("PROJECT", 4, projectText)
 	}
 	add("COUNT", 2, func(i faults.Incident) string { return strconv.FormatInt(i.Occurrences, 10) })
-	add("LAST SEEN", 5, func(i faults.Incident) string { return i.LastSeenAt })
-	add("SOURCE", 6, func(i faults.Incident) string { return i.Source })
+	add("BY", 5, byText)
+	add("LAST SEEN", 6, func(i faults.Incident) string { return i.LastSeenAt })
+	add("SOURCE", 7, func(i faults.Incident) string { return i.Source })
 	add("SUMMARY", shedNever, func(i faults.Incident) string { return i.Summary })
 
 	return cols
@@ -491,7 +497,7 @@ const gap = "  "
 // that no longer fits must GO rather than be squeezed, which tabwriter has no
 // concept of.
 //
-// Columns shed in a fixed order — SOURCE, LAST SEEN, PROJECT, STATUS, COUNT —
+// Columns shed in a fixed order — SOURCE, LAST SEEN, BY, PROJECT, STATUS, COUNT —
 // each one whole, so what remains is always a true table rather than a smeared
 // one. ID, CODE and SUMMARY never shed: they are the listing.
 func listingLines(incidents []faults.Incident, wide, includeCleared bool, width int) (lines []string) {
@@ -635,6 +641,35 @@ func statusText(incident faults.Incident) (text string) {
 	text = "open"
 	if incident.ClearedAt != "" {
 		text = "cleared"
+	}
+	return text
+}
+
+// raiserText names a raiser the way the rest of the CLI names a session working
+// on a task (E-2268): `ES-1299 (E-2259)`, `ES-1299` for a session on no task,
+// `E-2259` for a task with no session, and `-` when neither is known.
+func raiserText(taskID, sessionID int64) (text string) {
+	switch {
+	case sessionID != 0 && taskID != 0:
+		text = fmt.Sprintf("ES-%d (E-%d)", sessionID, taskID)
+	case sessionID != 0:
+		text = fmt.Sprintf("ES-%d", sessionID)
+	case taskID != 0:
+		text = fmt.Sprintf("E-%d", taskID)
+	default:
+		text = "-"
+	}
+	return text
+}
+
+// byText is the listing's BY cell: the latest raiser, plus `+N` when N others
+// raised the same incident. The marker is what separates one session hitting a
+// fault forty times from forty sessions hitting it once — the same COUNT, and a
+// very different incident. `errors show` names every one of them.
+func byText(incident faults.Incident) (text string) {
+	text = raiserText(incident.TaskID, incident.SessionID)
+	if incident.Raisers > 1 {
+		text += fmt.Sprintf(" +%d", incident.Raisers-1)
 	}
 	return text
 }
@@ -1030,10 +1065,47 @@ func showOne(id int64, detail bool) {
 	}
 	fmt.Printf("Summary:     %s\n", incident.Summary)
 
+	printRaisers(incident)
 	printRemedy(incident)
 
 	if detail {
 		printDetails(incident.ID, "errors show")
+	}
+}
+
+// printRaisers prints one "Raised by" line per distinct raiser of the incident
+// (E-2268), most recent first: who, how many times, and over what window.
+//
+// Degraded rather than refused when the sources cannot be read, for
+// printDetails' reason: the incident is already on screen. An incident recorded
+// before raisers were tracked has none and prints nothing.
+func printRaisers(incident faults.Incident) {
+	sources, err := faults.Sources(incident.ID)
+	if err != nil {
+		refusal.NoReport(
+			"endless-go errors: raised by: "+err.Error(),
+			"Nothing is blocked: the incident stands, without who raised it",
+		).Command("errors show").Print()
+		return
+	}
+	if len(sources) == 0 {
+		return
+	}
+
+	names := make([]string, len(sources))
+	width := 0
+	for i, source := range sources {
+		names[i] = raiserText(source.TaskID, source.SessionID)
+		if w := runewidth.StringWidth(names[i]); w > width {
+			width = w
+		}
+	}
+
+	fmt.Println()
+	fmt.Println("Raised by:")
+	for i, source := range sources {
+		fmt.Printf("  %s  %d occurrence(s), first %s, last %s\n",
+			pad(names[i], width), source.Occurrences, source.FirstSeenAt, source.LastSeenAt)
 	}
 }
 
@@ -1144,7 +1216,11 @@ func printDetails(id int64, command string) {
 	}
 	fmt.Printf("\n--- error %d: %d logged occurrence(s) ---\n", id, len(details))
 	for _, d := range details {
-		fmt.Printf("\n[%s] occurrence %d\n", d.TS, d.Occurrence)
+		fmt.Printf("\n[%s] occurrence %d", d.TS, d.Occurrence)
+		if d.TaskID != 0 || d.SessionID != 0 {
+			fmt.Printf(", raised by %s", raiserText(d.TaskID, d.SessionID))
+		}
+		fmt.Println()
 		if d.Detail != "" {
 			fmt.Println(d.Detail)
 		}
@@ -1355,6 +1431,7 @@ func runRecord(args []string) {
 	source := fs.String("source", "", "subsystem raising it, e.g. job:minimizer")
 	detail := fs.String("detail", "", "long capture; goes to the detail log, never the DB")
 	fingerprint := fs.String("fingerprint", "", "grouping key (defaults to the summary)")
+	task := fs.Int64("task", 0, "the task this fault is about, for a job that knows it (E-2268)")
 	parseFlags(fs, "errors record", args)
 	if *codeID == "" || *summary == "" {
 		refusal.NoReport(
@@ -1390,5 +1467,6 @@ func runRecord(args []string) {
 		Fingerprint: *fingerprint,
 		Summary:     *summary,
 		Detail:      *detail,
+		TaskID:      *task,
 	})
 }

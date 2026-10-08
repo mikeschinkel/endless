@@ -52,6 +52,21 @@
 // read includes the unattributed incidents alongside the project's own; see
 // ProjectScope.
 //
+// # Raiser attribution
+//
+// A fault also says WHO raised it: the task and the session that were active
+// (E-2268). That is what lets an incident be routed back to the session that
+// caused it, and what lets `errors list` say who caused what.
+//
+// Like the project, the raiser is resolved by a func injected at Bind — the
+// RaiserResolver — so this package learns nothing about sessions, worktrees or
+// harnesses. A producer that knows the one task its fault is about sets
+// Fault.TaskID (and Fault.SessionID if it knows one); those win over anything
+// resolved. A fault about several tasks names them in Fields and leaves both 0.
+//
+// The incident row carries the LATEST raiser; errors_sources carries every
+// distinct one; each detail line carries its own.
+//
 // # Contract
 //
 // Record is best-effort and NEVER fails: it is called from paths (the session
@@ -94,7 +109,35 @@ type Fault struct {
 	// where the work does, which is most of them, so this field is the exception
 	// and not the convention.
 	ProjectID int64
+
+	// TaskID and SessionID name who raised this fault, for the producers that
+	// know (E-2268): a job whose fault is about one task's branch or worktree
+	// knows that task, and a hook handler knows the session its payload names.
+	//
+	// Leave them 0 and the bound RaiserResolver supplies them from the process
+	// instead. A producer whose fault is about SEVERAL tasks leaves both 0 and
+	// names the tasks in Fields: one of them would be a guess.
+	TaskID    int64
+	SessionID int64
 }
+
+// Raiser is who raised a fault: an Endless task id and an Endless session id
+// (sessions.id). Either is 0 when not known.
+type Raiser struct {
+	TaskID    int64
+	SessionID int64
+}
+
+// RaiserResolver answers "which task and session raised this fault?" for the
+// same reason ProjectResolver exists: this package cannot.
+//
+// It is called with whatever the producer named explicitly — zero fields mean
+// "you decide" — and returns the raiser to record. An explicit field must come
+// back unchanged; the resolver fills only the zero ones.
+//
+// Returning the zero Raiser is a legitimate answer. An implementation must be
+// read-only, for ProjectResolver's reason: it runs inside Record.
+type RaiserResolver func(explicit Raiser) (resolved Raiser)
 
 // ProjectResolver answers "which project is this fault attributed to?" — a
 // question this package cannot answer itself, because it imports nothing from
@@ -116,10 +159,11 @@ var (
 	dbAccessor  func() (*sql.DB, error)
 	logDirFunc  func() string
 	projectFunc ProjectResolver
+	raiserFunc  RaiserResolver
 )
 
-// Bind wires the database accessor, the detail-log directory and the project
-// resolver. It is called once at process start (cmd/endless-go/main.go) and by
+// Bind wires the database accessor, the detail-log directory, the project
+// resolver and the raiser resolver. It is called once at process start (cmd/endless-go/main.go) and by
 // test helpers.
 //
 // Until it is called, Record is a silent no-op and the read paths return
@@ -130,11 +174,14 @@ var (
 // project may be nil, which degrades to "attribute a fault to whatever project
 // its producer named, and to none otherwise". Recording still works; it just
 // stops being ambient. A test that does not care about attribution passes nil.
-func Bind(db func() (*sql.DB, error), logDir func() string, project ProjectResolver) {
+// raiser may be nil for the same reason, with the same degradation: a fault then
+// names only the task and session its producer set.
+func Bind(db func() (*sql.DB, error), logDir func() string, project ProjectResolver, raiser RaiserResolver) {
 	bindMu.Lock()
 	dbAccessor = db
 	logDirFunc = logDir
 	projectFunc = project
+	raiserFunc = raiser
 	bindMu.Unlock()
 }
 
@@ -210,6 +257,34 @@ end:
 	return id, name
 }
 
+// resolveRaiser turns a producer's explicit raiser into the one Record persists.
+// With no resolver bound it passes the explicit fields straight through.
+//
+// Explicit fields are re-applied over the resolver's answer, so a resolver that
+// forgot the contract still cannot override what a producer said it knew.
+func resolveRaiser(explicit Raiser) (raiser Raiser) {
+	var fn RaiserResolver
+
+	bindMu.RLock()
+	fn = raiserFunc
+	bindMu.RUnlock()
+
+	raiser = explicit
+	if fn == nil {
+		goto end
+	}
+	raiser = fn(explicit)
+	if explicit.TaskID != 0 {
+		raiser.TaskID = explicit.TaskID
+	}
+	if explicit.SessionID != 0 {
+		raiser.SessionID = explicit.SessionID
+	}
+
+end:
+	return raiser
+}
+
 // Record persists one fault occurrence: it upserts the open incident in the
 // `errors` table and appends the full detail to the JSONL log.
 //
@@ -224,6 +299,7 @@ func Record(f Fault) {
 	var occurrence int64
 	var projectID int64
 	var projectName string
+	var raiser Raiser
 
 	f = f.normalized()
 	if f.Summary == "" {
@@ -237,13 +313,14 @@ func Record(f Fault) {
 	// that needs the same broken database answers (0, "") and the line says
 	// nothing rather than guessing.
 	projectID, projectName = resolveProject(f.ProjectID)
+	raiser = resolveRaiser(Raiser{TaskID: f.TaskID, SessionID: f.SessionID})
 
 	db, err = database()
 	if err != nil {
 		goto unindexed
 	}
 
-	id, occurrence, err = upsertIncident(db, f, projectID)
+	id, occurrence, err = upsertIncident(db, f, projectID, raiser)
 	if err != nil && projectID != 0 {
 		// Retry unattributed. project_id is a foreign key, so an id naming a
 		// project that no longer exists — a row deleted between the resolve and
@@ -255,13 +332,13 @@ func Record(f Fault) {
 		// the failure mode this whole package exists to prevent, and it would be
 		// silent, because Record cannot tell anyone it dropped something.
 		projectID, projectName = 0, ""
-		id, occurrence, err = upsertIncident(db, f, projectID)
+		id, occurrence, err = upsertIncident(db, f, projectID, raiser)
 	}
 	if err != nil {
 		goto unindexed
 	}
 
-	appendDetail(f, &id, occurrence, projectName, "")
+	appendDetail(f, &id, occurrence, projectName, raiser, "")
 	goto end
 
 unindexed:
@@ -279,7 +356,7 @@ unindexed:
 	// No synthetic id is minted — see the Detail doc. err is recorded as the
 	// reason, which is the whole diagnosis when what failed is the fault store
 	// itself, and is then dropped: Record has no channel to report on.
-	appendDetail(f, nil, 0, projectName, err.Error())
+	appendDetail(f, nil, 0, projectName, raiser, err.Error())
 
 end:
 	return
@@ -313,12 +390,14 @@ func fingerprintOf(summary string) (fp string) {
 }
 
 // upsertIncident bumps the open incident for this project and fingerprint, or
-// opens one.
+// opens one, and records the raiser against it — both in one transaction, so an
+// incident never exists without the errors_sources row that says who raised it.
 //
-// A single statement, so two processes racing the same fingerprint cannot both
-// insert: the partial unique index turns the loser into the DO UPDATE branch.
-// RETURNING gives back the row id and the post-bump occurrence number, which the
-// JSONL line needs to tie detail back to the incident.
+// The incident upsert is a single statement, so two processes racing the same
+// fingerprint cannot both insert: the partial unique index turns the loser into
+// the DO UPDATE branch. RETURNING gives back the row id and the post-bump
+// occurrence number, which the JSONL line needs to tie detail back to the
+// incident.
 //
 // The ON CONFLICT target names COALESCE(project_id, 0) — not project_id —
 // because that is the expression idx_errors_open_uniq indexes, and SQLite
@@ -326,40 +405,80 @@ func fingerprintOf(summary string) (fp string) {
 // COALESCE is not cosmetic: NULLs are DISTINCT in a unique index, so targeting
 // the bare column would stop deduplicating every unattributed fault and let the
 // tmux status bar, which re-execs per pane every two seconds, insert a fresh row
-// per tick instead of bumping one.
+// per tick instead of bumping one. errors_sources folds its NULLs the same way.
 //
 // The DO UPDATE deliberately does not touch project_id: the conflicting row was
-// matched BY project, so it already holds this one.
-func upsertIncident(db *sql.DB, f Fault, projectID int64) (id int64, occurrence int64, err error) {
-	err = db.QueryRow(
-		`INSERT INTO errors
-		     (project_id, code, severity, source, fingerprint, summary, occurrences,
-		      first_seen_at, last_seen_at)
-		 VALUES (?, ?, ?, ?, ?, ?, 1,
-		      strftime('%Y-%m-%dT%H:%M:%S', 'now'),
-		      strftime('%Y-%m-%dT%H:%M:%S', 'now'))
-		 ON CONFLICT (COALESCE(project_id, 0), source, code, fingerprint)
-		     WHERE cleared_at IS NULL
-		 DO UPDATE SET occurrences  = occurrences + 1,
-		               last_seen_at = strftime('%Y-%m-%dT%H:%M:%S', 'now'),
-		               summary      = excluded.summary
-		 RETURNING id, occurrences`,
-		nullableProjectID(projectID),
-		f.Code.ID, string(f.Code.Severity), f.Source, f.Fingerprint, f.Summary,
-	).Scan(&id, &occurrence)
+// matched BY project, so it already holds this one. It DOES rewrite task_id and
+// session_id, unattributed or not: they name the latest raiser (E-2268).
+func upsertIncident(db *sql.DB, f Fault, projectID int64, raiser Raiser) (id int64, occurrence int64, err error) {
+	var tx *sql.Tx
+
+	tx, err = db.Begin()
 	if err != nil {
 		err = doterr.NewErr(ErrFaults, ErrRecording, ErrQuery, err)
 		goto end
 	}
 
+	err = tx.QueryRow(
+		`INSERT INTO errors
+		     (project_id, code, severity, source, fingerprint, summary, occurrences,
+		      first_seen_at, last_seen_at, task_id, session_id)
+		 VALUES (?, ?, ?, ?, ?, ?, 1,
+		      strftime('%Y-%m-%dT%H:%M:%S', 'now'),
+		      strftime('%Y-%m-%dT%H:%M:%S', 'now'), ?, ?)
+		 ON CONFLICT (COALESCE(project_id, 0), source, code, fingerprint)
+		     WHERE cleared_at IS NULL
+		 DO UPDATE SET occurrences  = occurrences + 1,
+		               last_seen_at = strftime('%Y-%m-%dT%H:%M:%S', 'now'),
+		               summary      = excluded.summary,
+		               task_id      = excluded.task_id,
+		               session_id   = excluded.session_id
+		 RETURNING id, occurrences`,
+		nullableID(projectID),
+		f.Code.ID, string(f.Code.Severity), f.Source, f.Fingerprint, f.Summary,
+		nullableID(raiser.TaskID), nullableID(raiser.SessionID),
+	).Scan(&id, &occurrence)
+	if err != nil {
+		err = doterr.NewErr(ErrFaults, ErrRecording, ErrQuery, err)
+		goto rollback
+	}
+
+	_, err = tx.Exec(
+		`INSERT INTO errors_sources
+		     (error_id, session_id, task_id, occurrences, first_seen_at, last_seen_at)
+		 VALUES (?, ?, ?, 1,
+		      strftime('%Y-%m-%dT%H:%M:%S', 'now'),
+		      strftime('%Y-%m-%dT%H:%M:%S', 'now'))
+		 ON CONFLICT (error_id, COALESCE(session_id, 0), COALESCE(task_id, 0))
+		 DO UPDATE SET occurrences  = occurrences + 1,
+		               last_seen_at = strftime('%Y-%m-%dT%H:%M:%S', 'now')`,
+		id, nullableID(raiser.SessionID), nullableID(raiser.TaskID),
+	)
+	if err != nil {
+		err = doterr.NewErr(ErrFaults, ErrRecording, ErrQuery, err)
+		goto rollback
+	}
+
+	err = tx.Commit()
+	if err != nil {
+		err = doterr.NewErr(ErrFaults, ErrRecording, ErrQuery, err)
+	}
+	goto end
+
+rollback:
+	// The rollback's own error is dropped: the statement error is the
+	// diagnosis, and Record goes on to log the occurrence unindexed.
+	_ = tx.Rollback()
+	id, occurrence = 0, 0
+
 end:
 	return id, occurrence, err
 }
 
-// nullableProjectID renders an unresolved project (0) as SQL NULL rather than as
-// the integer 0, which would be a foreign key to a project that cannot exist.
-// The sentinel 0 lives only inside the index expression, never in the column.
-func nullableProjectID(id int64) (value any) {
+// nullableID renders an unresolved id (0) as SQL NULL rather than as the
+// integer 0, which would name a project, task or session that cannot exist. The
+// sentinel 0 lives only inside the index expressions, never in a column.
+func nullableID(id int64) (value any) {
 	if id != 0 {
 		value = id
 	}

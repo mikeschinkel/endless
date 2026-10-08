@@ -65,7 +65,7 @@ func newTestDB(t *testing.T) *sql.DB {
 	t.Cleanup(monitor.SetTestDB(db))
 	faults.Bind(monitor.DB, func() string {
 		return filepath.Join(monitor.ConfigDir(), "log")
-	}, nil)
+	}, nil, nil)
 	return db
 }
 
