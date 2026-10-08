@@ -7293,3 +7293,7 @@ Planning epic E-2261 in the E-2225 session, Mike said other sessions have moved 
 ### [2026-10-08] Define code-internal terms before using them with Mike
 Working E-2158/E-2275, I asked Mike about 'the land's auto-commit' as if it were a shared term; it was only a word from a code comment and a refusal string in worktree_cmd.py. He asked me to define it. When a term comes from the code rather than from our conversation, say what it is in plain words the first time (here: the land's commit of main's Endless-managed files before rebasing), or avoid it.
 - **Project**: endless
+
+### [2026-10-08] Remove temporary probe commits instead of leaving them in history
+In E-2266 I committed a throwaway probe verify suite and then a second commit removing it, and reported that the net change was empty. Mike: leaving testing cruft in a git log is a bad practice; if it can be removed, remove it (rewrite the branch so neither commit remains) rather than leaving an add/remove pair.
+- **Project**: endless
