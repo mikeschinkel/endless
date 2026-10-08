@@ -7281,3 +7281,7 @@ In the E-2269 brainstorm I filed a PoC task (E-2271), then ran the PoC directly,
 ### [2026-10-08] Decisions: lock in only the part Mike actually made binding
 When filing ED-1615 from the E-2269 brainstorm, I wrote the current interim mechanism (claude -p + SendMessage) into the decision as how Endless delivers messages, and added an unrelated point (claude -p --resume). Mike said this puts a stake in the ground he'll later have to argue against: claude -p is a stopgap that Claude Code mods are meant to replace. The only binding part was 'never tmux send-keys'. Before filing a decision, strip out today's chosen implementation and anything off the title's subject, and keep only what Mike ruled must hold.
 - **Project**: endless
+
+### [2026-10-08] Give the exact ledger resolution with any merge advice
+Investigating ERR-0030 (main diverged from origin because a ledger amend raced main-sync's push), I recommended Mike run git merge origin/main and only said the ledger file would 'probably conflict'. It did, and Mike stopped: .endless/db-ledger is the write-ahead log and must not become corrupt. When advising a git operation that can touch the db-ledger, first verify how the two ledger versions relate (e.g. one is an exact in-order prefix of the other) and hand over the exact, verified resolution command in the same message — never leave the WAL conflict for Mike to resolve by judgment.
+- **Project**: endless
