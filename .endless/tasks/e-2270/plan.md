@@ -20,3 +20,7 @@ All in src/endless/task_cmd.py and src/endless/cli.py (task_cmd.py already reads
 5. Docs: the relation table in `endless guide tasks` (and the precedes entry in task_cmd.py, which says "advisory, never blocks") updated to say precedes now refuses unless overridden.
 
 6. Tests: claim, spawn and prime each refuse with an unfinished predecessor, naming it and its status, and change nothing; each succeeds with --out-of-order and lists the predecessor; a finished predecessor (confirmed, assumed, superseded) does not refuse; a task with no predecessors is unaffected; the plan and open-question refusals still fire with --out-of-order passed.
+
+
+
+7. Grown scope (found during implementation): the auto-spawn and auto-prime jobs (internal/autospawnjob) mirror spawn's refusals so they never pick a task spawn would refuse — otherwise they re-pick it every run. Their eligibility queries now treat an unfinished `precedes` source like an unfinished `blocks` source (the jobs never pass --out-of-order), with an exclusion case in each job's table test and a settled-predecessor positive control.
