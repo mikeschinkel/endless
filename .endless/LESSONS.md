@@ -7253,3 +7253,7 @@ In the E-2269 brainstorm I pushed back on whether auto-spawned fixes would be 'r
 ### [2026-10-07] Brainstorm E-2269: a session works on exactly one task
 In the E-2269 brainstorm I proposed that an ended session, resumed to fix a bug it caused, should file a new bugfix task (cleaning up its original) and work on it. Mike corrected me: that breaks the invariant that a Claude session never works on implementing more than one task. A session may discuss, file, and update many tasks through the endless CLI, but it implements only its own. Working a new task means spawning it. So a resumed session can only reopen and continue its own task. Mike would resume it with --no-revisit and let the session itself set revisit if it accepts responsibility, since it might not.
 - **Project**: endless
+
+### [2026-10-07] Use blocks, not precedes, when the order is real
+In the E-2259 session I linked E-2268 (fault attribution) to E-2269 (the error-routing brainstorm) with 'precedes'. precedes is advisory only: spawn and claim never consult it, so Mike spawned E-2269 first with nothing telling him E-2268 should go first. When one piece of work cannot be built until another exists, link with blocks/blocked_by on the task that actually depends on it (here, a future routing implementation, not the brainstorm), and say in the reply which task must go first rather than relying on the relation to surface it.
+- **Project**: endless
