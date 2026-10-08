@@ -4505,21 +4505,31 @@ def land_worktree(
                     last_error, last_was_contention = busy, True
                     _lock_backoff(attempt)
                     continue
-                # The files are Endless's own auto-managed paths on main, and
-                # lock contention has already been sent back to the retry
-                # loop. What is left is git refusing the add or the commit —
-                # a pre-commit hook, an unwritable index — which git names and
-                # the agent clears. Nothing merged.
-                raise agent_help.relay_foreign(
-                    agent_help.no_report(
-                        f"git could not auto-commit main's endless-managed "
-                        f"files, so {canonical} was not landed. Nothing was "
-                        f"merged.",
-                        "Act on what git said below and retry the land",
-                        text="auto-commit failed:",
-                    ),
-                    str(e.stderr or e),
-                )
+                # E-2275: the background recorder commits these same paths on
+                # main and shares no lock with the land. When it committed them
+                # after Step 1's status read, git has nothing left to commit
+                # and exits 1 with only stdout. Nothing staged means the
+                # recorder already did this step's work, so carry on. Checked
+                # after the failure rather than before the commit, which would
+                # leave a window between the check and the commit.
+                if _git_run(["diff", "--cached", "--quiet"], cwd=main_root,
+                            check=False).returncode != 0:
+                    # The files are Endless's own auto-managed paths on main,
+                    # and lock contention has already been sent back to the
+                    # retry loop. What is left is git refusing the add or the
+                    # commit — a pre-commit hook, an unwritable index — which
+                    # git names and the agent clears. Nothing merged. Git
+                    # sometimes explains on stdout alone, so fall back to it.
+                    raise agent_help.relay_foreign(
+                        agent_help.no_report(
+                            f"git could not auto-commit main's endless-managed "
+                            f"files, so {canonical} was not landed. Nothing "
+                            f"was merged.",
+                            "Act on what git said below and retry the land",
+                            text="auto-commit failed:",
+                        ),
+                        str(e.stderr or e.stdout or e),
+                    )
 
         # Step 3.5: dedup the worktree's verbs.jsonl against main's, committing
         # the bundled result on the worktree's branch (E-1141 / E-1138).
