@@ -63,7 +63,7 @@ cd "${PROJ}" || setup_error "cannot cd to ${PROJ}"
 "${ENDLESS}" project register "${PROJ}" --infer --name e2270-verify --status active >/dev/null 2>&1 || true
 
 add() {
-    "${ENDLESS}" task add "$1" --description "$1 for the E-2270 suite." \
+    "${ENDLESS}" task add "$1" --description "$1 for the ordering suite." \
         --plan "# Plan" --complexity low --risk low "${@:2}" >"${TMP}/add.log" 2>&1 || cp "${TMP}/add.log" "${TMP}/add-failed.log"
     grep -oE 'Added E-[0-9]+' "${TMP}/add.log" | head -1 | cut -d' ' -f2
 }
