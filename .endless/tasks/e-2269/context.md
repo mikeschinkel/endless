@@ -1,0 +1,1 @@
+On 2026-10-07 Mike asked for a background job that notices errors, diagnoses them, messages the session that caused them to fix them, or otherwise files a bugfix task and spawns it. Each error that surfaces costs him a step backwards from work he thought was done. Routing to a session depends on fault attribution, filed alongside.
