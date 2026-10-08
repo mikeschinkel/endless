@@ -1,0 +1,1 @@
+The PoC was run directly in the E-2269 session, and its results are recorded in E-2269's outcome. Mike: it was trivial to test and didn't need a task (ED-1550).
