@@ -1,0 +1,164 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 29,
+      "passed": 29,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test: faults, errorscmd, schema",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go test: monitor resolver policy",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "resolver case runs and passes: an_agent-run_fault_records_the_session_and_its_task",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "resolver case runs and passes: a_person-run_fault_records_no_session,_even_with_esu's_variable_set",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "resolver case runs and passes: an_explicit_task_overrides_the_session's",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "resolver case runs and passes: the_worktree_fills_the_task_when_there_is_no_session",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestRecord_AttributesTheResolvedRaiser",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestRecord_ExplicitRaiserOverridesTheResolvedOne",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestRecord_ASecondRaiserUpdatesTheLatestAndAddsASource",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestRecord_ARepeatFromTheSameRaiserOnlyBumpsItsRow",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestRecord_UnattributedOccurrencesShareOneSource",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestListingLines_CarryTheBYColumn",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestShow_ListsEveryRaiserAndEachOccurrencesOwn",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest: the rater names the task it failed to rate",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "an agent-run fault records ES-7 and its task E-40",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the person's repeat lands on the same incident",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a person-run fault names the worktree's task and no session",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the incident has two distinct raisers",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "errors list has a BY column",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "errors list names the latest raiser and one other",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "an unattributed incident reads -",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "show has a Raised by block",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it names the agent's session and task",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it names the person's task",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "--detail names occurrence 1's raiser",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "--detail names occurrence 2's raiser",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "errors.task_id exists",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "errors.session_id exists",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "errors_sources and its unique index exist",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
