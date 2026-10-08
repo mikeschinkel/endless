@@ -7297,3 +7297,7 @@ Working E-2158/E-2275, I asked Mike about 'the land's auto-commit' as if it were
 ### [2026-10-08] Remove temporary probe commits instead of leaving them in history
 In E-2266 I committed a throwaway probe verify suite and then a second commit removing it, and reported that the net change was empty. Mike: leaving testing cruft in a git log is a bad practice; if it can be removed, remove it (rewrite the branch so neither commit remains) rather than leaving an add/remove pair.
 - **Project**: endless
+
+### [2026-10-08] Do not report being unable to delete cache files when the only concern is housekeeping
+In E-2266 a worktree hook blocked me from deleting failed verify reports under the user cache dir, and I listed that as something Mike should know. Mike: there is no need to report not being able to delete caches when the only concern is housekeeping.
+- **Project**: endless
