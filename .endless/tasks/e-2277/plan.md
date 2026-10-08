@@ -48,8 +48,20 @@ settled by definition. No range-diff is needed to know that.
    `_unsettled_probe`). With step 1, that writes `settled/<branch-tip>`, which
    the monitor's next tick reads. Best-effort: a failure prints nothing and
    never unwinds the land, because the job corrects it within one interval.
-   The land already rebuilds the installed endless-go from the advanced main
-   before this point, so E-2277's own land uses the fixed binary.
+   The probe is the installed `endless-go` on PATH, so in any project it is
+   whatever release the user installed; when it is missing or older than this
+   fix, the call is a harmless no-op and the job corrects the display as today.
+   (Only for Endless landing itself does land rebuild that binary from the
+   advanced main first, so E-2277's own land already uses the fix.)
+
+## Any project, any language
+
+Nothing here reads the project's code or build: the check is git
+(`merge-base --is-ancestor`, the default branch Endless already resolves,
+`master`/`develop`/`trunk` included) plus the cache under `.git/info/`, so a
+Rust, Java, TypeScript or Python project behaves identically. Very large
+histories pay one ancestry walk, which git's commit-graph keeps cheap, and
+still far below the range-diff it replaces.
 
 ## Not in scope
 
