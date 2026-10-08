@@ -16,3 +16,6 @@ These are display names computed from the container's own rows and its children,
 ## Sorting the open epics
 
 An agent proposes which open epics become groups, and Mike approves the split. Existing epic plans move into objective and strategy case by case; a plan that fits neither stays as a legacy plan row. E-1738 has no children yet but is waiting on future ones. E-1790 is already a todo related to E-1596.
+
+## Guides
+The guides still describe epics as needing a plan, and need updating with the rest of this change: docs/guide/tasks.md (the type-aware plan requirement, around line 87, says an epic needs a plan whatever its context says) and docs/guide/orchestration.md (the epic coordinator section, around line 1026, frames the coordinator's work only in terms of plans). Found in the E-2225 session while splitting E-2261 into an objective and strategy plus child plans.
