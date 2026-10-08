@@ -86,6 +86,27 @@ Older causes that can no longer happen:
 | Suite authoring (nested temp HOME, vacuous greps) | 2 (16, 27) | no | per suite |
 | Nondeterministic output exposing a real bug | 1 (31) | no | fixed |
 
+## Which of this is self_dev
+
+Most of it. The agent/user divergence shows up only when the suite's system under test reads the variables that differ, and Endless is the system that reads them. That happens when Endless verifies Endless (`"self_dev": true`).
+
+| Cause | self_dev only? | Why |
+|---|---|---|
+| Hook gate (`CLAUDE_CODE_ENTRYPOINT`), agent rendering (`agentenv.Present`, `ENDLESS_AUDIENCE`), `# db:` footer, session resolution (`CLAUDE_CODE_SESSION_ID`, `ENDLESS_SESSION_ID`, `TMUX_PANE`), sandbox seed UUID | **yes** | only a suite that runs `endless`/`endless-go` meets these branches (cases 1–13, 32) |
+| Stale or mismatched binary vs worktree (cases 20–23) | **yes** | only self_dev runs a branch-built Endless inside a suite, against a global install of Endless |
+| Tree changed between runs (14–19) | no | any project; mostly closed by E-2243's clean-tree rule |
+| Cold `GOCACHE`/uv cache under the runner's temp HOME (24–26) | no | any Go or uv project verified through the runner |
+| Editing a script mid-run (29) | no | any project with a `verify.sh` |
+| Live tmux server reachable from a suite | no, but self_dev is where it bites | any suite whose code under test drives tmux |
+
+PRODUCT: in another project, the harness variables still reach the suite. They change its verdict only if that project's own tools read them. That isn't Endless-specific: `CLAUDECODE` and `AI_AGENT` exist so that tools can do exactly that. `ENDLESS_AUDIENCE` and `ENDLESS_SESSION_ID` are harmless there unless the suite calls Endless. So the person default in E-2278 is right for every project, but almost all of the evidence for it comes from self_dev.
+
+## tmux: stripping the variables does not isolate it
+
+About 45 places read `TMUX` or `TMUX_PANE` directly: about 25 in Go across 20 files, and about 20 in Python across 6 files. Most go through no shared accessor; `monitor.InTmux` exists but is not used for most of them. They cover session resolution, hook pane recording, spawn and resume windows, the status line and menus, autospawn, and liveness. Unsetting both variables makes every one of them take its supported "not in tmux" branch. But a `tmux` subprocess with neither variable set **still connects to the user's live server** (the default socket). It just has no "current pane". Checked 2026-10-08: `env -u TMUX -u TMUX_PANE tmux list-sessions` listed the live sessions.
+
+Real isolation is a private server: unset both variables and point `TMUX_TMPDIR` at a per-run directory. A suite's `tmux` calls then reach an empty private server, never the user's. The socket path must stay under the macOS limit of about 104 bytes, so the directory needs a short path and not the long per-run temp dir; a first attempt from this session's scratchpad failed with "File name too long". A suite that tests tmux behaviour would start its own server on that socket (`tmux new-session -d`) and take `TMUX_PANE` from it: a fixture, not the caller's pane. This is the class of damage in case 7 (E-2071), where a suite run by an agent bound a fixture session to Mike's live pane %413.
+
 ## Code review: everywhere Endless acts differently for an agent
 
 What a suite inherits today, and what each variable switches:
