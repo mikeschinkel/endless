@@ -65,7 +65,7 @@ cd "${PROJ}" || setup_error "cannot cd to ${PROJ}"
 add() {
     "${ENDLESS}" task add "$1" --description "$1 for the E-2270 suite." \
         --plan "# Plan" --complexity low --risk low "${@:2}" 2>&1 \
-        | grep -oE 'E-[0-9]+' | head -1
+        | grep -oE 'Added E-[0-9]+' | head -1 | cut -d' ' -f2
 }
 status_of() {
     "${ENDLESS}" task show "$1" --json 2>/dev/null \
