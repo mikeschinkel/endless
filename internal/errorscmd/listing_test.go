@@ -83,6 +83,33 @@ func cases() map[string]struct {
 		"with status": {[]faults.Incident{warned(), cleared()}, false, true},
 		"everything":  {[]faults.Incident{warned(), cleared()}, true, true},
 		"wide runes":  {[]faults.Incident{wideRunes(), errored()}, true, true},
+		"accepted":    {[]faults.Incident{accepted(), errored()}, true, true},
+	}
+}
+
+// accepted is an incident a session has taken on (E-2272).
+func accepted() faults.Incident {
+	i := warned()
+	i.ID, i.AcceptedSessionID = 11, 1304
+	return i
+}
+
+func TestListingLines_MarkAcceptedIncidentsWithOneGlyph(t *testing.T) {
+	if w := runewidth.StringWidth(acceptedGlyph); w != 1 {
+		t.Fatalf("acceptedGlyph %q is %d columns wide; a table glyph must be 1", acceptedGlyph, w)
+	}
+	lines := listingLines([]faults.Incident{accepted(), errored()}, false, false, 0)
+	if !strings.Contains(lines[1], acceptedGlyph) {
+		t.Errorf("accepted row lacks %s:\n%s", acceptedGlyph, lines[1])
+	}
+	if strings.Contains(lines[2], acceptedGlyph) {
+		t.Errorf("unaccepted row carries %s:\n%s", acceptedGlyph, lines[2])
+	}
+	// No accepted row, no column: the listing is unchanged for everyone not
+	// using triage.
+	plain := listingLines([]faults.Incident{warned(), errored()}, false, false, 0)
+	if !strings.HasPrefix(plain[0], "ID  CODE") {
+		t.Errorf("a listing with nothing accepted grew a marker column:\n%s", plain[0])
 	}
 }
 

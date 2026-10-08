@@ -1847,7 +1847,20 @@ NEW_TRANSCRIPT_HELP = (
 
 
 @session_cmd.command("goto")
-@click.argument("target_ref")
+@click.argument("target_ref", required=False, default=None)
+@click.option(
+    "--error-fix", "error_fix", type=int, default=None, metavar="ID",
+    help="Go to the session that accepted error ID (`endless errors accept`) "
+         "instead of naming a target.",
+)
+@click.option("--background", is_flag=True, hidden=True,
+              help="With --resume: open the window without focusing it and "
+                   "without needing $TMUX (the fault-triage job's resume).")
+@click.option("--target-session", "target_session", default=None, hidden=True,
+              help="With --background: the tmux session ($N) the window opens in.")
+@click.option("--prompt-file", "prompt_file", default=None, hidden=True,
+              type=click.Path(exists=True, dir_okay=False),
+              help="With --resume: the resumed session's first prompt.")
 @click.option(
     "--resume", is_flag=True,
     help="If the target isn't live, resume it in a NEW tmux window and focus "
@@ -1867,7 +1880,8 @@ NEW_TRANSCRIPT_HELP = (
     "--new-transcript", "new_transcript", is_flag=True,
     help="With --resume, " + NEW_TRANSCRIPT_HELP,
 )
-def session_goto(target_ref, resume, revisit, no_revisit, new_transcript):
+def session_goto(target_ref, error_fix, background, target_session, prompt_file,
+                 resume, revisit, no_revisit, new_transcript):
     """Switch tmux focus to a task's or session's pane, with a back-stack.
 
     <target_ref> is a task id (E-NNNN or NNNN) or a session id (ES-NNNN, a bare
@@ -1889,10 +1903,24 @@ def session_goto(target_ref, resume, revisit, no_revisit, new_transcript):
     A target whose Claude transcript file is gone is refused rather than
     launched into a window that dies on the spot; --new-transcript is the route
     on from there.
+
+    --error-fix ID goes to the session that accepted error ID — the one fixing
+    it — in place of a target.
     """
     from endless.session_cmd import session_goto as run_goto
+    if (target_ref is None) == (error_fix is None):
+        raise agent_help.no_report(
+            "session goto takes a target or --error-fix <id>, exactly one.",
+            "Retry naming either a target (ES-N, E-N) or --error-fix <id>",
+            exit_code=2,
+        )
+    if error_fix is not None:
+        from endless.jobs_cmd import errors_fixer
+        target_ref = errors_fixer(error_fix)
     run_goto(target_ref, resume=resume, revisit=revisit,
-             no_revisit=no_revisit, new_transcript=new_transcript)
+             no_revisit=no_revisit, new_transcript=new_transcript,
+             background=background, target_session=target_session,
+             prompt_file=prompt_file)
 
 
 @session_cmd.command("resume")
@@ -5059,6 +5087,62 @@ def errors_clear_land_schema(db_version, binary_version, since, by):
     """
     from endless.jobs_cmd import errors_clear_land_schema as impl
     impl(db_version, binary_version, since, by)
+
+
+@errors_cmd.command("accept")
+@click.argument("error_id", type=int)
+@click.option("--session", "session", type=int, default=None, metavar="N",
+              help="The session taking it (ES-N's number); default: the session running this")
+def errors_accept(error_id, session):
+    """Take error ERROR_ID as this session's to fix.
+
+    Run it when the fault-triage job asks "we think error N is yours" and it
+    is: the error list then marks it, and `session goto --error-fix N` comes
+    here. Fix it within your own task, setting the task to revisit if it had
+    already shipped.
+    """
+    from endless.jobs_cmd import errors_answer as impl
+    impl("accept", error_id, session, None)
+
+
+@errors_cmd.command("decline")
+@click.argument("error_id", type=int)
+@click.option("--reason", required=True, help="Why it is not this session's")
+@click.option("--session", "session", type=int, default=None, metavar="N",
+              help="The session refusing it (ES-N's number); default: the session running this")
+def errors_decline(error_id, reason, session):
+    """Refuse error ERROR_ID: it is not this session's.
+
+    The fault-triage job then files it as a bugfix task and spawns it; the
+    reason goes into that task's context.
+    """
+    from endless.jobs_cmd import errors_answer as impl
+    impl("decline", error_id, session, reason)
+
+
+@errors_cmd.command("escalate")
+@click.argument("error_id", type=int)
+def errors_escalate(error_id):
+    """Route error ERROR_ID now, without waiting for its session to go idle.
+
+    The message interrupts a busy session at its next break between tool
+    calls. Works whether or not the project opted into fault triage; starting
+    a session (a resume or a spawn) is still one at a time.
+    """
+    from endless.jobs_cmd import errors_escalate as impl
+    impl(error_id)
+
+
+@errors_cmd.command("fixer", hidden=True)
+@click.argument("error_id", type=int)
+def errors_fixer_cmd(error_id):
+    """Print the session that accepted error ERROR_ID, as ES-N.
+
+    Hidden: it is the lookup behind `session goto --error-fix`, which is the
+    verb a person wants.
+    """
+    from endless.jobs_cmd import errors_fixer as impl
+    click.echo(impl(error_id))
 
 
 @errors_cmd.command("codes")

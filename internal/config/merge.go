@@ -127,6 +127,13 @@ func (c *EndlessConfig) Merge(other cfgstore.RootConfig) cfgstore.RootConfig {
 		out.MainSync.Interval = o.MainSync.Interval
 	}
 
+	// FaultTriage: Enabled is project-only and deliberately NOT inherited;
+	// Interval is CLI-only. See FaultTriage.
+	out.FaultTriage.Enabled = c.FaultTriage.Enabled
+	if out.FaultTriage.Interval == "" {
+		out.FaultTriage.Interval = o.FaultTriage.Interval
+	}
+
 	return &out
 }
 

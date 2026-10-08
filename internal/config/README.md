@@ -72,6 +72,7 @@ These are not expected to appear in CLI files. Same safety-net pattern.
 | `tmux`     | `object`          | Merged PER FIELD, not wholesale — see `tmux` below.                                        |
 | `auto_spawn` | `object`        | Split by field — see `auto_spawn` below.                                                   |
 | `main_sync` | `object`         | Split by field — see `main_sync` below.                                                    |
+| `fault_triage` | `object`      | Split by field — see `fault_triage` below.                                                 |
 | `project_status` | `object`    | Per list and per attribute — see `project_status` below.                                   |
 
 #### `tracking`
@@ -170,6 +171,26 @@ file alone (`config.LoadProject`), and a project with no file is off.
 
 ```json
 { "main_sync": { "enabled": true } }
+```
+
+#### `fault_triage`
+
+The fault-triage job (E-2272) routes each new error to a session that fixes it:
+it messages the live session that raised it, resumes an ended one, or files and
+spawns a bugfix task. See `docs/errors.md`, "Routing an error to a session that
+fixes it".
+
+| Field      | Layer        | Type     | Meaning |
+| ---------- | ------------ | -------- | ------- |
+| `enabled`  | project only | `bool`   | Opts this project in. Default `false`; also the kill switch. |
+| `interval` | CLI only     | `string` | Job cadence, a Go duration. Default `1m`. |
+
+`enabled` is **never inherited** from the CLI layer: the job starts sessions in
+the project, and that is each project's decision. Opting in routes only errors
+first seen afterwards.
+
+```json
+{ "fault_triage": { "enabled": true } }
 ```
 
 #### `checks`

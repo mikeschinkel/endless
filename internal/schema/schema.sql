@@ -1456,6 +1456,51 @@ CREATE TABLE IF NOT EXISTS errors_sources (
 CREATE UNIQUE INDEX IF NOT EXISTS idx_errors_sources_uniq
     ON errors_sources(error_id, COALESCE(session_id, 0), COALESCE(task_id, 0));
 
+-- Error triage (E-2272). One row per incident the fault-triage job has taken up
+-- (or a session has answered): where the incident was routed and what came of
+-- it. Machine-local like the errors table it hangs off, and written directly —
+-- never through the ledger — because an incident id means nothing on another
+-- machine or after a rebuild.
+--
+-- state is the job's step: waiting (the raiser is live and busy; deliver once it
+-- is idle), delivered (messaged at delivered_at), resumed (its ended session was
+-- resumed with the message), queued (to be filed as a bugfix task and spawned),
+-- filed (fix task filed, its spawn waiting on the throttle), spawned, linked
+-- (attached to a fix task that already has a session), recorded (raised by a fix
+-- session, so recorded on that fix task and never spawned), accepted.
+--
+-- session_id is the session asked; fix_task_id the bugfix task the incident was
+-- filed under or recorded on — which is also how a fix session is recognised.
+-- accepted_* and declined_* say who answered; a decline sends the row to queued.
+-- Plain INTEGERs, not foreign keys, for errors.task_id's reason.
+CREATE TABLE IF NOT EXISTS error_triage (
+    error_id            INTEGER PRIMARY KEY REFERENCES errors(id) ON DELETE CASCADE,
+    state               TEXT NOT NULL,
+    session_id          INTEGER,
+    delivered_at        TEXT,
+    fix_task_id         INTEGER,
+    accepted_session_id INTEGER,
+    accepted_at         TEXT,
+    declined_session_id INTEGER,
+    declined_at         TEXT,
+    decline_reason      TEXT,
+    escalated_at        TEXT,
+    note                TEXT,
+    updated_at          TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
+);
+CREATE INDEX IF NOT EXISTS idx_error_triage_fix_task
+    ON error_triage(fix_task_id);
+
+
+-- Fault-triage opt-in watermark (E-2272): when the job first saw each project's
+-- fault_triage.enabled. Only incidents first seen after it are routed, so opting
+-- in never triages a backlog; opting out deletes the row, so opting back in
+-- starts a new watermark.
+CREATE TABLE IF NOT EXISTS fault_triage_projects (
+    project_id INTEGER PRIMARY KEY REFERENCES projects(id) ON DELETE CASCADE,
+    enabled_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
+);
+
 -- ─── The minimizer autoresearch loop (E-1975) ────────────────────────────────
 --
 -- Five tables behind one idea: the minimizer prompt is not a string someone

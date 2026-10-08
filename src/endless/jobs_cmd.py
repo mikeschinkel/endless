@@ -177,6 +177,48 @@ def errors_clear_land_schema(db_version: int, binary_version: int, since: str,
     _run_go("errors", args)
 
 
+def errors_answer(verb: str, error_id: int, session: int | None,
+                  reason: str | None) -> None:
+    """A session's answer to the fault-triage job: accept or decline (E-2272).
+
+    The answering session is resolved on the Go side from this process's
+    environment, which the subprocess inherits, unless --session names one.
+    """
+    args = [verb]
+    if session is not None:
+        args += ["--session", str(session)]
+    if reason is not None:
+        args += ["--reason", reason]
+    args.append(str(error_id))
+    _run_go("errors", args)
+
+
+def errors_escalate(error_id: int) -> None:
+    """Route one error now (E-2272)."""
+    _run_go("errors", ["escalate", str(error_id)])
+
+
+def errors_fixer(error_id: int) -> str:
+    """The session that accepted error_id, as `ES-N` (E-2272).
+
+    Captured rather than inherited: the caller turns it into a goto target.
+    A refusal (no such error, nobody accepted it) is the Go side's own,
+    already classified and written to stderr, so it propagates as-is.
+    """
+    from endless import agent_help, config
+    from endless.event_bridge import _resolve_endless_go
+
+    config.require_db_context()
+    result = subprocess.run(
+        [_resolve_endless_go(), *config.go_db_context_args(),
+         "errors", "fixer", str(error_id)],
+        stdout=subprocess.PIPE, text=True,
+    )
+    if result.returncode != 0:
+        agent_help.passthrough_exit(result.returncode)
+    return result.stdout.strip()
+
+
 def errors_codes() -> None:
     """Print the documented error catalog."""
     _run_go("errors", ["codes"])

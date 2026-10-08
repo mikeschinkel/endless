@@ -94,6 +94,7 @@ import (
 	_ "github.com/mikeschinkel/endless/internal/mainsyncjob"
 	_ "github.com/mikeschinkel/endless/internal/minimizerjob"
 	_ "github.com/mikeschinkel/endless/internal/raterjob"
+	_ "github.com/mikeschinkel/endless/internal/triagejob"
 	_ "github.com/mikeschinkel/endless/internal/pathsjob"
 	_ "github.com/mikeschinkel/endless/internal/unlandedjob"
 	"github.com/mikeschinkel/endless/internal/verifycmd"
@@ -382,6 +383,6 @@ func usageText() string {
 	fmt.Fprintln(w, "  session-prime  mark the calling Claude session primed (the end of a read-in)")
 	fmt.Fprintln(w, "  verify         [--keep|--report-dir] <task-id>  (run a task's Tier-0 verification suite)")
 	fmt.Fprintln(w, "  jobs           list|run|retry  (the fire-once background job runner)")
-	fmt.Fprintln(w, "  errors         list|show|clear|codes  (machine-local fault record)")
+	fmt.Fprintln(w, "  errors         list|show|clear|accept|decline|escalate|codes  (machine-local fault record)")
 	return b.String()
 }

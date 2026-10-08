@@ -91,7 +91,7 @@ func Run(args []string) {
 		// the agent's verdict a line to carry.
 		refusal.NoReport(
 			"endless-go errors: no command given",
-			"Rerun with a command — list, show, clear, codes, record or raise",
+			"Rerun with a command — list, show, clear, accept, decline, escalate, codes, record or raise",
 		).Command("errors").Text(usageText()).Exit(2)
 	}
 
@@ -110,6 +110,14 @@ func Run(args []string) {
 		runClearLandSchema(args[1:])
 	case "raise":
 		runRaise(args[1:])
+	case "accept":
+		runAccept(args[1:])
+	case "decline":
+		runDecline(args[1:])
+	case "escalate":
+		runEscalate(args[1:])
+	case "fixer":
+		runFixer(args[1:])
 	case "-h", "--help", "help":
 		fmt.Fprint(os.Stdout, usageText())
 	default:
@@ -132,6 +140,10 @@ func usageText() string {
 	fmt.Fprintln(w, "  show <id> [--detail]              one error in full, with its remedy")
 	fmt.Fprintln(w, "  clear [<id>...]                   mark errors cleared (all open ones when no id given)")
 	fmt.Fprintln(w, "  clear --log                       dismiss only what is waiting in the log")
+	fmt.Fprintln(w, "  accept <id> [--session N]         this session takes the error: it is its to fix")
+	fmt.Fprintln(w, "  decline <id> --reason T [--session N]")
+	fmt.Fprintln(w, "                                    this session refuses it; a bugfix session will take it")
+	fmt.Fprintln(w, "  escalate <id>                     route the error now, without waiting for its session to idle")
 	fmt.Fprintln(w, "  codes                             print the documented error catalog")
 	fmt.Fprintln(w, "  record --code ID --summary T [--source S] [--detail D]")
 	fmt.Fprintln(w, "                                   record a real catalog fault (internal; the Python CLI's bridge to the fault store)")
@@ -445,6 +457,12 @@ func listingColumns(incidents []faults.Incident, wide, includeCleared bool) (col
 	}
 
 	add("ID", shedNever, func(i faults.Incident) string { return strconv.FormatInt(i.ID, 10) })
+	if anyAccepted(incidents) {
+		// The accepted marker (E-2272): one glyph, no heading, present only
+		// when some row carries it, and the last thing shed — it is one column
+		// wide and says whether anyone is on it.
+		add("", 1, acceptedText)
+	}
 	add("CODE", shedNever, func(i faults.Incident) string { return i.Code })
 	if includeCleared {
 		add("STATUS", 3, statusText)
@@ -763,7 +781,15 @@ func runShow(args []string) {
 // discovered: asking the FlagSet would mean parsing before the split, which is
 // the ordering problem this function exists to remove.
 func splitArgs(args []string) (flags, positionals []string) {
-	takesValue := map[string]bool{"-id": true, "--id": true}
+	return splitArgsWith(args, "id")
+}
+
+// splitArgsWith is splitArgs for a verb whose value-taking flags are named.
+func splitArgsWith(args []string, valued ...string) (flags, positionals []string) {
+	takesValue := map[string]bool{}
+	for _, name := range valued {
+		takesValue["-"+name], takesValue["--"+name] = true, true
+	}
 
 	for i := 0; i < len(args); i++ {
 		arg := args[i]
@@ -1066,6 +1092,7 @@ func showOne(id int64, detail bool) {
 	fmt.Printf("Summary:     %s\n", incident.Summary)
 
 	printRaisers(incident)
+	printTriage(incident)
 	printRemedy(incident)
 
 	if detail {

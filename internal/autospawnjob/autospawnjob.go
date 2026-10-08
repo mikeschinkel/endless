@@ -511,16 +511,31 @@ func describeTarget(setting, target string) string {
 // Output is captured, never inherited: jobs.Job forbids writing to the
 // trigger's terminal. It rides along in the error on failure.
 func runEndless(ctx context.Context, pick candidate, args []string) (err error) {
-	var bin string
-	var cmd *exec.Cmd
-	var out []byte
-	var cancel context.CancelFunc
-	var dbArgs []string
-
 	if pick.projectPath == "" {
 		err = fmt.Errorf("E-%d: its project directory could not be resolved", pick.taskID)
 		goto end
 	}
+	_, err = RunEndless(ctx, pick.projectPath, nil, args)
+	if err != nil {
+		err = fmt.Errorf("E-%d: %w", pick.taskID, err)
+	}
+
+end:
+	return err
+}
+
+// RunEndless runs one `endless` command from dir and returns its combined
+// output — the child-process half of runEndless, shared with the fault-triage
+// job (E-2272), which files, updates and spawns bugfix tasks the same way.
+//
+// env nil inherits this process's environment; otherwise it is the child's
+// whole environment.
+func RunEndless(ctx context.Context, dir string, env []string, args []string) (out []byte, err error) {
+	var bin string
+	var cmd *exec.Cmd
+	var cancel context.CancelFunc
+	var dbArgs []string
+
 	bin, err = exec.LookPath("endless")
 	if err != nil {
 		err = fmt.Errorf("%w: the Python CLI is not on PATH", err)
@@ -532,22 +547,80 @@ func runEndless(ctx context.Context, pick candidate, args []string) (err error) 
 		err = fmt.Errorf("the runner's database is not main (%v)", dbArgs)
 	}
 	if err != nil {
-		err = fmt.Errorf("%s E-%d: %w", args[2], pick.taskID, err)
+		err = fmt.Errorf("%s: %w", verbOf(args), err)
 		goto end
 	}
 
 	ctx, cancel = context.WithTimeout(ctx, spawnTimeout)
 	defer cancel()
 	cmd = exec.CommandContext(ctx, bin, args...)
-	cmd.Dir = pick.projectPath
+	cmd.Dir = dir
+	cmd.Env = env
 
 	out, err = cmd.CombinedOutput()
 	if err != nil {
-		err = fmt.Errorf("%s E-%d: %w: %s", args[2], pick.taskID, err, tail(string(out)))
+		err = fmt.Errorf("%s: %w: %s", verbOf(args), err, tail(string(out)))
 	}
 
 end:
-	return err
+	return out, err
+}
+
+// verbOf names the command an argv runs, for an error: the words after the
+// global flags (`task spawn`, `task add`).
+func verbOf(args []string) (verb string) {
+	var words []string
+	for _, a := range args {
+		if strings.HasPrefix(a, "-") {
+			if len(words) > 0 {
+				break
+			}
+			continue
+		}
+		words = append(words, a)
+		if len(words) == 2 {
+			break
+		}
+	}
+	return strings.Join(words, " ")
+}
+
+// Window is where a session nobody asked for opens: auto_spawn.target resolved
+// to a tmux session, and auto_spawn.placement. Shared with the fault-triage
+// job, which starts sessions under the same user setting (E-2272).
+type Window struct {
+	Target    string // tmux session id; "" for the runner's own (target monitor)
+	Placement string
+	Setting   string // the auto_spawn.target value it came from, for a note
+}
+
+// ResolveWindow resolves the user's auto_spawn target and placement, or returns
+// the reason to skip starting a session now — chiefly that no tmux client is
+// attached, so nobody would see it.
+func ResolveWindow() (w Window, skip string, err error) {
+	s := loadSettings()
+	w.Setting, w.Placement = s.target, s.placement
+	w.Target, skip, err = resolveTarget(s.target)
+	if err != nil || skip != "" {
+		goto end
+	}
+	_, err = spawnlaunchcmd.ParsePlacement(s.placement)
+	if err != nil {
+		err = fmt.Errorf("auto_spawn.%w", err)
+	}
+
+end:
+	return w, skip, err
+}
+
+// SpawnArgs is the `endless` argv that auto-spawns taskID into w.
+func SpawnArgs(taskID int64, w Window) []string {
+	return spawnArgs(taskID, w.Target, w.Placement)
+}
+
+// Describe renders where w opens, for a run's note.
+func (w Window) Describe() string {
+	return describeTarget(w.Setting, w.Target)
 }
 
 // spawnArgs is the `endless` argv for one auto-spawn.

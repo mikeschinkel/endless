@@ -43,6 +43,9 @@ endless errors clear             # mark every open incident cleared
 endless errors clear 12 13       # clear specific incidents
 endless errors clear --log       # dismiss only what is waiting in the log
 endless errors codes             # print this catalog from the running binary
+endless errors accept 12         # (a session) error 12 is mine to fix
+endless errors decline 12 --reason "..."  # (a session) it is not
+endless errors escalate 12       # route error 12 to a session now
 ```
 
 **`list` lists; `show` shows one.** The listing has one line per incident and
@@ -174,6 +177,76 @@ The incident keeps only its latest raiser — the one to route to. One row per
 distinct raiser is kept beside it, so `+2` means three sessions or tasks hit the
 same fault, not three occurrences. Errors recorded before raisers were tracked
 show `-`.
+
+## Routing an error to a session that fixes it
+
+A project can opt in to the **fault-triage job** (`fault-triage` in `endless jobs
+list`), so work on an error starts as soon as it surfaces. It is off until the
+project's own `.endless/config.json` turns it on:
+
+```json
+{ "fault_triage": { "enabled": true } }
+```
+
+Only errors first seen after the job first notices the opt-in are routed:
+opting in never triages a backlog. `fault_triage.interval` in
+`~/.config/endless/config.json` sets the cadence (default `1m`).
+
+Each new error goes one of four ways, decided by who raised it (above):
+
+- **A live session raised it.** Once Endless's hook-recorded state says that
+  session is idle, it is sent a message: *we think error N is yours*. It answers
+  with `endless errors accept N` (it is mine; I will fix it in my own task) or
+  `endless errors decline N --reason "..."`. A busy session is never
+  interrupted unless you run `endless errors escalate N`.
+- **The session that raised it has ended,** and its Claude transcript still
+  exists: it is resumed in a new tmux window that does not take your focus,
+  with the message as its first prompt. Its task is left alone; a session that
+  accepts sets its own task to `revisit`.
+- **Otherwise** — nobody to ask, a decline, a session that went idle again
+  without answering, a message that could not be delivered — a **bugfix task**
+  is filed and spawned. Its context carries the error's record, who raised it,
+  why it landed there and its latest captures; its plan starts with accepting
+  the error. There is one task per fingerprint: a recurrence joins the open
+  task rather than filing another, and one whose task has already settled files
+  a new task that cleans up the old one.
+- **A fix session raised it** (a session on a bugfix task this job filed): it
+  is recorded on that task and never spawned, so a fix cannot spawn a fix for
+  itself.
+
+Starting sessions is throttled: **one outstanding at a time**, machine-wide. No
+session is resumed or spawned while a resumed one has not answered or a spawned
+fix task has not reached `unverified`. Messages are not throttled. A session is
+started only while a tmux client is attached, into the tmux session and tab
+position that `auto_spawn.target` and `auto_spawn.placement` name.
+
+```sh
+endless errors accept 12                      # this session takes error 12
+endless errors decline 12 --reason "the rater raised it, not my change"
+endless errors escalate 12                    # route it now; don't wait for idle
+endless session goto --error-fix 12           # go to the session fixing it
+```
+
+`errors list` marks an accepted error with `✓` in a column of its own (shown
+only when some listed error has one); `errors show` names who accepted or
+declined it, its fix task, and where triage has it.
+
+**Delivery to a live session** goes through a throwaway headless Claude:
+`claude -p` allowed only `SendMessage`, `ListAgents` and `ToolSearch`, run from
+`<config-dir>/endless-triage` (so the message is seen to come from
+`endless-triage`), with hooks off, finding its target by tmux pane. It needs
+**Claude Code's cross-session `SendMessage`**: verified on Claude Code 2.1.293,
+and present in 2.1.285, the oldest build it has been checked against; older
+builds are untested. A message the sender reports as held, or cannot place,
+counts as undelivered and the error is filed instead.
+
+Two limits worth knowing:
+
+- A session working on **no task** stays `idle` in Endless's state while it
+  works, so the job waits five minutes after messaging any session before
+  reading an idle session as having moved on without answering.
+- The routing state is **machine-local**, like the rest of this record: it is
+  never written to the ledger.
 
 ## Where the detail lives
 

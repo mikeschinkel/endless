@@ -3445,7 +3445,8 @@ def _apply_revisit_intent(ref: str, revisit: bool, no_revisit: bool) -> None:
 
 def _resume_new_window_pane(
     ref: str, revisit: bool = False, no_revisit: bool = False,
-    new_transcript: bool = False,
+    new_transcript: bool = False, target_session: str | None = None,
+    prompt: str | None = None,
 ) -> tuple[str, str]:
     """Open a NEW tmux window running `claude --resume <uuid>` in the target's
     worktree (detached, so the caller's own push+switch does the focusing) and
@@ -3484,10 +3485,18 @@ def _resume_new_window_pane(
         cmd = shlex.quote(claude)
     else:
         cmd = f"{shlex.quote(claude)} --resume {shlex.quote(uuid)}"
+    if prompt:
+        # The resumed session's first prompt (E-2272): the fault-triage job's
+        # "we think this error is yours", delivered as a turn of its own.
+        cmd += " " + shlex.quote(prompt)
     # Land in the session that asked for the window, never in whichever one
     # tmux considers current (E-2125). Refusing beats guessing: a window that
-    # opens somewhere unexplained is the defect being fixed.
-    target = _spawner_session_target()
+    # opens somewhere unexplained is the defect being fixed. A background
+    # resume has no asking pane, so its caller names the session instead.
+    if target_session:
+        target = target_session if target_session.endswith(":") else f"{target_session}:"
+    else:
+        target = _spawner_session_target()
     if target is None:
         # REPORT: an agent cannot move its own process into a tmux pane, so
         # there is no retry that gets past this. This summary and the tmux one
@@ -3566,6 +3575,9 @@ def session_goto(
     revisit: bool = False,
     no_revisit: bool = False,
     new_transcript: bool = False,
+    background: bool = False,
+    target_session: str | None = None,
+    prompt_file: str | None = None,
 ) -> None:
     """Switch tmux focus to a task's or session's pane, pushing the current pane
     onto the back-stack. See the module section header (E-1681).
@@ -3584,6 +3596,13 @@ def session_goto(
     is the give-up route out of a refused resume, and there is nothing to give
     up on when the target is live and simply being focused.
     """
+    if background and not resume:
+        raise agent_help.no_report(
+            "--background applies only with --resume: it opens a resumed "
+            "session's window without focusing it.",
+            "Retry adding --resume, or drop --background",
+            exit_code=2,
+        )
     if new_transcript and not resume:
         raise agent_help.no_report(
             "--new-transcript applies only with --resume (it says what to do "
@@ -3603,6 +3622,14 @@ def session_goto(
             "the target session is for). A live target is just focused.",
             "Retry adding --resume, or drop --no-revisit",
         )
+    prompt = None
+    if prompt_file:
+        with open(prompt_file, encoding="utf-8") as f:
+            prompt = f.read().strip() or None
+    if background:
+        _resume_in_background(target_ref, revisit, no_revisit, target_session,
+                              prompt)
+        return
     if not _in_tmux():
         # goto moves the attached person's tmux focus, so there is no version
         # of this an agent can run instead: starting or attaching tmux for them
@@ -3620,7 +3647,7 @@ def session_goto(
             _fail_not_live(nl)
         target_pane, label = _resume_new_window_pane(
             nl.ref, revisit=revisit, no_revisit=no_revisit,
-            new_transcript=new_transcript,
+            new_transcript=new_transcript, prompt=prompt,
         )
 
     key = _backstack_key()
@@ -3639,6 +3666,43 @@ def session_goto(
             "session list` for a target that is still there",
         ))
     agent_help.info(f"• goto {label}", err=True)
+
+
+def _resume_in_background(
+    target_ref: str, revisit: bool, no_revisit: bool,
+    target_session: str | None, prompt: str | None,
+) -> None:
+    """`goto --resume --background` (E-2272): resume a NON-live target in a new
+    window of `target_session` without moving anyone's focus.
+
+    The fault-triage job's resume of an ended session that raised an error. It
+    runs from a background job, so there is no $TMUX and no asking pane: the
+    caller names the tmux session, and nothing is pushed or switched. A target
+    that IS live is refused — a second Claude process on a live session's
+    transcript is the route E-2269 rejected — so the caller falls back.
+    """
+    if not target_session:
+        raise agent_help.no_report(
+            "--background needs --target-session: with no asking pane there "
+            "is no session to open the window in.",
+            "Retry with --target-session $N",
+            exit_code=2,
+        )
+    live = _live_sessions(_project_root_for_cwd())
+    try:
+        pane, _label = _resolve_goto_target(target_ref, live)
+    except _GotoNotLive as nl:
+        pane, label = _resume_new_window_pane(
+            nl.ref, revisit=revisit, no_revisit=no_revisit,
+            target_session=target_session, prompt=prompt,
+        )
+        agent_help.info(f"• resumed {label} in {target_session}", err=True)
+        return
+    _refuse_on_stderr(agent_help.no_report(
+        f"{target_ref} is live (pane {pane}); --background resumes only a "
+        f"session that has ended.",
+        "Message the live session instead of resuming it",
+    ))
 
 
 def session_back() -> None:

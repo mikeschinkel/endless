@@ -150,6 +150,16 @@ It also watches for main being **rewritten** under open task branches (a `git pu
 
 ---
 
+### Fault triage
+
+The `fault-triage` job routes each new error to a session that fixes it. It is **off until a project opts in**:
+
+```json
+{ "fault_triage": { "enabled": true } }
+```
+
+Only errors first seen after the opt-in are routed. An error raised by a **live session** is messaged to it once it is idle — *we think error N is yours* — and the session answers `endless errors accept N` or `endless errors decline N --reason "..."`. One raised by an **ended session** whose transcript exists resumes it in an unfocused window with that message. Anything else — no session, a decline, no answer, a message that could not be delivered — is **filed as a bugfix task and spawned**, one task per fingerprint; an error raised by a fix session is recorded on its fix task, never spawned. Resumes and spawns are **one outstanding at a time**; messages are not throttled. `endless errors escalate N` routes now without waiting for idle; `endless session goto --error-fix N` goes to the session that accepted it, and `errors list` marks accepted errors `✓`. `fault_triage.interval` (user config, default `1m`) sets the cadence. Delivery needs Claude Code's cross-session `SendMessage` (verified on 2.1.293). See `docs/errors.md`, "Routing an error to a session that fixes it".
+
 ## Errors
 
 Anything that goes wrong in the background is recorded as a classified, clearable **error** with a stable code whose prefix states its severity: `WARN-NNNN` is degraded-but-working, `ERR-NNNN` is something you asked for that did not happen. `session status` and `session monitor` append a trailing **fault row** whenever uncleared errors exist — the most severe wins, and `error` outranks `warning`.

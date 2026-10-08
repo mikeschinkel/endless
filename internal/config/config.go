@@ -88,7 +88,39 @@ type EndlessConfig struct {
 	// default branch in step with its upstream. Split across the layers like
 	// AutoSpawn, for the same reasons — see MainSync.
 	MainSync MainSync `json:"main_sync,omitzero"`
+
+	// FaultTriage configures the fault-triage job (E-2272): routing each new
+	// incident to the session that raised it, or to a spawned bugfix session.
+	// Split across the layers like AutoSpawn, for the same reasons — see
+	// FaultTriage.
+	FaultTriage FaultTriage `json:"fault_triage,omitzero"`
 }
+
+// FaultTriage is the "fault_triage" object.
+//
+// Enabled is PROJECT-ONLY and never inherited from the CLI layer: the job
+// messages sessions, resumes ended ones and spawns bugfix sessions in the
+// project, and starting sessions in someone's project unasked is that project's
+// decision. Read it with LoadProject.
+//
+// Interval is CLI-ONLY: one job serves every project. Read it with Load("").
+type FaultTriage struct {
+	// Enabled opts the project in. Absent or false is off, which is also the
+	// kill switch. Only incidents first seen after the job first sees the
+	// opt-in are routed, so opting in never triages a backlog.
+	Enabled bool `json:"enabled,omitempty"`
+
+	// Interval is the job's cadence as a Go duration ("1m"). Empty means
+	// DefaultFaultTriageInterval. Messages go out on every run; at most one
+	// session is started per run, and only while none it started is
+	// outstanding.
+	Interval string `json:"interval,omitempty"`
+}
+
+// DefaultFaultTriageInterval is the fault-triage cadence when none is
+// configured. Short, because the point is that work on an error starts as soon
+// as it surfaces; a run with nothing new to route reads a few rows and returns.
+const DefaultFaultTriageInterval = "1m"
 
 // MainSync is the "main_sync" object.
 //

@@ -37,6 +37,12 @@ type Incident struct {
 	TaskID    int64
 	SessionID int64
 	Raisers   int64
+
+	// AcceptedSessionID is the session that accepted the incident — took it as
+	// its own to fix — through `endless errors accept` (E-2272); 0 when none
+	// has. It is what the listing's accepted marker and `session goto
+	// --error-fix` read.
+	AcceptedSessionID int64
 }
 
 // Source is one distinct raiser of an incident: a row of errors_sources.
@@ -389,6 +395,7 @@ func query(db *sql.DB, where string, limit int, args ...any) (incidents []Incide
 	var clearedBy sql.NullString
 	var taskID sql.NullInt64
 	var sessionID sql.NullInt64
+	var acceptedBy sql.NullInt64
 	var stmt string
 	var closeErr error
 
@@ -396,7 +403,8 @@ func query(db *sql.DB, where string, limit int, args ...any) (incidents []Incide
 	               e.fingerprint, e.summary, e.occurrences, e.first_seen_at,
 	               e.last_seen_at, e.cleared_at, e.cleared_by,
 	               e.task_id, e.session_id,
-	               (SELECT count(*) FROM errors_sources s WHERE s.error_id = e.id)
+	               (SELECT count(*) FROM errors_sources s WHERE s.error_id = e.id),
+	               (SELECT t.accepted_session_id FROM error_triage t WHERE t.error_id = e.id)
 	          FROM errors e
 	          LEFT JOIN projects p ON p.id = e.project_id ` + where + `
 	         ORDER BY e.last_seen_at DESC, e.id DESC`
@@ -418,6 +426,7 @@ func query(db *sql.DB, where string, limit int, args ...any) (incidents []Incide
 			&incident.Source, &incident.Fingerprint, &incident.Summary,
 			&incident.Occurrences, &incident.FirstSeenAt, &incident.LastSeenAt,
 			&clearedAt, &clearedBy, &taskID, &sessionID, &incident.Raisers,
+			&acceptedBy,
 		)
 		if err != nil {
 			err = doterr.NewErr(ErrFaults, ErrScanning, err)
@@ -430,6 +439,7 @@ func query(db *sql.DB, where string, limit int, args ...any) (incidents []Incide
 		incident.ClearedBy = clearedBy.String
 		incident.TaskID = taskID.Int64
 		incident.SessionID = sessionID.Int64
+		incident.AcceptedSessionID = acceptedBy.Int64
 		incidents = append(incidents, incident)
 	}
 	if err == nil {
