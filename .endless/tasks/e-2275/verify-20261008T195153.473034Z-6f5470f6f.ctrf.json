@@ -1,0 +1,54 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 7,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "git's failure is exit 1, empty stderr, 'nothing to commit' on stdout",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "that race now lands, main carries the recorder's commit and no duplicate",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "recorder took one of two files: the land commits the other and lands",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a failing pre-commit hook still refuses, with git's words",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a stdout-only git failure shows its stdout in the refusal",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "tests/test_worktree_land_lock_contention.py passes",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "with no failures",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
