@@ -1,16 +1,22 @@
-All in src/endless/task_cmd.py (already one of the files that reads SQLite; no new SQLite reader is added), plus tests.
+Decision (Mike, 2026-10-07): an unfinished preceding task REFUSES claim, spawn and prime; `--out-of-order` overrides the refusal. Flag name recommended by the agent; rename freely.
 
-1. Helper `_unfinished_predecessors(item_id) -> list[dict]`: every task linked `precedes` INTO this task (equivalently, this task's `preceded_by` links), whose status is not in the terminal set (confirmed, assumed, completed, declined, obsolete, superseded). Each row: id, title, status. Read through the same relation query `show_relations` uses, filtered to the precedes type, so the two cannot disagree about what the links are.
+All in src/endless/task_cmd.py and src/endless/cli.py (task_cmd.py already reads SQLite; no new SQLite reader is added), plus tests.
 
-2. Notice at the three start points, after `_require_spawnable` passes and before any work starts: `claim_item` (claim), the spawn path (spawn) and prime. When the helper returns rows, print to stderr, yellow:
+1. Helper `_unfinished_predecessors(item_id) -> list[dict]`: every task linked `precedes` into this task (this task's `preceded_by` links) whose status is not terminal (confirmed, assumed, completed, declined, obsolete, superseded). Each row: id, title, status. Read through the same relation query `show_relations` uses, so the two cannot disagree about what the links are.
 
-       Note: E-2269 should follow tasks that are not finished yet:
+2. The refusal. `_require_spawnable` gains this check, so claim, spawn and prime all refuse the same way and before any work starts. When the helper returns rows, and `--out-of-order` was not passed, nothing changes and the command exits with:
+
+       Cannot spawn E-2269: tasks that should come first are not finished:
          E-2268  submitted  Record which task and session raised each fault
-       `precedes` is advisory, so nothing was refused. If the order matters,
-       start those first, or link them with `blocks` to enforce it.
+       Start those first, or run it anyway:
+           endless task spawn E-2269 --out-of-order
 
-   It never refuses and never changes the exit status. An agent running the command sees the same text; no agent_help refusal, because nothing went wrong.
+   It is an agent_help.report refusal: running work out of order is the user's call, so an agent stops and asks rather than passing the flag itself.
 
-3. Nothing else changes: `precedes` stays advisory everywhere, and `blocks`/`blocked_by` keep their existing enforcement.
+3. The flag. `--out-of-order` on `task claim`, `task spawn` and `task prime`. With it, the predecessors are still listed (one yellow line each, on stderr) and the command proceeds. It overrides only this check; it does not touch the plan, open-question or prior-claim refusals.
 
-4. Tests (tests/, using the existing task-command fixtures): claim, spawn and prime each print the notice naming an unfinished predecessor with its status; a finished predecessor (confirmed, assumed, superseded) is not named; a task with no predecessors prints nothing; the command still succeeds in every case.
+4. `blocks`/`blocked_by` keep their existing behaviour. The difference between the two relations becomes: `precedes` refuses but can be overridden with `--out-of-order`; `blocks` is the hard dependency.
+
+5. Docs: the relation table in `endless guide tasks` (and the precedes entry in task_cmd.py, which says "advisory, never blocks") updated to say precedes now refuses unless overridden.
+
+6. Tests: claim, spawn and prime each refuse with an unfinished predecessor, naming it and its status, and change nothing; each succeeds with --out-of-order and lists the predecessor; a finished predecessor (confirmed, assumed, superseded) does not refuse; a task with no predecessors is unaffected; the plan and open-question refusals still fire with --out-of-order passed.
