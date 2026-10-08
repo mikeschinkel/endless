@@ -14,7 +14,9 @@
 //
 //  1. `git fetch <remote>` for main's upstream.
 //  2. Only origin moved: `git merge --ff-only <upstream>`.
-//  3. Only main moved: `git push <remote> main:<upstream branch>`. Never forced.
+//  3. Only main moved: push the tip this run inspected, by SHA, to the upstream
+//     branch. Never forced. A tip the ledger auto-commit may still amend stays
+//     local; its parent goes instead (E-2273).
 //  4. Both moved (diverged): change nothing, record ERR-0030 with each side's
 //     count and both ways out, and let the user choose.
 //  5. Main was rewritten under open task branches: record WARN-0031 naming
@@ -35,6 +37,13 @@
 // pull.ff say, and Endless does not own anyone's git config; fetch, merge
 // --ff-only and push behave the same everywhere. It never force-pushes, never
 // merges or rebases on divergence, and never touches a task worktree.
+//
+// It never publishes a commit Endless may still amend. The auto-commit amends
+// an unpublished tip whose subject matches, and its check that the tip is
+// unpublished cannot see a push that starts after it: publish such a tip, and
+// an amend already past that check rewrites a commit origin holds, diverging
+// main from it (ERR-0030). Holding the tip back removes the window: the next
+// commit on top makes it unamendable, and the run after that pushes it.
 //
 // It works on the main checkout only, and only when that checkout has the
 // default branch checked out: a fast-forward is a merge into HEAD, and merging
@@ -175,6 +184,9 @@ const (
 	FastForwarded Action = "fast-forwarded"
 	Pushed        Action = "pushed"
 	Diverged      Action = "diverged"
+	// HeldBack is main's only unpushed commit being one the auto-commit may
+	// still amend: nothing can be pushed until a commit lands on top of it.
+	HeldBack Action = "held back"
 )
 
 // Result is one project's sync.
@@ -185,6 +197,9 @@ type Result struct {
 	// Ahead is how many commits main had that the upstream lacked, Behind the
 	// reverse, both counted after the fetch and before anything changed.
 	Ahead, Behind int
+	// HeldBack is the subject of main's tip when the push left it local
+	// because the auto-commit may still amend it; empty when it went too.
+	HeldBack string
 	// Stranded names the open task branches still carrying copies of commits
 	// main holds under other SHAs. Empty unless a rewrite check ran and found
 	// some.
@@ -229,7 +244,12 @@ func (r Result) String() string {
 	case FastForwarded:
 		s += fmt.Sprintf(" %s by %d from %s", r.Branch, r.Behind, r.Upstream)
 	case Pushed:
-		s += fmt.Sprintf(" %d to %s", r.Ahead, r.Upstream)
+		s += fmt.Sprintf(" %d to %s", r.Ahead-r.heldCount(), r.Upstream)
+		if r.HeldBack != "" {
+			s += fmt.Sprintf(", holding back the tip (%q) while it may still be amended", r.HeldBack)
+		}
+	case HeldBack:
+		s += fmt.Sprintf(" %s's only unpushed commit (%q) while it may still be amended", r.Branch, r.HeldBack)
 	case Diverged:
 		s += fmt.Sprintf(" (%d ahead, %d behind %s) — nothing changed", r.Ahead, r.Behind, r.Upstream)
 	}
@@ -245,6 +265,13 @@ func (r Result) String() string {
 			len(r.Leftover), r.Branch, strings.Join(names, ", "))
 	}
 	return s
+}
+
+func (r Result) heldCount() int {
+	if r.HeldBack == "" {
+		return 0
+	}
+	return 1
 }
 
 // Git runs git in dir and returns stdout.
@@ -301,7 +328,15 @@ func syncProject(ctx context.Context, projectID int64, root string, git Git) (re
 		return res, fmt.Errorf("resolve %s's upstream after fetching: %w", res.Branch, err)
 	}
 
-	counts, err := run("rev-list", "--left-right", "--count", res.Branch+"..."+upstreamRef)
+	// Resolve main once. Every decision below is about this commit, and the
+	// push names it by SHA: a push of the branch by name resolves it again when
+	// it runs, and would publish whatever the auto-commit added in between.
+	tip, err := run("rev-parse", "--verify", "refs/heads/"+res.Branch+"^{commit}")
+	if err != nil {
+		return res, fmt.Errorf("resolve %s: %w", res.Branch, err)
+	}
+
+	counts, err := run("rev-list", "--left-right", "--count", tip+"..."+upstreamRef)
 	if err != nil {
 		return res, fmt.Errorf("compare %s with %s: %w", res.Branch, res.Upstream, err)
 	}
@@ -319,10 +354,19 @@ func syncProject(ctx context.Context, projectID int64, root string, git Git) (re
 		}
 		res.Action = FastForwarded
 	case res.Behind == 0:
+		var push string
+		push, res.HeldBack, err = pushable(run, tip)
+		if err != nil {
+			return res, err
+		}
+		if res.HeldBack != "" && res.Ahead == 1 {
+			res.Action = HeldBack
+			break
+		}
 		// An explicit refspec, so push.default and any per-remote push config
 		// cannot send something else. No --force of any kind: a push the remote
 		// rejects is a failure to report, never one to overrule.
-		if _, err = run("push", "--quiet", remote, "refs/heads/"+res.Branch+":"+mergeRef); err != nil {
+		if _, err = run("push", "--quiet", remote, push+":"+mergeRef); err != nil {
 			return res, unreachable(fmt.Errorf("push %s to %s: %w", res.Branch, res.Upstream, err))
 		}
 		res.Action = Pushed
@@ -348,6 +392,24 @@ func syncProject(ctx context.Context, projectID int64, root string, git Git) (re
 		clearRewritten(root)
 	}
 	return res, nil
+}
+
+// pushable returns the commit to publish for main's tip: the tip itself, or its
+// parent when the auto-commit may still amend the tip, with that tip's subject
+// as held. See "What it never does".
+func pushable(run func(args ...string) (string, error), tip string) (push, held string, err error) {
+	subject, err := run("log", "-1", "--format=%s", tip)
+	if err != nil {
+		return "", "", fmt.Errorf("read the subject of %s: %w", tip, err)
+	}
+	if !events.MayAmend(subject) {
+		return tip, "", nil
+	}
+	push, err = run("rev-parse", "--verify", tip+"^")
+	if err != nil {
+		return "", "", fmt.Errorf("resolve the parent of %s: %w", tip, err)
+	}
+	return push, subject, nil
 }
 
 // unreachablePhrases are what git and ssh print when the remote could not be

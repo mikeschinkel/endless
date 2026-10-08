@@ -31,6 +31,25 @@ import (
 // auto-commits (E-1206). The amend decision keys off this prefix.
 const LedgerCommitSubject = "Endless: record ledger entry"
 
+// AutoCommitSubjectPrefix begins the subject of every commit Endless makes on
+// its own behalf: the ledger, document mirrors, verify reports, verbs. Callers
+// choose the rest of a document mirror's subject, so this prefix is the only
+// thing this package can promise about all of them.
+const AutoCommitSubjectPrefix = "Endless: "
+
+// MayAmend reports whether a commit with this subject is one commitPaths could
+// still amend while it is the tip of an unpublished branch (E-2273). canAmend
+// amends whenever HEAD's subject equals the one being committed, and every
+// subject it is ever given carries AutoCommitSubjectPrefix — so a tip with any
+// other subject is never rewritten here, and one with it may be.
+//
+// Conservative by construction: a verify report's subject is unique and so is
+// never amended in practice, and a person may write a subject with this
+// prefix. Either costs a caller holding the tip back only a delay.
+func MayAmend(subject string) bool {
+	return strings.HasPrefix(subject, AutoCommitSubjectPrefix)
+}
+
 // gitRedirectVars lists env vars that override git's repo resolution
 // (E-1309). Stripped from the subprocess env so `git -C <projectRoot>`
 // is authoritative. Without this, a stray GIT_DIR somewhere in the

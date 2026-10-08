@@ -483,7 +483,7 @@ func TestSync_LinearMainSkipsTheRewriteCheck(t *testing.T) {
 	if _, err := sync1(t, f, rec.git); err != nil {
 		t.Fatal(err)
 	}
-	if rec.ran("log") {
+	if rec.ran("worktree list") {
 		t.Errorf("ran the rewrite check though main only moved forward: %v", rec.runs)
 	}
 }
@@ -628,7 +628,7 @@ func TestRewritten_OnlyFinishedLeftoversClearTheWarning(t *testing.T) {
 	if _, err := sync1(t, f, rec.git); err != nil {
 		t.Fatal(err)
 	}
-	if rec.ran("log") {
+	if rec.ran("worktree list") {
 		t.Errorf("a leftover kept the full check running: %v", rec.runs)
 	}
 }
