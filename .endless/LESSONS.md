@@ -7289,3 +7289,7 @@ Investigating ERR-0030 (main diverged from origin because a ledger amend raced m
 ### [2026-10-08] Check pending workflow changes before citing the guide as current
 Planning epic E-2261 in the E-2225 session, Mike said other sessions have moved epics to objectives and strategies instead of plans. I answered that the task guide says an epic needs a plan, so that 'isn't how Endless works today'. Mike called that pedantic: the workflow is being revised and the guide may lag behind tasks that change it. When Mike describes a workflow change, look for the tasks that make it (and whether the guide update is pending) before treating the current guide text as the rule.
 - **Project**: endless
+
+### [2026-10-08] Define code-internal terms before using them with Mike
+Working E-2158/E-2275, I asked Mike about 'the land's auto-commit' as if it were a shared term; it was only a word from a code comment and a refusal string in worktree_cmd.py. He asked me to define it. When a term comes from the code rather than from our conversation, say what it is in plain words the first time (here: the land's commit of main's Endless-managed files before rebasing), or avoid it.
+- **Project**: endless
