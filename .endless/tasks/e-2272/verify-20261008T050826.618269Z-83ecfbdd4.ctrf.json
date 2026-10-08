@@ -1,0 +1,194 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 35,
+      "passed": 35,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test: triagejob, faults, errorscmd, config, autospawnjob, schema",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "routing contract runs and passes: TestRoute_IdleLiveSessionIsMessagedByPane",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "routing contract runs and passes: TestRoute_BusySessionWaitsUntilIdleUnlessEscalated",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "routing contract runs and passes: TestRoute_HeldMessageFallsBackToFileAndSpawn",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "routing contract runs and passes: TestRoute_SenderFailureFallsBackAndFailsTheRun",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "routing contract runs and passes: TestRoute_EndedSessionWithTranscriptIsResumedAndThrottled",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "routing contract runs and passes: TestRoute_EndedSessionWithoutTranscriptIsFiled",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "routing contract runs and passes: TestRoute_ThrottleHoldsASpawnUntilOpen",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "routing contract runs and passes: TestRoute_DeclineFilesAndSpawns",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "routing contract runs and passes: TestRoute_AcceptSettlesIt",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "routing contract runs and passes: TestRoute_IdleWithoutAnswerFallsBackAfterTheGrace",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "routing contract runs and passes: TestRoute_FixSessionFaultIsRecordedNeverSpawned",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "routing contract runs and passes: TestRoute_RecurrenceJoinsTheOpenFixTask",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "routing contract runs and passes: TestRoute_RecurrenceAfterASettledFixFilesANewOneCleaningItUp",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "routing contract runs and passes: TestRoutables_OnlyAfterTheOptInWatermark",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "routing contract runs and passes: TestParseDelivery",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract runs and passes: TestListingLines_MarkAcceptedIncidentsWithOneGlyph",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract runs and passes: TestMerge_FaultTriageEnabledIsNeverInherited",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest: triage argv, goto refusals, Go/Python verb parity",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a person with no session is refused (exit 2)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and told to name one",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "an agent session accepts it as ES-7",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the listing marks the accepted error ✓",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and not the others",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "show names who accepted it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "show points at goto --error-fix",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "fixer names the accepting session",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "fixer on an unaccepted error exits 1",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "decline without --reason is refused (exit 2)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "decline on a named session",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a decline queues it for file-and-spawn, with its reason",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a cleared error cannot be escalated",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "fault-triage is a registered job",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "with nothing opted in it says so",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "error_triage and fault_triage_projects exist",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
