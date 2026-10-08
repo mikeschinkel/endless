@@ -1,0 +1,2 @@
+{"v":1,"ts":"602B353MAZG19ZK","kind":"task_dep.created","project":"endless","entity":{"type":"task_dep","id":"2268"},"actor":{"kind":"cli","id":"mikeschinkel@m4macmini.local","session_id":"1301","harness":"claude_cli"},"payload":{"source_id":2268,"target_id":2272,"dep_type":"blocks"}}
+{"v":1,"ts":"602B354FK4819ZK","kind":"task_dep.created","project":"endless","entity":{"type":"task_dep","id":"2272"},"actor":{"kind":"cli","id":"mikeschinkel@m4macmini.local","session_id":"1301","harness":"claude_cli"},"payload":{"source_id":2272,"target_id":2269,"dep_type":"cleans_up"}}
