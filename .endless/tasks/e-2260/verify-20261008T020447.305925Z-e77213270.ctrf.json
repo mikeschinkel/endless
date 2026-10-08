@@ -1,0 +1,74 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 11,
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "jobs, mainsyncjob and faults (catalog/docs sync) build and pass",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "Transient survives errors.Is/As and wraps; an unmarked error and nil are not transient",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "each listed stderr phrase is transient; a rejected push and auth failures are not",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a run is transient only when every project's failure is",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "below the threshold: no incident, fail_count counts, backoff escalates",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "at the threshold: one WARN-0032 naming the job, the count and the cause; no WARN-0001",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a non-transient failure is WARN-0001 on its first run, after transient ones too",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "WARN-0032 is in the catalog, documented, and its number recorded as spent",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a successful run clears the open WARN-0032",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a failed clear is not the run's error",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "endless errors codes lists WARN-0032",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
