@@ -7285,3 +7285,7 @@ When filing ED-1615 from the E-2269 brainstorm, I wrote the current interim mech
 ### [2026-10-08] Give the exact ledger resolution with any merge advice
 Investigating ERR-0030 (main diverged from origin because a ledger amend raced main-sync's push), I recommended Mike run git merge origin/main and only said the ledger file would 'probably conflict'. It did, and Mike stopped: .endless/db-ledger is the write-ahead log and must not become corrupt. When advising a git operation that can touch the db-ledger, first verify how the two ledger versions relate (e.g. one is an exact in-order prefix of the other) and hand over the exact, verified resolution command in the same message — never leave the WAL conflict for Mike to resolve by judgment.
 - **Project**: endless
+
+### [2026-10-08] Check pending workflow changes before citing the guide as current
+Planning epic E-2261 in the E-2225 session, Mike said other sessions have moved epics to objectives and strategies instead of plans. I answered that the task guide says an epic needs a plan, so that 'isn't how Endless works today'. Mike called that pedantic: the workflow is being revised and the guide may lag behind tasks that change it. When Mike describes a workflow change, look for the tasks that make it (and whether the guide update is pending) before treating the current guide text as the rule.
+- **Project**: endless
