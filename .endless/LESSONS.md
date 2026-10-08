@@ -7305,3 +7305,7 @@ In E-2266 a worktree hook blocked me from deleting failed verify reports under t
 ### [2026-10-08] A verify suite must exercise both the person's and the agent's experience
 In E-2266 I proposed that the verify runner strip agent and user identity variables so agent and user runs match. Mike: a verify test should test BOTH the user's experience and the agent's experience, so changing the environment applies only to the user side, not the agent side. For self_dev, verify before and after the milestone both need to reproduce both environments when the two experiences differ.
 - **Project**: endless
+
+### [2026-10-08] A verify suite's person-run checks must pin the human refusal rendering
+E-2272: my verify suite passed for me and failed for Mike on one check. A refusal shows a person only its summary; the remedy line renders only for an agent. The suite's person() helper stripped CLAUDE_CODE_* markers but not ENDLESS_AUDIENCE/AI_AGENT, so under an agent run the binary still rendered the agent text and the assertion matched text a person never sees. Fix: clear every agent/audience marker and set ENDLESS_AUDIENCE=human in person(); and put anything a person must know (e.g. a flag to retry with) in the refusal summary, not only the remedy.
+- **Project**: endless
