@@ -1,0 +1,1 @@
+Mike has asked for fault attribution at least once before, and it was never filed. It is the prerequisite for routing an error to the session that caused it (see the triage brainstorm filed alongside), and it is useful on its own: errors list could say who caused what.
