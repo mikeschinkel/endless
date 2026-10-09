@@ -159,3 +159,21 @@ This task's own suite, run through `endless task verify`:
 
 - The guide's verify section still described `ENDLESS_VERIFY_RUN`, the marker
   E-2090 removed; the paragraph rewritten for step 4 drops it.
+- The suite drives the candidate runner rather than relying on the runner that
+  starts it. After the rebase onto E-2262, a pass must be recorded in main
+  (where land reads `unlanded`), so main's runner starts the suite; the suite
+  runs this branch's `bin/endless-go verify` against a throwaway fixture
+  project, once from an agent's environment and once from a person's, and
+  compares what each saw (the E-2023 / E-2243 pattern, consistent with ED-1596
+  and ED-1601).
+
+## Known gap (accepted for now, must be fixed eventually)
+
+The Verification items that need a seeded sandbox database are not checked
+live: the Python CLI's person/agent refusal form and `db:` footer, and
+`endless session id` resolving the fixture session (including under
+`with_tmux`). A fixture project has no main database to seed a sandbox from,
+and a nested run against this worktree under the runner's temp HOME cannot
+seed one either. The database-free reactions (endless-go refusal form, the
+Claude hook gate) are checked. Same root as the open question of testing
+worktree usage generically.
