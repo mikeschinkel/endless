@@ -219,7 +219,7 @@ every entry is `as_planned` and no item is grown and unapproved.
   added, edited and withdrawn freely. No baseline exists.
 - **Approval**: `task approve` copies each active item's `statement` into
   `approved_statement` and stamps `approved_at`. Refuse approval of a
-  todo or bugfix with no active deliverable item.
+  todo, bugfix or docs task with no active deliverable item.
 - **Material edit on `ready`**: material means the item set differs from the
   baseline: an item added, withdrawn, or with a changed statement, kind or
   firmness. Edits to plan prose stop being material. That replaces today's
@@ -248,7 +248,7 @@ every entry is `as_planned` and no item is grown and unapproved.
 
 ## 6. Existing plans
 
-Recommendation: **require items at claim and spawn for todo and bugfix
+Recommendation: **require items at claim and spawn for todo, bugfix and docs
 tasks, with no migration and no grandfathering at that gate.** Grandfather
 only work already past the gate.
 
@@ -280,14 +280,15 @@ only work already past the gate.
    leave them in prose for now.
 3. **Should items carry `verify`?** That would make a separate tests list
    redundant. The alternative is a per-task verification list, as today.
-4. **Should approval refuse a todo or bugfix with no items** once this
+4. **Should approval refuse a todo, bugfix or docs task with no items** once this
    ships, or only claim and spawn? Refusing at approval is earlier and
    catches the 43 `submitted` tasks when they are reviewed. Refusing at claim
    catches them when they are used.
-5. **"docs" type.** The brainstorm scoped the gate to the todo, bugfix and
-   docs types, but `task_types` has no docs type (the types are todo, bugfix,
-   research, epic and brainstorm). Should a docs type be added, or the scope
-   read as todo and bugfix?
+
+Settled: the gate's scope is todo, bugfix and docs, as the brainstorm set.
+The docs type is not in `task_types` yet, but Mike says it is about to be
+added, so the item requirement and the reconciliation gate (sections 4–6)
+cover it alongside todo and bugfix.
 
 Related clean-ups this study points at (not filed):
 
