@@ -7329,3 +7329,7 @@ On E-2276, I re-registered 'study' as an investigation verb but left research ta
 ### [2026-10-09] Read a research task's parent epic decisions before reporting findings
 Priming E-2257 (classify tables for the E-2215 storage split), I listed the task-ID allocator colliding across project files as a finding. Mike pointed out it was already decided: a machine-DB mirror table is the canonical source of task ids, with a sync job filling in fields like name and title from project DBs. E-2215's plan said so. In that research I re-raised something its parent epic had already decided.
 - **Project**: endless
+
+### [2026-10-09] Check a hazard against current behaviour and data before reporting it
+Priming E-2257, I reported that sessions.task_id gets set to NULL when its task is deleted, as if it were a live hazard. Mike asked whether I was sure, since tasks are now marked removed rather than deleted (E-1929). The only remaining DELETE FROM tasks is the rebuild-db copy-back that E-2062 already refuses. Also, my worktree branch was 331 commits behind main, so I classified a stale schema.sql and missed tables main had added (errors_sources, error_triage, fault_triage_projects, live_projects). Mike asked me to look at the data to see which tables are actually in use. In that research I made claims from old comments and an old branch without checking current code and data.
+- **Project**: endless
