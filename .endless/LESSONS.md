@@ -7349,3 +7349,7 @@ While relaying the root-commit identity change from E-2257 to the E-2217 session
 ### [2026-10-09] Explain a proposed distinction with concrete examples, not abstract labels
 On E-2279 (plan-item content model) I asked Mike to decide on an item 'firmness' flag with values 'exact' vs 'outcome', described only in the abstract. Mike could not tell what they meant or what examples would look like, so he couldn't answer. When asking Mike to decide on a new concept or distinction, show it with concrete examples (ideally from real tasks) and use names that say what they mean.
 - **Project**: endless
+
+### [2026-10-09] Avoid 'route' as a term; it has several meanings in Endless
+On E-2279 I described plan items as 'route fixed' vs 'route open' (meaning whether the plan prescribes how the work is done). Mike said 'route' is confusing because, as discussed many times, it has at least three meanings in Endless. Use plainly descriptive terms instead, e.g. 'how it is done' / 'method' for implementation approach.
+- **Project**: endless
