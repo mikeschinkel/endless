@@ -7317,3 +7317,7 @@ In E-2266, consolidating fixes per ED-1550, I found E-1908 and E-2219 had the sa
 ### [2026-10-09] Don't prefer shipping an interim version that a known redesign will replace
 On E-2276 (reconciling plan deviations before verify), I recommended shipping a text-based reconciliation gate now and adding structured plan items later, after a research task on plan content. Mike chose to block the work on the research and build the structure first. His reason: I over-value shorter tasks, and implementing something he will change shortly after is unnecessary churn. When a pending research or design task is likely to reshape what a task builds, recommend sequencing behind it rather than shipping an interim version.
 - **Project**: endless
+
+### [2026-10-09] Fix small side effects yourself instead of handing them back
+At the end of E-2276, a refused task add had auto-registered 'study' as an action verb with a nonsense definition, and I told Mike the entry needed correcting instead of correcting it. He asked why I didn't change it myself. 'endless verb update' was available to me and the change was small and in scope, so I should have made it and reported that I had.
+- **Project**: endless
