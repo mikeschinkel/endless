@@ -482,16 +482,32 @@ func cachedUnlanded(ctx context.Context, worktreeDir string) unlandedLookup {
 // compute-on-MISS must therefore miss before it computes.
 //
 // The cache read keys on the watermark's base tip rather than on the caller's
-// freshly resolved base, and that is safe in both directions: a `settled` hit is
-// permanent while the branch tip has not moved, and a stale `unsettled` hit can
-// only over-report, which makes the reaper skip — the safe direction for a
-// decision that ends in a removed directory.
+// freshly resolved base. A `settled` hit is permanent while the branch tip has
+// not moved, so it is returned as-is. An `unsettled` hit can be stale: only the
+// job advances the watermark, so after `worktree land` fast-forwards the base to
+// a branch tip that was measured unsettled just before, that entry stays
+// reachable until the job's next pass — and `task unsettled`, asked right after
+// a land, answered "unlanded" with the remedy "land it" (E-2277). So an
+// unsettled hit is trusted only once HEAD is shown NOT to be an ancestor of the
+// base: one `merge-base --is-ancestor`, never the range-diff. An ancestor holds
+// nothing the base lacks, so that check alone settles it, exactly. A branch
+// whose content landed WITHOUT becoming an ancestor (cherry-pick, squash) can
+// still read a stale unsettled hit until the next pass; that over-reports, which
+// is the safe direction for the reaper, and `worktree land` never produces it.
 //
 // The caller supplies base — every one of them has already resolved it, and
 // taking it as a parameter keeps this function from quietly becoming a second
 // resolver with its own failure mode.
 func computeUnlandedAndCache(ctx context.Context, worktreeDir, base string) ([]string, error) {
-	if hit := cachedUnlanded(ctx, worktreeDir); hit.Known {
+	hit := cachedUnlanded(ctx, worktreeDir)
+	if hit.Known && len(hit.Commits) == 0 {
+		return nil, nil
+	}
+	if headIsAncestorOf(ctx, worktreeDir, base) {
+		storeUnlanded(ctx, worktreeDir, base, nil)
+		return nil, nil
+	}
+	if hit.Known {
 		return hit.Commits, nil
 	}
 	commits, err := unlandedCommits(ctx, worktreeDir, base)
@@ -502,6 +518,14 @@ func computeUnlandedAndCache(ctx context.Context, worktreeDir, base string) ([]s
 	}
 	storeUnlanded(ctx, worktreeDir, base, commits)
 	return commits, nil
+}
+
+// headIsAncestorOf reports that the worktree's HEAD is contained in base. Any
+// failure — including an interrupt — answers false, which leaves the caller on
+// its pre-E-2277 path rather than inventing a settled verdict.
+func headIsAncestorOf(ctx context.Context, worktreeDir, base string) bool {
+	_, err := runGit(ctx, worktreeDir, "merge-base", "--is-ancestor", "HEAD", base)
+	return err == nil
 }
 
 // storeUnlanded writes one computed verdict into the cache. Best-effort: the

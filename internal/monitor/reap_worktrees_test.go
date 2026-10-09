@@ -279,6 +279,14 @@ func newReaperFixture(t *testing.T, landedAt time.Time) *reaperFixture {
 			f.revListArgs = append([]string{}, args...)
 			return f.revListOut, f.revListErr
 		case "merge-base":
+			if len(args) > 1 && args[1] == "--is-ancestor" {
+				// E-2277: HEAD is an ancestor of the base exactly when the
+				// branch is zero commits ahead, which is what revListOut models.
+				if f.revListErr == nil && strings.TrimSpace(f.revListOut) == "0" {
+					return "", nil
+				}
+				return "", fmt.Errorf("exit status 1")
+			}
 			return "b45e0000\n", nil
 		case "range-diff":
 			if f.rangeDiffErr != nil {

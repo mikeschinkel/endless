@@ -124,6 +124,18 @@ func (g *gitCounter) ran(sub string) bool {
 	return false
 }
 
+func (g *gitCounter) count(sub string) int {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	n := 0
+	for _, c := range g.calls {
+		if c == sub {
+			n++
+		}
+	}
+	return n
+}
+
 // countGit wraps the production runGit — it still runs real git — and records the
 // subcommand of every invocation.
 func countGit(t *testing.T) *gitCounter {
@@ -771,6 +783,9 @@ func TestWorktreesAtOneTipShareOneAnswer(t *testing.T) {
 // exact cost this whole task exists to remove.
 //
 // A function named compute-on-MISS must miss before it computes.
+//
+// Since E-2277 an UNSETTLED hit costs one `merge-base --is-ancestor` before it is
+// trusted (a land can make it stale); that is the only extra call allowed here.
 func TestComputeOnMissReadsTheCacheFirst(t *testing.T) {
 	ctx := context.Background()
 	f := newCacheFixture(t, 1)
@@ -789,10 +804,13 @@ func TestComputeOnMissReadsTheCacheFirst(t *testing.T) {
 	if len(commits) != 1 {
 		t.Errorf("verdict = %v, want the one unlanded commit", commits)
 	}
-	for _, forbidden := range []string{"range-diff", "merge-base", "rev-list", "log"} {
+	for _, forbidden := range []string{"range-diff", "rev-list", "log"} {
 		if g.ran(forbidden) {
 			t.Errorf("a warm cache still cost `git %s` (calls: %v)", forbidden, g.calls)
 		}
+	}
+	if n := g.count("merge-base"); n != 1 {
+		t.Errorf("a warm unsettled hit ran `git merge-base` %d times, want the one ancestor check (calls: %v)", n, g.calls)
 	}
 }
 

@@ -35,10 +35,14 @@ type unsettledStub struct {
 	unlanded     int
 	rangeDiffErr error
 	mergeBaseErr error
-	log          string
-	logErr       error
-	branch       string
-	branchErr    error
+	// headIsAncestor answers `merge-base --is-ancestor HEAD <base>` (E-2277).
+	// False — git's exit 1 — by default, because every stubbed branch here is
+	// ahead of its base, and an ancestor never reaches the comparison at all.
+	headIsAncestor bool
+	log            string
+	logErr         error
+	branch         string
+	branchErr      error
 	// baseUnresolvable makes every branch candidate fail to resolve, which is
 	// the state DefaultBranch reports as ErrDefaultBranchUnresolved.
 	baseUnresolvable bool
@@ -97,6 +101,12 @@ func (s *unsettledStub) install(t *testing.T) {
 		case "status":
 			return s.status, s.statusErr
 		case "merge-base":
+			if len(args) > 1 && args[1] == "--is-ancestor" {
+				if s.headIsAncestor {
+					return "", nil
+				}
+				return "", errors.New("exit status 1")
+			}
 			if s.mergeBaseErr != nil {
 				return "", s.mergeBaseErr
 			}

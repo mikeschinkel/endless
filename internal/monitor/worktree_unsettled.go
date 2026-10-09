@@ -356,9 +356,13 @@ func worktreeUnsettledAt(ctx context.Context, worktreePath string, mode unlanded
 	// SHA, so a commit a rebasing land re-hashed is seen to be in (E-2087). Since
 	// E-2128 it is answered from the cache, and only computed when the caller's
 	// mode licenses it.
+	//
+	// In compute mode only a SETTLED hit is final here; an unsettled one goes
+	// through computeUnlandedAndCache, which drops it when HEAD has since become
+	// an ancestor of the base — the state a land leaves behind (E-2277).
 	lookup := cachedUnlanded(ctx, worktreePath)
 	d.Base = lookup.Base
-	if lookup.Known {
+	if lookup.Known && (mode == unlandedCacheOnly || len(lookup.Commits) == 0) {
 		d.applyUnlanded(lookup.Commits)
 		goto enrichment
 	}
