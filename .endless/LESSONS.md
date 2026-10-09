@@ -7353,3 +7353,7 @@ On E-2279 (plan-item content model) I asked Mike to decide on an item 'firmness'
 ### [2026-10-09] Avoid 'route' as a term; it has several meanings in Endless
 On E-2279 I described plan items as 'route fixed' vs 'route open' (meaning whether the plan prescribes how the work is done). Mike said 'route' is confusing because, as discussed many times, it has at least three meanings in Endless. Use plainly descriptive terms instead, e.g. 'how it is done' / 'method' for implementation approach.
 - **Project**: endless
+
+### [2026-10-09] Research the history before proposing a change to which endless-go binary runs
+Situation: E-2278 (verify suites run as a person). A rebase onto E-2262 left no path where a verify ran this branch's runner AND recorded unlanded in main. I recommended that endless task verify, in a self-dev worktree, use the worktree's bin/endless-go while recording in main. Mike objected: Endless decided after months of trouble to always run main's bin/endless-go, because running worktree binaries could run broken code (possibly only for hooks). He is afraid of reliving that from a suggestion made without the background. Lesson: before proposing a change to binary or runner routing (main vs worktree endless-go), look up the decisions and tasks that set the current routing, and what failed before, and cite them in the proposal. In this case the open question he named is how to test worktree usage generically, plus an earlier idea of main delegating to the worktree when a task's verify.toml asks for it.
+- **Project**: endless
