@@ -15,6 +15,11 @@ root="$(git -C "$ENDLESS_VERIFY_DIR" rev-parse --show-toplevel)" || setup_error 
 cd "$root" || setup_error "cannot cd to $root"
 [[ -x "$root/bin/endless-go" ]] || setup_error "no $root/bin/endless-go — run \`just build\`"
 EGO="$root/bin/endless-go"
+# This suite tests the runner it is run by. main's runner predates E-2278 and
+# exports no agent env, so under it every check below fails for the wrong
+# reason; say which runner to use instead.
+[[ -n "${ENDLESS_VERIFY_AGENT_ENV:-}" ]] \
+    || setup_error "this suite needs E-2278's own runner, not main's — run: endless task verify E-2278 --db sandbox"
 
 section "This task's own tests (fail fast)"
 TESTS='TestPersonEnv_StripsTheCallersIdentity|TestAgentEnv_IsTheSupportedHarness|TestWriteAgentEnv|TestMakeTmuxDir_FitsASocketPath|TestSnapshotScript_KeepsTheLayout|TestRun_ScriptSuite_RunsASnapshot|TestRun_ScriptSuite_SameVerdictWhoeverRunsIt|TestRun_Manifest_AsAgentIsPerCheck|TestRun_PrivateTmuxIsTornDown|TestRun_Manifest_TmuxIsPerCheck'
