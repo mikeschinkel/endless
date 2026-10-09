@@ -89,3 +89,9 @@ cleanup if anyone wants it.
   through its own end-to-end Go test, because `endless task verify` runs the
   installed `endless-go` unless `--db sandbox` is active; the ambient GOCACHE
   check passes once an E-1908 runner runs the suite, and skips before then.
+- **Out-of-scope fix to keep the regression green:** `internal/sessionmonitorcmd`'s
+  `privateTmux` reused one PID-named socket across tests, so a test could reach
+  the previous test's still-exiting server (`kill-server` is asynchronous) and
+  fail `new-session` — intermittently, mostly under the load of the
+  `./internal/...` sweep. Each test now gets its own socket, and cleanup removes
+  the socket file tmux leaves behind.
