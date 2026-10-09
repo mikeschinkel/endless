@@ -30,8 +30,7 @@ at least one section of that kind. Counts are rough.
   it can be verification steps, phases, or answers to questions.
 - Proposal: plan items as rows in their own table with per-task stable
   numbers (P1, P2, …, numbered like question series), a one-line statement of
-  what will be true, a firmness flag, an optional verification, and an
-  optional parent. Prose stays in `plan` as the approach. Approval records a
+  what will be true, an optional verification, and an optional parent. Prose stays in `plan` as the approach. Approval records a
   baseline on each item. Grown scope becomes new items, not prose. A
   reconciliation holds exactly one entry per item.
 
@@ -160,8 +159,7 @@ else):
 | `parent_seq` | optional, one level only (E-2222's 2.A). A parent is reconciled through its children. |
 | `sort_order` | display order, separate from `seq`, so reordering never renumbers |
 | `kind` | `deliverable` (something will be true) or `exclusion` (something will not be touched or done). Exclusions turn the 45% of plans with scope fences into checkable commitments. |
-| `statement` | one line, short like a description: what will be true, not how. "`worktree land --check` prints exactly one Landable line and exits 0 on a clean branch." |
-| `firmness` | `exact`: this outcome and this route. `outcome`: the result must hold, and the route is the implementer's call. Default `outcome`. |
+| `statement` | one line, short like a description: what will be true. "`worktree land --check` prints exactly one Landable line and exits 0 on a clean branch." When the plan requires a particular way of doing it, the statement says so ("…compiled in the throwaway rehearsal checkout, never in the live worktree", E-2222). Reconciliation is measured against what the statement says and nothing more: doing something the statement does not specify, in whatever way, is not a deviation. |
 | `verify` | optional: how this item is shown to hold, such as a test name, a verify-suite check, or a command. Replaces the separate tests list most plans carry. |
 | `detail` | optional short prose: the files or functions it touches. Long design stays in the plan prose. |
 | `origin` | `planned` (exists at approval) or `grown` (added after claim) |
@@ -169,10 +167,10 @@ else):
 | `approved_statement`, `approved_at` | the baseline, copied on `task approve` (see section 5) |
 | `created_by_session`, timestamps | provenance, as on questions |
 
-The `plan` field stays, as the approach: design, rationale for the route,
+The `plan` field stays, as the approach: design, rationale for the approach,
 files, constraints. `task show --plan` renders the items first, then the prose.
 CLI shape, mirroring `question`: `endless plan item add <id> "<statement>"
-[--exclusion] [--exact] [--verify …] [--parent P2]`, plus `edit`, `withdraw`,
+[--exclusion] [--verify …] [--parent P2]`, plus `edit`, `withdraw`,
 `move` and `list`. Also `--items-file` on `task update`, taking one item per
 top-level list entry so a session can still write a plan in one go. The
 parsing is deterministic because the file format is defined, not guessed.
@@ -221,8 +219,7 @@ every entry is `as_planned` and no item is grown and unapproved.
   `approved_statement` and stamps `approved_at`. Refuse approval of a
   todo, bugfix or docs task with no active deliverable item.
 - **Material edit on `ready`**: material means the item set differs from the
-  baseline: an item added, withdrawn, or with a changed statement, kind or
-  firmness. Edits to plan prose stop being material. That replaces today's
+  baseline: an item added, withdrawn, or with a changed statement or kind. Edits to plan prose stop being material. That replaces today's
   whitespace comparison with a deterministic test that tracks the
   commitments. The task drops to `submitted`, as now.
 - **While `underway`**:
@@ -248,18 +245,23 @@ every entry is `as_planned` and no item is grown and unapproved.
 
 ## 6. Existing plans
 
-Recommendation: **require items at claim and spawn for todo, bugfix and docs
-tasks, with no migration and no grandfathering at that gate.** Grandfather
-only work already past the gate.
+Settled with Mike: **refuse approval and spawn of a todo, bugfix or docs
+task with no active deliverable item, with no migration and no grandfathering
+at those two points.** Claim is not gated: a session that claims such a task
+can write the items itself as part of the work.
 
 - The guide's plan gate already sets the precedent: "There is no
   grandfathering — an older task meets the gate exactly as a new one does."
   The open todo and bugfix tasks that have a plan are about 60 that have not
   started (`submitted`, `ready`, `unplanned`) and about 20 underway or
   unverified.
-- Not-yet-started tasks meet the item requirement when claimed or spawned.
+- Not-yet-started tasks meet the item requirement when approved or spawned.
   `task prime` and the planning session already exist to draft the missing
   piece, and drafting items from a prose plan is that kind of job.
+- A task claimed without items still cannot hand over a verify: the
+  reconciliation gate also refuses a todo, bugfix or docs task with no active
+  deliverable item, so a claiming session that skips writing items is caught
+  there.
 - Underway and unverified tasks, and finished ones, are left alone. The
   reconciliation gate skips a task that has no items and was claimed before
   the feature shipped, keyed on the claim event's time, so the cutoff is
@@ -268,27 +270,21 @@ only work already past the gate.
   items from essay-style plans needs judgment (section 1). A parser would be
   the non-deterministic gate the brainstorm rejected, moved one step earlier.
 
-## Open choices for Mike
+## Settled with Mike after the findings
 
-1. **Do deviations on `outcome`-firm items need a question?** The
-   brainstorm said all four kinds are raised. Firmness exists to let a
-   different route on an `outcome` item be recorded without stopping for an
-   answer. If every `differently` must still be answered, firmness only
-   informs the reviewer and could be dropped.
-2. **Should exclusions be items?** They are checkable and appear in 45% of
-   plans, but they add a second kind to every rule. The alternative is to
-   leave them in prose for now.
-3. **Should items carry `verify`?** That would make a separate tests list
-   redundant. The alternative is a per-task verification list, as today.
-4. **Should approval refuse a todo, bugfix or docs task with no items** once this
-   ships, or only claim and spawn? Refusing at approval is earlier and
-   catches the 43 `submitted` tasks when they are reviewed. Refusing at claim
-   catches them when they are used.
-
-Settled: the gate's scope is todo, bugfix and docs, as the brainstorm set.
-The docs type is not in `task_types` yet, but Mike says it is about to be
-added, so the item requirement and the reconciliation gate (sections 4–6)
-cover it alongside todo and bugfix.
+1. **No firmness flag.** A deviation is anything that contradicts what an
+   item's statement says. If the statement does not say how something is to
+   be done, doing it any particular way is not a deviation; if the plan
+   needs a particular way, the statement says so. Every `differently` entry
+   therefore needs an answered question, as the brainstorm set.
+2. **Exclusions are items** (`kind = exclusion`), checked by the
+   reconciliation like deliverables.
+3. **Each item carries its own optional `verify`**, replacing the separate
+   tests list.
+4. **Gate points: approval and spawn**, not claim (section 6).
+5. **Scope: todo, bugfix and docs.** The docs type is not in `task_types`
+   yet, but is about to be added, so the item requirement and the
+   reconciliation gate cover it alongside todo and bugfix.
 
 Related clean-ups this study points at (not filed):
 
