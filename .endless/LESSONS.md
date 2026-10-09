@@ -7333,3 +7333,7 @@ Priming E-2257 (classify tables for the E-2215 storage split), I listed the task
 ### [2026-10-09] Check a hazard against current behaviour and data before reporting it
 Priming E-2257, I reported that sessions.task_id gets set to NULL when its task is deleted, as if it were a live hazard. Mike asked whether I was sure, since tasks are now marked removed rather than deleted (E-1929). The only remaining DELETE FROM tasks is the rebuild-db copy-back that E-2062 already refuses. Also, my worktree branch was 331 commits behind main, so I classified a stale schema.sql and missed tables main had added (errors_sources, error_triage, fault_triage_projects, live_projects). Mike asked me to look at the data to see which tables are actually in use. In that research I made claims from old comments and an old branch without checking current code and data.
 - **Project**: endless
+
+### [2026-10-09] Search for existing tasks on a topic before asking the user about it
+Priming E-2257, I asked Mike whether cross-project task links should survive the storage split. Mike pointed out there is already a task about how cross-project links are handled (E-2249 / E-2247). The question also said 'span two' without naming projects, and Mike had to ask 'two what?'. In that case I asked about something already filed and worded the question ambiguously.
+- **Project**: endless
