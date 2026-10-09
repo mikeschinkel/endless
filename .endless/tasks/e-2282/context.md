@@ -1,0 +1,1 @@
+Found in E-2278 on 2026-10-09. E-2262 records a pass's unlanded status in the pinned database; just verify always passes --db sandbox, so the pass lands in the worktree sandbox while worktree land reads main and refuses ("is unverified, not unlanded"). No plan of E-2261/E-2262/E-2263 considered just verify. Every self-dev task verified with just verify is affected.
