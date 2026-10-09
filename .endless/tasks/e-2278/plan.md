@@ -29,6 +29,12 @@ their inline settings still win. They are not migrated either.
 
 ## Changes
 
+self_dev note: almost all of the evidence comes from Endless verifying Endless,
+where the system under test reads these variables. The changes are still generic
+(PRODUCT): in any project a suite's verdict must not depend on who started it,
+and no project's suite should be able to reach the user's live tmux server.
+
+
 ### 1. The suite's default environment is a person's
 
 In `internal/verifycmd`, build the suite env from the caller's env minus the
@@ -38,6 +44,7 @@ caller-identity variables, and do it in one named list next to `replaceEnv`:
   `AI_AGENT`, `__CFBundleIdentifier`
 - audience: `ENDLESS_AUDIENCE`
 - session routing: `ENDLESS_SESSION_ID`
+- tmux context: `TMUX`, `TMUX_PANE` (replaced by a private server, see 1b)
 
 Take the harness variable names from `internal/agentenv`, so the detector table
 and this list cannot drift. Apply the same stripped env to the sandbox reset/seed
@@ -49,11 +56,41 @@ depending on the caller.
 Front door: `endless task verify` stops exporting `ENDLESS_AUDIENCE` into the
 runner's environment. The runner strips it anyway; this removes the second source.
 
-**Open question for Mike: `TMUX` and `TMUX_PANE`.** Recommendation: strip both by
-default. The caller's pane is the other thing that differs between an agent run
-and Mike's run: E-2266's probe got three different session answers from three
-panes. A suite that tests tmux behaviour opts back in the same way it opts into
-the agent.
+### 1b. A private tmux server per run, with `with_tmux` to opt in
+
+Removing `TMUX`/`TMUX_PANE` on its own isolates nothing. A `tmux` subprocess with
+neither variable set still connects to the user's live server on the default
+socket (checked 2026-10-08: `env -u TMUX -u TMUX_PANE tmux list-sessions` listed
+the live sessions). And about 45 sites read these variables directly, through no
+shared accessor, so the caller's pane changes session resolution, hook pane
+recording, spawn/resume windows, status line and autospawn. E-2266's probe got
+three different session answers from three panes, and E-2071's sweep bound a
+fixture session to Mike's live pane %413.
+
+So the runner gives each run its own empty tmux server:
+
+- Unset `TMUX` and `TMUX_PANE`, and set `TMUX_TMPDIR` to a per-run directory
+  created under **`/tmp`** (`/tmp/endless-verify-<short id>/`), not under the OS
+  temp dir. On macOS `os.MkdirTemp("")` uses `$TMPDIR`
+  (`/var/folders/…/T/`), and with the canonicalized run dir that pushes tmux's
+  socket path (`<dir>/tmux-<uid>/default`) past the ~104-byte limit, which fails
+  with "File name too long". Under `/tmp` (which resolves to `/private/tmp` on
+  macOS) it is about 51 bytes on any machine and independent of `HOME`. It
+  stays out of `~/.config/endless`, so the suite is not handed a path to the
+  real config (ED-1583), and a socket is runtime state, not config (E-2186).
+- Every `tmux` call in the suite then reaches the private server, never the
+  user's. With no server started it fails the same way for everyone, and every
+  Endless read site takes its supported "not in tmux" branch.
+- **Teardown kills the private server** (`tmux kill-server` under the same
+  `TMUX_TMPDIR`) and removes the directory, even when setup or a check fails,
+  in the same deferred `teardown` as the run dir. Otherwise a server outlives
+  the run.
+- `_harness.sh` gains `with_tmux`. It starts a detached session on the private
+  server (`tmux new-session -d`), exports `TMUX` and `TMUX_PANE` from that
+  fixture pane, and lets the suite's checks run "inside tmux". The pane is a
+  fixture, so the result is the same whoever runs the suite. It combines with
+  `as_agent` for checks that test an agent inside tmux. `verify.toml` checks get
+  the same through a per-check key (e.g. `tmux = true`).
 
 ### 2. `as_agent`: a check that tests the agent's side says so
 
@@ -107,6 +144,12 @@ This task's own suite, run through `endless task verify`:
   the fixture session.
 - `verify.toml` with `as = "agent"` on one check: that check sees the agent env,
   and its sibling does not.
+- tmux: by default `tmux list-sessions` in the suite reaches no live session
+  (the private server is empty), and `TMUX`/`TMUX_PANE` are unset. Under
+  `with_tmux`, `TMUX_PANE` names the fixture pane and session resolution in the
+  sandbox gives the same answer from an agent's pane, a sibling pane and a
+  shell outside tmux. After the run, no server is left on the private socket and
+  its directory is gone, including after a failing check.
 - Snapshot: a suite that rewrites its own `verify.sh` mid-run still completes as
   the original script.
 - Unit tests in `internal/verifycmd` for the strip list, the agent env file and
