@@ -1,0 +1,1 @@
+E-2279's outcome proposes plan items as rows with per-task stable numbers. Research output could become such items, which would give this task a concrete target to design against.
