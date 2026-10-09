@@ -1,0 +1,209 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 38,
+      "passed": 38,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "TestPersonEnv_StripsTheCallersIdentity",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestAgentEnv_IsTheSupportedHarness",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestWriteAgentEnv",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestMakeTmuxDir_FitsASocketPath",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestSnapshotScript_KeepsTheLayout",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestRun_ScriptSuite_RunsASnapshot",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestRun_ScriptSuite_SameVerdictWhoeverRunsIt",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestRun_Manifest_AsAgentIsPerCheck",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestRun_PrivateTmuxIsTornDown",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestRun_Manifest_TmuxIsPerCheck",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestIsHarnessVar",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestObservedCLIEnv",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestCheck_AsAndTmuxParse",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the front door no longer hands the runner ENDLESS_AUDIENCE",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no caller-identity variable reached the suite",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a refusal is rendered",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "...in the person's form (no agent directive)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the footer is the person's",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "...not the agent's",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the Claude hook gate is shut for a person (payload ignored)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a person outside tmux has no session",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the same refusal renders in the agent's form",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the footer is the agent's",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the Claude hook gate is open (payload acted on)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "as_agent carries the fixed fixture session",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "endless session id resolves the fixture session",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "as_agent leaks nothing into the next check",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TMUX_TMPDIR is the run's own, under /tmp",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "tmux by default reaches no live session",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "...because it asks the private socket, where nothing runs",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the fixture pane's session is the private one",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "with_tmux names the fixture pane in TMUX_PANE",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "with_tmux's TMUX is on the private socket",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "outside with_tmux, TMUX_PANE is unset again",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "with_tmux and as_agent combine in either order",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "an agent in the fixture pane resolves the fixture session",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "this file is the run's copy",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "ENDLESS_VERIFY_DIR still names the real suite",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
