@@ -7341,3 +7341,7 @@ Priming E-2257, I asked Mike whether cross-project task links should survive the
 ### [2026-10-09] A new task_types column must be seeded in internal/schema/seeds.sql, not only schema.sql
 While adding the E-2262 land-property columns to task_types, I updated schema.sql's seed INSERT and the migration, but the Python suite failed with a VerifyIntegrity mismatch: the enum-mirror upsert that runs after every migration lives in internal/schema/seeds.sql (E-2019). Any column mirrored from a Go enum (like auto_spawnable) has to be added to that upsert too, or every connect fails closed.
 - **Project**: endless
+
+### [2026-10-09] Read silence on a recommended option as consent when relaying
+While relaying the root-commit identity change from E-2257 to the E-2217 session, I told it Mike had not yet picked among its Scope options, although Mike's message about the identity raised no objection to the recommended option 1. Mike said: 'By not mentioning it I implied my support for option 1.' In that relay, I reported an undecided choice that Mike considered decided.
+- **Project**: endless
