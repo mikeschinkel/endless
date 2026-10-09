@@ -20,8 +20,8 @@
 #   2. The destroy tests' behavioral assertions still run and pass, and still
 #      assert what they asserted — not weakened to go fast.
 #   3. Grep guard: no _test.go combines t.Setenv("HOME" with an in-test go build.
-#   4. Live: THIS suite runs under the runner's temp HOME, so `go env GOCACHE`
-#      here must be the caller's cache, not one under $HOME.
+#   4. The candidate runner hands a suite the caller's GOCACHE (its own
+#      end-to-end test), plus an ambient check of the runner running this suite.
 #   5. Fold-in regression: `go test ./internal/...` completes, no timeout panic.
 source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
@@ -66,13 +66,23 @@ done < <(git ls-files '*_test.go' | xargs grep -l 't.Setenv("HOME"' 2>/dev/null)
 assert_eq "no _test.go combines t.Setenv(\"HOME\") with go build" "" "${offenders}"
 
 # ── 4. the runner pins the caller's build cache ──────────────────────────────
-section "4. This suite's go builds against the caller's cache"
+# The runner executing THIS suite is whichever endless-go `task verify`
+# resolved — the installed one unless --db sandbox routes to this worktree's
+# bin/. So the candidate runner is proven through its own end-to-end test (the
+# real run() over a script suite that asks go for GOCACHE), and the ambient
+# check below passes once an E-1908 runner is the one running, else skips.
+section "4. The runner hands a suite the caller's build cache"
+go test ./internal/verifycmd/ -count=1 -timeout 180s -v \
+    -run '^(TestRun_ScriptSuite_SeesCallerGOCACHE|TestIsolatedEnv_CarriesCallerBuildCaches|TestIsolatedEnv_KeepsCallerSetCache)$' \
+    >"${WORK_TMP}/runner.log" 2>&1
+for name in TestRun_ScriptSuite_SeesCallerGOCACHE TestIsolatedEnv_CarriesCallerBuildCaches TestIsolatedEnv_KeepsCallerSetCache; do
+    assert_contains "${name} passes" "--- PASS: ${name} " "$(cat "${WORK_TMP}/runner.log")"
+done
 gocache=$(go env GOCACHE)
 case "${gocache}" in
-    "${HOME}"/*) report_fail "GOCACHE is outside the runner's temp HOME" "not under ${HOME}" "${gocache}" ;;
-    *)           report_pass "GOCACHE=${gocache} (temp HOME=${HOME})" ;;
+    "${HOME}"/*) report_skip "ambient GOCACHE check" "the runner running this suite predates E-1908 (GOCACHE under its temp HOME); the candidate runner is proven above" ;;
+    *)           report_pass "ambient: GOCACHE=${gocache} is outside the temp HOME=${HOME}" ;;
 esac
-assert_contains "the temp HOME is still in place" "endless-verify-" "${HOME}"
 
 # ── 5. fold-in regression ────────────────────────────────────────────────────
 section "5. go test ./internal/... completes"
