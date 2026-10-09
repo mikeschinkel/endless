@@ -55,3 +55,67 @@
    against the recorded commit.
 7. After implementation: draft the decision recording the rule. Mike asked
    that it be drafted last, not up front.
+
+## Content model from the research (settled with Mike)
+
+The research's outcome (E-2279) holds the evidence and the full model. In
+brief, with Mike's answers folded in:
+
+- **Plan items are rows** in their own table, `task_plan_items`, projected
+  from the ledger. Each row has:
+  - a per-task `seq`, never reused or renumbered, rendered `P3` or
+    `E-NNNN.P3` (numbered like a question series);
+  - an optional `parent_seq`, one level deep;
+  - a `sort_order`, separate from `seq`;
+  - a `kind`: `deliverable` or `exclusion`, where an exclusion is a scope
+    fence that the reconciliation also checks;
+  - a one-line `statement` of what will be true;
+  - an optional `verify`, which replaces the separate tests list;
+  - an optional short `detail`;
+  - an `origin`: `planned` or `grown`;
+  - a `state`: `active` or `withdrawn`;
+  - `approved_statement` and `approved_at`, the baseline;
+  - provenance.
+- **No firmness flag.** A deviation is anything that contradicts what an
+  item's statement says. If the statement does not say how something is
+  done, the way it is done is not a deviation. If the plan needs a
+  particular way, the statement says so.
+- **The `plan` field stays** as the approach prose. `task show --plan`
+  renders the items first, then the prose. The CLI mirrors `question`: add,
+  edit, withdraw, move and list, plus an `--items-file` with a defined
+  format.
+- **Grown scope becomes `grown` items**, not "As built" prose. Every
+  reconciliation entry names an item, and there is no free-floating "extra"
+  entry.
+- **Reconciliation:**
+  - `task_reconciliations` holds `tree`, the branch tree with `.endless/`
+    excluded;
+  - `task_reconciliation_entries` holds the item, the verdict, a note, and a
+    `question_id`;
+  - `task_questions` gains `kind`, one of `less`, `blocked`, `different` or
+    `more`.
+- **The gate refuses unless:**
+  - the tree is current;
+  - every active item has exactly one entry;
+  - every entry that is not as planned has an answered or closed question;
+  - every grown item has an answered question or the user's approval;
+  - every crossed exclusion has an answered question.
+
+  It also refuses a todo, bugfix or docs task with no active deliverable
+  item, unless the task was claimed before this ships.
+- **Lifecycle:**
+  - Approval copies the baseline onto each item.
+  - On a `ready` task, a material edit means the item set differs from the
+    baseline. Edits to plan prose are no longer material.
+  - While `underway`, approved statements are immutable, withdrawing an
+    approved item is refused, and the user can re-approve.
+  - From `unverified` on, items and entries are frozen. `revisit` unfreezes
+    them.
+- **Where it is enforced:** approval and spawn refuse a todo, bugfix or docs
+  task with no active deliverable item. Claim does not, because a claiming
+  session can write the items itself. There is no automatic migration of
+  existing prose plans.
+- **Docs type:** not in `task_types` yet but about to be added. The gate
+  covers it alongside todo and bugfix.
+
+Mike chose to keep this as one task rather than an epic, accepting its size.
