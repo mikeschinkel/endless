@@ -7345,3 +7345,7 @@ While adding the E-2262 land-property columns to task_types, I updated schema.sq
 ### [2026-10-09] Read silence on a recommended option as consent when relaying
 While relaying the root-commit identity change from E-2257 to the E-2217 session, I told it Mike had not yet picked among its Scope options, although Mike's message about the identity raised no objection to the recommended option 1. Mike said: 'By not mentioning it I implied my support for option 1.' In that relay, I reported an undecided choice that Mike considered decided.
 - **Project**: endless
+
+### [2026-10-09] Explain a proposed distinction with concrete examples, not abstract labels
+On E-2279 (plan-item content model) I asked Mike to decide on an item 'firmness' flag with values 'exact' vs 'outcome', described only in the abstract. Mike could not tell what they meant or what examples would look like, so he couldn't answer. When asking Mike to decide on a new concept or distinction, show it with concrete examples (ideally from real tasks) and use names that say what they mean.
+- **Project**: endless
