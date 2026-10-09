@@ -7313,3 +7313,7 @@ E-2272: my verify suite passed for me and failed for Mike on one check. A refusa
 ### [2026-10-08] Resolve duplicate tasks myself when the evidence decides it
 In E-2266, consolidating fixes per ED-1550, I found E-1908 and E-2219 had the same cause (t.Setenv HOME before an in-test go build) in the same package and told Mike 'that's yours to settle'. Mike asked why I could not decide or resolve it myself. When the code shows two open tasks share one cause, decide which survives, fold the other in with a recorded reason, and report what I did, rather than handing the call back.
 - **Project**: endless
+
+### [2026-10-09] Don't prefer shipping an interim version that a known redesign will replace
+On E-2276 (reconciling plan deviations before verify), I recommended shipping a text-based reconciliation gate now and adding structured plan items later, after a research task on plan content. Mike chose to block the work on the research and build the structure first. His reason: I over-value shorter tasks, and implementing something he will change shortly after is unnecessary churn. When a pending research or design task is likely to reshape what a task builds, recommend sequencing behind it rather than shipping an interim version.
+- **Project**: endless
