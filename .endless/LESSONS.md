@@ -7321,3 +7321,7 @@ On E-2276 (reconciling plan deviations before verify), I recommended shipping a 
 ### [2026-10-09] Fix small side effects yourself instead of handing them back
 At the end of E-2276, a refused task add had auto-registered 'study' as an action verb with a nonsense definition, and I told Mike the entry needed correcting instead of correcting it. He asked why I didn't change it myself. 'endless verb update' was available to me and the change was small and in scope, so I should have made it and reported that I had.
 - **Project**: endless
+
+### [2026-10-09] Apply a fix to whatever it was blocking
+On E-2276, I re-registered 'study' as an investigation verb but left research task E-2279 titled 'Investigate…', the workaround I had used only because 'study' was refused. Mike asked why I hadn't retitled it. After removing a blocker, go back and redo whatever you worked around because of it.
+- **Project**: endless
