@@ -1,0 +1,89 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 14,
+      "passed": 13,
+      "failed": 0,
+      "skipped": 1,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test ./internal/sandboxcmd ./internal/verifycmd in 37s (was: sandboxcmd could not finish in 10m)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestDestroyRefusesWithLiveWriter passes",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestDestroyForceOverridesLiveWriterCheck passes",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestDestroyExistingWithIfExistsStillDestroysAndReports passes",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "refusal names the live writer",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "refusal names --force",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "--force destroys and confirms",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no _test.go combines t.Setenv(\"HOME\") with go build",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestRun_ScriptSuite_SeesCallerGOCACHE passes",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestIsolatedEnv_CarriesCallerBuildCaches passes",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestIsolatedEnv_KeepsCallerSetCache passes",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "ambient GOCACHE check",
+        "status": "skipped",
+        "duration": 0
+      },
+      {
+        "name": "go test ./internal/... in 83s",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no package timeout panic",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
