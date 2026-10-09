@@ -132,14 +132,14 @@ So a suite gives the same verdict to everyone who runs it.
 - **Test both sides where they differ.** A check of the agent's experience
   wraps its command in `as_agent`; the person's needs no wrapper:
 
-      assert_not_contains "a person reads no directive" "Handle this yourself" \\
-          "$(endless task show E-99999999 --db sandbox 2>&1)"
-      assert_contains "an agent reads one" "Handle this yourself" \\
-          "$(as_agent endless task show E-99999999 --db sandbox 2>&1)"
+      assert_not_contains "a person sees no agent hint" "<agent-only text>" \\
+          "$(the-thing 2>&1)"
+      assert_contains "an agent sees it" "<agent-only text>" \\
+          "$(as_agent the-thing 2>&1)"
 
 - **A check that needs tmux** wraps its command in `with_tmux`, which runs it
   in a fixture pane on the private server. The two combine:
-  `with_tmux as_agent endless session id --db sandbox`.
+  `with_tmux as_agent the-thing`.
 - In a `verify.toml`, a check says the same with `as = "agent"` and
   `tmux = true`.
 - **Never read identity from the caller**, and never set these variables by
