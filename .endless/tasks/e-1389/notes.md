@@ -1,0 +1,1 @@
+When this lands, consider whether a relation row should carry a short reason. E-2279 found about a third of task notes are really the reason for a link ("Blocked by E-2137 because…", "Distinct from E-1306 … coordinate edits"), with nowhere else to live.
