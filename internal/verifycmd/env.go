@@ -86,12 +86,13 @@ end:
 }
 
 // isolatedEnv creates the temp HOME and XDG_CONFIG_HOME under runDir and returns
-// the environment the suite runs under: the parent environment with HOME and
-// XDG_CONFIG_HOME replaced so the suite cannot read or pollute the developer's
-// real home/config. Generic isolation, and nothing here is app-specific: both
-// variables are replaced because either may locate a tool's config, Endless's
-// main database included (E-2186: main follows XDG_CONFIG_HOME, then HOME).
-func isolatedEnv(runDir dt.DirPath) (env []string, err error) {
+// the environment the suite runs under: base — the person's environment
+// personEnv built from the caller's — with HOME and XDG_CONFIG_HOME replaced so
+// the suite cannot read or pollute the developer's real home/config. Generic
+// isolation, and nothing here is app-specific: both variables are replaced
+// because either may locate a tool's config, Endless's main database included
+// (E-2186: main follows XDG_CONFIG_HOME, then HOME).
+func isolatedEnv(runDir dt.DirPath, base []string) (env []string, err error) {
 	var home, xdg dt.DirPath
 
 	home = runDir.Join("home")
@@ -106,8 +107,8 @@ func isolatedEnv(runDir dt.DirPath) (env []string, err error) {
 		err = doterr.NewErr(ErrIsolatingEnv, err, "dir", xdg)
 		goto end
 	}
-	env = replaceEnv(os.Environ(), string(home), string(xdg))
-	env = overrideEnv(env, callerBuildCaches(os.Environ()))
+	env = replaceEnv(base, string(home), string(xdg))
+	env = overrideEnv(env, callerBuildCaches(base))
 end:
 	return env, err
 }
@@ -229,8 +230,13 @@ end:
 // reporting any test failure (a build/runner error, not a test failure) aborts
 // loudly. A driver that could not start, emit, or parse its stream returns an
 // error that aborts the run. Genuine test failures are collected and reported.
-func runChecks(checks []verify.Check, root dt.DirPath, env []string, runDir dt.DirPath) (results []checkResult, err error) {
+//
+// Each check runs as a person unless it says otherwise (E-2278): `as = "agent"`
+// layers the synthesized agent onto env for that check alone, and `tmux = true`
+// puts that check in the fixture pane on the run's private server.
+func runChecks(checks []verify.Check, root dt.DirPath, env []string, runDir, tmuxDir dt.DirPath) (results []checkResult, err error) {
 	var reportsDir dt.DirPath
+	var pane []string
 
 	reportsDir = runDir.Join("reports")
 	err = reportsDir.MkdirAll(0o755)
@@ -248,7 +254,22 @@ func runChecks(checks []verify.Check, root dt.DirPath, env []string, runDir dt.D
 			goto end
 		}
 
-		res, rerr := driver.Run(chk, root, env, reportFile)
+		chkEnv := env
+		if chk.As == verify.AsAgent {
+			chkEnv = overrideEnv(chkEnv, agentEnv())
+		}
+		if chk.Tmux {
+			if pane == nil {
+				pane, err = fixturePaneEnv(env, tmuxDir)
+				if err != nil {
+					err = doterr.NewErr(err, "check", i)
+					goto end
+				}
+			}
+			chkEnv = overrideEnv(chkEnv, pane)
+		}
+
+		res, rerr := driver.Run(chk, root, chkEnv, reportFile)
 		if rerr != nil {
 			err = doterr.NewErr(rerr, "check", i, "runner", chk.Runner)
 			goto end
@@ -293,7 +314,10 @@ func runShell(cmdStr string, root dt.DirPath, env []string) (stdout, stderr []by
 }
 
 // teardown runs the suite's teardown steps (always, mirroring E-1618's shell
-// trap) and then removes the per-run temp dir unless keep is set. env is passed
+// trap), stops the run's private tmux server and removes its directory, and then
+// removes the per-run temp dir unless keep is set. The tmux server goes even
+// with keep: a kept run dir is for reading, and a server left running outlives
+// the run it belonged to. env is passed
 // by pointer because it is filled in after teardown is deferred; a nil env means
 // isolation never completed, so the steps (which must run isolated) are skipped.
 // Teardown failures are reported but never change the run's exit code.
@@ -302,7 +326,7 @@ func runShell(cmdStr string, root dt.DirPath, env []string) (stdout, stderr []by
 // decided and none of these failures changes it, so there is nothing for a user
 // to weigh in on. The kept-directory line is not a failure at all — it is the
 // confirmation --keep was asked for — so it carries no directive either.
-func teardown(root dt.DirPath, envp *[]string, steps []string, runDir dt.DirPath, keep bool) {
+func teardown(root dt.DirPath, envp *[]string, steps []string, runDir, tmuxDir dt.DirPath, keep bool) {
 	var env []string
 
 	if envp != nil {
@@ -325,6 +349,7 @@ func teardown(root dt.DirPath, envp *[]string, steps []string, runDir dt.DirPath
 			}
 		}
 	}
+	killPrivateTmux(tmuxDir)
 	if keep {
 		refusal.Infof("kept per-run dir: %s", displayPath(string(runDir))).Print()
 		return

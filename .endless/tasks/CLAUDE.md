@@ -68,14 +68,19 @@ and the `CTRF:` line names it. A failing run's report stays in the user cache,
 where the `CTRF:` line names it, until the task passes — then the task's
 failed reports are deleted.
 
-It exports two things into a suite's environment:
+It runs a copy of `verify.sh` taken when the run starts, so editing the suite
+mid-run cannot break somebody else's run.
+
+It exports these into a suite's environment:
 
 | Variable | What it is |
 |----------|------------|
 | `ENDLESS_VERIFY_TASK` | the task being verified, `E-NNNN` |
-| `ENDLESS_VERIFY_DIR`  | this suite's own directory |
+| `ENDLESS_VERIFY_DIR`  | this suite's own directory (the real one, not the copy) |
+| `ENDLESS_VERIFY_AGENT_ENV` | the agent environment `as_agent` layers on |
+| `TMUX_TMPDIR` | the run's private tmux server, which `with_tmux` uses |
 
-Neither grants permission, and there is no variable that does. `_guard.sh`
+None of them grants permission, and there is no variable that does. `_guard.sh`
 decides what a suite may do from facts no environment can restate: the path the
 running file sits at, and whether a real config is reachable from it. It refuses
 a suite running from another task's worktree, and it refuses a direct run —
@@ -90,6 +95,34 @@ Read a file you ship beside your suite from `$ENDLESS_VERIFY_DIR`, never from a
 path you type out. A hand-written path has to match a directory-casing
 convention it cannot see, and gets that wrong silently on a case-insensitive
 filesystem and loudly on everyone else's.
+
+## Every check runs as a person
+
+Whoever starts the run — you, or the user — every check runs as a **person**.
+The runner strips the caller's identity before the suite starts: the agent
+harness's variables (`CLAUDECODE`, `CLAUDE_*`, `AI_AGENT`,
+`__CFBundleIdentifier`), `ENDLESS_AUDIENCE`, `ENDLESS_SESSION_ID`, `TMUX` and
+`TMUX_PANE`. It points `TMUX_TMPDIR` at a private, empty tmux server, so no
+check can reach the user's live sessions, and kills that server after the run.
+So a suite gives the same verdict to everyone who runs it.
+
+- **Test both sides where they differ.** A check of the agent's experience
+  wraps its command in `as_agent`; the person's needs no wrapper:
+
+      assert_not_contains "a person reads no directive" "Handle this yourself" \
+          "$(endless task show E-99999999 --db sandbox 2>&1)"
+      assert_contains "an agent reads one" "Handle this yourself" \
+          "$(as_agent endless task show E-99999999 --db sandbox 2>&1)"
+
+- **A check that needs tmux** wraps its command in `with_tmux`, which runs it
+  in a fixture pane on the private server. The two combine:
+  `with_tmux as_agent endless session id --db sandbox`.
+- In a `verify.toml`, a check says the same with `as = "agent"` and
+  `tmux = true`.
+- **Never read identity from the caller**, and never set these variables by
+  hand to "simulate" a person: the runner already did, and a hand-rolled strip
+  misses one. In zsh, `env $VARS cmd` does not word-split, so a strip built
+  that way silently does nothing — use an array or bash.
 
 ## Do not run another task's suite
 
@@ -145,7 +178,8 @@ A new script suite sources the harness and calls `summary` last:
 
 The harness gives you `section`, `assert_eq`, `assert_contains`,
 `assert_not_contains`, `report_pass`, `report_fail`, `report_skip`,
-`setup_error` (exit 2) and `summary` (exit 0 all-passed, 1 on any failure). It
+`setup_error` (exit 2), `summary` (exit 0 all-passed, 1 on any failure), and
+`as_agent` / `with_tmux` (see **Every check runs as a person**). It
 emits TAP to the runner as a side effect, so each assertion lands in the run's
 report; you write assertions, not plumbing.
 

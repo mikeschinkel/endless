@@ -42,7 +42,7 @@ func TestIsolatedEnv_CarriesCallerBuildCaches(t *testing.T) {
 	}
 	defer dir.RemoveAll()
 
-	env, err := isolatedEnv(dir)
+	env, err := isolatedEnv(dir, os.Environ())
 	if err != nil {
 		t.Fatalf("isolatedEnv: %v", err)
 	}
@@ -75,7 +75,7 @@ func TestIsolatedEnv_KeepsCallerSetCache(t *testing.T) {
 	}
 	defer dir.RemoveAll()
 
-	env, err := isolatedEnv(dir)
+	env, err := isolatedEnv(dir, os.Environ())
 	if err != nil {
 		t.Fatalf("isolatedEnv: %v", err)
 	}

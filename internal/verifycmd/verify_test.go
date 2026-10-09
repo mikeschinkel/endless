@@ -142,7 +142,7 @@ func TestIsolatedEnvReplacesHomeAndXDG(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", "/real/xdg")
 	runDir := dt.DirPath(t.TempDir())
 
-	env, err := isolatedEnv(runDir)
+	env, err := isolatedEnv(runDir, os.Environ())
 	if err != nil {
 		t.Fatalf("isolatedEnv: %v", err)
 	}

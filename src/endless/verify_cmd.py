@@ -25,6 +25,7 @@ A passing run the user made — not an agent's — also moves the task to
 (E-2262, endless.unlanded).
 """
 
+import os
 import re
 import shutil
 import subprocess
@@ -91,7 +92,7 @@ def run_verify(item_id: int | None, keep: bool) -> None:
         cmd.append("--keep")
     cmd.append(task_id)
 
-    result = subprocess.run(cmd, cwd=run_dir)
+    result = subprocess.run(cmd, cwd=run_dir, env=_runner_env())
     # stdout and stderr were inherited, so the runner's own output — a passing
     # suite, a failing check, its own classified refusal — is already on this
     # terminal. A failing run's report stays in the cache, where the runner
@@ -100,6 +101,19 @@ def run_verify(item_id: int | None, keep: bool) -> None:
         _record_passing_run(binary, task_id, resolved, sha, tree)
         unlanded.record_pass(resolved, full_sha)
     agent_help.passthrough_exit(result.returncode)
+
+
+def _runner_env() -> dict[str, str]:
+    """This process's environment without the audience the root group exported.
+
+    A suite runs as a person whoever starts it (E-2278), and the runner strips
+    the caller's identity itself; dropping the audience here removes its second
+    source. The runner's own refusals still render for an agent, because
+    endless-go detects the harness directly.
+    """
+    env = dict(os.environ)
+    env.pop(agent_help.AUDIENCE_VAR, None)
+    return env
 
 
 def _git(tree: Path, *args: str) -> subprocess.CompletedProcess:

@@ -12,6 +12,8 @@ var (
 	ErrNoSuiteForTask      = errors.New("no verification suite found for task (looked for verify.toml and verify.sh)")
 	ErrScriptStart         = errors.New("verify.sh suite failed to start")
 	ErrResettingSandbox    = errors.New("resetting the worktree's sandbox before the run")
+	ErrSnapshottingSuite   = errors.New("copying verify.sh into the run directory")
+	ErrFixtureTmux         = errors.New("starting the fixture tmux pane on the run's private server")
 
 	// The own-task-only refusal (E-2023). The sentinel is what callers match
 	// on; the message a user reads is rendered by ForeignLandedSuite, which

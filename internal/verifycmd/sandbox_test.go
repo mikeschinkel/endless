@@ -17,7 +17,7 @@ func TestResetSandboxClearsTheWorktreeSandbox(t *testing.T) {
 	if err := os.WriteFile(stale, nil, 0o644); err != nil {
 		t.Fatal(err)
 	}
-	if err := resetSandbox(dt.DirPath(worktree)); err != nil {
+	if err := resetSandbox(dt.DirPath(worktree), nil); err != nil {
 		t.Fatalf("resetSandbox: %v", err)
 	}
 	if _, err := os.Stat(stale); !os.IsNotExist(err) {
@@ -26,7 +26,7 @@ func TestResetSandboxClearsTheWorktreeSandbox(t *testing.T) {
 }
 
 func TestResetSandboxOutsideWorktreeIsANoop(t *testing.T) {
-	if err := resetSandbox(dt.DirPath(t.TempDir())); err != nil {
+	if err := resetSandbox(dt.DirPath(t.TempDir()), nil); err != nil {
 		t.Errorf("resetSandbox outside a worktree: %v", err)
 	}
 }

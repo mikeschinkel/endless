@@ -16,7 +16,10 @@
 // only one is supported (E-2006).
 package agentenv
 
-import "os"
+import (
+	"os"
+	"strings"
+)
 
 // The environment variables and values the detectors key on. Named because they
 // appear in both the table and its tests, and a typo in either would silently
@@ -24,11 +27,51 @@ import "os"
 const (
 	entrypointVar = "CLAUDE_CODE_ENTRYPOINT"
 	bundleVar     = "__CFBundleIdentifier"
+	claudeCodeVar = "CLAUDECODE"
+	sessionIDVar  = "CLAUDE_CODE_SESSION_ID"
+	aiAgentVar    = "AI_AGENT"
 
 	cliEntrypoint     = "cli"
 	desktopEntrypoint = "claude-desktop"
 	desktopBundleID   = "com.anthropic.claudefordesktop"
 )
+
+// harnessVarPrefix covers every variable Claude Code exports to a subprocess:
+// CLAUDECODE, CLAUDE_CODE_* and the CLAUDE_* rest (CLAUDE_PID, CLAUDE_EFFORT,
+// CLAUDE_AGENT_SDK_VERSION, …). A prefix rather than a list because the harness
+// adds variables between releases, and a list misses the next one silently.
+const harnessVarPrefix = "CLAUDE"
+
+// IsHarnessVar reports whether name is a variable by which an agent harness
+// identifies itself to its subprocesses: every name the detector table keys on,
+// plus the rest of what the harness exports beside them.
+//
+// It exists for a caller that has to build a PERSON's environment from an
+// agent's (E-2278: the verify runner gives every suite a person's environment,
+// whoever starts it). Keeping it beside the detectors is what stops the two
+// drifting: a variable a detector reads and this does not strip would let the
+// caller's identity leak through.
+func IsHarnessVar(name string) bool {
+	return strings.HasPrefix(name, harnessVarPrefix) ||
+		name == aiAgentVar ||
+		name == bundleVar
+}
+
+// ObservedCLIEnv returns the environment Claude Code in a terminal exports to a
+// subprocess, as observed in the dump the ClaudeCLI detector row records, with
+// sessionID in place of the live session's id.
+//
+// The values are synthesized, never copied from a running harness, so a caller
+// that needs "an agent" gets the same one wherever it runs. Detect claims the
+// result as ClaudeCLI; the test pins that.
+func ObservedCLIEnv(sessionID string) (env map[string]string) {
+	return map[string]string{
+		entrypointVar: cliEntrypoint,
+		claudeCodeVar: "1",
+		sessionIDVar:  sessionID,
+		aiAgentVar:    "claude-code_2-1-222_agent",
+	}
+}
 
 // ID names an agent harness. Values are stable strings because they are
 // intended to become config and DB values (see E-1505, which needs a

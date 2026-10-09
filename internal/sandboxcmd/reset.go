@@ -79,6 +79,14 @@ func resetCmd(args []string) {
 // on to run a suite against a half-seeded sandbox would report the wrong
 // failure.
 func Reset(dir string, out io.Writer) (string, error) {
+	return ResetEnv(dir, out, nil)
+}
+
+// ResetEnv is Reset with the hook run under env instead of the caller's
+// environment; a nil env inherits it, as Reset does. The verify runner passes a
+// person's environment so the seeded sandbox is the same whoever starts the run
+// (E-2278).
+func ResetEnv(dir string, out io.Writer, env []string) (string, error) {
 	worktree := monitor.WorktreeRoot(dir)
 	sandboxDir := monitor.WorktreeSandboxDir(dir)
 	if worktree == "" || sandboxDir == "" {
@@ -101,14 +109,14 @@ func Reset(dir string, out io.Writer) (string, error) {
 	}
 	// <root>/.endless/worktrees/e-NNN → <root>
 	projectRoot := filepath.Dir(filepath.Dir(filepath.Dir(worktree)))
-	if err := runSeedHook(projectRoot, worktree, sandboxDir, out); err != nil {
+	if err := runSeedHook(projectRoot, worktree, sandboxDir, out, env); err != nil {
 		return "", err
 	}
 	return sandboxDir, nil
 }
 
 // runSeedHook runs the project's seed-sandbox hook if it has one.
-func runSeedHook(projectRoot, worktree, sandboxDir string, out io.Writer) error {
+func runSeedHook(projectRoot, worktree, sandboxDir string, out io.Writer, env []string) error {
 	hook := filepath.Join(projectRoot, SeedSandboxHook)
 	info, err := os.Stat(hook)
 	if errors.Is(err, os.ErrNotExist) {
@@ -132,6 +140,7 @@ func runSeedHook(projectRoot, worktree, sandboxDir string, out io.Writer) error 
 	}
 	cmd := exec.Command(hook, worktree, sandboxDir)
 	cmd.Dir = worktree
+	cmd.Env = env
 	cmd.Stdout = out
 	cmd.Stderr = out
 	if err := cmd.Run(); err != nil {

@@ -195,6 +195,18 @@ func classify(err error) *refusal.Error {
 			"what to do about a temp directory Endless just created and cannot write into").
 			Command("verify")
 
+	case errors.Is(err, ErrFixtureTmux):
+		return refusal.ReportIf(msg,
+			"tmux is not installed on this machine",
+			"fix the check's tmux use and retry",
+			"installing tmux is theirs to do",
+		).Command("verify")
+
+	case errors.Is(err, ErrSnapshottingSuite):
+		return refusal.Report(msg,
+			"what to do about a suite Endless could not copy into a temp directory it just created").
+			Command("verify")
+
 	case errors.Is(err, ErrWritingCTRF):
 		return refusal.Report(msg,
 			"whether to fix the cache directory — the suite ran, but its verdict could not be written").
@@ -223,7 +235,7 @@ func run(id string, keep bool) (code int, err error) {
 	var script dt.Filepath
 	var eff *verify.Manifest
 	var ok bool
-	var runDir dt.DirPath
+	var runDir, tmuxDir dt.DirPath
 	var env []string
 	var results []checkResult
 	var merged *verify.Report
@@ -264,10 +276,6 @@ func run(id string, keep bool) (code int, err error) {
 				"suites_found", suiteCount(manifests, scripts), "root", root)
 			goto end
 		}
-		err = resetSandbox(root)
-		if err != nil {
-			goto end
-		}
 		code, err = runScriptSuite(id, script, root, keep)
 		goto end
 	}
@@ -284,26 +292,22 @@ func run(id string, keep bool) (code int, err error) {
 		goto end
 	}
 
-	err = resetSandbox(root)
+	runDir, err = makeRunDir()
 	if err != nil {
 		goto end
 	}
-
-	runDir, err = makeRunDir()
+	tmuxDir, err = makeTmuxDir()
 	if err != nil {
+		_ = runDir.RemoveAll()
 		goto end
 	}
 	// Teardown is registered BEFORE setup runs so a failing setup step still
 	// triggers teardown + cleanup (E-1618's shell-trap parity). env is captured
 	// by reference; if isolation below fails it stays nil and teardown skips its
 	// steps (they must run under the isolated env or not at all).
-	defer teardown(root, &env, eff.Teardown, runDir, keep)
+	defer teardown(root, &env, eff.Teardown, runDir, tmuxDir, keep)
 
-	env, err = isolatedEnv(runDir)
-	if err != nil {
-		goto end
-	}
-	env, err = suiteEnv(env, id, root)
+	env, err = prepareEnv(id, root, runDir, tmuxDir)
 	if err != nil {
 		goto end
 	}
@@ -315,7 +319,7 @@ func run(id string, keep bool) (code int, err error) {
 		goto end
 	}
 
-	results, err = runChecks(eff.Checks, root, env, runDir)
+	results, err = runChecks(eff.Checks, root, env, runDir, tmuxDir)
 	if err != nil {
 		goto end
 	}
@@ -333,6 +337,39 @@ func run(id string, keep bool) (code int, err error) {
 
 end:
 	return code, err
+}
+
+// prepareEnv builds the environment a suite runs under, in the order each step
+// needs: a person's environment from the caller's (E-2278), the sandbox reset
+// under it while the real HOME is still in place, then isolation, the suite's
+// own variables, and the agent environment file `as_agent` reads.
+func prepareEnv(id string, root, runDir, tmuxDir dt.DirPath) (env []string, err error) {
+	var person []string
+	var agentFile dt.Filepath
+
+	person = personEnv(os.Environ(), tmuxDir)
+	err = resetSandbox(root, person)
+	if err != nil {
+		goto end
+	}
+	env, err = isolatedEnv(runDir, person)
+	if err != nil {
+		goto end
+	}
+	env, err = suiteEnv(env, id, root)
+	if err != nil {
+		goto end
+	}
+	agentFile, err = writeAgentEnv(runDir)
+	if err != nil {
+		goto end
+	}
+	env = append(env, EnvAgentEnvFile+"="+string(agentFile))
+end:
+	if err != nil {
+		env = nil
+	}
+	return env, err
 }
 
 // suiteCount reports how many DISTINCT tasks have a suite, in either form.

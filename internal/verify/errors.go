@@ -27,6 +27,7 @@ var (
 	ErrFormatMismatch            = errors.New("declared format does not match the runner's inferred format")
 	ErrMalformedRunner           = errors.New("malformed runner type: expected family or family/variant")
 	ErrUnknownVariant            = errors.New("runner family does not implement the declared variant")
+	ErrUnknownCheckAs            = errors.New("unknown check environment: as must be person or agent")
 
 	// Driver execution (a driver executes and normalizes its own run).
 	ErrCheckStart     = errors.New("check command failed to start")

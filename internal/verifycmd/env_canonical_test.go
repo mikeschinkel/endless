@@ -1,6 +1,7 @@
 package verifycmd
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -40,7 +41,7 @@ func TestIsolatedEnv_HomeIsCanonical(t *testing.T) {
 	}
 	defer dir.RemoveAll()
 
-	env, err := isolatedEnv(dir)
+	env, err := isolatedEnv(dir, os.Environ())
 	if err != nil {
 		t.Fatalf("isolatedEnv: %v", err)
 	}

@@ -26,7 +26,25 @@ type Check struct {
 	Paths   []string `toml:"paths"`
 	Command string   `toml:"command"`
 	Format  Format   `toml:"format"`
+
+	// As names whose environment this check runs in. Empty (or "person") is the
+	// default every check gets: a person's, whoever started the run. "agent"
+	// layers the supported harness's environment on top (E-2278), so a check
+	// that tests the agent's experience says so instead of inheriting it from
+	// whoever happened to call the runner.
+	As string `toml:"as"`
+
+	// Tmux runs this check inside a fixture pane on the run's private tmux
+	// server, with TMUX and TMUX_PANE naming it. Without it a check runs
+	// outside tmux, and no check can reach the user's live server either way.
+	Tmux bool `toml:"tmux"`
 }
+
+// The values Check.As accepts.
+const (
+	AsPerson = "person"
+	AsAgent  = "agent"
+)
 
 // ResolvedFormat returns the native result-stream format this check emits: the
 // driver's inferred format for a structured driver, or the declared Format
@@ -98,6 +116,14 @@ func validateCheck(c Check, index int) (err error) {
 	d, err = LookupDriver(c.Runner)
 	if err != nil {
 		err = doterr.NewErr(ErrInvalidManifest, err, "index", index, "runner", c.Runner)
+		goto end
+	}
+
+	switch c.As {
+	case "", AsPerson, AsAgent:
+	default:
+		err = doterr.NewErr(ErrInvalidManifest, ErrUnknownCheckAs,
+			"index", index, "as", c.As, "allowed", AsPerson+", "+AsAgent)
 		goto end
 	}
 

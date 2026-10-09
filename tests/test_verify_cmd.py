@@ -89,6 +89,31 @@ def test_nonzero_exit_propagates(monkeypatch):
     assert exc.value.code == 2
 
 
+def test_runner_env_drops_the_exported_audience(monkeypatch):
+    """A suite runs as a person whoever starts it (E-2278).
+
+    The root group exports ENDLESS_AUDIENCE=agent for an agent; handing that
+    to the runner made every check render in the agent's form for an agent
+    and the person's for a person, so the same suite gave them different
+    verdicts. The rest of the environment passes through untouched.
+    """
+    monkeypatch.setenv("ENDLESS_AUDIENCE", "agent")
+    monkeypatch.setenv("E2278_PROBE", "kept")
+    envs: list = []
+
+    def fake_run(cmd, **kwargs):
+        envs.append(kwargs.get("env"))
+        return _FakeProc(0)
+
+    monkeypatch.setattr(subprocess, "run", fake_run)
+    _stub_git_side(monkeypatch)
+    with pytest.raises(SystemExit):
+        verify_cmd.run_verify(1603, keep=False)
+    assert len(envs) == 1
+    assert "ENDLESS_AUDIENCE" not in envs[0]
+    assert envs[0]["E2278_PROBE"] == "kept"
+
+
 def test_none_id_resolves_active_task(monkeypatch):
     calls = _stub_run(monkeypatch, returncode=0)
     monkeypatch.setattr(verify_cmd, "_current_session_task_id", lambda: 1758)

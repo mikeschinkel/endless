@@ -46,8 +46,10 @@ const (
 const tapFile = "verify.tap"
 
 // runScriptSuite runs a task's verify.sh under the same Tier-0 isolation the
-// manifest path uses — a fresh temp dir plus a temp HOME and XDG_CONFIG_HOME —
-// and normalizes its outcome into the same CTRF envelope.
+// manifest path uses — a fresh temp dir plus a temp HOME and XDG_CONFIG_HOME, a
+// person's environment and a private tmux server — and normalizes its outcome
+// into the same CTRF envelope. It runs a snapshot of the script, not the file in
+// the worktree (see snapshotScript).
 //
 // The script's stdout and stderr are passed STRAIGHT THROUGH rather than
 // captured. A script suite's output is its report: it prints a pass/fail line
@@ -61,8 +63,9 @@ const tapFile = "verify.tap"
 // through the runner is identical to what it was when it was executed directly,
 // including the exit-2 setup-error convention these scripts share.
 func runScriptSuite(id string, script dt.Filepath, root dt.DirPath, keep bool) (code int, err error) {
-	var runDir dt.DirPath
+	var runDir, tmuxDir dt.DirPath
 	var env []string
+	var snapshot dt.Filepath
 	var tapPath dt.Filepath
 	var rpt *verify.Report
 	var merged *verify.Report
@@ -73,14 +76,19 @@ func runScriptSuite(id string, script dt.Filepath, root dt.DirPath, keep bool) (
 	if err != nil {
 		goto end
 	}
-	defer teardown(root, &env, nil, runDir, keep)
+	tmuxDir, err = makeTmuxDir()
+	if err != nil {
+		_ = runDir.RemoveAll()
+		goto end
+	}
+	defer teardown(root, &env, nil, runDir, tmuxDir, keep)
 
-	env, err = isolatedEnv(runDir)
+	env, err = prepareEnv(id, root, runDir, tmuxDir)
 	if err != nil {
 		goto end
 	}
 
-	env, err = suiteEnv(env, id, root)
+	snapshot, err = snapshotScript(script, runDir)
 	if err != nil {
 		goto end
 	}
@@ -91,7 +99,7 @@ func runScriptSuite(id string, script dt.Filepath, root dt.DirPath, keep bool) (
 	}
 	env = append(env, EnvTAPPath+"="+string(tapPath))
 
-	code, err = execScript(script, root, env)
+	code, err = execScript(snapshot, root, env)
 	if err != nil {
 		goto end
 	}

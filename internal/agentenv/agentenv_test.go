@@ -246,3 +246,39 @@ func TestDetectorsAreOrderedMostSpecificFirst(t *testing.T) {
 			"refusal, because Desktop is detected partly by ABSENCE", detectors[0].id)
 	}
 }
+
+// TestIsHarnessVar pins that every variable a detector keys on is one a
+// person-environment builder strips (E-2278). A detector reading a variable
+// this lets through would let the caller's identity reach the child.
+func TestIsHarnessVar(t *testing.T) {
+	for _, name := range []string{
+		entrypointVar, bundleVar, claudeCodeVar, sessionIDVar, aiAgentVar,
+		"CLAUDE_AGENT_SDK_VERSION", "CLAUDE_CODE_HOST_SESSION_ID", "CLAUDE_PID",
+	} {
+		if !IsHarnessVar(name) {
+			t.Errorf("IsHarnessVar(%q) = false; it identifies the harness", name)
+		}
+	}
+	for _, name := range []string{"PATH", "HOME", "TERM", "ENDLESS_AUDIENCE", "XCLAUDE"} {
+		if IsHarnessVar(name) {
+			t.Errorf("IsHarnessVar(%q) = true; it is not a harness variable", name)
+		}
+	}
+}
+
+// TestObservedCLIEnv pins that the synthesized agent IS the supported harness,
+// and carries the session id it was given rather than a live one.
+func TestObservedCLIEnv(t *testing.T) {
+	vars := ObservedCLIEnv("fixture-id")
+	if got := DetectWith(env(vars)); got != ClaudeCLI {
+		t.Errorf("DetectWith(ObservedCLIEnv) = %q, want %q", got, ClaudeCLI)
+	}
+	if vars[sessionIDVar] != "fixture-id" {
+		t.Errorf("session id = %q, want the one passed in", vars[sessionIDVar])
+	}
+	for name := range vars {
+		if !IsHarnessVar(name) {
+			t.Errorf("ObservedCLIEnv sets %q, which IsHarnessVar does not strip", name)
+		}
+	}
+}

@@ -156,6 +156,58 @@ assert_not_contains() {
     fi
 }
 
+# ── Whose experience a check tests ─────────────────────────────────────────
+#
+# Every check runs as a PERSON, whoever started the run: the runner strips the
+# caller's identity (the agent harness's variables, ENDLESS_AUDIENCE,
+# ENDLESS_SESSION_ID, TMUX, TMUX_PANE) and points TMUX_TMPDIR at a private,
+# empty tmux server of the run's own. So a suite's verdict cannot depend on who
+# ran it. Test both sides where they differ, and never read identity from the
+# caller — wrap the check instead.
+
+# as_agent runs one command as the supported agent harness: the runner's
+# synthesized agent environment (a fixed fixture session id, the agent audience)
+# layered onto the person default. It runs in a subshell, so it wraps shell
+# functions too, and nothing leaks into the next check.
+#
+#     out="$(as_agent endless task show E-99999999 --db sandbox 2>&1)"
+as_agent() {
+    local file="${ENDLESS_VERIFY_AGENT_ENV:-}"
+    [[ -n "${file}" && -f "${file}" ]] \
+        || setup_error "as_agent: ENDLESS_VERIFY_AGENT_ENV is not set — run the suite through \`endless task verify\`"
+    (
+        local kv
+        while IFS= read -r kv || [[ -n "${kv}" ]]; do
+            [[ -n "${kv}" ]] && export "${kv?}"
+        done <"${file}"
+        "$@"
+    )
+}
+
+# with_tmux runs one command inside tmux: a fixture pane on the run's private
+# server, started on first use, with TMUX and TMUX_PANE naming it. The pane
+# runs `sh`, not your shell, so it is the same pane whoever runs the suite. It
+# combines with as_agent in either order (`with_tmux as_agent cmd …`).
+#
+# The runner kills the private server after the run, pass or fail.
+with_tmux() {
+    local session="endless-verify" info
+    [[ -n "${TMUX_TMPDIR:-}" ]] \
+        || setup_error "with_tmux: TMUX_TMPDIR is not set — run the suite through \`endless task verify\`"
+    if ! env -u TMUX -u TMUX_PANE tmux has-session -t "${session}" 2>/dev/null; then
+        env -u TMUX -u TMUX_PANE tmux new-session -d -s "${session}" -x 200 -y 50 sh \
+            || setup_error "with_tmux: could not start the fixture tmux session"
+    fi
+    info="$(env -u TMUX -u TMUX_PANE tmux display-message -p -t "${session}:" \
+        '#{socket_path},#{pid},#{session_id} #{pane_id}')" \
+        || setup_error "with_tmux: could not read the fixture pane"
+    (
+        export TMUX="${info%% *}" TMUX_PANE="${info##* }"
+        TMUX="${TMUX/,\$/,}"
+        "$@"
+    )
+}
+
 setup_error() {
     printf '%sSETUP ERROR:%s %s\n' "${RED}${BOLD}" "${RESET}" "$1" >&2
     tap "Bail out! $1"
