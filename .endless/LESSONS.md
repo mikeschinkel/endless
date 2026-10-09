@@ -7325,3 +7325,7 @@ At the end of E-2276, a refused task add had auto-registered 'study' as an actio
 ### [2026-10-09] Apply a fix to whatever it was blocking
 On E-2276, I re-registered 'study' as an investigation verb but left research task E-2279 titled 'Investigate…', the workaround I had used only because 'study' was refused. Mike asked why I hadn't retitled it. After removing a blocker, go back and redo whatever you worked around because of it.
 - **Project**: endless
+
+### [2026-10-09] Read a research task's parent epic decisions before reporting findings
+Priming E-2257 (classify tables for the E-2215 storage split), I listed the task-ID allocator colliding across project files as a finding. Mike pointed out it was already decided: a machine-DB mirror table is the canonical source of task ids, with a sync job filling in fields like name and title from project DBs. E-2215's plan said so. In that research I re-raised something its parent epic had already decided.
+- **Project**: endless
