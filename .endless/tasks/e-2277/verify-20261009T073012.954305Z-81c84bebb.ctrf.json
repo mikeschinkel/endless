@@ -1,0 +1,59 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 8,
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test ./internal/monitor/: stale-after-land, cache, reaper and probe tests",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest: land warms the landed worktree after recording; a failed warm never fails the land",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "on-demand probe after the land: unsettled",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "on-demand probe after the land: unlanded_count",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "on-demand probe after the land: reason",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the probe wrote settled/\u003cbranch-tip\u003e, which the ◆ column reads with no job pass",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "new unlanded commit: unsettled",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "new unlanded commit: unlanded_count",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
