@@ -7337,3 +7337,7 @@ Priming E-2257, I reported that sessions.task_id gets set to NULL when its task 
 ### [2026-10-09] Search for existing tasks on a topic before asking the user about it
 Priming E-2257, I asked Mike whether cross-project task links should survive the storage split. Mike pointed out there is already a task about how cross-project links are handled (E-2249 / E-2247). The question also said 'span two' without naming projects, and Mike had to ask 'two what?'. In that case I asked about something already filed and worded the question ambiguously.
 - **Project**: endless
+
+### [2026-10-09] A new task_types column must be seeded in internal/schema/seeds.sql, not only schema.sql
+While adding the E-2262 land-property columns to task_types, I updated schema.sql's seed INSERT and the migration, but the Python suite failed with a VerifyIntegrity mismatch: the enum-mirror upsert that runs after every migration lives in internal/schema/seeds.sql (E-2019). Any column mirrored from a Go enum (like auto_spawnable) has to be added to that upsert too, or every connect fails closed.
+- **Project**: endless
