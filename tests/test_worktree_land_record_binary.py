@@ -304,3 +304,44 @@ def test_a_failed_clear_never_fails_the_land(monkeypatch, capsys):
     assert "store locked" in err
     assert "endless errors list" in err
     assert "The land succeeded" in err
+
+
+# --- E-2277: the land asks for the verdict it just made true ----------------
+
+def test_land_warms_the_landed_worktree_after_recording(landable, monkeypatch):
+    main, wt = landable
+    calls = []
+    _patch_land(monkeypatch, main, wt, calls)
+
+    def warm(path):
+        # By the time the probe runs, the branch tip is an ancestor of main —
+        # the state the Go probe answers settled for without a comparison.
+        contained = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", _head(wt), "main"],
+            cwd=str(main), capture_output=True,
+        ).returncode == 0
+        calls.append(("warm", (str(path), contained)))
+
+    monkeypatch.setattr(worktree_cmd, "_warm_unlanded_cache", warm)
+
+    land_worktree(CANON, dry_run=False)
+
+    order = [c[0] for c in calls]
+    assert order.index("warm") > order.index("record")
+    assert dict(calls)["warm"] == (str(wt), True)
+
+
+def test_a_failed_warm_never_fails_the_land(landable, monkeypatch):
+    main, wt = landable
+    calls = []
+    _patch_land(monkeypatch, main, wt, calls)
+
+    def broken(path):
+        raise OSError("endless-go vanished")
+
+    monkeypatch.setattr(worktree_cmd, "_warm_unlanded_cache", broken)
+
+    land_worktree(CANON, dry_run=False)
+
+    assert _head(main, "main") == _head(wt)
+    assert "record" in [c[0] for c in calls]

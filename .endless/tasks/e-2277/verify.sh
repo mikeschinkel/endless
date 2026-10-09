@@ -33,6 +33,13 @@ else
     summary
 fi
 
+if uv run pytest -q tests/test_worktree_land_record_binary.py >"${TMP}/py.log" 2>&1; then
+    report_pass "pytest: land warms the landed worktree after recording; a failed warm never fails the land"
+else
+    report_fail "pytest tests/test_worktree_land_record_binary.py" "exit 0" "$(tail -25 "${TMP}/py.log")"
+    summary
+fi
+
 # ── 2. end to end: a real repo, a real land, the built probe ────────────────
 section "2. a just-landed worktree reads settled straight away"
 
