@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"github.com/mikeschinkel/endless/internal/refusal"
@@ -106,8 +107,82 @@ func isolatedEnv(runDir dt.DirPath) (env []string, err error) {
 		goto end
 	}
 	env = replaceEnv(os.Environ(), string(home), string(xdg))
+	env = overrideEnv(env, callerBuildCaches(os.Environ()))
 end:
 	return env, err
+}
+
+// overrideEnv returns base with every key in kvs dropped and kvs appended, so
+// an exported-but-empty entry cannot shadow or duplicate the value set here.
+func overrideEnv(base, kvs []string) (env []string) {
+	env = make([]string, 0, len(base)+len(kvs))
+	for _, kv := range base {
+		key, _, _ := strings.Cut(kv, "=")
+		if !slices.ContainsFunc(kvs, func(s string) bool { return strings.HasPrefix(s, key+"=") }) {
+			env = append(env, kv)
+		}
+	}
+	return append(env, kvs...)
+}
+
+// buildCaches are the build caches a toolchain locates under HOME by default,
+// each with the command that asks the toolchain where the caller's is.
+var buildCaches = []struct {
+	key  string
+	argv []string
+}{
+	{key: "GOCACHE", argv: []string{"go", "env", "GOCACHE"}},
+	{key: "GOMODCACHE", argv: []string{"go", "env", "GOMODCACHE"}},
+	{key: "UV_CACHE_DIR", argv: []string{"uv", "cache", "dir"}},
+}
+
+// callerBuildCaches resolves, under the caller's own environment base, where
+// each toolchain's build cache lives, and returns them as KEY=value entries for
+// the suite. Without them a suite compiles against an empty cache under the
+// temp HOME: a `go test` that takes seconds against the caller's cache takes
+// minutes cold, enough to miss deadlines and blow timeouts (E-1908).
+//
+// These are caches, not config, so pinning them leaves the isolation goal
+// intact: nothing here makes the caller's config or database reachable. A key
+// the caller already set is left alone (it survives replaceEnv as-is), and a
+// toolchain that is not installed, or cannot answer, is skipped: the suite then
+// runs cold, which is slow but still correct.
+func callerBuildCaches(base []string) (kvs []string) {
+	for _, bc := range buildCaches {
+		var out []byte
+		var err error
+		var dir string
+
+		if hasEnv(base, bc.key) {
+			continue
+		}
+		if _, err = exec.LookPath(bc.argv[0]); err != nil {
+			continue
+		}
+		cmd := exec.Command(bc.argv[0], bc.argv[1:]...)
+		cmd.Env = base
+		out, err = cmd.Output()
+		if err != nil {
+			continue
+		}
+		dir = strings.TrimSpace(string(out))
+		if dir == "" {
+			continue
+		}
+		kvs = append(kvs, bc.key+"="+dir)
+	}
+	return kvs
+}
+
+// hasEnv reports whether env sets key to a non-empty value.
+func hasEnv(env []string, key string) (has bool) {
+	for _, kv := range env {
+		v, ok := strings.CutPrefix(kv, key+"=")
+		if ok && v != "" {
+			has = true
+		}
+	}
+	return has
 }
 
 // replaceEnv returns base with any existing HOME / XDG_CONFIG_HOME entries
