@@ -71,3 +71,21 @@ cleanup if anyone wants it.
 
 
 
+
+
+
+## Grown scope (recorded during implementation)
+
+- **GOMODCACHE pinned too.** GOPATH defaults to `$HOME/go`, so for anyone
+  without GOPATH set the runner's temp HOME also moves the module cache and
+  forces module re-downloads. Same cause, same fix: the runner pins
+  `GOCACHE`, `GOMODCACHE` and `UV_CACHE_DIR` (each only when the caller has
+  not set it; a missing toolchain is skipped).
+- **The once-built test binary builds with the environment TestMain captured**,
+  not the calling test's, so a future caller that redirects HOME cannot bring
+  the cold build back.
+- **Verify suite location** is `.endless/tasks/e-1908/verify.sh` (current
+  convention), not `tests/tasks/`. Its runner check proves the candidate runner
+  through its own end-to-end Go test, because `endless task verify` runs the
+  installed `endless-go` unless `--db sandbox` is active; the ambient GOCACHE
+  check passes once an E-1908 runner runs the suite, and skips before then.
