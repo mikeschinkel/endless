@@ -154,3 +154,8 @@ This task's own suite, run through `endless task verify`:
   the original script.
 - Unit tests in `internal/verifycmd` for the strip list, the agent env file and
   the snapshot layout. `just test-go` and `just test` stay green.
+
+## Also done (folded in during implementation)
+
+- The guide's verify section still described `ENDLESS_VERIFY_RUN`, the marker
+  E-2090 removed; the paragraph rewritten for step 4 drops it.
