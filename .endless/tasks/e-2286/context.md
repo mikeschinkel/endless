@@ -1,0 +1,1 @@
+Opt-in settings like main_sync went unnoticed because nothing surfaced them. endless doctor fixes that only if people run it. The doctor brainstorm deliberately deferred discovery until a useful doctor exists.
