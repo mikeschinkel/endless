@@ -7373,3 +7373,7 @@ Situation: explaining an 'eeh' report that said '1 occurrence(s) recorded to the
 ### [2026-10-09] Keep message headers terse
 Situation: proposing replacement eeh header text for the log-only fault rename (E-2288). I proposed 'written to the log only — the database write failed'; Mike said it was too long and chose 'written to log only; DB write failed'. For this header he wanted the short form: drop articles, use 'DB', join the clauses with a semicolon.
 - **Project**: endless
+
+### [2026-10-09] Ledger history for non-Endless projects is not critical yet
+While filing a go-cliutil task from E-2283, I held off because Endless's auto-commit might land a ledger commit in go-cliutil that the ledger rules say must never be reverted. Mike said Endless has not really been used for anything but Endless, so ledger history for other projects is moot for now. Those projects are not treated as critical until the related code is robust, and I can do what the work needs in them without worrying about their ledger. This applies to non-Endless projects only: the Endless ledger rules still hold in full.
+- **Project**: endless
