@@ -70,7 +70,17 @@ The check registry has the same shape. Its per-entry validation: stable check ID
 ### Why no shared generic registry
 A `registry.List[T]` helper with validate hooks would save about 30 lines across the two packages. It is also a registry of registries in miniature, which you have said you do not want. Two plain packages also let each validation read in its own domain terms.
 
-## Open questions for you (to settle before E-2284 and E-2285 start)
+## Decisions (Mike, after reading these findings)
+- **Pattern A for both registries:** accepted.
+- **internal/jobs converts to pattern A:** `init()` registration can never fail, and the empty-name and duplicate checks move into `jobs.Initialize() error`. This ships with E-2284 or E-2285, whichever adds the `endless-go` startup `initialize()` step first. A note is on both tasks.
+- **An `Initialize` failure stops every `endless-go` command:** accepted.
+- **Settings and checks split, option A:** two independent registries. A setting declares its ID, scope, tri-state default, rationale, and a function that reads its current value. `--suggestions` iterates the settings registry. The check registry holds problem checks only, and may refer to a setting by ID. The other two options were rejected:
+  - Settings feeding the check registry merges suggestions and problems, which have different decline and accept rules.
+  - Settings carrying their own problem checks splits check registration across two places.
+- **Root cause of go-cliutil's A′ regression:** the fixup code added in 442b786 should have done its work in `Initialize()`, not in `RegisterCommand()`. That work is being filed in the go-cliutil project.
+- **gomion:** Mike fixed the `Initialize` condition himself (`if err != nil`). It is uncommitted in gomion's main.
+
+## Open questions (answered above) (to settle before E-2284 and E-2285 start)
 1. **Convert `internal/jobs` to pattern A as well?** Doing it is small: drop the panics, move the empty and duplicate checks into `jobs.Initialize() error`, and call it in the same startup step. That gives Endless one convention. My recommendation: yes, folded into E-2284 or E-2285 (whichever lands the startup `initialize()` first) rather than filed separately. Your call.
 2. **Should `Initialize` failure block every `endless-go` command, or only doctor and settings commands?** Blocking everything is the strict reading of "fail gracefully from main()", and the Go test above makes it a development-time failure only. The alternative (each command initializes only what it uses) adds no real safety and makes startup more complex. My recommendation: block everything.
 3. **Does a setting's `Check` belong to the setting, or does doctor derive a "suggest" entry from each setting?** The design reads as: the settings registry carries the metadata, `--suggestions` iterates settings, and the check registry holds problems only. I recommend keeping that split, so neither registry depends on the other's types except through setting IDs.
