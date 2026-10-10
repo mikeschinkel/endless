@@ -1,0 +1,109 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 18,
+      "passed": 18,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test: faults, faultrow, errorscmd, hookcmd, sessionstatuscmd",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestRecord_WritesTheLogOnlySpelling",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestLogOnly_ListsAndClearsPreRenameLines",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestRecord_WritesTheLogLineWhenTheDBWriteFails",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestRender_NoticeCountsLogOnlyBesideAHealthyStore",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the new line is the one just raised",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it is marked log_only",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and says why the database write failed, as db_error",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and carries no unindexed key",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and no index_error key",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "errors list uses the new header",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and the new reason prefix",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the pre-rename line is listed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "with its old index_error shown as the reason",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "nothing says indexed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "clear --log dismisses both spellings",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and the listing no longer shows them",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no unindexed/index_error outside the back-compat reader",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
