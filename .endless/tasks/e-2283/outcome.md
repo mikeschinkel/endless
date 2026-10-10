@@ -77,7 +77,7 @@ A `registry.List[T]` helper with validate hooks would save about 30 lines across
 - **Settings and checks split, option A:** two independent registries. A setting declares its ID, scope, tri-state default, rationale, and a function that reads its current value. `--suggestions` iterates the settings registry. The check registry holds problem checks only, and may refer to a setting by ID. The other two options were rejected:
   - Settings feeding the check registry merges suggestions and problems, which have different decline and accept rules.
   - Settings carrying their own problem checks splits check registration across two places.
-- **Root cause of go-cliutil's A′ regression:** the fixup code added in 442b786 should have done its work in `Initialize()`, not in `RegisterCommand()`. That work is being filed in the go-cliutil project.
+- **Root cause of go-cliutil's A′ regression:** the fixup code added in 442b786 should have done its work in `Initialize()`, not in `RegisterCommand()`. Filed as E-2289 in the go-cliutil project.
 - **gomion:** Mike fixed the `Initialize` condition himself (`if err != nil`). It is uncommitted in gomion's main.
 
 ## Open questions (answered above) (to settle before E-2284 and E-2285 start)
