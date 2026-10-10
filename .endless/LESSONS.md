@@ -7381,3 +7381,7 @@ While filing a go-cliutil task from E-2283, I held off because Endless's auto-co
 ### [2026-10-09] Plan any task from any session; only the work is session-bound
 After E-2276 finished, I said planning E-2280 belonged to a new session because this one was bound to E-2276. Mike corrected me: work must be done in a task's own session, but planning a task can be done in any session. I had stretched the guide's 'a session claims one task for its lifetime' from claiming to planning.
 - **Project**: endless
+
+### [2026-10-09] Fold a finding into the open task it shares a cause with
+In E-2283, after filing E-2291 (point claim's no-plan refusal to task bind), I found that bind also writes a 'claimed' session_tasks row. I recommended filing that as a separate task because it was a schema and event change while E-2291 was a text change. Mike pointed to ED-1550: fold a finding into an OPEN task, and file the cause rather than each symptom. Both came from one cause, bind treated as a claim rather than as the step before one, and E-2291 was open and unplanned. The size difference between the two parts was not a reason to split them.
+- **Project**: endless
