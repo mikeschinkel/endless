@@ -46,10 +46,10 @@ A command that looks at how a machine and its projects are set up *before* anyth
 ## Deferred
 - How users discover doctor exists (install/init, session-start nudge, etc.) is downstream. First build a useful doctor, then decide how to surface it.
 
-## Follow-ups filed
+## Follow-ups filed (grouped under epic E-2287 "Build endless doctor")
 - E-2283 (research): review go-pkgs registration patterns and recommend one for both registries. Blocks E-2284 and E-2285.
 - E-2284 (todo): Go settings registry with doctor metadata (tri-state, scope, rationale, check); starts by finding existing settings.
 - E-2285 (todo): endless doctor command and Go check registry. Only --suggestions depends on E-2284.
-- ED-1616 (decision, proposed): worktree check becomes an alias for doctor's worktree scope (option b).
-- ED-1617 (decision, proposed): endless doctor --fix is user-only.
+- The worktree check alias (option b) is a design note in E-2285, not a decision; ED-1616 was rejected as task-level rather than architectural.
+- ED-1617 (decision, accepted): endless doctor --fix is user-only.
 - E-2286 (brainstorm, later): how users discover endless doctor.
