@@ -7369,3 +7369,7 @@ At the end of the endless doctor brainstorm (E-2258), I filed two decisions (wor
 ### [2026-10-09] Use plain words in user-facing text, not coined terms
 Situation: explaining an 'eeh' report that said '1 occurrence(s) recorded to the log but never indexed' (fault log lines whose errors-table row could not be written, E-1887). Mike pointed out that 'indexed' was a coined term for 'a database row was added' that no one approved, so a reader has to learn what it means instead of the message just saying it was not written to the database. He suggested names like 'log_only' or 'no_db_write'. Mike says this is a common problem: agents coin terms without getting them approved. Before introducing a new term in user-facing text (messages, field names, flags), say the plain thing ('not written to the database') or get the term approved.
 - **Project**: endless
+
+### [2026-10-09] Keep message headers terse
+Situation: proposing replacement eeh header text for the log-only fault rename (E-2288). I proposed 'written to the log only — the database write failed'; Mike said it was too long and chose 'written to log only; DB write failed'. For this header he wanted the short form: drop articles, use 'DB', join the clauses with a semicolon.
+- **Project**: endless
