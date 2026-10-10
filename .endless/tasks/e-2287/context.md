@@ -1,0 +1,1 @@
+Groups the work spawned by the doctor brainstorm, whose outcome holds the full design: registration-pattern research, the Go settings registry, the doctor command with its check registry, and how users discover doctor.
