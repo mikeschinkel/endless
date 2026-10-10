@@ -7377,3 +7377,7 @@ Situation: proposing replacement eeh header text for the log-only fault rename (
 ### [2026-10-09] Ledger history for non-Endless projects is not critical yet
 While filing a go-cliutil task from E-2283, I held off because Endless's auto-commit might land a ledger commit in go-cliutil that the ledger rules say must never be reverted. Mike said Endless has not really been used for anything but Endless, so ledger history for other projects is moot for now. Those projects are not treated as critical until the related code is robust, and I can do what the work needs in them without worrying about their ledger. This applies to non-Endless projects only: the Endless ledger rules still hold in full.
 - **Project**: endless
+
+### [2026-10-09] Plan any task from any session; only the work is session-bound
+After E-2276 finished, I said planning E-2280 belonged to a new session because this one was bound to E-2276. Mike corrected me: work must be done in a task's own session, but planning a task can be done in any session. I had stretched the guide's 'a session claims one task for its lifetime' from claiming to planning.
+- **Project**: endless
