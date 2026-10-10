@@ -168,7 +168,7 @@ const Hint = "Run eeh"
 func Render(w io.Writer, cols int, color bool, scope faults.ProjectScope) {
 	var overview faults.Overview
 	var line string
-	var unindexed int
+	var logOnly int
 	var unreadable bool
 	var err error
 
@@ -183,9 +183,9 @@ func Render(w io.Writer, cols int, color bool, scope faults.ProjectScope) {
 	unreadable = err != nil && !errors.Is(err, faults.ErrNotBound)
 
 	// Read BEFORE deciding anything, because the interesting case is the one
-	// where the read above just failed: an occurrence the database never
-	// indexed is invisible to every query over it (E-1887).
-	unindexed = faults.UnindexedCount()
+	// where the read above just failed: an occurrence that never reached the
+	// database is invisible to every query over it (E-1887).
+	logOnly = faults.LogOnlyCount()
 
 	if !unreadable && overview.Total > 0 {
 		line = rowLine(overview, cols, color)
@@ -196,11 +196,11 @@ func Render(w io.Writer, cols int, color bool, scope faults.ProjectScope) {
 		}
 	}
 
-	if !unreadable && unindexed == 0 {
+	if !unreadable && logOnly == 0 {
 		goto end
 	}
 
-	line = noticeLine(unindexed, unreadable, cols, color)
+	line = noticeLine(logOnly, unreadable, cols, color)
 	if line == "" {
 		goto end
 	}
@@ -214,7 +214,7 @@ end:
 // cannot show (E-1887).
 //
 // Two situations collapse into it, because the reader's next move is the same
-// for both: unindexed occurrences exist in errors.jsonl newer than the clear
+// for both: log-only occurrences exist in errors.jsonl newer than the clear
 // watermark, or the fault store could not be read at all. Either way the row
 // above is not the whole story, and `eeh` — which falls back to the log when
 // the database is unavailable — is where the rest is.
@@ -225,7 +225,7 @@ end:
 // It carries no code, because no code has been assigned: the assignment is the
 // database write that did not happen. The chip holds the error glyph the tally
 // already uses rather than inventing a second vocabulary for the same colour.
-func noticeLine(unindexed int, unreadable bool, cols int, color bool) (line string) {
+func noticeLine(logOnly int, unreadable bool, cols int, color bool) (line string) {
 	var chip string
 	var text string
 	var hint string
@@ -253,7 +253,7 @@ func noticeLine(unindexed int, unreadable bool, cols int, color bool) (line stri
 		hint = ""
 	}
 
-	text = runewidth.Truncate(noticeText(unindexed, unreadable), budget, "…")
+	text = runewidth.Truncate(noticeText(logOnly, unreadable), budget, "…")
 	if runewidth.StringWidth(text) < minSummaryFragment {
 		text = ""
 	}
@@ -281,21 +281,21 @@ end:
 // of it there is.
 //
 // An unreadable store leads, because it is the larger claim: it means nothing
-// on the row above can be trusted to be complete, whereas an unindexed count
+// on the row above can be trusted to be complete, whereas a log-only count
 // beside a readable store means only that the row is short by that many.
-func noticeText(unindexed int, unreadable bool) (text string) {
+func noticeText(logOnly int, unreadable bool) (text string) {
 	if unreadable {
 		text = "the error record could not be read"
-		if unindexed > 0 {
-			text += " — " + strconv.Itoa(unindexed) + " in the log"
+		if logOnly > 0 {
+			text += " — " + strconv.Itoa(logOnly) + " in the log"
 		}
 		goto end
 	}
-	text = strconv.Itoa(unindexed) + " error"
-	if unindexed != 1 {
+	text = strconv.Itoa(logOnly) + " error"
+	if logOnly != 1 {
 		text += "s"
 	}
-	text += " recorded but not indexed"
+	text += " written to log only"
 
 end:
 	return text

@@ -36,25 +36,28 @@ const detailLogFile = "errors.jsonl"
 // convention, so a future reader can consume either file with one decoder. A
 // struct (not a map) keeps field order and shape stable.
 //
-// # Indexed and unindexed lines (E-1887)
+// # Log-only lines (E-1887, E-2288)
 //
 // FaultID and Occurrence are assigned BY the `errors` row this occurrence
 // belongs to. A line written when that write could not happen — the database
 // unreachable, the table missing, the insert rejected — has neither, and says
-// so: a null `fault_id` plus an explicit `"unindexed": true`.
+// so: a null `fault_id` plus an explicit `"log_only": true`.
 //
 // The marker is explicit rather than inferred from the null because a reader
-// must be able to tell "occurrence 4 of incident 12" from "this was never
-// indexed at all" without knowing which fields a given version assigns. No
-// synthetic id is minted for an unindexed line: a fake id that later collides
+// must be able to tell "occurrence 4 of incident 12" from "this never reached
+// the database at all" without knowing which fields a given version assigns. No
+// synthetic id is minted for a log-only line: a fake id that later collides
 // with a real one is worse than an honest absence.
 //
-// IndexError says WHY it could not be indexed, which is the whole diagnosis
+// DBError says WHY the database write failed, which is the whole diagnosis
 // when the thing that failed is the fault store itself.
 //
-// Lines written before E-1887 carry a plain integer `fault_id` and no
-// `unindexed` key, and decode correctly: the id populates the pointer and the
-// marker stays false.
+// Lines written before E-2288 carry the same two facts as `"unindexed": true`
+// and `index_error`. UnmarshalJSON folds those into LogOnly and DBError, so
+// every reader lists and clears an old line exactly as a new one; only the
+// writer changed. Lines written before E-1887 carry a plain integer `fault_id`
+// and neither marker, and decode correctly: the id populates the pointer and
+// the marker stays false.
 //
 // Project carries the project NAME, not the id, because this file is read
 // without a database (E-1960). It sits beside Source for the same reason both
@@ -77,10 +80,10 @@ const detailLogFile = "errors.jsonl"
 type Detail struct {
 	Kind        string         `json:"kind"` // always "fault"
 	TS          string         `json:"ts"`
-	FaultID     *int64         `json:"fault_id"`             // errors.id; null when unindexed
-	Occurrence  int64          `json:"occurrence,omitempty"` // 1-based within the incident; absent when unindexed
-	Unindexed   bool           `json:"unindexed,omitempty"`  // this occurrence reached no `errors` row
-	IndexError  string         `json:"index_error,omitempty"`
+	FaultID     *int64         `json:"fault_id"`             // errors.id; null when log only
+	Occurrence  int64          `json:"occurrence,omitempty"` // 1-based within the incident; absent when log only
+	LogOnly     bool           `json:"log_only,omitempty"`   // this occurrence reached no `errors` row
+	DBError     string         `json:"db_error,omitempty"`   // why the `errors` row write failed
 	Code        string         `json:"code"`
 	Severity    string         `json:"severity"`
 	Project     string         `json:"project,omitempty"`    // project NAME; absent when unattributed
@@ -93,16 +96,43 @@ type Detail struct {
 	Fields      map[string]any `json:"fields,omitempty"`
 }
 
+// UnmarshalJSON decodes a line in either key spelling: `log_only`/`db_error`,
+// or the `unindexed`/`index_error` that lines written before E-2288 carry. The
+// log is append-only history, so the old spelling is never rewritten and must
+// keep decoding for as long as such a line can sit in the file.
+func (d *Detail) UnmarshalJSON(data []byte) (err error) {
+	// detailJSON drops Detail's methods, so decoding into it does not recurse.
+	type detailJSON Detail
+	var legacy struct {
+		detailJSON
+		Unindexed  bool   `json:"unindexed"`
+		IndexError string `json:"index_error"`
+	}
+
+	err = json.Unmarshal(data, &legacy)
+	if err != nil {
+		goto end
+	}
+	*d = Detail(legacy.detailJSON)
+	d.LogOnly = d.LogOnly || legacy.Unindexed
+	if d.DBError == "" {
+		d.DBError = legacy.IndexError
+	}
+
+end:
+	return err
+}
+
 // appendDetail writes one occurrence line. Best-effort and silent: an
 // unwritable log must never turn into a user-visible failure, and must never
 // recurse into Record.
 //
-// id is nil for an occurrence that reached no `errors` row, and indexErr then
+// id is nil for an occurrence that reached no `errors` row, and dbErr then
 // says why. That case is the whole of E-1887's section 6: a fault raised
 // BECAUSE the database failed cannot be recorded through the database, so until
 // this call moved off Record's success path it was written nowhere at all —
 // the one failure mode where losing the report costs most.
-func appendDetail(f Fault, id *int64, occurrence int64, project string, raiser Raiser, indexErr string) {
+func appendDetail(f Fault, id *int64, occurrence int64, project string, raiser Raiser, dbErr string) {
 	var dir string
 	var path string
 	var data []byte
@@ -124,8 +154,8 @@ func appendDetail(f Fault, id *int64, occurrence int64, project string, raiser R
 		TS:          time.Now().UTC().Format("2006-01-02T15:04:05"),
 		FaultID:     id,
 		Occurrence:  occurrence,
-		Unindexed:   id == nil,
-		IndexError:  indexErr,
+		LogOnly:     id == nil,
+		DBError:     dbErr,
 		Code:        f.Code.ID,
 		Severity:    string(f.Code.Severity),
 		Project:     project,
@@ -208,8 +238,8 @@ func Details(id int64) (details []Detail, err error) {
 			continue
 		}
 		if detail.FaultID == nil || *detail.FaultID != id {
-			// Unindexed lines belong to no incident, so no incident's detail
-			// view may claim them. Unindexed reads them instead.
+			// Log-only lines belong to no incident, so no incident's detail
+			// view may claim them. LogOnly reads them instead.
 			continue
 		}
 		details = append(details, detail)

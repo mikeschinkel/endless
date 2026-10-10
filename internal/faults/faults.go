@@ -308,7 +308,7 @@ func Record(f Fault) {
 
 	// Resolved once and threaded to every half, so the row and its detail lines
 	// can never disagree about which project the incident belongs to. It runs
-	// BEFORE the database handle is taken (E-1887) so an unindexed line still
+	// BEFORE the database handle is taken (E-1887) so a log-only line still
 	// carries the project name whenever the resolver can supply one; a resolver
 	// that needs the same broken database answers (0, "") and the line says
 	// nothing rather than guessing.
@@ -317,7 +317,7 @@ func Record(f Fault) {
 
 	db, err = database()
 	if err != nil {
-		goto unindexed
+		goto logOnly
 	}
 
 	id, occurrence, err = upsertIncident(db, f, projectID, raiser)
@@ -335,14 +335,14 @@ func Record(f Fault) {
 		id, occurrence, err = upsertIncident(db, f, projectID, raiser)
 	}
 	if err != nil {
-		goto unindexed
+		goto logOnly
 	}
 
 	appendDetail(f, &id, occurrence, projectName, raiser, "")
 	goto end
 
-unindexed:
-	// The index write did not happen, so this occurrence has no id and no
+logOnly:
+	// The database write did not happen, so this occurrence has no id and no
 	// occurrence number — both are assigned BY that write. It still goes to
 	// disk (E-1887).
 	//
@@ -467,7 +467,7 @@ func upsertIncident(db *sql.DB, f Fault, projectID int64, raiser Raiser) (id int
 
 rollback:
 	// The rollback's own error is dropped: the statement error is the
-	// diagnosis, and Record goes on to log the occurrence unindexed.
+	// diagnosis, and Record goes on to write the occurrence to the log only.
 	_ = tx.Rollback()
 	id, occurrence = 0, 0
 

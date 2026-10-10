@@ -271,17 +271,20 @@ replayed into the database, and faults emit no ledger events.
 
 A fault raised *because* the database could not be written cannot be recorded
 in it. The detail line is still written — that is the half of this that does not
-need a database — and it says so: `"fault_id": null` and `"unindexed": true`,
-with an `index_error` giving the reason. No id is invented for it, because an id
+need a database — and it says so: `"fault_id": null` and `"log_only": true`,
+with a `db_error` giving the reason. No id is invented for it, because an id
 is what `show <id>` and `clear <id>` address a row by, and a fake one that later
-collides with a real one is worse than an honest absence.
+collides with a real one is worse than an honest absence. Lines written before
+E-2288 carry `"unindexed": true` and `index_error` instead; they are listed and
+cleared exactly as the new spelling is.
 
 Those occurrences are not silent. `errors list` prints them beneath the table,
-without ids, and falls back to printing them alone when the table itself cannot
-be read. The fault row on `session status` adds one line — `✕ N errors recorded
-but not indexed`, or `the error record could not be read` — so the surface whose
-job is to say something is wrong is not blind to the case where the thing that
-is wrong is the fault store.
+without ids, under `N occurrence(s) written to log only; DB write failed:` with
+each reason prefixed `not in the database:`, and falls back to printing them
+alone when the table itself cannot be read. The fault row on `session status`
+adds one line — `✕ N errors written to log only`, or `the error record could
+not be read` — so the surface whose job is to say something is wrong is not
+blind to the case where the thing that is wrong is the fault store.
 
 #### Dismissing them
 

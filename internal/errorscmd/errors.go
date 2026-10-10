@@ -321,16 +321,16 @@ func runList(args []string) {
 	if err != nil {
 		// The database is what failed, which is the one state in which this
 		// listing still has something to say (E-1887): a fault raised BECAUSE
-		// the database failed was written to errors.jsonl and indexed nowhere,
+		// the database failed was written to errors.jsonl and nowhere else,
 		// so the log is the only place it exists. Print those before exiting,
 		// rather than exiting on the error and leaving the user with no way to
 		// read a report that was successfully recorded.
 		//
-		// Printed rather than exited on, because the unindexed half below has to
+		// Printed rather than exited on, because the log-only half below has to
 		// run between the two: Exit would end the process with the one thing
 		// this branch exists to show still unprinted.
 		storeFailure("errors list", "endless-go errors: list: ", err).Print()
-		printUnindexed()
+		printLogOnly()
 		os.Exit(1)
 	}
 
@@ -340,7 +340,7 @@ func runList(args []string) {
 	// the rest are.
 	fmt.Println(listingHeader(scoped, len(incidents), *all))
 	if len(incidents) == 0 {
-		printUnindexed()
+		printLogOnly()
 		return
 	}
 	fmt.Println()
@@ -354,15 +354,15 @@ func runList(args []string) {
 	}
 
 	printFooter(incidents)
-	printUnindexed()
+	printLogOnly()
 }
 
-// printUnindexed prints the occurrences that reached the detail log but no
+// printLogOnly prints the occurrences that reached the detail log but no
 // `errors` row, and nothing at all when there are none (E-1887).
 //
 // They are NOT folded into the table above. Every column that table is built
 // around — the id you type into the next command, the occurrence count, the
-// first-seen timestamp — is assigned by the index write that did not happen, so
+// first-seen timestamp — is assigned by the database write that did not happen, so
 // a row for one would be mostly empty cells wearing a table's clothes. More to
 // the point, an id is what `show` and `clear <id>` address a row by, and
 // minting a synthetic one that later collides with a real id is worse than an
@@ -370,23 +370,23 @@ func runList(args []string) {
 //
 // Deliberately quiet on failure: this is an annotation, and it is printed in
 // exactly the state where things are already going wrong.
-func printUnindexed() {
+func printLogOnly() {
 	var details []faults.Detail
 	var err error
 
-	details, err = faults.Unindexed()
+	details, err = faults.LogOnly()
 	if err != nil || len(details) == 0 {
 		goto end
 	}
 
 	fmt.Println()
-	fmt.Printf("%d occurrence(s) recorded to the log but never indexed:\n", len(details))
+	fmt.Printf("%d occurrence(s) written to log only; DB write failed:\n", len(details))
 	fmt.Println()
 	for _, d := range details {
 		fmt.Printf("  [%s] %s  %s\n", d.TS, d.Code, d.Source)
 		fmt.Printf("    %s\n", d.Summary)
-		if d.IndexError != "" {
-			fmt.Printf("    not indexed: %s\n", d.IndexError)
+		if d.DBError != "" {
+			fmt.Printf("    not in the database: %s\n", d.DBError)
 		}
 	}
 
@@ -1034,12 +1034,12 @@ func printFooter(incidents []faults.Incident) {
 	fmt.Println("Once you have dealt with them, dismiss them:")
 	fmt.Println("  endless errors clear            mark every open error above as seen")
 	fmt.Println("  endless errors clear <id>       dismiss just one")
-	if faults.UnindexedCount() > 0 {
+	if faults.LogOnlyCount() > 0 {
 		// Named only when there is something for it to dismiss. A footer whose
 		// job is to say what you can do here must not list an action that would
 		// do nothing — that is the defect E-2148 removed when this footer named
 		// only `clear`, and re-adding it one line lower would be no better.
-		fmt.Println("  endless errors clear --log      dismiss only the unindexed occurrences below")
+		fmt.Println("  endless errors clear --log      dismiss only the log-only occurrences below")
 	}
 	fmt.Println()
 	fmt.Println("Clearing is an acknowledgement, not a retry — it does not re-arm a failing job.")
@@ -1054,13 +1054,13 @@ func showOne(id int64, detail bool) {
 		failure := storeFailure("errors show", "endless-go errors: show: ", err)
 		// An id addresses a table row, so there is no fallback for `show`
 		// itself. Name the one that exists rather than leaving a dead end: any
-		// fault recorded while the store was unreadable is unindexed and is
+		// fault recorded while the store was unreadable is log only and is
 		// listed, without ids, by `list` (E-1887).
 		//
 		// A second body line rather than a second message, so the two arrive as
 		// one classified refusal — the pointer is part of what this failure
 		// says, not a separate verdict about it.
-		if faults.UnindexedCount() > 0 {
+		if faults.LogOnlyCount() > 0 {
 			failure = failure.Detail(
 				"endless-go errors: occurrences were recorded outside the database; " +
 					"`endless errors list` shows them")
@@ -1304,12 +1304,12 @@ func runClear(args []string) {
 
 	// The log's watermark moves FIRST on both forms that touch it (E-1887).
 	//
-	// First, because the whole point of an unindexed occurrence is that the
+	// First, because the whole point of a log-only occurrence is that the
 	// database was unreachable when it was recorded — and it may still be, in
 	// which case the table clear below fails and this is the only half that can
 	// run. A notice a user cannot dismiss is a notice they learn to ignore.
 	//
-	// Never on the id form, because an id names a row and an unindexed
+	// Never on the id form, because an id names a row and a log-only
 	// occurrence has none. Dismissing the whole log because someone cleared one
 	// row would dismiss reports they never saw.
 	if *logOnly || len(ids) == 0 {
@@ -1320,7 +1320,7 @@ func runClear(args []string) {
 	// record are dismissed for different reasons and a user must be able to say
 	// which they mean. The bare `clear` couples them because "dismiss what you
 	// just showed me" covers both — the listing prints both — but someone who
-	// has read the unindexed occurrences and is still working through the open
+	// has read the log-only occurrences and is still working through the open
 	// rows had no way to say so, and the coupling also meant that acknowledging
 	// the log at all required a table clear that FAILS when the database is the
 	// thing that broke.
@@ -1342,14 +1342,14 @@ func runClear(args []string) {
 // must never happen is silence — this is the only acknowledgement available for
 // an occurrence that reached no row.
 func clearLog() {
-	unindexed, err := faults.ClearUnindexed()
+	logOnly, err := faults.ClearLogOnly()
 	if err != nil {
 		// No inventory row: the log half of `clear` postdates the audit
 		// (E-1887). It goes through the same funnel as the table half, which
 		// faults it — and a fault is the honest reading. The watermark is a file
 		// Endless owns, nothing the caller passed chooses whether it can be
-		// rewritten, and failing to move it means the only acknowledgement an
-		// unindexed occurrence has is unavailable, so the notice will come back
+		// rewritten, and failing to move it means the only acknowledgement a
+		// log-only occurrence has is unavailable, so the notice will come back
 		// on the next listing. Not fatal, because on the bare form the table
 		// half still has work to do.
 		storeFailure("errors clear",
@@ -1359,8 +1359,8 @@ func clearLog() {
 	// Said even when it is zero on the explicit form: a user who typed --log
 	// asked a question, and "nothing was waiting" is the answer to it. On the
 	// bare form it would be a line about nothing, beside a line about the rows.
-	if unindexed > 0 {
-		fmt.Printf("dismissed %d occurrence(s) waiting in the log\n", unindexed)
+	if logOnly > 0 {
+		fmt.Printf("dismissed %d occurrence(s) waiting in the log\n", logOnly)
 	}
 }
 

@@ -290,7 +290,7 @@ func TestDB_AheadHalts(t *testing.T) {
 		t.Error("a halted connect changed the schema")
 	}
 	// The fault writer still gets the connection, so a land window's hooks
-	// record ONE deduplicated incident rather than an unindexed line each.
+	// record ONE deduplicated incident rather than a log-only line each.
 	if db, err := FaultDB(); err != nil || db == nil {
 		t.Errorf("FaultDB() = (%v, %v), want the halted connection", db, err)
 	}

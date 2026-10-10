@@ -12,13 +12,13 @@ import (
 	"github.com/mikeschinkel/go-doterr"
 )
 
-// Unindexed fault occurrences, and the watermark that dismisses them (E-1887).
+// Log-only fault occurrences, and the watermark that dismisses them (E-1887).
 //
 // # Why this exists
 //
 // A fault raised BECAUSE the database failed cannot be recorded through the
 // database. Record still writes its detail line (see appendDetail), marked
-// unindexed and carrying no `errors` row id — so the report survives, but every
+// log only and carrying no `errors` row id — so the report survives, but every
 // surface over the `errors` table is blind to it, including the fault row whose
 // whole job is to say something is wrong.
 //
@@ -28,7 +28,7 @@ import (
 //
 // # The watermark, and why the table's cleared_at cannot serve
 //
-// `errors clear` marks ROWS cleared. An unindexed occurrence has no row, so
+// `errors clear` marks ROWS cleared. A log-only occurrence has no row, so
 // that state is unreachable for precisely the entries this file is about — and
 // a notice that cannot be dismissed is a notice a user learns to ignore.
 //
@@ -52,7 +52,7 @@ import (
 // # Read cost, which is load-bearing here
 //
 // The fault row repaints every two seconds on a live monitor, and calls
-// UnindexedCount on every repaint. So the read is deliberately proportional to
+// LogOnlyCount on every repaint. So the read is deliberately proportional to
 // what is NEW rather than to the size of the log: an identity digest over a
 // bounded prefix, then a seek to the watermark and a read of the tail. On the
 // ordinary healthy path — everything cleared, nothing appended — that is a stat
@@ -86,14 +86,14 @@ type watermark struct {
 	DigestLen int64  `json:"digest_len"`
 }
 
-// Unindexed returns every unindexed occurrence newer than the clear watermark,
+// LogOnly returns every log-only occurrence newer than the clear watermark,
 // oldest first.
 //
 // Lines that fail to parse are skipped rather than failing the read, for the
 // same reason Details skips them: several processes append to this log, so a
 // torn final line is possible and must not hide the intact records before it.
 // A missing file is not an error — it means nothing has been recorded.
-func Unindexed() (details []Detail, err error) {
+func LogOnly() (details []Detail, err error) {
 	var file *os.File
 	var info os.FileInfo
 	var tail []byte
@@ -122,20 +122,20 @@ func Unindexed() (details []Detail, err error) {
 		err = nil
 		goto end
 	}
-	details = parseUnindexed(tail)
+	details = parseLogOnly(tail)
 
 end:
 	return details, err
 }
 
-// UnindexedCount returns how many unindexed occurrences are outstanding. Zero
+// LogOnlyCount returns how many log-only occurrences are outstanding. Zero
 // on any read failure: this backs a notice, and a notice must not be able to
 // fail the view it annotates.
-func UnindexedCount() (n int) {
+func LogOnlyCount() (n int) {
 	var details []Detail
 	var err error
 
-	details, err = Unindexed()
+	details, err = LogOnly()
 	if err != nil {
 		goto end
 	}
@@ -145,13 +145,13 @@ end:
 	return n
 }
 
-// ClearUnindexed moves the watermark to the end of the log, dismissing every
-// unindexed occurrence outstanding now. It returns how many that was.
+// ClearLogOnly moves the watermark to the end of the log, dismissing every
+// log-only occurrence outstanding now. It returns how many that was.
 //
 // Called by `errors clear` in its no-id form only. The id form names a TABLE
-// row, and an unindexed occurrence has no id to name — clearing the whole file
+// row, and a log-only occurrence has no id to name — clearing the whole file
 // because a user dismissed one row would dismiss reports they never saw.
-func ClearUnindexed() (cleared int, err error) {
+func ClearLogOnly() (cleared int, err error) {
 	var details []Detail
 	var dir string
 	var info os.FileInfo
@@ -165,7 +165,7 @@ func ClearUnindexed() (cleared int, err error) {
 		goto end
 	}
 
-	details, err = Unindexed()
+	details, err = LogOnly()
 	if err != nil {
 		goto end
 	}
@@ -358,9 +358,9 @@ func digestOf(data []byte) (digest string) {
 	return digest
 }
 
-// parseUnindexed decodes the unindexed occurrences out of a span of the log,
+// parseLogOnly decodes the log-only occurrences out of a span of the log,
 // in the order they were appended.
-func parseUnindexed(data []byte) (details []Detail) {
+func parseLogOnly(data []byte) (details []Detail) {
 	var line string
 	var detail Detail
 
@@ -372,7 +372,7 @@ func parseUnindexed(data []byte) (details []Detail) {
 		if json.Unmarshal([]byte(line), &detail) != nil {
 			continue
 		}
-		if !detail.Unindexed {
+		if !detail.LogOnly {
 			continue
 		}
 		details = append(details, detail)

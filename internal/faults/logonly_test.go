@@ -17,7 +17,7 @@ import (
 //
 // A fault raised BECAUSE the database failed cannot be recorded through the
 // database. Until E-1887 it was recorded NOWHERE — faults.Record reached the
-// detail log only after a successful index write, so the one failure mode where
+// detail log only after a successful database write, so the one failure mode where
 // losing the report costs most was the one that lost it.
 //
 // These tests hold the two halves: the line still lands on disk, and it is
@@ -67,7 +67,7 @@ func readLog(t *testing.T, logDir string) (lines []faults.Detail) {
 	return lines
 }
 
-func TestRecord_WritesTheLogLineWhenTheIndexWriteFails(t *testing.T) {
+func TestRecord_WritesTheLogLineWhenTheDBWriteFails(t *testing.T) {
 	logDir := newBrokenStore(t)
 
 	faults.Record(faults.Fault{
@@ -80,12 +80,12 @@ func TestRecord_WritesTheLogLineWhenTheIndexWriteFails(t *testing.T) {
 	lines := readLog(t, logDir)
 	if len(lines) != 1 {
 		t.Fatalf("wrote %d log lines, want 1 — a fault the database could not "+
-			"index must still reach the log", len(lines))
+			"record must still reach the log", len(lines))
 	}
 
 	line := lines[0]
-	if !line.Unindexed {
-		t.Error("the line is not marked unindexed; a reader cannot tell it from an indexed one")
+	if !line.LogOnly {
+		t.Error("the line is not marked log only; a reader cannot tell it from one with a row")
 	}
 	if line.FaultID != nil {
 		t.Errorf("fault_id = %d, want null — no row was written, so no id exists", *line.FaultID)
@@ -93,8 +93,8 @@ func TestRecord_WritesTheLogLineWhenTheIndexWriteFails(t *testing.T) {
 	if line.Occurrence != 0 {
 		t.Errorf("occurrence = %d, want absent — it is assigned by the write that failed", line.Occurrence)
 	}
-	if line.IndexError == "" {
-		t.Error("index_error is empty; why it could not be indexed is the whole diagnosis here")
+	if line.DBError == "" {
+		t.Error("db_error is empty; why the database write failed is the whole diagnosis here")
 	}
 	if line.Summary != "claude hook: touching session: no such column: process_id" {
 		t.Errorf("summary = %q, want the caller's", line.Summary)
@@ -117,25 +117,25 @@ func TestRecord_HealthyDatabaseIsUnchanged(t *testing.T) {
 	if len(lines) != 1 {
 		t.Fatalf("wrote %d log lines, want 1 — the fallback must not add a second", len(lines))
 	}
-	if lines[0].Unindexed {
-		t.Error("an indexed occurrence is marked unindexed")
+	if lines[0].LogOnly {
+		t.Error("an occurrence with a row is marked log only")
 	}
 	if lines[0].FaultID == nil || *lines[0].FaultID == 0 {
-		t.Error("fault_id is absent on an indexed occurrence")
+		t.Error("fault_id is absent on an occurrence with a row")
 	}
 	if lines[0].Occurrence != 1 {
 		t.Errorf("occurrence = %d, want 1", lines[0].Occurrence)
 	}
-	if lines[0].IndexError != "" {
-		t.Errorf("index_error = %q, want empty when the index write succeeded", lines[0].IndexError)
+	if lines[0].DBError != "" {
+		t.Errorf("db_error = %q, want empty when the database write succeeded", lines[0].DBError)
 	}
 
-	if n := faults.UnindexedCount(); n != 0 {
-		t.Errorf("UnindexedCount = %d, want 0 — nothing went unindexed", n)
+	if n := faults.LogOnlyCount(); n != 0 {
+		t.Errorf("LogOnlyCount = %d, want 0 — nothing went to the log only", n)
 	}
 }
 
-func TestUnindexed_ReadsOnlyUnindexedLines(t *testing.T) {
+func TestLogOnly_ReadsOnlyLogOnlyLines(t *testing.T) {
 	logDir := newBrokenStore(t)
 
 	for i := 0; i < 3; i++ {
@@ -146,33 +146,33 @@ func TestUnindexed_ReadsOnlyUnindexedLines(t *testing.T) {
 		})
 	}
 
-	details, err := faults.Unindexed()
+	details, err := faults.LogOnly()
 	if err != nil {
-		t.Fatalf("Unindexed: %v", err)
+		t.Fatalf("LogOnly: %v", err)
 	}
 	if len(details) != 3 {
-		t.Fatalf("Unindexed returned %d, want 3 — one line per OCCURRENCE, since "+
+		t.Fatalf("LogOnly returned %d, want 3 — one line per OCCURRENCE, since "+
 			"nothing deduped them (that is what the index does)", len(details))
 	}
-	if n := faults.UnindexedCount(); n != 3 {
-		t.Errorf("UnindexedCount = %d, want 3", n)
+	if n := faults.LogOnlyCount(); n != 3 {
+		t.Errorf("LogOnlyCount = %d, want 3", n)
 	}
 
-	// An indexed line in the same file must not be picked up. Details() is the
+	// A line with a row in the same file must not be picked up. Details() is the
 	// reader that owns those, and neither may claim the other's lines.
 	if err = os.WriteFile(
 		filepath.Join(logDir, "errors.jsonl"),
-		append(mustRead(t, logDir), []byte(`{"kind":"fault","fault_id":7,"occurrence":1,"code":"WARN-0001","summary":"indexed"}`+"\n")...),
+		append(mustRead(t, logDir), []byte(`{"kind":"fault","fault_id":7,"occurrence":1,"code":"WARN-0001","summary":"has a row"}`+"\n")...),
 		0o644,
 	); err != nil {
-		t.Fatalf("append an indexed line: %v", err)
+		t.Fatalf("append a line with a row: %v", err)
 	}
-	if n := faults.UnindexedCount(); n != 3 {
-		t.Errorf("UnindexedCount = %d after adding an INDEXED line, want 3", n)
+	if n := faults.LogOnlyCount(); n != 3 {
+		t.Errorf("LogOnlyCount = %d after adding a line WITH A ROW, want 3", n)
 	}
 }
 
-func TestClearUnindexed_MovesTheWatermarkAndItPersists(t *testing.T) {
+func TestClearLogOnly_MovesTheWatermarkAndItPersists(t *testing.T) {
 	logDir := newBrokenStore(t)
 
 	faults.Record(faults.Fault{
@@ -180,19 +180,19 @@ func TestClearUnindexed_MovesTheWatermarkAndItPersists(t *testing.T) {
 		Source:  "hook:claude",
 		Summary: "claude hook: something went wrong",
 	})
-	if n := faults.UnindexedCount(); n != 1 {
-		t.Fatalf("UnindexedCount = %d before clearing, want 1", n)
+	if n := faults.LogOnlyCount(); n != 1 {
+		t.Fatalf("LogOnlyCount = %d before clearing, want 1", n)
 	}
 
-	cleared, err := faults.ClearUnindexed()
+	cleared, err := faults.ClearLogOnly()
 	if err != nil {
-		t.Fatalf("ClearUnindexed: %v", err)
+		t.Fatalf("ClearLogOnly: %v", err)
 	}
 	if cleared != 1 {
-		t.Errorf("ClearUnindexed reported %d, want 1", cleared)
+		t.Errorf("ClearLogOnly reported %d, want 1", cleared)
 	}
-	if n := faults.UnindexedCount(); n != 0 {
-		t.Errorf("UnindexedCount = %d after clearing, want 0", n)
+	if n := faults.LogOnlyCount(); n != 0 {
+		t.Errorf("LogOnlyCount = %d after clearing, want 0", n)
 	}
 
 	// The watermark is a file, not process state: a later invocation must see
@@ -203,8 +203,8 @@ func TestClearUnindexed_MovesTheWatermarkAndItPersists(t *testing.T) {
 		nil,
 		nil,
 	)
-	if n := faults.UnindexedCount(); n != 0 {
-		t.Errorf("UnindexedCount = %d after a rebind, want 0 — the watermark did not persist", n)
+	if n := faults.LogOnlyCount(); n != 0 {
+		t.Errorf("LogOnlyCount = %d after a rebind, want 0 — the watermark did not persist", n)
 	}
 
 	// A NEW occurrence after the clear is outstanding again. Clearing is an
@@ -214,12 +214,12 @@ func TestClearUnindexed_MovesTheWatermarkAndItPersists(t *testing.T) {
 		Source:  "hook:claude",
 		Summary: "claude hook: something else went wrong",
 	})
-	if n := faults.UnindexedCount(); n != 1 {
-		t.Errorf("UnindexedCount = %d after a new occurrence, want 1", n)
+	if n := faults.LogOnlyCount(); n != 1 {
+		t.Errorf("LogOnlyCount = %d after a new occurrence, want 1", n)
 	}
 }
 
-func TestUnindexed_ATruncatedLogResetsTheWatermark(t *testing.T) {
+func TestLogOnly_ATruncatedLogResetsTheWatermark(t *testing.T) {
 	logDir := newBrokenStore(t)
 
 	faults.Record(faults.Fault{
@@ -227,8 +227,8 @@ func TestUnindexed_ATruncatedLogResetsTheWatermark(t *testing.T) {
 		Source:  "hook:claude",
 		Summary: "first",
 	})
-	if _, err := faults.ClearUnindexed(); err != nil {
-		t.Fatalf("ClearUnindexed: %v", err)
+	if _, err := faults.ClearLogOnly(); err != nil {
+		t.Fatalf("ClearLogOnly: %v", err)
 	}
 
 	// The log is replaced by something shorter than the watermark — rotated by
@@ -244,20 +244,20 @@ func TestUnindexed_ATruncatedLogResetsTheWatermark(t *testing.T) {
 		Summary: "after the truncation",
 	})
 
-	if n := faults.UnindexedCount(); n != 1 {
-		t.Errorf("UnindexedCount = %d, want 1 — a watermark past the end of the "+
+	if n := faults.LogOnlyCount(); n != 1 {
+		t.Errorf("LogOnlyCount = %d, want 1 — a watermark past the end of the "+
 			"log must read as 0 rather than hide everything after it", n)
 	}
 }
 
-func TestDetails_IgnoresUnindexedLines(t *testing.T) {
+func TestDetails_IgnoresLogOnlyLines(t *testing.T) {
 	db, logDir := newBoundStore(t)
 
 	faults.Record(faults.Fault{
 		Code:    faults.ErrCodeJobFailed,
 		Source:  "job:evaluate",
 		Summary: "job \"evaluate\" failed",
-		Detail:  "indexed detail",
+		Detail:  "row detail",
 	})
 
 	var id int64
@@ -265,13 +265,13 @@ func TestDetails_IgnoresUnindexedLines(t *testing.T) {
 		t.Fatalf("read the incident id: %v", err)
 	}
 
-	// An unindexed line carrying a null id must not be swept into an incident's
+	// A log-only line carrying a null id must not be swept into an incident's
 	// detail view; it belongs to no incident.
 	f, err := os.OpenFile(filepath.Join(logDir, "errors.jsonl"), os.O_APPEND|os.O_WRONLY, 0o644)
 	if err != nil {
 		t.Fatalf("open log: %v", err)
 	}
-	if _, err = f.WriteString(`{"kind":"fault","fault_id":null,"unindexed":true,"code":"ERR-0015","summary":"orphan"}` + "\n"); err != nil {
+	if _, err = f.WriteString(`{"kind":"fault","fault_id":null,"log_only":true,"code":"ERR-0015","summary":"orphan"}` + "\n"); err != nil {
 		t.Fatalf("append: %v", err)
 	}
 	if err = f.Close(); err != nil {
@@ -283,9 +283,9 @@ func TestDetails_IgnoresUnindexedLines(t *testing.T) {
 		t.Fatalf("Details: %v", err)
 	}
 	if len(details) != 1 {
-		t.Fatalf("Details returned %d, want 1 — the unindexed line is not this incident's", len(details))
+		t.Fatalf("Details returned %d, want 1 — the log-only line is not this incident's", len(details))
 	}
-	if details[0].Detail != "indexed detail" {
+	if details[0].Detail != "row detail" {
 		t.Errorf("Details returned %q", details[0].Detail)
 	}
 }
@@ -299,7 +299,7 @@ func mustRead(t *testing.T, logDir string) []byte {
 	return data
 }
 
-func TestUnindexed_WatermarkHoldsAcrossALogThatOutgrowsTheDigestPrefix(t *testing.T) {
+func TestLogOnly_WatermarkHoldsAcrossALogThatOutgrowsTheDigestPrefix(t *testing.T) {
 	logDir := newBrokenStore(t)
 
 	// Cleared while the log is small, so the watermark's digest covers the
@@ -312,8 +312,8 @@ func TestUnindexed_WatermarkHoldsAcrossALogThatOutgrowsTheDigestPrefix(t *testin
 		Source:  "hook:claude",
 		Summary: "first",
 	})
-	if _, err := faults.ClearUnindexed(); err != nil {
-		t.Fatalf("ClearUnindexed: %v", err)
+	if _, err := faults.ClearLogOnly(); err != nil {
+		t.Fatalf("ClearLogOnly: %v", err)
 	}
 
 	for i := 0; i < 60; i++ {
@@ -333,20 +333,20 @@ func TestUnindexed_WatermarkHoldsAcrossALogThatOutgrowsTheDigestPrefix(t *testin
 		t.Fatalf("log is %d bytes; this test needs it past the digest prefix", size.Size())
 	}
 
-	if n := faults.UnindexedCount(); n != 60 {
-		t.Errorf("UnindexedCount = %d, want 60 — the cleared first occurrence must "+
+	if n := faults.LogOnlyCount(); n != 60 {
+		t.Errorf("LogOnlyCount = %d, want 60 — the cleared first occurrence must "+
 			"stay cleared and every later one must be outstanding", n)
 	}
 }
 
-func TestClearUnindexed_OnALogThatDoesNotExistYet(t *testing.T) {
+func TestClearLogOnly_OnALogThatDoesNotExistYet(t *testing.T) {
 	newBrokenStore(t)
 
 	// Nothing has ever been recorded. Clearing must be a no-op rather than
 	// writing a watermark for a file whose opening bytes cannot be known.
-	cleared, err := faults.ClearUnindexed()
+	cleared, err := faults.ClearLogOnly()
 	if err != nil {
-		t.Fatalf("ClearUnindexed with no log: %v", err)
+		t.Fatalf("ClearLogOnly with no log: %v", err)
 	}
 	if cleared != 0 {
 		t.Errorf("cleared %d, want 0", cleared)
@@ -357,8 +357,73 @@ func TestClearUnindexed_OnALogThatDoesNotExistYet(t *testing.T) {
 		Source:  "hook:claude",
 		Summary: "the first one ever",
 	})
-	if n := faults.UnindexedCount(); n != 1 {
-		t.Errorf("UnindexedCount = %d, want 1 — a clear before the log existed must "+
+	if n := faults.LogOnlyCount(); n != 1 {
+		t.Errorf("LogOnlyCount = %d, want 1 — a clear before the log existed must "+
 			"not have swallowed the first occurrence recorded after it", n)
+	}
+}
+
+// The writer spells the marker `log_only` and the reason `db_error` (E-2288).
+// Checked on the raw bytes, because the decoder accepts both spellings and so
+// cannot tell a reader which one was written.
+func TestRecord_WritesTheLogOnlySpelling(t *testing.T) {
+	logDir := newBrokenStore(t)
+
+	faults.Record(faults.Fault{
+		Code:    faults.ErrCodeHookWriteFailed,
+		Source:  "hook:claude",
+		Summary: "claude hook: touching session: database is locked",
+	})
+
+	raw := string(mustRead(t, logDir))
+	if !strings.Contains(raw, `"log_only":true`) {
+		t.Errorf("log line = %s, want it to carry \"log_only\":true", raw)
+	}
+	if !strings.Contains(raw, `"db_error":"`) {
+		t.Errorf("log line = %s, want it to carry db_error", raw)
+	}
+	if strings.Contains(raw, `"unindexed"`) || strings.Contains(raw, `"index_error"`) {
+		t.Errorf("log line = %s, want neither pre-E-2288 key written", raw)
+	}
+}
+
+// A line written before E-2288 says `"unindexed": true` and `index_error`. The
+// log is append-only history, so such lines stay in the file and must be listed
+// and cleared exactly as a new-spelling line is.
+func TestLogOnly_ListsAndClearsPreRenameLines(t *testing.T) {
+	logDir := newBrokenStore(t)
+
+	if err := os.WriteFile(filepath.Join(logDir, "errors.jsonl"), []byte(
+		`{"kind":"fault","fault_id":null,"unindexed":true,"index_error":"old reason","code":"ERR-0015","summary":"old"}`+"\n"+
+			`{"kind":"fault","fault_id":null,"log_only":true,"db_error":"new reason","code":"ERR-0015","summary":"new"}`+"\n",
+	), 0o644); err != nil {
+		t.Fatalf("write the log: %v", err)
+	}
+
+	details, err := faults.LogOnly()
+	if err != nil {
+		t.Fatalf("LogOnly: %v", err)
+	}
+	if len(details) != 2 {
+		t.Fatalf("LogOnly returned %d, want 2 — both spellings are log-only lines", len(details))
+	}
+	if !details[0].LogOnly || details[0].DBError != "old reason" {
+		t.Errorf("old line decoded as LogOnly=%v DBError=%q, want true and %q",
+			details[0].LogOnly, details[0].DBError, "old reason")
+	}
+	if !details[1].LogOnly || details[1].DBError != "new reason" {
+		t.Errorf("new line decoded as LogOnly=%v DBError=%q, want true and %q",
+			details[1].LogOnly, details[1].DBError, "new reason")
+	}
+
+	cleared, err := faults.ClearLogOnly()
+	if err != nil {
+		t.Fatalf("ClearLogOnly: %v", err)
+	}
+	if cleared != 2 {
+		t.Errorf("ClearLogOnly reported %d, want 2", cleared)
+	}
+	if n := faults.LogOnlyCount(); n != 0 {
+		t.Errorf("LogOnlyCount = %d after clearing, want 0", n)
 	}
 }

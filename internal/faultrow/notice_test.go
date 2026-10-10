@@ -11,7 +11,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/faults"
 )
 
-// The unindexed notice (E-1887).
+// The log-only notice (E-1887).
 //
 // The fault row reads the `errors` table. A fault raised BECAUSE that table
 // could not be written reaches no row, so the row that exists to say "something
@@ -55,7 +55,7 @@ func TestRender_NoticeWhenTheStoreCannotBeRead(t *testing.T) {
 	}
 }
 
-func TestRender_NoticeWhenOccurrencesWentUnindexed(t *testing.T) {
+func TestRender_NoticeWhenOccurrencesWentToLogOnly(t *testing.T) {
 	bindBrokenStore(t)
 
 	faults.Record(faults.Fault{
@@ -73,7 +73,7 @@ func TestRender_NoticeWhenOccurrencesWentUnindexed(t *testing.T) {
 	}
 }
 
-func TestRender_NoticeCountsUnindexedBesideAHealthyStore(t *testing.T) {
+func TestRender_NoticeCountsLogOnlyBesideAHealthyStore(t *testing.T) {
 	db := bindFaultStore(t)
 	_ = db
 
@@ -84,7 +84,7 @@ func TestRender_NoticeCountsUnindexedBesideAHealthyStore(t *testing.T) {
 		t.Fatal("no detail log path; the store is not bound")
 	}
 	if err := os.WriteFile(logPath,
-		[]byte(`{"kind":"fault","fault_id":null,"unindexed":true,"code":"ERR-0015","summary":"orphan"}`+"\n"),
+		[]byte(`{"kind":"fault","fault_id":null,"log_only":true,"code":"ERR-0015","summary":"orphan"}`+"\n"),
 		0o644); err != nil {
 		t.Fatalf("seed the log: %v", err)
 	}
@@ -93,8 +93,8 @@ func TestRender_NoticeCountsUnindexedBesideAHealthyStore(t *testing.T) {
 	Render(&out, 100, false, faults.AllProjects)
 
 	line := out.String()
-	if !strings.Contains(line, "not indexed") {
-		t.Errorf("line = %q, want it to say an occurrence was never indexed", line)
+	if !strings.Contains(line, "log only") {
+		t.Errorf("line = %q, want it to say an occurrence went to the log only", line)
 	}
 	if strings.Contains(line, "could not be read") {
 		t.Errorf("line = %q, must not claim the record is unreadable when it reads fine", line)
@@ -137,7 +137,7 @@ func TestRender_BothRowAndNoticeWhenBothApply(t *testing.T) {
 	if err != nil {
 		t.Fatalf("open log: %v", err)
 	}
-	if _, err = f.WriteString(`{"kind":"fault","fault_id":null,"unindexed":true,"code":"ERR-0015","summary":"orphan"}` + "\n"); err != nil {
+	if _, err = f.WriteString(`{"kind":"fault","fault_id":null,"log_only":true,"code":"ERR-0015","summary":"orphan"}` + "\n"); err != nil {
 		t.Fatalf("append: %v", err)
 	}
 	if err = f.Close(); err != nil {
@@ -155,7 +155,7 @@ func TestRender_BothRowAndNoticeWhenBothApply(t *testing.T) {
 	if !strings.Contains(lines[0], "WARN-0001") {
 		t.Errorf("first line = %q, want the incident row", lines[0])
 	}
-	if !strings.Contains(lines[1], "not indexed") {
+	if !strings.Contains(lines[1], "log only") {
 		t.Errorf("second line = %q, want the notice", lines[1])
 	}
 }

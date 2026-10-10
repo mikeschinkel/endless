@@ -339,7 +339,7 @@ func Run(args []string) {
 //
 // Almost every way this view dies is the database being unreachable, and that
 // is precisely when a fault has been recorded that no query can reach: it was
-// written to errors.jsonl and indexed nowhere, because the index write is the
+// written to errors.jsonl only, because the database write is the
 // thing that failed. The fault row's notice needs only the filesystem, so it is
 // the ONE line of this frame that can still be produced, and the line that
 // tells a reader reports exist and where they are.

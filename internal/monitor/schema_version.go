@@ -235,7 +235,7 @@ func reconcileSchema(db *sql.DB, path string) error {
 // faultConn is a connection DB() opened and then refused on schema grounds. It
 // is handed to the fault writer ALONE (FaultDB), so a hook meeting a database
 // ahead of its binary — every hook on the machine, during a land's window —
-// records one deduplicated incident instead of an unindexed line per event.
+// records one deduplicated incident instead of a log-only line per event.
 // The `errors` table is machine-local observation, not ledger (package faults),
 // which is why an older binary writing it is not the ED-1570 hazard.
 var faultConn *sql.DB
@@ -243,7 +243,7 @@ var faultConn *sql.DB
 // FaultDB is the accessor internal/faults is bound to. It is DB() whenever DB()
 // succeeds, and the refused connection when DB() opened one and then refused
 // it. A worktree build aimed at main never opens it, so it gets no handle and
-// its faults go to the unindexed log in its own config directory.
+// its faults go to the log, not the database, in its own config directory.
 func FaultDB() (*sql.DB, error) {
 	db, err := DB()
 	if err == nil {

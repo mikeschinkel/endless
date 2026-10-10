@@ -290,21 +290,21 @@ func TestRecordHookFault_RecordsWhenTheDatabaseIsTheThingThatFailed(t *testing.T
 	t.Cleanup(func() { faults.Bind(nil, nil, nil, nil) })
 
 	// The case the whole fallback exists for: the hook failed BECAUSE the
-	// database is unreachable, so the fault cannot be indexed in it. The report
+	// database is unreachable, so the fault cannot be recorded in it. The report
 	// must still survive.
 	recordHookFault("claude", dbWriteFailed(errors.New("touching session: database is locked")))
 
-	details, err := faults.Unindexed()
+	details, err := faults.LogOnly()
 	if err != nil {
-		t.Fatalf("Unindexed: %v", err)
+		t.Fatalf("LogOnly: %v", err)
 	}
 	if len(details) != 1 {
-		t.Fatalf("recorded %d unindexed occurrences, want 1", len(details))
+		t.Fatalf("recorded %d log-only occurrences, want 1", len(details))
 	}
 	if details[0].Code != "ERR-0015" {
 		t.Errorf("code = %s, want ERR-0015", details[0].Code)
 	}
-	if !details[0].Unindexed {
-		t.Error("the occurrence is not marked unindexed")
+	if !details[0].LogOnly {
+		t.Error("the occurrence is not marked log only")
 	}
 }
