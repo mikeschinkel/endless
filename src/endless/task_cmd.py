@@ -6923,7 +6923,7 @@ def detail_item(
     caveat_line = authority.banner(caveat, task_id_display(item_id))
     # Session provenance (E-1866): who created the task and who else touched it.
     # Resolved once here so all three output modes report the same facts.
-    touches = _session_touches(item_id)
+    touches = _attach_liveness(_session_touches(item_id))
     creator = _creating_session(touches)
     # One grouped query, resolved once for all three output modes (E-2126):
     # children are structure, so every render advertises how many there are and
@@ -7094,7 +7094,8 @@ def detail_item(
             click.echo(f"created_by={_session_ref(creator)}")
         if touches:
             touch_str = ",".join(
-                f"{t['rel_slug'] or 'touched'} {_session_ref(t)} [{t['state']}]"
+                f"{t['rel_slug'] or 'touched'} {_session_ref(t)} [{t['state']}] "
+                f"{_liveness_text(t, styled=False)}"
                 for t in touches
             )
             click.echo(f"touched_by={touch_str}")
@@ -8991,6 +8992,7 @@ def _session_touches(item_id: int) -> list[dict]:
         "         r.label       AS rel_label, "
         "         s.state       AS state, "
         "         s.task_id     AS task_id, "
+        "         s.focus_task_id AS focus_task_id, "
         "         s.session_id  AS uuid "
         "  FROM session_tasks st "
         "  LEFT JOIN session_task_relations r ON r.id = st.relation_id "
@@ -9004,6 +9006,7 @@ def _session_touches(item_id: int) -> list[dict]:
         "         NULL AS rel_label, "
         "         s.state AS state, "
         "         s.task_id AS task_id, "
+        "         s.focus_task_id AS focus_task_id, "
         "         s.session_id AS uuid "
         "  FROM sessions s "
         "  WHERE s.task_id = ? "
@@ -9030,6 +9033,10 @@ def _session_touches(item_id: int) -> list[dict]:
             "touch_slug": row["rel_slug"],
             "state": row["state"] or _MISSING_SESSION_STATE,
             "task_id": row["task_id"],
+            # The task the session's conversation is on now (E-2188), as
+            # opposed to task_id, the one it claimed. `task sessions` reports
+            # which of the two points here (E-2294).
+            "focus_task_id": row["focus_task_id"],
             # The Claude UUID, for the transcript marker (E-2106). NULL when
             # session_tasks names a session whose sessions row is gone.
             "uuid": row["uuid"],
@@ -9081,6 +9088,10 @@ def _session_json(touch: dict) -> dict:
             if touch["task_id"] else None
         ),
         "state": touch["state"],
+        # E-2294: the observed run state from `session_liveness`, raw — see
+        # _attach_liveness for why it is not a yes/no.
+        "liveness": touch["liveness"],
+        "pane": touch["pane"],
         "touched_at": touch["last_touch"],
     }
 
@@ -9109,6 +9120,70 @@ def _transcript_gone(touch: dict) -> bool:
     return transcript_path(uuid) is None
 
 
+def _attach_liveness(touches: list[dict]) -> list[dict]:
+    """Stamp each touch with `liveness` and `pane` from Go's session_liveness
+    view (E-2294), in place, and return the list.
+
+    The raw state — `live`, `dead`, `unknown`, `unbound` — never a yes/no. The
+    claim guard reads `unknown` as live and the status monitor reads only
+    `live` as present (E-2293), so collapsing the four into two would disagree
+    with one of them. A session bound to a tmux server that no longer exists
+    reads `unknown` forever, and must say so rather than borrow either verdict.
+
+    One `endless-go` call for every row: the observation is one tmux sweep, and
+    asking per session would observe each against a different instant.
+    `task show` and `task sessions` both read through here, so the two cannot
+    disagree about the same session.
+    """
+    if not touches:
+        return touches
+    import json
+
+    from endless.event_bridge import _resolve_endless_go
+    result = subprocess.run(
+        [_resolve_endless_go(), *config.go_db_context_args(),
+         "session-query", "session-liveness",
+         *(str(t["session_id"]) for t in touches)],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        # endless-go classified this where it was raised; relaying is the job,
+        # as for every session-query read.
+        if result.stderr.strip():
+            raise agent_help.relay(result.stderr, exit_code=result.returncode)
+        raise agent_help.fault(
+            f"the session-liveness probe exited {result.returncode} and said "
+            f"nothing.")
+    try:
+        rows = provenance.rows_of(json.loads(result.stdout))
+    except ValueError as exc:
+        raise agent_help.fault(f"unreadable liveness output: {exc}") from exc
+    by_id = {r["session_id"]: r for r in rows}
+    for t in touches:
+        row = by_id.get(t["session_id"]) or {}
+        t["liveness"] = row.get("liveness") or "unbound"
+        t["pane"] = row.get("pane")
+    return touches
+
+
+# E-2294: how each liveness state is colored wherever it is printed. Only `live`
+# is good news and only `dead` is proof of loss; the other two are no opinion.
+_LIVENESS_COLORS = {"live": "green", "dead": "red"}
+
+
+def _liveness_text(touch: dict, styled: bool = True) -> str:
+    """'tmux:live %414' / 'tmux:dead' / 'tmux:unknown' / 'tmux:unbound' — the
+    session's liveness as `task show` and `task sessions` print it (E-2294).
+    The pane rides along only when live; see monitor.SessionLivenessRow."""
+    text = f"tmux:{touch['liveness']}"
+    if touch["pane"]:
+        text += f" {touch['pane']}"
+    if not styled:
+        return text
+    color = _LIVENESS_COLORS.get(touch["liveness"])
+    return click.style(text, fg=color) if color else click.style(text, dim=True)
+
+
 def _echo_touched_by_section(touches: list[dict], min_width: int = 0) -> bool:
     """Emit the 'Touched by:' session block (E-1866) — the session-side peer of
     'This task:', laid out identically so the two read as siblings: a cyan
@@ -9133,7 +9208,7 @@ def _echo_touched_by_section(touches: list[dict], min_width: int = 0) -> bool:
         )
         click.echo(
             f"- {label}{_session_ref(t)} "
-            f"[{click.style(t['state'], fg=color)}]{marker}")
+            f"[{click.style(t['state'], fg=color)}] {_liveness_text(t)}{marker}")
     return True
 
 
@@ -9187,6 +9262,103 @@ def _related_task_ids(item_id: int, rel_type: str | None = None) -> list[int]:
         if r["target_id"] != item_id:
             ids.add(r["target_id"])
     return sorted(ids)
+
+
+def _holds(touch: dict, item_id: int) -> str | None:
+    """Whether the task is this session's own (`sessions.task_id`, the claim —
+    write-once under ED-1560) or only where its conversation is now
+    (`sessions.focus_task_id`, E-2188). None when it is neither: the session
+    touched the task and has since moved on."""
+    if touch["task_id"] == item_id:
+        return "own"
+    if touch["focus_task_id"] == item_id:
+        return "focus"
+    return None
+
+
+def show_task_sessions(
+    item_id: int, include_ended: bool = False,
+    agent: bool = False, as_json: bool = False,
+):
+    """Every session holding a task, and whether anything is running there
+    (E-2294).
+
+    The rows are `task show`'s Touched-by rows — the same `_session_touches`
+    query, the same relation override, the same liveness read — so the two
+    commands cannot disagree about a session. What this adds is the answer
+    that block only half gives: the pane a live session sits in, and whether
+    the task is the session's own or only its focus. Sessions in a finished
+    state are left out unless `include_ended`, because the question here is
+    who holds the task now; the history is what `task show` is for.
+    """
+    if not db.exists("SELECT 1 FROM live_tasks WHERE id = ?", (item_id,)):
+        raise agent_help.no_report(
+            f"Task {task_id_display(item_id)} not found.", _NO_SUCH_ID_REMEDY)
+
+    touches = _session_touches(item_id)
+    finished = _finished_session_states()
+    rows = touches if include_ended else [
+        t for t in touches if t["state"] not in finished]
+    _attach_liveness(rows)
+    hidden = len(touches) - len(rows)
+
+    if as_json:
+        import json
+        click.echo(json.dumps(provenance.attach({
+            "id": task_id_display(item_id),
+            # Always present, so `[]` says "no session holds it" rather than an
+            # absent key leaving it unsaid.
+            "sessions": [
+                {**_session_json(t), "holds": _holds(t, item_id)}
+                for t in rows
+            ],
+        }), indent=2))
+        return
+
+    provenance.echo_head()
+    who = task_id_display(item_id)
+    if not rows:
+        none = (f"No session has touched {who}." if include_ended
+                else f"No session holds {who} now.")
+        if hidden:
+            none += (f" {hidden} ended session{'s' if hidden != 1 else ''} "
+                     f"touched it; --all lists them.")
+        click.echo(none)
+        return
+
+    if agent:
+        click.echo(f"# Sessions holding {who}")
+        for t in rows:
+            click.echo(
+                f"{t['rel_slug'] or 'touched'} {_session_ref(t)} [{t['state']}] "
+                f"{_liveness_text(t, styled=False)} "
+                f"holds={_holds(t, item_id) or '-'}")
+        return
+
+    click.echo()
+    click.echo(click.style(f"Sessions holding {who}", fg="green", bold=True))
+    click.echo(click.style("─" * 30, dim=True))
+    table = [
+        [
+            session_id_display(t["session_id"]),
+            t["rel_label"].lower(),
+            t["state"],
+            t["liveness"],
+            t["pane"] or "-",
+            _holds(t, item_id) or "-",
+            task_id_display(t["task_id"]) if t["task_id"] else "-",
+        ]
+        for t in rows
+    ]
+    click.echo(tabulate(
+        table,
+        headers=["Session", "Relation", "State", "Tmux", "Pane", "Holds", "Claimed"],
+        tablefmt="simple"))
+    if hidden and not include_ended:
+        click.echo(click.style(
+            f"\n{hidden} ended session{'s' if hidden != 1 else ''} not shown; "
+            f"--all lists them.", dim=True))
+    click.echo()
 
 
 def show_relations(item_id: int, agent: bool = False, as_json: bool = False):

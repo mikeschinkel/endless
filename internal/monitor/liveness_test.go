@@ -453,3 +453,53 @@ func TestLiveness_DuplicateServerYieldsOneRow(t *testing.T) {
 		t.Errorf("session_liveness returned %d rows, want 1", rows)
 	}
 }
+
+// TestSessionsLiveness_ReportsRawStateAndLivePaneOnly pins the batch reader
+// `task sessions` and `task show` share (E-2294): every state comes back raw and
+// in argument order, a session whose pane is gone reads `dead` even though its
+// row still says `working`, a pane is reported only when it was seen, and an id
+// with no row reads `unbound` like SessionLiveness.
+func TestSessionsLiveness_ReportsRawStateAndLivePaneOnly(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "acme", "/tmp/acme")
+	defer SetTestTmuxObservation("ours", map[string]string{"%1": "2.1.220"})()
+
+	live := seedLivenessSession(t, db, "sess-live", mustSeedPane(t, db, "ours", "%1"))
+	dead := seedLivenessSession(t, db, "sess-dead", mustSeedPane(t, db, "ours", "%404"))
+	unknown := seedLivenessSession(t, db, "sess-unknown", mustSeedPane(t, db, "gone-server", "%1"))
+	unbound := seedLivenessSession(t, db, "sess-unbound", 0)
+	const missing = int64(99999)
+
+	if err := RefreshLiveness(); err != nil {
+		t.Fatalf("RefreshLiveness: %v", err)
+	}
+	got, err := SessionsLiveness([]int64{dead, live, unknown, unbound, missing})
+	if err != nil {
+		t.Fatalf("SessionsLiveness: %v", err)
+	}
+	want := []struct {
+		id    int64
+		state Liveness
+		pane  string
+	}{
+		{dead, LivenessDead, ""},
+		{live, LivenessLive, "%1"},
+		{unknown, LivenessUnknown, ""},
+		{unbound, LivenessUnbound, ""},
+		{missing, LivenessUnbound, ""},
+	}
+	if len(got) != len(want) {
+		t.Fatalf("got %d rows, want %d", len(got), len(want))
+	}
+	for i, w := range want {
+		g := got[i]
+		pane := ""
+		if g.Pane != nil {
+			pane = *g.Pane
+		}
+		if g.SessionID != w.id || g.Liveness != w.state || pane != w.pane {
+			t.Errorf("row %d = {%d %q %q}, want {%d %q %q}",
+				i, g.SessionID, g.Liveness, pane, w.id, w.state, w.pane)
+		}
+	}
+}

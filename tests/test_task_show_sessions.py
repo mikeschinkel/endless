@@ -351,6 +351,9 @@ def test_json_reports_created_by_and_touched_by(seeded_project_at_cwd):
         "relation": "surfaced",
         "task": f"E-{a}",
         "state": "idle",
+        # E-2294: no pane binding, so no tmux opinion either way.
+        "liveness": "unbound",
+        "pane": None,
         "touched_at": "2026-08-01T00:00:00",
     }
     assert [t["session"] for t in payload["touched_by"]] == ["ES-996", "ES-994"]

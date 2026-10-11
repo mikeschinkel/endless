@@ -356,6 +356,65 @@ func SessionLiveness(sessionID int64) (Liveness, error) {
 	return Liveness(state), nil
 }
 
+// SessionLivenessRow is one session's observed run state plus the pane it is
+// bound to, for callers that report liveness per session rather than act on it
+// (`task sessions`, `task show`'s Touched-by block, E-2294).
+//
+// Pane is set only when Liveness is `live`. A pane id is unique per tmux
+// server, not globally (E-2196): the address of a `dead` or `unknown` binding
+// names a pane on a server we did not see it on, and printing it beside a live
+// pane that happens to share the id invites going to the wrong one.
+type SessionLivenessRow struct {
+	SessionID int64    `json:"session_id"`
+	Liveness  Liveness `json:"liveness"`
+	Pane      *string  `json:"pane"`
+}
+
+// SessionsLiveness returns the observed state of each named session, in the
+// order given. Reads the session_liveness view, the one definition of liveness,
+// rather than re-deriving it: a reader comparing this with the claim guard or
+// the status monitor must be looking at the same answer.
+//
+// An id with no session row reads `unbound`, exactly as SessionLiveness does
+// for one — a session that no longer exists has no binding to judge.
+func SessionsLiveness(sessionIDs []int64) ([]SessionLivenessRow, error) {
+	out := make([]SessionLivenessRow, 0, len(sessionIDs))
+	if len(sessionIDs) == 0 {
+		return out, nil
+	}
+	db, err := DB()
+	if err != nil {
+		return nil, err
+	}
+	if err = livenessReady(); err != nil {
+		return nil, err
+	}
+	stmt, err := db.Prepare(
+		`SELECT liveness, COALESCE(address, '') FROM session_liveness WHERE session_id = ?`,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("liveness: prepare session read: %w", err)
+	}
+	defer stmt.Close()
+	for _, id := range sessionIDs {
+		row := SessionLivenessRow{SessionID: id, Liveness: LivenessUnbound}
+		var state, address string
+		err = stmt.QueryRow(id).Scan(&state, &address)
+		switch {
+		case err == sql.ErrNoRows:
+		case err != nil:
+			return nil, fmt.Errorf("liveness: read session %d: %w", id, err)
+		default:
+			row.Liveness = Liveness(state)
+			if row.Liveness == LivenessLive && address != "" {
+				row.Pane = &address
+			}
+		}
+		out = append(out, row)
+	}
+	return out, nil
+}
+
 // ── observation: tmux ───────────────────────────────────────────────────────
 
 // observedServer is one tmux server we successfully reached, plus its panes.

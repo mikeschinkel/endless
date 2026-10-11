@@ -12,6 +12,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -46,6 +47,10 @@ func Run(args []string) {
 	// spawn/claim guard could WRITE a ghost owner to 'ended' before reading
 	// ownership. `list-live` now excludes observably-dead sessions at read
 	// time, so the ghost is absent without anything having been written.
+	case "session-liveness":
+		if err := runSessionLiveness(args[1:]); err != nil {
+			fail("session-liveness", err)
+		}
 	case "task-plan":
 		if err := runTaskPlan(args[1:]); err != nil {
 			fail("task-plan", err)
@@ -158,6 +163,8 @@ func usageText() string {
 		"subcommands:",
 		"  list-live --project-root <path>   JSON array of live sessions for the project",
 		"                                    end non-ended sessions whose tmux pane is gone (silent; DB error → exit 1)",
+		"  session-liveness <session-id>...  JSON array [{session_id, liveness, pane}] in argument order (E-2294);",
+		"                                    liveness is live|dead|unknown|unbound, pane set only when live",
 		"  task-plan --id <task-id>          raw plan for the task (empty if none)",
 		"  task-field --id <task-id> --name <" + strings.Join(taskcontent.Slugs(), "|") + ">",
 		"                                    raw value of one multiline doc column (empty if none)",
@@ -1081,6 +1088,33 @@ func runListLive(args []string) error {
 		return fmt.Errorf("list live sessions: %w", err)
 	}
 	return dbprovenance.Encode(os.Stdout, sessions)
+}
+
+// runSessionLiveness emits the observed liveness of each session id given as a
+// positional argument, as a JSON array in the same order (E-2294). The raw
+// four-state value, not a yes/no: the claim guard and the status monitor read
+// `unknown` differently, and a collapsed answer would disagree with one of them.
+func runSessionLiveness(args []string) error {
+	fs := refusal.NewFlags("session-liveness")
+	if err := parseFlags(fs, "session-liveness", args); err != nil {
+		return err
+	}
+	ids := make([]int64, 0, len(fs.Args()))
+	for _, a := range fs.Args() {
+		id, err := strconv.ParseInt(a, 10, 64)
+		if err != nil || id <= 0 {
+			return refusal.NoReport(
+				fmt.Sprintf("session id %q is not a positive integer", a),
+				"Pass sessions.id values (the N of ES-N) and retry",
+			)
+		}
+		ids = append(ids, id)
+	}
+	rows, err := monitor.SessionsLiveness(ids)
+	if err != nil {
+		return fmt.Errorf("session liveness: %w", err)
+	}
+	return dbprovenance.Encode(os.Stdout, rows)
 }
 
 // runEnsureClaudeID prints the integer sessions.id for an env-identified

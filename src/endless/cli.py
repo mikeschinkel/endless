@@ -4262,6 +4262,25 @@ def task_relations(item_id, agent, as_json):
     show_relations(item_id, agent=agent, as_json=as_json)
 
 
+@task_cmd.command("sessions")
+@click.argument("item_id", type=TASK_ID)
+@click.option("--all", "include_ended", is_flag=True,
+              help="Include sessions that have ended")
+@output_options(json_help="JSON output — the task and its sessions array")
+def task_sessions(item_id, include_ended, agent, as_json):
+    """List the sessions holding a task and whether each is live.
+
+    One row per session that claimed, surfaced, revisited, referenced or queued
+    the task: its relation, its state, the observed tmux liveness of its pane
+    (live, dead, unknown or unbound — a row can read `working` while its pane is
+    dead), the pane when live, and whether the task is the session's own or
+    only its current focus. Ended sessions are omitted unless --all.
+    """
+    from endless.task_cmd import show_task_sessions
+    show_task_sessions(item_id, include_ended=include_ended,
+                       agent=agent, as_json=as_json)
+
+
 @main.command("plan", context_settings={"ignore_unknown_options": True})
 @click.argument("args", nargs=-1, type=click.UNPROCESSED)
 def plan_redirect(args):
