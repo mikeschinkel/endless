@@ -72,8 +72,11 @@ decision yet. The decision drafted in the last item records them.
    statement or kind. Prose edits stop being material.
 7. While `underway`:
    - a new item is `grown`;
-   - an approved statement cannot be edited;
-   - withdrawing an approved item is refused;
+   - an approved item can be edited or withdrawn by anyone, but every such
+     change leaves the item set differing from the baseline, and the gate
+     refuses until the user re-approves (Mike chose this over refusing the
+     edit, so a redesign can be written by the agent and accepted in one
+     place);
    - the user can re-approve, which re-baselines every item. Re-approval
      closes, as moot, every open discrepancy question on an item that is
      withdrawn, and marks the plan as changed for the next reconciliation.
@@ -105,7 +108,11 @@ decision yet. The decision drafted in the last item records them.
     - every active item has exactly one entry;
     - every discrepancy has a settled question, meaning answered or closed
       in any way, by anyone, or an earlier answer kept with `answer_holds`;
-    - the task has at least one active deliverable item.
+    - the task has at least one active deliverable item;
+    - the item set matches the approved baseline: no approved item has a
+      changed statement or kind, and none has been withdrawn since approval.
+      Grown items are not baseline differences; they are `more`
+      discrepancies.
     There is no grandfathering by claim time.
 11. The gate runs on todo and bugfix tasks when the status is set to
     `unverified` or `assumed`, and inside `task verify` as a backstop. Those
@@ -186,3 +193,5 @@ decision yet. The decision drafted in the last item records them.
 - EQ-41: land's move to `assumed` skips the gate.
 - EQ-42: spawn refuses `ready` tasks with prose-only plans.
 - EQ-43: the `endless plan` redirect is removed.
+- Item 7 (asked in chat): approved items may be edited while underway, and
+  the gate holds until re-approval (option B).
