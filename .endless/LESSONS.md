@@ -7397,3 +7397,7 @@ In the E-2291 needs-plan questions, I put Q4 (leave bound out of session status'
 ### [2026-10-10] Say what an internal term refers to when putting it to Mike
 In the E-2291 questions I asked where 'bound' should rank, 'above queued', and used 'primed session', without saying what each refers to. Mike asked 'Ranked WHERE?', 'Where are tasks queued?', and whether we had ever agreed to define 'primed session'. In a question for him, name the mechanism behind a code-level term: which function ranks, and what that rank decides. Point to where a term is defined, or define it in the question.
 - **Project**: endless
+
+### [2026-10-10] Present only real trade-offs as open questions
+While presenting open questions for planning E-2280, several questions had an option with no cons beside options with no pros, and one 'con' (E-2261's child must remember to call the check) was really an action item. Mike asked why one-sided choices were posed as open questions at all, and whether the con was there just to fill the column. A choice where one option dominates is not open: decide it, state it in the plan, and ask only where options trade real costs. A required follow-up step is a plan item, not a con. He also asked what 'exclusion fence' and 'crossing' meant: don't introduce coined metaphors in questions; use agreed terms and define them.
+- **Project**: endless
