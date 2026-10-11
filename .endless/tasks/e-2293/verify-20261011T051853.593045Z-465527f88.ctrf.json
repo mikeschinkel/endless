@@ -1,0 +1,129 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 22,
+      "passed": 22,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test: monitor, sessionstatuscmd, events, schema",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestStewardship_UnreachableSessionDoesNotSteward",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestStewardship_DeadPaneDoesNotSteward",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestStewardship_IdlePresentSessionStillStewards",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestStewardship_OneClaimerClearsDuplicate",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestStewardship_UnprovenClaimerKeepsDuplicate",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestStewardship_TwoClaimersMarkDuplicate",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestStewardship_PinOutranksSteward",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestApplyHiddenMode_FocusAndStewardship",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestRender_SuppressedFooterAndGlyph",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestSessionTasksHidden_RefusesOwnTask",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestSessionTasksHidden_FocusIsHideable",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestSessionTasksUnhidden_UnhidesOrPins",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest: session hide/unhide --task and membership verbs",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "E-150 is not stewarded elsewhere on A's view",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and the table draws it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and nothing is reported suppressed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "E-160 is A's focus",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the hidden focus row is not drawn",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and the footer counts it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "--show-suppressed is accepted",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "--json carries pinned",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
