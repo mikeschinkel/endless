@@ -7409,3 +7409,11 @@ While planning E-2280, I called 'exclusion' an agreed term because the E-2279 re
 ### [2026-10-10] Recover crashed tmux Claude sessions with endless session resume, not recover-claude.sh
 While recovering ~37 tmux windows after a tmux crash, I found an old recover-claude.sh helper script (May 2026) in Mike's tmux config directory and started reading it. Mike said that script is almost certainly obsolete if it is older than a week or two, because Endless now has its own recovery command. Use `endless session resume --tmux-session NAME` (dry-run first) after tmux-resurrect has restored the layout.
 - **Project**: endless
+
+### [2026-10-10] Monitor, not board — and a monitor is not a children listing
+I called `session status` a 'board' repeatedly while analysing why E-1995 was missing from it. Mike has asked me before to stop using that word; monitor is the term.
+
+The substantive half: I argued 'the epic is the one monitor that should never lose a child' as if it were a rule. It is not. Mike's reason: a monitor shows the work THIS session still has to do. If a sibling session takes a task over — say it was blocking that sibling and the sibling is now planning it — that session should own it and the epic's monitor should not list it. Wanting to see an epic's full child set is a different need, served by `task show --children`.
+
+So do not reason from 'the monitor must show everything under the focal task'. Ask what this session still has to act on. When I catch myself arguing a display should be complete, check whether I am conflating the monitor with a listing command that already exists.
+- **Project**: endless
