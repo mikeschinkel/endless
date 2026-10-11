@@ -121,6 +121,8 @@ es task add "Add a gadget" --description "Add a gadget to the probe project" --p
     --complexity low --risk low >/dev/null
 out="$(es task approve E-2)"
 assert_contains "approve refuses a todo with no deliverable item" "no active deliverable plan item" "$out"
+out="$(es task spawn E-2)"
+assert_contains "spawn refuses a todo with a prose-only plan" "so it cannot be spawned" "$out"
 es task approve E-1 >/dev/null
 assert_eq "approve moves E-1 to ready" "ready" "$(field E-1 'd["status"]')"
 out="$(es task plan list E-1)"
