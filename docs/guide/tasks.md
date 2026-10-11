@@ -266,16 +266,20 @@ nothing to resolve. `endless tmux task` is an alias for it.
 
   ```
   Touched by:
-  - Claimed:     ES-101 (E-102) [ended]
-  - Revisited:   ES-102 (E-103) [idle]
-  - Surfaced:    ES-103 (E-104) [idle]
+  - Claimed:     ES-101 (E-102) [ended] tmux:unbound
+  - Revisited:   ES-102 (E-103) [working] tmux:dead
+  - Surfaced:    ES-103 (E-104) [idle] tmux:live %414
   ```
 
   The leading relation says how the task entered that session's scope — **Claimed** (the session claimed it), **Surfaced** (created it), **Revisited** (touched it without claiming), or **Touched** for a historical row recorded before the vocabulary existed. The parenthesized id is the task that session is bound to *now*; `[state]` is the session's state, or `gone` when the session row itself no longer exists.
 
+  `tmux:` is whether anything is actually running there, observed at read time: **live** (its pane was seen, and the pane follows), **dead** (its tmux server was reached and the pane was not there — even when `[state]` still says `working`), **unknown** (its server could not be reached, so no opinion — a session bound to a tmux server that has since gone reads this forever), or **unbound** (no pane binding at all). The raw state, not a yes/no, because the claim guard reads `unknown` as live while the status monitor counts only `live` as present.
+
   **Claimed** is read off `sessions.task_id`, the write-once ownership record, not off the touch — so a session that filed a task and later claimed it reads `Claimed`, not the `Surfaced` its touch row was stamped with, and a session that claimed the task without ever recording a touch is listed too. That is the same column `task spawn` refuses on, so this block and that refusal cannot disagree.
 
 Sessions render as **`ES-NNNN`** and tasks as `E-NNNN` — separate id spaces that would otherwise be indistinguishable side by side. Feed an `ES-NNNN` straight to `endless session goto ES-101` to jump there. `--json` reports the same facts as `created_by` / `touched_by`; `--agent` as `created_by=` / `touched_by=` lines.
+
+**`endless task sessions <id>`** answers "which session holds this, and is anything running there" on its own: one row per session holding the task, with its relation, state, `tmux` liveness, the pane when live, and whether the task is the session's **own** (its claim) or only its **focus** (where its conversation is now). Ended sessions are left out — `--all` includes them — and a task nobody holds says so. Its rows and `task show`'s come from the same read, so the two always agree. `--json` and `--agent` as usual.
 
 ---
 
