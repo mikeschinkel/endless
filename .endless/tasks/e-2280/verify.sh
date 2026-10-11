@@ -121,7 +121,7 @@ es task add "Add a gadget" --description "Add a gadget to the probe project" --p
     --complexity low --risk low >/dev/null
 out="$(es task approve E-2)"
 assert_contains "approve refuses a todo with no deliverable item" "no active deliverable plan item" "$out"
-out="$(es task spawn E-2)"
+out="$(with_tmux es task spawn E-2)"
 assert_contains "spawn refuses a todo with a prose-only plan" "so it cannot be spawned" "$out"
 es task approve E-1 >/dev/null
 assert_eq "approve moves E-1 to ready" "ready" "$(field E-1 'd["status"]')"
@@ -138,7 +138,7 @@ assert_eq "re-approved" "ready" "$(field E-1 'd["status"]')"
 section "Reconciling, and the gate"
 assert_contains "the gate refuses an unreconciled task" "has not been reconciled" "$(gate 1)"
 out="$(es task update E-1 --status unverified)"
-assert_contains "setting unverified runs the gate" "reconciliation gate refused" "$out"
+assert_contains "setting unverified runs the gate" "cannot move to unverified yet" "$out"
 
 out="$(es task reconcile E-1)"
 assert_contains "reconcile without --file prints a file to fill in" 'item = "P1"' "$out"
@@ -161,7 +161,7 @@ assert_contains "it is an open question on the task" "EQ-1     open" "$out"
 assert_contains "the gate holds for the user's answer" "waiting for the user" "$(gate 1)"
 
 es question answer EQ-1 "Fine, keep the template" --by user >/dev/null
-assert_contains "the gate passes once it is answered" '"pass": true' "$(gate 1)"
+assert_contains "the gate passes once it is answered" '"pass":true' "$(gate 1)"
 
 out="$(es task reconcile E-1 --file "$TMP/r1.toml")"
 assert_contains "reconciling again must say whether the earlier answer holds" "answer_holds" "$out"
@@ -179,12 +179,12 @@ verdict = "kept"
 TOML
 out="$(es task reconcile E-1 --file "$TMP/r2.toml")"
 assert_contains "a kept earlier answer files no question" "No discrepancies are waiting" "$out"
-assert_contains "and the gate passes" '"pass": true' "$(gate 1)"
+assert_contains "and the gate passes" '"pass":true' "$(gate 1)"
 out="$(es task show E-1 --plan)"
 assert_contains "show --plan carries the verdict and the answer" "EQ-1 answered: Fine, keep the template" "$out"
 
 ( cd "$PROJ" && mkdir -p .endless/x && echo x >.endless/x/f && git add -A && git commit -qm "endless only" )
-assert_contains "a commit touching only .endless/ leaves it current" '"pass": true' "$(gate 1)"
+assert_contains "a commit touching only .endless/ leaves it current" '"pass":true' "$(gate 1)"
 ( cd "$PROJ" && echo 'package widget' >widget.go && git add -A && git commit -qm "code" )
 assert_contains "a code change makes it stale" "code changed since the last reconciliation" "$(gate 1)"
 

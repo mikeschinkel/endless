@@ -244,12 +244,8 @@ func TestFingerprint_OwnChangesOnly(t *testing.T) {
 	gitRun(t, dir, "checkout", "-q", "-b", "task/1")
 
 	ctx := context.Background()
-	fp0, _, err := Fingerprint(ctx, dir)
-	if err != nil {
+	if _, _, err := Fingerprint(ctx, dir); err != nil {
 		t.Fatal(err)
-	}
-	if fp0 != EmptyFingerprint {
-		t.Errorf("no own changes: %q, want %q", fp0, EmptyFingerprint)
 	}
 
 	write(t, dir, "a.go", "package a\n\nfunc A() {}\n")
@@ -279,5 +275,33 @@ func TestFingerprint_OwnChangesOnly(t *testing.T) {
 	commit(t, dir, "more work")
 	if fp, _, _ := Fingerprint(ctx, dir); fp == fp1 {
 		t.Errorf("an edit left the fingerprint unchanged")
+	}
+}
+
+// TestFingerprint_OnTheBaseBranch: work committed straight onto the base branch
+// has no branch of its own to diff, so the tracked tree outside .endless/ is
+// what is fingerprinted.
+func TestFingerprint_OnTheBaseBranch(t *testing.T) {
+	dir := t.TempDir()
+	gitRun(t, dir, "init", "-q", "-b", "main")
+	write(t, dir, "a.go", "package a\n")
+	commit(t, dir, "base")
+	ctx := context.Background()
+	fp0, _, err := Fingerprint(ctx, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.HasPrefix(fp0, "tree:") {
+		t.Fatalf("fingerprint on the base branch = %q, want a tree fingerprint", fp0)
+	}
+	write(t, dir, ".endless/x", "x\n")
+	commit(t, dir, "Endless: ledger")
+	if fp, _, _ := Fingerprint(ctx, dir); fp != fp0 {
+		t.Errorf("an .endless/-only commit changed the fingerprint")
+	}
+	write(t, dir, "a.go", "package a\n\nvar A = 1\n")
+	commit(t, dir, "code")
+	if fp, _, _ := Fingerprint(ctx, dir); fp == fp0 {
+		t.Errorf("a code commit left the fingerprint unchanged")
 	}
 }

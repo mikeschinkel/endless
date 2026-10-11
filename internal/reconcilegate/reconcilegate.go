@@ -13,7 +13,9 @@ package reconcilegate
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"database/sql"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -33,6 +35,12 @@ const EmptyFingerprint = "empty"
 // `.endless/` excluded. A clean rebase onto a moved base leaves it alone; an
 // edit, or a conflict resolved differently, changes it. Endless's own ledger and
 // mirror commits never do.
+//
+// When HEAD IS the base point — the work is committed straight onto the base
+// branch, as in a project that does not use worktrees — there is no branch of
+// its own to diff, and that diff would be empty forever. Then the fingerprint
+// is the tracked tree outside `.endless/` instead, so any code change, anyone's,
+// makes a reconciliation stale.
 func Fingerprint(ctx context.Context, repo string) (fingerprint, head string, err error) {
 	base, err := monitor.DefaultBranch(ctx, repo)
 	if err != nil {
@@ -44,6 +52,21 @@ func Fingerprint(ctx context.Context, repo string) (fingerprint, head string, er
 	mb, err := git(ctx, repo, nil, "merge-base", base, "HEAD")
 	if err != nil {
 		return "", "", fmt.Errorf("merge-base of %s and HEAD: %w", base, err)
+	}
+	if mb == head {
+		// ls-tree takes no exclude pathspec, so `.endless/` is dropped here.
+		tree, err := git(ctx, repo, nil, "ls-tree", "-r", "--full-tree", "HEAD")
+		if err != nil {
+			return "", "", err
+		}
+		h := sha256.New()
+		for _, line := range strings.Split(tree, "\n") {
+			if _, path, ok := strings.Cut(line, "\t"); ok && !strings.HasPrefix(path, ".endless/") {
+				fmt.Fprintln(h, line)
+			}
+		}
+		sum := h.Sum(nil)
+		return "tree:" + hex.EncodeToString(sum[:]), head, nil
 	}
 	diff, err := git(ctx, repo, nil, "diff", "--binary", "--no-color", "--no-ext-diff",
 		"--no-renames", "--src-prefix=a/", "--dst-prefix=b/", mb, "HEAD",

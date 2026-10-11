@@ -564,7 +564,7 @@ If it files questions, list them in the order it prints them as your final messa
 
 - the task has at least one active deliverable item;
 - the items match what the user approved (re-approve with `task approve` after a change);
-- the latest reconciliation is current: no code outside `.endless/` changed on the branch since (a clean `git rebase` does not count; an edit does), and no item changed since;
+- the latest reconciliation is current: no code outside `.endless/` changed on the branch since (a clean `git rebase` does not count; an edit does — and for work committed straight onto the base branch, any change to the tracked tree outside `.endless/` does), and no item changed since;
 - every active item has exactly one entry, and every discrepancy's question is settled — answered or closed, by anyone — or carries a kept earlier answer.
 
 `worktree land`'s own move to `assumed` is not gated: the verify it requires already was. A task with no items at all is let through by `task verify` only, because it reached `unverified` before itemized plans existed.
