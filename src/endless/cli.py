@@ -3330,6 +3330,10 @@ def _apply_clear_flags(clear_fields, resolved):
               help="Full implementation plan (inline)")
 @click.option("--plan-file", default=None,
               help="Load the full implementation plan from a file")
+@click.option("--items-file", default=None,
+              help="Load the plan items from a TOML file: one [[item]] table per "
+                   "item (id, kind, statement, verify, detail). Rules: endless "
+                   "guide tasks")
 @click.option("--context", "context_text", default=None,
               help="Context (inline) — why the task exists: how things work "
                    "today, what prompted it, the evidence. Never how.")
@@ -3398,7 +3402,7 @@ def _apply_clear_flags(clear_fields, resolved):
 @click.option("--allow-path", "allow_paths", multiple=True,
               help="Regex matching an absolute path to permit in inline content "
                    "(repeatable; escape hatch for the path gate).")
-def task_add(title, description, description_file, plan_text, plan_file, context_text, context_file, analysis_text, analysis_file, phase, project, parent, after, task_type, status, complexity, risk, force,
+def task_add(title, description, description_file, plan_text, plan_file, items_file, context_text, context_file, analysis_text, analysis_file, phase, project, parent, after, task_type, status, complexity, risk, force,
              justification,
              blocks_ids, blocked_by_ids, precedes_ids, preceded_by_ids,
              conflicts_with_ids, relates_to_ids, implements_ids,
@@ -3426,6 +3430,9 @@ def task_add(title, description, description_file, plan_text, plan_file, context
                       justification=justification)
     if new_id is None:
         return
+    if items_file:
+        from endless import plan_items
+        plan_items.apply_items_file(new_id, items_file)
     for tid in blocks_ids:
         link_tasks(new_id, tid, "blocks")
     for tid in blocked_by_ids:
@@ -3468,6 +3475,10 @@ def task_add(title, description, description_file, plan_text, plan_file, context
               help="Full implementation plan (inline)")
 @click.option("--plan-file", default=None,
               help="Load the full implementation plan from a file")
+@click.option("--items-file", default=None,
+              help="Load the plan items from a TOML file: one [[item]] table per "
+                   "item (id, kind, statement, verify, detail). Rules: endless "
+                   "guide tasks")
 @click.option("--parent", type=TASK_ID, default=None,
               help="Set parent task ID (0 to make root)")
 @click.option("--phase", default=None,
@@ -3536,7 +3547,7 @@ def task_add(title, description, description_file, plan_text, plan_file, context
                    "close the superseded task.")
 # E-2189: renamed with the relation it records.
 @retired_option("--replaces", "--supersedes")
-def task_update(item_ids, status, title, description, description_file, plan_text, plan_file, parent, phase, complexity, risk,
+def task_update(item_ids, status, title, description, description_file, plan_text, plan_file, items_file, parent, phase, complexity, risk,
                 task_type, context_text, context_file, analysis_text, analysis_file, force, outcome, outcome_file, reason, reason_file,
                 notes_text, notes_file, justification, allow_paths,
                 keep_status, clear_fields, duplicates_ids, supersedes_ids):
@@ -3573,8 +3584,17 @@ def task_update(item_ids, status, title, description, description_file, plan_tex
         status, title, description, plan_text, parent, phase, complexity, risk, task_type,
         context_text, analysis_text, outcome, reason, notes_text, justification,
     ))
-    relations_only = not edits_a_field and (duplicates_ids or supersedes_ids)
+    relations_only = not edits_a_field and (duplicates_ids or supersedes_ids or items_file)
+    if items_file:
+        from endless import plan_items
+        # Parsed once, before any task is touched: a malformed file refuses the
+        # whole command rather than half of it.
+        plan_items.parse_items_file(items_file)
     for item_id in item_ids:
+        if items_file:
+            # Items first: a status set in the same call (unverified, say) would
+            # freeze them.
+            plan_items.apply_items_file(item_id, items_file, keep_status=keep_status)
         if not relations_only:
             update_plan(item_id, status=status, title=title,
                         description=description, plan=plan_text,
@@ -4300,6 +4320,113 @@ def plan_redirect(args):
         "The 'plan' command has been renamed to 'task'. Nothing ran.",
         f"Re-run as `{corrected}`",
         text="The 'plan' command has been renamed to 'task'.")
+
+
+@task_cmd.group("plan")
+def task_plan_group():
+    """Manage a task's plan items: one-line statements of what will be true.
+
+    Items are numbered P1, P2, … within their task and never renumbered. A
+    `deliverable` states what the work makes true; an `exclusion` states what
+    the task will not do or change. Rules: endless guide tasks.
+    """
+
+
+@task_plan_group.command("add")
+@click.argument("item_id", type=TASK_ID)
+@click.argument("statement")
+@click.option("--kind", type=click.Choice(["deliverable", "exclusion"]),
+              default="deliverable", help="deliverable (default) or exclusion")
+@click.option("--verify", default=None, help="How to tell the item is true")
+@click.option("--detail", default=None, help="A short note on the item")
+def task_plan_add(item_id, statement, kind, verify, detail):
+    """Add one plan item. While the task is underway it is a grown item."""
+    from endless import plan_items
+    op = {"op": "add", "kind": kind, "statement": statement.strip()}
+    if verify:
+        op["verify"] = verify
+    if detail:
+        op["detail"] = detail
+    plan_items.emit_ops(item_id, [op])
+
+
+@task_plan_group.command("edit")
+@click.argument("item_id", type=TASK_ID)
+@click.argument("item")
+@click.option("--statement", default=None, help="New one-line statement")
+@click.option("--kind", type=click.Choice(["deliverable", "exclusion"]), default=None)
+@click.option("--verify", default=None, help="New verify text ('' clears)")
+@click.option("--detail", default=None, help="New detail text ('' clears)")
+def task_plan_edit(item_id, item, statement, kind, verify, detail):
+    """Edit one plan item, named P<n>.
+
+    Editing an approved item is allowed at any status before `unverified`, but
+    the change must be re-approved before the task can be handed over.
+    """
+    from endless import plan_items
+    op = {"op": "edit", "seq": plan_items.parse_label(item)}
+    for k, v in (("statement", statement), ("kind", kind), ("verify", verify), ("detail", detail)):
+        if v is not None:
+            op[k] = v.strip()
+    plan_items.emit_ops(item_id, [op])
+
+
+@task_plan_group.command("withdraw")
+@click.argument("item_id", type=TASK_ID)
+@click.argument("items", nargs=-1, required=True)
+def task_plan_withdraw(item_id, items):
+    """Withdraw plan items, named P<n>. Their numbers are never reused."""
+    from endless import plan_items
+    plan_items.emit_ops(item_id, [{"op": "withdraw", "seq": plan_items.parse_label(i)}
+                                  for i in items])
+
+
+@task_plan_group.command("move")
+@click.argument("item_id", type=TASK_ID)
+@click.argument("item")
+@click.argument("position", type=click.IntRange(min=1))
+def task_plan_move(item_id, item, position):
+    """Move a plan item to a 1-based POSITION in the list. Display order only."""
+    from endless import plan_items
+    seq = plan_items.parse_label(item)
+    rows = plan_items.items(item_id)
+    order = [r["seq"] for r in rows if r["seq"] != seq]
+    if len(order) == len(rows):
+        raise agent_help.no_report(f"E-{item_id} has no active plan item {item}.",
+                                   "Name an item `endless task plan list` shows")
+    order.insert(min(position, len(order) + 1) - 1, seq)
+    base = max([r["sort_order"] for r in plan_items.items(item_id, all_items=True)] or [0])
+    plan_items.emit_ops(item_id, [{"op": "move", "seq": s, "sort_order": base + i}
+                                  for i, s in enumerate(order, 1)])
+
+
+@task_plan_group.command("list")
+@click.argument("item_id", type=TASK_ID)
+@click.option("--all", "all_items", is_flag=True, help="Include withdrawn items")
+@click.option("--json", "as_json", is_flag=True, help="JSON output")
+def task_plan_list(item_id, all_items, as_json):
+    """List a task's plan items with their latest verdicts."""
+    from endless import plan_items
+    plan_items.list_items(item_id, all_items, as_json)
+
+
+@task_cmd.command("reconcile")
+@click.argument("item_id", type=TASK_ID)
+@click.option("--file", "file_path", default=None,
+              help="The reconciliation: one [[entry]] table per active item")
+def task_reconcile(item_id, file_path):
+    """Reconcile finished work against the task's plan items.
+
+    Without --file: show every item, its earlier verdict and answer, what
+    changed since the last reconciliation, and a file to fill in. With --file:
+    record it, file a kind-tagged question for each discrepancy, and list them.
+    Run after implementing and before handing over a verify.
+    """
+    from endless import plan_items
+    if file_path is None:
+        plan_items.show_reconcile_context(item_id)
+    else:
+        plan_items.reconcile(item_id, file_path)
 
 
 @main.group("decision")

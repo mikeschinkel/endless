@@ -84,6 +84,11 @@ def run_verify(item_id: int | None, keep: bool) -> None:
     tree = Path(run_dir) if run_dir is not None else Path.cwd()
 
     _require_clean_tree(task_id, tree)
+    # E-2280: the backstop. Every hand-over already ran the reconciliation gate;
+    # this catches a verify that skipped one. A task with no plan items at all is
+    # let through: it reached `unverified` before itemized plans shipped.
+    from endless import plan_items
+    plan_items.require_gate(resolved, "be verified", mode="backstop")
     sha = _head_sha(tree)
     full_sha = _head_sha(tree, short=False)
 

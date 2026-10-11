@@ -863,11 +863,12 @@ def db_context_is_sandbox() -> bool:
     """
     if RESOLVED_CONFIG_DIR is None:
         return False
-    try:
-        RESOLVED_CONFIG_DIR.relative_to(_cache_root() / "endless" / "sandboxes")
-    except ValueError:
-        return False
-    return True
+    # Asked of sandbox_config_dir, the one seam that knows where a sandbox is.
+    # This used to test for the pre-ED-1554 location under the cache, so once
+    # sandboxes moved into the worktree it answered False for every one of them
+    # and a sandbox run committed its mirrors onto the real main checkout.
+    worktree = worktree_path()
+    return worktree is not None and RESOLVED_CONFIG_DIR == sandbox_config_dir(worktree)
 
 
 def go_db_context_args() -> list[str]:

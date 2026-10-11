@@ -3666,6 +3666,9 @@ def assume_item(item_id: int, cascade: bool = False, outcome: str | None = None)
         )
 
     _require_status_allowed_for_type("assumed", row[0]["type"])
+    if row[0]["status"] != "assumed":
+        from endless import plan_items
+        plan_items.require_gate(item_id, "move to assumed")
     if cascade:
         _refuse_cascade_across_typed_descendants(item_id, "assumed")
 
@@ -4074,12 +4077,26 @@ def approve_item(item_id: int, complexity: str | None = None,
     """
     from endless.event_bridge import emit_event
 
+    from endless import plan_items
+
     row = _read_for_rating(item_id)
     current = row["status"]
-    if current == "ready":
+    # E-2280: approving copies the plan items into their baseline. On a task
+    # already under way it is a re-approval: the baseline moves to the items as
+    # they are now — a redesign accepted in one place — and the status stays.
+    if current in ("ready", "underway", "revisit"):
+        if not plan_items.readiness(item_id)["unapproved"]:
+            click.echo(
+                click.style("•", fg="cyan")
+                + f" {task_id_display(item_id)} is {current}, and its plan items "
+                "already match what was approved"
+            )
+            return
+        plan_items.require_deliverable(item_id, "approved")
+        plan_items.baseline(item_id)
         click.echo(
             click.style("•", fg="cyan")
-            + f" Item {task_id_display(item_id)} is already ready"
+            + f" Re-approved the plan items of {task_id_display(item_id)}"
         )
         return
     if current != "submitted":
@@ -4096,6 +4113,7 @@ def approve_item(item_id: int, complexity: str | None = None,
         )
     effective, changed = _resolve_ratings(row, complexity, risk)
     _refuse_unrated_approve(item_id, effective)
+    plan_items.require_deliverable(item_id, "approved")
 
     _, proj_name = _resolve_project(None)
     _emit_ratings(item_id, proj_name, changed)
@@ -4110,6 +4128,8 @@ def approve_item(item_id: int, complexity: str | None = None,
             "cascade": False,
         },
     )
+
+    plan_items.baseline(item_id)
 
     _emit_field_changes(
         item_id, row["title"],
@@ -6117,6 +6137,12 @@ def update_plan(
         # task does not count (E-1531, Mike's ruling). Every closing move is a
         # decision of its own, and says why of its own.
         _require_reason_for_abandonment(status, reason)
+        # E-2280: handing work over is gated on a current, settled
+        # reconciliation. `worktree land`'s own move to `assumed` does not come
+        # through here, and needs no gate: the verify it requires already ran it.
+        if status in ("unverified", "assumed") and status != row[0]["status"]:
+            from endless import plan_items
+            plan_items.require_gate(item_id, f"move to {status}")
         # E-1993: `submitted` means "planned, awaiting approval" by every route
         # to it — `task submit`, the plan-attach promotion, and this one — so it
         # needs a plan, already stored or arriving in this same update.
@@ -6177,18 +6203,10 @@ def update_plan(
     # Reopening keeps its explicit spelling, `--status revisit`, and stays the
     # user's to make. The edges are untouched; only the inference is gone.
 
-    # E-1993: a material plan edit on an approved task drops its approval. The
-    # plan is what `task approve` approved, so once it changes the task goes
-    # back to `submitted` to be approved again. Guards:
-    #   - only a MATERIAL change: an identical re-write, or one differing only
-    #     in leading/trailing whitespace, is not one,
-    #   - an explicit --status in the same update wins (intent), as does
-    #     --keep-status (typo/formatting-only edit),
-    #   - only from `ready`. Every earlier status has no approval to lose, and
-    #     from `underway` on the plan edit records what the work became — the
-    #     discovery rules in `docs/guide/tasks.md` REQUIRE a session to record
-    #     grown scope there, and yanking approval from under it would punish
-    #     exactly that.
+    # E-1993 dropped a `ready` task's approval on any material edit of its plan
+    # prose. E-2280 moved what is approved to the plan ITEMS: a prose edit is no
+    # longer material, and the reset lives in plan_items.unapprove_if_material,
+    # which fires when the item set stops matching its approved baseline.
     #
     # A description edit never changes status. It used to reset a pre-work task
     # to `untriaged` (E-1845), because the description was the spec triage and
@@ -6201,16 +6219,6 @@ def update_plan(
     if plan_attached and not (row[0]["plan"] or "").strip():
         _challenge_drafted_plan(item_id, row[0], plan)
 
-    plan_changed = (
-        plan is not None
-        and plan.strip() != (row[0]["plan"] or "").strip()
-    )
-    auto_unapprove = (
-        not keep_status
-        and status is None
-        and plan_changed
-        and row[0]["status"] == "ready"
-    )
 
     # E-1913: `--keep-status` holds the status across EVERY auto-transition, not
     # only the one guarded above. The plan-attach promotion (a pre-judgment task
@@ -6262,8 +6270,6 @@ def update_plan(
 
     if status is not None:
         _add("status", status)
-    elif auto_unapprove:
-        _add("status", "submitted")
     elif keep_status_pin or promotion_refused:
         # Deliberately not _add(): this writes back the status the row already
         # has, purely to make the executor stand down. Nothing changed, so
@@ -6404,16 +6410,6 @@ def update_plan(
     header_title = fields.get("title", row[0]["title"]) or row[0]["description"]
     _emit_field_changes(item_id, header_title, rendered)
 
-    # E-1993: the field render above already shows `Status: ready ->
-    # submitted`; this names WHY and the escape hatch. Human-only (E-2120): an
-    # agent is shown the fields it asked to change and nothing else.
-    if auto_unapprove and not agent_reading:
-        click.echo(
-            f"{task_id_display(item_id)} → submitted (the plan changed, and "
-            f"approval was granted against the old one). Pass --keep-status on "
-            f"a typo- or formatting-only edit to keep it approved."
-        )
-
     # E-2203: the plan and every other field have landed; the promotion has
     # not. Refused as an error, not a note, so the agent cannot carry on as if
     # the task were submitted.
@@ -6428,11 +6424,8 @@ def update_plan(
     # reaches here unrated is a person's — and the rater job proposes ratings
     # for it, which the note says rather than asking them to originate any.
     promoted = (
-        auto_unapprove
-        or (
-            status is None and not keep_status and plan_attached
-            and row[0]["status"] in _PRE_JUDGMENT_STATUSES
-        )
+        status is None and not keep_status and plan_attached
+        and row[0]["status"] in _PRE_JUDGMENT_STATUSES
     )
     if promoted:
         _nudge_unrated(item_id, *(
@@ -7160,6 +7153,11 @@ def detail_item(
             for q in open_questions:
                 click.echo(f"EQ-{q['id']} {q['question']}")
         for slug in content_slugs:
+            # E-2280: the plan renders its items first, then its prose.
+            if slug == "plan" and slug in show_content:
+                items_text = _plan_items_text(item_id)
+                if items_text:
+                    click.echo(f"\n## Plan items\n{items_text}")
             if slug in show_content and item[slug]:
                 click.echo(f"\n## {content_names.label(slug)}\n{brief_text(item[slug], brief)}")
         if show_children:
@@ -7407,6 +7405,13 @@ def _render_detail_human(
     for slug in content_slugs:
         if slug in leading:
             continue  # rendered after the description, above
+        # E-2280: the plan renders its items first, then its prose.
+        if slug == "plan" and slug in show_content:
+            items_text = _plan_items_text(item_id)
+            if items_text:
+                click.echo()
+                click.echo(click.style("— Plan items —", fg="cyan"))
+                click.echo(items_text)
         _echo_large_section(content_names.label(slug), brief_text(item[slug], brief),
                             slug in show_content, color)
 
@@ -7416,6 +7421,13 @@ def _render_detail_human(
         # whichever end a `head -N` or `tail -N` leaves must be sufficient alone.
         click.echo(caveat_line)
         click.echo()
+
+
+def _plan_items_text(item_id: int) -> str:
+    """A task's plan items with their latest verdicts and answers, or ""."""
+    from endless import plan_items
+    rows = plan_items.items(item_id)
+    return plan_items.render_items(rows) if rows else ""
 
 
 # The spawn handoff is generated, not stored (E-1469). Per-task variables
@@ -7882,6 +7894,11 @@ def spawn_plan(item_id: int, project_name: str | None = None,
 
     # E-1993: a task with no plan, or with open questions, is not spawnable.
     _require_spawnable(item_id, "spawn", out_of_order=out_of_order)
+    # E-2280: a todo or bugfix task is spawned only with an itemized plan, so the
+    # session it starts can reconcile against it. Prose-only plans already
+    # `ready` are refused too (Mike: dogfood it sooner).
+    from endless import plan_items
+    plan_items.require_deliverable(item_id, "spawned")
 
     # Pre-claim: emit status_changed, create worktree. No session binding
     # yet — Claude hasn't started. SessionStart's @endless_spawned_by

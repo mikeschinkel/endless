@@ -300,3 +300,51 @@ func TasksWithPlanItems(projectID int64) ([]int64, error) {
 	}
 	return out, rows.Err()
 }
+
+// PlanReadiness is what approval and spawn need to know about a task's items:
+// whether its type is gated, and whether it has an active deliverable.
+type PlanReadiness struct {
+	TaskID       int64  `json:"task_id"`
+	Type         string `json:"type"`
+	Status       string `json:"status"`
+	Gated        bool   `json:"gated"`
+	Items        int    `json:"items"`
+	Deliverables int    `json:"deliverables"`
+	Unapproved   bool   `json:"unapproved"`
+}
+
+// ReadPlanReadiness reads one task's PlanReadiness. Unapproved is true when the
+// item set differs from its baseline (or has none) — what re-approval changes.
+func ReadPlanReadiness(taskID int64) (PlanReadiness, error) {
+	r := PlanReadiness{TaskID: taskID}
+	db, err := DB()
+	if err != nil {
+		return r, err
+	}
+	err = db.QueryRow(
+		`SELECT COALESCE(tt.slug, ''), t.status FROM live_tasks t
+		   LEFT JOIN task_types tt ON tt.id = t.type_id WHERE t.id = ?`, taskID,
+	).Scan(&r.Type, &r.Status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return r, fmt.Errorf("no task E-%d", taskID)
+	}
+	if err != nil {
+		return r, err
+	}
+	r.Gated = planitem.IsGatedType(r.Type)
+	var unapproved int
+	err = db.QueryRow(
+		`SELECT count(*),
+		        COALESCE(SUM(state = ? AND kind = ?), 0),
+		        COALESCE(SUM(CASE
+		            WHEN state = ? AND (approved_at IS NULL OR statement != approved_statement
+		                                OR kind != approved_kind) THEN 1
+		            WHEN state = ? AND approved_at IS NOT NULL THEN 1
+		            ELSE 0 END), 0)
+		   FROM task_plan_items WHERE task_id = ?`,
+		planitem.StateActive, planitem.KindDeliverable,
+		planitem.StateActive, planitem.StateWithdrawn, taskID,
+	).Scan(&r.Items, &r.Deliverables, &unapproved)
+	r.Unapproved = unapproved > 0
+	return r, err
+}

@@ -170,3 +170,20 @@ func runPlanItemsTOML(args []string) error {
 	return dbprovenance.Encode(os.Stdout, map[string]string{
 		"path": docmirror.TaskItemsPath(*id), "content": content})
 }
+
+// runPlanReadiness prints a task's PlanReadiness.
+func runPlanReadiness(args []string) error {
+	fs := refusal.NewFlags("plan-readiness")
+	id := fs.Int64("id", 0, "task id")
+	if err := parseFlags(fs, "plan-readiness", args); err != nil {
+		return err
+	}
+	if *id <= 0 {
+		return refusal.NoReport("--id is required", "Pass --id <task-id> and retry")
+	}
+	r, err := monitor.ReadPlanReadiness(*id)
+	if err != nil {
+		return err
+	}
+	return dbprovenance.Encode(os.Stdout, r)
+}
