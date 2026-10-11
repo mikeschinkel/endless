@@ -1,3 +1,40 @@
+# Revision 2026-10-11 — settled with Mike before implementation
+
+The plan below predates E-2225's rename: `liveOwnership` /
+`session_ownership.go` are now `liveStewardship` /
+`internal/monitor/session_stewardship.go`, and the old "owner" is ED-1605's
+STEWARD. Read §1 through that lens. What is implemented:
+
+- **§1, as settled:** ED-1605's steward ladder stays (the live filer, else the
+  sole live revisiter). What changes is what "live" means FOR DISPLAY
+  SUPPRESSION: a session must be PROVEN PRESENT — `session_liveness` reads
+  `live` (its pane was seen on a server we reached). `unknown` (server gone or
+  unreachable), `unbound` and `dead` do not steward a row away. Idle state is
+  irrelevant. Reason: for the claim guard a wrong refusal costs a retry, so
+  `unknown` stays live there (unchanged); for display the costs invert — a
+  wrong suppression hides open work, a wrong show costs one line. Measured:
+  session 1113 (which suppresses E-1993/E-1995) is bound to tmux server
+  79dabb93…, which no longer exists, so it reads `unknown` forever; "not dead"
+  would not have fixed the reported case. "An idle session stewards nothing"
+  was rejected as absolutist and as failing when every session is idle.
+  This REVERSES one acceptance line: a task whose only claimant is on an
+  unreachable server is NOT suppressed.
+- **§2:** exactly one proven-present claiming session (`sessions.task_id`)
+  clears `◫`; two or more raise it.
+- **§3:** as planned. A hide outranks `focus_task_id`. Hiding the session's own
+  claimed task (`sessions.task_id`) is refused at the command; the board's
+  focal row is never dropped by a hide.
+- **§4:** footer reports `hidden` and `suppressed` separately, each naming its
+  flag; `--show-suppressed` reveals suppressed rows with their own glyph.
+- **§5:** `session unhide --task` on a task this session has not hidden writes
+  a PIN (new `session_pinned_tasks` table) that keeps the row on this
+  session's monitor even when another session stewards it; `session hide
+  --task` clears the pin. Per the project's "DB access in Go" rule, hide and
+  unhide move from Python SQL to Go events (`session_tasks.hidden` /
+  `session_tasks.unhidden`), the same path `session task remove` uses.
+
+---
+
 # Session status ownership: right inputs, visible decisions, user wins
 
 One cause, five symptoms. The ownership annotation decides which rows a session
@@ -144,3 +181,4 @@ them as something they are not.
 - The footer reports hidden and suppressed counts separately and names the flag
   for each; `--show-suppressed` reveals them with a distinct glyph.
 - `just test` and `just test-go` pass.
+
