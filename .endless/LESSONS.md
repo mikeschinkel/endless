@@ -7433,3 +7433,7 @@ While priming E-2280, I asked whether to remove the top-level 'endless plan' red
 ### [2026-10-11] Write task questions that Mike can follow without the plan's internals
 While priming E-2280, Mike could not follow several of my open questions (staleness fingerprint, grandfathering cutoff, parent items, reconciling again, the land exemption). They used the plan's internal terms (P9/P10, tree, merge-base, 'ships', 'same discrepancy') without the scenario that makes them matter. In each question: say which mechanism it is about, walk through the concrete sequence of events where the problem shows up, give the options in those terms, and recommend one.
 - **Project**: endless
+
+### [2026-10-11] Don't propose absolutist rules like 'an idle session stewards nothing'
+While settling E-2293's suppression rule I offered 'an idle session stewards nothing' to clear a ghost session. Mike rejected it: it is an absolutist rule, and it fails when all sessions are idle (dedup vanishes exactly when he steps away). Look for the input that actually distinguishes the bad case (here: liveness 'live' vs 'unknown' for a session on a vanished tmux server) instead of excluding a whole ordinary state.
+- **Project**: endless
