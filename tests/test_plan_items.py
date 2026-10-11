@@ -14,6 +14,8 @@ from click.exceptions import ClickException
 
 from endless import config, plan_items
 
+pytestmark = pytest.mark.real_plan_items
+
 
 def _write(tmp_path: Path, name: str, body: str) -> str:
     p = tmp_path / name

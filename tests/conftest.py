@@ -344,6 +344,26 @@ def stub_land_gate(monkeypatch, request):
 
 
 @pytest.fixture(autouse=True)
+def stub_plan_item_gates(monkeypatch, request):
+    """E-2280: approving, spawning and handing over a todo or bugfix now ask
+    endless-go about the task's plan items and reconciliation. The tests of
+    those commands predate itemized plans and drive tasks their database holds
+    no items for, so the item rules are opened for them: approval and spawn
+    find a deliverable, the gate passes, and approval records no baseline.
+    Tests of the rules themselves opt out with `@pytest.mark.real_plan_items`.
+    """
+    if request.node.get_closest_marker("real_plan_items"):
+        return
+    from endless import plan_items
+    monkeypatch.setattr(plan_items, "require_deliverable", lambda *a, **k: None)
+    monkeypatch.setattr(plan_items, "require_gate", lambda *a, **k: None)
+    monkeypatch.setattr(plan_items, "baseline", lambda *a, **k: None)
+    monkeypatch.setattr(plan_items, "readiness",
+                        lambda task_id: {"unapproved": False, "status": "", "gated": False,
+                                         "deliverables": 1, "items": 0, "type": ""})
+
+
+@pytest.fixture(autouse=True)
 def stub_current_session_id(monkeypatch, request):
     """E-1401: provide a deterministic session id so emit_event's attribution
     gate doesn't fire in tests.
