@@ -7425,3 +7425,7 @@ The lesson is not 'always prefer stored state'. Self-maintaining derivation was 
 
 So when I argue for deriving something that was going to be explicit, state what the user loses and say how they get it back. 'It needs no maintenance' is an argument about my cost, not theirs. And a derivation that silently removes rows is worse than one that removes them visibly, because the user cannot tell the difference between 'nothing there' and 'something withheld'.
 - **Project**: endless
+
+### [2026-10-11] Don't ask whether to keep a transition shim Mike called short-term
+While priming E-2280, I asked whether to remove the top-level 'endless plan' redirect (the 'renamed to task' shim) or repoint it. Mike: remove it. He had said it was only needed short-term for the transition, months ago, and that should have kept it from being an open question. When a shim or alias exists only for a transition Mike called short-term, and that transition is long past, removing it is the default, not a question.
+- **Project**: endless
