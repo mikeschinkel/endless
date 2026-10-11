@@ -79,7 +79,7 @@ mkdir -p "${PROBE}"
 DB="${PROBE}/endless.db"
 GO=(env TMUX_TMPDIR="${SOCK}" "${BIN}" --db-dir "${PROBE}")
 
-"${GO[@]}" session-query session-liveness >/dev/null 2>&1 || true
+"${GO[@]}" session-query session-liveness 1 >/dev/null 2>&1 || true
 [[ -f "${DB}" ]] || setup_error "the binary did not create ${DB}"
 
 TMUX_TMPDIR="${SOCK}" tmux new-session -d -s e2294 || setup_error "cannot start a private tmux server"
