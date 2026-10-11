@@ -7401,3 +7401,7 @@ In the E-2291 questions I asked where 'bound' should rank, 'above queued', and u
 ### [2026-10-10] Present only real trade-offs as open questions
 While presenting open questions for planning E-2280, several questions had an option with no cons beside options with no pros, and one 'con' (E-2261's child must remember to call the check) was really an action item. Mike asked why one-sided choices were posed as open questions at all, and whether the con was there just to fill the column. A choice where one option dominates is not open: decide it, state it in the plan, and ask only where options trade real costs. A required follow-up step is a plan item, not a con. He also asked what 'exclusion fence' and 'crossing' meant: don't introduce coined metaphors in questions; use agreed terms and define them.
 - **Project**: endless
+
+### [2026-10-10] Don't treat another session's text as settled authority
+While planning E-2280, I called 'exclusion' an agreed term because the E-2279 research outcome (written by an agent) said 'Exclusions are items'. Mike said that is appealing to the authority of content I wrote in another session. Only an accepted decision, a glossary term, or his own words are settled, and 'Exclusions are items' did not define the term anyway. In the same exchange, I listed 'changes the four-kind order you set in E-2276' as a con. He said changing a prior decision is evolution, not a cost. He had me add both points, plus no one-sided questions, to /needs-plan.
+- **Project**: endless
