@@ -7437,3 +7437,7 @@ While priming E-2280, Mike could not follow several of my open questions (stalen
 ### [2026-10-11] Don't propose absolutist rules like 'an idle session stewards nothing'
 While settling E-2293's suppression rule I offered 'an idle session stewards nothing' to clear a ghost session. Mike rejected it: it is an absolutist rule, and it fails when all sessions are idle (dedup vanishes exactly when he steps away). Look for the input that actually distinguishes the bad case (here: liveness 'live' vs 'unknown' for a session on a vanished tmux server) instead of excluding a whole ordinary state.
 - **Project**: endless
+
+### [2026-10-11] Don't commit to a task branch while the user is verifying or landing it
+On E-1562 I committed a docs fix to task/1562 while Mike was running endless task verify, then committed a template fix after his verify passed. Each commit changed the branch, so the land refused: verify must pass at the branch's current code, and his run had tested an earlier commit. Once I hand over the verify command, don't commit to that branch. If a fix is needed after that, say so first and hand the verify command back after committing, so he re-runs it at the new head.
+- **Project**: endless
