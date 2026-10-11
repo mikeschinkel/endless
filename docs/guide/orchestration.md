@@ -270,7 +270,9 @@ endless worktree sync --apply               # rebase the ones that safely can be
 Dry run by default. It skips any worktree holding uncommitted changes (that is
 a session's in-flight work) and the one you are standing in, aborts and reports
 a rebase that conflicts, and never removes anything. A worktree it cannot sweep
-is left exactly as it was, for its own session to rebase in place.
+is left exactly as it was, for its own session to rebase in place — unless the
+abort itself fails, in which case sync reports it STUCK (still mid-rebase) and
+prints the `git rebase --abort` that clears it.
 
 ### Why a worktree is unsettled (`task unsettled`)
 

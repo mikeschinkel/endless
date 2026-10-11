@@ -4921,7 +4921,8 @@ def worktree_sync(apply):
     Dry run by default. Skips any worktree with uncommitted changes (that is a
     session's in-flight work) and the one you are standing in. A conflicting
     rebase is aborted, reported, and left exactly as it was; the sweep carries
-    on. Nothing is ever removed.
+    on. One whose abort does not take is reported STUCK, mid-rebase, with the
+    command that clears it. Nothing is ever removed.
     """
     from endless.worktree_cmd import sync_worktrees
     sync_worktrees(apply)

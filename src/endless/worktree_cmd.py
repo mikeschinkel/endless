@@ -834,6 +834,8 @@ def sync_worktrees(apply: bool) -> None:
         the branch under the process doing the rewriting.
       - A conflicting rebase is aborted and reported, and the sweep continues.
         One worktree's conflict must strand neither the sweep nor the worktree.
+        An abort that does not take (E-2295) is reported as STUCK, never as
+        restored.
 
     Nothing is ever removed. A worktree that cannot be swept is left exactly as
     it was, for its own session to deal with.
@@ -873,7 +875,7 @@ def sync_worktrees(apply: bool) -> None:
             click.echo("Re-run with --apply to rebase them.")
         return
 
-    done, failed, undo, moved = 0, [], [], []
+    done, failed, undo, moved, stuck = 0, [], [], [], []
     for path, branch, _, _reason in todo:
         # Re-check immediately before acting. The plan above was built for the
         # whole fleet at once, and rebasing it takes minutes — long enough for a
@@ -896,7 +898,9 @@ def sync_worktrees(apply: bool) -> None:
             undo.append((path, was))
             click.echo(f"  rebased   {_display_path(path)}  ({branch})")
             continue
-        _git_run(["rebase", "--abort"], cwd=path, check=False)
+        # E-2295: confirmed, not assumed — a worktree whose abort lost the
+        # index lock is still mid-rebase, and must not be reported as restored.
+        abort_failed = _abort_rebase(path, branch)
         # Report what git SAID, not a guess at why. Most of these are not merge
         # conflicts at all — a file git refuses to overwrite on checkout looks
         # identical from here, and calling that a conflict sends the reader
@@ -904,12 +908,16 @@ def sync_worktrees(apply: bool) -> None:
         lines = [ln for ln in (res.stderr + "\n" + res.stdout).splitlines() if ln.strip()]
         reason = next((ln.strip() for ln in lines if ln.startswith("error:")), "")
         detail = reason or (lines[-1].strip() if lines else "rebase failed")
+        if abort_failed is not None:
+            stuck.append((path, branch, abort_failed))
+            click.echo(f"  STUCK     {_display_path(path)}  ({branch}) — NOT aborted: {detail}")
+            continue
         failed.append((path, branch, detail))
         click.echo(f"  FAILED    {_display_path(path)}  ({branch}) — aborted: {detail}")
 
     click.echo(
         f"\n{done} rebased onto {base}, {len(skipped) + len(moved)} skipped, "
-        f"{len(failed)} conflicted."
+        f"{len(failed) + len(stuck)} conflicted."
     )
     if moved:
         click.echo(f"  {len(moved)} of those became busy after the survey and were left alone.")
@@ -920,6 +928,15 @@ def sync_worktrees(apply: bool) -> None:
             "\nEach failed worktree was restored to where it was. Its own session "
             "resolves it, in place — `git rebase " + base + "` there."
         )
+    if stuck:
+        click.echo(
+            "\nThese could NOT be restored: the sweep's `git rebase --abort` did "
+            "not take, so each is still MID-REBASE with HEAD detached. Clear "
+            "each before anything else runs there:"
+        )
+        for path, branch, said in stuck:
+            click.echo(f"  git -C {_display_path(path)} rebase --abort   # {branch}")
+            click.echo(_git_said(said))
     if undo:
         click.echo("\nTo put any of them back exactly as they were:")
         for path, was in undo:
@@ -1164,6 +1181,128 @@ def _rebase_in_progress(worktree_path: Path) -> bool:
         return False
     git_dir = Path(probe.stdout.strip())
     return (git_dir / "rebase-merge").exists() or (git_dir / "rebase-apply").exists()
+
+
+def _abort_rebase(worktree_path: Path, branch: str) -> str | None:
+    """Abort a rebase land started, and confirm it took (E-2295).
+
+    Returns None when the worktree is provably back where it was: no rebase in
+    progress and HEAD on `branch`. Otherwise returns what went wrong, in git's
+    own words when it said any, for a refusal that must now say so.
+
+    `git rebase --abort` takes the index lock like any git write, so it loses
+    the same race E-2174 retries the rebase for, and is retried the same way.
+    Observed landing E-1562: a `verify` run held the lock, the abort failed
+    unread, and land told the agent its branch was exactly as it was while the
+    worktree sat mid-rebase with HEAD detached.
+
+    The verdict is read from the worktree afterwards, not from the exit code: an
+    abort that exits non-zero but cleared the rebase anyway is a success, and
+    one that exits zero with HEAD somewhere else is not.
+    """
+    said = ""
+    for attempt in range(1, LAND_MAX_RETRIES + 1):
+        res = _git_run(["rebase", "--abort"], cwd=worktree_path, check=False)
+        said = ((res.stderr or "") + (res.stdout or "")).strip()
+        if res.returncode == 0 or not _is_lock_contention(said):
+            break
+        if attempt < LAND_MAX_RETRIES:
+            _lock_backoff(attempt)
+    if _rebase_in_progress(worktree_path):
+        return said or "git rebase --abort exited without ending the rebase."
+    head = _git_run(
+        ["rev-parse", "--abbrev-ref", "HEAD"], cwd=worktree_path, check=False,
+    ).stdout.strip()
+    if branch and head != branch:
+        return (f"The rebase ended, but HEAD is on {head or '(nothing)'}, "
+                f"not {branch}.")
+    return None
+
+
+def _abort_land_rebase(
+    worktree_path: Path, branch: str, base_branch: str,
+    refusal: agent_help.Refusal, *, phase: str,
+) -> agent_help.Refusal:
+    """Abort land's failed rebase, and return the refusal that is now TRUE.
+
+    `refusal` was built before the abort — it has to be, because the abort
+    destroys the conflict state it reads — and every one of its texts says the
+    branch is exactly as it was. That holds only if the abort took. When it did
+    not, this returns a refusal that says where the worktree actually is, and
+    does not send the reader to `worktree diagnose`, which refuses on the
+    detached HEAD a stuck rebase leaves.
+    """
+    stuck = _abort_rebase(worktree_path, branch)
+    if stuck is None:
+        return refusal
+
+    wt = _display_path(worktree_path)
+    target = _task_id_from_worktree_path(worktree_path) or "<id>"
+    who = _task_id_from_worktree_path(worktree_path) or wt
+    said = _git_said(stuck)
+    # git's own hint for a held lock is to delete it. The holder is a live
+    # process (E-2174's `_lock_backoff`), so that advice is overruled here.
+    busy = (
+        "Another git process held the index lock through every retry. Let it "
+        "finish; do NOT delete the lock file, whatever git's hint says.\n\n"
+        if _is_lock_contention(stuck) else ""
+    )
+    hit = ""
+    if _rebase_in_progress(worktree_path):
+        # Read live, not from `refusal`: its every text asserts the abort.
+        unmerged = [ln.strip() for ln in _git_run(
+            ["diff", "--name-only", "--diff-filter=U"],
+            cwd=worktree_path, check=False,
+        ).stdout.splitlines() if ln.strip()]
+        if unmerged:
+            hit = "Still in conflict:\n" + "\n".join(
+                f"  {f}" for f in unmerged) + "\n\n"
+        where = (
+            f"The worktree is MID-REBASE: HEAD is detached partway through "
+            f"replaying {branch} onto {base_branch}, and anything that was in "
+            f"conflict still is. Do not commit there and do not start another "
+            f"rebase on top of it."
+        )
+        summary = (
+            f"{who}'s rebase failed while {phase}, and land could NOT abort "
+            f"it — the worktree is MID-REBASE with HEAD detached. Nothing was "
+            f"merged."
+        )
+        clear = (f"  git -C {wt} rebase --abort\n"
+                 f"  git -C {wt} status        # on {branch}, nothing in progress\n")
+        remedy = (f"run `git -C {wt} rebase --abort`, confirm the worktree is "
+                  f"back on {branch}, and re-run the land")
+    else:
+        where = (
+            f"The rebase did end, but the worktree is not back on {branch}, so "
+            f"land cannot say the branch is as it was."
+        )
+        summary = (
+            f"{who}'s rebase failed while {phase}, and land's abort left the "
+            f"worktree off {branch}. Nothing was merged."
+        )
+        clear = (f"  git -C {wt} checkout {branch}\n"
+                 f"  git -C {wt} status        # on {branch}, nothing in progress\n")
+        remedy = (f"check {branch} out in the worktree, confirm `git status` "
+                  f"is clean, and re-run the land")
+    return agent_help.report_if(
+        summary,
+        "the printed git command fails again when you run it",
+        remedy,
+        "a worktree that cannot be returned to its branch needs repair that "
+        "is not a land's to make",
+        text=(f"rebase failed while {phase}, and land could NOT abort it.\n\n"
+              f"{where}\n\n"
+              f"git rebase --abort said:\n{said}\n\n"
+              f"{busy}"
+              f"{hit}"
+              f"Clear it, then re-run the land:\n"
+              f"{clear}"
+              f"  endless worktree land {target}\n\n"
+              f"`endless worktree diagnose` cannot help until then — it needs "
+              f"the branch checked out. Re-running the land reproduces any "
+              f"conflict and records it afresh.\n"),
+    )
 
 
 def _git_said(stderr: str | None) -> str:
@@ -4058,6 +4197,30 @@ def _resolve_land_target(task_id: str | None) -> tuple[str, Path, str, str]:
     if target is None:
         raise _no_worktree_to_land_refusal(canonical)
     branch = target["branch"]
+    path = Path(target["path"])
+    if not branch and _rebase_in_progress(path):
+        # E-2295: a rebase stopped partway detaches HEAD, so "no branch" here
+        # usually means a land whose abort did not take — not a worktree
+        # somebody left detached on purpose. Name it, and the way out, instead
+        # of the generic refusal below. Not aborted from here: whose rebase it
+        # is cannot be told, and the reader holding the land's refusal can.
+        wt = _display_path(path)
+        rebasing = _rebase_branch_name(path) or f"task/{canonical[2:]}"
+        raise agent_help.report_if(
+            f"Worktree for {canonical} is MID-REBASE of {rebasing} with HEAD "
+            f"detached, so there is nothing to diagnose yet. Nothing was "
+            f"changed.",
+            "a land's refusal did not tell you it left this rebase behind",
+            f"run `git -C {wt} rebase --abort`, then re-run the land, which "
+            f"records any conflict afresh",
+            "aborting a rebase somebody else is in the middle of discards "
+            "their conflict resolution",
+            text=(f"Worktree for {canonical} is MID-REBASE of {rebasing} "
+                  f"(HEAD detached partway through the replay).\n\n"
+                  f"If a land left it there, clear it and re-run the land:\n"
+                  f"  git -C {wt} rebase --abort\n"
+                  f"  endless worktree land {canonical}\n"),
+        )
     if not branch:
         # Read-only diagnostic: there is simply nothing to diagnose on a
         # detached tree, and the agent has two ways on (check out the branch
@@ -4071,7 +4234,7 @@ def _resolve_land_target(task_id: str | None) -> tuple[str, Path, str, str]:
         )
     base_branch = (target["companion"] or {}).get("base_branch") \
         or _default_base_branch(_project_root())
-    return canonical, Path(target["path"]), branch, base_branch
+    return canonical, path, branch, base_branch
 
 
 def diagnose_land_conflict(task_id: str | None, as_json: bool) -> None:
@@ -4604,13 +4767,15 @@ def land_worktree(
             # Already classified: _rebase_failure_message returns the refusal,
             # because only it can still see which of the three failures this
             # was — the abort below destroys the evidence.
+            phase = "replaying your commits after dropping base auto-amend commits"
             refusal = _rebase_failure_message(
-                worktree_path, base_branch,
-                phase="replaying your commits after dropping base auto-amend commits",
+                worktree_path, base_branch, phase=phase,
                 stderr=e.stderr, pre_existing=rebase_was_running,
             )
             if not rebase_was_running:
-                _git_run(["rebase", "--abort"], cwd=worktree_path, check=False)
+                refusal = _abort_land_rebase(
+                    worktree_path, branch, base_branch, refusal, phase=phase,
+                )
             raise refusal
         if n_orphans:
             noun = "commit" if n_orphans == 1 else "commits"
@@ -4700,13 +4865,17 @@ def land_worktree(
             # abort. What git printed decides which report this is: a conflict
             # names files and offers candidates, anything else quotes git and
             # offers none (E-2122).
+            phase = f"rebasing your branch onto {base_branch}"
             refusal = _rebase_failure_message(
-                worktree_path, base_branch,
-                phase=f"rebasing your branch onto {base_branch}",
+                worktree_path, base_branch, phase=phase,
                 stderr=e.stderr, pre_existing=rebase_was_running,
             )
             if not rebase_was_running:
-                _git_run(["rebase", "--abort"], cwd=worktree_path, check=False)
+                # E-2295: the refusal says the branch is unchanged, which is
+                # true only if this abort took — confirmed, not assumed.
+                refusal = _abort_land_rebase(
+                    worktree_path, branch, base_branch, refusal, phase=phase,
+                )
             raise refusal
 
         # Step 4.2 (E-1941): the branch is now rebased onto base, so the
