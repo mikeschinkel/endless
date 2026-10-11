@@ -1,0 +1,424 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 81,
+      "passed": 81,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test: internal/monitor",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go test: internal/unlandedjob",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go test: internal/sessionstatuscmd",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go test: internal/faults",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest: the Go/Python resolver parity suite",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the display path reads the cache and runs no part of the comparison",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a cold cache answers 'not yet determined', never a derived verdict",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a settled verdict survives the base advancing, and is not recomputed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a non-zero verdict does not — base movement can shrink it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "an amended base is detected and flushes every settled marker",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a branch amend invalidates that one entry and nothing else",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "renaming the project's default_branch invalidates the whole cache",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "with no watermark every lookup misses — fail-closed by construction",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "an ambiguous watermark is refused, not resolved by a rule",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the cached count stays exact past the display cap",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a truncated entry reads as a miss, never as the all-clear",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "markers for branch tips nothing points at are pruned",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a base branch with a slash is one path component, reversibly",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a read-only cache is a permanent miss and exactly ONE incident",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a cold batch completes in full without exceeding the pool cap",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a cancelled lease is interrupted, not OOM-killed, and records no fault",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and cancelling a whole pass leaves no incident behind",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the reaper reclaims a rebase-landed worktree with no landing row",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and computes on a miss — a delete never acts on 'not yet determined'",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "job-writes-then-display-reads, end to end on a master-branch repo",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "landing your own task shows settled at once, with no job pass in between",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and so does claiming one — a branch cut at the base needs no comparison",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "two worktrees at one branch tip share one answer, paying no git at all",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "compute-on-miss MISSES first: a warm cache costs the reaper no git at all",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a registered project that is not a git repo is skipped, not a job failure",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "one project's unresolvable base records ERR-0011 and does not fail the sweep",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a project with no task worktrees is skipped before any git call runs",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a fault names the repository it is about, not the project the process is in",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "all four column states, with ~ outranking ◆ on an uncomputed row",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "every state is display width 1, so the 13-col prefix still aligns",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "one frame holding all four, distinguishable and column-aligned",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no two legend states share a glyph — the check that ruled out ·",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "~ joins ⊙ in not un-dimming a row",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the job is registered, so something actually writes the cache",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "ERR-0012 has a documented remedy in docs/errors.md",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the on-demand probe establishes the verdict",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and answers the question exactly",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "naming the commit it found",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the cache lives under the git COMMON dir, not the worktree's own",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no per-worktree copy of the cache — they share exactly one",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "an on-demand caller does not advance the watermark — one writer",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the unsettled entry is keyed \u003cbase-tip\u003e/\u003cbranch-tip\u003e",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and holds exactly the lines a consumer needs — one per unlanded commit",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "which is the commit itself, not a record about it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "after a land the verdict is settled",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "with nothing outstanding",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and the verdict is established, not merely absent",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "'fully landed' is recorded as settled/\u003cbranch-tip\u003e",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and the file is EMPTY — its presence is the whole verdict",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the settled marker survives an append-only base move",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and the verdict is unchanged",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the old tip's answer is untouched — it is still true of that OID",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the amended tip has no cached answer — the miss IS the invalidation",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and the on-demand probe computes it afresh",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "storing what it computed under the new tip",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no hook branch reaps worktrees any more",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and the removal says where reaping lives instead",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the cheap SHA-containment test it needed is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and so is the landed-SHA credit that propped it up",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "condition 4 reads the shared cache, computing on a miss",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "while the filesystem checks stay live and uncached",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "runGit takes a context as its first parameter",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and builds a cancellable child",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "there is no context-free door beside it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a cancelled context is the second benign death, beside SIGINT",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and SIGKILL stays faultable",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the ◆ path is cache-only, by the mode it passes",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the on-demand path computes on a miss",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and the cache-only branch returns before the resolver is reached",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the cache marshals nothing — there is no record type",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "an unsettled entry is written temp-then-rename",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a settled marker is create-or-nothing",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "~ is tested FIRST in the column",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and the legend documents it like the other states",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the job is wired by blank import, like the other three",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and is fired by the existing liveview trigger — nothing new wired",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
