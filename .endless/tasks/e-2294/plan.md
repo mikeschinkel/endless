@@ -39,6 +39,14 @@ The liveness probe is the one new fact. Reuse what the status monitor already
 does to decide a pane is gone rather than writing a second probe — one answer to
 "is this pane live", in one place.
 
+Report the raw state from the `session_liveness` view — `live`, `unknown`,
+`dead`, `unbound` — not a yes/no. Since E-2293 two rules read that view
+differently: the claim guard treats `unknown` as live (a wrong refusal costs a
+retry), while the status monitor counts a session toward suppression only when
+it is `live` (its pane was seen). A collapsed yes/no would disagree with one of
+them. The case to get right is a session bound to a tmux server that no longer
+exists: it reads `unknown` forever and must show as such.
+
 ## `task show` gains the same fact
 
 The "Touched by" block gets the live-window column too. It is the same question
@@ -66,3 +74,4 @@ past when the question is merely "where is this task running".
 - `task show`'s Touched-by block reports live-window status, and agrees with
   `task sessions` for the same task.
 - `just test` and `just test-go` pass.
+
