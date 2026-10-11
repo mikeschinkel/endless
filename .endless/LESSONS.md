@@ -7389,3 +7389,7 @@ In E-2283, after filing E-2291 (point claim's no-plan refusal to task bind), I f
 ### [2026-10-10] Check the code before putting a question that depends on it
 Planning E-2291 (a bound session_tasks relation for task bind), I asked Mike whether a primed session's SessionStart auto-bind should record 'bound', and said I had not confirmed which relation it writes today. Mike said I should already have checked it. A question whose options depend on current behavior has to be grounded in that behavior before it is put to him. Here the check (maybeCwdBind -> monitor.BindSessionToTask) showed the auto-bind writes no session_tasks row at all, which changed the question.
 - **Project**: endless
+
+### [2026-10-10] A choice with a one-sided answer is not an open question
+In the E-2291 needs-plan questions, I put Q4 (leave bound out of session status's non-anchor list, or let it in) and Q6 (refuse or allow session task remove of a bound task) as questions, although option (a) had no cons and option (b) had no pros. Q5's alternatives were similar. Mike asked why I would present those as questions at all. When the comparison has only one sensible answer, state it as part of the plan, with its reason, instead of asking him to choose.
+- **Project**: endless
