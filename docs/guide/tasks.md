@@ -93,7 +93,7 @@ The refusal says how to proceed: write the plan, attach it (`task update <id> --
 
 ### Plan items
 
-A **plan item** is one line stating something that will be true when the task is done. Items are numbered per task — `P3`, or `E-2280.P3` from outside it — and a number is never reused or renumbered. There are two kinds:
+A **plan item** is one line stating something that will be true when the task is done. Items are numbered per task — `P3`, or `E-NNNN.P3` from outside it — and a number is never reused or renumbered. There are two kinds:
 
 - a **deliverable** states something the work will make true;
 - an **exclusion** states something the task will not do or change ("does not change the ledger event format") — the "out of scope" list, made checkable.
