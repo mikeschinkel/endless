@@ -51,19 +51,21 @@ _VERB_OF = {
     "session_tasks.queued": "session task",
     "session_tasks.removed": "session task",
     "session_tasks.touched": "touch",
+    "session_tasks.hidden": "session hide",
+    "session_tasks.unhidden": "session unhide",
 }
 
 
 def session_task_add(task_refs: tuple[str, ...],
                      session_id_override: int | None) -> None:
     """Entry point bound by cli.py for `session task add`."""
-    _emit("session_tasks.queued", task_refs, session_id_override)
+    emit_membership("session_tasks.queued", task_refs, session_id_override)
 
 
 def session_task_remove(task_refs: tuple[str, ...],
                         session_id_override: int | None) -> None:
     """Entry point bound by cli.py for `session task remove`."""
-    _emit("session_tasks.removed", task_refs, session_id_override)
+    emit_membership("session_tasks.removed", task_refs, session_id_override)
 
 
 def touch(task_refs: tuple[str, ...],
@@ -73,12 +75,16 @@ def touch(task_refs: tuple[str, ...],
     Same emit path as `session task add`, one relation weaker: `revisited`
     means the task is in this session's scope, not that it is on its agenda.
     """
-    _emit("session_tasks.touched", task_refs, session_id_override)
+    emit_membership("session_tasks.touched", task_refs, session_id_override)
 
 
-def _emit(kind: str, task_refs: tuple[str, ...],
-          session_id_override: int | None) -> None:
-    """Normalize the ids, emit `kind`, and print the Go handler's markdown."""
+def emit_membership(kind: str, task_refs: tuple[str, ...],
+                    session_id_override: int | None) -> None:
+    """Normalize the ids, emit `kind`, and print the Go handler's markdown.
+
+    Shared with `session hide/unhide --task` (E-2293), whose input is the same
+    (one session, a set of tasks) and whose writes moved to Go alongside these.
+    """
     task_ids = _canonical_ids(task_refs, _VERB_OF[kind])
 
     process = _resolve_process(session_id_override)
@@ -145,7 +151,7 @@ def _canonical_ids(task_refs: tuple[str, ...], verb: str) -> list[str]:
     """
     if not task_refs:
         # Both refusals here are the TSV's NO-REPORT usage/validation rows, and
-        # both run before `_emit`, so no event exists to have half-landed — the
+        # both run before `emit_membership`, so no event exists to have half-landed — the
         # one-line message is the whole verdict and goes through verbatim.
         raise agent_help.no_report(
             f"{verb}: name at least one task id",

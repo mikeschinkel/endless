@@ -1583,9 +1583,12 @@ def session_history(session_id, show_tools, timestamps, limit, sort_order, as_js
               help="Render this session's hidden task rows too, marked ⊘")
 @click.option("--only-hidden", is_flag=True,
               help="Render ONLY this session's hidden task rows")
+@click.option("--show-suppressed", is_flag=True,
+              help="Render rows another live session stewards too, marked ⊖")
 @output_options(agent=False,
                 json_help="Emit the rows as JSON (every row carries its hidden state)")
-def session_status(show_all, tree, graph, show_hidden, only_hidden, as_json):
+def session_status(show_all, tree, graph, show_hidden, only_hidden,
+                   show_suppressed, as_json):
     """Show the current session's status — a one-shot snapshot.
 
     Resolves the focal task for the current tmux window (live session's active
@@ -1605,6 +1608,11 @@ def session_status(show_all, tree, graph, show_hidden, only_hidden, as_json):
     find ids to unhide. Hiding is per-session and display-only: no other
     session's view changes, and nothing about the task does.
 
+    Tasks another live session stewards (it filed them, and its pane is
+    present) are SUPPRESSED: omitted and counted in the same footer as
+    '… N suppressed'. --show-suppressed renders them marked ⊖. `session unhide
+    --task <id>` on one pins it to this session's view.
+
     \b
     Under the table, the ordering graph: which of these tasks to do before
     which. --graph renders it alone; --json carries it as a `graph` object.
@@ -1622,7 +1630,7 @@ def session_status(show_all, tree, graph, show_hidden, only_hidden, as_json):
     from endless.session_cmd import session_status_resolve
     session_status_resolve(show_all=show_all, tree=tree, graph=graph,
                            show_hidden=show_hidden, only_hidden=only_hidden,
-                           as_json=as_json)
+                           show_suppressed=show_suppressed, as_json=as_json)
 
 
 @session_cmd.command("monitor")
@@ -1636,6 +1644,8 @@ def session_status(show_all, tree, graph, show_hidden, only_hidden, as_json):
               help="Render this session's hidden task rows too, marked ⊘")
 @click.option("--only-hidden", is_flag=True,
               help="Render ONLY this session's hidden task rows")
+@click.option("--show-suppressed", is_flag=True,
+              help="Render rows another live session stewards too, marked ⊖")
 @click.option("--restart", is_flag=True,
               help="Respawn every session-monitor pane in this tmux session in "
                    "place, onto the installed binary")
@@ -1645,8 +1655,9 @@ def session_status(show_all, tree, graph, show_hidden, only_hidden, as_json):
               help="With --restart: restart monitors in every tmux session")
 @click.option("--dry-run", is_flag=True,
               help="With --restart: list the panes it would restart, change nothing")
-def session_monitor(show_all, tree, graph, show_hidden, only_hidden, restart,
-                    tmux_session, all_tmux_sessions, dry_run):
+def session_monitor(show_all, tree, graph, show_hidden, only_hidden,
+                    show_suppressed, restart, tmux_session, all_tmux_sessions,
+                    dry_run):
     """Live dashboard: repeatedly render `session status` until interrupted.
 
     The top-like pane you keep open all day. Loops the same view `session
@@ -1687,7 +1698,8 @@ def session_monitor(show_all, tree, graph, show_hidden, only_hidden, restart,
         for flag, given in (("--all", show_all), ("--tree", tree),
                             ("--graph", graph),
                             ("--show-hidden", show_hidden),
-                            ("--only-hidden", only_hidden)):
+                            ("--only-hidden", only_hidden),
+                            ("--show-suppressed", show_suppressed)):
             if given:
                 raise agent_help.no_report(
                     f"{flag} does not apply with --restart. Nothing ran.",
@@ -1701,7 +1713,8 @@ def session_monitor(show_all, tree, graph, show_hidden, only_hidden, restart,
         return
     session_status_resolve(show_all=show_all, tree=tree, graph=graph,
                            monitor=True,
-                           show_hidden=show_hidden, only_hidden=only_hidden)
+                           show_hidden=show_hidden, only_hidden=only_hidden,
+                           show_suppressed=show_suppressed)
 
 
 @session_cmd.command("list")

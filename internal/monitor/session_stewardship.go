@@ -7,9 +7,11 @@ package monitor
 // stays viewer-agnostic, and what depends on WHO is looking is filled in after.
 //
 // FOCUS is the viewing session's sessions.focus_task_id — the task its
-// conversation touched last. The renderer highlights it, and it overrides every
-// kind of suppression: a focused task is shown even when hidden, and even when
-// another session is its steward.
+// conversation touched last. The renderer highlights it, and it keeps a task on
+// the board even when another session is its steward. It does NOT outrank an
+// explicit `session hide --task` (E-2293): focus is a pointer at what the
+// conversation touched, not the task the session is on, and hiding a row in a
+// session that is not its steward is the user choosing the steward.
 //
 // STEWARDSHIP answers "the same task is on several sessions' boards — which one
 // keeps it?" (ED-1605: the steward is the session whose monitor shows the task
@@ -17,9 +19,17 @@ package monitor
 // different thing). It is computed here, every time a board is drawn, and never
 // written anywhere, so it corrects itself the moment a session ends. The rules:
 //
-//   - Only LIVE sessions count, by the same state test the ⟳ in-flight column
-//     uses. A dead session neither stewards a task nor takes one off a live
-//     board.
+//   - Only sessions PROVEN PRESENT count (E-2293): a live recorded state AND a
+//     session_liveness of `live` — its pane was seen on a tmux server this
+//     process reached. `unknown` (the server is gone or unreachable), `unbound`
+//     and `dead` take nothing off anyone's board. This is deliberately stricter
+//     than the claim guard's `!= 'dead'` (ListLiveSessions), because the costs
+//     run the other way: a wrong refusal there costs a retry, while a wrong
+//     suppression here hides open work, and a wrong show costs one line. A
+//     session bound to a tmux server that no longer exists reads `unknown`
+//     forever; under the claim guard's rule it stewarded its filings forever
+//     too. Idle state is irrelevant: an idle session whose pane is there is
+//     present.
 //   - A task's CLAIMING session is left out of the count entirely: being worked
 //     by the session that claimed it is the expected case, not a duplicate, and
 //     it already shows as ⟳ doing everywhere else. So is that session's focus on
@@ -31,11 +41,15 @@ package monitor
 //   - An update never takes stewardship from a filer: adding a note to someone
 //     else's task is ordinary and must not move it.
 //
-// A board shows a task unless another live session is its steward — and even
-// then it shows a task it has in focus. The DUPLICATE-WORK mark warns that
-// another session may already have done real work on the task, and is set when
-// the task is ambiguous, or is focused on one board and stewarded by another (on
-// both of those boards).
+// A board shows a task unless another present session is its steward — and even
+// then it shows a task it has in focus, or one the viewer PINNED with `session
+// unhide --task` (E-2293: the user's explicit choice outranks the derivation).
+// The DUPLICATE-WORK mark warns that another session may already have done real
+// work on the task, and is set when the task is ambiguous, or is focused on one
+// board and stewarded by another (on both of those boards). Once exactly one
+// present session has CLAIMED the task the warning has done its job — the user
+// knows where the work lives — so the mark is cleared; two present claimants
+// are a genuine collision and always raise it (E-2293).
 //
 // The claimed task's own row, its parent and its spawner are never hidden and
 // never marked: they are the board's frame, not entries on it.
@@ -52,6 +66,10 @@ type taskStewardship struct {
 	surfacers  []int64
 	revisiters []int64
 	focusers   []int64
+	// claimers counts present sessions whose sessions.task_id is the task. It
+	// is not part of the ladder — a claimer is the OWNER, not a steward — and
+	// only decides the duplicate mark.
+	claimers int
 }
 
 // steward applies the ladder: the single surfacer, else the single revisiter.
@@ -71,7 +89,7 @@ func (o taskStewardship) steward() (steward int64, ambiguous bool) {
 	return 0, false
 }
 
-// AnnotateSessionStatusStewardship fills Focused, DuplicateWork and
+// AnnotateSessionStatusStewardship fills Focused, Pinned, DuplicateWork and
 // StewardedElsewhere on each row for the board of `viewer` anchored on `focal` (0 for the no-goal
 // view). The board's own sessions are the viewer plus every live session that
 // claimed `focal` — the same sessions whose session_tasks rows SessionStatusRows
@@ -89,7 +107,19 @@ func AnnotateSessionStatusStewardship(rows []SessionStatusRow, viewer, focal int
 		return err
 	}
 
+	// RefreshLiveness, not livenessReady: `session monitor` repaints this board
+	// in a loop, and the once-guard would freeze presence at the first frame.
+	// Reaching no server is not an error; every session then reads `unknown`,
+	// which suppresses nothing — the board over-shows rather than hides.
+	if err = RefreshLiveness(); err != nil {
+		return err
+	}
+
 	focus, err := sessionFocusTask(db, viewer)
+	if err != nil {
+		return err
+	}
+	pinned, err := SessionPinnedTasks(viewer)
 	if err != nil {
 		return err
 	}
@@ -101,6 +131,7 @@ func AnnotateSessionStatusStewardship(rows []SessionStatusRow, viewer, focal int
 	var candidates []int64
 	for i := range rows {
 		rows[i].Focused = focus != 0 && rows[i].ID == focus
+		rows[i].Pinned = pinned[rows[i].ID]
 		if !isBoardFrame(rows[i]) {
 			candidates = append(candidates, rows[i].ID)
 		}
@@ -124,9 +155,10 @@ func AnnotateSessionStatusStewardship(rows []SessionStatusRow, viewer, focal int
 			// Nobody live has a claim on it: it belongs to whichever board
 			// surfaced it (an epic child, a dependent, a blocker).
 		case !board[steward]:
-			if r.Focused {
+			switch {
+			case r.Focused:
 				r.DuplicateWork = true
-			} else {
+			case !r.Pinned:
 				r.StewardedElsewhere = true
 			}
 		default:
@@ -137,9 +169,20 @@ func AnnotateSessionStatusStewardship(rows []SessionStatusRow, viewer, focal int
 				}
 			}
 		}
+		switch {
+		case o.claimers >= 2:
+			r.DuplicateWork = true
+		case o.claimers == 1:
+			r.DuplicateWork = false
+		}
 	}
 	return nil
 }
+
+// presentSession is the SQL predicate (over sessions s and session_liveness sl)
+// for a session that counts toward stewardship: recorded live, and its pane
+// observed. See the file header for why `unknown` does not qualify here.
+var presentSession = `s.state IN (` + liveSessionStates + `) AND sl.liveness = 'live'`
 
 // isBoardFrame reports whether a row is one stewardship never touches: the
 // board's claimed task, its parent, and its spawner.
@@ -188,8 +231,9 @@ func boardSessions(db *sql.DB, viewer, focal int64) (map[int64]bool, error) {
 }
 
 // liveStewardship gathers, for each task id, the surfacers, revisiters and
-// focusers among live sessions — excluding each task's own claiming session,
-// and excluding from surfacers and revisiters any session that hid the task.
+// focusers among present sessions — excluding each task's own claiming session,
+// and excluding from surfacers and revisiters any session that hid the task —
+// plus the number of present sessions that claimed it.
 // Tasks nobody live has touched are simply absent from the map.
 func liveStewardship(db *sql.DB, taskIDs []int64) (map[int64]taskStewardship, error) {
 	out := make(map[int64]taskStewardship)
@@ -201,8 +245,9 @@ func liveStewardship(db *sql.DB, taskIDs []int64) (map[int64]taskStewardship, er
 	rows, err := db.Query(
 		`SELECT st.task_id, st.session_id, st.relation_id
 		   FROM session_tasks st JOIN sessions s ON s.id = st.session_id
+		   JOIN session_liveness sl ON sl.session_id = s.id
 		  WHERE st.task_id IN (`+ph+`)
-		    AND s.state IN (`+liveSessionStates+`)
+		    AND `+presentSession+`
 		    AND s.task_id IS NOT st.task_id
 		    AND st.relation_id IN (?, ?)
 		    AND NOT EXISTS (
@@ -234,11 +279,12 @@ func liveStewardship(db *sql.DB, taskIDs []int64) (map[int64]taskStewardship, er
 
 	_, args = intPlaceholders(taskIDs)
 	frows, err := db.Query(
-		`SELECT focus_task_id, id FROM sessions
-		  WHERE focus_task_id IN (`+ph+`)
-		    AND state IN (`+liveSessionStates+`)
-		    AND task_id IS NOT focus_task_id
-		  ORDER BY id`,
+		`SELECT s.focus_task_id, s.id FROM sessions s
+		   JOIN session_liveness sl ON sl.session_id = s.id
+		  WHERE s.focus_task_id IN (`+ph+`)
+		    AND `+presentSession+`
+		    AND s.task_id IS NOT s.focus_task_id
+		  ORDER BY s.id`,
 		args...,
 	)
 	if err != nil {
@@ -254,5 +300,32 @@ func liveStewardship(db *sql.DB, taskIDs []int64) (map[int64]taskStewardship, er
 		o.focusers = append(o.focusers, sessionID)
 		out[taskID] = o
 	}
-	return out, frows.Err()
+	if err := frows.Err(); err != nil {
+		return nil, err
+	}
+
+	_, args = intPlaceholders(taskIDs)
+	crows, err := db.Query(
+		`SELECT s.task_id, COUNT(*) FROM sessions s
+		   JOIN session_liveness sl ON sl.session_id = s.id
+		  WHERE s.task_id IN (`+ph+`)
+		    AND `+presentSession+`
+		  GROUP BY s.task_id`,
+		args...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer crows.Close()
+	for crows.Next() {
+		var taskID int64
+		var n int
+		if err := crows.Scan(&taskID, &n); err != nil {
+			return nil, err
+		}
+		o := out[taskID]
+		o.claimers = n
+		out[taskID] = o
+	}
+	return out, crows.Err()
 }

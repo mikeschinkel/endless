@@ -80,7 +80,19 @@ const (
 	// hiddenOnly (--only-hidden) renders the hidden set alone. This is the
 	// discovery path for unhiding without already knowing the ids.
 	hiddenOnly
+
+	// suppressedShow (--show-suppressed) is OR'd onto any of the three modes
+	// above (E-2293). It reveals the rows another present session stewards —
+	// SUPPRESSED rather than hidden: the user did not ask for them to go, the
+	// stewardship derivation did — each marked with suppressedGlyph.
+	suppressedShow hiddenMode = 1 << 4
 )
+
+// hidden is the mode's hidden-row half, with suppressedShow masked off.
+func (m hiddenMode) hidden() hiddenMode { return m &^ suppressedShow }
+
+// showSuppressed reports whether --show-suppressed is set.
+func (m hiddenMode) showSuppressed() bool { return m&suppressedShow != 0 }
 
 // hiddenGlyph marks a hidden row under --show-hidden / --only-hidden. ⊘ (U+2298
 // CIRCLED DIVISION SLASH) reads as "suppressed" and measures single-width
@@ -89,10 +101,33 @@ const (
 // same width-on-demand idiom blockField uses.
 const hiddenGlyph = "⊘"
 
-// hiddenFooter is the always-printed trace for suppressed rows in the default
+// suppressedGlyph marks a suppressed row under --show-suppressed (E-2293). ⊖
+// (U+2296 CIRCLED MINUS) is ⊘'s neighbour in the same block and measures
+// single-width, so it shares ⊘'s conditional column: a row is withheld for one
+// reason or the other, and the glyph says which.
+const suppressedGlyph = "⊖"
+
+// hiddenFooter is the always-printed trace for hidden rows in the default
 // mode. It names the flag that reveals them so the listing is self-documenting.
-func hiddenFooter(n int) string {
-	return fmt.Sprintf("… %d hidden (--show-hidden)", n)
+func hiddenFooter(n int) string { return unseenFooter(n, 0) }
+
+// unseenFooter is the trace for every row this frame withheld, reported per
+// reason (E-2293): hidden because this session asked, suppressed because
+// another present session stewards it. Each names its own flag. "" when
+// nothing was withheld. Without the suppressed half an empty board and a
+// withheld one looked identical, which is how withheld work went unnoticed.
+func unseenFooter(hiddenN, suppressedN int) string {
+	var parts []string
+	if hiddenN > 0 {
+		parts = append(parts, fmt.Sprintf("%d hidden (--show-hidden)", hiddenN))
+	}
+	if suppressedN > 0 {
+		parts = append(parts, fmt.Sprintf("%d suppressed (--show-suppressed)", suppressedN))
+	}
+	if len(parts) == 0 {
+		return ""
+	}
+	return "… " + strings.Join(parts, " · ")
 }
 
 // The redraw cadence and the pane self-sizing rule moved to internal/liveview
@@ -141,6 +176,7 @@ func Run(args []string) {
 	sessionFlag := fs.Int64("session", 0, "explicit viewing session id (headless: bypasses tmux resolution; alone it lists that session's surfaced/revisited rows — the no-goal view — and alongside --task it names the session whose hides apply; intended for tests)")
 	showHidden := fs.Bool("show-hidden", false, "render this session's hidden task rows too, marked "+hiddenGlyph)
 	onlyHidden := fs.Bool("only-hidden", false, "render ONLY this session's hidden task rows (the discovery path for unhiding)")
+	showSuppressed := fs.Bool("show-suppressed", false, "render rows another live session stewards too, marked "+suppressedGlyph)
 	asJSON := fs.Bool("json", false, "emit the row set as JSON instead of the table; every row carries its hidden state")
 	graphOnly := fs.Bool("graph", false, "render only the ordering graph (=> blocks, -> should precede, | same relation, <> must not run concurrently)")
 	if err := fs.Parse(args); err != nil {
@@ -179,6 +215,9 @@ func Run(args []string) {
 		hm = hiddenOnly
 	case *showHidden:
 		hm = hiddenShow
+	}
+	if *showSuppressed {
+		hm |= suppressedShow
 	}
 
 	// nextAnchor produces the ids this view is pinned to (see anchor). The two
@@ -681,21 +720,21 @@ func renderFrame(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTa
 		return
 	}
 
-	// Apply the viewing session's hides (E-1914). hiddenN counts the SUPPRESSED
-	// rows specifically, not every hidden row, so the footer reports what is
-	// missing from this frame — under --show-hidden/--only-hidden nothing is
-	// missing and there is nothing to footer.
-	rows, hiddenN := applyHiddenMode(rows, hm)
+	// Apply the viewing session's hides (E-1914) and the stewardship
+	// suppression (E-2293). The counts are what is MISSING from this frame, per
+	// reason — a reason whose flag is set withholds nothing and counts nothing.
+	rows, hiddenN, suppressedN := applyHiddenMode(rows, hm)
+	footer := unseenFooter(hiddenN, suppressedN)
 
 	if len(rows) == 0 {
-		// Everything was hidden. The footer is the whole frame — that is exactly
-		// the trace the default mode owes the user, so it must not be swallowed by
-		// an "empty" shortcut. Under --only-hidden an empty result means the
-		// opposite (nothing is hidden), which gets its own hint.
-		if hm == hiddenOnly {
+		// Everything was withheld. The footer is the whole frame — that is
+		// exactly the trace the default mode owes the user, so it must not be
+		// swallowed by an "empty" shortcut. Under --only-hidden an empty result
+		// means the opposite (nothing is hidden), which gets its own hint.
+		if hm.hidden() == hiddenOnly {
 			fmt.Fprintln(w, dim("  nothing hidden in this session", color))
-		} else if hiddenN > 0 {
-			fmt.Fprintln(w, dim(hiddenFooter(hiddenN), color))
+		} else if footer != "" {
+			fmt.Fprintln(w, dim(footer, color))
 		}
 		faultrow.Render(w, cols, color, faults.AllProjects)
 		return
@@ -725,7 +764,7 @@ func renderFrame(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTa
 	// where hidden rows are omitted outright — is byte-identical to before E-1914.
 	hw := 0
 	for _, r := range rows {
-		if r.Hidden {
+		if r.Hidden || r.StewardedElsewhere {
 			hw = 2
 			break
 		}
@@ -794,8 +833,8 @@ func renderFrame(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTa
 	// row annotates the machine. Printed whenever anything was suppressed — never
 	// conditional on width, color, or row count — because a hidden task that
 	// vanishes without a trace is the one failure this feature must not have.
-	if hiddenN > 0 {
-		fmt.Fprintln(w, dim(hiddenFooter(hiddenN), color))
+	if footer != "" {
+		fmt.Fprintln(w, dim(footer, color))
 	}
 
 	// The ordering graph (E-2164) annotates the row set too — which of these
@@ -814,37 +853,51 @@ func renderFrame(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTa
 	faultrow.Render(w, cols, color, faults.AllProjects)
 }
 
-// applyHiddenMode splits rows by the viewing session's hides and returns the set
-// to render plus the number SUPPRESSED from this frame. It never mutates the
-// input slice — --json renders the same annotated rows unfiltered.
+// applyHiddenMode splits rows by the two reasons a row can be withheld — the
+// viewing session HID it, or another present session STEWARDS it (SUPPRESSED)
+// — and returns the set to render plus how many were withheld for each. It
+// never mutates the input slice — --json renders the same annotated rows
+// unfiltered.
 //
-//   - hiddenOmit: drop hidden rows; the count is what was dropped (→ footer).
-//   - hiddenShow: keep everything; nothing is suppressed, so the count is 0.
-//   - hiddenOnly: keep only hidden rows; nothing hidden is suppressed, so 0.
+//   - hiddenOmit: drop hidden rows and count them (→ footer).
+//   - hiddenShow: keep hidden rows; none are withheld, so the count is 0.
+//   - hiddenOnly: keep ONLY hidden rows, whoever stewards them — it is the
+//     discovery path for unhiding — and count nothing.
+//   - suppressed rows are dropped and counted unless --show-suppressed is set.
+//     The count matters as much as the drop: an uncounted suppression made an
+//     empty board indistinguishable from a withheld one (E-2293).
 //
-// Two E-2188 rules apply in every mode. A FOCUSED row is never suppressed by a
-// hide — the task the conversation is on right now is the last row that should
-// vanish, and a manual `session hide --task` does not outrank it; it still wears
-// ⊘, because the hide is still recorded. And a row another live session
-// STEWARDS is omitted outright, and uncounted: the footer reports what this
-// session hid, and stewardship is not something it did. It is still on the
-// steward's board, and in --json with `stewarded_elsewhere`.
-func applyHiddenMode(rows []monitor.SessionStatusRow, hm hiddenMode) ([]monitor.SessionStatusRow, int) {
-	out := make([]monitor.SessionStatusRow, 0, len(rows))
-	suppressed := 0
+// A row withheld for both reasons counts once, as hidden: that is the reason
+// the user gave. Revealing the hides alone then surfaces it as suppressed.
+//
+// A hide outranks the FOCUS pointer (E-2293): focus_task_id is the task the
+// conversation touched last, not the one the session is on, and hiding a row
+// from a session that is not its steward is the user picking the steward. The
+// board's own claimed task (IsFocal) is never dropped by a hide; `session hide
+// --task` refuses it.
+func applyHiddenMode(rows []monitor.SessionStatusRow, hm hiddenMode) (out []monitor.SessionStatusRow, hiddenN, suppressedN int) {
+	out = make([]monitor.SessionStatusRow, 0, len(rows))
 	for _, r := range rows {
-		if r.StewardedElsewhere {
+		hidden := r.Hidden && !r.IsFocal
+		switch hm.hidden() {
+		case hiddenOnly:
+			if hidden {
+				out = append(out, r)
+			}
+			continue
+		case hiddenOmit:
+			if hidden {
+				hiddenN++
+				continue
+			}
+		}
+		if r.StewardedElsewhere && !hm.showSuppressed() {
+			suppressedN++
 			continue
 		}
-		if hm == hiddenShow || r.Hidden == (hm == hiddenOnly) || (hm == hiddenOmit && r.Focused) {
-			out = append(out, r)
-			continue
-		}
-		if hm == hiddenOmit {
-			suppressed++
-		}
+		out = append(out, r)
 	}
-	return out, suppressed
+	return out, hiddenN, suppressedN
 }
 
 // minTitleBudget is the floor on the columns left for a row's title, applied
@@ -891,14 +944,17 @@ func statusNotes(r monitor.SessionStatusRow) string {
 	return supersededByNote(r) + duplicatesNote(r)
 }
 
-// hiddenField renders the ⊘ column for a row to width hw (0 = column absent,
+// hiddenField renders the ⊘/⊖ column for a row to width hw (0 = column absent,
 // 2 = glyph + space). Companion to blockField, same width-on-demand contract.
 func hiddenField(r monitor.SessionStatusRow, hw int) string {
 	if hw == 0 {
 		return ""
 	}
-	if r.Hidden {
+	switch {
+	case r.Hidden:
 		return hiddenGlyph + " "
+	case r.StewardedElsewhere:
+		return suppressedGlyph + " "
 	}
 	return "  "
 }
@@ -938,14 +994,17 @@ func joinLegend(entries []legendEntry, sep, between string) string {
 func legendEntries(rows []monitor.SessionStatusRow) []legendEntry {
 	var present [taskrow.Count]bool
 	var done, blocked, blocks, unsettled, notStarted, undetermined, hidden, queued, referenced bool
-	var focus, duplicate, spawnable bool
+	var focus, duplicate, spawnable, suppressed bool
 	for _, r := range rows {
 		present[classify(r)] = true
 		if isTerminal(r.Status) {
 			done = true
 		}
-		if r.Hidden {
+		switch {
+		case r.Hidden:
 			hidden = true
+		case r.StewardedElsewhere:
+			suppressed = true
 		}
 		switch r.Relation {
 		case sessiontaskrelation.RelationQueued:
@@ -1029,6 +1088,11 @@ func legendEntries(rows []monitor.SessionStatusRow) []legendEntry {
 	// only ever appear under --show-hidden/--only-hidden.
 	if hidden {
 		parts = append(parts, legendEntry{Icon: hiddenGlyph, Label: "hidden"})
+	}
+	// ⊖ is ⊘'s sibling: withheld by stewardship rather than by this session,
+	// and only ever drawn under --show-suppressed (E-2293).
+	if suppressed {
+		parts = append(parts, legendEntry{Icon: suppressedGlyph, Label: "suppressed"})
 	}
 	// ⊕/· join ⊘ in the view-scoped tail: like hidden, they describe how the row
 	// entered THIS SESSION's scope rather than anything about the task (E-1696).

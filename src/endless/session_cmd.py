@@ -1638,6 +1638,7 @@ def session_status_resolve(
     graph: bool = False,
     only_hidden: bool = False,
     as_json: bool = False,
+    show_suppressed: bool = False,
 ) -> None:
     """Render the per-session status view (E-1465, renamed E-1688).
 
@@ -1655,8 +1656,9 @@ def session_status_resolve(
 
     --show-hidden / --only-hidden select how this session's per-session hidden
     tasks (E-1914) are rendered; they are mutually exclusive and rejected here so
-    the user gets a click-shaped error rather than the Go flag parser's. --json
-    dumps the row set as data instead of drawing it.
+    the user gets a click-shaped error rather than the Go flag parser's.
+    --show-suppressed (E-2293) also renders rows another live session stewards.
+    --json dumps the row set as data instead of drawing it.
 
     The Go subcommand pins the main DB (sessions live there regardless of cwd),
     so no --db is threaded.
@@ -1690,6 +1692,8 @@ def session_status_resolve(
         args.append("--show-hidden")
     if only_hidden:
         args.append("--only-hidden")
+    if show_suppressed:
+        args.append("--show-suppressed")
     if as_json:
         args.append("--json")
     try:
@@ -2182,86 +2186,34 @@ def _resolve_hide_session(session_value: str | None) -> int:
     return session_id
 
 
-def _resolve_hide_tasks(task_refs: list[str]) -> list[int]:
-    """Parse and validate `--task` values ('E-500' or '500') into task ids.
-
-    Validated up front, as a set, so a typo in the third id fails the command
-    instead of leaving the first two applied.
-    """
-    task_ids: list[int] = []
-    for raw in task_refs:
-        ref = raw.strip()
-        if ref[:2].upper() == "E-":
-            ref = ref[2:]
-        try:
-            task_id = int(ref)
-        except ValueError:
-            # The whole set is validated before anything is applied, so a typo
-            # in the third id leaves the first two unhidden — which is what
-            # lets both of these be plain NO-REPORT retries.
-            raise agent_help.no_report(
-                f"Malformed task id '{raw}' (expected E-NNN or NNN).",
-                "Retry with a well-formed task id",
-            ) from None
-        if not db.query("SELECT id FROM live_tasks WHERE id = ?", (task_id,)):
-            raise agent_help.no_report(
-                f"No task found with id E-{task_id}",
-                "Check the id with `endless task show` or `endless task list` "
-                "and retry with one that exists",
-            )
-        if task_id not in task_ids:
-            task_ids.append(task_id)
-    return task_ids
-
-
 def hide_session_tasks(
     session_value: str | None,
     task_refs: list[str],
     unhide: bool = False,
 ):
-    """Hide (or unhide) tasks from ONE session's `session status` listing (E-1914).
+    """Hide (or unhide) tasks in ONE session's `session status` listing (E-1914).
 
     Display-scoped and session-scoped: it changes nothing about the task, and no
     other session's view moves. A hide never expires on its own — no status
-    transition clears it, `unverified` included — so this and `--task`-less
-    session hiding are the only things that ever write the state.
+    transition clears it, `unverified` included.
 
-    Re-hiding an already-hidden task (or unhiding one that is not hidden) is a
-    no-op, not an error: the commands are for reaching a desired state, and
-    getting there twice should not be a failure.
+    Unhiding a task this session has NOT hidden pins it instead (E-2293): the
+    row then stays on this session's board even while another session stewards
+    it, until a `session hide --task` clears the pin. Hiding the session's own
+    claimed task is refused; hiding its mere focus is not.
+
+    The write is the Go executor's (`session_tasks.hidden` /
+    `session_tasks.unhidden`), on the same emit path as `session task remove`:
+    it validates the ids as a set before applying any, and reports no-ops
+    rather than failing on them.
     """
-    from endless.task_cmd import session_id_display, task_id_display
+    from endless.session_task_cmd import emit_membership
 
     session_id = _resolve_hide_session(session_value)
-    task_ids = _resolve_hide_tasks(task_refs)
-
-    changed: list[int] = []
-    for task_id in task_ids:
-        if unhide:
-            cursor = db.execute(
-                "DELETE FROM session_hidden_tasks "
-                "WHERE session_id = ? AND task_id = ?",
-                (session_id, task_id),
-            )
-        else:
-            cursor = db.execute(
-                "INSERT OR IGNORE INTO session_hidden_tasks "
-                "(session_id, task_id, hidden_at) "
-                "VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%S', 'now'))",
-                (session_id, task_id),
-            )
-        if cursor.rowcount:
-            changed.append(task_id)
-
-    verb = "Unhid" if unhide else "Hid"
-    already = "not hidden" if unhide else "already hidden"
-    session_label = session_id_display(session_id)
-    for task_id in task_ids:
-        note = "" if task_id in changed else click.style(f" ({already})", dim=True)
-        click.echo(
-            click.style("•", fg="cyan")
-            + f" {verb} {task_id_display(task_id)} for {session_label}{note}"
-        )
+    kind = "session_tasks.unhidden" if unhide else "session_tasks.hidden"
+    # --task has always taken a bare number too; the shared validator wants E-.
+    refs = tuple(f"E-{r.strip()}" if r.strip().isdigit() else r for r in task_refs)
+    emit_membership(kind, refs, session_id)
 
 
 def _format_ts(ts: str) -> str:

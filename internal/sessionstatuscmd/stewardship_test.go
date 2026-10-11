@@ -133,15 +133,19 @@ func TestRender_ClaimedTaskFocusIsColourOnly(t *testing.T) {
 	}
 }
 
-// TestApplyHiddenMode_FocusAndStewardship: focus overrides a manual hide (the row
-// is shown and still wears ⊘); a row stewarded elsewhere is omitted in every mode
-// and never counted in the hidden footer.
+// TestApplyHiddenMode_FocusAndStewardship (E-2293): a hide outranks the focus
+// pointer; the board's own claimed task is never dropped by a hide; a row
+// stewarded elsewhere is withheld and COUNTED as suppressed unless
+// --show-suppressed; --only-hidden lists every hidden row whoever stewards it;
+// and a row both hidden and stewarded counts once, as hidden.
 func TestApplyHiddenMode_FocusAndStewardship(t *testing.T) {
 	rows := []monitor.SessionStatusRow{
 		{ID: 1},
 		{ID: 2, Hidden: true},
 		{ID: 3, Hidden: true, Focused: true},
 		{ID: 4, StewardedElsewhere: true},
+		{ID: 5, Hidden: true, StewardedElsewhere: true},
+		{ID: 6, Hidden: true, IsFocal: true},
 	}
 	ids := func(rs []monitor.SessionStatusRow) []int64 {
 		var out []int64
@@ -151,19 +155,62 @@ func TestApplyHiddenMode_FocusAndStewardship(t *testing.T) {
 		return out
 	}
 	cases := []struct {
-		hm         hiddenMode
-		want       []int64
-		suppressed int
+		hm                 hiddenMode
+		want               []int64
+		hidden, suppressed int
 	}{
-		{hiddenOmit, []int64{1, 3}, 1},
-		{hiddenShow, []int64{1, 2, 3}, 0},
-		{hiddenOnly, []int64{2, 3}, 0},
+		{hiddenOmit, []int64{1, 6}, 3, 1},
+		{hiddenShow, []int64{1, 2, 3, 6}, 0, 2},
+		{hiddenOnly, []int64{2, 3, 5}, 0, 0},
+		{hiddenOmit | suppressedShow, []int64{1, 4, 6}, 3, 0},
+		{hiddenShow | suppressedShow, []int64{1, 2, 3, 4, 5, 6}, 0, 0},
 	}
 	for _, c := range cases {
-		got, n := applyHiddenMode(rows, c.hm)
-		if g := ids(got); len(g) != len(c.want) || !equalIDs(g, c.want) || n != c.suppressed {
-			t.Errorf("mode %d: rows %v suppressed %d, want %v suppressed %d", c.hm, g, n, c.want, c.suppressed)
+		got, h, n := applyHiddenMode(rows, c.hm)
+		if g := ids(got); !equalIDs(g, c.want) || h != c.hidden || n != c.suppressed {
+			t.Errorf("mode %d: rows %v hidden %d suppressed %d, want %v hidden %d suppressed %d",
+				c.hm, g, h, n, c.want, c.hidden, c.suppressed)
 		}
+	}
+}
+
+// TestRender_SuppressedFooterAndGlyph (E-2293): the default frame reports
+// suppressed rows separately from hidden ones, naming each flag, and
+// --show-suppressed draws them with ⊖ and documents it in the legend.
+func TestRender_SuppressedFooterAndGlyph(t *testing.T) {
+	rows := []monitor.SessionStatusRow{
+		{ID: 100, Title: "claimed", Status: "underway", IsFocal: true, UnsettledKnown: true},
+		{ID: 150, Title: "stewarded elsewhere", Status: "ready", UnsettledKnown: true, StewardedElsewhere: true},
+		{ID: 151, Title: "hidden here", Status: "ready", UnsettledKnown: true, Hidden: true},
+	}
+	var b strings.Builder
+	renderTo(&b, rows, 100, hintClaimBind, 200, false, hiddenOmit)
+	out := b.String()
+	if !strings.Contains(out, "… 1 hidden (--show-hidden) · 1 suppressed (--show-suppressed)") {
+		t.Errorf("default frame footer does not report both counts:\n%s", out)
+	}
+	if strings.Contains(out, "E-150") {
+		t.Errorf("default frame draws the suppressed row:\n%s", out)
+	}
+
+	b.Reset()
+	renderTo(&b, rows, 100, hintClaimBind, 200, false, hiddenOmit|suppressedShow)
+	out = b.String()
+	if !strings.Contains(out, suppressedGlyph+" ") || !strings.Contains(out, "E-150") {
+		t.Errorf("--show-suppressed does not draw E-150 with %s:\n%s", suppressedGlyph, out)
+	}
+	if !strings.Contains(out, suppressedGlyph+" suppressed") {
+		t.Errorf("legend does not document %s:\n%s", suppressedGlyph, out)
+	}
+	if strings.Contains(out, "suppressed (--show-suppressed)") {
+		t.Errorf("--show-suppressed still footers the rows it revealed:\n%s", out)
+	}
+}
+
+// TestSuppressedGlyphWidth: ⊖ shares ⊘'s single-width column.
+func TestSuppressedGlyphWidth(t *testing.T) {
+	if w := displayWidth(suppressedGlyph); w != 1 {
+		t.Errorf("display width of %q = %d, want 1", suppressedGlyph, w)
 	}
 }
 

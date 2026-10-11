@@ -77,6 +77,9 @@ type jsonRow struct {
 	Focused            bool `json:"focused"`
 	DuplicateWork      bool `json:"duplicate_work"`
 	StewardedElsewhere bool `json:"stewarded_elsewhere"`
+	// Pinned: the viewer's `session unhide --task` keeps this row on its board
+	// even while another session stewards it (E-2293).
+	Pinned bool `json:"pinned"`
 	// Spawnable is E-2204's: a blocker has released the task, none still holds
 	// it, and nobody has claimed it. The table draws it as ▷ and a green id.
 	Spawnable bool `json:"spawnable"`
@@ -171,6 +174,7 @@ func renderJSON(w io.Writer, a anchor, all bool) error {
 			Focused:            r.Focused,
 			DuplicateWork:      r.DuplicateWork,
 			StewardedElsewhere: r.StewardedElsewhere,
+			Pinned:             r.Pinned,
 			Spawnable:          r.Spawnable(),
 		})
 		if r.Focused {

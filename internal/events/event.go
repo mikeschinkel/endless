@@ -283,6 +283,10 @@ const (
 	KindSessionTasksQueued  Kind = "session_tasks.queued"
 	KindSessionTasksTouched Kind = "session_tasks.touched"
 	KindSessionTasksRemoved Kind = "session_tasks.removed"
+	// Session task visibility (E-2293): `session hide --task` / `session
+	// unhide --task`.
+	KindSessionTasksHidden   Kind = "session_tasks.hidden"
+	KindSessionTasksUnhidden Kind = "session_tasks.unhidden"
 )
 
 // Decision event kinds (E-1378). Decisions are first-class items extracted
@@ -423,6 +427,9 @@ var ValidKinds = map[Kind]bool{
 	KindSessionTasksQueued:  true,
 	KindSessionTasksTouched: true,
 	KindSessionTasksRemoved: true,
+	// Session task visibility (E-2293)
+	KindSessionTasksHidden:   true,
+	KindSessionTasksUnhidden: true,
 	// Decision (E-1378)
 	KindDecisionCreated:       true,
 	KindDecisionFieldsUpdated: true,

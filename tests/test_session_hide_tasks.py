@@ -15,23 +15,38 @@ from endless import db
 from endless.cli import main
 
 
+@pytest.fixture(autouse=True)
+def _project(seeded_project_at_cwd):
+    """`--task` hides emit events (E-2293), so cwd must resolve to a registered
+    project — _resolve_project(None) is on the emit path."""
+    return seeded_project_at_cwd
+
+
 def _seed(session_ids=(9001,), task_ids=(500, 501)):
-    """A project, some tasks, and some sessions, all in the isolated test DB."""
-    db.execute(
-        "INSERT INTO projects (id, name, path) VALUES (1, 'probe', '/probe')"
-    )
+    """Some tasks and some sessions against the fixture's project."""
+    project_id = db.query("SELECT id FROM projects")[0]["id"]
     for task_id in task_ids:
         db.execute(
             "INSERT INTO tasks (id, project_id, title, status, phase) "
-            "VALUES (?, 1, ?, 'ready', 'now')",
-            (task_id, f"task {task_id}"),
+            "VALUES (?, ?, ?, 'ready', 'now')",
+            (task_id, project_id, f"task {task_id}"),
         )
     for session_id in session_ids:
         db.execute(
             "INSERT INTO sessions (id, session_id, project_id, state) "
-            "VALUES (?, ?, 1, 'working')",
-            (session_id, f"uuid-{session_id}"),
+            "VALUES (?, ?, ?, 'working')",
+            (session_id, f"uuid-{session_id}", project_id),
         )
+
+
+def _pinned(session_id):
+    return {
+        r["task_id"]
+        for r in db.query(
+            "SELECT task_id FROM session_pinned_tasks WHERE session_id = ?",
+            (session_id,),
+        )
+    }
 
 
 def _hidden(session_id):
@@ -177,16 +192,59 @@ def test_hiding_twice_is_a_no_op():
     )[0]["hidden_at"] == first
 
 
-def test_unhide_restores_and_is_idempotent():
+def test_unhide_restores_without_pinning():
     _seed()
     _run("session", "hide", "ES-9001", "--task", "E-500")
 
-    assert _run("session", "unhide", "ES-9001", "--task", "E-500").exit_code == 0
+    result = _run("session", "unhide", "ES-9001", "--task", "E-500")
+    assert result.exit_code == 0, result.output
     assert _hidden(9001) == set()
+    assert _pinned(9001) == set()
+
+
+# --- pins (E-2293) ------------------------------------------------------------
+
+
+def test_unhide_of_an_unhidden_task_pins_it_and_hide_clears_the_pin():
+    """Unhiding a task nobody hid is the user asking to see it; what can still
+    withhold it is stewardship, and the pin overrides that. A later hide wins."""
+    _seed()
 
     result = _run("session", "unhide", "ES-9001", "--task", "E-500")
     assert result.exit_code == 0, result.output
-    assert "not hidden" in result.output
+    assert "Pinned E-500" in result.output
+    assert _pinned(9001) == {500}
+
+    again = _run("session", "unhide", "ES-9001", "--task", "E-500")
+    assert again.exit_code == 0, again.output
+    assert "already pinned" in again.output
+
+    assert _run("session", "hide", "ES-9001", "--task", "E-500").exit_code == 0
+    assert _pinned(9001) == set()
+    assert _hidden(9001) == {500}
+
+
+def test_hiding_the_sessions_own_task_is_refused():
+    _seed()
+    db.execute("UPDATE sessions SET task_id = 500 WHERE id = 9001")
+
+    result = _run("session", "hide", "ES-9001", "--task", "E-500")
+
+    assert result.exit_code != 0
+    assert "E-500" in result.output
+    assert _hidden(9001) == set()
+
+
+def test_hiding_the_sessions_focus_is_allowed():
+    """A hide outranks focus_task_id: that pointer is the task the conversation
+    touched last, not the one the session is on."""
+    _seed()
+    db.execute("UPDATE sessions SET task_id = 500, focus_task_id = 501 WHERE id = 9001")
+
+    result = _run("session", "hide", "ES-9001", "--task", "E-501")
+
+    assert result.exit_code == 0, result.output
+    assert _hidden(9001) == {501}
 
 
 # --- the no-flag path is untouched -----------------------------------------

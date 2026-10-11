@@ -210,7 +210,11 @@ Three things this is deliberately **not**:
 
 - It is not a property of the task. Hiding is scoped to the *(session, task)* pair — another session working the same task sees its own view unchanged, and `task next`, blocking relations and landing are all unaffected.
 - It never expires. No status transition un-hides a row, `unverified` included; only `session unhide --task` does.
-- It never hides silently. Whenever anything is suppressed the view carries a `… N hidden (--show-hidden)` footer, in `session monitor` too. `--show-hidden` renders everything with hidden rows marked ⊘; `--only-hidden` renders just the hidden set, which is how you find ids to unhide without having recorded them.
+- It never hides silently. Whenever anything is withheld the view carries a footer, in `session monitor` too, with one count per reason: `… 2 hidden (--show-hidden) · 1 suppressed (--show-suppressed)`. `--show-hidden` renders hidden rows marked ⊘; `--only-hidden` renders just the hidden set, which is how you find ids to unhide without having recorded them. *Suppressed* rows are ones another session stewards (see **Focus, and a task's steward**); `--show-suppressed` renders them marked ⊖.
+
+You cannot hide your own claimed task — it is the anchor of your view. You can hide your focused task.
+
+`session unhide --task` on a task you have **not** hidden pins it instead: it stays in your view even while another session stewards it, until a `session hide --task` on it clears the pin. That is the override for a suppression you disagree with.
 
 Pass a session reference (`endless session hide ES-101 --task E-101`) to hide for a session other than your own. Note that bare `session hide <ids...>` — no `--task` — is a different command: it hides whole SESSIONS from `session list`.
 
@@ -246,17 +250,19 @@ Two more kinds of row render dimmed because neither is actionable from your boar
 
 ### Focus, and a task's steward
 
-Your session's **focused** task is the one it last claimed, filed or updated (including `touch`) — what the conversation is on right now, which is often not the task you claimed. Queueing or reading a task does not move focus. `session status` / `session monitor` highlight it: the id in inverse video, and `◼︎` between the type letter and the id. Your claimed task never shows `◼︎` — when it has focus, the colour says so, and in plain text no `◼︎` anywhere means the same thing. `--json` carries `focus` on the frame and `focused` on each row. A focused task is shown even if you hid it.
+Your session's **focused** task is the one it last claimed, filed or updated (including `touch`) — what the conversation is on right now, which is often not the task you claimed. Queueing or reading a task does not move focus. `session status` / `session monitor` highlight it: the id in inverse video, and `◼︎` between the type letter and the id. Your claimed task never shows `◼︎` — when it has focus, the colour says so, and in plain text no `◼︎` anywhere means the same thing. `--json` carries `focus` on the frame and `focused` on each row. Focus keeps a task in your view when another session stewards it, but an explicit `session hide --task` outranks focus.
 
 When the same task would show in several live sessions' status views, only its **steward** shows it — the session that keeps it in view so it gets spawned or rejected. The steward is not the task's **owner**: the owner is the session that claimed it, and a task normally has a steward long before it has an owner. Stewardship is decided each time the view is drawn, never stored, so it corrects itself when a session ends:
 
-1. The live session that filed it.
-2. Otherwise, the only live session that updated it.
-3. Otherwise (two or more live updaters) there is no steward, and it stays in each view with the duplicate mark.
+1. The present session that filed it.
+2. Otherwise, the only present session that updated it.
+3. Otherwise (two or more present updaters) there is no steward, and it stays in each view with the duplicate mark.
 
-Updating a task never takes stewardship from the session that filed it. Hiding it does give it up: a session that ran `session hide --task` on a task no longer counts as its filer or updater, so it neither stewards the task nor makes it ambiguous — hide means "not mine". The exception is focus: if the hiding session has the task in focus again, it counts, because touching the task again is exactly when duplicate work is possible. The task's claiming session is left out: working the task you claimed is the expected case, and it already shows as ⟳ doing in other views. The steward stays the steward after a spawn; the row is dimmed. Dead sessions steward nothing. Your claimed task, its parent and its spawner are never hidden this way.
+**Present** means more than live: the session's tmux pane was actually seen. A session whose pane is gone, or whose tmux server cannot be reached (after a tmux restart its old server never answers again), stewards nothing, however its state reads — a session nobody can show is there must not take a row out of a view that can see it. Idle does not matter: an idle session whose pane is there is present. (Claiming is stricter in the other direction: there, a session whose server cannot be reached still counts as live, because a wrong refusal costs only a retry.)
 
-The **duplicate** mark — `◫`, and the id near-black on red (256-colour 232 on 160) — warns that another session may already have done real work on the task. It appears in both views when a task is focused in one session and stewarded by another, and in every view when stewardship is ambiguous. Stop and decide which session keeps it. `--json` carries `duplicate_work` and `stewarded_elsewhere` on every row, including rows the table omits.
+Updating a task never takes stewardship from the session that filed it. Hiding it does give it up: a session that ran `session hide --task` on a task no longer counts as its filer or updater, so it neither stewards the task nor makes it ambiguous — hide means "not mine". The exception is focus: if the hiding session has the task in focus again, it counts, because touching the task again is exactly when duplicate work is possible. The task's claiming session is left out: working the task you claimed is the expected case, and it already shows as ⟳ doing in other views. The steward stays the steward after a spawn; the row is dimmed. Your claimed task, its parent and its spawner are never hidden this way.
+
+The **duplicate** mark — `◫`, and the id near-black on red (256-colour 232 on 160) — warns that another session may already have done real work on the task. It appears in both views when a task is focused in one session and stewarded by another, and in every view when stewardship is ambiguous. Stop and decide which session keeps it — hiding it in the other session is how you pick. Once exactly one present session has claimed the task, the mark goes: the work has a home and you know where. Two present sessions claiming one task always raise it. `--json` carries `duplicate_work`, `stewarded_elsewhere` and `pinned` on every row, including rows the table omits.
 
 The **unblocked** mark — `▷`, and the id near-black on green (232 on 118) — is news: a task that was blocked has had a blocker released (a terminal status), nothing still holds it, and nobody has claimed it. It stays until someone claims or spawns it; it is computed each draw, not delivered once. On one id, duplicate outranks unblocked, which outranks focus. `--json` carries it as `spawnable`.
 

@@ -329,6 +329,10 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 		return execSessionTasksTouched(db, evt)
 	case KindSessionTasksRemoved:
 		return execSessionTasksRemoved(db, evt)
+	case KindSessionTasksHidden:
+		return execSessionTasksHidden(db, evt)
+	case KindSessionTasksUnhidden:
+		return execSessionTasksUnhidden(db, evt)
 	case KindDecisionCreated:
 		return execDecisionCreated(db, evt)
 	case KindDecisionFieldsUpdated:

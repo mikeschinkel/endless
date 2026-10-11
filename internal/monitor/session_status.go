@@ -101,8 +101,10 @@ type SessionStatusRow struct {
 	// it — the task's stewardship is ambiguous, or it is focused on one board
 	// and stewarded by another. StewardedElsewhere: another live session is its
 	// steward and the viewer is not focused on it, so the table omits it.
-	// Unannotated rows stay false.
+	// Pinned: the viewer ran `session unhide --task` on it, which outranks
+	// stewardship (E-2293). Unannotated rows stay false.
 	Focused            bool
+	Pinned             bool
 	DuplicateWork      bool
 	StewardedElsewhere bool
 	BlockedByN         int

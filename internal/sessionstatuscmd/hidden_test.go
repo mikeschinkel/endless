@@ -204,7 +204,7 @@ func TestApplyHiddenMode(t *testing.T) {
 	}
 	for _, c := range cases {
 		in := hiddenRows()
-		got, suppressed := applyHiddenMode(in, c.mode)
+		got, suppressed, _ := applyHiddenMode(in, c.mode)
 		if len(in) != 2 {
 			t.Errorf("mode %d mutated the input slice", c.mode)
 		}

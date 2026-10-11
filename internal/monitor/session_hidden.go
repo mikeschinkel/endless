@@ -134,3 +134,35 @@ func UnhideSessionTasks(sessionID int64, taskIDs []int64) (int, error) {
 	}
 	return removed, nil
 }
+
+// SessionPinnedTasks returns the set of tasks session `sessionID` has PINNED
+// into its own listing with `session unhide --task` (E-2293). A pin is the
+// user's override of stewardship: the row stays on this session's board even
+// while another present session stewards it. Like a hide it never expires on
+// its own; `session hide --task` is what clears it. Empty (never nil) for
+// session 0, so callers can index it unconditionally.
+func SessionPinnedTasks(sessionID int64) (map[int64]bool, error) {
+	pinned := make(map[int64]bool)
+	if sessionID == 0 {
+		return pinned, nil
+	}
+	db, err := DB()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.Query(
+		`SELECT task_id FROM session_pinned_tasks WHERE session_id = ?`, sessionID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var taskID int64
+		if err := rows.Scan(&taskID); err != nil {
+			return nil, err
+		}
+		pinned[taskID] = true
+	}
+	return pinned, rows.Err()
+}

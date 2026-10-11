@@ -1281,6 +1281,20 @@ CREATE TABLE IF NOT EXISTS session_hidden_tasks (
 CREATE INDEX IF NOT EXISTS idx_session_hidden_tasks_task
     ON session_hidden_tasks(task_id);
 
+-- Per-session task PINS (E-2293): the inverse override to a hide. A row means
+-- "session S keeps task T on its own `session status` listing even while
+-- another session stewards it" — the user's explicit choice outranks the
+-- display-time stewardship derivation. Written only by `session unhide --task`
+-- on a task the session has not hidden; `session hide --task` deletes it, so a
+-- (session, task) pair is hidden, pinned, or neither. No FKs, for the reason
+-- session_hidden_tasks has none.
+CREATE TABLE IF NOT EXISTS session_pinned_tasks (
+    session_id INTEGER NOT NULL,
+    task_id INTEGER NOT NULL,
+    pinned_at TEXT NOT NULL,
+    PRIMARY KEY (session_id, task_id)
+);
+
 -- Per-task rater claims (E-2203). Taken BEFORE the rater's model call, so two
 -- rater runs that select the same unrated task — the background job and a
 -- person's `endless rater run`, which the job lease does not arbitrate — cannot
