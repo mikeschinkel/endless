@@ -37,6 +37,14 @@
   failure **waits for Mike's approval**. (An adversarial agent writing the
   suite is a later task.)
 
+## The reconciliation gate (from E-2280)
+
+- Before it opens a window, the verify request calls the shared reconciliation
+  gate (`internal/reconcilegate`, the same check `task update --status
+  unverified` runs) and refuses while the task's reconciliation is stale or a
+  discrepancy question is unanswered. When this task's plan is itemized, this
+  is its own plan item.
+
 ## First
 
 Confirm that Claude Code lets the agent's Bash create the window (probed OK in
