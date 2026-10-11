@@ -7429,3 +7429,7 @@ So when I argue for deriving something that was going to be explicit, state what
 ### [2026-10-11] Don't ask whether to keep a transition shim Mike called short-term
 While priming E-2280, I asked whether to remove the top-level 'endless plan' redirect (the 'renamed to task' shim) or repoint it. Mike: remove it. He had said it was only needed short-term for the transition, months ago, and that should have kept it from being an open question. When a shim or alias exists only for a transition Mike called short-term, and that transition is long past, removing it is the default, not a question.
 - **Project**: endless
+
+### [2026-10-11] Write task questions that Mike can follow without the plan's internals
+While priming E-2280, Mike could not follow several of my open questions (staleness fingerprint, grandfathering cutoff, parent items, reconciling again, the land exemption). They used the plan's internal terms (P9/P10, tree, merge-base, 'ships', 'same discrepancy') without the scenario that makes them matter. In each question: say which mechanism it is about, walk through the concrete sequence of events where the problem shows up, give the options in those terms, and recommend one.
+- **Project**: endless
