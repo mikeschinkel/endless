@@ -36,7 +36,10 @@ decision yet. The decision drafted in the last item records them.
 - **Fingerprint**: what a reconciliation records about the code. It covers
   only the branch's own changes: the `git patch-id --stable` of the diff
   from the merge-base with the task's base branch to HEAD, with `.endless/`
-  excluded. A clean rebase does not change it, and an edit does.
+  excluded. A clean rebase does not change it, and an edit does. When HEAD is
+  the base point itself (work committed straight onto the base branch, as in
+  a project without worktrees), there is no such diff, so it is a hash of the
+  tracked tree outside `.endless/` instead (found while building E-2280).
 - **Earlier answer**: the settled question from a previous reconciliation
   on the same item. The agent, not the user, re-checks it against the whole
   task each time it reconciles again (item 9).
