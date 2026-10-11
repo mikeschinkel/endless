@@ -33,19 +33,25 @@ The refusal names the blockers, the way `--out-of-order`'s does. A refusal that
 says only "this task is blocked" makes the caller go look it up, and the ids are
 already in hand.
 
-## The override
+## There is no override
 
-`--blocked`, mirroring `--out-of-order` in shape and spirit: it starts the task
-anyway and still lists the blockers. There are legitimate reasons to begin
-blocked work — reading in, drafting a plan, or starting a part that does not
-depend on the blocker — and an unoverridable gate would make a hard relation
-unusable as documentation of intent, which is how `blocks` edges stop getting
-recorded.
+Blocked means blocked. The gate takes no bypass flag, and `--out-of-order` must
+not be widened to cover it.
 
-Name it for the condition it overrides, as `--out-of-order` is. Do not reuse
-`--out-of-order` for both: the two relations mean different things, and one flag
-that waves off either would make a blocked spawn indistinguishable from an
-out-of-order one in a shell history or a wrapper script.
+This is the asymmetry, not an inconsistency to tidy up. `precedes` is advisory —
+a recommended order — so an override is what makes it usable. `blocks` states
+that the work cannot start, and a flag that waves that away converts a hard
+constraint into a suggestion, which removes the only thing it was for.
+
+The remedy for a block that should not apply already exists and is the right
+one: remove the block (`task unblock`). That leaves a record of someone deciding
+the dependency was wrong, where a bypass flag leaves a record of someone
+deciding to ignore it this once — and the next session starts from a graph that
+still says the task is blocked.
+
+An earlier draft of this plan proposed a `--blocked` flag by symmetry with
+`--out-of-order`. Withdrawn: nobody asked for it, and the symmetry argument is
+backwards.
 
 ## Claim as well as spawn
 
@@ -69,7 +75,6 @@ folded in; this one applies to every task type.
 - `task claim` is refused on the same condition, with the same message.
 - A blocker in a terminal status does not refuse either, matching the release
   rule the display uses.
-- `--blocked` starts the task anyway and lists the blockers it overrode.
-- `--out-of-order` still governs `precedes` only, and neither flag waves off the
-  other's condition.
+- No flag bypasses the refusal, and `--out-of-order` does not cover it. The
+  refusal points at `task unblock` as the way forward.
 - `just test` and `just test-go` pass.
