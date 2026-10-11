@@ -93,6 +93,19 @@ def task_doc_path(task_id: int, stem: str) -> str:
     return f"{task_dir(task_id)}/{stem}.md"
 
 
+ITEMS_STEM = "items"
+
+
+def task_items_path(task_id: int) -> str:
+    """Repo-relative path of a task's plan item mirror (E-2280).
+
+    Not a task_content kind: the items are rows of their own table, rendered as
+    TOML in the `--items-file` format by endless-go, so the mirror can be copied
+    and loaded back.
+    """
+    return f"{task_dir(task_id)}/{ITEMS_STEM}.toml"
+
+
 def legacy_task_doc_path(kind: Kind, task_id: int) -> str:
     """Where this kind's mirror was written before consolidation.
 
@@ -273,6 +286,7 @@ def _legacy_task_doc_re() -> re.Pattern:
 
 
 DECISION_DOC_RE = re.compile(r"(^|/)\.endless/decisions/ED-\d+\.md$")
+TASK_ITEMS_RE = re.compile(rf"(^|/)\.endless/tasks/e-\d+/{ITEMS_STEM}\.toml$")
 
 
 def is_mirror_path(path: str) -> bool:
@@ -281,6 +295,7 @@ def is_mirror_path(path: str) -> bool:
     """
     return bool(
         _task_doc_re().search(path)
+        or TASK_ITEMS_RE.search(path)
         or _legacy_task_doc_re().search(path)
         or DECISION_DOC_RE.search(path)
     )

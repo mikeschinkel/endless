@@ -44,6 +44,8 @@ import (
 type rebuildLoss struct {
 	TaskLandings    int64 // tasks(id) ON DELETE CASCADE — destroyed
 	TaskQuestions   int64 // tasks(id) ON DELETE CASCADE — destroyed (E-2176)
+	PlanItems       int64 // tasks(id) ON DELETE CASCADE — destroyed (E-2280)
+	Reconciliations int64 // tasks(id) ON DELETE CASCADE — destroyed, with their entries (E-2280)
 	SessionGates    int64 // tasks(id) via epic_id, CASCADE — destroyed
 	ReportJudgments int64 // session_gates(id) CASCADE — destroyed, second hop
 	ReportLabels    int64 // session_gates(id) CASCADE — destroyed, second hop
@@ -112,6 +114,8 @@ func countRebuildLoss(db *sql.DB) rebuildLoss {
 	probes := []probe{
 		{table: "task_landings", dest: &loss.TaskLandings},
 		{table: "task_questions", dest: &loss.TaskQuestions},
+		{table: "task_plan_items", dest: &loss.PlanItems},
+		{table: "task_reconciliations", dest: &loss.Reconciliations},
 		{table: "session_gates", dest: &loss.SessionGates},
 		{table: "report_judgments", dest: &loss.ReportJudgments},
 		{table: "report_labels", dest: &loss.ReportLabels},
@@ -157,6 +161,8 @@ func rebuildRefusalText(loss rebuildLoss) string {
 
 		row(num(loss.TaskLandings), "task_landings rows", "(landing history)")
 		row(num(loss.TaskQuestions), "task_questions rows", "(open questions and answers)")
+		row(num(loss.PlanItems), "task_plan_items rows", "(itemized plans)")
+		row(num(loss.Reconciliations), "task_reconciliations", "(and their entries)")
 		row(num(loss.SessionGates), "session_gates rows",
 			fmt.Sprintf("(and %d report_judgments, %d report_labels)",
 				loss.ReportJudgments, loss.ReportLabels))

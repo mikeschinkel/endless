@@ -108,6 +108,19 @@ func TaskDocPath(taskID int64, stem string) (path string) {
 	return fmt.Sprintf("%s/%s.md", TaskDir(taskID), stem)
 }
 
+// ItemsStem is the filename stem of a task's plan item mirror (E-2280). Not a
+// task_content kind: the items are rows of their own table, rendered as TOML in
+// the `--items-file` format so the mirror can be copied and loaded back.
+const ItemsStem = "items"
+
+// TaskItemsPath returns the repo-relative path of a task's plan item mirror.
+func TaskItemsPath(taskID int64) (path string) {
+	return fmt.Sprintf("%s/%s.toml", TaskDir(taskID), ItemsStem)
+}
+
+// TaskItemsRe matches a task's plan item mirror.
+var TaskItemsRe = regexp.MustCompile(`(^|/)\.endless/tasks/e-\d+/` + ItemsStem + `\.toml$`)
+
 // LegacyTaskDocPath returns where this kind's mirror was written before
 // consolidation. Used only to FIND a file to relocate; nothing writes here.
 func LegacyTaskDocPath(kind Kind, taskID int64) (path string) {
@@ -175,6 +188,7 @@ var DecisionDocRe = regexp.MustCompile(`(^|/)\.endless/decisions/ED-\d+\.md$`)
 // database, not to you" test.
 func IsMirrorPath(path string) (isMirror bool) {
 	return TaskDocRe.MatchString(path) ||
+		TaskItemsRe.MatchString(path) ||
 		LegacyTaskDocRe.MatchString(path) ||
 		DecisionDocRe.MatchString(path)
 }

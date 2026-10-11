@@ -298,6 +298,26 @@ func reconcile(project monitor.ProjectRef, changed map[string]bool, result *Resu
 		}
 	}
 
+	// Plan item mirrors (E-2280): rendered, not stored, so the renderer is the
+	// column. A task whose items are all withdrawn renders empty and, like an
+	// empty content column, is left alone.
+	itemTasks, err := monitor.TasksWithPlanItems(project.ID)
+	if err != nil {
+		return fmt.Errorf("read plan item tasks: %w", err)
+	}
+	for _, id := range itemTasks {
+		content, err := monitor.PlanItemsTOML(id)
+		if err != nil {
+			return fmt.Errorf("render plan items of E-%d: %w", id, err)
+		}
+		if content == "" {
+			continue
+		}
+		if err = writeIfDifferent(project.Root, docmirror.TaskItemsPath(id), content, adoptable, changed, result); err != nil {
+			return err
+		}
+	}
+
 	decisionRows, err := monitor.DecisionDocRows(project.ID)
 	if err != nil {
 		return fmt.Errorf("read decision bodies: %w", err)

@@ -113,6 +113,10 @@ func Run(args []string) {
 		if err := runPlanItems(args[1:]); err != nil {
 			fail("plan-items", err)
 		}
+	case "plan-items-toml":
+		if err := runPlanItemsTOML(args[1:]); err != nil {
+			fail("plan-items-toml", err)
+		}
 	case "moot-questions":
 		if err := runMootQuestions(args[1:]); err != nil {
 			fail("moot-questions", err)
@@ -213,6 +217,7 @@ func usageText() string {
 		"  task-questions [--id <task-id>] [--project <name>] [--all]   JSON array of open (or --all) task questions",
 		"  question-target (--task <id> | --question <id>)   JSON {task_id, project[, status]} a question command acts on",
 		"  plan-items --id <task-id> [--all]  JSON array of a task's plan items with their latest verdicts (E-2280)",
+		"  plan-items-toml --id <task-id>    JSON {path, content} of a task's items.toml mirror",
 		"  moot-questions --id <task-id>     JSON array [{id, item_seq}] of open discrepancy questions on withdrawn items",
 		"  fingerprint --repo <path>         JSON {fingerprint, head} of the branch's own changes",
 		"  reconcile-gate --id <task-id> --repo <path> [--mode handover|backstop]",

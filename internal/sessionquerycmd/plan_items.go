@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/mikeschinkel/endless/internal/dbprovenance"
+	"github.com/mikeschinkel/endless/internal/docmirror"
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/reconcilegate"
 	"github.com/mikeschinkel/endless/internal/refusal"
@@ -150,4 +151,22 @@ func runReconcileContext(args []string) error {
 		}
 	}
 	return dbprovenance.Encode(os.Stdout, ctx)
+}
+
+// runPlanItemsTOML prints {path, content} for a task's items.toml mirror.
+func runPlanItemsTOML(args []string) error {
+	fs := refusal.NewFlags("plan-items-toml")
+	id := fs.Int64("id", 0, "task id")
+	if err := parseFlags(fs, "plan-items-toml", args); err != nil {
+		return err
+	}
+	if *id <= 0 {
+		return refusal.NoReport("--id is required", "Pass --id <task-id> and retry")
+	}
+	content, err := monitor.PlanItemsTOML(*id)
+	if err != nil {
+		return err
+	}
+	return dbprovenance.Encode(os.Stdout, map[string]string{
+		"path": docmirror.TaskItemsPath(*id), "content": content})
 }
