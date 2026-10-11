@@ -7393,3 +7393,7 @@ Planning E-2291 (a bound session_tasks relation for task bind), I asked Mike whe
 ### [2026-10-10] A choice with a one-sided answer is not an open question
 In the E-2291 needs-plan questions, I put Q4 (leave bound out of session status's non-anchor list, or let it in) and Q6 (refuse or allow session task remove of a bound task) as questions, although option (a) had no cons and option (b) had no pros. Q5's alternatives were similar. Mike asked why I would present those as questions at all. When the comparison has only one sensible answer, state it as part of the plan, with its reason, instead of asking him to choose.
 - **Project**: endless
+
+### [2026-10-10] Say what an internal term refers to when putting it to Mike
+In the E-2291 questions I asked where 'bound' should rank, 'above queued', and used 'primed session', without saying what each refers to. Mike asked 'Ranked WHERE?', 'Where are tasks queued?', and whether we had ever agreed to define 'primed session'. In a question for him, name the mechanism behind a code-level term: which function ranks, and what that rank decides. Point to where a term is defined, or define it in the question.
+- **Project**: endless
