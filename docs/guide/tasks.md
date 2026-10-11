@@ -15,7 +15,7 @@ Every task has one short name, one short description, and a set of long-form con
 | `justification` | Short        | **Research and brainstorm only:** why the work cannot be inline in a do-task. Required by `--type research` unless the parent is an underway epic (see **Research-type gate**); refused on every other type. Shown with `task show --justification`, directly after the description and before context. | `--justification` (inline) on `task add` / `task update`; writing it again rewords it; `--clear justification` on `task update`. |
 | `context`     | Long-form      | Why the task exists: how things work today, what prompted the task, and the evidence for it (logs, counts, repro). Never how the work will be done. Shown with `task show --context`, directly after the description. | `--context` (inline) / `--context-file <path>` on `task add` / `task update`. |
 | `analysis`    | Long-form      | Design and investigation toward a plan: the how, rationale and rejected alternatives, scope, acceptance ideas, open design questions. Shown with `task show --analysis`. | `--analysis` (inline) / `--analysis-file <path>` on `task add` / `task update`. |
-| `plan`        | Long-form      | The work to do: approach, the files and functions it touches, verification steps. **Required before a task can be claimed or spawned.** Name files and functions, never line numbers — see **No time-frozen specifics** below. Shown with `task show --plan`. **On a research task, `plan` instead holds the research *request* — see the Research-task field model below.** | `--plan` (inline) / `--plan-file <path>` on `task add` / `task update`. |
+| `plan`        | Long-form      | The work to do, in two parts: its **plan items** — discrete, independently checkable one-line statements of what will be true (see [Plan items](#plan-items) below) — and the approach prose: the files and functions it touches, how. Rationale and rejected alternatives belong in `analysis`, not here. **Required before a task can be claimed or spawned;** a `todo` or `bugfix` also needs at least one deliverable item before it can be approved or spawned. Name files and functions, never line numbers — see **No time-frozen specifics** below. Shown with `task show --plan`, items first. **On a research task, `plan` instead holds the research *request* — see the Research-task field model below.** | Prose: `--plan` (inline) / `--plan-file <path>` on `task add` / `task update`. Items: `--items-file <path>` on the same commands, or `task plan add`. |
 | `notes`       | Freeform       | Catch-all: history, progress, dated updates, who said what. Use sparingly. Shown with `task show --notes`. | `--notes` (inline) / `--notes-file <path>` on `task update`. |
 | `outcome`     | Short to long  | The result — the deliverable. **Required** when completing a `research`/`brainstorm` task (the outcome IS the deliverable). Optional on `confirm`/`assume`. Shown with `task show --outcome`. | `--outcome` (inline) / `--outcome-file <path>` on `task confirm` / `task assume` / `task update`. |
 | `reason`      | Short          | Why the task ended. **Required** on every abandonment — `declined`, `obsolete` and `superseded` alike — given with that command; one already stored does not count. Kept apart from `outcome` so abandoning findings work never overwrites the findings. Shown with `task show --reason`. | `--reason` (inline) / `--reason-file <path>` on `task update` / `task decline`; `--outcome` given *with* an abandonment status, and on `task supersede`, is stored as the reason. |
@@ -90,6 +90,42 @@ The plan requirement is **type-aware**. A `brainstorm` or `research` task whose 
 Those two are the **whole** gate. Approval is not part of it: a `submitted` task with a plan and no open questions can be claimed or spawned without `task approve`. Approving records that a human reviewed the plan and moves the task from ⚑ review to ▶ do on the board; it does not unlock anything.
 
 The refusal says how to proceed: write the plan, attach it (`task update <id> --plan-file <path>`, which moves the task to `submitted`); answer or close each open question. Or let a session do the first part: `task prime <id>` starts one that reads the task in, drafts the plan, asks its questions, and waits (see **Primed sessions** in `endless guide orchestration`). There is no grandfathering — an older task meets the gate exactly as a new one does, which is how it finds out it needs a plan.
+
+### Plan items
+
+A **plan item** is one line stating something that will be true when the task is done. Items are numbered per task — `P3`, or `E-2280.P3` from outside it — and a number is never reused or renumbered. There are two kinds:
+
+- a **deliverable** states something the work will make true;
+- an **exclusion** states something the task will not do or change ("does not change the ledger event format") — the "out of scope" list, made checkable.
+
+Each item is discrete and independently checkable: someone who reads only the item and the finished work can say whether it holds. If the plan needs something done a particular way, the statement says so; if it does not say how, the way it is done is not a deviation. Rationale goes in `analysis`, approach in the plan prose. An item may carry a `verify` (how to tell it is true) and a short `detail`.
+
+Write a whole set at once from a TOML file, one `[[item]]` table per item, in display order:
+
+```toml
+[[item]]
+statement = "task show --plan renders the items before the prose"
+verify = "tests/test_plan_items.py"
+
+[[item]]
+kind = "exclusion"
+statement = "Does not change the ledger event format"
+```
+
+```bash
+endless task update <id> --items-file <path>     # also on task add
+endless task plan add <id> "<statement>" [--kind exclusion] [--verify "..."]
+endless task plan edit <id> P3 --statement "..."
+endless task plan withdraw <id> P3
+endless task plan move <id> P3 1                 # display order only
+endless task plan list <id> [--all]
+```
+
+The file's keys are `id`, `kind` (default `deliverable`), `statement`, `verify` and `detail`, and anything else is refused. An item with an `id` names an existing item, kept and edited where it differs; one without is added; an active item the file leaves out is withdrawn. Each task's items are mirrored to `.endless/tasks/e-NNNN/items.toml` in this same format — copy it, edit the copy, and load it back.
+
+**Approval is of the items.** `task approve` copies every item into an approved baseline, and refuses a `todo` or `bugfix` with no active deliverable item; so does `task spawn` (a `ready` task with a prose-only plan included). `task claim` is not gated: a claiming session can write the items itself. On a `ready` task, a change to the item set — an item added, withdrawn, or with a changed statement or kind — sends it back to `submitted`; an edit to the plan prose no longer does. An item added to a task that has never had items is planned, not grown.
+
+**While `underway`**, a new item is a **grown** item: work beyond the approved plan. Approved items can still be edited or withdrawn, but every such change holds the hand-over until the user re-approves — `task approve` on an underway task moves the baseline to the items as they are, which is how a redesign is accepted, in one place. From `unverified` on, items are frozen; `revisit` unfreezes them.
 
 **"Plan drafted, N questions open" is a complete, filed state, not a failure.** When you plan a task and hit questions only your user can answer, do not decide them to make the plan look finished. Attach the plan you have, ask the questions with `endless question ask <id> "…"`, and stop. The task is parked until they are answered, `task show` says so prominently, and the questions are recorded durably instead of scrolling away in chat. Filing is the way to ask, not the opposite of asking. A question you can put to a live user in the conversation, ask there instead: rows are for when nobody is there to answer.
 
@@ -321,21 +357,20 @@ Use the task ID printed by `task add` **literally**. IDs advance globally across
 
 **Filing is one of five answers, not the default — and it is never yours alone.** When you spot a bug, a rough edge, or an obvious cleanup while working a task, run these tests in order — the handoff every spawned session receives carries the same five:
 
-{{if .report_gate}}**1. Could it reasonably be done now?** Then do it, and do all three parts: note it in the commit message, record the grown scope on the task itself, and put it in your reply draft so your user learns the scope grew without having to read the diff:
+**1. Could it reasonably be done now?** Then do it: note it in the commit message, and add it to the task as a grown plan item. It is reported through the reconciliation (see [Reconciling before a verify](#reconciling-before-a-verify)), where your user meets it as a `more` question before any verify — not after the fact in your reply:
 
 ```bash
-# The task row is what posterity reads; the commit and the reply are transient.
-endless task update <id> --plan-file <path> --keep-status
-# Discoveries go in your reply draft; the minimizer decides what survives.
-endless task report <id> --draft-file <path>
+# The task row is what posterity reads; the commit is transient.
+endless task plan add <id> "<what is now also true>"
 ```
-{{else}}**1. Could it reasonably be done now?** Then do it, and do all three parts: note it in the commit message, record the grown scope on the task itself (`endless task update <id> --plan-file <path> --keep-status`), and say so in your reply so your user learns the scope grew without having to read the diff.
-{{end}}
+
+On a `research` or `epic` task, which is not reconciled, record it in the plan prose instead: `endless task update <id> --plan-file <path> --keep-status`, and say so in your reply.
+
 **The test is cost and reviewer confusion, not kinship.** How big is the fix, and would carrying it in this diff mislead whoever reviews it? "Not a pure example of this task" is not a reason to file — a one-line fix in a file you already have open is cheaper to make than the task row describing it. Do not let purity get in the way of proficiency.
 
 The bound this test really protects is **size**, not relatedness: a *large or risky* drive-by stays a separate task, because fixing it inline inflates the diff your user reviews, couples two unrelated changes into one land, hides the change the task was actually about, and expands the blast radius of a revert. A small unrelated fix does none of that.
 
-Recording the grown scope is not optional. The commit message is found only by someone already reading that diff, and your reply dies with the session; the task row is what anyone reads later. A task whose plan describes only its original scope is a lie about what shipped under it. `--keep-status` says the edit records history rather than re-specifying the work.
+Recording the grown scope is not optional. The commit message is found only by someone already reading that diff, and your reply dies with the session; the task row is what anyone reads later. A task whose plan describes only its original scope is a lie about what shipped under it.
 
 **2. Is it a bug in work THIS session landed?** Then reopen the task that shipped it — `endless task update E-<id> --status revisit` — and fix it there. A defect in your own landed work is that task done wrong, not a new task. See [Fix a bug in your own landed work](orchestration.md#fix-a-bug-in-your-own-landed-work).
 
@@ -429,6 +464,7 @@ Field model (mirrors the research model):
 endless task update <id> --title "New title"
 endless task update <id> --description "..."
 endless task update <id> --plan-file /path/to/plan.md
+endless task update <id> --items-file /path/to/items.toml   # the plan items
 endless task update <id> --status ready
 endless task update <id> --phase later
 endless task update <id> --complexity medium --risk high   # none clears either
@@ -451,7 +487,7 @@ Attaching a non-empty plan (`--plan`) to an `unplanned` task moves it to `submit
 | The edit | Infers |
 |---|---|
 | non-empty `--plan` on an `unplanned` task | → `submitted` (plan attached = spec-complete) |
-| a material `--plan` change on a `ready` task | → `submitted` (what was approved changed; it needs approving again) |
+| a change to the plan items of a `ready` task (`--items-file`) | → `submitted` (what was approved changed; it needs approving again) |
 
 A rating edit infers nothing: `--complexity`/`--risk` never move status. (The
 retired `--tier 1` used to advance a pre-work task to `ready`; see
@@ -498,7 +534,8 @@ endless task approve <id>                            # human: submitted → read
 endless task approve <id> --risk medium              # ...overriding (or supplying) a rating as you ratify
 endless task claim <id>                              # ready → underway + create worktree
 endless task update <id> --status revisit            # hand the task back (see `task release`: disabled)
-endless task update <id> --status unverified             # work done, awaiting verification
+endless task reconcile <id> [--file <path>]          # todo/bugfix: reconcile the work against the plan items first
+endless task update <id> --status unverified             # work done, reconciled and settled, awaiting verification
 endless task update <id> --status unreviewed --outcome "..."   # research/brainstorm: outcome written, awaiting the user's read
 endless task confirm <id> --outcome "..."            # user-only — sessions do not self-confirm
 endless task confirm <id> --cascade --outcome "..."  # confirm a task and descendants
@@ -507,6 +544,30 @@ endless task decline <id> --reason "..."             # active decision not to do
 endless task update <id> --status obsolete --reason "..."    # no longer needed, nothing replaced it
 endless task supersede <id> --by <new_id> --outcome "..."    # supersede with another task
 ```
+
+### Reconciling before a verify
+
+A `todo` or `bugfix` is handed over only after a **reconciliation**: the agent's record, made after implementing, of how the work compares with every active plan item. A different route usually feels like ordinary engineering while you are on it and only looks like a deviation when the diff is read against the plan, which is why this happens after the work, before anyone is asked to verify it.
+
+`endless task reconcile <id>` shows every item, its earlier verdict and answer, what changed since the last reconciliation, and a file to fill in: one `[[entry]]` per active item, with a **verdict** and a note.
+
+| Item kind | Verdicts |
+|---|---|
+| deliverable | `as_planned`, `differently`, `not_done`, `blocked` |
+| exclusion | `kept`, `not_kept` (the work did what it rules out) |
+
+`endless task reconcile <id> --file <path>` records it. Every **discrepancy** — any verdict other than `as_planned` or `kept`, and any grown item the user has not approved — is filed as an open question tagged with its **kind**, ranked most to least concerning: `excluded`, `less` (not done), `blocked`, `different`, `more` (grown). `question list` sorts by that rank. "No discrepancies" is recorded affirmatively, by giving every item a verdict; it is never inferred from silence.
+
+If it files questions, list them in the order it prints them as your final message and stop. After your user answers, make any changes and reconcile again. An item whose earlier question was answered and whose verdict is unchanged needs `answer_holds = true` with a one-line reason, or `reask = true` with what changed: judge the earlier answer against the whole task as it is now, not the item alone — a redesign can make an answer wrong that was right before. A changed verdict always files a new question. Re-approving after a redesign closes, as moot, the open questions on withdrawn items.
+
+**The gate.** Setting `unverified`, or `assumed`, refuses a `todo` or `bugfix` unless all of these hold, and `task verify` checks them again as a backstop:
+
+- the task has at least one active deliverable item;
+- the items match what the user approved (re-approve with `task approve` after a change);
+- the latest reconciliation is current: no code outside `.endless/` changed on the branch since (a clean `git rebase` does not count; an edit does), and no item changed since;
+- every active item has exactly one entry, and every discrepancy's question is settled — answered or closed, by anyone — or carries a kept earlier answer.
+
+`worktree land`'s own move to `assumed` is not gated: the verify it requires already was. A task with no items at all is let through by `task verify` only, because it reached `unverified` before itemized plans existed.
 
 Found a bug in work you already landed? Reopen that task (`--status revisit`) instead of filing a new one — see [Fix a bug in your own landed work](orchestration.md#fix-a-bug-in-your-own-landed-work).
 

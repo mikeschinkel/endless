@@ -119,12 +119,14 @@ func TestRender_MechanicsPartial_SharedBySpawnAndClaim(t *testing.T) {
 			"the fix is `git rebase main` or `git reset --hard main` **in place**",
 			"Your worktree is: /tmp/wt/e-9999 (branch task/9999-test) — confirm with `pwd`. Don't edit the main checkout.",
 			"Stay focused on E-9999 — one session, one task.",
-			"When implementation is done: `endless task update E-9999 --status unverified --db main`",
+			"When implementation is done, reconcile before handing anything over: `endless task reconcile E-9999 --db main`",
+			"Only then `endless task update E-9999 --status unverified --db main`",
 		},
 		"bugfix": {
 			"the fix is `git rebase main` or `git reset --hard main` **in place**",
 			"Stay focused on E-9999 — one session, one task.",
-			"When implementation is done: `endless task update E-9999 --status unverified --db main`",
+			"When implementation is done, reconcile before handing anything over: `endless task reconcile E-9999 --db main`",
+			"Only then `endless task update E-9999 --status unverified --db main`",
 		},
 		"research": {
 			"the fix is `git rebase main` or `git reset --hard main` **in place**",
@@ -326,10 +328,6 @@ func TestRender_Handoff_DiscoveryBranchesSurviveCompression(t *testing.T) {
 		`"not a pure example of this task" is not a reason to file`,
 		// The real bound, kept: size, not relatedness.
 		"The bound is size — a large or risky unrelated change still splits out",
-		// Bullet 1's third obligation. The commit message and the reply are
-		// transient; the task row is what anyone reads later.
-		"record the grown scope on the task",
-		"`endless task update E-9999 --plan-file <path> --keep-status --db main`",
 		// The branch that routes the residue to the user instead of into
 		// `task add`, with the shape that makes the question answerable.
 		"ASK me before filing — that call is mine, not yours",
@@ -370,7 +368,21 @@ func TestRender_Handoff_DiscoveryBranchesSurviveCompression(t *testing.T) {
 				if typ == "brainstorm" {
 					continue
 				}
-				for _, w := range wants {
+				// Bullet 1's third obligation. The commit message and the reply
+				// are transient; the task row is what anyone reads later. On a
+				// reconciled type (E-2280) the row is a grown plan item, reported
+				// through the reconciliation; elsewhere it is the plan prose.
+				grown := []string{
+					"record the grown scope on the task",
+					"`endless task update E-9999 --plan-file <path> --keep-status --db main`",
+				}
+				if typ == "todo" || typ == "bugfix" {
+					grown = []string{
+						"add it as a grown plan item (`endless task plan add E-9999 \"<statement>\" --db main`)",
+						"It reaches me through the reconciliation, not your reply.",
+					}
+				}
+				for _, w := range append(wants, grown...) {
 					if !strings.Contains(flat, w) {
 						t.Errorf("%s missing %q\n--- output ---\n%s", name, w, flat)
 					}

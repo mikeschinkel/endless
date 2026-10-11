@@ -285,7 +285,6 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 {{if .report_gate}}| `minimizer` | tasks | The minimizer's autoresearch loop — champions, variants, judge calibration, rollback. |
 {{end}}| `note` | _(none yet)_ | project notes aren't covered by the guide yet. |
 | `notes` | _(none yet)_ | project notes aren't covered by the guide yet. |
-| `plan` | tasks | 'plan' is the former name for 'task' (renamed); use 'task'. |
 | `project` | reference | Managing registered projects (register, list, status, set, rename, scan, discover, purge, unregister, ignore, unignore). |
 | `question` | tasks | Open questions on a task — asking a series, answering (and saying who answered), withdrawing, rejecting, superseding, listing. |
 | `rater` | tasks | The rater job that proposes complexity and risk for submitted tasks nobody rated, and running it by hand. |
@@ -298,6 +297,8 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `task` | tasks | Task CRUD, field semantics (title/description/text/analysis/notes/outcome), status transitions, relations. |
 | `task claim` | orchestration | Claiming a task: creates the per-task worktree and binds your session. |
 | `task handoff` | orchestration | The generated handoff text for a spawned session. |
+| `task plan` | tasks | Plan items — one-line, independently checkable statements of what will be true; adding, editing, withdrawing, reordering and listing them, and loading a whole set with --items-file. |
+| `task reconcile` | tasks | Reconciling finished work against the plan items before a verify — verdicts, discrepancy questions and their kinds, earlier answers, and the gate on unverified, assumed and verify. |
 | `task release` | orchestration | Why releasing a task is disabled — a session claims one task for its lifetime. |
 {{if .report_gate}}| `task report` | tasks | The minimizer — write your whole draft, send its output verbatim, and the Stop hook that enforces both halves. |
 {{end}}| `task spawn` | orchestration | Spawning a session on a task: foreground/background, attach verbs, coordinator pattern. |

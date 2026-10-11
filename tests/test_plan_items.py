@@ -1,0 +1,303 @@
+"""E-2280: itemized plans and reconciliation — the Python half.
+
+The rules themselves (origins, freezing, which question settles a discrepancy,
+the gate) are enforced in Go and tested there (internal/events/plan_items_test.go,
+internal/reconcilegate). What lives here is what this side owns: the two file
+formats, turning an items file into operations, rendering, and the sandbox
+check that keeps the items.toml mirror off the real main checkout.
+"""
+
+from pathlib import Path
+
+import pytest
+from click.exceptions import ClickException
+
+from endless import config, plan_items
+
+
+def _write(tmp_path: Path, name: str, body: str) -> str:
+    p = tmp_path / name
+    p.write_text(body)
+    return str(p)
+
+
+# --- labels ----------------------------------------------------------------
+
+@pytest.mark.parametrize("raw", ["P3", "p3", "3", "E-2280.P3"])
+def test_parse_label_accepts_every_spelling(raw):
+    assert plan_items.parse_label(raw) == 3
+
+
+@pytest.mark.parametrize("raw", ["P0", "Px", "", "P03", "-1"])
+def test_parse_label_refuses_garbage(raw):
+    with pytest.raises(ClickException):
+        plan_items.parse_label(raw)
+
+
+# --- the items file ----------------------------------------------------------
+
+def test_items_file_reads_items_in_order(tmp_path):
+    path = _write(tmp_path, "i.toml", '''
+[[item]]
+statement = "The widget renders"
+verify = "go test ./widget"
+
+[[item]]
+id = "P4"
+kind = "exclusion"
+statement = "Does not touch the ledger"
+''')
+    got = plan_items.parse_items_file(path)
+    assert got == [
+        {"seq": None, "kind": "deliverable", "statement": "The widget renders",
+         "verify": "go test ./widget", "detail": ""},
+        {"seq": 4, "kind": "exclusion", "statement": "Does not touch the ledger",
+         "verify": "", "detail": ""},
+    ]
+
+
+@pytest.mark.parametrize("body", [
+    '[[item]]\nstatement = "x"\nowner = "me"\n',          # unknown key
+    'title = "x"\n[[item]]\nstatement = "x"\n',            # unknown top-level key
+    '[[item]]\nkind = "wish"\nstatement = "x"\n',          # unknown kind
+    '[[item]]\nstatement = ""\n',                          # empty statement
+    '[[item]]\nstatement = """a\nb"""\n',                  # two lines
+    '[[item]]\nid = "P1"\nstatement = "a"\n[[item]]\nid = "P1"\nstatement = "b"\n',
+    '[[item]]\nstatement = 3\n',                           # not a string
+    '',                                                    # no items
+    'not toml [',
+])
+def test_items_file_refuses_what_it_does_not_define(tmp_path, body):
+    with pytest.raises(ClickException):
+        plan_items.parse_items_file(_write(tmp_path, "i.toml", body))
+
+
+def _current(monkeypatch, rows):
+    """Stand in for the Go read: active rows, and every row with --all."""
+    def items(task_id, all_items=False):
+        return [r for r in rows if all_items or r["state"] == "active"]
+    monkeypatch.setattr(plan_items, "items", items)
+
+
+def _row(seq, statement, kind="deliverable", state="active", sort=None, verify=None):
+    return {"seq": seq, "statement": statement, "kind": kind, "state": state,
+            "sort_order": sort if sort is not None else seq, "verify": verify,
+            "detail": None}
+
+
+def test_items_file_diff_adds_edits_withdraws_and_orders(monkeypatch):
+    _current(monkeypatch, [_row(1, "a"), _row(2, "b"), _row(3, "c", state="withdrawn")])
+    wanted = [
+        {"seq": 2, "kind": "deliverable", "statement": "b2", "verify": "", "detail": ""},
+        {"seq": None, "kind": "exclusion", "statement": "new", "verify": "", "detail": ""},
+    ]
+    ops = plan_items.ops_for_items_file(9, wanted)
+    assert {"op": "withdraw", "seq": 1} in ops
+    assert {"op": "edit", "seq": 2, "statement": "b2"} in ops
+    add = next(o for o in ops if o["op"] == "add")
+    move = next(o for o in ops if o["op"] == "move")
+    assert add["statement"] == "new" and add["kind"] == "exclusion"
+    # The file's order is the display order, past every existing sort order.
+    assert move["sort_order"] == 4 and add["sort_order"] == 5
+
+
+def test_loading_the_unchanged_set_changes_nothing(monkeypatch):
+    _current(monkeypatch, [_row(1, "a", verify="t"), _row(2, "b", kind="exclusion")])
+    wanted = [
+        {"seq": 1, "kind": "deliverable", "statement": "a", "verify": "t", "detail": ""},
+        {"seq": 2, "kind": "exclusion", "statement": "b", "verify": "", "detail": ""},
+    ]
+    assert plan_items.ops_for_items_file(9, wanted) == []
+
+
+def test_items_file_refuses_unknown_and_withdrawn_ids(monkeypatch):
+    _current(monkeypatch, [_row(1, "a"), _row(2, "b", state="withdrawn")])
+    for seq in (7, 2):
+        with pytest.raises(ClickException):
+            plan_items.ops_for_items_file(9, [
+                {"seq": seq, "kind": "deliverable", "statement": "x", "verify": "", "detail": ""}])
+
+
+# --- the reconciliation file -------------------------------------------------
+
+def test_reconcile_file_reads_entries(tmp_path):
+    path = _write(tmp_path, "r.toml", '''
+[[entry]]
+item = "P1"
+verdict = "differently"
+note = "Another route"
+answer_holds = true
+reason = "Nothing it covers changed"
+
+[[entry]]
+item = "P2"
+verdict = "kept"
+''')
+    assert plan_items.parse_reconcile_file(path) == [
+        {"item_seq": 1, "verdict": "differently", "note": "Another route",
+         "answer_holds": True, "reask": False, "reason": "Nothing it covers changed"},
+        {"item_seq": 2, "verdict": "kept", "note": "", "answer_holds": False,
+         "reask": False, "reason": ""},
+    ]
+
+
+@pytest.mark.parametrize("body", [
+    '[[entry]]\nitem = "P1"\nverdict = "kept"\nmood = "fine"\n',
+    '[[entry]]\nverdict = "kept"\n',
+    'summary = "x"\n',
+])
+def test_reconcile_file_refuses_what_it_does_not_define(tmp_path, body):
+    with pytest.raises(ClickException):
+        plan_items.parse_reconcile_file(_write(tmp_path, "r.toml", body))
+
+
+# --- rendering ---------------------------------------------------------------
+
+def test_render_shows_verdict_answer_and_kept_reason():
+    out = plan_items.render_items([{
+        "label": "P1", "kind": "deliverable", "statement": "It renders",
+        "origin": "planned", "state": "active", "approved_at": "x",
+        "approved_statement": "It renders", "approved_kind": "deliverable",
+        "verify": "go test", "detail": None, "verdict": "differently",
+        "note": "via a template", "question_id": 7, "question_status": "answered",
+        "answer": "fine", "holds_reason": "nothing changed",
+    }])
+    assert "P1" in out and "verify: go test" in out
+    assert "done differently: via a template" in out
+    assert "EQ-7 answered: fine" in out and "kept: nothing changed" in out
+
+
+def test_render_flags_grown_unapproved_and_changed_items():
+    base = {"kind": "deliverable", "verify": None, "detail": None, "verdict": None}
+    out = plan_items.render_items([
+        {**base, "label": "P1", "statement": "a", "origin": "grown", "state": "active",
+         "approved_at": None},
+        {**base, "label": "P2", "statement": "b2", "origin": "planned", "state": "active",
+         "approved_at": "x", "approved_statement": "b", "approved_kind": "deliverable"},
+    ])
+    assert "[grown, unapproved]" in out
+    assert "[changed since approval]" in out
+
+
+# --- the sandbox check the mirror depends on ----------------------------------
+
+def test_an_in_tree_sandbox_is_a_sandbox(tmp_path, monkeypatch):
+    """The check used to look under the cache, where sandboxes lived before
+    ED-1554, so it called every in-tree sandbox real — and a sandbox run
+    committed its mirrors onto the real main checkout.
+    """
+    wt = tmp_path / "proj" / ".endless" / "worktrees" / "e-5"
+    wt.mkdir(parents=True)
+    monkeypatch.setattr(config, "worktree_path", lambda: wt)
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", config.sandbox_config_dir(wt))
+    assert config.db_context_is_sandbox()
+    monkeypatch.setattr(config, "RESOLVED_CONFIG_DIR", tmp_path / "real" / "endless")
+    assert not config.db_context_is_sandbox()
+    monkeypatch.setattr(config, "worktree_path", lambda: None)
+    assert not config.db_context_is_sandbox()
+
+
+# --- the CLI surfaces, with the Go seams stubbed -------------------------------
+
+from click.testing import CliRunner  # noqa: E402
+
+from endless.cli import main  # noqa: E402
+
+
+@pytest.fixture
+def seams(monkeypatch):
+    """Stub every Go read and event emit; record the emits."""
+    emitted: list[dict] = []
+    state = {"status": "underway", "unapproved": False, "gate": {"pass": True, "problems": []}}
+
+    def fake_go(args):
+        verb = args[0]
+        if verb == "plan-items":
+            return {"rows": [_row(1, "a"), _row(2, "b"), _row(3, "c")]}
+        if verb == "plan-readiness":
+            return {"status": state["status"], "unapproved": state["unapproved"],
+                    "gated": True, "type": "todo", "deliverables": 1}
+        if verb == "fingerprint":
+            return {"fingerprint": "fp1", "head": "abc"}
+        if verb == "task-questions":
+            return {"rows": []}
+        if verb == "reconcile-gate":
+            return state["gate"]
+        raise AssertionError(f"unexpected read {args}")
+
+    def fake_emit(**kw):
+        emitted.append(kw)
+        return {"added": ["P4"]} if kw["kind"] == "task.plan_items_changed" else {"seq": 1}
+
+    monkeypatch.setattr(plan_items, "_go", fake_go)
+    monkeypatch.setattr(plan_items, "emit_event", fake_emit)
+    monkeypatch.setattr(plan_items, "_project", lambda task_id: "proj")
+    monkeypatch.setattr(plan_items, "write_mirror", lambda task_id: None)
+    monkeypatch.setattr(plan_items, "task_repo", lambda task_id: Path("/repo"))
+    return emitted, state
+
+
+def _ops(emitted):
+    return [e["payload"]["ops"] for e in emitted if e["kind"] == "task.plan_items_changed"]
+
+
+def test_plan_add_edit_withdraw_shape_their_ops(seams):
+    emitted, _ = seams
+    r = CliRunner()
+    assert r.invoke(main, ["task", "plan", "add", "E-7", " New thing ", "--kind",
+                           "exclusion", "--verify", "t"]).exit_code == 0
+    assert r.invoke(main, ["task", "plan", "edit", "E-7", "P2", "--statement", "b2"]).exit_code == 0
+    assert r.invoke(main, ["task", "plan", "withdraw", "E-7", "P1", "E-7.P3"]).exit_code == 0
+    assert _ops(emitted) == [
+        [{"op": "add", "kind": "exclusion", "statement": "New thing", "verify": "t"}],
+        [{"op": "edit", "seq": 2, "statement": "b2"}],
+        [{"op": "withdraw", "seq": 1}, {"op": "withdraw", "seq": 3}],
+    ]
+
+
+def test_plan_move_rewrites_the_display_order(seams):
+    emitted, _ = seams
+    result = CliRunner().invoke(main, ["task", "plan", "move", "E-7", "P3", "1"])
+    assert result.exit_code == 0, result.output
+    assert [(o["seq"], o["sort_order"]) for o in _ops(emitted)[0]] == [(3, 4), (1, 5), (2, 6)]
+
+
+def test_an_item_change_on_a_ready_task_drops_its_approval(seams):
+    emitted, state = seams
+    state.update(status="ready", unapproved=True)
+    result = CliRunner().invoke(main, ["task", "plan", "add", "E-7", "More"])
+    assert result.exit_code == 0, result.output
+    change = [e for e in emitted if e["kind"] == "task.status_changed"]
+    assert change and change[0]["payload"]["new_status"] == "submitted"
+
+
+def test_an_item_change_underway_keeps_the_status(seams):
+    emitted, state = seams
+    state.update(status="underway", unapproved=True)
+    CliRunner().invoke(main, ["task", "plan", "add", "E-7", "More"])
+    assert not [e for e in emitted if e["kind"] == "task.status_changed"]
+
+
+def test_reconcile_records_entries_with_the_fingerprint(seams, tmp_path):
+    emitted, _ = seams
+    path = _write(tmp_path, "r.toml", '[[entry]]\nitem = "P1"\nverdict = "as_planned"\n')
+    result = CliRunner().invoke(main, ["task", "reconcile", "E-7", "--file", path])
+    assert result.exit_code == 0, result.output
+    evt = next(e for e in emitted if e["kind"] == "task.reconciled")
+    assert evt["payload"]["fingerprint"] == "fp1" and evt["payload"]["head"] == "abc"
+    assert evt["payload"]["entries"][0]["item_seq"] == 1
+    assert "No discrepancies are waiting" in result.output
+
+
+def test_the_gate_refusal_lists_every_problem(seams):
+    _, state = seams
+    state["gate"] = {"pass": False, "problems": ["the code changed", "EQ-3 is open"]}
+    with pytest.raises(ClickException) as exc:
+        plan_items.require_gate(7, "move to unverified")
+    assert "the code changed" in str(exc.value.message) and "EQ-3 is open" in str(exc.value.message)
+
+
+def test_the_plan_redirect_is_gone():
+    result = CliRunner().invoke(main, ["plan", "list"])
+    assert result.exit_code != 0
+    assert "renamed to 'task'" not in result.output

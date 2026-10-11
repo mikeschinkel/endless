@@ -32,6 +32,11 @@ Your worktree is: {{.worktree_path}} (branch {{.branch}}) — confirm with `pwd`
   to make and to review; the real bound the guide protects is a LARGE unrelated
   change, which is a size test, not a kinship test.
 
+  E-2280: on a todo or bugfix the grown scope is a grown PLAN ITEM, and it is
+  reported through the reconciliation that gates the hand-over, not after the
+  fact in the reply. Research and epic keep the prose route below: they are not
+  reconciled.
+
   Bullet 1 also carries a third obligation now: record the grown scope on the
   task. The commit message and the reply are both transient — the commit is
   found only by someone already reading that diff, the reply dies with the
@@ -76,9 +81,11 @@ Stay focused on E-{{.spawned_id}} — one session, one task. {{if eq .task_type 
    Filing more than one? Check whether they share a root cause — file the
    cause, not each symptom.{{else}}Filing is the exception, not the default. For anything you discover along the way:
    - Could it reasonably be done now? Do it — note it in the commit message,
-     record the grown scope on the task (`endless task update E-{{.spawned_id}}
+     {{if or (eq .task_type "todo") (eq .task_type "bugfix")}}and add it as a grown plan item (`endless task plan add E-{{.spawned_id}}
+     "<statement>" --db main`). It reaches me through the reconciliation, not
+     your reply.{{else}}record the grown scope on the task (`endless task update E-{{.spawned_id}}
      --plan-file <path> --keep-status --db main`), and say so in your reply
-     draft. The test is COST and reviewer confusion, not kinship: "not a pure
+     draft.{{end}} The test is COST and reviewer confusion, not kinship: "not a pure
      example of this task" is not a reason to file, and a fix cheaper to make
      than the task row describing it gets folded in. The bound is size — a
      large or risky unrelated change still splits out, because it inflates the
@@ -152,7 +159,7 @@ The work is landed from the owner's side — this session's — by the user in a
 {{if eq .task_type "research"}}When findings are ready: `endless task update E-{{.spawned_id}} --status unreviewed --outcome-file <path> --db main`, then tell me where to read them. Don't mark `completed` yourself — that is mine to set once I have read them — and don't mark `confirmed`/`assumed`, which research never uses.
 {{- else if eq .task_type "brainstorm"}}When the synthesis is ready: `endless task update E-{{.spawned_id}} --status unreviewed --outcome-file <path> --db main`, then tell me where to read it and which follow-ups it spawned. Don't mark `completed` yourself — that is mine to set once I have read it — and don't mark `confirmed`/`assumed`, which a brainstorm never uses.
 {{- else if eq .task_type "epic"}}When all children are `confirmed`/`assumed`: `endless task update E-{{.spawned_id}} --status completed --db main`, then tell me. Don't mark the epic complete while children are still open.
-{{- else}}When implementation is done: `endless task update E-{{.spawned_id}} --status unverified --db main`, then hand me the one verify command. Don't mark `confirmed`/`assumed` yourself.
+{{- else}}When implementation is done, reconcile before handing anything over: `endless task reconcile E-{{.spawned_id}} --db main` shows every plan item and a file to fill in, one verdict per item; record it with `--file <path>`. If it files discrepancy questions, list them in the order it prints them as your final message and stop. After I answer, make any changes and reconcile again. Only then `endless task update E-{{.spawned_id}} --status unverified --db main` — the gate refuses it until the reconciliation is current and every discrepancy is settled — and hand me the one verify command. Don't mark `confirmed`/`assumed` yourself.
 {{- end}}
 {{- end}}
 
