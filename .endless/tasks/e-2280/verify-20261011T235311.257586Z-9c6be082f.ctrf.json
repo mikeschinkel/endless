@@ -1,0 +1,194 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 35,
+      "passed": 35,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go: plan items, the gate, the migration, the mirror and the handoff wording",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest: the file formats, the CLI surfaces and the sandbox check",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "registered a throwaway project on its own database",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "task add accepts --items-file",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the deliverable is P1",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the exclusion is P2",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the items.toml mirror is written on the main checkout",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the mirror is the items-file format",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the mirror is committed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "re-loading the mirror unchanged changes nothing",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "task show --plan renders the items",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the items come before the prose",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "approve refuses a todo with no deliverable item",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "spawn refuses a todo with a prose-only plan",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "approve moves E-1 to ready",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "approval baselines every item",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a prose edit on a ready task keeps it ready",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "an item edit on a ready task drops its approval",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it is submitted again",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "re-approved",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the gate refuses an unreconciled task",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "setting unverified runs the gate",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "reconcile without --file prints a file to fill in",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a discrepancy is filed as a question",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the question carries its kind",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it is an open question on the task",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the gate holds for the user's answer",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the gate passes once it is answered",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "reconciling again must say whether the earlier answer holds",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a kept earlier answer files no question",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and the gate passes",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "show --plan carries the verdict and the answer",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a commit touching only .endless/ leaves it current",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a code change makes it stale",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "'endless plan' no longer redirects to 'task'",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
