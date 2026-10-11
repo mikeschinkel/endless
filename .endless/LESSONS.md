@@ -7417,3 +7417,11 @@ The substantive half: I argued 'the epic is the one monitor that should never lo
 
 So do not reason from 'the monitor must show everything under the focal task'. Ask what this session still has to act on. When I catch myself arguing a display should be complete, check whether I am conflating the monitor with a listing command that already exists.
 - **Project**: endless
+
+### [2026-10-10] Derived state I argue for must keep the user's override and visibility
+Mike originally wanted monitor suppression done through `session hide --task` — an explicit, stored decision. I lobbied hard for deriving it on the fly instead, on the grounds that derived state needs no maintenance. That advice is now costing him exactly what the explicit command would have given: he cannot unhide a task the algorithm suppressed, and he cannot see what was suppressed. It bit concretely — I reported E-1994 and E-1995 as the last open work in this epic from a monitor that was silently omitting E-1995.
+
+The lesson is not 'always prefer stored state'. Self-maintaining derivation was a real argument and still is. What I left out of the trade was that an explicit command carries two properties beyond the bookkeeping: the user can override it, and the user can see it. Derived state can have both, but only if they are designed in — a count in the footer, a flag to reveal, and a stored override that outranks the derivation.
+
+So when I argue for deriving something that was going to be explicit, state what the user loses and say how they get it back. 'It needs no maintenance' is an argument about my cost, not theirs. And a derivation that silently removes rows is worse than one that removes them visibly, because the user cannot tell the difference between 'nothing there' and 'something withheld'.
+- **Project**: endless
