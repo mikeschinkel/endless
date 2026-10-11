@@ -7385,3 +7385,7 @@ After E-2276 finished, I said planning E-2280 belonged to a new session because 
 ### [2026-10-09] Fold a finding into the open task it shares a cause with
 In E-2283, after filing E-2291 (point claim's no-plan refusal to task bind), I found that bind also writes a 'claimed' session_tasks row. I recommended filing that as a separate task because it was a schema and event change while E-2291 was a text change. Mike pointed to ED-1550: fold a finding into an OPEN task, and file the cause rather than each symptom. Both came from one cause, bind treated as a claim rather than as the step before one, and E-2291 was open and unplanned. The size difference between the two parts was not a reason to split them.
 - **Project**: endless
+
+### [2026-10-10] Check the code before putting a question that depends on it
+Planning E-2291 (a bound session_tasks relation for task bind), I asked Mike whether a primed session's SessionStart auto-bind should record 'bound', and said I had not confirmed which relation it writes today. Mike said I should already have checked it. A question whose options depend on current behavior has to be grounded in that behavior before it is put to him. Here the check (maybeCwdBind -> monitor.BindSessionToTask) showed the auto-bind writes no session_tasks row at all, which changed the question.
+- **Project**: endless
