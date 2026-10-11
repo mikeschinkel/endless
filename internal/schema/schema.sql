@@ -947,12 +947,86 @@ CREATE TABLE IF NOT EXISTS task_questions (
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     updated_at TEXT NOT NULL DEFAULT '',
     reason TEXT,
+    kind TEXT,
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_task_questions_task
     ON task_questions(task_id, series);
 CREATE INDEX IF NOT EXISTS idx_task_questions_status
     ON task_questions(status);
+
+-- Itemized plans and their reconciliation (E-2280).
+--
+-- task_questions.kind (above, added by migration 00020) is set only on a
+-- question a reconciliation filed for a discrepancy: excluded | less | blocked |
+-- different | more, ranked most to least concerning (internal/planitem). NULL on
+-- an ordinary question.
+--
+-- task_plan_items: one row per plan item, a one-line statement of something that
+-- will be true when the task is done. seq is per task, rendered P<seq>, never
+-- reused or renumbered; sort_order is display order, separate from seq. The list
+-- is flat. kind: deliverable | exclusion. origin: planned | grown. state:
+-- active | withdrawn — a withdrawn item stays so its number is never reused.
+-- approved_statement / approved_kind / approved_at are the baseline `task
+-- approve` copied; the item set "differs from the baseline" when an active item
+-- has none, or its statement or kind no longer match, or a withdrawn item still
+-- carries one. All values are validated in application code.
+CREATE TABLE IF NOT EXISTS task_plan_items (
+    id INTEGER PRIMARY KEY,
+    task_id INTEGER NOT NULL,
+    seq INTEGER NOT NULL,
+    sort_order INTEGER NOT NULL,
+    kind TEXT NOT NULL,
+    statement TEXT NOT NULL,
+    verify TEXT,
+    detail TEXT,
+    origin TEXT NOT NULL,
+    state TEXT NOT NULL DEFAULT 'active',
+    approved_statement TEXT,
+    approved_kind TEXT,
+    approved_at TEXT,
+    created_by_session INTEGER,
+    created_at TEXT NOT NULL,
+    updated_at TEXT NOT NULL,
+    UNIQUE (task_id, seq),
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
+
+-- task_reconciliations: the agent's record, made after implementing and before
+-- handing over a verify, of how the work compares with every active plan item.
+-- seq is per task. fingerprint is the `git patch-id --stable` of the branch's
+-- own changes (merge-base with the base branch to HEAD, `.endless/` excluded),
+-- so a clean rebase leaves it alone and an edit does not. plan_digest hashes the
+-- item set it was made against (monitor.PlanDigest), so any item change after it
+-- makes it stale without comparing second-resolution timestamps. plan_changed records
+-- that the plan was re-approved since the previous reconciliation.
+CREATE TABLE IF NOT EXISTS task_reconciliations (
+    id INTEGER PRIMARY KEY,
+    task_id INTEGER NOT NULL,
+    seq INTEGER NOT NULL,
+    fingerprint TEXT NOT NULL,
+    plan_digest TEXT NOT NULL,
+    head TEXT,
+    plan_changed INTEGER NOT NULL DEFAULT 0,
+    session_id INTEGER,
+    created_at TEXT NOT NULL,
+    UNIQUE (task_id, seq),
+    FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
+);
+
+-- task_reconciliation_entries: one per active item at the time. question_id is
+-- the question that settles a discrepancy: one this reconciliation filed, or an
+-- earlier one the agent kept (holds_reason says why it still holds).
+CREATE TABLE IF NOT EXISTS task_reconciliation_entries (
+    reconciliation_id INTEGER NOT NULL,
+    item_seq INTEGER NOT NULL,
+    verdict TEXT NOT NULL,
+    note TEXT,
+    question_id INTEGER,
+    holds_reason TEXT,
+    PRIMARY KEY (reconciliation_id, item_seq),
+    FOREIGN KEY (reconciliation_id) REFERENCES task_reconciliations(id) ON DELETE CASCADE
+);
 
 -- Decisions (E-1378). Lifecycle: proposed (initial) -> accepted | rejected,
 -- and accepted -> superseded | obsolete (E-1920). status validation enforced in

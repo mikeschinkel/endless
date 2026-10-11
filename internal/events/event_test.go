@@ -253,8 +253,9 @@ func TestValidKinds_Count(t *testing.T) {
 	//      moved to RetiredKinds, not deleted: see TestRetiredKinds below)
 	// + 1 (E-2173 session_tasks.touched)
 	// + 2 (E-2176 task.questions_asked, task_question.resolved)
-	// + 2 (E-2293 session_tasks.{hidden,unhidden}) = 50.
-	want := 50
+	// + 2 (E-2293 session_tasks.{hidden,unhidden})
+	// + 3 (E-2280 task.plan_items_changed, task.plan_baselined, task.reconciled) = 53.
+	want := 53
 	got := len(events.ValidKinds)
 	if got != want {
 		t.Errorf("ValidKinds has %d entries, want %d", got, want)

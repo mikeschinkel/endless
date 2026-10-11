@@ -109,6 +109,26 @@ func Run(args []string) {
 		if err := runQuestionTarget(args[1:]); err != nil {
 			fail("question-target", err)
 		}
+	case "plan-items":
+		if err := runPlanItems(args[1:]); err != nil {
+			fail("plan-items", err)
+		}
+	case "moot-questions":
+		if err := runMootQuestions(args[1:]); err != nil {
+			fail("moot-questions", err)
+		}
+	case "fingerprint":
+		if err := runFingerprint(args[1:]); err != nil {
+			fail("fingerprint", err)
+		}
+	case "reconcile-gate":
+		if err := runReconcileGate(args[1:]); err != nil {
+			fail("reconcile-gate", err)
+		}
+	case "reconcile-context":
+		if err := runReconcileContext(args[1:]); err != nil {
+			fail("reconcile-context", err)
+		}
 	case "unrated-tasks":
 		if err := runUnratedTasks(args[1:]); err != nil {
 			fail("unrated-tasks", err)
@@ -192,6 +212,13 @@ func usageText() string {
 		"  task-report --id <task-id>        JSON {task_id, status, type, landed, successors[]} of a task's computed report facts (E-1771)",
 		"  task-questions [--id <task-id>] [--project <name>] [--all]   JSON array of open (or --all) task questions",
 		"  question-target (--task <id> | --question <id>)   JSON {task_id, project[, status]} a question command acts on",
+		"  plan-items --id <task-id> [--all]  JSON array of a task's plan items with their latest verdicts (E-2280)",
+		"  moot-questions --id <task-id>     JSON array [{id, item_seq}] of open discrepancy questions on withdrawn items",
+		"  fingerprint --repo <path>         JSON {fingerprint, head} of the branch's own changes",
+		"  reconcile-gate --id <task-id> --repo <path> [--mode handover|backstop]",
+		"                                    JSON {task_id, skipped, problems[], pass} — the reconciliation gate",
+		"  reconcile-context --id <task-id> [--repo <path>]",
+		"                                    JSON {items[], last, plan_reapproved, plan_edited, files_changed[]}",
 		"  unrated-tasks [--project <name>] [--limit N]",
 		"                                    JSON array [{id, project, title}] of submitted tasks missing a rating, oldest first (E-2203)",
 		"  rater-context --id <task-id>      JSON {task_id, project, project_root, title, description, context, plan, type, phase,",

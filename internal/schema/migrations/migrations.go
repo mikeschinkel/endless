@@ -53,5 +53,6 @@ func Go() []*goose.Migration {
 		ignoredProjects(),
 		faultRaisers(),
 		landSettles(),
+		planItems(),
 	}
 }

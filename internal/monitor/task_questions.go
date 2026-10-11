@@ -4,22 +4,26 @@ import (
 	"database/sql"
 	"fmt"
 
+	"github.com/mikeschinkel/endless/internal/planitem"
 	"github.com/mikeschinkel/endless/internal/questionstatus"
 )
 
 // TaskQuestion is one task_questions row (E-2176), joined to the task it
 // belongs to so a project-wide listing can say which task each question parks.
 type TaskQuestion struct {
-	ID             int64   `json:"id"`
-	TaskID         int64   `json:"task_id"`
-	TaskTitle      string  `json:"task_title"`
-	Project        string  `json:"project"`
-	Series         int64   `json:"series"`
-	Question       string  `json:"question"`
-	Answer         *string `json:"answer"`
-	Status         string  `json:"status"`
-	AnsweredBy     *string `json:"answered_by"`
-	Reason         *string `json:"reason"`
+	ID         int64   `json:"id"`
+	TaskID     int64   `json:"task_id"`
+	TaskTitle  string  `json:"task_title"`
+	Project    string  `json:"project"`
+	Series     int64   `json:"series"`
+	Question   string  `json:"question"`
+	Answer     *string `json:"answer"`
+	Status     string  `json:"status"`
+	AnsweredBy *string `json:"answered_by"`
+	Reason     *string `json:"reason"`
+	// Kind is the discrepancy kind a reconciliation filed the question under
+	// (E-2280), nil on an ordinary question.
+	Kind           *string `json:"kind"`
 	AskedBySession *int64  `json:"asked_by_session"`
 	CreatedAt      string  `json:"created_at"`
 	UpdatedAt      string  `json:"updated_at"`
@@ -48,7 +52,7 @@ func TaskQuestions(f TaskQuestionFilter) ([]TaskQuestion, error) {
 // listing along with the task — the same rule every other task read follows.
 func taskQuestions(db *sql.DB, f TaskQuestionFilter) ([]TaskQuestion, error) {
 	query := `SELECT q.id, q.task_id, t.title, p.name, q.series, q.question,
-	                 q.answer, q.status, q.answered_by, q.reason, q.asked_by_session,
+	                 q.answer, q.status, q.answered_by, q.reason, q.kind, q.asked_by_session,
 	                 q.created_at, q.updated_at
 	            FROM task_questions q
 	            JOIN live_tasks t ON t.id = q.task_id
@@ -67,7 +71,9 @@ func taskQuestions(db *sql.DB, f TaskQuestionFilter) ([]TaskQuestion, error) {
 		query += " AND q.status = ?"
 		args = append(args, questionstatus.Open)
 	}
-	query += " ORDER BY q.task_id ASC, q.series ASC, q.id ASC"
+	// Within a task, discrepancy questions come first, most concerning kind
+	// first (E-2280); ordinary questions keep series order after them.
+	query += " ORDER BY q.task_id ASC, " + questionKindRankSQL + " ASC, q.series ASC, q.id ASC"
 
 	rows, err := db.Query(query, args...)
 	if err != nil {
@@ -79,7 +85,7 @@ func taskQuestions(db *sql.DB, f TaskQuestionFilter) ([]TaskQuestion, error) {
 	for rows.Next() {
 		var q TaskQuestion
 		if err = rows.Scan(&q.ID, &q.TaskID, &q.TaskTitle, &q.Project, &q.Series,
-			&q.Question, &q.Answer, &q.Status, &q.AnsweredBy, &q.Reason, &q.AskedBySession,
+			&q.Question, &q.Answer, &q.Status, &q.AnsweredBy, &q.Reason, &q.Kind, &q.AskedBySession,
 			&q.CreatedAt, &q.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("scan task question: %w", err)
 		}
@@ -138,3 +144,13 @@ func resolveQuestionTarget(db *sql.DB, taskID, questionID int64) (QuestionTarget
 		return tgt, err
 	}
 }
+
+// questionKindRankSQL ranks a question by its kind, in planitem.QuestionKinds
+// order, with ordinary (kind-less) questions last.
+var questionKindRankSQL = func() string {
+	expr := "CASE q.kind"
+	for i, k := range planitem.QuestionKinds {
+		expr += fmt.Sprintf(" WHEN '%s' THEN %d", k, i)
+	}
+	return expr + fmt.Sprintf(" ELSE %d END", len(planitem.QuestionKinds))
+}()

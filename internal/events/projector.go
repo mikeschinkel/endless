@@ -97,6 +97,12 @@ func replayEvent(db *sql.DB, evt *Event, result *ProjectResult) error {
 		return replayTaskQuestionsAsked(db, evt, result)
 	case KindTaskQuestionResolved:
 		return replayTaskQuestionResolved(db, evt, result)
+	case KindTaskPlanItemsChanged:
+		return replayTaskPlanItemsChanged(db, evt, result)
+	case KindTaskPlanBaselined:
+		return replayTaskPlanBaselined(db, evt, result)
+	case KindTaskReconciled:
+		return replayTaskReconciled(db, evt, result)
 	case KindTaskDepCreated:
 		return replayTaskDepCreated(db, evt, result)
 	case KindTaskDepDeleted:

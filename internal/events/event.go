@@ -202,6 +202,21 @@ const (
 	KindTaskQuestionResolved Kind = "task_question.resolved"
 )
 
+// Plan item and reconciliation event kinds (E-2280). Every one has the task as
+// its entity; what the database allocates (item numbers, question ids, the
+// reconciliation's number) is decided under the write lock by a Prepare
+// function in plan_items.go and written into the payload before the append.
+//
+//   - task.plan_items_changed: a batch of add / edit / withdraw / move.
+//   - task.plan_baselined: `task approve` copying the item set into its baseline.
+//   - task.reconciled: one reconciliation, its entries, and the discrepancy
+//     questions it files.
+const (
+	KindTaskPlanItemsChanged Kind = "task.plan_items_changed"
+	KindTaskPlanBaselined    Kind = "task.plan_baselined"
+	KindTaskReconciled       Kind = "task.reconciled"
+)
+
 // Task dependency event kinds.
 const (
 	KindTaskDepCreated Kind = "task_dep.created"
@@ -393,6 +408,10 @@ var ValidKinds = map[Kind]bool{
 	// Task questions (E-2176)
 	KindTaskQuestionsAsked:   true,
 	KindTaskQuestionResolved: true,
+	// Plan items and reconciliation (E-2280)
+	KindTaskPlanItemsChanged: true,
+	KindTaskPlanBaselined:    true,
+	KindTaskReconciled:       true,
 	// Task dependency
 	KindTaskDepCreated: true,
 	KindTaskDepDeleted: true,

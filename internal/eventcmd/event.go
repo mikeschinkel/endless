@@ -312,6 +312,12 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 	needsDecisionPreAlloc := evtKind == events.KindDecisionCreated
 	needsPreAlloc := needsTaskPreAlloc || needsDecisionPreAlloc
 
+	if isPreparedKind(evtKind) {
+		return emitPrepared(evtKind, ts, project, entityTypeStr, entityID,
+			actorKindStr, actorID, sessionID, nodeIDStr, projectRoot, payloadStr,
+			correlationID)
+	}
+
 	if evtKind == events.KindTaskQuestionsAsked {
 		return emitQuestionsAsked(ts, project, entityTypeStr, entityID,
 			actorKindStr, actorID, sessionID, nodeIDStr, projectRoot, payloadStr,

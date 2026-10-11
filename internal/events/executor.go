@@ -317,6 +317,12 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 		return execTaskQuestionsAsked(db, evt)
 	case KindTaskQuestionResolved:
 		return execTaskQuestionResolved(db, evt)
+	case KindTaskPlanItemsChanged:
+		return execTaskPlanItemsChanged(db, evt)
+	case KindTaskPlanBaselined:
+		return execTaskPlanBaselined(db, evt)
+	case KindTaskReconciled:
+		return execTaskReconciled(db, evt)
 	case KindTaskDepCreated:
 		return execTaskDepCreated(db, evt)
 	case KindTaskDepDeleted:
