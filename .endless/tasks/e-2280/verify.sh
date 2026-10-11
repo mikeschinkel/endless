@@ -183,7 +183,7 @@ assert_contains "and the gate passes" '"pass":true' "$(gate 1)"
 out="$(es task show E-1 --plan)"
 assert_contains "show --plan carries the verdict and the answer" "EQ-1 answered: Fine, keep the template" "$out"
 
-( cd "$PROJ" && mkdir -p .endless/x && echo x >.endless/x/f && git add -A && git commit -qm "endless only" )
+( cd "$PROJ" && mkdir -p .endless/x && echo x >.endless/x/f && git add .endless/x && git commit -qm "endless only" )
 assert_contains "a commit touching only .endless/ leaves it current" '"pass":true' "$(gate 1)"
 ( cd "$PROJ" && echo 'package widget' >widget.go && git add -A && git commit -qm "code" )
 assert_contains "a code change makes it stale" "code changed since the last reconciliation" "$(gate 1)"
