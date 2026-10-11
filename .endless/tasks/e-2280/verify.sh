@@ -67,7 +67,7 @@ es() {
       env -u ENDLESS_SESSION_ID -u ENDLESS_DB_CHOICE \
           HOME="$TMP/home" XDG_CONFIG_HOME="$TMP/home/.config" \
           PATH="$TMP/bin:$PATH" ENDLESS_AUTO_MIGRATE=1 ENDLESS_NO_TRIAGE=1 \
-          "$ENDLESS" "$@" 2>&1 )
+          "$ENDLESS" --no-session "$@" 2>&1 )
 }
 ego() {
     ( cd "$PROJ" &&
