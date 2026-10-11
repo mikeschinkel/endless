@@ -27,6 +27,31 @@ Ownership means a live session holds `RelationClaimed`. Drop `surfaced` and
 `revisited` from the ownership query; they stay in `session_tasks` as the
 provenance they are.
 
+### "Live" must be the OBSERVATION, not the recorded state
+
+`liveOwnership` tests `s.state IN (liveSessionStates)` — the recorded fact. That
+is not enough, and narrowing ownership to `claimed` without fixing it only
+swaps one permanent suppressor for another: a session whose pane died keeps
+`working` in the database forever, because E-1898 removed the dead-pane reaper
+and nothing writes `ended` any more. A ghost claimer would then suppress the row
+from every other monitor, which is this same defect with a different cause.
+
+Measured 2026-10-02: 118 sessions read non-ended in the database — 36 `working`,
+60 `needs_input`, 22 `idle` — while about 21 are actually reachable. Most
+"owners" are ghosts.
+
+`ListLiveSessions` in `internal/monitor/live_sessions.go` already applies the
+right pair, and its header explains why both are needed: `sessionstate.Live` is
+the recorded fact, `liveness != 'dead'` is a fresh observation that the
+session's tmux pane was not there. Ownership must use both. Do not write a
+second probe; the interface mismatch to resolve is that `ListLiveSessions` is
+per-project while `liveOwnership` is per-task-set.
+
+Keep its `unknown` rule exactly as it stands: a session whose tmux server could
+not be reached stays an owner, because it is still an owner as far as anyone can
+prove. A wrong refusal costs a retry; the inverse hands a live worktree to a
+second session.
+
 ## 2. The duplicate glyph goes away once the task has its own session
 
 `◫` exists to stop two sessions working one task. Once the task has spawned and
@@ -107,6 +132,10 @@ them as something they are not.
 - A task surfaced or revisited by an idle session is NOT suppressed from a
   monitor that lists it; E-1991's monitor shows E-1993 and E-1995.
 - A task claimed by a live session is suppressed from other monitors as today.
+- A task claimed by a session whose pane is gone is NOT suppressed, even though
+  its row still reads `working`.
+- A task claimed by a session whose tmux server is unreachable IS still
+  suppressed — `unknown` is not `dead`.
 - A task with a live claiming session wears no `◫`; two live claims still do.
 - `session hide --task` on a row that is only the session's focus hides it.
 - `session hide --task` on the session's own task is still refused.
