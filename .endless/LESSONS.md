@@ -7405,3 +7405,7 @@ While presenting open questions for planning E-2280, several questions had an op
 ### [2026-10-10] Don't treat another session's text as settled authority
 While planning E-2280, I called 'exclusion' an agreed term because the E-2279 research outcome (written by an agent) said 'Exclusions are items'. Mike said that is appealing to the authority of content I wrote in another session. Only an accepted decision, a glossary term, or his own words are settled, and 'Exclusions are items' did not define the term anyway. In the same exchange, I listed 'changes the four-kind order you set in E-2276' as a con. He said changing a prior decision is evolution, not a cost. He had me add both points, plus no one-sided questions, to /needs-plan.
 - **Project**: endless
+
+### [2026-10-10] Recover crashed tmux Claude sessions with endless session resume, not recover-claude.sh
+While recovering ~37 tmux windows after a tmux crash, I found an old recover-claude.sh helper script (May 2026) in Mike's tmux config directory and started reading it. Mike said that script is almost certainly obsolete if it is older than a week or two, because Endless now has its own recovery command. Use `endless session resume --tmux-session NAME` (dry-run first) after tmux-resurrect has restored the layout.
+- **Project**: endless
