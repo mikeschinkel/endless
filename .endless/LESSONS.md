@@ -7449,3 +7449,7 @@ The error was treating an adjacent feature's shape as a requirement. --out-of-or
 
 So: when I add a gate, add the gate. An escape hatch is a separate decision and his to make, not something I infer from a neighbouring flag. If I think a constraint needs an override, say so and ask — do not ship it. And 'the lesser condition had one' is not a reason for anything; the strength of the condition is precisely what decides whether a bypass is appropriate.
 - **Project**: endless
+
+### [2026-10-11] Say 'I recommended, you accepted' — never 'you picked' — for a choice I put to Mike
+In E-2293 I described the display-liveness rule as 'you picked a stricter test'. Mike corrected it: I recommended it and he accepted, possibly without seeing its ramifications. Attributing my recommendation to him overstates his ownership and hides that the reasoning (and any blind spot in it) was mine. When I recommended an option, say so, and state the ramifications I know of when recommending, not after.
+- **Project**: endless
