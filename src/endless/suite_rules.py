@@ -32,7 +32,7 @@ sources; both belong to no task.
 | In `e-<id>/`                                  | Whose          | Written by                     |
 |-----------------------------------------------|----------------|--------------------------------|
 | `verify.toml`, `verify.sh`, `land.toml`       | the task's     | you, on the task branch        |
-| `context.md`, `plan.md`, `analysis.md`, `outcome.md`, `reason.md`, `notes.md` | the database's | `endless task update`, on main |
+| `justification.md`, `context.md`, `plan.md`, `analysis.md`, `outcome.md`, `reason.md`, `notes.md` | the database's | `endless task update`, on main |
 | `verify-<UTC timestamp>-<sha>.ctrf.json`      | the runner's   | `endless task verify`, on main |
 
 Those `.md` files are **document mirrors**: each is a projection of one piece
