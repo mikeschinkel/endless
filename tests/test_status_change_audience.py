@@ -56,34 +56,39 @@ def _ready_task() -> int:
 
 # ─── the inferred status change: shown to a human, withheld from an agent ────
 
-def test_an_agent_is_not_told_about_a_status_it_did_not_ask_for(
-    capsys, monkeypatch, seeded_project_at_cwd
-):
-    item_id = _ready_task()
-    capsys.readouterr()
+def _items_changed_on_a_ready_task(monkeypatch) -> list[dict]:
+    """E-2280 moved the approval reset to the plan ITEMS: stub the two Go seams
+    plan_items.unapprove_if_material reads and writes, and record the emit."""
+    from endless import plan_items
+    emitted: list[dict] = []
+    monkeypatch.setattr(plan_items, "readiness",
+                        lambda task_id: {"status": "ready", "unapproved": True})
+    monkeypatch.setattr(plan_items, "emit_event", lambda **kw: emitted.append(kw))
+    monkeypatch.setattr(plan_items, "_project", lambda task_id: "proj")
+    return emitted
+
+
+@pytest.mark.real_plan_items
+def test_an_agent_is_not_told_about_a_status_it_did_not_ask_for(capsys, monkeypatch):
+    from endless import plan_items
+    emitted = _items_changed_on_a_ready_task(monkeypatch)
     _as_agent(monkeypatch)
 
-    task_cmd.update_plan(item_id=item_id, plan="# plan\na materially different plan\n")
+    assert plan_items.unapprove_if_material(7)
 
-    out = capsys.readouterr().out
-    assert "Plan:" in out, "the field it DID ask for still renders"
-    assert "Status:" not in out, out
-    assert "approval was granted" not in out, "the advisory is human-only"
-    assert _status_of(item_id) == "submitted", "the reset still happened"
+    assert "approval was granted" not in capsys.readouterr().out, "the advisory is human-only"
+    assert emitted[0]["payload"]["new_status"] == "submitted", "the reset still happened"
 
 
-def test_a_human_still_sees_the_status_line_and_the_advisory(
-    capsys, seeded_project_at_cwd
-):
-    item_id = _ready_task()
-    capsys.readouterr()
+@pytest.mark.real_plan_items
+def test_a_human_still_sees_the_advisory(capsys, monkeypatch):
+    from endless import plan_items
+    emitted = _items_changed_on_a_ready_task(monkeypatch)
 
-    task_cmd.update_plan(item_id=item_id, plan="# plan\na materially different plan\n")
+    assert plan_items.unapprove_if_material(7)
 
-    out = capsys.readouterr().out
-    assert "Status:" in out, out
-    assert "approval was granted" in out, out
-    assert _status_of(item_id) == "submitted"
+    assert "approval was granted" in capsys.readouterr().out
+    assert emitted[0]["payload"]["new_status"] == "submitted"
 
 
 def test_an_agent_still_sees_a_status_it_named(

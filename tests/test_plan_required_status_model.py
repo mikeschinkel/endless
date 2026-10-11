@@ -101,11 +101,12 @@ def _ready_with_plan(plan: str = "# Plan\noriginal\n") -> int:
     return item_id
 
 
-def test_plan_edit_on_ready_returns_it_to_submitted(seeded_project_at_cwd):
-    """What was approved was the plan, so changing it takes the approval back."""
+def test_plan_prose_edit_on_ready_keeps_it_ready(seeded_project_at_cwd):
+    """E-2280: what is approved is the plan items; editing the prose is not
+    material, so the approval stands. (E-1993 took it back.)"""
     item_id = _ready_with_plan()
     task_cmd.update_plan(item_id=item_id, plan="# Plan\nsomething else\n")
-    assert _status_of(item_id) == "submitted"
+    assert _status_of(item_id) == "ready"
     assert "something else" in _plan_of(item_id)
 
 
@@ -147,12 +148,12 @@ def test_plan_edit_after_ready_infers_nothing(start, seeded_project_at_cwd):
     assert _status_of(item_id) == start
 
 
-def test_plan_edit_with_description_edit_still_resets_once(seeded_project_at_cwd):
+def test_plan_prose_and_description_edit_keep_it_ready(seeded_project_at_cwd):
     item_id = _ready_with_plan()
     task_cmd.update_plan(
         item_id=item_id, description="new words", plan="# Plan\nnew plan\n"
     )
-    assert _status_of(item_id) == "submitted"
+    assert _status_of(item_id) == "ready"
 
 
 # --- not actionable, but still blocking -------------------------------------

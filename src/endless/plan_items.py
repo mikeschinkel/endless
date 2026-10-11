@@ -119,10 +119,13 @@ def unapprove_if_material(task_id: int) -> bool:
         entity_id=str(task_id),
         payload={"old_status": "ready", "new_status": "submitted", "cascade": False},
     )
-    click.echo(
-        f"E-{task_id} → submitted (its plan items changed, and approval was "
-        "granted against the old ones). Approve it again with "
-        f"`endless task approve E-{task_id}`.")
+    # Human-only (E-2120): an agent is shown the fields it asked to change, not
+    # a status it did not ask for.
+    if not agent_help.agent_facing():
+        click.echo(
+            f"E-{task_id} → submitted (its plan items changed, and approval was "
+            "granted against the old ones). Approve it again with "
+            f"`endless task approve E-{task_id}`.")
     return True
 
 

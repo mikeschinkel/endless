@@ -89,9 +89,10 @@ def test_update_with_plan_on_pre_judgment_promotes_to_submitted(
     assert _status_of(item_id) == "submitted"
 
 
-def test_update_with_plan_on_ready_task_drops_approval(tmp_path, seeded_project_at_cwd):
-    """E-1993: what is approved is the plan, so a ready task whose plan
-    changes — here, from none to one — goes back to `submitted`."""
+def test_update_with_plan_on_ready_task_keeps_approval(tmp_path, seeded_project_at_cwd):
+    """E-2280: what is approved is the plan ITEMS, so a change to the plan
+    prose — here, from none to one — no longer takes a ready task's approval
+    back. (E-1993 sent it to `submitted`.)"""
     item_id = task_cmd.add_item(
         title="Add a thing",
         description="short",
@@ -103,7 +104,7 @@ def test_update_with_plan_on_ready_task_drops_approval(tmp_path, seeded_project_
     plan.write_text("# plan")
     task_cmd.update_plan(item_id=item_id, plan=plan.read_text())
 
-    assert _status_of(item_id) == "submitted"
+    assert _status_of(item_id) == "ready"
 
 
 def test_update_with_plan_plus_explicit_status_caller_wins(tmp_path, seeded_project_at_cwd):

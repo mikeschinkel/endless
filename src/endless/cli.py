@@ -4403,7 +4403,7 @@ def task_plan_move(item_id, item, position):
 @task_plan_group.command("list")
 @click.argument("item_id", type=TASK_ID)
 @click.option("--all", "all_items", is_flag=True, help="Include withdrawn items")
-@click.option("--json", "as_json", is_flag=True, help="JSON output")
+@output_options(agent=False, json_help="JSON output — the items with their latest verdicts")
 def task_plan_list(item_id, all_items, as_json):
     """List a task's plan items with their latest verdicts."""
     from endless import plan_items
