@@ -60,3 +60,19 @@ by inference.
 Classification is per-task and deliberately not keyed on file type: a docs task may touch Go, as E-2144 does, since the guide's status table is generated from a Go transition table.
 
 It must still refuse to auto-land when the change trips a sync gate (lifecycle-check, guide-check, the Python sync suites) or when code changed and no verify suite covers it.
+
+## Plan reconciliation
+
+E-2280 adds a reconciliation gate to todo and bugfix tasks. Before a task can
+reach `unverified` or `assumed`, or be verified, the agent must reconcile its
+work against the task's plan items, and every discrepancy must be filed as a
+question and settled. E-2280 defines the gated types in one place so that docs
+can be added with one entry. That leaves two things for this task's planning
+pass:
+
+- **Add docs to the gated types.** Is a docs task gated like todo and bugfix?
+- **How an auto-implementing, auto-landing task reconciles.** A discrepancy
+  needs the user's answer, which an unattended run cannot get. One option:
+  auto-land proceeds only when the reconciliation has no discrepancies, and
+  otherwise stops and waits for the user like any other task. Decide it with
+  Mike in the planning pass.
