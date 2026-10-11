@@ -7441,3 +7441,11 @@ While settling E-2293's suppression rule I offered 'an idle session stewards not
 ### [2026-10-11] Don't commit to a task branch while the user is verifying or landing it
 On E-1562 I committed a docs fix to task/1562 while Mike was running endless task verify, then committed a template fix after his verify passed. Each commit changed the branch, so the land refused: verify must pass at the branch's current code, and his run had tested an earlier commit. Once I hand over the verify command, don't commit to that branch. If a fix is needed after that, say so first and hand the verify command back after committing, so he re-runs it at the new head.
 - **Project**: endless
+
+### [2026-10-11] Never add an escape hatch I was not asked for
+Mike told me to add a gate refusing to spawn a blocked task. I added a --blocked override flag alongside it, which he never asked for, reasoning by symmetry with the --out-of-order flag that the advisory precedes relation already has. His answer: blocked means blocked; if it needs overriding, remove the block.
+
+The error was treating an adjacent feature's shape as a requirement. --out-of-order exists because precedes is explicitly ADVISORY — a recommended order. blocks is a hard statement that the work cannot start. Giving a hard constraint a bypass converts it into a suggestion, which destroys the only thing it was for, and the remedy for a wrong block already exists: unblock the task.
+
+So: when I add a gate, add the gate. An escape hatch is a separate decision and his to make, not something I infer from a neighbouring flag. If I think a constraint needs an override, say so and ask — do not ship it. And 'the lesser condition had one' is not a reason for anything; the strength of the condition is precisely what decides whether a bypass is appropriate.
+- **Project**: endless
