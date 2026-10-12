@@ -27,6 +27,12 @@ objective and strategy instead is E-2254's job once those fields exist.
 4. The `prime.md.tmpl` header comment's list of framing-suffices types gains
    `epic`.
 
+5. Grown in implementation: `prime.md.tmpl`'s framing clause read "This is a
+   {{.task_type}}", which renders "This is a epic"; it now reads "This task's
+   type is {{.task_type}}". The agent-facing refusal summary and remedy (and
+   the parked-on-questions summary) say "no plan or context" and name
+   `--context-file` for these types, matching the human text.
+
 ## Deliverables (each independently checkable)
 
 - `endless task spawn` / `task claim` on an epic with context and no plan
