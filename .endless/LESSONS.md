@@ -7485,3 +7485,7 @@ In the E-2284 settings-registry questions, I recommended keeping JSON true/false
 ### [2026-10-12] Treat a user's definition given in passing as a working statement, not an absolute
 While settling E-2280's spawn rules, Mike defined 'ready' as 'all questions answered AND the plan read and approved'. I treated that as a fixed rule and built a question around it, when he had not weighed the open-questions case. His words: 'I have to be more careful with my statements lest you take them as absolutes as you are wont to do.' When a definition said in passing collides with another case, raise the collision as a question about the definition, not as a constraint the design must meet.
 - **Project**: endless
+
+### [2026-10-12] Plan items are approved individually, not all at once by task approve
+In E-2280 I made 'task approve' record every plan item as approved in one step, and pointed the spawn refusal at it. Mike: items 'need to be reviewed and approved individually'. A blanket flag might be possible, but he doubts that approving without reviewing is appropriate. Approval of an item is a per-item act of review.
+- **Project**: endless
