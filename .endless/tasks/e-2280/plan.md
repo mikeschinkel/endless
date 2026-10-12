@@ -15,7 +15,7 @@ decision yet. The decision drafted in the last item records them.
   (`origin = grown`). It is work done beyond the approved plan. An item
   added to a task that has never had any items is `planned`, not grown.
 - **Reconciliation**: the agent's record, made after implementing and before
-  handing over a verify, of how the work compares with every active plan
+  setting `unverified`, of how the work compares with every active plan
   item. It has one **entry** per item, holding a **verdict**:
   - for a deliverable item: `as_planned`, `differently`, `not_done` or
     `blocked`;
@@ -36,10 +36,7 @@ decision yet. The decision drafted in the last item records them.
 - **Fingerprint**: what a reconciliation records about the code. It covers
   only the branch's own changes: the `git patch-id --stable` of the diff
   from the merge-base with the task's base branch to HEAD, with `.endless/`
-  excluded. A clean rebase does not change it, and an edit does. When HEAD is
-  the base point itself (work committed straight onto the base branch, as in
-  a project without worktrees), there is no such diff, so it is a hash of the
-  tracked tree outside `.endless/` instead (found while building E-2280).
+  excluded. A clean rebase does not change it, and an edit does.
 - **Earlier answer**: the settled question from a previous reconciliation
   on the same item. The agent, not the user, re-checks it against the whole
   task each time it reconciles again (item 9).
@@ -66,9 +63,11 @@ decision yet. The decision drafted in the last item records them.
 4. `task show --plan` renders the items first (P-number, kind, statement,
    verify), each with its latest verdict and the answer to its question,
    then the plan prose.
-5. `task approve` copies each active item's statement into
-   `approved_statement`. `task approve` and `task spawn` refuse a todo or
-   bugfix task with no active deliverable item. Spawn refuses an already
+5. `task approve`, and `task update --status ready` from `submitted` (the
+   same approval under another verb), copy each active item's statement and
+   kind into `approved_statement` and `approved_kind`. Both, and `task spawn`,
+   refuse a todo or bugfix task with no active deliverable item, and any task
+   whose only active items are exclusions. Spawn refuses an already
    `ready` task with a prose-only plan too. `task claim` is not gated.
 6. On a `ready` task, a plan edit is material only when the item set
    differs from the baseline: an item added, withdrawn, or with a changed
@@ -117,9 +116,12 @@ decision yet. The decision drafted in the last item records them.
       Grown items are not baseline differences; they are `more`
       discrepancies.
     There is no grandfathering by claim time.
-11. The gate runs on todo and bugfix tasks when the status is set to
-    `unverified` or `assumed`, and inside `task verify` as a backstop. Those
-    types are defined in one place, so adding docs means adding one entry.
+11. The gate runs on any task with plan items, and on every todo and bugfix
+    (which must have them), when the status is set to `unverified` or
+    `assumed`, and inside `task verify` as a backstop. When the lifecycle
+    refuses the move itself, the gate stands aside so that refusal is the one
+    shown. The types that must be itemized are defined in one place, so adding
+    docs means adding one entry.
     - `worktree land`'s own move from `unlanded` to `assumed` skips the gate,
       because the verify it requires already ran it.
     - The backstop in `task verify` skips a task with no plan items at all.
@@ -148,8 +150,7 @@ decision yet. The decision drafted in the last item records them.
     - if there are discrepancies, list them in kind order as the final
       message and stop;
     - after the user answers, record the answers, make any changes,
-      reconcile again, and only then set `unverified` and hand over the
-      verify.
+      reconcile again, and only then set `unverified`.
 16. Plan-time prompting asks for items through `--items-file`. That covers
     `prime.md.tmpl`, `task prime`, and the user-level `/needs-plan`
     command.
@@ -168,7 +169,7 @@ decision yet. The decision drafted in the last item records them.
 20. After Mike lands E-2280: message the active sessions, a few at a time
     and only when idle, waiting for each batch before the next. Each message
     says E-2280 has landed and what to do now (write plan items, reconcile
-    before handing over a verify), and to reply only with critical
+    before setting `unverified`), and to reply only with critical
     questions.
 
 ## Exclusions
