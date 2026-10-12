@@ -154,7 +154,8 @@ func OptInRefusal(err error, command string) *refusal.Error {
 		"A config file holds an opt-in Endless cannot read. Nothing was changed.",
 		"Rewrite each value named below — `endless-go settings migrate FILE` rewrites "+
 			"legacy true/false for you — then retry",
-	).Command(command).Detail(strings.Join(lines, "\n")).Cause(err)
+	).Command(command).Detail(strings.Join(lines, "\n") +
+		"\n\n`endless-go settings migrate FILE` rewrites a legacy true/false in place.").Cause(err)
 }
 
 // Metadata is the export without values: every setting at its default, and
