@@ -13,9 +13,9 @@ import (
 // must not become a project's.
 func TestMerge_AutoSpawnEnabledIsNeverInherited(t *testing.T) {
 	project := &EndlessConfig{Name: "p"}
-	cli := &EndlessConfig{AutoSpawn: AutoSpawn{Enabled: true, Cap: 9}}
+	cli := &EndlessConfig{AutoSpawn: AutoSpawn{Enabled: "on", Cap: 9}}
 	merged := project.Merge(cli).(*EndlessConfig)
-	if merged.AutoSpawn.Enabled {
+	if merged.AutoSpawn.Enabled != "" {
 		t.Errorf("auto_spawn.enabled inherited from the CLI layer")
 	}
 	if merged.AutoSpawn.Cap != 0 {
@@ -26,10 +26,10 @@ func TestMerge_AutoSpawnEnabledIsNeverInherited(t *testing.T) {
 // TestMerge_AutoSpawnCadenceInherits: interval and target are the user's, so a
 // project that sets neither sees the user's values.
 func TestMerge_AutoSpawnCadenceInherits(t *testing.T) {
-	project := &EndlessConfig{AutoSpawn: AutoSpawn{Enabled: true}}
+	project := &EndlessConfig{AutoSpawn: AutoSpawn{Enabled: "on"}}
 	cli := &EndlessConfig{AutoSpawn: AutoSpawn{Interval: "10m", Target: "monitor", Placement: "right"}}
 	merged := project.Merge(cli).(*EndlessConfig)
-	if !merged.AutoSpawn.Enabled {
+	if merged.AutoSpawn.Enabled != "on" {
 		t.Errorf("project's own enabled lost in merge")
 	}
 	if merged.AutoSpawn.Interval != "10m" || merged.AutoSpawn.Target != "monitor" {
@@ -52,7 +52,7 @@ func TestLoadProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(cliDir, "config.json"),
-		[]byte(`{"auto_spawn":{"enabled":true,"cap":9}}`), 0o644); err != nil {
+		[]byte(`{"auto_spawn":{"enabled":"on","cap":9}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
@@ -61,7 +61,7 @@ func TestLoadProject(t *testing.T) {
 	if err != nil {
 		t.Fatalf("LoadProject with no project file: %v", err)
 	}
-	if cfg.AutoSpawn.Enabled || cfg.AutoSpawn.Cap != 0 {
+	if cfg.AutoSpawn.Enabled != "" || cfg.AutoSpawn.Cap != 0 {
 		t.Errorf("no project file read as %+v, want the zero value", cfg.AutoSpawn)
 	}
 
@@ -69,14 +69,14 @@ func TestLoadProject(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err = os.WriteFile(filepath.Join(proj, ".endless", "config.json"),
-		[]byte(`{"name":"p","auto_spawn":{"enabled":true,"cap":2}}`), 0o644); err != nil {
+		[]byte(`{"name":"p","auto_spawn":{"enabled":"on","cap":2}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	cfg, err = LoadProject(dt.DirPath(proj))
 	if err != nil {
 		t.Fatalf("LoadProject: %v", err)
 	}
-	if !cfg.AutoSpawn.Enabled || cfg.AutoSpawn.Cap != 2 {
+	if cfg.AutoSpawn.Enabled != "on" || cfg.AutoSpawn.Cap != 2 {
 		t.Errorf("project file read as %+v, want enabled with cap 2", cfg.AutoSpawn)
 	}
 }

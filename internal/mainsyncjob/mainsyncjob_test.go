@@ -346,7 +346,7 @@ func TestRunProjects_DisabledDoesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err := os.WriteFile(filepath.Join(f.main, ".endless", "config.json"),
-		[]byte(`{"main_sync":{"enabled":true}}`), 0o644); err != nil {
+		[]byte(`{"main_sync":{"enabled":"on"}}`), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	note, err = runProjects(context.Background(),

@@ -59,6 +59,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/jobs"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/settings"
 )
 
 // JobName keys this job's scheduling row. It must stay stable.
@@ -250,11 +251,19 @@ type enabledFunc func(projectPath string) (bool, error)
 // loadProjectEnabled reads fault_triage.enabled from the project's own config
 // file, never inheriting it from the user's (see config.FaultTriage).
 func loadProjectEnabled(projectPath string) (enabled bool, err error) {
+	var ft FaultTriage
+	var on settings.OptIn
+
 	cfg, err := config.LoadProject(dt.DirPath(projectPath))
 	if err != nil {
 		return false, err
 	}
-	return cfg.FaultTriage.Enabled, nil
+	ft, err = ParseFaultTriage(cfg.FaultTriage)
+	if err != nil {
+		return false, err
+	}
+	on, err = settings.Resolve(EnabledSetting, ft.Enabled)
+	return on.IsOn(), err
 }
 
 type project struct {

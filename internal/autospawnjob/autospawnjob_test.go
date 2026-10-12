@@ -323,7 +323,7 @@ func TestLoadProjectPolicy_DefaultsAndOptIn(t *testing.T) {
 	if err != nil || p.enabled {
 		t.Fatalf("no config file: %+v err=%v, want off", p, err)
 	}
-	writeFile(t, filepath.Join(dir, ".endless", "config.json"), `{"auto_spawn":{"enabled":true}}`)
+	writeFile(t, filepath.Join(dir, ".endless", "config.json"), `{"auto_spawn":{"enabled":"on"}}`)
 	p, err = loadProjectPolicy(dir)
 	if err != nil || !p.enabled || p.cap != 3 {
 		t.Errorf("enabled, no cap: %+v err=%v, want enabled with the default cap 3", p, err)
@@ -384,7 +384,7 @@ func TestSpawnArgs(t *testing.T) {
 
 // TestRegisteredAndScheduled pins the wiring and the cadence read.
 func TestRegisteredAndScheduled(t *testing.T) {
-	if _, ok := jobs.Lookup(JobName); !ok {
+	if _, ok, err := jobs.Lookup(JobName); err != nil || !ok {
 		t.Fatalf("%q is not registered", JobName)
 	}
 	home := t.TempDir()

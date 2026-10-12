@@ -31,6 +31,44 @@ For each field below, the row gives JSON name, type, category, and merge
 rule. "Receiver" in merge rules means the project layer; "other" means
 the CLI layer.
 
+## Opt-ins and the settings registry (E-2284)
+
+An opt-in is a three-way switch, written as a string: `"on"`, `"off"` or
+`"unset"`. A missing key is unset. Unset takes the setting's registered
+default; `"off"` is an explicit decline, which `endless doctor` reads as "do not
+suggest this again". The opt-ins are `auto_spawn.enabled`, `prime.enabled`,
+`main_sync.enabled`, `fault_triage.enabled` and every key of `checks`.
+
+A JSON `true` or `false` at an opt-in key is refused when the file loads, by
+`Normalize`, with the file, the key and the value to write instead
+(`config.OptInError`). `endless-go settings migrate [FILE...]` rewrites those
+legacy booleans in place, changing no other byte.
+
+Two layers, after gomion's gomcfg / gompkg split:
+
+- **File layer** — this package. `EndlessConfig` holds opt-ins as `OptInText`,
+  the text as written.
+- **Runtime layer** — the feature package's own type (`mainsyncjob.MainSync`,
+  `autospawnjob.AutoSpawn`, `autospawnjob.Prime`, `triagejob.FaultTriage`,
+  `monitor.Checks`), produced by its `Parse...` function from the file layer,
+  holding `settings.OptIn`. Readers trust only that.
+
+Each runtime type implements `settings.Provider`: its `Settings()` declares the
+feature's keys (one per leaf key — the opt-in and its tuning keys) with the
+file(s) each may live in, its kind, default, and for a suggestable opt-in the
+rationale doctor shows. The owning package registers them in `init()`;
+`endless-go` validates and freezes the registry at startup
+(`settings.Initialize`), and a failure there stops every command.
+
+Every leaf key of `EndlessConfig` is either registered or on the allowlist in
+`cmd/endless-go/main_test.go`. The allowlist may only shrink (E-2303 registers
+the rest): `TestEveryConfigKeyIsRegistered` fails on a new key that is neither,
+and on an allowlist longer than its pinned size.
+
+`endless-go settings list --json [--project DIR]` exports the registry with
+each key's effective value and source file; Python reads registered keys only
+through it.
+
 ## Field reference
 
 ### Global-only
@@ -68,7 +106,7 @@ These are not expected to appear in CLI files. Same safety-net pattern.
 | JSON key   | Type              | Merge rule                                                                                |
 | ---------- | ----------------- | ----------------------------------------------------------------------------------------- |
 | `tracking` | `string`          | Receiver wins when set to a non-empty string; empty string inherits from other.           |
-| `checks`   | `map[string]bool` | Per-key merge: for each key, receiver value wins if present; otherwise inherit from other. |
+| `checks`   | `map[string]opt-in` | Per-key merge: for each key, receiver value wins if set; otherwise inherit from other. |
 | `tmux`     | `object`          | Merged PER FIELD, not wholesale — see `tmux` below.                                        |
 | `auto_spawn` | `object`        | Split by field — see `auto_spawn` below.                                                   |
 | `main_sync` | `object`         | Split by field — see `main_sync` below.                                                    |
@@ -138,7 +176,7 @@ whole:
 
 | Field      | Layer        | Type     | Meaning |
 | ---------- | ------------ | -------- | ------- |
-| `enabled`  | project only | `bool`   | Opts this project in. Default `false`; also the kill switch. |
+| `enabled`  | project only | opt-in   | Opts this project in. Default off; also the kill switch. |
 | `cap`      | project only | `int`    | Most auto-spawned tasks outstanding (underway or unverified) at once. Default `3`. |
 | `interval` | CLI only     | `string` | Job cadence, a Go duration. Default `5m`. At most one task is spawned per interval. |
 | `target`   | CLI only     | `string` | tmux session the window opens in: `active` (default — the session of the most recently active attached client) or `monitor` (the session the job runs in). |
@@ -149,7 +187,7 @@ whole:
 file alone (`config.LoadProject`), and a project with no file is off.
 
 ```json
-{ "auto_spawn": { "enabled": true, "cap": 2 } }
+{ "auto_spawn": { "enabled": "on", "cap": 2 } }
 ```
 
 #### `main_sync`
@@ -162,7 +200,7 @@ effect on it, and it never force-pushes.
 
 | Field      | Layer        | Type     | Meaning |
 | ---------- | ------------ | -------- | ------- |
-| `enabled`  | project only | `bool`   | Opts this project in. Default `false`; also the kill switch. |
+| `enabled`  | project only | opt-in   | Opts this project in. Default off; also the kill switch. |
 | `interval` | CLI only     | `string` | Job cadence, a Go duration. Default `5m`. |
 
 `enabled` is **never inherited** from the CLI layer: the job publishes main to
@@ -170,7 +208,7 @@ its remote, and that is each project's decision. It is read from the project
 file alone (`config.LoadProject`), and a project with no file is off.
 
 ```json
-{ "main_sync": { "enabled": true } }
+{ "main_sync": { "enabled": "on" } }
 ```
 
 #### `fault_triage`
@@ -182,7 +220,7 @@ fixes it".
 
 | Field      | Layer        | Type     | Meaning |
 | ---------- | ------------ | -------- | ------- |
-| `enabled`  | project only | `bool`   | Opts this project in. Default `false`; also the kill switch. |
+| `enabled`  | project only | opt-in   | Opts this project in. Default off; also the kill switch. |
 | `interval` | CLI only     | `string` | Job cadence, a Go duration. Default `1m`. |
 
 `enabled` is **never inherited** from the CLI layer: the job starts sessions in
@@ -190,7 +228,7 @@ the project, and that is each project's decision. Opting in routes only errors
 first seen afterwards.
 
 ```json
-{ "fault_triage": { "enabled": true } }
+{ "fault_triage": { "enabled": "on" } }
 ```
 
 #### `checks`
@@ -198,7 +236,7 @@ first seen afterwards.
 Per-key merge with optional per-key custom rules. The default rule for
 each key is: project value wins when the key is present in the project
 map; otherwise inherit the CLI value; if the key is absent in both
-layers, the lookup helper falls back to the hardcoded default for that
+layers, the reader (`monitor.Checks`) falls back to the registered default for that
 check (see "Per-check defaults" below).
 
 A future per-key rule (e.g. "OR logic for some specific check") would be
@@ -208,29 +246,29 @@ the same dispatch table once any custom rule is added.
 
 ## Per-check defaults
 
-When a check key is absent in both layers, these hardcoded defaults
-apply:
+When a check key is unset in both layers, its registered default applies
+(`monitor.Checks.Settings()`):
 
 | Key                   | Default |
 | --------------------- | ------- |
-| `task_required`       | `true`  |
-| `decision_checkpoint` | `false` |
-| `session_audit`       | `false` |
-| `bash_git_writes`     | `true`  |
-| (any other name)      | `true`  |
+| `task_required`       | `on`    |
+| `decision_checkpoint` | `off`   |
+| `session_audit`       | `off`   |
+| `bash_git_writes`     | `on`    |
+| (any other name)      | `on`    |
 
-The `task_required` default is `true` for backwards compatibility with
-the original PreToolUse session-required block. Other defined-but-default-
-off keys ship disabled so deploying the binary does not change behavior
-until a user opts in.
+Only `bash_git_writes` has a reader today. `task_required` defaults on for
+backwards compatibility with the original PreToolUse session-required block;
+the other defined keys ship off so deploying the binary does not change
+behavior until a user opts in.
 
 `bash_git_writes` (E-940) makes the PreToolUse write-target gate treat git
 commands that rewrite a working tree (`restore`, `checkout`, `reset --hard`,
 `stash pop`, `clean`, `apply`, `pull`, …) as writes to that working tree. It is
-on trial; set it `false` to turn that recognition off with no rebuild.
+on trial; set it `"off"` to turn that recognition off with no rebuild.
 
-Unknown keys default to `true` so that future checks introduced by client
-code (without a corresponding default) fail open rather than silently
+Unknown keys default to on so that future checks introduced by client
+code (without a registered default) fail open rather than silently
 disable.
 
 ## Empty / missing files
@@ -247,7 +285,7 @@ disable.
 
 - Go schema: `internal/config/config.go` (`EndlessConfig` struct).
 - Go merge: `internal/config/merge.go` (`(*EndlessConfig).Merge`).
-- Go defaults: `internal/config/normalize.go` (`DefaultCheckEnabled`).
+- Go defaults: each setting's registration (`internal/settings`; checks in `internal/monitor/checks.go`).
 - Python readers needing migration (per E-954): `src/endless/config.py`,
   `src/endless/event_bridge.py`, `src/endless/register.py`,
   `src/endless/reconcile.py`.

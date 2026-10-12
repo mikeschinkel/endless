@@ -26,6 +26,7 @@
 //	endless-go session-state groups|get|has|sql-list|rank|label|glyph  (the session state vocabulary; no DB)
 //	endless-go jobs          list|run|retry   (E-698 fire-once background job runner)
 //	endless-go errors        show|clear|codes (E-698 machine-local fault record)
+//	endless-go settings      list|migrate     (E-2284 registered config keys)
 //
 // Per-subcommand DB-context contract (must run BEFORE the subcommand
 // body):
@@ -63,6 +64,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/events"
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/hookcmd"
+	"github.com/mikeschinkel/endless/internal/jobs"
 	"github.com/mikeschinkel/endless/internal/jobscmd"
 	"github.com/mikeschinkel/endless/internal/markdowncmd"
 	"github.com/mikeschinkel/endless/internal/monitor"
@@ -77,6 +79,8 @@ import (
 	"github.com/mikeschinkel/endless/internal/sessionprimecmd"
 	"github.com/mikeschinkel/endless/internal/sessionstatecmd"
 	"github.com/mikeschinkel/endless/internal/sessionstatuscmd"
+	"github.com/mikeschinkel/endless/internal/settings"
+	"github.com/mikeschinkel/endless/internal/settingscmd"
 	"github.com/mikeschinkel/endless/internal/spawnlaunchcmd"
 	"github.com/mikeschinkel/endless/internal/taskcontentcmd"
 	"github.com/mikeschinkel/endless/internal/taskstatuscmd"
@@ -142,6 +146,14 @@ func main() {
 	// that HERE would mean matching on message text; deciding it there costs
 	// nothing, because the branch that knows is the branch that failed.
 	if err := monitor.ConsumeDBFlags(); err != nil {
+		refusal.From(err).Command("endless-go").Exit(2)
+	}
+
+	// E-2284/E-2283: validate and freeze the registries every init() filled.
+	// Registration cannot fail; this is where a bad registration is caught, and
+	// it stops every subcommand, not only the ones that read a registry. A Go
+	// test (TestInitialize) makes that a development-time failure.
+	if err := initialize(); err != nil {
 		refusal.From(err).Command("endless-go").Exit(2)
 	}
 
@@ -277,6 +289,8 @@ func main() {
 		jobscmd.Run(rest)
 	case "errors":
 		errorscmd.Run(rest)
+	case "settings":
+		settingscmd.Run(rest)
 	default:
 		// Two readings this binary cannot tell apart. Typed by hand, it is a
 		// name the caller fixes and retries. Relayed from an `endless` verb, it
@@ -290,6 +304,20 @@ func main() {
 			"the installed endless-go is older than the endless CLI calling it, and only the user can reinstall a matching pair",
 		).Command("endless-go").Detail(usageText()).Exit(2)
 	}
+}
+
+// initialize validates and freezes the settings registry, then the job
+// registry. Settings first: the doctor's check registry (E-2285) will resolve
+// references to settings, so they must be frozen before anything that refers
+// to them.
+func initialize() (err error) {
+	err = settings.Initialize()
+	if err != nil {
+		goto end
+	}
+	err = jobs.Initialize()
+end:
+	return err
 }
 
 // cfgstoreLogFile keeps go-cfgstore's own warnings out of hook.log, so a hook
@@ -384,5 +412,6 @@ func usageText() string {
 	fmt.Fprintln(w, "  verify         [--keep|--report-dir] <task-id>  (run a task's Tier-0 verification suite)")
 	fmt.Fprintln(w, "  jobs           list|run|retry  (the fire-once background job runner)")
 	fmt.Fprintln(w, "  errors         list|show|clear|accept|decline|escalate|codes  (machine-local fault record)")
+	fmt.Fprintln(w, "  settings       list [--json] [--project DIR]|migrate [FILE...]  (the registered config keys)")
 	return b.String()
 }

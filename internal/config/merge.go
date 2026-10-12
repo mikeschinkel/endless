@@ -2,6 +2,8 @@ package config
 
 import (
 	"github.com/mikeschinkel/go-cfgstore"
+
+	"github.com/mikeschinkel/endless/internal/settings"
 )
 
 // Merge produces a new EndlessConfig by merging the CLI layer (passed as
@@ -139,11 +141,11 @@ func (c *EndlessConfig) Merge(other cfgstore.RootConfig) cfgstore.RootConfig {
 
 // CheckMergeFunc resolves a single check key given its CLI-layer value and
 // project-layer value. Either pointer may be nil to indicate the layer did
-// not set the key. Returning a value adds the key to the merged map; the
-// merge function never calls a CheckMergeFunc when both values are nil, so
-// implementations can assume at least one of `globalVal` or `projectVal`
-// is non-nil.
-type CheckMergeFunc func(globalVal, projectVal *bool, name string) bool
+// not set the key — absent, or written as "unset". Returning a value adds the
+// key to the merged map; the merge function never calls a CheckMergeFunc when
+// both values are nil, so implementations can assume at least one of
+// `globalVal` or `projectVal` is non-nil.
+type CheckMergeFunc func(globalVal, projectVal *OptInText, name string) OptInText
 
 // checkMergeRules registers per-key custom merge rules for entries in the
 // Checks map. Keys not present here use defaultCheckMerge.
@@ -154,14 +156,14 @@ type CheckMergeFunc func(globalVal, projectVal *bool, name string) bool
 // every case we have today.
 var checkMergeRules = map[string]CheckMergeFunc{
 	// example shape:
-	//   "some_check": func(globalVal, projectVal *bool, name string) bool { ... },
+	//   "some_check": func(globalVal, projectVal *OptInText, name string) OptInText { ... },
 }
 
 // defaultCheckMerge: project value wins when set; otherwise inherit CLI.
-// Callers (via EndlessConfig.IsCheckEnabled) supply DefaultCheckEnabled
-// when neither layer defined the key, so this function is only invoked
-// for keys that DO appear in at least one layer.
-func defaultCheckMerge(globalVal, projectVal *bool, _ string) bool {
+// Readers (monitor.Checks) supply the registered default when neither layer
+// set the key, so this function is only invoked for keys that ARE set in at
+// least one layer.
+func defaultCheckMerge(globalVal, projectVal *OptInText, _ string) OptInText {
 	if projectVal != nil {
 		return *projectVal
 	}
@@ -169,14 +171,20 @@ func defaultCheckMerge(globalVal, projectVal *bool, _ string) bool {
 		return *globalVal
 	}
 	// Unreachable in practice; mergeChecks skips keys absent from both layers.
-	return false
+	return ""
+}
+
+// isSet reports whether an opt-in text records a decision: "unset" is the
+// same as leaving the key out, so it inherits rather than overriding.
+func isSet(t OptInText) bool {
+	return t != "" && t != OptInText(settings.UnsetText)
 }
 
 // mergeChecks combines two Checks maps using per-key dispatch into
-// checkMergeRules (with defaultCheckMerge as fallback). Only keys that
-// appear in at least one layer end up in the result; keys that exist in
-// neither layer fall through to DefaultCheckEnabled at query time.
-func mergeChecks(project, global map[string]bool) map[string]bool {
+// checkMergeRules (with defaultCheckMerge as fallback). Only keys set in at
+// least one layer end up in the result; keys set in neither fall through to
+// the registered default at query time.
+func mergeChecks(project, global map[string]OptInText) map[string]OptInText {
 	if len(project) == 0 && len(global) == 0 {
 		return nil
 	}
@@ -187,14 +195,17 @@ func mergeChecks(project, global map[string]bool) map[string]bool {
 	for k := range global {
 		keys[k] = struct{}{}
 	}
-	out := make(map[string]bool, len(keys))
+	out := make(map[string]OptInText, len(keys))
 	for name := range keys {
-		var pv, gv *bool
-		if v, ok := project[name]; ok {
+		var pv, gv *OptInText
+		if v, ok := project[name]; ok && isSet(v) {
 			pv = &v
 		}
-		if v, ok := global[name]; ok {
+		if v, ok := global[name]; ok && isSet(v) {
 			gv = &v
+		}
+		if pv == nil && gv == nil {
+			continue
 		}
 		rule, ok := checkMergeRules[name]
 		if !ok {

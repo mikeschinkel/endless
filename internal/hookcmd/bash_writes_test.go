@@ -397,7 +397,7 @@ func TestBashWritesRefusalNamesGitCheck(t *testing.T) {
 	if !block {
 		t.Fatal("git restore in main was allowed")
 	}
-	if !strings.Contains(msg.Error(), `"`+gitWritesCheck+`": false`) {
+	if !strings.Contains(msg.Error(), `"`+gitWritesCheck+`": "off"`) {
 		t.Errorf("git refusal does not name the %s key:\n%s", gitWritesCheck, msg)
 	}
 }

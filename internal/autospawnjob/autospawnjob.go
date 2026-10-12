@@ -104,7 +104,7 @@ func (job) Schedule() (schedule jobs.Schedule) {
 // Run spawns at most one eligible task, or records why it did not.
 func (job) Run(ctx context.Context) (err error) {
 	var db *sql.DB
-	var s settings
+	var s userSettings
 	var pick candidate
 	var skip string
 	var target string
@@ -153,8 +153,8 @@ end:
 	return err
 }
 
-// settings is the user-level half of the config: one job, one cadence.
-type settings struct {
+// userSettings is the user-level half of the config: one job, one cadence.
+type userSettings struct {
 	interval  time.Duration
 	target    string
 	placement string
@@ -164,7 +164,7 @@ type settings struct {
 // auto_spawn.placement from the user's config (the CLI layer). A missing, unreadable or unparsable interval falls
 // back to the default rather than failing: Schedule has no error return, and a
 // typo in a preference must not stop the runner from scheduling anything.
-func loadSettings() (s settings) {
+func loadSettings() (s userSettings) {
 	var cfg *config.EndlessConfig
 	var err error
 
@@ -205,12 +205,20 @@ type policyFunc func(projectPath string) (projectPolicy, error)
 // config.AutoSpawn).
 func loadProjectPolicy(projectPath string) (p projectPolicy, err error) {
 	var cfg *config.EndlessConfig
+	var a AutoSpawn
 
 	cfg, err = config.LoadProject(dt.DirPath(projectPath))
 	if err != nil {
 		goto end
 	}
-	p.enabled = cfg.AutoSpawn.Enabled
+	a, err = ParseAutoSpawn(cfg.AutoSpawn)
+	if err != nil {
+		goto end
+	}
+	p.enabled, err = resolveEnabled(EnabledSetting, a.Enabled)
+	if err != nil {
+		goto end
+	}
 	p.cap = cfg.AutoSpawn.Cap
 	if p.cap <= 0 {
 		p.cap = config.DefaultAutoSpawnCap

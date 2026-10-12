@@ -100,6 +100,11 @@ func TestBlankTemplateIsTheDefault(t *testing.T) {
 // is actually WIRED — a template that renders correctly but is never read would
 // pass every test above.
 func TestSessionNameTemplateReadsProjectConfig(t *testing.T) {
+	// A temp HOME, so the user layer is an empty file rather than whatever the
+	// machine running the test happens to hold.
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, ".config"))
 	dir := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(dir, ".endless"), 0o755); err != nil {
 		t.Fatalf("mkdir: %v", err)

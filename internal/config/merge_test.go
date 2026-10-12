@@ -6,46 +6,48 @@ import (
 
 func TestMerge_ChecksGlobalOnly(t *testing.T) {
 	// An opt-in check set only in the CLI layer must propagate through merge
-	// so the project sees it enabled.
-	project := &EndlessConfig{
-		Name: "endless",
-	}
-	cli := &EndlessConfig{
-		Checks: map[string]bool{"session_audit": true},
-	}
+	// so the project sees it.
+	project := &EndlessConfig{Name: "endless"}
+	cli := &EndlessConfig{Checks: map[string]OptInText{"session_audit": "on"}}
 	merged := project.Merge(cli).(*EndlessConfig)
-	if !merged.IsCheckEnabled("session_audit") {
-		t.Errorf("expected session_audit enabled from CLI layer, got disabled")
+	if got := merged.Checks["session_audit"]; got != "on" {
+		t.Errorf("session_audit = %q, want on from the CLI layer", got)
 	}
 }
 
 func TestMerge_ChecksProjectOverridesCLI(t *testing.T) {
-	project := &EndlessConfig{
-		Name:   "endless",
-		Checks: map[string]bool{"session_audit": false},
-	}
-	cli := &EndlessConfig{
-		Checks: map[string]bool{"session_audit": true},
-	}
+	project := &EndlessConfig{Checks: map[string]OptInText{"session_audit": "off"}}
+	cli := &EndlessConfig{Checks: map[string]OptInText{"session_audit": "on"}}
 	merged := project.Merge(cli).(*EndlessConfig)
-	if merged.IsCheckEnabled("session_audit") {
-		t.Errorf("expected project value (false) to win, got enabled")
+	if got := merged.Checks["session_audit"]; got != "off" {
+		t.Errorf("session_audit = %q, want the project's off", got)
+	}
+}
+
+// TestMerge_ChecksUnsetInherits: "unset" is the same as leaving the key out,
+// so a project that writes it inherits the CLI value rather than masking it,
+// and a key unset in both layers is absent, leaving the registered default.
+func TestMerge_ChecksUnsetInherits(t *testing.T) {
+	project := &EndlessConfig{Checks: map[string]OptInText{"session_audit": "unset", "task_required": "unset"}}
+	cli := &EndlessConfig{Checks: map[string]OptInText{"session_audit": "on"}}
+	merged := project.Merge(cli).(*EndlessConfig)
+	if got := merged.Checks["session_audit"]; got != "on" {
+		t.Errorf("session_audit = %q, want on inherited through the project's unset", got)
+	}
+	if _, ok := merged.Checks["task_required"]; ok {
+		t.Errorf("task_required present after merge, want absent (unset in both layers)")
 	}
 }
 
 func TestMerge_ChecksKeysFromBothLayers(t *testing.T) {
-	project := &EndlessConfig{
-		Checks: map[string]bool{"task_required": false},
-	}
-	cli := &EndlessConfig{
-		Checks: map[string]bool{"session_audit": true},
-	}
+	project := &EndlessConfig{Checks: map[string]OptInText{"task_required": "off"}}
+	cli := &EndlessConfig{Checks: map[string]OptInText{"session_audit": "on"}}
 	merged := project.Merge(cli).(*EndlessConfig)
-	if merged.IsCheckEnabled("task_required") {
-		t.Errorf("expected task_required disabled from project layer")
+	if got := merged.Checks["task_required"]; got != "off" {
+		t.Errorf("task_required = %q, want off from the project layer", got)
 	}
-	if !merged.IsCheckEnabled("session_audit") {
-		t.Errorf("expected session_audit enabled from CLI layer")
+	if got := merged.Checks["session_audit"]; got != "on" {
+		t.Errorf("session_audit = %q, want on from the CLI layer", got)
 	}
 }
 
@@ -114,19 +116,6 @@ func TestMerge_ProjectOnlyFieldsPreserved(t *testing.T) {
 	}
 	if merged.Description != "Project awareness system" {
 		t.Errorf("Description lost, got %q", merged.Description)
-	}
-}
-
-func TestIsCheckEnabled_FallsBackToDefault(t *testing.T) {
-	cfg := &EndlessConfig{}
-	if !cfg.IsCheckEnabled("task_required") {
-		t.Errorf("task_required default should be true")
-	}
-	if cfg.IsCheckEnabled("session_audit") {
-		t.Errorf("session_audit default should be false")
-	}
-	if !cfg.IsCheckEnabled("totally_unknown_check") {
-		t.Errorf("unknown checks default to true (current policy)")
 	}
 }
 

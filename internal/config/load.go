@@ -80,3 +80,21 @@ func LoadProject(projectPath dt.DirPath) (cfg *EndlessConfig, err error) {
 end:
 	return cfg, err
 }
+
+// MachineFile is the CLI layer's config file, resolved the way go-cfgstore
+// resolves it for Load.
+func MachineFile() (file dt.Filepath, err error) {
+	var dir dt.DirPath
+	dir, err = cfgstore.DefaultDirsProvider().CLIConfigDirType()
+	if err != nil {
+		goto end
+	}
+	file = dt.FilepathJoin3(dir, ConfigSlug, ConfigFile)
+end:
+	return file, err
+}
+
+// ProjectFile is a project's own config file.
+func ProjectFile(projectPath dt.DirPath) dt.Filepath {
+	return dt.FilepathJoin3(projectPath, "."+ConfigSlug, ConfigFile)
+}

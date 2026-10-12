@@ -154,7 +154,7 @@ func TestLoadPrimePolicy_DefaultsAndOptIn(t *testing.T) {
 	if err != nil || p.enabled {
 		t.Fatalf("no config: %+v, %v; want disabled", p, err)
 	}
-	writeFile(t, filepath.Join(dir, ".endless", "config.json"), `{"prime":{"enabled":true}}`)
+	writeFile(t, filepath.Join(dir, ".endless", "config.json"), `{"prime":{"enabled":"on"}}`)
 	p, err = loadPrimePolicy(dir)
 	if err != nil || !p.enabled || p.cap != 3 {
 		t.Errorf("opted in: %+v, %v; want enabled with the default cap 3", p, err)
@@ -168,7 +168,7 @@ func TestPrimeArgs(t *testing.T) {
 }
 
 func TestPrimeRegistered(t *testing.T) {
-	if _, ok := jobs.Lookup(PrimeJobName); !ok {
+	if _, ok, err := jobs.Lookup(PrimeJobName); err != nil || !ok {
 		t.Fatalf("%q is not registered", PrimeJobName)
 	}
 }

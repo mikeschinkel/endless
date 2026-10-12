@@ -17,9 +17,9 @@
     "optimizer": false
   },
   "prime": {
-    "enabled": true
+    "enabled": "on"
   },
   "main_sync": {
-    "enabled": true
+    "enabled": "on"
   }
 }

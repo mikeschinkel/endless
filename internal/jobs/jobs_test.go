@@ -74,6 +74,9 @@ func register(t *testing.T, job Job) {
 	t.Helper()
 	t.Cleanup(resetRegistryForTest())
 	Register(job)
+	if err := Initialize(); err != nil {
+		t.Fatalf("Initialize: %v", err)
+	}
 }
 
 func TestRunDue_RunsARegisteredJobAndReschedulesIt(t *testing.T) {
@@ -479,21 +482,46 @@ func TestRegistered_IsEmptyByDefault(t *testing.T) {
 	// E-698 ships the runner with NO production jobs: the runner knows nothing
 	// job-specific, and E-1859 / E-1881 are its first clients. If this ever
 	// fails, a job was registered without the deliberate decision to ship one.
-	if got := len(Registered()); got != 0 {
+	jobs, err := Registered()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(jobs); got != 0 {
 		t.Errorf("Registered() has %d jobs before any test registers one, want 0", got)
 	}
 }
 
-func TestRegister_RejectsADuplicateName(t *testing.T) {
+// TestAccessorsRefuseBeforeInitialize: the registry is only readable once
+// Initialize has validated and frozen it (E-2283).
+func TestAccessorsRefuseBeforeInitialize(t *testing.T) {
+	t.Cleanup(resetRegistryForTest())
+	registry = nil
+	Register(&fakeJob{name: "early", schedule: Schedule{Interval: time.Minute}})
+
+	if _, err := Registered(); !errors.Is(err, ErrNotInitialized) {
+		t.Errorf("Registered() before Initialize = %v, want ErrNotInitialized", err)
+	}
+	if _, _, err := Lookup("early"); !errors.Is(err, ErrNotInitialized) {
+		t.Errorf("Lookup() before Initialize = %v, want ErrNotInitialized", err)
+	}
+}
+
+// TestInitialize_RejectsEveryBadRegistration: Register never panics; an empty
+// name and a duplicate are both reported by Initialize, together, and the
+// registry stays refusing.
+func TestInitialize_RejectsEveryBadRegistration(t *testing.T) {
 	t.Cleanup(resetRegistryForTest())
 	Register(&fakeJob{name: "dupe", schedule: Schedule{Interval: time.Minute}})
-
-	defer func() {
-		if recover() == nil {
-			t.Error("registering a duplicate name did not panic")
-		}
-	}()
 	Register(&fakeJob{name: "dupe", schedule: Schedule{Interval: time.Minute}})
+	Register(&fakeJob{name: "", schedule: Schedule{Interval: time.Minute}})
+
+	err := Initialize()
+	if !errors.Is(err, ErrDuplicateJob) || !errors.Is(err, ErrEmptyName) {
+		t.Errorf("Initialize() = %v, want both ErrDuplicateJob and ErrEmptyName", err)
+	}
+	if _, err := Registered(); !errors.Is(err, ErrNotInitialized) {
+		t.Errorf("Registered() after a failed Initialize = %v, want ErrNotInitialized", err)
+	}
 }
 
 // TestLastOkAt_ReadsThePreviousSuccessfulRun: nothing before a job has ever

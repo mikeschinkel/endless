@@ -43,10 +43,11 @@ import (
 // ledger, mirrors, LESSONS.md) by design.
 
 // gitWritesCheck is the config key for the git working-tree mutators. On trial:
-// they may prove too restrictive, so `"checks": {"bash_git_writes": false}` in
+// they may prove too restrictive, so `"checks": {"bash_git_writes": "off"}` in
 // .endless/config.json turns them off with no rebuild, and removing the feature
-// is deleting gitWorktreeWrites, its call and its test rows.
-const gitWritesCheck = "bash_git_writes"
+// is deleting gitWorktreeWrites, its call and its test rows. Its default is its
+// registered setting's (monitor.Checks).
+const gitWritesCheck = monitor.BashGitWritesCheck
 
 // bashWrite is one write target recognized in a Bash command.
 type bashWrite struct {
@@ -1332,7 +1333,7 @@ func bashWritesRefusal(scope writeScope, writes []bashWrite) (msg *refusal.Error
 		if strings.HasPrefix(w.Construct, "git ") {
 			fmt.Fprintf(&b, "\n\nGit working-tree commands are judged as writes on trial. If this "+
 				"refusal is a false positive, turn them off with\n"+
-				`  "checks": {"%s": false}`+"\nin .endless/config.json — and say so, so the trial "+
+				`  "checks": {"%s": "off"}`+"\nin .endless/config.json — and say so, so the trial "+
 				"hears about it.", gitWritesCheck)
 		}
 		return refusal.NoReport(

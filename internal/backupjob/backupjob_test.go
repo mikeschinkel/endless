@@ -12,7 +12,13 @@ import (
 // and the only symptom is the thing this task exists to fix — backups that stop
 // happening — showing up again weeks later.
 func TestRegistered(t *testing.T) {
-	got, ok := jobs.Lookup(JobName)
+	if err := jobs.Initialize(); err != nil {
+		t.Fatalf("jobs.Initialize: %v", err)
+	}
+	got, ok, err := jobs.Lookup(JobName)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatalf("%q is not registered; the runner will never fire it", JobName)
 	}

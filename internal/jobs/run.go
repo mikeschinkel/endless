@@ -78,6 +78,7 @@ func RunDue(ctx context.Context) (result Result) {
 	var db *sql.DB
 	var err error
 	var job Job
+	var jobs []Job
 
 	if Suppressed() {
 		goto end
@@ -101,7 +102,18 @@ func RunDue(ctx context.Context) (result Result) {
 		goto end
 	}
 
-	for _, job = range Registered() {
+	jobs, err = Registered()
+	if err != nil {
+		faults.Record(faults.Fault{
+			Code:        faults.ErrCodeJobScheduling,
+			Source:      "jobs",
+			Fingerprint: "runner-registry-uninitialized",
+			Summary:     "background job runner ran before the job registry was initialized",
+			Detail:      err.Error(),
+		})
+		goto end
+	}
+	for _, job = range jobs {
 		result.Outcomes = append(result.Outcomes, runOne(ctx, db, job))
 	}
 
@@ -117,7 +129,10 @@ func RunNamed(ctx context.Context, name string) (outcome Outcome, err error) {
 	var job Job
 	var ok bool
 
-	job, ok = Lookup(name)
+	job, ok, err = Lookup(name)
+	if err != nil {
+		goto end
+	}
 	if !ok {
 		err = doterr.NewErr(ErrJobs, ErrUnknownJob, "name", name)
 		goto end

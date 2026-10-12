@@ -152,7 +152,7 @@ design.
 Git commands that rewrite a working tree (`restore`, `checkout`,
 `reset --hard`, `stash pop`, `clean`, `apply`, `pull`, …) count as writes to
 the repository they run in. That rule is on trial; a project turns it off with
-`"checks": {"bash_git_writes": false}` in `.endless/config.json`.
+`"checks": {"bash_git_writes": "off"}` in `.endless/config.json`.
 
 ### Choosing the database (`--db`)
 

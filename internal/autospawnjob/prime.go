@@ -75,7 +75,7 @@ func (primeJob) Schedule() (schedule jobs.Schedule) {
 // Run primes at most one eligible task, or records why it did not.
 func (primeJob) Run(ctx context.Context) (err error) {
 	var db *sql.DB
-	var s settings
+	var s userSettings
 	var pick candidate
 	var skip string
 	var target string
@@ -127,12 +127,20 @@ end:
 // config file, never inheriting either from the user's (see config.Prime).
 func loadPrimePolicy(projectPath string) (p projectPolicy, err error) {
 	var cfg *config.EndlessConfig
+	var pr Prime
 
 	cfg, err = config.LoadProject(dt.DirPath(projectPath))
 	if err != nil {
 		goto end
 	}
-	p.enabled = cfg.Prime.Enabled
+	pr, err = ParsePrime(cfg.Prime)
+	if err != nil {
+		goto end
+	}
+	p.enabled, err = resolveEnabled(PrimeEnabledSetting, pr.Enabled)
+	if err != nil {
+		goto end
+	}
 	p.cap = cfg.Prime.Cap
 	if p.cap <= 0 {
 		p.cap = config.DefaultPrimeCap

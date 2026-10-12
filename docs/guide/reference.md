@@ -114,12 +114,18 @@ A job can end a run successfully without doing its work — nothing was due for 
 
 The runner itself knows nothing job-specific — jobs register themselves with it. Today they are the auto-spawn and prime selectors below, the rater (which proposes complexity and risk for `submitted` tasks nobody rated — see **Ratings** in `endless guide tasks`), the hourly database backup, the document-mirror sweep, the unlanded-branch cache, main sync, and the minimizer's autoresearch tick.
 
+### Opt-in settings
+
+The opt-ins below — `auto_spawn.enabled`, `prime.enabled`, `main_sync.enabled`, `fault_triage.enabled`, and every key under `checks` — take one of three values: `"on"`, `"off"` or `"unset"`. A missing key is unset, and an unset opt-in takes its default (off for the four jobs). `"off"` is an explicit decline, which `endless doctor` will not suggest again; `"unset"` is what it may suggest. The old JSON `true` / `false` is refused with the file, the key and the value to write instead; `endless-go settings migrate [FILE...]` rewrites them in place (with no FILE: the user config and the current project's).
+
+`endless project set main_sync.enabled=on` (or `<name>.main_sync.enabled=on` from anywhere) writes one into the project's own config. `endless-go settings list` shows every registered key with its effective value and the file it came from; `--json` is the export the Python CLI reads, and `--metadata` lists the keys without reading any config file.
+
 ### Auto-spawn
 
 The `auto-spawn` job starts a Claude session, unasked, on a task that is safe to work without an explicit spawn. It is **off until a project opts in**, in that project's own `.endless/config.json`:
 
 ```json
-{ "auto_spawn": { "enabled": true, "cap": 3 } }
+{ "auto_spawn": { "enabled": "on", "cap": 3 } }
 ```
 
 A task is picked only when it is `ready` (human-approved), rated **low** complexity and **low** risk, in phase `now` or `urgent`, of type `todo` or `bugfix`, unblocked, planned with no open question, and never claimed by any session. Each due run spawns **at most one** task — `urgent` before `now`, oldest first — so the interval is the rate limit. A project with `cap` auto-spawned tasks still underway or unverified gets nothing more until one settles.
@@ -131,7 +137,7 @@ The window opens detached, so it never takes your focus, in the tmux session of 
 The `prime` job starts a task's session **before it is needed** (see **Primed sessions** in `endless guide orchestration`). Attaching a plan to a task — the move from `unplanned` to `submitted`, at `task add` or `task update` — asks for one; the job picks it up on its next due run. Like auto-spawn it is **off until a project opts in**:
 
 ```json
-{ "prime": { "enabled": true, "cap": 3 } }
+{ "prime": { "enabled": "on", "cap": 3 } }
 ```
 
 A task is primed only when its plan was attached and it still has one, it is `submitted` or `ready`, in phase `now` or `urgent`, unblocked, with no open question, and no session has ever bound to it. Each due run primes **at most one**, `urgent` first. `cap` counts live sessions on tasks nobody has started yet — reading in or primed — because each is a live process and a tmux window. The cadence and tmux target are auto-spawn's `interval` and `target`. `endless jobs list` notes `no project has opted in`, `nothing to prime`, `every opted-in project is at its prime cap`, or `primed E-N`.
@@ -141,7 +147,7 @@ A task is primed only when its plan was attached and it still has one, it is `su
 The `main-sync` job keeps a project's default branch in step with its upstream, so that integrating a commit made elsewhere stays a fast-forward instead of a rewrite of hundreds of unpushed commits. It is **off until a project opts in**, in that project's own `.endless/config.json`:
 
 ```json
-{ "main_sync": { "enabled": true } }
+{ "main_sync": { "enabled": "on" } }
 ```
 
 Each run fetches main's upstream, then: if only the remote moved, `git merge --ff-only`; if only main moved, `git push` (never forced); if **both** moved, it changes nothing and records `ERR-0030`, naming each side's count and both ways out — merging costs one merge commit, rebasing makes every open task branch `git rebase main` before it can land. Which one is your call. It never runs `git pull`, so `pull.rebase` and `pull.ff` have no effect on it. It acts only on the main checkout, and only while that checkout has the default branch checked out. A failed fetch or push is recorded and backs off.
@@ -155,7 +161,7 @@ It also watches for main being **rewritten** under open task branches (a `git pu
 The `fault-triage` job routes each new error to a session that fixes it. It is **off until a project opts in**:
 
 ```json
-{ "fault_triage": { "enabled": true } }
+{ "fault_triage": { "enabled": "on" } }
 ```
 
 Only errors first seen after the opt-in are routed. An error raised by a **live session** is messaged to it once it is idle — *we think error N is yours* — and the session answers `endless errors accept N` or `endless errors decline N --reason "..."`. One raised by an **ended session** whose transcript exists resumes it in an unfocused window with that message. Anything else — no session, a decline, no answer, a message that could not be delivered — is **filed as a bugfix task and spawned**, one task per fingerprint; an error raised by a fix session is recorded on its fix task, never spawned. Resumes and spawns are **one outstanding at a time**; messages are not throttled. `endless errors escalate N` routes now without waiting for idle; `endless session goto --error-fix N` goes to the session that accepted it, and `errors list` marks accepted errors `✓`. `fault_triage.interval` (user config, default `1m`) sets the cadence. Delivery needs Claude Code's cross-session `SendMessage` (verified on 2.1.293). See `docs/errors.md`, "Routing an error to a session that fixes it".

@@ -39,6 +39,7 @@ func Statuses() (statuses []Status, err error) {
 	var ok bool
 	var names []string
 	var name string
+	var registered []Job
 
 	db, err = monitor.DB()
 	if err != nil {
@@ -51,7 +52,11 @@ func Statuses() (statuses []Status, err error) {
 		goto end
 	}
 
-	for _, job = range Registered() {
+	registered, err = Registered()
+	if err != nil {
+		goto end
+	}
+	for _, job = range registered {
 		status, ok = rows[job.Name()]
 		if !ok {
 			status = Status{Name: job.Name()}
@@ -90,7 +95,10 @@ func Retry(name string) (err error) {
 	var affected int64
 	var ok bool
 
-	_, ok = Lookup(name)
+	_, ok, err = Lookup(name)
+	if err != nil {
+		goto end
+	}
 	if !ok {
 		err = doterr.NewErr(ErrJobs, ErrUnknownJob, "name", name)
 		goto end

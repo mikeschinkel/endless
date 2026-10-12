@@ -44,9 +44,12 @@ package jobs
 
 import (
 	"context"
+	"errors"
+	"slices"
 	"sort"
-	"sync"
 	"time"
+
+	"github.com/mikeschinkel/go-doterr"
 )
 
 // Schedule declares when a job runs and how it backs off. The zero value is
@@ -145,67 +148,96 @@ type Job interface {
 }
 
 var (
-	registryMu sync.RWMutex
-	registry   = make(map[string]Job)
+	// pending is appended to by Register and read only by Initialize.
+	pending []Job
+
+	// registry is built by Initialize; nil means not initialized.
+	registry map[string]Job
+
+	// ordered is registry's jobs sorted by name, so listings and run order are
+	// deterministic.
+	ordered []Job
 )
 
-// Register adds a job to the registry. It panics on a duplicate or invalid
-// name: registration happens at process start from static code, so a collision
-// is a programming error that must never reach a running system, and there is no
-// sensible runtime recovery from two jobs claiming one scheduling row.
+// Register queues a job for Initialize. Call it from init(). It validates
+// nothing and returns nothing (E-2283): an init() must not be able to fail, so
+// the empty-name and duplicate-name checks live in Initialize, which reports
+// them through endless-go's startup refusal instead of a panic.
 func Register(job Job) {
-	name := job.Name()
-	if name == "" {
-		panic(ErrRegistering.Error() + ": " + ErrEmptyName.Error())
-	}
+	pending = append(pending, job)
+}
 
-	registryMu.Lock()
-	defer registryMu.Unlock()
+// Initialize validates every registered job — a name, and one job per name —
+// joining every failure rather than stopping at the first, and on success
+// builds and freezes the registry. On failure the registry is left
+// uninitialized. Called once from endless-go's startup, after
+// settings.Initialize.
+func Initialize() (err error) {
+	var errs []error
+	var built = make(map[string]Job, len(pending))
+	var list = make([]Job, 0, len(pending))
 
-	_, dup := registry[name]
-	if dup {
-		panic(ErrRegistering.Error() + ": " + ErrDuplicateJob.Error() + ": " + name)
+	for i, job := range pending {
+		name := job.Name()
+		if name == "" {
+			errs = append(errs, doterr.NewErr(ErrJobs, ErrRegistering, ErrEmptyName, "index", i))
+			continue
+		}
+		if _, dup := built[name]; dup {
+			errs = append(errs, doterr.NewErr(ErrJobs, ErrRegistering, ErrDuplicateJob, "name", name))
+			continue
+		}
+		built[name] = job
+		list = append(list, job)
 	}
-	registry[name] = job
+	err = errors.Join(errs...)
+	if err != nil {
+		registry, ordered = nil, nil
+		goto end
+	}
+	sort.Slice(list, func(i, j int) bool {
+		return list[i].Name() < list[j].Name()
+	})
+	registry, ordered = built, list
+
+end:
+	return err
 }
 
 // Registered returns every registered job, ordered by name so that listings and
-// run order are deterministic.
-func Registered() (jobs []Job) {
-	registryMu.RLock()
-	jobs = make([]Job, 0, len(registry))
-	for _, job := range registry {
-		jobs = append(jobs, job)
+// run order are deterministic. Before Initialize it returns ErrNotInitialized.
+func Registered() (jobs []Job, err error) {
+	if registry == nil {
+		err = doterr.NewErr(ErrJobs, ErrNotInitialized)
+		goto end
 	}
-	registryMu.RUnlock()
-
-	sort.Slice(jobs, func(i, j int) bool {
-		return jobs[i].Name() < jobs[j].Name()
-	})
-	return jobs
+	jobs = slices.Clone(ordered)
+end:
+	return jobs, err
 }
 
 // Lookup returns the registered job with the given name. ok is false when no
 // such job is registered — which is the normal case for a scheduling row left
-// behind by a job that has since been removed.
-func Lookup(name string) (job Job, ok bool) {
-	registryMu.RLock()
+// behind by a job that has since been removed. Before Initialize it returns
+// ErrNotInitialized.
+func Lookup(name string) (job Job, ok bool, err error) {
+	if registry == nil {
+		err = doterr.NewErr(ErrJobs, ErrNotInitialized, "name", name)
+		goto end
+	}
 	job, ok = registry[name]
-	registryMu.RUnlock()
-	return job, ok
+end:
+	return job, ok, err
 }
 
-// resetRegistryForTest clears the registry and returns a restore func. Tests
-// only: the registry is process-global static wiring in production.
+// resetRegistryForTest empties the registry, leaving it initialized and
+// empty, and returns a restore func. Tests only: the registry is
+// process-global static wiring in production.
 func resetRegistryForTest() (restore func()) {
-	registryMu.Lock()
-	prev := registry
-	registry = make(map[string]Job)
-	registryMu.Unlock()
+	prevPending, prevRegistry, prevOrdered := pending, registry, ordered
+	pending, registry, ordered = nil, map[string]Job{}, nil
 
 	return func() {
-		registryMu.Lock()
-		registry = prev
-		registryMu.Unlock()
+		pending, registry, ordered = prevPending, prevRegistry, prevOrdered
 	}
 }

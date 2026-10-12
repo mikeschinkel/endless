@@ -59,9 +59,10 @@ type EndlessConfig struct {
 	// registered projects.
 	Tracking string `json:"tracking,omitempty"`
 
-	// Checks is a per-key enable/disable map. Merge is per-key with optional
-	// per-key custom rules; see merge.go.
-	Checks map[string]bool `json:"checks,omitempty"`
+	// Checks is a per-key opt-in map: "on", "off" or "unset". Merge is per-key
+	// with optional per-key custom rules; see merge.go. Each known key's
+	// default is its registered setting's (see monitor.Checks).
+	Checks map[string]OptInText `json:"checks,omitempty"`
 
 	// Tmux holds multiplexer preferences. Layered per field, not wholesale:
 	// setting one of its fields in a project must not blank the others
@@ -105,10 +106,11 @@ type EndlessConfig struct {
 //
 // Interval is CLI-ONLY: one job serves every project. Read it with Load("").
 type FaultTriage struct {
-	// Enabled opts the project in. Absent or false is off, which is also the
-	// kill switch. Only incidents first seen after the job first sees the
-	// opt-in are routed, so opting in never triages a backlog.
-	Enabled bool `json:"enabled,omitempty"`
+	// Enabled opts the project in: "on", "off" or "unset". Absent or unset is
+	// off, which is also the kill switch. Only incidents first seen after the
+	// job first sees the opt-in are routed, so opting in never triages a
+	// backlog.
+	Enabled OptInText `json:"enabled,omitempty"`
 
 	// Interval is the job's cadence as a Go duration ("1m"). Empty means
 	// DefaultFaultTriageInterval. Messages go out on every run; at most one
@@ -133,9 +135,9 @@ const DefaultFaultTriageInterval = "1m"
 // Interval is CLI-ONLY: one job serves every project, so a per-project cadence
 // has nothing to attach to. Read it with Load("").
 type MainSync struct {
-	// Enabled opts the project in. Absent or false is off, which is also the
-	// kill switch.
-	Enabled bool `json:"enabled,omitempty"`
+	// Enabled opts the project in: "on", "off" or "unset". Absent or unset is
+	// off, which is also the kill switch.
+	Enabled OptInText `json:"enabled,omitempty"`
 
 	// Interval is the job's cadence as a Go duration ("5m"). Empty means
 	// DefaultMainSyncInterval.
@@ -150,8 +152,9 @@ const DefaultMainSyncInterval = "5m"
 // window per task, so opting in is that project's decision, read with
 // LoadProject.
 type Prime struct {
-	// Enabled opts the project in. Absent or false is off — the kill switch.
-	Enabled bool `json:"enabled,omitempty"`
+	// Enabled opts the project in: "on", "off" or "unset". Absent or unset is
+	// off — the kill switch.
+	Enabled OptInText `json:"enabled,omitempty"`
 
 	// Cap is how many primed sessions may be outstanding in the project at
 	// once: live sessions bound to a task nobody has started yet. Zero means
@@ -198,9 +201,9 @@ type ListColor struct {
 // the whole database, so a per-project cadence has nothing to attach to. Read
 // them with Load("").
 type AutoSpawn struct {
-	// Enabled opts the project in. Absent or false is off, which is also the
-	// kill switch.
-	Enabled bool `json:"enabled,omitempty"`
+	// Enabled opts the project in: "on", "off" or "unset". Absent or unset is
+	// off, which is also the kill switch.
+	Enabled OptInText `json:"enabled,omitempty"`
 
 	// Cap is how many auto-spawned tasks may be outstanding (underway or
 	// unverified) in the project at once. Zero means DefaultAutoSpawnCap.

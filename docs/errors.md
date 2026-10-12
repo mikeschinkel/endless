@@ -185,7 +185,7 @@ list`), so work on an error starts as soon as it surfaces. It is off until the
 project's own `.endless/config.json` turns it on:
 
 ```json
-{ "fault_triage": { "enabled": true } }
+{ "fault_triage": { "enabled": "on" } }
 ```
 
 Only errors first seen after the job first notices the opt-in are routed:

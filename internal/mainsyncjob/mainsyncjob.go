@@ -72,6 +72,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/jobs"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/settings"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
 
@@ -837,12 +838,23 @@ func systemGit(ctx context.Context, dir string, args ...string) (string, error) 
 	return string(out), nil
 }
 
-// enabled reads main_sync.enabled from the project's own config file. An
-// unreadable file reads as off: a job that publishes history does not do so on
-// a guess.
+// enabled reads main_sync.enabled from the project's own config file, unset
+// resolving to the registered default. An unreadable file reads as off: a job
+// that publishes history does not do so on a guess.
 func enabled(root string) bool {
+	var ms MainSync
+	var on settings.OptIn
+
 	cfg, err := config.LoadProject(dt.DirPath(root))
-	return err == nil && cfg != nil && cfg.MainSync.Enabled
+	if err != nil || cfg == nil {
+		return false
+	}
+	ms, err = ParseMainSync(cfg.MainSync)
+	if err != nil {
+		return false
+	}
+	on, err = settings.Resolve(EnabledSetting, ms.Enabled)
+	return err == nil && on.IsOn()
 }
 
 // loadInterval reads main_sync.interval from the user's config. Anything

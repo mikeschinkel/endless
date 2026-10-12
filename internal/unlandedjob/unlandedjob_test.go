@@ -13,7 +13,13 @@ import (
 // never be written, every row would show `~` forever, and nothing else would look
 // wrong.
 func TestRegistered(t *testing.T) {
-	got, ok := jobs.Lookup(JobName)
+	if err := jobs.Initialize(); err != nil {
+		t.Fatalf("jobs.Initialize: %v", err)
+	}
+	got, ok, err := jobs.Lookup(JobName)
+	if err != nil {
+		t.Fatal(err)
+	}
 	if !ok {
 		t.Fatalf("%q is not registered; the runner will never fire it", JobName)
 	}
