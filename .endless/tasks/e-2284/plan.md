@@ -51,3 +51,10 @@
 ## Risks and notes
 - Config `checks` (hook gate switches) and doctor checks share a word. The registry uses the JSON path (`checks.task_required`), and doctor check IDs need a different namespace (E-2285).
 - Because a parse failure stops every command, the parse-refusal message has to say how to fix the value in one line.
+
+## Scope added during implementation
+- **fault_triage.enabled** is registered and moved to the string opt-in like the other four job opt-ins. It was added by E-2272 after this plan was written; it is the same shape as main_sync, and leaving it a bool would have made `checks`/jobs opt-ins inconsistent.
+- **`endless-go settings migrate [FILE...]`** rewrites legacy JSON booleans at opt-in keys to "on"/"off" in place, changing no other byte (an `enabled` inside an array is left alone). It makes step 10 one command for this machine, and is the upgrade path for anyone else's config (PRODUCT).
+- **`endless-go settings list --json --metadata`** lists the registry without reading any config file. `endless project set` uses it to decide whether an expression names a registered key, so an unrelated broken file cannot stand in the way of that decision; only the write path reads the target project's config.
+- **`config.OptInError`**: a bad opt-in is refused one line per key — file, key, value, what to write — instead of a doterr chain, per the risk note about the parse-refusal message.
+- The repository's own `.endless/config.json` is migrated on the branch, so it lands with the binary that reads it.
