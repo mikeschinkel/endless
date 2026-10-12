@@ -1,0 +1,1 @@
+The deliverable is a per-event decision across three existing inference mechanisms, and a blanket install is already ruled out, so nothing can be planned until the set is chosen.
