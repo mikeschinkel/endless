@@ -7493,3 +7493,7 @@ In E-2280 I made 'task approve' record every plan item as approved in one step, 
 ### [2026-10-12] Mike's plan approval is not an endorsement of every detail in it
 In the E-2291 discussion I said the relation name 'surfaced' came from E-1462's plan 'which you approved', as if that settled it. Mike said his approvals are almost always made because a plan has far too much to read: he approves and raises issues if they turn out to matter. So an approved plan does not show that he weighed a particular name or detail in it. When a detail is in question, do not cite his approval of the plan as his choice of it.
 - **Project**: endless
+
+### [2026-10-12] Correction: plan items are approved one at a time BY DEFAULT, with an all-at-once flag
+This supersedes the earlier lesson 'Plan items are approved individually, not all at once by task approve'. That lesson made 'one at a time' an absolute, which is the very error the lesson written next to it warns against. Mike's position: items are reviewed and approved one at a time by default, not always; an all-at-once flag should exist too ('let's go ahead with it').
+- **Project**: endless
