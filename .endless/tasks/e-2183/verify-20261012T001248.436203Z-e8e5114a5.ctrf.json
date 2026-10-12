@@ -1,0 +1,69 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 10,
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "config recipes resolve from main's justfile, build from the branch's",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "install runs go-work-init through main's justfile",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "install never runs a bare 'just go-work-init'",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "install runs dev-sandbox-init through main's justfile",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "install never runs a bare 'just dev-sandbox-init'",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "install runs claude-settings-init through main's justfile",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "install never runs a bare 'just claude-settings-init'",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "install builds with the branch's own justfile",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the detect command is in the justfile",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the repair command is in the justfile",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
