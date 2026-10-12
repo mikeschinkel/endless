@@ -13,9 +13,7 @@ package reconcilegate
 import (
 	"bytes"
 	"context"
-	"crypto/sha256"
 	"database/sql"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"os/exec"
@@ -24,6 +22,8 @@ import (
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/planitem"
 	"github.com/mikeschinkel/endless/internal/questionstatus"
+	"github.com/mikeschinkel/endless/internal/taskstatus"
+	"github.com/mikeschinkel/endless/internal/tasktype"
 )
 
 // EmptyFingerprint is the fingerprint of a branch with no changes of its own
@@ -35,12 +35,6 @@ const EmptyFingerprint = "empty"
 // `.endless/` excluded. A clean rebase onto a moved base leaves it alone; an
 // edit, or a conflict resolved differently, changes it. Endless's own ledger and
 // mirror commits never do.
-//
-// When HEAD IS the base point — the work is committed straight onto the base
-// branch, as in a project that does not use worktrees — there is no branch of
-// its own to diff, and that diff would be empty forever. Then the fingerprint
-// is the tracked tree outside `.endless/` instead, so any code change, anyone's,
-// makes a reconciliation stale.
 func Fingerprint(ctx context.Context, repo string) (fingerprint, head string, err error) {
 	base, err := monitor.DefaultBranch(ctx, repo)
 	if err != nil {
@@ -52,21 +46,6 @@ func Fingerprint(ctx context.Context, repo string) (fingerprint, head string, er
 	mb, err := git(ctx, repo, nil, "merge-base", base, "HEAD")
 	if err != nil {
 		return "", "", fmt.Errorf("merge-base of %s and HEAD: %w", base, err)
-	}
-	if mb == head {
-		// ls-tree takes no exclude pathspec, so `.endless/` is dropped here.
-		tree, err := git(ctx, repo, nil, "ls-tree", "-r", "--full-tree", "HEAD")
-		if err != nil {
-			return "", "", err
-		}
-		h := sha256.New()
-		for _, line := range strings.Split(tree, "\n") {
-			if _, path, ok := strings.Cut(line, "\t"); ok && !strings.HasPrefix(path, ".endless/") {
-				fmt.Fprintln(h, line)
-			}
-		}
-		sum := h.Sum(nil)
-		return "tree:" + hex.EncodeToString(sum[:]), head, nil
 	}
 	diff, err := git(ctx, repo, nil, "diff", "--binary", "--no-color", "--no-ext-diff",
 		"--no-renames", "--src-prefix=a/", "--dst-prefix=b/", mb, "HEAD",
@@ -126,12 +105,26 @@ type Result struct {
 }
 
 // Check runs the gate on one task against the branch's current fingerprint.
-func Check(taskID int64, fingerprint string, mode Mode) (Result, error) {
+//
+// to is the status being moved to, or "" for none (the backstop). When the
+// lifecycle refuses that move outright, the gate stands aside and passes, so
+// the caller's refusal is the lifecycle's — the one that says what is wrong.
+func Check(taskID int64, fingerprint string, mode Mode, to string) (Result, error) {
 	db, err := monitor.DB()
 	if err != nil {
 		return Result{}, err
 	}
-	return check(db, taskID, fingerprint, mode)
+	return check(db, taskID, fingerprint, mode, to)
+}
+
+func activeItems(items []gateItem) int {
+	n := 0
+	for _, it := range items {
+		if it.state == planitem.StateActive {
+			n++
+		}
+	}
+	return n
 }
 
 type gateItem struct {
@@ -144,27 +137,35 @@ type gateItem struct {
 	approvedAt        sql.NullString
 }
 
-func check(db *sql.DB, taskID int64, fingerprint string, mode Mode) (Result, error) {
+func check(db *sql.DB, taskID int64, fingerprint string, mode Mode, to string) (Result, error) {
 	res := Result{TaskID: taskID, Problems: []string{}}
-	var typ string
+	var typ, status string
 	if err := db.QueryRow(
-		`SELECT COALESCE(tt.slug, '') FROM live_tasks t
+		`SELECT COALESCE(tt.slug, ''), t.status FROM live_tasks t
 		   LEFT JOIN task_types tt ON tt.id = t.type_id WHERE t.id = ?`, taskID,
-	).Scan(&typ); err != nil {
+	).Scan(&typ, &status); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return res, fmt.Errorf("no task E-%d", taskID)
 		}
 		return res, fmt.Errorf("look up E-%d: %w", taskID, err)
 	}
-	if !planitem.IsGatedType(typ) {
-		res.Skipped = fmt.Sprintf("%s tasks are not gated", typ)
-		res.Pass = true
-		return res, nil
+	if to != "" {
+		if tt, err := tasktype.Parse(typ); err == nil && !taskstatus.TransitionAllowed(status, to, tt) {
+			res.Skipped = fmt.Sprintf("the lifecycle refuses %s → %s itself", status, to)
+			res.Pass = true
+			return res, nil
+		}
 	}
-
 	items, err := readGateItems(db, taskID)
 	if err != nil {
 		return res, err
+	}
+	// A task with plan items is gated whatever its type; a todo or bugfix is
+	// gated even without them, since it must have them.
+	if !planitem.MustItemize(typ) && activeItems(items) == 0 {
+		res.Skipped = fmt.Sprintf("the %s task has no plan items", typ)
+		res.Pass = true
+		return res, nil
 	}
 	if len(items) == 0 && mode == ModeBackstop {
 		res.Skipped = "the task has no plan items; it reached unverified before itemized plans shipped"

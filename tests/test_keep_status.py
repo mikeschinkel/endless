@@ -29,6 +29,7 @@ import click
 import pytest
 
 from endless import db, task_cmd
+from plan_item_steps import itemize, reconcile_as_planned
 
 
 def _status_of(item_id: int) -> str:
@@ -46,16 +47,21 @@ def _finish(item_id: int, status: str, **kwargs) -> None:
     task IN a done state, so they walk it there rather than asserting it.
     """
     # E-1813: approving ratifies both ratings, so the walk supplies them.
+    # E-2280: approval needs an itemized plan, and `unverified` a reconciliation.
+    itemize(item_id)
     task_cmd.update_plan(item_id=item_id, status="ready",
                          complexity="low", risk="low")
-    for step in ("underway", "unverified"):
-        task_cmd.update_plan(item_id=item_id, status=step)
+    task_cmd.update_plan(item_id=item_id, status="underway")
+    reconcile_as_planned(item_id)
+    task_cmd.update_plan(item_id=item_id, status="unverified")
     task_cmd.update_plan(item_id=item_id, status=status, **kwargs)
 
 
 def _approve(item_id: int) -> None:
     """Take an unrated pre-work task to `ready` the legal way: submit with
-    ratings, then approve (E-1813 removed the tier-1 shortcut)."""
+    ratings, then approve (E-1813 removed the tier-1 shortcut). Approval needs
+    an itemized plan (E-2280)."""
+    itemize(item_id)
     task_cmd.update_plan(item_id=item_id, status="submitted",
                          complexity="low", risk="low")
     task_cmd.update_plan(item_id=item_id, status="ready")

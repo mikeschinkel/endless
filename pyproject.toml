@@ -35,5 +35,4 @@ markers = [
     "no_sandbox_reset_stub: opt out of the autouse stub that skips `endless-go sandbox reset` on worktree creation",
     "no_session_stub: opt out of the autouse stub that makes _current_endless_session_id return 1 (E-1401)",
     "real_land_gate: opt out of the autouse stub that opens worktree land's unlanded gate (E-2262)",
-    "real_plan_items: opt out of the autouse stub that opens the plan item rules and reconciliation gate (E-2280)",
 ]

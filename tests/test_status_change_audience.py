@@ -22,6 +22,7 @@ compose (E-2097), and a stub would assert against the stub.
 import pytest
 
 from endless import agent_help, db, task_cmd
+from plan_item_steps import itemize
 
 
 @pytest.fixture(autouse=True)
@@ -50,6 +51,7 @@ def _ready_task() -> int:
                                 plan="# plan\noriginal\n")
     task_cmd.update_plan(item_id=item_id, complexity="low", risk="low",
                          keep_status=True)
+    itemize(item_id)  # approval needs an itemized plan (E-2280)
     task_cmd.update_plan(item_id=item_id, status="ready")
     return item_id
 
@@ -68,7 +70,6 @@ def _items_changed_on_a_ready_task(monkeypatch) -> list[dict]:
     return emitted
 
 
-@pytest.mark.real_plan_items
 def test_an_agent_is_not_told_about_a_status_it_did_not_ask_for(capsys, monkeypatch):
     from endless import plan_items
     emitted = _items_changed_on_a_ready_task(monkeypatch)
@@ -80,7 +81,6 @@ def test_an_agent_is_not_told_about_a_status_it_did_not_ask_for(capsys, monkeypa
     assert emitted[0]["payload"]["new_status"] == "submitted", "the reset still happened"
 
 
-@pytest.mark.real_plan_items
 def test_a_human_still_sees_the_advisory(capsys, monkeypatch):
     from endless import plan_items
     emitted = _items_changed_on_a_ready_task(monkeypatch)

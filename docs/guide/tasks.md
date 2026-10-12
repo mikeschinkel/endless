@@ -123,9 +123,9 @@ endless task plan list <id> [--all]
 
 The file's keys are `id`, `kind` (default `deliverable`), `statement`, `verify` and `detail`, and anything else is refused. An item with an `id` names an existing item, kept and edited where it differs; one without is added; an active item the file leaves out is withdrawn. Each task's items are mirrored to `.endless/tasks/e-NNNN/items.toml` in this same format — copy it, edit the copy, and load it back.
 
-**Approval is of the items.** `task approve` copies every item into an approved baseline, and refuses a `todo` or `bugfix` with no active deliverable item; so does `task spawn` (a `ready` task with a prose-only plan included). `task claim` is not gated: a claiming session can write the items itself. On a `ready` task, a change to the item set — an item added, withdrawn, or with a changed statement or kind — sends it back to `submitted`; an edit to the plan prose no longer does. An item added to a task that has never had items is planned, not grown.
+**Approval is of the items.** `task approve` copies every item into an approved baseline, and refuses a `todo` or `bugfix` with no active deliverable item (or any task whose only active items are exclusions); so does `task spawn` (a `ready` task with a prose-only plan included). `task claim` is not gated: a claiming session can write the items itself. On a `ready` task, a change to the item set — an item added, withdrawn, or with a changed statement or kind — sends it back to `submitted`; an edit to the plan prose no longer does. An item added to a task that has never had items is planned, not grown.
 
-**While `underway`**, a new item is a **grown** item: work beyond the approved plan. Approved items can still be edited or withdrawn, but every such change holds the hand-over until the user re-approves — `task approve` on an underway task moves the baseline to the items as they are, which is how a redesign is accepted, in one place. From `unverified` on, items are frozen; `revisit` unfreezes them.
+**While `underway`**, a new item is a **grown** item: work beyond the approved plan. Approved items can still be edited or withdrawn, but every such change keeps the task from reaching `unverified` until the user re-approves — `task approve` on an underway task moves the baseline to the items as they are, which is how a redesign is accepted, in one place. From `unverified` on, items are frozen; `revisit` unfreezes them.
 
 **"Plan drafted, N questions open" is a complete, filed state, not a failure.** When you plan a task and hit questions only your user can answer, do not decide them to make the plan look finished. Attach the plan you have, ask the questions with `endless question ask <id> "…"`, and stop. The task is parked until they are answered, `task show` says so prominently, and the questions are recorded durably instead of scrolling away in chat. Filing is the way to ask, not the opposite of asking. A question you can put to a live user in the conversation, ask there instead: rows are for when nobody is there to answer.
 
@@ -547,7 +547,7 @@ endless task supersede <id> --by <new_id> --outcome "..."    # supersede with an
 
 ### Reconciling before a verify
 
-A `todo` or `bugfix` is handed over only after a **reconciliation**: the agent's record, made after implementing, of how the work compares with every active plan item. A different route usually feels like ordinary engineering while you are on it and only looks like a deviation when the diff is read against the plan, which is why this happens after the work, before anyone is asked to verify it.
+A task with plan items — every `todo` and `bugfix` must have them — can be set to `unverified` only after a **reconciliation**: the agent's record, made after implementing, of how the work compares with every active plan item. A different route usually feels like ordinary engineering while you are on it and only looks like a deviation when the diff is read against the plan, which is why this happens after the work, before anyone is asked to verify it.
 
 `endless task reconcile <id>` shows every item, its earlier verdict and answer, what changed since the last reconciliation, and a file to fill in: one `[[entry]]` per active item, with a **verdict** and a note.
 
@@ -560,11 +560,11 @@ A `todo` or `bugfix` is handed over only after a **reconciliation**: the agent's
 
 If it files questions, list them in the order it prints them as your final message and stop. After your user answers, make any changes and reconcile again. An item whose earlier question was answered and whose verdict is unchanged needs `answer_holds = true` with a one-line reason, or `reask = true` with what changed: judge the earlier answer against the whole task as it is now, not the item alone — a redesign can make an answer wrong that was right before. A changed verdict always files a new question. Re-approving after a redesign closes, as moot, the open questions on withdrawn items.
 
-**The gate.** Setting `unverified`, or `assumed`, refuses a `todo` or `bugfix` unless all of these hold, and `task verify` checks them again as a backstop:
+**The gate.** Setting `unverified`, or `assumed`, refuses a task with plan items, and any `todo` or `bugfix`, unless all of these hold, and `task verify` checks them again as a backstop:
 
 - the task has at least one active deliverable item;
 - the items match what the user approved (re-approve with `task approve` after a change);
-- the latest reconciliation is current: no code outside `.endless/` changed on the branch since (a clean `git rebase` does not count; an edit does — and for work committed straight onto the base branch, any change to the tracked tree outside `.endless/` does), and no item changed since;
+- the latest reconciliation is current: no code outside `.endless/` changed on the branch since (a clean `git rebase` does not count; an edit does), and no item changed since;
 - every active item has exactly one entry, and every discrepancy's question is settled — answered or closed, by anyone — or carries a kept earlier answer.
 
 `worktree land`'s own move to `assumed` is not gated: the verify it requires already was. A task with no items at all is let through by `task verify` only, because it reached `unverified` before itemized plans existed.

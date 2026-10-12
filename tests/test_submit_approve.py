@@ -19,6 +19,7 @@ import pytest
 import click
 
 from endless import task_cmd, db
+from plan_item_steps import itemize
 
 # E-1813: submit proposes both ratings and approve ratifies them, so the happy
 # paths below pass them; the refusals are pinned at the bottom of the file.
@@ -32,9 +33,11 @@ def _status_of(item_id: int) -> str:
 
 
 def _add(**kw) -> int:
-    """`task add`, then a plan attached without promotion (E-1993)."""
+    """`task add`, then a plan attached without promotion (E-1993), itemized
+    as approval requires (E-2280)."""
     item_id = task_cmd.add_item(**kw)
     task_cmd.update_plan(item_id=item_id, plan="# Plan\nbody\n", keep_status=True)
+    itemize(item_id)
     return item_id
 
 

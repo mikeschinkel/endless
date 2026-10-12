@@ -3666,11 +3666,11 @@ def assume_item(item_id: int, cascade: bool = False, outcome: str | None = None)
         )
 
     _require_status_allowed_for_type("assumed", row[0]["type"])
-    if row[0]["status"] != "assumed":
-        from endless import plan_items
-        plan_items.require_gate(item_id, "move to assumed")
     if cascade:
         _refuse_cascade_across_typed_descendants(item_id, "assumed")
+    if row[0]["status"] != "assumed":
+        from endless import plan_items
+        plan_items.require_gate(item_id, "move to assumed", to="assumed")
 
     if row[0]["status"] == "assumed" and not cascade:
         click.echo(
@@ -6076,6 +6076,9 @@ def update_plan(
             )
         else:
             _refuse_unrated_approve(item_id, effective)
+            # E-2280: and the item rule, and the baseline below, as approve does.
+            from endless import plan_items
+            plan_items.require_deliverable(item_id, "approved")
 
     if status in _ABANDONMENT_STATUSES and outcome is not None and reason is None:
         reason, outcome = outcome, None
@@ -6137,12 +6140,12 @@ def update_plan(
         # task does not count (E-1531, Mike's ruling). Every closing move is a
         # decision of its own, and says why of its own.
         _require_reason_for_abandonment(status, reason)
-        # E-2280: handing work over is gated on a current, settled
+        # E-2280: `unverified` and `assumed` are gated on a current, settled
         # reconciliation. `worktree land`'s own move to `assumed` does not come
         # through here, and needs no gate: the verify it requires already ran it.
         if status in ("unverified", "assumed") and status != row[0]["status"]:
             from endless import plan_items
-            plan_items.require_gate(item_id, f"move to {status}")
+            plan_items.require_gate(item_id, f"move to {status}", to=status)
         # E-1993: `submitted` means "planned, awaiting approval" by every route
         # to it — `task submit`, the plan-attach promotion, and this one — so it
         # needs a plan, already stored or arriving in this same update.
@@ -6379,6 +6382,9 @@ def update_plan(
         entity_id=str(item_id),
         payload={"fields": fields},
     )
+    if gated and status == "ready":
+        from endless import plan_items
+        plan_items.baseline(item_id)
 
     # E-2120: audience-gate the status render. An agent is shown the fields it
     # ASKED to change; a status entry it did not ask for — the E-1993

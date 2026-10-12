@@ -996,9 +996,7 @@ CREATE TABLE IF NOT EXISTS task_plan_items (
 -- handing over a verify, of how the work compares with every active plan item.
 -- seq is per task. fingerprint is the `git patch-id --stable` of the branch's
 -- own changes (merge-base with the base branch to HEAD, `.endless/` excluded),
--- so a clean rebase leaves it alone and an edit does not; on the base branch
--- itself, where there is no such diff, it hashes the tracked tree outside
--- `.endless/` instead. plan_digest hashes the
+-- so a clean rebase leaves it alone and an edit does not. plan_digest hashes the
 -- item set it was made against (monitor.PlanDigest), so any item change after it
 -- makes it stale without comparing second-resolution timestamps. plan_changed records
 -- that the plan was re-approved since the previous reconciliation.

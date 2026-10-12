@@ -94,7 +94,7 @@ func digestOf(t *testing.T, db *sql.DB) string {
 
 func mustCheck(t *testing.T, db *sql.DB, fp string, mode Mode) Result {
 	t.Helper()
-	r, err := check(db, task, fp, mode)
+	r, err := check(db, task, fp, mode, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -125,11 +125,16 @@ func TestGate_PassesWhenCurrentAndSettled(t *testing.T) {
 }
 
 func TestGate_EachConditionOnItsOwn(t *testing.T) {
-	t.Run("not gated type", func(t *testing.T) {
+	t.Run("research with no items", func(t *testing.T) {
 		db := newDB(t, 3) // research
 		if r := mustCheck(t, db, "fp", ModeHandover); !r.Pass || r.Skipped == "" {
 			t.Fatalf("research gated: %+v", r)
 		}
+	})
+	t.Run("research with items", func(t *testing.T) {
+		db := newDB(t, 3) // research
+		item(t, db, 1, "deliverable", "planned", "active", true)
+		wantProblem(t, mustCheck(t, db, "fp", ModeHandover), "has not been reconciled")
 	})
 	t.Run("no deliverable", func(t *testing.T) {
 		db := newDB(t, 1)
@@ -244,8 +249,12 @@ func TestFingerprint_OwnChangesOnly(t *testing.T) {
 	gitRun(t, dir, "checkout", "-q", "-b", "task/1")
 
 	ctx := context.Background()
-	if _, _, err := Fingerprint(ctx, dir); err != nil {
+	fp0, _, err := Fingerprint(ctx, dir)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if fp0 != EmptyFingerprint {
+		t.Errorf("no own changes: %q, want %q", fp0, EmptyFingerprint)
 	}
 
 	write(t, dir, "a.go", "package a\n\nfunc A() {}\n")
@@ -278,30 +287,21 @@ func TestFingerprint_OwnChangesOnly(t *testing.T) {
 	}
 }
 
-// TestFingerprint_OnTheBaseBranch: work committed straight onto the base branch
-// has no branch of its own to diff, so the tracked tree outside .endless/ is
-// what is fingerprinted.
-func TestFingerprint_OnTheBaseBranch(t *testing.T) {
-	dir := t.TempDir()
-	gitRun(t, dir, "init", "-q", "-b", "main")
-	write(t, dir, "a.go", "package a\n")
-	commit(t, dir, "base")
-	ctx := context.Background()
-	fp0, _, err := Fingerprint(ctx, dir)
+// The gate stands aside for a move the lifecycle refuses outright, so the
+// lifecycle's refusal — which names the reachable statuses — is what is shown.
+func TestGate_StandsAsideForAnIllegalMove(t *testing.T) {
+	db := newDB(t, 1)
+	mustExec(t, db, `UPDATE tasks SET status = 'unplanned' WHERE id = ?`, task)
+	r, err := check(db, task, "fp", ModeHandover, "unverified")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !strings.HasPrefix(fp0, "tree:") {
-		t.Fatalf("fingerprint on the base branch = %q, want a tree fingerprint", fp0)
+	if !r.Pass || r.Skipped == "" {
+		t.Fatalf("gate did not stand aside for unplanned → unverified: %+v", r)
 	}
-	write(t, dir, ".endless/x", "x\n")
-	commit(t, dir, "Endless: ledger")
-	if fp, _, _ := Fingerprint(ctx, dir); fp != fp0 {
-		t.Errorf("an .endless/-only commit changed the fingerprint")
+	mustExec(t, db, `UPDATE tasks SET status = 'underway' WHERE id = ?`, task)
+	if r, err = check(db, task, "fp", ModeHandover, "unverified"); err != nil {
+		t.Fatal(err)
 	}
-	write(t, dir, "a.go", "package a\n\nvar A = 1\n")
-	commit(t, dir, "code")
-	if fp, _, _ := Fingerprint(ctx, dir); fp == fp0 {
-		t.Errorf("a code commit left the fingerprint unchanged")
-	}
+	wantProblem(t, r, "no active deliverable")
 }

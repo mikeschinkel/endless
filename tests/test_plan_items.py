@@ -14,8 +14,6 @@ from click.exceptions import ClickException
 
 from endless import config, plan_items
 
-pytestmark = pytest.mark.real_plan_items
-
 
 def _write(tmp_path: Path, name: str, body: str) -> str:
     p = tmp_path / name
@@ -218,7 +216,7 @@ def seams(monkeypatch):
             return {"rows": [_row(1, "a"), _row(2, "b"), _row(3, "c")]}
         if verb == "plan-readiness":
             return {"status": state["status"], "unapproved": state["unapproved"],
-                    "gated": True, "type": "todo", "deliverables": 1}
+                    "must_itemize": True, "active": 1, "type": "todo", "deliverables": 1}
         if verb == "fingerprint":
             return {"fingerprint": "fp1", "head": "abc"}
         if verb == "task-questions":
@@ -303,3 +301,28 @@ def test_the_plan_redirect_is_gone():
     result = CliRunner().invoke(main, ["plan", "list"])
     assert result.exit_code != 0
     assert "renamed to 'task'" not in result.output
+
+
+# --- `task update --status ready` is approval by another verb ---------------
+
+def _submitted_todo() -> int:
+    from endless import task_cmd
+    tid = task_cmd.add_item(title="Add a thing", description="short", plan="# plan\n")
+    task_cmd.update_plan(item_id=tid, status="submitted", complexity="low", risk="low")
+    return tid
+
+
+def test_update_to_ready_refuses_a_todo_without_items(seeded_project_at_cwd):
+    from endless import task_cmd
+    tid = _submitted_todo()
+    with pytest.raises(ClickException, match="no active deliverable plan item"):
+        task_cmd.update_plan(item_id=tid, status="ready")
+
+
+def test_update_to_ready_baselines_the_items(seeded_project_at_cwd):
+    from endless import task_cmd
+    from plan_item_steps import itemize
+    tid = _submitted_todo()
+    itemize(tid)
+    task_cmd.update_plan(item_id=tid, status="ready")
+    assert plan_items.readiness(tid)["unapproved"] is False

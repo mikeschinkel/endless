@@ -4420,7 +4420,7 @@ def task_reconcile(item_id, file_path):
     Without --file: show every item, its earlier verdict and answer, what
     changed since the last reconciliation, and a file to fill in. With --file:
     record it, file a kind-tagged question for each discrepancy, and list them.
-    Run after implementing and before handing over a verify.
+    Run after implementing and before setting the task to `unverified`.
     """
     from endless import plan_items
     if file_path is None:

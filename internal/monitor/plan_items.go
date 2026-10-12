@@ -302,13 +302,14 @@ func TasksWithPlanItems(projectID int64) ([]int64, error) {
 }
 
 // PlanReadiness is what approval and spawn need to know about a task's items:
-// whether its type is gated, and whether it has an active deliverable.
+// whether its type must be itemized, and whether it has an active deliverable.
 type PlanReadiness struct {
 	TaskID       int64  `json:"task_id"`
 	Type         string `json:"type"`
 	Status       string `json:"status"`
-	Gated        bool   `json:"gated"`
+	MustItemize  bool   `json:"must_itemize"`
 	Items        int    `json:"items"`
+	Active       int    `json:"active"`
 	Deliverables int    `json:"deliverables"`
 	Unapproved   bool   `json:"unapproved"`
 }
@@ -331,10 +332,11 @@ func ReadPlanReadiness(taskID int64) (PlanReadiness, error) {
 	if err != nil {
 		return r, err
 	}
-	r.Gated = planitem.IsGatedType(r.Type)
+	r.MustItemize = planitem.MustItemize(r.Type)
 	var unapproved int
 	err = db.QueryRow(
 		`SELECT count(*),
+		        COALESCE(SUM(state = ?), 0),
 		        COALESCE(SUM(state = ? AND kind = ?), 0),
 		        COALESCE(SUM(CASE
 		            WHEN state = ? AND (approved_at IS NULL OR statement != approved_statement
@@ -342,9 +344,9 @@ func ReadPlanReadiness(taskID int64) (PlanReadiness, error) {
 		            WHEN state = ? AND approved_at IS NOT NULL THEN 1
 		            ELSE 0 END), 0)
 		   FROM task_plan_items WHERE task_id = ?`,
-		planitem.StateActive, planitem.KindDeliverable,
+		planitem.StateActive, planitem.StateActive, planitem.KindDeliverable,
 		planitem.StateActive, planitem.StateWithdrawn, taskID,
-	).Scan(&r.Items, &r.Deliverables, &unapproved)
+	).Scan(&r.Items, &r.Active, &r.Deliverables, &unapproved)
 	r.Unapproved = unapproved > 0
 	return r, err
 }

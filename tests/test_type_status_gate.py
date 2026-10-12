@@ -15,6 +15,7 @@ import click
 import pytest
 
 from endless import db, task_cmd
+from plan_item_steps import itemize, reconcile_as_planned
 
 # task_types seed (internal/schema/schema.sql): 1=task 2=bug 3=research 4=epic.
 _TASK = 1
@@ -77,12 +78,16 @@ def test_add_research_unverified_rejected(seeded_project_at_cwd):
 
 def test_update_task_unverified_allowed(seeded_project_at_cwd):
     tid = _add_task("Implement the widget", type_id=_TASK)
+    itemize(tid)
+    reconcile_as_planned(tid)
     task_cmd.update_plan(tid, status="unverified")
     assert _status(tid) == "unverified"
 
 
 def test_update_bug_unverified_allowed(seeded_project_at_cwd):
     tid = _add_task("Fix the crash", type_id=_BUG)
+    itemize(tid)
+    reconcile_as_planned(tid)
     task_cmd.update_plan(tid, status="unverified")
     assert _status(tid) == "unverified"
 

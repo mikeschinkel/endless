@@ -136,7 +136,16 @@ es task approve E-1 >/dev/null
 assert_eq "re-approved" "ready" "$(field E-1 'd["status"]')"
 
 section "Reconciling, and the gate"
+# The work lives on a task branch, as it does in a worktree; the fingerprint is
+# that branch's own changes against main.
+( cd "$PROJ" && git checkout -q -b task/1 && echo 'package widget' >widget.go &&
+  git add widget.go && git commit -qm "widget" ) >"$TMP/git.log" 2>&1 \
+    || setup_error "cannot start the task branch: $(cat "$TMP/git.log")"
 assert_contains "the gate refuses an unreconciled task" "has not been reconciled" "$(gate 1)"
+out="$(es task update E-1 --status unverified)"
+assert_contains "from ready the lifecycle's refusal is the one shown" "not a legal status change" "$out"
+es task update E-1 --status underway >/dev/null
+assert_eq "the work is underway" "underway" "$(field E-1 'd["status"]')"
 out="$(es task update E-1 --status unverified)"
 assert_contains "setting unverified runs the gate" "cannot move to unverified yet" "$out"
 
@@ -185,7 +194,7 @@ assert_contains "show --plan carries the verdict and the answer" "EQ-1 answered:
 
 ( cd "$PROJ" && mkdir -p .endless/x && echo x >.endless/x/f && git add .endless/x && git commit -qm "endless only" )
 assert_contains "a commit touching only .endless/ leaves it current" '"pass":true' "$(gate 1)"
-( cd "$PROJ" && echo 'package widget' >widget.go && git add -A && git commit -qm "code" )
+( cd "$PROJ" && echo 'func Render() {}' >>widget.go && git add widget.go && git commit -qm "code" )
 assert_contains "a code change makes it stale" "code changed since the last reconciliation" "$(gate 1)"
 
 section "The old redirect"

@@ -4,10 +4,11 @@
 A plan item is a one-line statement of something that will be true when the
 task is done, numbered `P3` within its task (`E-2280.P3` from outside it). A
 `deliverable` states what the work makes true; an `exclusion` states what the
-task will not do or change. After implementing and before handing over a
-verify, the agent reconciles: one verdict per active item. Every discrepancy
-becomes an open question tagged with its kind, and the gate refuses a hand-over
-until the reconciliation is current and every one of them is settled.
+task will not do or change. After implementing and before setting the task to
+`unverified`, the agent reconciles: one verdict per active item. Every
+discrepancy becomes an open question tagged with its kind, and the gate refuses
+`unverified` (and `assumed`) until the reconciliation is current and every one
+of them is settled.
 
 **Zero Python SQLite.** Reads go through `endless-go session-query`, writes
 through `endless-go event emit`, which validates and completes each change under
@@ -511,20 +512,25 @@ def reconcile(task_id: int, path: str) -> None:
     click.echo()
     click.echo("List these in that order as your final message and stop. After "
                "the user answers, record the answers, make any changes, reconcile "
-               "again, and only then hand over the verify.")
+               "again, and only then set the task to `unverified`.")
 
 
 # The gate ------------------------------------------------------------------
 
-def gate(task_id: int, mode: str = "handover") -> dict:
+def gate(task_id: int, mode: str = "handover", to: str | None = None) -> dict:
     repo = task_repo(task_id)
-    return _go(["reconcile-gate", "--id", str(task_id), "--repo", str(repo),
-                "--mode", mode])
+    args = ["reconcile-gate", "--id", str(task_id), "--repo", str(repo), "--mode", mode]
+    if to:
+        args += ["--to", to]
+    return _go(args)
 
 
-def require_gate(task_id: int, action: str, mode: str = "handover") -> None:
-    """Refuse `action` unless the task's reconciliation is current and settled."""
-    res = gate(task_id, mode)
+def require_gate(task_id: int, action: str, mode: str = "handover",
+                 to: str | None = None) -> None:
+    """Refuse `action` unless the task's reconciliation is current and settled.
+    `to` is the status being moved to: when the lifecycle refuses that move
+    itself, the gate stands aside so the lifecycle's refusal is the one shown."""
+    res = gate(task_id, mode, to)
     if res.get("pass"):
         return
     problems = "\n".join(f"  - {p}" for p in res.get("problems") or [])
@@ -532,15 +538,16 @@ def require_gate(task_id: int, action: str, mode: str = "handover") -> None:
         f"E-{task_id} cannot {action} yet; its reconciliation gate refused:\n{problems}",
         f"Reconcile with `endless task reconcile E-{task_id}` (it shows what to "
         "fill in), and stop for the user's answers to any discrepancy before "
-        "handing over",
+        "setting it to `unverified`",
         text=f"E-{task_id} cannot {action} yet:\n{problems}",
     )
 
 
 def require_deliverable(task_id: int, action: str) -> None:
-    """Refuse `action` on a gated-type task with no active deliverable item."""
+    """Refuse `action` on a task with no active deliverable item when its type
+    must be itemized or it has active items (only exclusions, say)."""
     r = readiness(task_id)
-    if r["gated"] and r["deliverables"] == 0:
+    if (r["must_itemize"] or r["active"]) and r["deliverables"] == 0:
         raise agent_help.no_report(
             f"E-{task_id} is a {r['type']} task with no active deliverable plan "
             f"item, so it cannot be {action}. Its plan must be itemized first.",

@@ -67,12 +67,15 @@ const (
 // QuestionKinds lists the kinds in rank order, most concerning first.
 var QuestionKinds = []string{QuestionExcluded, QuestionLess, QuestionBlocked, QuestionDifferent, QuestionMore}
 
-// GatedTypes are the task type slugs whose hand-over is gated on a current
-// reconciliation. One place: adding the docs type (E-2147) is one entry here.
-var GatedTypes = []string{"todo", "bugfix"}
+// ItemizedTypes are the task type slugs whose plans must be itemized: a task of
+// one cannot be approved, spawned or set to `unverified` without an active
+// deliverable item. Any task that has plan items is gated on a current
+// reconciliation, whatever its type; these types are the ones that must have
+// them. One place: adding the docs type (E-2147) is one entry here.
+var ItemizedTypes = []string{"todo", "bugfix"}
 
-// IsGatedType reports whether tasks of this type slug are gated.
-func IsGatedType(slug string) bool { return slices.Contains(GatedTypes, slug) }
+// MustItemize reports whether tasks of this type slug must have plan items.
+func MustItemize(slug string) bool { return slices.Contains(ItemizedTypes, slug) }
 
 // FrozenStatuses are the task statuses in which items and reconciliations can
 // no longer change: from `unverified` on. `revisit` unfreezes them.

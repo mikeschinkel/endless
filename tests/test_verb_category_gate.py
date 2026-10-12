@@ -23,6 +23,7 @@ import click
 import pytest
 
 from endless import db, matchers, task_cmd
+from plan_item_steps import itemize, reconcile_as_planned
 
 
 def _add_valid_todo(title: str = "Fix the parser") -> int:
@@ -169,6 +170,8 @@ def test_update_status_only_does_not_trip_gate(seeded_project_at_cwd):
     gate — an unrelated edit to a pre-existing row is never retroactively
     blocked."""
     tid = _add_valid_todo("Fix the parser")
+    itemize(tid)
+    reconcile_as_planned(tid)
     task_cmd.update_plan(tid, status="assumed")
     row = db.query("SELECT status FROM tasks WHERE id = ?", (tid,))
     assert row[0]["status"] == "assumed"

@@ -17,6 +17,7 @@ import click
 import pytest
 
 from endless import db, task_cmd
+from plan_item_steps import itemize
 
 
 def _add_task(title: str, status: str = "unplanned", task_type: str = "todo") -> int:
@@ -75,6 +76,7 @@ def test_the_documented_path_runs_unimpeded(seeded_project_at_cwd):
     """
     tid = _add_task("Add a thing and walk it", status="unplanned")
     task_cmd.update_plan(item_id=tid, plan="# Plan\n", keep_status=True)
+    itemize(tid)  # approval needs an itemized plan (E-2280)
     for status in ("submitted", "ready", "underway"):
         # E-1813: submitting and approving carry both ratings.
         rated = (

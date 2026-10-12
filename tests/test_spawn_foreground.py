@@ -43,6 +43,9 @@ def fg_env(monkeypatch):
     # subprocess.run is captured below, so the open-questions read (a Go
     # call) cannot answer; this task has none.
     monkeypatch.setattr(task_cmd, "_open_questions", lambda item_id: [])
+    # Likewise the plan-items read (E-2280): this task has its deliverable.
+    from endless import plan_items
+    monkeypatch.setattr(plan_items, "require_deliverable", lambda *a, **k: None)
     monkeypatch.setattr(task_cmd, "_resolve_project", lambda *a, **k: (None, "p"))
     monkeypatch.setattr(task_cmd, "_perform_claim_work",
                         lambda **k: (Path("/wt/e-1705"), True))

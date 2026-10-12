@@ -21,6 +21,7 @@ Nor in a project that turned the report channel off with `"report_gate": false`
 import pytest
 
 from endless import agent_help, config, db, task_cmd
+from plan_item_steps import itemize, reconcile_as_planned
 
 # Stable substring of the reminder — the pointer at the report command.
 # The reminder renders `endless task report E-<id>`; this fragment is what
@@ -60,6 +61,11 @@ def _add_task(title: str, status: str = "underway", type_id: int = 1) -> int:
         "VALUES (?, ?, 1, 'ended', ?, '2026-08-01T00:00:00')",
         (task_cmd._current_endless_session_id(), f"uuid-report-reminder-{task_id}", task_id),
     )
+    # A todo or bugfix underway has its plan items, and these tests wind it down
+    # as finished work: reconciled, as `unverified` and `assumed` require (E-2280).
+    if type_id in (1, 2) and status == "underway":
+        itemize(task_id)
+        reconcile_as_planned(task_id)
     return task_id
 
 

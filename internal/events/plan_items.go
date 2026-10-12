@@ -410,7 +410,7 @@ func ptrNullIfEmpty(s *string) any {
 // task.plan_baselined
 
 // PreparePlanBaselined refuses a baseline the gate could never pass: a task of
-// a gated type with no active deliverable item. It also refuses a frozen task.
+// one that must be itemized, or that has items, with no active deliverable. It also refuses a frozen task.
 func PreparePlanBaselined(db dbQuerier, taskID int64) error {
 	facts, err := readTaskFacts(db, taskID)
 	if err != nil {
@@ -419,15 +419,15 @@ func PreparePlanBaselined(db dbQuerier, taskID int64) error {
 	if planitem.IsFrozen(facts.Status) {
 		return fmt.Errorf("E-%d is %s, so its plan items are frozen", taskID, facts.Status)
 	}
-	if !planitem.IsGatedType(facts.Type) {
-		return nil
-	}
-	var n int
+	var active, n int
 	if err := db.QueryRow(
-		`SELECT count(*) FROM task_plan_items WHERE task_id = ? AND state = ? AND kind = ?`,
-		taskID, planitem.StateActive, planitem.KindDeliverable,
-	).Scan(&n); err != nil {
+		`SELECT count(*), COALESCE(SUM(kind = ?), 0) FROM task_plan_items WHERE task_id = ? AND state = ?`,
+		planitem.KindDeliverable, taskID, planitem.StateActive,
+	).Scan(&active, &n); err != nil {
 		return fmt.Errorf("count deliverable items of E-%d: %w", taskID, err)
+	}
+	if !planitem.MustItemize(facts.Type) && active == 0 {
+		return nil
 	}
 	if n == 0 {
 		return fmt.Errorf("E-%d is a %s task with no active deliverable plan item", taskID, facts.Type)

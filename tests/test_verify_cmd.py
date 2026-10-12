@@ -21,6 +21,16 @@ from endless import unlanded, verify_cmd
 
 
 @pytest.fixture(autouse=True)
+def stub_reconcile_gate(monkeypatch):
+    """Take the reconciliation backstop (E-2280) out of these tests, like the
+    clean-tree check: they drive made-up task ids with no database behind them
+    and fake subprocess.run. The gate is pinned in test_plan_items.py and the
+    Go gate tests."""
+    from endless import plan_items
+    monkeypatch.setattr(plan_items, "require_gate", lambda *a, **k: None)
+
+
+@pytest.fixture(autouse=True)
 def stub_unlanded(monkeypatch):
     """Take the `unlanded` bookkeeping (E-2262) out of these tests: they pin how
     the runner is invoked and how a pass is recorded on main, and fake

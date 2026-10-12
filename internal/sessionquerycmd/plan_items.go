@@ -75,6 +75,7 @@ func runReconcileGate(args []string) error {
 	id := fs.Int64("id", 0, "task id")
 	repo := fs.String("repo", "", "the task's worktree (or checkout)")
 	mode := fs.String("mode", string(reconcilegate.ModeHandover), "handover | backstop")
+	to := fs.String("to", "", "the status being moved to; the gate stands aside when the lifecycle refuses the move")
 	if err := parseFlags(fs, "reconcile-gate", args); err != nil {
 		return err
 	}
@@ -89,7 +90,7 @@ func runReconcileGate(args []string) error {
 	if err != nil {
 		return err
 	}
-	res, err := reconcilegate.Check(*id, fp, m)
+	res, err := reconcilegate.Check(*id, fp, m, *to)
 	if err != nil {
 		return err
 	}
