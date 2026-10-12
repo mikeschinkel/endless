@@ -1,0 +1,1 @@
+Mike asked for research first: the set of hooks and commands to allow outside an Endless server is unknown, and the answer shapes what the filtering task does.
