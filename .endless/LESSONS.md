@@ -7465,3 +7465,7 @@ E-2280 made approval, spawn and unverified require plan items and a reconciliati
 ### [2026-10-11] Name the concrete status, not 'hand over', in decisions and user-facing text
 E-2280's decision ED-1618 was titled 'Hand over a todo or bugfix only after...'. Mike found 'hand over' ambiguous. Say what actually happens, e.g. 'set to unverified'. He also asked why the rule was keyed on 'todo and bugfix' rather than 'tasks with plan items': key a rule on the property that makes it apply, not on the types that happen to have it today.
 - **Project**: endless
+
+### [2026-10-11] Search for an owning task before recommending a new one, not just before filing
+In E-2166's session I found that two of eight intended Claude hook events were never installed, and recommended Mike file a new task for detecting that drift. I had not searched the ledger for an owning task. E-1398 ('Add a command to install the Claude hooks', now/unplanned, unclaimed) already says in its own description that the command 'installs and verifies' the entries, and its original context said 'detect missing/incorrect entries' outright. The install half shipped as endless setup claude-hook; the verify half is exactly what I was proposing to file. ED-1550 says to search for an owning task first and fold findings into an open task as evidence — I applied that rule only at the moment of filing, not at the moment of RECOMMENDING a filing, which is where it actually costs Mike something: he spent a turn weighing a decision that did not need to exist.
+- **Project**: endless
