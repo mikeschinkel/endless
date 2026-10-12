@@ -1,0 +1,74 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 11,
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test: templatecmd",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest: prime, spawn gate, handoff",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest runs and passes: test_a_framed_epic_is_not_refused_as_planless",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest runs and passes: test_claim_starts_a_framed_epic",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest runs and passes: test_an_unframed_epic_is_refused_naming_context",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest runs and passes: test_an_unframed_brainstorm_is_refused_naming_context",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest runs and passes: test_a_framed_bugfix_still_needs_a_plan",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest runs and passes: test_a_framed_todo_still_needs_a_plan",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest runs and passes: test_prime_does_not_draft_for_a_framed_epic",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest runs and passes: test_a_primed_epic_handoff_starts_from_its_framing",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go test runs and passes: TestRender_EpicHandoff_ContextOrPlan",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
