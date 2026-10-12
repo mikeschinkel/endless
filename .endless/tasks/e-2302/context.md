@@ -1,0 +1,3 @@
+Mike, 2026-10-11, in the E-2300 planning session: tmux servers outside the ones Endless controls are not supported, so some of Endless's hooks should act only when run inside an Endless tmux server (E-2240). Some Endless commands must still work outside tmux, such as setup and --help. Tmux is an enabling technology for Endless, not part of its foundation; other multiplexers may follow, so the test should be "inside an Endless-controlled server", not "inside tmux".
+
+Start with research: identify which hooks and commands should be allowed outside an Endless server, and whether some hooks should still act there.
