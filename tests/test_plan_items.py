@@ -326,3 +326,29 @@ def test_update_to_ready_baselines_the_items(seeded_project_at_cwd):
     itemize(tid)
     task_cmd.update_plan(item_id=tid, status="ready")
     assert plan_items.readiness(tid)["unapproved"] is False
+
+
+def test_spawn_refuses_items_the_user_has_not_approved(seeded_project_at_cwd):
+    from plan_item_steps import itemize
+    tid = _submitted_todo()
+    itemize(tid)
+    with pytest.raises(ClickException) as exc:
+        plan_items.require_approved(tid, "spawned")
+    assert "have not been approved" in str(exc.value)
+    assert f"endless task approve E-{tid}" in str(exc.value)
+    plan_items.baseline(tid)
+    plan_items.require_approved(tid, "spawned")
+
+
+def test_spawn_refuses_items_changed_since_approval(seeded_project_at_cwd):
+    from plan_item_steps import itemize
+    tid = _submitted_todo()
+    itemize(tid)
+    plan_items.baseline(tid)
+    itemize(tid, "And a second thing")
+    with pytest.raises(ClickException):
+        plan_items.require_approved(tid, "spawned")
+
+
+def test_a_task_with_no_items_needs_no_approval_to_spawn(seeded_project_at_cwd):
+    plan_items.require_approved(_submitted_todo(), "spawned")

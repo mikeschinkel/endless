@@ -549,6 +549,22 @@ def require_gate(task_id: int, action: str, mode: str = "handover",
     )
 
 
+def require_approved(task_id: int, action: str) -> None:
+    """Refuse `action` on a task whose plan items are not the ones the user
+    approved: never approved, or changed since. Approving them is the user's."""
+    r = readiness(task_id)
+    if r["active"] and r["unapproved"]:
+        raise agent_help.report(
+            f"E-{task_id}'s plan items have not been approved as they stand, so "
+            f"it cannot be {action}. Nothing changed.",
+            "whether to approve the plan items",
+            text=(f"E-{task_id}'s plan items have not been approved as they "
+                  f"stand, so it cannot be {action}. Read them and approve them:\n"
+                  f"    endless task show E-{task_id} --plan\n"
+                  f"    endless task approve E-{task_id}"),
+        )
+
+
 def require_deliverable(task_id: int, action: str) -> None:
     """Refuse `action` on a task with no active deliverable item when its type
     must be itemized or it has active items (only exclusions, say)."""

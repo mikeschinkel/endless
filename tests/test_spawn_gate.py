@@ -115,3 +115,30 @@ def test_show_of_an_unparked_task_says_nothing_about_questions(seeded_project_at
     assert "Parked:" not in human
     data = json.loads(runner.invoke(main, ["task", "show", str(item_id), "--json"]).output)
     assert data["open_questions"] == []
+
+
+def test_allow_open_questions_starts_it_and_names_them(seeded_project_at_cwd, capsys):
+    item_id = _task(plan="# Plan\nbody\n")
+    question_cmd.ask_questions(item_id, ("Which way round?",))
+    task_cmd._require_spawnable(item_id, "spawn", allow_open_questions=True)
+    err = capsys.readouterr().err
+    assert "with EQ-" in err and "Which way round?" in err
+
+
+def test_the_spawn_refusal_names_the_flag(seeded_project_at_cwd):
+    item_id = _task(plan="# Plan\nbody\n")
+    question_cmd.ask_questions(item_id, ("Which way round?",))
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd._require_spawnable(item_id, "spawn")
+    assert "--allow-open-questions" in str(exc.value)
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd._require_spawnable(item_id, "claim")
+    assert "--allow-open-questions" not in str(exc.value)
+
+
+def test_allow_open_questions_does_not_excuse_a_missing_plan(seeded_project_at_cwd):
+    item_id = _task()
+    question_cmd.ask_questions(item_id, ("Which way round?",))
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd._require_spawnable(item_id, "spawn", allow_open_questions=True)
+    assert "has no plan" in str(exc.value)

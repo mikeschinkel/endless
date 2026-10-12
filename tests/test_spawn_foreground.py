@@ -46,6 +46,7 @@ def fg_env(monkeypatch):
     # Likewise the plan-items read (E-2280): this task has its deliverable.
     from endless import plan_items
     monkeypatch.setattr(plan_items, "require_deliverable", lambda *a, **k: None)
+    monkeypatch.setattr(plan_items, "require_approved", lambda *a, **k: None)
     monkeypatch.setattr(task_cmd, "_resolve_project", lambda *a, **k: (None, "p"))
     monkeypatch.setattr(task_cmd, "_perform_claim_work",
                         lambda **k: (Path("/wt/e-1705"), True))

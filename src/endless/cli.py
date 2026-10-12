@@ -4044,10 +4044,13 @@ def task_handoff(item_id):
 @click.option("--out-of-order", "out_of_order", is_flag=True,
               help="Start it even though a task that should precede it is "
                    "unfinished. Those tasks are still listed.")
+@click.option("--allow-open-questions", "allow_open_questions", is_flag=True,
+              help="Start it with its questions still open. Each is listed.")
 def task_spawn(item_id, project, permission_mode, model, session_name,
                worktree, no_refocus, to_first, to_last, to_left, to_right,
                tmux_session, force, reopen, print_decision, bg, attach,
-               new_session, auto, target_session, out_of_order):
+               new_session, auto, target_session, out_of_order,
+               allow_open_questions):
     """Spawn Claude working on a task in a new tmux window.
 
     Spawns launch Claude as the tmux window's command and deliver the
@@ -4103,7 +4106,8 @@ def task_spawn(item_id, project, permission_mode, model, session_name,
                name=session_name, auto=auto, target_session=target_session,
                no_refocus=no_refocus,
                placement=chosen[0] if chosen else "first",
-               tmux_session=tmux_session, out_of_order=out_of_order)
+               tmux_session=tmux_session, out_of_order=out_of_order,
+               allow_open_questions=allow_open_questions)
 
 
 @task_cmd.command("prime")

@@ -132,6 +132,8 @@ assert_eq "a prose edit on a ready task keeps it ready" "ready" "$(field E-1 'd[
 out="$(es task plan edit E-1 P1 --statement "The widget renders quickly")"
 assert_contains "an item edit on a ready task drops its approval" "→ submitted" "$out"
 assert_eq "it is submitted again" "submitted" "$(field E-1 'd["status"]')"
+out="$(with_tmux es task spawn E-1)"
+assert_contains "spawn refuses items not approved as they stand" "have not been approved" "$out"
 es task approve E-1 >/dev/null
 assert_eq "re-approved" "ready" "$(field E-1 'd["status"]')"
 

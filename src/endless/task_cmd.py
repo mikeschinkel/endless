@@ -5169,9 +5169,13 @@ def _require_in_order(item_id: int, verb: str, out_of_order: bool) -> None:
 
 
 def _require_spawnable(item_id: int, verb: str, require_plan: bool = True,
-                       out_of_order: bool = False) -> None:
+                       out_of_order: bool = False,
+                       allow_open_questions: bool = False) -> None:
     """Refuse to claim or spawn a task that has no plan or has open questions,
     or (E-2270) whose predecessors are unfinished unless `out_of_order`.
+
+    E-2280: `allow_open_questions` (spawn's flag, the user's call) starts it
+    with its questions still open; each is named, so it is never silent.
 
     E-1993. Filing stays cheap — a task may be filed with no plan and with
     questions nobody can answer yet — but a session works from a plan, and a
@@ -5218,6 +5222,13 @@ def _require_spawnable(item_id: int, verb: str, require_plan: bool = True,
             f"      endless question ask {tid} \"<question>\""
         )
     questions = _open_questions(item_id)
+    if questions and allow_open_questions:
+        from endless.question_cmd import question_id_display
+        for q in questions:
+            agent_help.info(click.style(
+                f"Starting {tid} with {question_id_display(q['id'])} open: "
+                f"{q['question']}", fg="yellow"), err=True)
+        questions = []
     if questions:
         from endless.question_cmd import question_id_display
         n = len(questions)
@@ -5232,6 +5243,9 @@ def _require_spawnable(item_id: int, verb: str, require_plan: bool = True,
             "  or withdraw, reject or supersede it with --reason; fold the answers\n"
             "  into the plan."
         )
+        if verb == "spawn":
+            lines.append(f"  Or start it with them open:\n"
+                         f"      endless task spawn {tid} --allow-open-questions")
         problems.append("\n".join(lines))
     if not problems:
         # E-2270: after the plan and question refusals, which --out-of-order
@@ -7731,7 +7745,8 @@ def spawn_plan(item_id: int, project_name: str | None = None,
                name: str | None = None, auto: bool = False,
                target_session: str | None = None,
                no_refocus: bool = False, placement: str = "first",
-               tmux_session: str | None = None, out_of_order: bool = False):
+               tmux_session: str | None = None, out_of_order: bool = False,
+               allow_open_questions: bool = False):
     """Spawn a new tmux window with Claude working on a task's prompt.
 
     Pre-claims the task (status flip + worktree creation) BEFORE launching
@@ -7899,12 +7914,15 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     _check_prior_claim(item_id, current_status)
 
     # E-1993: a task with no plan, or with open questions, is not spawnable.
-    _require_spawnable(item_id, "spawn", out_of_order=out_of_order)
+    _require_spawnable(item_id, "spawn", out_of_order=out_of_order,
+                       allow_open_questions=allow_open_questions)
     # E-2280: a todo or bugfix task is spawned only with an itemized plan, so the
     # session it starts can reconcile against it. Prose-only plans already
-    # `ready` are refused too (Mike: dogfood it sooner).
+    # `ready` are refused too (Mike: dogfood it sooner). And only with the items
+    # the user approved: what it is reconciled against is what they agreed to.
     from endless import plan_items
     plan_items.require_deliverable(item_id, "spawned")
+    plan_items.require_approved(item_id, "spawned")
 
     # Pre-claim: emit status_changed, create worktree. No session binding
     # yet — Claude hasn't started. SessionStart's @endless_spawned_by
