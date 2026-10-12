@@ -149,10 +149,13 @@ decision yet. The decision drafted in the last item records them.
 15. The handoff templates (`_mechanics.tmpl`, `_close.tmpl` and the
     per-type templates) say:
     - reconcile after implementing;
-    - if there are discrepancies, list them in kind order as the final
-      message and stop;
-    - after the user answers, record the answers, make any changes,
-      reconcile again, and only then set `unverified`.
+    - if there are discrepancies, put them to the user one at a time in
+      kind order, each with what differs, the options with pros and cons,
+      and a recommendation, stopping after each so the user can ask about
+      it; record each answer before the next (Mike, after review).
+      `endless question list` shows them all at once;
+    - when all are answered, make any changes, reconcile again, and only
+      then set `unverified`.
 16. Plan-time prompting asks for items through `--items-file`. That covers
     `prime.md.tmpl`, `task prime`, and the user-level `/needs-plan`
     command.
