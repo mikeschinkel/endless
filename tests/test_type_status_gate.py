@@ -92,14 +92,15 @@ def test_update_bug_unverified_allowed(seeded_project_at_cwd):
     assert _status(tid) == "unverified"
 
 
-def test_add_task_unverified_allowed(seeded_project_at_cwd):
-    tid = task_cmd.add_item("Implement the widget", task_type="todo", status="unverified")
-    assert _status(tid) == "unverified"
-
-
-def test_add_bug_unverified_allowed(seeded_project_at_cwd):
-    tid = task_cmd.add_item("Fix the crash", task_type="bugfix", status="unverified")
-    assert _status(tid) == "unverified"
+@pytest.mark.parametrize("task_type,title", [("todo", "Implement the widget"),
+                                              ("bugfix", "Fix the crash")])
+def test_add_implementation_task_at_unverified_refused(task_type, title,
+                                                       seeded_project_at_cwd):
+    """E-2280: `unverified` is reached only after a reconciliation against the
+    task's plan items, which a task being created cannot have."""
+    with pytest.raises(click.ClickException, match="cannot be created"):
+        task_cmd.add_item(title, task_type=task_type, status="unverified")
+    assert not db.query("SELECT id FROM tasks WHERE title = ?", (title,))
 
 
 # ─── E-1577 inheritance: assumed/confirmed still rejected for research/epic ────

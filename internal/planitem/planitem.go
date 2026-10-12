@@ -77,6 +77,11 @@ var ItemizedTypes = []string{"todo", "bugfix"}
 // MustItemize reports whether tasks of this type slug must have plan items.
 func MustItemize(slug string) bool { return slices.Contains(ItemizedTypes, slug) }
 
+// ReportedStatuses are the statuses that report the work done. A task reaches
+// them only through `unverified` or `assumed`, the moves the reconciliation
+// gate guards, so a task that must be itemized cannot be created at one.
+var ReportedStatuses = []string{"unverified", "unlanded", "assumed", "confirmed", "completed"}
+
 // FrozenStatuses are the task statuses in which items and reconciliations can
 // no longer change: from `unverified` on. `revisit` unfreezes them.
 var FrozenStatuses = []string{

@@ -567,7 +567,7 @@ If it files questions, list them in the order it prints them as your final messa
 - the latest reconciliation is current: no code outside `.endless/` changed on the branch since (a clean `git rebase` does not count; an edit does), and no item changed since;
 - every active item has exactly one entry, and every discrepancy's question is settled — answered or closed, by anyone — or carries a kept earlier answer.
 
-`worktree land`'s own move to `assumed` is not gated: the verify it requires already was. A task with no items at all is let through by `task verify` only, because it reached `unverified` before itemized plans existed.
+A `todo` or `bugfix` cannot be created at `unverified` or any later status that reports its work, since nothing could have been reconciled yet. `worktree land`'s own move to `assumed` is not gated: the verify it requires already was. A task with no items at all is let through by `task verify` only, because it reached `unverified` before itemized plans existed.
 
 Found a bug in work you already landed? Reopen that task (`--status revisit`) instead of filing a new one — see [Fix a bug in your own landed work](orchestration.md#fix-a-bug-in-your-own-landed-work).
 

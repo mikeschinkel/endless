@@ -4,11 +4,13 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/planitem"
 	"github.com/mikeschinkel/endless/internal/rating"
 	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/sessionstate"
@@ -481,6 +483,17 @@ func execTaskCreated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 	status := currentStatus(p.Status, strings.TrimSpace(plan) != "")
 	if isPreJudgmentStatus(status) && strings.TrimSpace(plan) != "" {
 		status = "submitted"
+	}
+	// E-2280: a todo or bugfix reaches a status that reports its work only
+	// through the reconciliation gate, so it cannot be created at one. Executor
+	// only: an event already in the ledger replays as it was.
+	if planitem.MustItemize(typeID.String()) && slices.Contains(planitem.ReportedStatuses, status) {
+		return nil, refusal.NoReport(
+			fmt.Sprintf("a %s task cannot be created at %q: that status is reached only "+
+				"after a reconciliation against its plan items", typeID, status),
+			"Create it without --status (or at an earlier status), add its plan items, "+
+				"and reconcile before setting the status",
+		)
 	}
 	// primeRequested (E-1994): a task filed `submitted` with its plan — by the
 	// inference above or explicitly — is the moment the `prime` job may start

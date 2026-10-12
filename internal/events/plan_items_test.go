@@ -353,3 +353,29 @@ func dumpRows(t *testing.T, db *sql.DB, q string) string {
 	}
 	return b.String()
 }
+
+// A todo or bugfix reaches a status that reports its work only through the
+// reconciliation gate, so it cannot be created at one; other types can.
+func TestTaskCreated_RefusesAnItemizedTypeAtAReportedStatus(t *testing.T) {
+	h := newPlanHarness(t)
+	created := func(id int64, typ, status string) error {
+		evt := h.event(KindTaskCreated, TaskCreatedPayload{Title: "Add a thing", Type: typ, Status: status, Phase: "now"})
+		evt.Entity.ID = strconv.FormatInt(id, 10)
+		_, err := dispatch(h.db, evt, nil)
+		return err
+	}
+	for _, st := range planitem.ReportedStatuses {
+		if err := created(9001, "todo", st); err == nil || !strings.Contains(err.Error(), "cannot be created") {
+			t.Errorf("todo at %s: got %v, want a refusal", st, err)
+		}
+	}
+	if err := created(9002, "bugfix", "unverified"); err == nil {
+		t.Error("bugfix at unverified was created")
+	}
+	if err := created(9003, "todo", "underway"); err != nil {
+		t.Errorf("todo at underway: %v", err)
+	}
+	if err := created(9004, "research", "completed"); err != nil {
+		t.Errorf("research at completed: %v", err)
+	}
+}
