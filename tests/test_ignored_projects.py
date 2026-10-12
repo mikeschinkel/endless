@@ -8,7 +8,7 @@ from click.testing import CliRunner
 from endless import config, db
 from endless.cli import main
 from endless.project_path import stored
-from endless.reconcile import reconcile
+from endless.project_sync import sync_projects
 
 
 def _row(path):
@@ -107,7 +107,7 @@ def test_explicit_register_is_allowed_under_an_ignored_parent(isolated_env):
     assert config.is_ignored(parent / "other")
 
 
-def test_reconcile_skips_projects_under_an_ignored_directory(isolated_env):
+def test_sync_projects_skips_projects_under_an_ignored_directory(isolated_env):
     parent = isolated_env["projects_root"] / "third-party"
     child = parent / "lib"
     (child / ".endless").mkdir(parents=True)
@@ -117,11 +117,11 @@ def test_reconcile_skips_projects_under_an_ignored_directory(isolated_env):
     config.mark_as_group(parent)
     config.add_ignore(parent)
 
-    reconcile()
+    sync_projects()
     assert _row(child) is None
 
 
-def test_reconcile_leaves_ignored_rows_alone(isolated_env):
+def test_sync_projects_leaves_ignored_rows_alone(isolated_env):
     project_dir = isolated_env["projects_root"] / "gone-quiet"
     project_dir.mkdir()
     _register(project_dir)
@@ -132,6 +132,6 @@ def test_reconcile_leaves_ignored_rows_alone(isolated_env):
     config.add_ignore(ghost)
     ghost.rmdir()
 
-    reconcile()
+    sync_projects()
     assert _row(project_dir)["status"] == "ignored"
     assert _row(ghost)["status"] == "ignored"

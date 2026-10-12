@@ -9,8 +9,8 @@ from endless.project_path import project_name_for_cwd, stored
 
 
 def show_status(name: str | None = None):
-    from endless.reconcile import reconcile
-    reconcile()
+    from endless.project_sync import sync_projects
+    sync_projects()
 
     # Auto-detect from current directory if no name given
     if not name:

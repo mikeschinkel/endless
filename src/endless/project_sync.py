@@ -9,7 +9,7 @@ from endless import db, config
 from endless.project_path import resolved, stored
 
 
-def reconcile():
+def sync_projects():
     """Scan roots for .endless/config.json files and sync DB.
 
     - Projects found on disk but not in DB → insert
@@ -33,7 +33,7 @@ def reconcile():
     }
     # Keyed on the RESOLVED form, not the stored string (E-2002): a project
     # whose row predates this normalization must still be recognized as the
-    # same project as the directory found on disk, or reconcile inserts a
+    # same project as the directory found on disk, or the sync inserts a
     # second row for it.
     db_by_path: dict[str, dict] = {
         str(resolved(row["path"])): dict(row) for row in db_rows
@@ -82,7 +82,7 @@ def reconcile():
         else:
             # New project on disk, not in DB → insert
             # But skip if status is "unregistered", or if the directory is
-            # ignored (E-2251): reconcile is an automatic path, and only an
+            # ignored (E-2251): the sync is an automatic path, and only an
             # explicit `project register` may register under an ignored tree.
             if (cfg.get("status") != "unregistered"
                     and not config.is_ignored(disk_path)):

@@ -1,5 +1,5 @@
 """E-1915: `task remove` refuses while relations still reference the task, and
-reconcile clears the rows earlier removals already orphaned.
+the project sync clears the rows earlier removals already orphaned.
 
 `task_deps` and `decision_relations` cannot declare a foreign key on their task
 endpoint (SQLite cannot express an FK whose target table varies by row), so a
@@ -23,7 +23,7 @@ import click
 import pytest
 
 from endless import db, task_cmd
-from endless.reconcile import repair_orphan_relations
+from endless.project_sync import repair_orphan_relations
 from endless.task_cmd import STORED_DEP_TYPES
 
 
@@ -310,13 +310,13 @@ def test_repair_ignores_decision_endpoints(isolated_env):
     assert db.scalar("SELECT count(*) FROM task_deps") == 1
 
 
-def test_repair_runs_as_part_of_reconcile(isolated_env):
-    from endless.reconcile import reconcile
+def test_repair_runs_as_part_of_sync_projects(isolated_env):
+    from endless.project_sync import sync_projects
 
     _seed_project()
     live = _add_task("Live")
     _add_dep(9999, live, "blocks")
 
-    reconcile()
+    sync_projects()
 
     assert db.scalar("SELECT count(*) FROM task_deps") == 0

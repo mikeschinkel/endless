@@ -288,4 +288,4 @@ disable.
 - Go defaults: each setting's registration (`internal/settings`; checks in `internal/monitor/checks.go`).
 - Python readers needing migration (per E-954): `src/endless/config.py`,
   `src/endless/event_bridge.py`, `src/endless/register.py`,
-  `src/endless/reconcile.py`.
+  `src/endless/project_sync.py`.

@@ -1,4 +1,4 @@
-"""Scan command logic — reconcile projects and update timestamps."""
+"""Scan command logic — sync projects with disk and update timestamps."""
 
 from datetime import datetime, timezone
 from pathlib import Path
@@ -30,8 +30,8 @@ def scan_project(project_id: int, project_name: str, project_path: Path):
 
 
 def run_scan(project_name: str | None = None, docs_only: bool = False):
-    from endless.reconcile import reconcile
-    reconcile()
+    from endless.project_sync import sync_projects
+    sync_projects()
 
     click.echo(click.style("•", fg="cyan") + " Scanning projects...")
     click.echo()

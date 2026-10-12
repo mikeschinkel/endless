@@ -18,8 +18,8 @@ STATUS_COLORS = {
 def list_projects(status_filter: str | None = None, group: bool = False,
                   limit: int | None = None, no_limit: bool = False):
     cap = rowcap.resolve_cap(limit, no_limit)
-    from endless.reconcile import reconcile
-    reconcile()
+    from endless.project_sync import sync_projects
+    sync_projects()
 
     where = ""
     params = ()
