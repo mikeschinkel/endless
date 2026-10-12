@@ -68,7 +68,11 @@ decision yet. The decision drafted in the last item records them.
    kind into `approved_statement` and `approved_kind`. Both, and `task spawn`,
    refuse a todo or bugfix task with no active deliverable item, and any task
    whose only active items are exclusions. Spawn refuses an already
-   `ready` task with a prose-only plan too. `task claim` is not gated.
+   `ready` task with a prose-only plan too, and any task whose items are
+   not the approved ones (never approved, or changed since): the items a
+   session reconciles against are the ones the user agreed to. Spawn does
+   not need `ready`. `task spawn --allow-open-questions` starts a task with
+   its questions open, naming each. `task claim` is not gated.
 6. On a `ready` task, a plan edit is material only when the item set
    differs from the baseline: an item added, withdrawn, or with a changed
    statement or kind. Prose edits stop being material.
