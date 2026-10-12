@@ -8,10 +8,15 @@ Separately, claim's no-plan refusal never mentions `task bind`. So a session dra
 
 Ownership itself stays in `sessions.task_id` (`_task_claimants`, the write gate). Nothing here changes who owns a task. It changes only how that ownership is labelled and listed.
 
-## 1. A `bound` relation (ED-1497 relations; rank as defined in ED-1622)
+## 1. A `bound` relation (ED-1497 relations)
 - Append `RelationBound = 6` to `internal/sessiontaskrelation`, with slug `bound` and label `Bound`. Never renumber. Add the `schema.sql` seed row and a migration. `VerifyIntegrity` fails closed on drift.
 - Rank: directly below `claimed`, above `queued`. A later `task claim` by the same session then upgrades `bound` to `claimed`, and binding a queued task upgrades `queued` to `bound`.
 - In `session status`'s display tier (`prominence` in `relation_tier.go`), `bound` counts as decided work, alongside `claimed` and `queued`.
+
+## 1b. Rename `surfaced` to `filed`
+- Relation id 2 keeps its id. Change its slug to `filed` and its label to `Filed` in `sessiontaskrelation` and in the `schema.sql` seed, which upserts the change onto existing rows on connect (the E-1659 pattern). No data migration.
+- Update every reader and doc that names `surfaced`: the Go switch statements, the `session status` and `task show` text, the sessions guide's relation table, and the `touch`/`session task add` help.
+- Replayed `task.imported` events, which are legacy (their commands were removed in E-2142), also land as `filed`. That is accepted.
 
 ## 2. Which relation each path writes
 - `task claim` → `claimed`. No change.
@@ -51,9 +56,14 @@ Ownership itself stays in `sessions.task_id` (`_task_claimants`, the write gate)
   - `session status` shows a bound task only as the anchor
   - `session task remove` refuses a bound task
   - the hook test in section 6
+  - the slug rename (`filed`) passes `VerifyIntegrity`
+  - the backfill writes `claimed` or `bound` per the status rule and leaves stronger rows alone
 - Python:
   - `task bind` emits `task.bound`
   - claim's no-plan refusal includes the bind line, and spawn's does not
 
-## Out of scope
-- Backfilling `session_tasks` rows for sessions bound before this lands.
+## 7. Backfill existing ownership rows
+- Today 563 of the 574 sessions that hold a `sessions.task_id` have no `claimed` row for it, mostly spawned sessions, through the auto-bind gap.
+- A migration upserts one row per session that holds a `sessions.task_id`, using the same status rule as the auto-bind: `claimed` if the task has reached `underway` or later, `bound` if it is still pre-work.
+- It is upgrade-only through the normal ladder, so an existing stronger row is untouched. Upgrading `revisited` or `filed` to `claimed`/`bound` is the point.
+- The migration has to be safe to run again: a rebuild from the ledger must reach the same rows. Either the backfill is derived at projection time, or the migration runs after replay. Decide while implementing, and say which in the commit.
