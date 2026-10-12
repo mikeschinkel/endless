@@ -7453,3 +7453,7 @@ So: when I add a gate, add the gate. An escape hatch is a separate decision and 
 ### [2026-10-11] Say 'I recommended, you accepted' — never 'you picked' — for a choice I put to Mike
 In E-2293 I described the display-liveness rule as 'you picked a stricter test'. Mike corrected it: I recommended it and he accepted, possibly without seeing its ramifications. Attributing my recommendation to him overstates his ownership and hides that the reasoning (and any blind spot in it) was mine. When I recommended an option, say so, and state the ramifications I know of when recommending, not after.
 - **Project**: endless
+
+### [2026-10-11] Endless projects always use worktrees; don't design for work on the base branch
+While building E-2280's reconciliation fingerprint I added a fallback for work committed straight onto the base branch, 'as in a project without worktrees', and wrote it into the guide and plan. Mike: work is never committed straight onto the base branch, and an Endless project by definition uses worktrees. Don't invent a no-worktree project as a PRODUCT case to justify code or docs.
+- **Project**: endless
