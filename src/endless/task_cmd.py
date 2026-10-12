@@ -5069,9 +5069,12 @@ def _open_questions_for_show(item_id: int) -> list[dict]:
 # which the framing in the `context` slot is enough to start from. A brainstorm
 # is requester-led — the session is meant to draw the plan out of the person,
 # not to arrive with one — and research is an investigation whose shape is its
-# result. A todo, bugfix or epic still needs a plan: their framing describes
-# what is wanted, not how it will be built.
-_FRAMING_SUFFICES_TYPES = frozenset({"brainstorm", "research"})
+# result. A todo or bugfix still needs a plan: its framing describes what is
+# wanted, not how it will be built.
+#
+# E-2301: an epic too. It is framed by its objective and strategy, not by a
+# plan; until E-2254 adds those fields and gates on them, its context stands in.
+_FRAMING_SUFFICES_TYPES = frozenset({"brainstorm", "research", "epic"})
 
 
 def _has_sufficient_framing(task_type: str | None, content: dict) -> bool:
@@ -5165,12 +5168,28 @@ def _require_spawnable(item_id: int, verb: str, require_plan: bool = True,
     plan = (content.get("plan") or "").strip()
     # E-1994: type-aware sufficiency. A brainstorm or research task whose
     # framing is written (the `context` slot) is startable without a plan.
-    framed = _has_sufficient_framing(_task_type_slug(item_id), content)
+    task_type = _task_type_slug(item_id)
+    framed = _has_sufficient_framing(task_type, content)
+    # E-2301: for a type whose framing suffices, the plan is not the only way
+    # in, so the refusal names the framing route too.
+    framing_route = task_type in _FRAMING_SUFFICES_TYPES
     if require_plan and not plan and not framed:
+        if framing_route:
+            head = (
+                f"{tid} has no plan or context. This {task_type} can start from its\n"
+                f"  framing; the description only says what the task is. Write the\n"
+                f"  framing:\n"
+                f"      endless task update {tid} --context-file <path>\n"
+                f"  Or write the plan and attach it:\n"
+            )
+        else:
+            head = (
+                f"{tid} has no plan. A session works from the plan; the description\n"
+                f"  only says what the task is. Write the plan and attach it:\n"
+            )
         problems.append(
-            f"{tid} has no plan. A session works from the plan; the description\n"
-            f"  only says what the task is. Write the plan and attach it:\n"
-            f"      endless task update {tid} --plan-file <path>   (→ submitted)\n"
+            head
+            + f"      endless task update {tid} --plan-file <path>   (→ submitted)\n"
             f"  Or have a session read the task in and draft one now, then wait for\n"
             f"  you — its plan is challenged before it is attached:\n"
             f"      endless task prime {tid}\n"
@@ -5215,13 +5234,24 @@ def _require_spawnable(item_id: int, verb: str, require_plan: bool = True,
     if questions:
         raise agent_help.report(
             f"Cannot {verb} {tid}: it is parked on {len(questions)} open "
-            f"question(s)" + ("" if plan or framed or not require_plan else " and has no plan")
+            f"question(s)" + ("" if plan or framed or not require_plan
+               else " and has no plan or context" if framing_route
+               else " and has no plan")
             + f". {NOTHING_CHANGED}",
             "the answers to the open questions, which are the user's to give",
             text=message,
         )
     # A missing plan is the opposite: writing it is the work, and the message
     # names the call that attaches it.
+    if framing_route:
+        raise agent_help.no_report(
+            f"Cannot {verb} {tid}: it has no plan or context. {NOTHING_CHANGED}",
+            f"Write the framing and attach it with endless task update {tid} "
+            f"--context-file <path>, or attach a plan with --plan-file <path>, "
+            f"then {verb} it again — or start a session that drafts a plan and "
+            f"waits: endless task prime {tid}",
+            text=message,
+        )
     raise agent_help.no_report(
         f"Cannot {verb} {tid}: it has no plan. {NOTHING_CHANGED}",
         f"Write the plan, attach it with endless task update {tid} "

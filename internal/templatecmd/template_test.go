@@ -712,3 +712,28 @@ func TestRender_HandoffClose_OmitsReportingWhenGateOff(t *testing.T) {
 		})
 	}
 }
+
+// TestRender_EpicHandoff_ContextOrPlan pins E-2301: an epic can start from its
+// context with no plan, so its handoff reads the context and plan, and does not
+// stop merely because there is no plan.
+func TestRender_EpicHandoff_ContextOrPlan(t *testing.T) {
+	root := projectFixture(t)
+	vars := `{"spawned_id":1,"label_prefix":"E-1","title":"T",` +
+		`"worktree_path":"/w","branch":"b","child_count":0,` +
+		`"children_state":"none","report_gate":true}`
+	out, errOut, err := runRenderInProject(t, root, "handoff/epic", vars)
+	if err != nil {
+		t.Fatalf("render: %v\nstderr: %s", err, errOut)
+	}
+	for _, want := range []string{
+		"to read the epic's context and plan.",
+		"the context or plan is insufficient",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("epic handoff missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "the plan is insufficient") {
+		t.Errorf("epic handoff still stops on a missing plan alone:\n%s", out)
+	}
+}

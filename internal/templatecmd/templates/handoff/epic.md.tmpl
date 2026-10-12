@@ -4,7 +4,7 @@ You're a worktree-bound Claude Code session spawned to coordinate this epic end 
 {{template "handoff_worktree" .}}
 
 {{template "handoff_deliverable" .}}1. Run `endless guide` to learn the Endless workflow.
-2. Run `endless task show E-{{.spawned_id}} --all-fields --db main` to read the plan.
+2. Run `endless task show E-{{.spawned_id}} --all-fields --db main` to read the epic's context and plan.
 3. Read the children in that output — these are the units of work to dispatch and verify.
 
 Children: {{.children_state}}.
@@ -18,7 +18,7 @@ Pick your operational mode from that breakdown:
 - **Mixed** — surface the breakdown and ask the user.
 
 4. {{template "handoff_focus" .}}
-5. If anything is ambiguous, the plan is insufficient, or you hit a design choice the plan
+5. If anything is ambiguous, the context or plan is insufficient, or you hit a design choice the plan
    doesn't cover — STOP and ask me. Don't guess.
 6. {{template "handoff_terminal" .}}
 7. {{template "handoff_land_drop" .}}

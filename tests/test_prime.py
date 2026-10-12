@@ -50,6 +50,55 @@ def test_a_framed_todo_still_needs_a_plan(seeded_project_at_cwd):
         task_cmd._require_spawnable(item_id, "claim")
 
 
+# E-2301: an epic is framed by its context, as a brainstorm or research task is
+# — a stopgap until E-2254 gates it on its objective and strategy instead.
+
+def test_a_framed_epic_is_not_refused_as_planless(seeded_project_at_cwd):
+    item_id = task_cmd.add_item(title="Explore a thing", description="d",
+                                task_type="epic", context="The framing.")
+    task_cmd._require_spawnable(item_id, "spawn")
+    task_cmd._require_spawnable(item_id, "claim")
+
+
+def test_an_unframed_epic_is_refused_naming_context(seeded_project_at_cwd):
+    item_id = task_cmd.add_item(title="Explore a thing", description="d",
+                                task_type="epic")
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd._require_spawnable(item_id, "spawn")
+    msg = str(exc.value)
+    assert "has no plan or context" in msg
+    assert f"endless task update E-{item_id} --context-file" in msg
+    assert f"endless task update E-{item_id} --plan-file" in msg
+
+
+def test_an_unframed_brainstorm_is_refused_naming_context(seeded_project_at_cwd):
+    item_id = task_cmd.add_item(title="Explore a thing", description="d",
+                                task_type="brainstorm")
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd._require_spawnable(item_id, "claim")
+    msg = str(exc.value)
+    assert "has no plan or context" in msg
+    assert f"endless task update E-{item_id} --context-file" in msg
+
+
+def test_a_framed_bugfix_still_needs_a_plan(seeded_project_at_cwd):
+    item_id = task_cmd.add_item(title="Fix a thing", description="d",
+                                task_type="bugfix", context="The framing.")
+    with pytest.raises(click.ClickException) as exc:
+        task_cmd._require_spawnable(item_id, "claim")
+    msg = str(exc.value)
+    assert "has no plan." in msg
+    assert "--context-file" not in msg
+
+
+def test_claim_starts_a_framed_epic(seeded_project_at_cwd, monkeypatch):
+    item_id = task_cmd.add_item(title="Explore a thing", description="d",
+                                task_type="epic", context="The framing.")
+    monkeypatch.setattr(task_cmd, "_echo_claim_next_step", lambda *a, **k: None)
+    task_cmd.claim_item(item_id, unattended=True)
+    assert _status(item_id) == "underway"
+
+
 def test_the_no_plan_refusal_offers_prime(seeded_project_at_cwd):
     item_id = task_cmd.add_item(title="Fix a thing", description="d")
     with pytest.raises(click.ClickException) as exc:
@@ -279,6 +328,27 @@ def test_prime_does_not_draft_for_a_framed_brainstorm(seeded_project_at_cwd, pri
     arm()
     task_cmd.prime_task(item_id)
     assert rendered["drafting"] is False
+
+
+def test_prime_does_not_draft_for_a_framed_epic(seeded_project_at_cwd, prime_env):
+    _, rendered, _, arm = prime_env
+    item_id = task_cmd.add_item(title="Explore a thing", description="d",
+                                task_type="epic", context="Framing.")
+    arm()
+    task_cmd.prime_task(item_id)
+    assert rendered["drafting"] is False
+
+
+def test_a_primed_epic_handoff_starts_from_its_framing(seeded_project_at_cwd):
+    item_id = task_cmd.add_item(title="Explore a thing", description="d",
+                                task_type="epic", context="Framing.")
+    text = task_cmd.render_handoff(item_id, "Explore a thing", task_type="epic",
+                                   primed=True)
+    head, _, body = text.partition("\n---\n")
+    assert "This task's type is epic: its framing is the starting point" in head
+    assert "Draft one" not in head
+    assert "to read the epic's context and plan." in body
+    assert "the context or plan is insufficient" in body
 
 
 def test_prime_refuses_started_work(seeded_project_at_cwd, prime_env):
