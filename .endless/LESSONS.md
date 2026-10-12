@@ -7457,3 +7457,7 @@ In E-2293 I described the display-liveness rule as 'you picked a stricter test'.
 ### [2026-10-11] Endless projects always use worktrees; don't design for work on the base branch
 While building E-2280's reconciliation fingerprint I added a fallback for work committed straight onto the base branch, 'as in a project without worktrees', and wrote it into the guide and plan. Mike: work is never committed straight onto the base branch, and an Endless project by definition uses worktrees. Don't invent a no-worktree project as a PRODUCT case to justify code or docs.
 - **Project**: endless
+
+### [2026-10-11] Rewrite project tests for a new requirement instead of stubbing it off for them
+E-2280 made approval, spawn and unverified require plan items and a reconciliation. I added an autouse conftest stub that switched those rules off for every older test, with a marker to opt back in. Mike: project tests should be rewritten for the new requirement. (Verify scripts are different: they are meant to bit-rot and need no maintenance.) Doing the rewrite also surfaced two real bugs the stub hid.
+- **Project**: endless
