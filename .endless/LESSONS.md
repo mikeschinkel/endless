@@ -7489,3 +7489,7 @@ While settling E-2280's spawn rules, Mike defined 'ready' as 'all questions answ
 ### [2026-10-12] Plan items are approved individually, not all at once by task approve
 In E-2280 I made 'task approve' record every plan item as approved in one step, and pointed the spawn refusal at it. Mike: items 'need to be reviewed and approved individually'. A blanket flag might be possible, but he doubts that approving without reviewing is appropriate. Approval of an item is a per-item act of review.
 - **Project**: endless
+
+### [2026-10-12] Mike's plan approval is not an endorsement of every detail in it
+In the E-2291 discussion I said the relation name 'surfaced' came from E-1462's plan 'which you approved', as if that settled it. Mike said his approvals are almost always made because a plan has far too much to read: he approves and raises issues if they turn out to matter. So an approved plan does not show that he weighed a particular name or detail in it. When a detail is in question, do not cite his approval of the plan as his choice of it.
+- **Project**: endless
