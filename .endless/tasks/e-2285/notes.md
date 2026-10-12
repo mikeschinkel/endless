@@ -54,12 +54,14 @@ Decided with Mike, 2026-10-11:
 - Fix tier: confirm, not auto. The repair only appends and never reorders or
   removes a foreign hook, but it edits a file Endless does not own.
 
-Carried over for whoever moves the list, NOT settled: the Claude hook dispatch
-in `internal/hookcmd/claude.go` has ten event cases while `CLAUDE_HOOK_EVENTS`
-installs eight. `PreCompact` is a real Claude Code event whose handler parses
-the transcript before compaction, and it is never installed, so that parse never
-happens. The `ExitPlanMode` case is reachable only from a payload whose
-hookEventName is "ExitPlanMode"; that is a tool name, so whether the harness
-ever sends such an event needs checking against the hooks reference before
-anyone installs it. Declaring the set beside the handlers is what makes this
-visible; whether to install either one is Mike's call and is not yet answered.
+Answered 2026-10-12, no longer open here: the Claude hook dispatch has ten event
+cases while `CLAUDE_HOOK_EVENTS` installs eight. `PreCompact` is a real event
+whose handler parses the transcript before compaction and was never installed;
+`ExitPlanMode` is not an event name at all, so its case was never reachable.
+Mike's answers: install `PreCompact` (synchronously), delete the `ExitPlanMode`
+case rather than relocate it, and do NOT install the rest for safety — each
+event is paired with a handler or left out, because the common path before the
+dispatch switch refreshes `last_activity` on every invocation. E-2304 carries
+the fix; E-2305 decides the rest of the catalog, including whether the expected
+set is a list of names or a structure with matchers, which is the part that
+affects what this task builds.
