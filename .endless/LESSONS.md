@@ -7497,3 +7497,7 @@ In the E-2291 discussion I said the relation name 'surfaced' came from E-1462's 
 ### [2026-10-12] Correction: plan items are approved one at a time BY DEFAULT, with an all-at-once flag
 This supersedes the earlier lesson 'Plan items are approved individually, not all at once by task approve'. That lesson made 'one at a time' an absolute, which is the very error the lesson written next to it warns against. Mike's position: items are reviewed and approved one at a time by default, not always; an all-at-once flag should exist too ('let's go ahead with it').
 - **Project**: endless
+
+### [2026-10-12] Don't assume a larger change is out of the current task's scope
+While settling E-2280's approval model, I said that adding a 'reviewed' status was bigger than E-2280's scope and would need a follow-up task. Mike: 'It would not have to be, that is just your bias.' Size alone does not put a change outside a task. Judge scope by whether the change is part of what the task is settling; if unsure, ask, rather than assert that it needs a separate task.
+- **Project**: endless
