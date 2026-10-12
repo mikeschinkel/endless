@@ -40,9 +40,13 @@
    - Tests for `settings list --json`.
    - Python tests for `endless set` using the exported field list.
 9. **Docs.** Update `internal/config/README.md` (string opt-ins, the registry, the allowlist) and the guide's sections on these settings.
-10. **Migration** (Mike's files only):
-   - Rewrite the bool values for the registered keys to `"on"` or `"off"` in the endless project's `.endless/config.json`, in `~/.config/endless/config.json` (`checks`), and in any other registered project's `.endless/config.json` that sets them.
-   - The handoff lists the exact files and edits. They must be applied before the globally installed binary changes, or every command stops at the parse refusal.
+10. **Migration happens on land.**
+   - When E-2284 lands, the landing session rewrites the bool values for the registered keys to `"on"` or `"off"`, in the same land, before the global install picks up the new binary. Files:
+     - the endless project's `.endless/config.json`
+     - `~/.config/endless/config.json` (`checks`)
+     - any other registered project's `.endless/config.json` that sets these keys.
+   - Then it confirms `endless-go settings list --json` succeeds in each of those projects.
+   - The edits are not left for a later manual step, because a parse failure stops every command.
 
 ## Risks and notes
 - Config `checks` (hook gate switches) and doctor checks share a word. The registry uses the JSON path (`checks.task_required`), and doctor check IDs need a different namespace (E-2285).
