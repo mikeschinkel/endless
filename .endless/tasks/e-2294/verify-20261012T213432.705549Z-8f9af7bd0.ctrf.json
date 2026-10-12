@@ -1,0 +1,49 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 6,
+      "passed": 6,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test: monitor",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestSessionsLiveness_ReportsRawStateAndLivePaneOnly",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest: task sessions and task show's Touched-by block",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no task sessions test was skipped",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "rows come back in argument order with raw states",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a non-integer session id is refused",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
