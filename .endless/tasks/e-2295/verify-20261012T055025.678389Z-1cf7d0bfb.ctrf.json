@@ -1,0 +1,59 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 8,
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "all E-2295 tests pass",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "refusal names the rebase still in progress, not an aborted one",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "an abort that wins the lock on retry reports the branch unchanged",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "an uncontended abort reports the branch unchanged",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a stuck worktree is reported STUCK, not restored",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a clean abort is still reported as restored",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "names the in-progress rebase and how to clear it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "lock contention, rebase failure, conflict message, land conflict",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
