@@ -119,14 +119,16 @@ func TestRender_MechanicsPartial_SharedBySpawnAndClaim(t *testing.T) {
 			"the fix is `git rebase main` or `git reset --hard main` **in place**",
 			"Your worktree is: /tmp/wt/e-9999 (branch task/9999-test) — confirm with `pwd`. Don't edit the main checkout.",
 			"Stay focused on E-9999 — one session, one task.",
-			"When implementation is done, reconcile before handing anything over: `endless task reconcile E-9999 --db main`",
+			"When implementation is done, reconcile before setting `unverified`: `endless task reconcile E-9999 --db main`",
 			"Only then `endless task update E-9999 --status unverified --db main`",
+			"put them to me one at a time, in the order it prints them",
 		},
 		"bugfix": {
 			"the fix is `git rebase main` or `git reset --hard main` **in place**",
 			"Stay focused on E-9999 — one session, one task.",
-			"When implementation is done, reconcile before handing anything over: `endless task reconcile E-9999 --db main`",
+			"When implementation is done, reconcile before setting `unverified`: `endless task reconcile E-9999 --db main`",
 			"Only then `endless task update E-9999 --status unverified --db main`",
+			"put them to me one at a time, in the order it prints them",
 		},
 		"research": {
 			"the fix is `git rebase main` or `git reset --hard main` **in place**",

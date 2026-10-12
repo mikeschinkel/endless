@@ -510,9 +510,15 @@ def reconcile(task_id: int, path: str) -> None:
     for q in open_qs:
         click.echo(f"  EQ-{q['id']} {q['question']}")
     click.echo()
-    click.echo("List these in that order as your final message and stop. After "
-               "the user answers, record the answers, make any changes, reconcile "
-               "again, and only then set the task to `unverified`.")
+    click.echo(
+        "Put them to the user ONE AT A TIME, in this order. For each: say what "
+        "differs from the plan and why, give the options with their pros and "
+        "cons and your recommendation, then stop — the user may ask about it "
+        "before answering. Record the answer with `endless question answer "
+        f"EQ-<n> \"<answer>\" --by user`, then present the next. `endless "
+        f"question list E-{task_id}` shows them all at once, in the same order. "
+        "When all are answered, make any changes, reconcile again, and only "
+        "then set the task to `unverified`.")
 
 
 # The gate ------------------------------------------------------------------
