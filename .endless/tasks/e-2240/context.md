@@ -6,3 +6,8 @@ Today a user's Claude task sessions run on their default tmux server, alongside 
 - the task-session server, `tmux -L endless-tasks`, holding the session where task sessions live — `tasks` by default (renamed from `active` for symmetry with `console`), configurable.
 
 `endless tmux start`, alias `endless start`, starts both servers and opens two Endless-specific terminal windows, one attached to each, where the platform allows. E-2238 makes the console's shell act on the task-session server.
+
+
+Socket paths (Mike, 2026-10-11, in the E-2300 planning session): Endless's servers use a fixed socket path, `tmux -S <fixed path>`, not `-L <name>`. A `-L` name resolves inside `TMUX_TMPDIR`, which varies between environments, so two shells could reach two different "endless-tasks" servers. A fixed path lets every Endless command reach the same server, and lets E-2300 judge liveness by asking that one known socket.
+
+Scope (Mike, same session): tmux servers outside the ones Endless controls are not supported. Endless treats tmux as an enabling technology, not a foundational part of its architecture; it may later support other terminal multiplexers (Herdr, for example) or its own. Controlling the servers Endless uses is what keeps that open.
