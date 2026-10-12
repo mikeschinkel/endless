@@ -1,56 +1,46 @@
 # E-2183 — plan
 
+Scope narrowed 2026-10-11, on Mike's call: this task is the `install` fix only.
+Deleting `claude-settings-sweep` has come OUT and is recorded on E-2172 instead,
+because the condition that makes deletion safe is E-2172's subject, not this
+task's. Keeping both here would have left E-2183 open for months waiting on it.
+
 ## First: a correction to this task's own analysis
 
-The analysis says fixing `install` means "running `just install` in any of those
-~99 pre-land branches" stops re-pinning. **That is wrong**, and the plan depends
-on it being wrong.
+The analysis says fixing `install` stops "running `just install` in any of those
+~99 pre-land branches" from re-applying the old behaviour. **That is wrong**, and
+the plan depends on it being wrong.
 
-An unsynced worktree runs its OWN `install` recipe too. Fixing `install` on main
-does nothing for a branch that predates the fix — that branch's `install` still
-has the bare `just` calls AND its `claude-settings-init` still pins. Conversely,
-a worktree that HAS synced already has the fixed `claude-settings-init`, so its
-bare `just` call is harmless.
+A worktree that has not been rebased onto main runs its OWN `install` recipe
+too. Fixing `install` on main does nothing for such a branch — its `install`
+still has the bare `just` calls and its `claude-settings-init` still writes the
+hooks block. Conversely, a worktree that HAS been rebased already has the fixed
+`claude-settings-init`, so its bare `just` call is harmless.
 
-So piece (1) fixes nobody today. What it does is stop recurrence: a worktree
-synced now, against a `claude-settings-init` that changes again later, would
-otherwise re-apply the older config recipe. That is worth doing — it is the
-durable half — but it is prophylaxis, not remediation. Remediation is sync.
+So this change fixes nobody today. What it does is stop recurrence: a worktree
+rebased now, against a `claude-settings-init` that changes again later, would
+otherwise re-apply the older config recipe. That is worth doing and it is the
+durable half — but it is prophylaxis, not remediation. Remediation is rebasing
+the branch, which is E-1881/E-2172's territory.
 
 ## Measured on main, 2026-10-11
 
-    worktrees (registered == directories)                190
-      justfile still carrying the OLD pinning recipe      88
-      justfile carrying the fixed recipe                 102
-    worktrees currently pinned                             1   (e-2157)
+    worktrees (registered == directories)                191
+      justfile still carrying the OLD config recipe       88
+      justfile carrying the fixed recipe                 103
+    worktrees whose settings.local.json has a hooks block  0
 
-**e-2157 is the bug in the wild.** The sweep reported 122 visited / 99 unpinned
-/ 0 failures, so it was unpinned; its `settings.local.json` is dated Sep 27
-10:42 and names its own `bin/endless-go` again, and its justfile still has the
-old recipe. Which of the three routes re-pinned it (a worktree-scoped `just
-install`, a direct `just claude-settings-init`, or a re-run of
-`post-worktree-create.sh`) is not recoverable from the filesystem, and the plan
-does not need it: all three are closed by the same two moves.
+The hooks-block count is zero because Mike re-ran the sweep today. It had been
+1 (`e-2157`) — unpinned by the first sweep on Sep 27, then written back the same
+morning, with its justfile still carrying the old recipe. One recurrence in two
+weeks across ~190 worktrees is the observed rate, and it is the evidence that
+this task is about something real rather than hypothetical.
 
-## The ordering this forces
-
-Deleting the sweep while 88 old-recipe worktrees exist removes the only tool
-that can clean up the re-pin that just happened. So:
-
-1. Re-sweep (closes e-2157).
-2. Fix `install` (piece 1).
-3. `endless worktree sync --apply` until the old-recipe count is 0, or the
-   residue is named and understood.
-4. THEN delete the sweep (piece 2).
-
-Steps 2 and 4 are this task's code. Steps 1 and 3 are operations Mike runs; the
-task is not done until 3 reports zero, because 4 is unsafe before then.
-
-## Step 2 — `install` resolves config recipes from main
+## The change
 
 In the worktree-scoped branch of `install`, mirror what
-`.endless/hooks/post-worktree-create.sh` already does and for the reason its
-header already gives:
+`.endless/hooks/post-worktree-create.sh` already does, for the reason its header
+already gives (a worktree on an older branch carries an older justfile):
 
     main_checkout="$(dirname "$(cd "$(git rev-parse --git-common-dir)" && pwd)")"
     recipe() { just --justfile "${main_checkout}/justfile" \
@@ -62,67 +52,52 @@ header already gives:
     recipe claude-settings-init
 
 `build` stays bare. A worktree exists to build candidate code; a branch that
-changed how it builds must build its own way. That split is the statement worth
-landing: **machine-level config comes from main, candidate behaviour comes from
-the branch.** Put it in the recipe's comment, next to the existing paragraph
-claiming the scoped install "NEVER touches the global symlink" — which E-2166
-already had to amend once.
+changed how it builds must build its own way. The statement to land in the
+recipe's comment is: **machine-level config comes from main, candidate behaviour
+comes from the branch.** Put it beside the existing paragraph claiming the
+scoped install "NEVER touches the global symlink" — which E-2166 already had to
+amend once, so it is the paragraph that goes stale.
 
 Check while there whether `go-work-init` and `dev-sandbox-init` genuinely belong
 on the config side. `go-work-init` writes absolute paths to local go-pkgs
-modules and `dev-sandbox-init` seeds a sandbox DB; both look like machine wiring
-rather than candidate behaviour, which is why they are grouped here — but if
-either is being deliberately exercised as candidate code, it moves to the
-`build` side and the comment says so.
+modules and `dev-sandbox-init` seeds a sandbox database; both read as machine
+wiring rather than candidate behaviour, which is why they are grouped there.
+If either turns out to be deliberately exercised as candidate code, it moves to
+the `build` side and the comment says which and why.
 
-## Step 4 — delete `claude-settings-sweep`
+## Document the one-worktree recovery
 
-Gate: step 3 reports 0 old-recipe worktrees.
+While the sweep still exists this is redundant, but the sweep is going away on
+E-2172 and the knowledge must not go with it. Record, in the `install` recipe's
+comment or `endless guide`, the two commands that matter:
 
-- Remove the recipe from `justfile`.
-- Remove `tests/test_claude_settings_sweep.py` with it. It exists only to cover
-  the sweep; keeping a test for a deleted recipe is the same debt in another
-  file.
-- Leave `tests/test_claude_settings_init.py` alone. Its pin-removal cases cover
-  `claude-settings-init`, which survives, and a worktree recreated at a path
-  that once had a pin still needs the strip.
+- Detect: list every worktree whose `.claude/settings.local.json` contains a
+  `hooks` key.
+- Repair one: `just --justfile <main>/justfile --working-directory <worktree>
+  claude-settings-init`
 
-**This breaks E-2166's landed verify suite, and that is correct.**
-`.endless/tasks/e-2166/verify.sh` asserts the sweep exists in five places
-(lines 159, 161, 174, 180, and the skip message at 222). Per
-`.endless/tasks/CLAUDE.md` — "Do not edit a landed task's suite… If your change
-alters a string or a behaviour a landed suite asserted, leave the suite alone"
-— do NOT retrofit it. Bit rot there is expected and accepted. Say so in the
-commit message so the next reader of that suite is not surprised.
+That is exactly what the sweep does per worktree, so documenting it is what
+makes the sweep's eventual removal a loss of a loop rather than a loss of a
+capability.
 
 ## Durable coverage
 
-The behaviour must outlive this task's own gate, per `.endless/tasks/CLAUDE.md`:
+Per `.endless/tasks/CLAUDE.md`, this must outlive the task's own gate:
 
-- A test that `install`'s worktree-scoped path resolves `claude-settings-init`,
-  `dev-sandbox-init` and `go-work-init` through `--justfile <main>/justfile`,
-  and `build` without it. The cheap honest form reads the recipe body, as
-  E-2166's suite did for the sweep; the strong form is the end-to-end shape
-  `tests/test_claude_settings_sweep.py` uses — a temp repo whose main justfile
-  differs from the worktree's, asserting which one ran. Prefer the end-to-end
-  one: a source-reading test passes on a recipe that names the flag and still
-  calls the wrong thing.
-
-## Open question for Mike
-
-Step 4's gate may never reach zero: `endless worktree sync` skips worktrees with
-uncommitted changes, which is most live sessions. If the count stalls at a
-handful of long-lived dirty worktrees, the choice is to (a) hold the sweep until
-they land, or (b) delete it anyway and accept that those few can re-pin and
-would need a hand-run `claude-settings-init` from main. Worth answering before
-step 4, not during it.
+A test that `install`'s worktree-scoped path resolves `claude-settings-init`,
+`dev-sandbox-init` and `go-work-init` through `--justfile <main>/justfile`, and
+`build` without it. Prefer the end-to-end shape
+`tests/test_claude_settings_sweep.py` already uses — a temp repo whose main
+justfile differs from the worktree's, asserting which one actually ran. A test
+that merely greps the recipe source passes on a recipe that names the flag and
+still calls the wrong thing.
 
 ## Not in scope, stated so it is not re-derived
 
-`just claude-settings-init` run DIRECTLY in an unsynced worktree still gets that
-branch's recipe. Nothing in the justfile closes that — only rebasing the branch
-does. That is what makes "keep task worktrees synced" the answer rather than a
-recipe that re-fixes the symptom, and it is why step 3 is part of this task
-rather than a follow-up.
+`just claude-settings-init` run DIRECTLY in a worktree that has not been rebased
+still gets that branch's recipe. Nothing in the justfile closes that; only
+rebasing the branch does. That is E-2172's question, and it is why the sweep's
+removal is recorded there rather than gated inside this task.
 
-Self_dev only (ED-1571): no other project has a per-worktree install or a land.
+Self_dev only (ED-1571): no other project has a per-worktree install or a land,
+so none of this mechanism exists there.
