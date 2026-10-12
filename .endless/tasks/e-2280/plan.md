@@ -122,6 +122,8 @@ decision yet. The decision drafted in the last item records them.
     refuses the move itself, the gate stands aside so that refusal is the one
     shown. The types that must be itemized are defined in one place, so adding
     docs means adding one entry.
+    - A todo or bugfix cannot be created at `unverified` or a later status
+      that reports its work (Mike, after review): `task.created` refuses it.
     - `worktree land`'s own move from `unlanded` to `assumed` skips the gate,
       because the verify it requires already ran it.
     - The backstop in `task verify` skips a task with no plan items at all.
