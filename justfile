@@ -63,6 +63,25 @@ build: go
 # exactly as they do everywhere else (ED-1596). A worktree's bin/endless-go
 # still serves its CLI and sandbox work; it just no longer serves hook events.
 #
+# Machine-level config comes from main; candidate behaviour comes from the
+# branch (E-2183). The scoped install runs go-work-init, dev-sandbox-init and
+# claude-settings-init from MAIN's justfile against this worktree, exactly as
+# .endless/hooks/post-worktree-create.sh does and for its reason: a worktree on
+# an older branch carries an older justfile, and a bare `just claude-settings-
+# init` from one cut before E-2166 re-pinned its hooks at its own binary. Only
+# `build` stays the branch's — a worktree exists to build candidate code, and a
+# branch that changed how it builds must build its own way. dev-sandbox-init
+# still runs the worktree's freshly built bin/endless-go, so the candidate
+# sandbox subcommand is exercised; only the recipe wrapping it comes from main.
+#
+# What this cannot close: `just claude-settings-init` invoked DIRECTLY in a
+# worktree not rebased since E-2166 still runs that branch's recipe. Only a
+# rebase (`endless worktree sync`) fixes that. To find and repair one by hand,
+# from the main checkout:
+#
+#   grep -l '"hooks"' .endless/worktrees/*/.claude/settings.local.json
+#   just --justfile "$PWD/justfile" --working-directory <worktree> claude-settings-init
+#
 # Hardening: warns loudly if /usr/local/bin/endless-go already resolves into a
 # worktree, surfacing an existing mispointed symlink instead of letting it fester.
 
@@ -115,11 +134,17 @@ install mode="":
     fi
     # Worktree-scoped install: bundle the existing worktree recipes and NEVER
     # run `ln -sfn` or `uv tool install`. dev-sandbox-init runs before
-    # claude-settings-init so the latter sees the seeded sandbox.
-    just go-work-init
+    # claude-settings-init so the latter sees the seeded sandbox. Config recipes
+    # come from main's justfile, `build` from the branch's (see header).
+    main_checkout="$(dirname "$git_common_dir")"
+    worktree="$(pwd)"
+    recipe() {
+        just --justfile "${main_checkout}/justfile" --working-directory "${worktree}" "$@"
+    }
+    recipe go-work-init
     just build
-    just dev-sandbox-init
-    just claude-settings-init
+    recipe dev-sandbox-init
+    recipe claude-settings-init
     echo "install: worktree-scoped setup complete for $(pwd)"
     echo "  Wired: go.work, bin/*, .claude/settings.local.json. Global /usr/local/bin untouched."
 
