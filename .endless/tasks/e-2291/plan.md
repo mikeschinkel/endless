@@ -10,13 +10,21 @@ Ownership itself stays in `sessions.task_id` (`_task_claimants`, the write gate)
 
 ## 1. A `bound` relation (ED-1497 relations)
 - Append `RelationBound = 6` to `internal/sessiontaskrelation`, with slug `bound` and label `Bound`. Never renumber. Add the `schema.sql` seed row and a migration. `VerifyIntegrity` fails closed on drift.
-- Rank: directly below `claimed`, above `queued`. A later `task claim` by the same session then upgrades `bound` to `claimed`, and binding a queued task upgrades `queued` to `bound`.
-- In `session status`'s display tier (`prominence` in `relation_tier.go`), `bound` counts as decided work, alongside `claimed` and `queued`.
+- Rank: directly below `claimed`, above `touched`. A later `task claim` by the same session then upgrades `bound` to `claimed`, and binding a touched task upgrades `touched` to `bound`.
+- In `session status`'s display tier (`prominence` in `relation_tier.go`), `bound` counts as decided work, alongside `claimed` and `touched`.
 
 ## 1b. Rename `surfaced` to `filed`
 - Relation id 2 keeps its id. Change its slug to `filed` and its label to `Filed` in `sessiontaskrelation` and in the `schema.sql` seed, which upserts the change onto existing rows on connect (the E-1659 pattern). No data migration.
 - Update every reader and doc that names `surfaced`: the Go switch statements, the `session status` and `task show` text, the sessions guide's relation table, and the `touch`/`session task add` help.
 - Replayed `task.imported` events, which are legacy (their commands were removed in E-2142), also land as `filed`. That is accepted.
+
+## 1c. Retire `queued`; `touch` records `touched`
+- Relation id 5 keeps its id. Change its slug from `queued` to `touched` and its label to `Touched`, through the same seed-upsert as 1b. No data migration.
+- `endless touch` writes `touched` instead of `revisited`. `revisited` goes back to meaning only "the session edited it".
+- `endless session task add` becomes an alias of `endless touch`: same event (`session_tasks.touched`), same relation. Retire the `session_tasks.queued` event kind for emission. The ledger holds none, so there is nothing to replay. Keep it decodable if the event registry requires that.
+- Replay: the existing `session_tasks.touched` events (23 in the main ledger) rebuild as `touched`, not `revisited`, because the executor for that kind now upserts `touched`.
+- `touched` keeps queued's place: it ranks just below `bound`, above `filed`. It keeps the ⊕ mark, and counts as decided work in `session status`.
+- Update every reader and doc that names `queued` or calls touch `revisited`: the Go switch statements, `relation_tier.go`'s glyph comment, the help for `touch` and `session task add`, and the sessions guide's relation table and verb list.
 
 ## 2. Which relation each path writes
 - `task claim` → `claimed`. No change.
@@ -36,7 +44,7 @@ Ownership itself stays in `sessions.task_id` (`_task_claimants`, the write gate)
 ## 4. Readers that special-case `claimed`
 - **`session status`:** `nonClaimedRelationIDs` becomes "every relation except the anchor relations". The anchor relations are a named set, `{claimed, bound}`, defined in `sessiontaskrelation`, so a bound task is the session's anchor and not a second row (Q4 a).
 - **`session task remove`:** refuses a `bound` task exactly as it refuses a `claimed` one, and points to `session hide --task` (Q6 a). `sessions.task_id` stays set either way, so allowing it would leave the list out of step with ownership.
-- **`session task add`:** queuing your own bound task leaves it `bound`, reported rather than raised as an error, as it already does for `claimed`.
+- **`touch` / `session task add`:** touching your own bound task leaves it `bound`, reported rather than raised as an error, as it already does for `claimed`.
 
 ## 5. Claim's no-plan refusal points to bind (Q8 a)
 - In `_require_spawnable`, when the verb is `claim` and there is no plan, add a conditional route: "If you and your user are working out the plan together now: `endless task bind <id>`. Claim once the plan is attached." Do not add it for `spawn` or `prime`.
@@ -51,7 +59,8 @@ Ownership itself stays in `sessions.task_id` (`_task_claimants`, the write gate)
   - the relation enum, rank and seed integrity
   - the `task.bound` executor writes `sessions.task_id` and `bound`
   - a claim after a bind upgrades the row to `claimed`
-  - binding a queued task upgrades it to `bound`
+  - binding a touched task upgrades it to `bound`
+  - `touch` and `session task add` both write `touched`, and a replayed `session_tasks.touched` event rebuilds as `touched`
   - the cwd auto-bind writes `claimed` for an `underway` task and `bound` for a pre-work one
   - `session status` shows a bound task only as the anchor
   - `session task remove` refuses a bound task
