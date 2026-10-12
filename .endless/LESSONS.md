@@ -7461,3 +7461,7 @@ While building E-2280's reconciliation fingerprint I added a fallback for work c
 ### [2026-10-11] Rewrite project tests for a new requirement instead of stubbing it off for them
 E-2280 made approval, spawn and unverified require plan items and a reconciliation. I added an autouse conftest stub that switched those rules off for every older test, with a marker to opt back in. Mike: project tests should be rewritten for the new requirement. (Verify scripts are different: they are meant to bit-rot and need no maintenance.) Doing the rewrite also surfaced two real bugs the stub hid.
 - **Project**: endless
+
+### [2026-10-11] Name the concrete status, not 'hand over', in decisions and user-facing text
+E-2280's decision ED-1618 was titled 'Hand over a todo or bugfix only after...'. Mike found 'hand over' ambiguous. Say what actually happens, e.g. 'set to unverified'. He also asked why the rule was keyed on 'todo and bugfix' rather than 'tasks with plan items': key a rule on the property that makes it apply, not on the types that happen to have it today.
+- **Project**: endless
