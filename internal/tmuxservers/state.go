@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"slices"
 	"strconv"
+	"strings"
 
 	"github.com/mikeschinkel/endless/internal/config"
 )
@@ -159,11 +160,5 @@ func (s Server) Record() (wrote bool, err error) {
 }
 
 func splitLines(s string) []string {
-	var out []string
-	for _, l := range regexp.MustCompile(`\r?\n`).Split(s, -1) {
-		if l != "" {
-			out = append(out, l)
-		}
-	}
-	return out
+	return strings.FieldsFunc(s, func(r rune) bool { return r == '\n' || r == '\r' })
 }
