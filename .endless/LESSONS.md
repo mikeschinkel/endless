@@ -7513,3 +7513,7 @@ Planning E-2228 (session monitor idle CPU), I recommended throttling the per-tic
 ### [2026-10-12] Mark blocked_by only for a practical dependency, not an ideal-path one
 Planning E-2229 (gate monitor work on tmux visibility), Mike asked why E-1850 (tmux layout brainstorm) and E-2086 (setup installs tmux config) were blockers. They block the ideal home for the visibility hooks (an Endless-owned tmux config), not the work itself: hooks can be installed at runtime the way 'endless tmux apply' already installs options. Mike says agents have repeatedly marked tasks as blockers when they block an ideal path rather than the practical one. Before recording or relying on blocked_by, ask whether the task truly cannot proceed without the other, or only would prefer it; the latter is relates-to.
 - **Project**: endless
+
+### [2026-10-12] CLI output shows paths with ~, not the full $HOME path
+Situation: E-2284 added `endless-go settings migrate` and the opt-in refusal (config.OptInError); both print absolute paths like /Users/mikeschinkel/.config/endless/config.json. Mike said: all paths the CLI generates as output should use ~ in place of the full path to $HOME. This is about paths shown to a person in CLI output (messages, refusals, reports), not paths written into files or passed to other programs. Python already has endless.config.tilde(); the Go side (internal/, cmd/endless-go) had no equivalent as of E-2284.
+- **Project**: endless
