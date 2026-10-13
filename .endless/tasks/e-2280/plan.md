@@ -173,6 +173,12 @@ decision yet. The decision drafted in the last item records them.
 18. `src/endless/reconcile.py`, which syncs project rows for `endless scan`,
     is renamed `project_sync.py`, with its test file, so "reconcile" means
     only this task's reconciliation.
+18a. The board (`session status`, `project status`) picks a `submitted` or
+    `ready` row's glyph from its status and whether any question is still
+    unanswered (open): ⚑ approve (not approved, none unanswered), ⚐ act
+    (not approved, some unanswered), ¿ answer (approved, some unanswered),
+    ▶ do (approved, none unanswered). No status is added; an answered or
+    closed question does not count.
 19. Last, after implementation: draft the decision recording the rule and
     these terms.
 20. After Mike lands E-2280: message the active sessions, a few at a time
