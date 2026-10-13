@@ -993,3 +993,54 @@ Fingerprinted on the job, so an outage that lasts is one incident with a
 rising occurrence count.
 
 **What to do.** Check the network, any VPN, and the remote's credentials; the summary names the job, how many times in a row it has failed, and the first line of the cause. The job keeps retrying on its own and this warning clears itself on its next successful run. Once the cause is fixed, run `endless jobs retry <name>` to retry now rather than waiting out the backoff.
+
+## WARN-0033 — monitor-visibility-unreadable
+
+**Severity:** warning · **Raised by:** `endless-go monitor-wake`, and the
+safety-net poll of `session monitor` and `project monitor` (E-2229)
+
+A live monitor does its work only while someone can see it: while its window is
+the active window of a client attached to its tmux server. A tmux hook runs
+`endless-go monitor-wake` on every window switch, attach and detach, and that
+command asks tmux which windows are on screen and signals each monitor. Every
+monitor also asks the same question itself about every 20 seconds, in case a
+hook was missed. This incident says tmux refused one of those questions.
+
+Warning rather than error: a monitor that cannot tell whether it is visible
+treats itself as visible and keeps redrawing, which costs CPU and loses nothing.
+Fingerprinted on the tmux server, so one broken server is one incident.
+
+**What to do.** Run `endless errors show <n> --detail` for tmux's own error and the command that failed. A tmux server that has exited takes its monitors with it, so one that stays open usually means the `tmux` on the monitor's PATH cannot reach the server it runs in. Until it is fixed the monitor treats itself as visible and keeps redrawing, which costs CPU and loses nothing. Dismiss with `endless errors clear <id>` once the cause is gone.
+
+## WARN-0034 — monitor-hooks-missing
+
+**Severity:** warning · **Raised by:** the safety-net poll of `session monitor`
+and `project monitor` (E-2229)
+
+The first monitor to start on a tmux server installs four global hooks —
+`session-window-changed`, `client-session-changed`, `client-attached` and
+`client-detached` — each appending one `run-shell -b '<endless-go>
+monitor-wake'` to whatever that hook already runs, so a user's own hooks are
+kept. A monitor's safety-net poll found them gone, and put them back.
+
+Warning rather than error: the reinstall has already repaired it, and until it
+did, monitors still corrected their visibility at each poll. Fingerprinted on
+the tmux server, so a config that keeps removing the hooks is one incident with
+a rising occurrence count.
+
+**What to do.** Nothing to do for a single occurrence: the monitor already put the hooks back. A count that keeps rising means something keeps removing them — a tmux config reload that runs `set-hook -gu`, or a plugin that replaces hooks with `set-hook -g` instead of appending with `-ga`. Make that config append instead. Dismiss with `endless errors clear <id>`.
+
+## WARN-0035 — monitor-hooks-install-failed
+
+**Severity:** warning · **Raised by:** `session monitor`, `project monitor` and
+`endless tmux apply` (E-2229)
+
+tmux refused `set-hook` while the window-switch hooks described under WARN-0034
+were being installed.
+
+Warning rather than error: without the hooks a monitor still notices that its
+window was switched to or away from at its next safety-net poll, so the cost is
+promptness — a monitor may take up to about 20 seconds to repaint after you
+switch to it.
+
+**What to do.** Run `endless errors show <n> --detail` for tmux's error. Until the hooks install, monitors still notice a window switch at their next safety-net poll, about 20 seconds later, so nothing is lost but promptness. Re-run `endless tmux apply` from inside the tmux session once the cause is fixed; every monitor also retries on its next poll. Dismiss with `endless errors clear <id>`.

@@ -74,6 +74,29 @@ const (
 	DimSGR = "\x1b[2m"
 )
 
+// SafetyNet is how often a visibility-gated view asks for itself whether it can
+// be seen (E-2229), inside the 15–30s range ED-1606 set. The tmux hooks are the
+// primary signal; this is what corrects a missed one, and what keeps the hooks
+// installed.
+const SafetyNet = 20 * time.Second
+
+// Visibility is what gates a live view on being seen (E-2229). A view nobody
+// can see does no work at all: no frame, no query, no git, no job trigger. A
+// change of visibility arrives as a signal — SIGUSR1 "you are visible",
+// SIGUSR2 "you are hidden" — sent by whatever watches the screen;
+// internal/monitorvis implements it for tmux.
+type Visibility interface {
+	// Start begins being findable by whatever sends the signals, and reports
+	// the visibility now. Loop calls it after it is already listening.
+	Start() (visible bool)
+	// Check is the safety-net poll, run every SafetyNet.
+	Check() (visible bool)
+	// Missed says a poll disagreed with the last signalled state.
+	Missed(visible bool)
+	// Close stops being findable. Called on every clean exit, before Fatal.
+	Close()
+}
+
 // Frame renders one frame of a live view into w and returns the number of
 // CONTENT rows it drew. The count is the pane fit's input, and 0 has a specific
 // meaning: the view drew its nothing-here hint rather than a short real frame
@@ -113,6 +136,17 @@ type LoopConfig struct {
 	// Tick overrides Interval. Zero — every real dashboard — means Interval; a
 	// test drives the loop faster.
 	Tick time.Duration
+	// Visibility gates the loop on being seen (E-2229). Nil — outside tmux, and
+	// every test that does not ask — means always visible, the loop as it was.
+	Visibility Visibility
+	// SafetyNet overrides the package SafetyNet; zero means SafetyNet.
+	SafetyNet time.Duration
+
+	// wake and sigs replace the SIGUSR1/SIGUSR2 and SIGINT/SIGTERM
+	// subscriptions, so a test can deliver a signal without signalling its own
+	// process.
+	wake chan os.Signal
+	sigs chan os.Signal
 }
 
 // Loop redraws cfg.Render every Interval until SIGINT/SIGTERM, repainting only
@@ -130,6 +164,12 @@ type LoopConfig struct {
 // install replaces it (E-2193; see restart.go). A replacement that cannot start
 // leaves this process rendering, with job firing stopped and a notice line
 // appended to the frame.
+//
+// With cfg.Visibility set it works only while it can be seen (E-2229). Hidden,
+// it stops its ticker and waits for a signal, a termination, or the safety net
+// every SafetyNet — no frame, no query, no git, no job trigger. Becoming
+// visible repaints at once and resumes the ticker; a visible view also polls
+// on the safety net, so a missed "hidden" signal is corrected too.
 func Loop(cfg LoopConfig) {
 	out := cfg.Out
 	if out == nil {
@@ -149,14 +189,28 @@ func Loop(cfg LoopConfig) {
 	io.WriteString(out, "\x1b[?25l")                         // hide cursor
 	restore := func() { io.WriteString(out, "\x1b[?25h\n") } // show cursor + trailing newline
 
-	sigs := make(chan os.Signal, 1)
-	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+	sigs := cfg.sigs
+	if sigs == nil {
+		sigs = make(chan os.Signal, 1)
+		signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+	}
 	defer signal.Stop(sigs)
 	// SIGWINCH says the pane changed size, which is when the pane fit has to
 	// ask tmux again even though the frame did not change.
 	winch := make(chan os.Signal, 1)
 	signal.Notify(winch, syscall.SIGWINCH)
 	defer signal.Stop(winch)
+
+	// The visibility signals (E-2229). Subscribed BEFORE the gate starts:
+	// once it has tagged the pane, a window switch anywhere on the server
+	// signals this process.
+	gate := cfg.Visibility
+	wake := cfg.wake
+	if gate != nil && wake == nil {
+		wake = make(chan os.Signal, 4)
+		signal.Notify(wake, syscall.SIGUSR1, syscall.SIGUSR2)
+		defer signal.Stop(wake)
+	}
 
 	io.WriteString(out, "\x1b[2J\x1b[H") // clear screen, cursor home
 	tick := cfg.Tick
@@ -192,21 +246,48 @@ func Loop(cfg LoopConfig) {
 	// signal relay stops, so the new image starts from a terminal and a signal
 	// disposition that look like a fresh launch; it clears and redraws itself.
 	// If the exec does not happen, both are taken again.
+	//
+	// The visibility signals are IGNORED across the exec rather than stopped:
+	// the pane keeps its tag (the new image keeps this UPID and re-tags), and
+	// an ignored disposition survives exec, so a wake landing before the new
+	// image subscribes is dropped instead of taking the default action, which
+	// for SIGUSR1 is to terminate.
 	watch := newRestarter(
 		func() {
 			signal.Stop(sigs)
 			signal.Stop(winch)
+			if gate != nil && cfg.wake == nil {
+				signal.Ignore(syscall.SIGUSR1, syscall.SIGUSR2)
+			}
 			io.WriteString(out, "\x1b[?25h")
 		},
 		func() {
 			signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 			signal.Notify(winch, syscall.SIGWINCH)
+			if gate != nil && cfg.wake == nil {
+				signal.Notify(wake, syscall.SIGUSR1, syscall.SIGUSR2)
+			}
 			io.WriteString(out, "\x1b[?25l")
 			prev = "" // force a full repaint over whatever the attempt left
 		},
 	)
 
-	for {
+	// exit is every clean way out: the gate stops being findable first, since
+	// fatal may end the process before a deferred Close would run.
+	exit := func(err error) {
+		prof.stop()
+		restore()
+		if gate != nil {
+			gate.Close()
+		}
+		if err != nil {
+			fatal(err)
+		}
+	}
+
+	// paint renders and paints one frame, and reports false when the render
+	// failed and the loop must end.
+	paint := func() bool {
 		var b strings.Builder
 		prof.begin()
 
@@ -216,14 +297,14 @@ func Loop(cfg LoopConfig) {
 		cols := DetectCols(cfg.ColsOverride, cfg.FallbackCols)
 		rows, err := cfg.Render(&b, cols, cfg.Color)
 		if err != nil {
-			prof.stop()
-			restore()
-			fatal(err)
-			return
+			exit(err)
+			return false
 		}
 		if notice := watch.Notice(); notice != "" {
 			fmt.Fprintln(&b, Strong("⚠ "+notice, cfg.Color))
 		}
+		// A SIGWINCH that arrived while the view was hidden waits here, in
+		// its buffered channel, and is honored by the first paint after.
 		resized := false
 		select {
 		case <-winch:
@@ -240,13 +321,76 @@ func Loop(cfg LoopConfig) {
 			io.WriteString(out, "\x1b[H"+EraseEachLineToEOL(frame)+"\x1b[J")
 			prev = frame
 		}
-		prof.end()
+		prof.end("visible")
+		return true
+	}
+
+	// The visibility gate (E-2229). Without one the view is always visible and
+	// neither the safety net nor the signals exist. A hidden view stops its
+	// ticker and does nothing until a signal or the safety net says otherwise;
+	// the last frame stays on screen, unseen, and is repainted on return.
+	visible := true
+	var netC <-chan time.Time
+	if gate != nil {
+		every := cfg.SafetyNet
+		if every <= 0 {
+			every = SafetyNet
+		}
+		net := time.NewTicker(every)
+		defer net.Stop()
+		netC = net.C
+		visible = gate.Start()
+	}
+	setVisible := func(now bool) bool {
+		if now == visible {
+			return true
+		}
+		visible = now
+		if !visible {
+			ticker.Stop()
+			return true
+		}
+		ticker.Reset(tick)
+		return paint()
+	}
+
+	if visible && !paint() {
+		return
+	}
+	if !visible {
+		ticker.Stop()
+	}
+	for {
 		select {
 		case <-sigs:
-			prof.stop()
-			restore()
+			exit(nil)
 			return
 		case <-ticker.C:
+			if !paint() {
+				return
+			}
+		case sig := <-wake:
+			if !setVisible(sig == syscall.SIGUSR1) {
+				return
+			}
+		case <-netC:
+			prof.begin()
+			now := gate.Check()
+			if now != visible {
+				gate.Missed(now)
+			}
+			if !visible {
+				// A hidden view still follows its binary: a restart runs
+				// here at the poll cadence instead of at the tick's. Jobs
+				// never fire from a hidden view.
+				watch.tick(jobsInFlight.Load())
+				prof.end("hidden")
+			} else {
+				prof.end("poll")
+			}
+			if !setVisible(now) {
+				return
+			}
 		}
 	}
 }

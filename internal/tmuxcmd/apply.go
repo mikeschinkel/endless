@@ -6,6 +6,7 @@ import (
 	"os/exec"
 	"strings"
 
+	"github.com/mikeschinkel/endless/internal/monitorvis"
 	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
@@ -71,6 +72,10 @@ func runApply(args []string) {
 	}
 
 	retireNavHooks()
+	// After the retire: an old nav hook is unset with `set-hook -gu`, which
+	// clears the whole array, ours included. Best-effort, like the retire — a
+	// failure is recorded as WARN-0035 and monitors retry at their next poll.
+	_ = monitorvis.EnsureHooks(binPath)
 
 	// Force an immediate redraw so the user sees the change without
 	// waiting up to status-interval seconds.

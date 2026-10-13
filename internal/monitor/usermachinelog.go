@@ -176,6 +176,34 @@ func LogSessionTxn(t SessionTxn) {
 	})
 }
 
+// monitorVisibilityLogEntry is a "monitor-visibility" line: a live monitor's
+// safety-net poll found its window's visibility different from what the last
+// tmux hook signal told it (E-2229). One missed hook corrects itself within a
+// poll, so it is logged here rather than raised as a fault; a run of these
+// lines is the trail that says the hooks are not firing.
+type monitorVisibilityLogEntry struct {
+	Kind     string `json:"kind"` // always "monitor-visibility"
+	TS       string `json:"ts"`
+	TmuxPane string `json:"tmux_pane,omitempty"`
+	PID      int    `json:"pid"`
+	Visible  bool   `json:"visible"`
+	Reason   string `json:"reason"`
+}
+
+// LogMonitorMissedHook appends a "monitor-visibility" line recording that the
+// monitor in pane found itself `visible` at a safety-net poll, contrary to the
+// state its last hook signal set. Best-effort, like every write here.
+func LogMonitorMissedHook(pane string, visible bool) {
+	appendUserMachineLog(monitorVisibilityLogEntry{
+		Kind:     "monitor-visibility",
+		TS:       time.Now().UTC().Format(time.RFC3339),
+		TmuxPane: pane,
+		PID:      os.Getpid(),
+		Visible:  visible,
+		Reason:   "missed-hook",
+	})
+}
+
 func currentCwd() string {
 	cwd, err := os.Getwd()
 	if err != nil {
@@ -188,7 +216,7 @@ func currentCwd() string {
 // whole line (including the newline) is written in one Write call so concurrent
 // hook processes appending to the same file interleave atomically (a JSON line
 // is far below PIPE_BUF, so O_APPEND writes don't tear).
-func appendUserMachineLog(entry sessionLogEntry) {
+func appendUserMachineLog(entry any) {
 	line, err := json.Marshal(entry)
 	if err != nil {
 		return

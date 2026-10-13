@@ -764,6 +764,69 @@ var (
 			"cause is fixed, run `endless jobs retry <name>` to retry now rather " +
 			"than waiting out the backoff.",
 	}
+
+	// ErrCodeMonitorVisibilityUnreadable covers tmux refusing the visibility
+	// query (E-2229): either `endless-go monitor-wake`, which a tmux hook runs on
+	// every window switch to tell monitors whether they can be seen, or a
+	// monitor's own safety-net poll of the same thing.
+	//
+	// Warning rather than error: a monitor that cannot tell treats itself as
+	// visible and keeps drawing, which is today's cost and not a loss.
+	// Fingerprinted on the tmux server, so one broken server is one incident.
+	ErrCodeMonitorVisibilityUnreadable = Code{
+		ID:       "WARN-0033",
+		Slug:     "monitor-visibility-unreadable",
+		Severity: SeverityWarning,
+		Title:    "A monitor could not read tmux window visibility",
+		Remedy: "Run `endless errors show <n> --detail` for tmux's own error " +
+			"and the command that failed. A tmux server that has exited " +
+			"takes its monitors with it, so one that stays open usually " +
+			"means the `tmux` on the monitor's PATH cannot reach the server " +
+			"it runs in. Until it is fixed the monitor treats itself as " +
+			"visible and keeps redrawing, which costs CPU and loses " +
+			"nothing. Dismiss with `endless errors clear <id>` once the " +
+			"cause is gone.",
+	}
+
+	// ErrCodeMonitorHooksMissing covers a monitor's safety-net poll finding the
+	// window-switch hooks absent from its tmux server and putting them back
+	// (E-2229). They were installed when the first monitor started, so absent
+	// means something removed them.
+	//
+	// Warning: the reinstall has already repaired it. Fingerprinted on the tmux
+	// server, so a config that keeps removing them is one incident whose
+	// occurrence count rises.
+	ErrCodeMonitorHooksMissing = Code{
+		ID:       "WARN-0034",
+		Slug:     "monitor-hooks-missing",
+		Severity: SeverityWarning,
+		Title:    "The monitor window-switch hooks were missing and were reinstalled",
+		Remedy: "Nothing to do for a single occurrence: the monitor already put " +
+			"the hooks back. A count that keeps rising means something " +
+			"keeps removing them — a tmux config reload that runs `set-hook " +
+			"-gu`, or a plugin that replaces hooks with `set-hook -g` " +
+			"instead of appending with `-ga`. Make that config append " +
+			"instead. Dismiss with `endless errors clear <id>`.",
+	}
+
+	// ErrCodeMonitorHooksInstallFailed covers tmux refusing `set-hook` when a
+	// monitor or `endless tmux apply` installs the window-switch hooks (E-2229).
+	//
+	// Warning: without the hooks a monitor still corrects its visibility at its
+	// next safety-net poll, so a switch is noticed late rather than never.
+	ErrCodeMonitorHooksInstallFailed = Code{
+		ID:       "WARN-0035",
+		Slug:     "monitor-hooks-install-failed",
+		Severity: SeverityWarning,
+		Title:    "The monitor window-switch hooks could not be installed",
+		Remedy: "Run `endless errors show <n> --detail` for tmux's error. Until " +
+			"the hooks install, monitors still notice a window switch at " +
+			"their next safety-net poll, about 20 seconds later, so nothing " +
+			"is lost but promptness. Re-run `endless tmux apply` from " +
+			"inside the tmux session once the cause is fixed; every monitor " +
+			"also retries on its next poll. Dismiss with `endless errors " +
+			"clear <id>`.",
+	}
 )
 
 // catalog indexes every registered Code by ID. Built once at init from the
@@ -801,6 +864,9 @@ var catalog = buildCatalog(
 	ErrCodeMainDiverged,
 	ErrCodeMainRewritten,
 	ErrCodeJobUnreachable,
+	ErrCodeMonitorVisibilityUnreadable,
+	ErrCodeMonitorHooksMissing,
+	ErrCodeMonitorHooksInstallFailed,
 )
 
 // buildCatalog indexes codes by ID. It panics on a duplicate ID: a collision is

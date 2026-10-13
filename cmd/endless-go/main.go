@@ -27,6 +27,7 @@
 //	endless-go jobs          list|run|retry   (E-698 fire-once background job runner)
 //	endless-go errors        show|clear|codes (E-698 machine-local fault record)
 //	endless-go settings      list|migrate     (E-2284 registered config keys)
+//	endless-go monitor-wake  (run by tmux hooks: signal live monitors whose visibility changed, E-2229)
 //
 // Per-subcommand DB-context contract (must run BEFORE the subcommand
 // body):
@@ -68,6 +69,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/jobscmd"
 	"github.com/mikeschinkel/endless/internal/markdowncmd"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/monitorvis"
 	"github.com/mikeschinkel/endless/internal/outputstylecmd"
 	"github.com/mikeschinkel/endless/internal/projectcmd"
 	"github.com/mikeschinkel/endless/internal/projectstatuscmd"
@@ -187,7 +189,7 @@ func main() {
 	// Other subcommands stay on whatever --db/--db-dir (or absence of one)
 	// ConsumeDBFlags already established above.
 	switch sub {
-	case "hook", "tmux", "session-prime":
+	case "hook", "tmux", "session-prime", "monitor-wake":
 		// An explicit --db/--db-dir wins over the main pin (E-1429: a
 		// per-invocation flag is trustworthy; the env-driven pin is the
 		// fallback). Production invokers of these binaries never pass one,
@@ -211,6 +213,10 @@ func main() {
 		// pinned here. Pinning it is coherence with `hook`, not a choice made on
 		// anyone's behalf: a primed state written to a sandbox would never be
 		// read by the hook that clears it.
+		//
+		// `monitor-wake` (E-2229) is machine-invoked like `tmux`: a tmux hook
+		// runs it on every window switch, and the only thing it writes is a
+		// fault, which belongs where the monitors it serves record theirs.
 		if !monitor.HasExplicitDBContext() {
 			monitor.PinMainDB()
 		}
@@ -291,6 +297,8 @@ func main() {
 		errorscmd.Run(rest)
 	case "settings":
 		settingscmd.Run(rest)
+	case monitorvis.WakeVerb:
+		monitorvis.RunWake(rest)
 	default:
 		// Two readings this binary cannot tell apart. Typed by hand, it is a
 		// name the caller fixes and retries. Relayed from an `endless` verb, it
@@ -413,5 +421,6 @@ func usageText() string {
 	fmt.Fprintln(w, "  jobs           list|run|retry  (the fire-once background job runner)")
 	fmt.Fprintln(w, "  errors         list|show|clear|accept|decline|escalate|codes  (machine-local fault record)")
 	fmt.Fprintln(w, "  settings       list [--json] [--project DIR]|migrate [FILE...]  (the registered config keys)")
+	fmt.Fprintln(w, "  monitor-wake   (internal, run by tmux hooks) signal live monitors whose visibility changed")
 	return b.String()
 }

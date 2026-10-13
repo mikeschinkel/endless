@@ -24,6 +24,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/liveview"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/monitorvis"
 	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
@@ -128,6 +129,13 @@ func runStatus(args []string) {
 		frame.truncate = true
 	}
 	if o.monitor && isTTY() {
+		// Gated on visibility like `session monitor` (E-2229). The gate tags
+		// the pane with its own option and leaves Pane unset, so gating does
+		// not switch the pane fit back on (E-2156).
+		var vis liveview.Visibility
+		if gate := monitorvis.NewGate(os.Getenv("TMUX_PANE")); gate != nil {
+			vis = gate
+		}
 		liveview.Loop(liveview.LoopConfig{
 			Render:       frame.fn(),
 			ColsOverride: o.cols,
@@ -144,7 +152,8 @@ func runStatus(args []string) {
 			// selector exclusive to this window is E-1814's own job (its job gates
 			// itself); stating that here rather than shipping a comment that claims
 			// a property the code does not have.
-			FireJobs: true,
+			FireJobs:   true,
+			Visibility: vis,
 			// A query that has started failing is not something a 2s repaint can
 			// recover from, so the loop ends and the process says so. fail() runs
 			// AFTER liveview.Loop has restored the cursor.

@@ -23,6 +23,13 @@ func ExecCounts() (git, tmux int64) {
 	return gitExecs.Load(), tmuxExecs.Load()
 }
 
+// TmuxCommand is tmuxCommand for the live-view packages outside monitor that
+// also issue tmux calls per tick or per poll (internal/monitorvis), so their
+// children show up in the same per-tick count.
+func TmuxCommand(args ...string) *exec.Cmd {
+	return tmuxCommand(args...)
+}
+
 // tmuxCommand builds `tmux <args...>` and counts it.
 func tmuxCommand(args ...string) *exec.Cmd {
 	tmuxExecs.Add(1)

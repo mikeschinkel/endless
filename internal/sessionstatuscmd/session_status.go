@@ -27,6 +27,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/liveview"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/monitorvis"
 	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/sessionmonitorcmd"
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
@@ -653,6 +654,12 @@ func monitorLoop(tracker *anchorTracker, all bool, colsOverride int, color bool,
 	pane := os.Getenv("TMUX_PANE")
 	untag := sessionmonitorcmd.Tag(pane)
 	defer untag()
+	// A typed nil *Gate in the interface would read as a gate; outside tmux
+	// there is none.
+	var vis liveview.Visibility
+	if gate := monitorvis.NewGate(pane); gate != nil {
+		vis = gate
+	}
 	liveview.Loop(liveview.LoopConfig{
 		Render: func(w io.Writer, cols int, color bool) (int, error) {
 			return monitorFrame(tracker, w, all, cols, color, hm)
@@ -664,6 +671,8 @@ func monitorLoop(tracker *anchorTracker, all bool, colsOverride int, color bool,
 		// view fits this pane to its own frame on every repaint (E-1851).
 		Pane:     pane,
 		FireJobs: true,
+		// Works only while its window is on screen (E-2229).
+		Visibility: vis,
 		Fatal: func(err error) {
 			// die exits the process, so the deferred untag would never run.
 			untag()

@@ -604,6 +604,9 @@ func TestCatalog_NumbersAreNeverReused(t *testing.T) {
 		"0030": "main-diverged",
 		"0031": "main-rewritten",
 		"0032": "job-unreachable",
+		"0033": "monitor-visibility-unreadable",
+		"0034": "monitor-hooks-missing",
+		"0035": "monitor-hooks-install-failed",
 	}
 
 	for _, code := range faults.Codes() {

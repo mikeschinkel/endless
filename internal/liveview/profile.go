@@ -22,7 +22,8 @@ import (
 //
 //   - cpu.pprof — a runtime/pprof CPU profile of the whole run, flushed on a
 //     clean exit (Ctrl-C). Read it with `go tool pprof`.
-//   - ticks.log — one line per tick: the tick's wall time, this process's own
+//   - ticks.log — one line per tick: whether the view was visible or hidden
+//     (E-2229), the tick's wall time, this process's own
 //     CPU and its children's CPU spent during it, and how many git and tmux
 //     children and job-scheduling writes it issued.
 //
@@ -106,15 +107,17 @@ func (p *tickProfiler) begin() {
 	p.start = time.Now()
 }
 
-// end writes the line for the tick begin opened.
-func (p *tickProfiler) end() {
+// end writes the line for the tick begin opened. state says what the tick was:
+// "visible" for a repaint, "hidden" or "poll" for a safety-net poll (E-2229).
+func (p *tickProfiler) end(state string) {
 	if p == nil {
 		return
 	}
 	p.n++
 	now := readTickCounters()
-	fmt.Fprintf(p.log, "tick=%d wall=%s self_cpu=%s child_cpu=%s git=%d tmux=%d job_writes=%d\n",
+	fmt.Fprintf(p.log, "tick=%d state=%s wall=%s self_cpu=%s child_cpu=%s git=%d tmux=%d job_writes=%d\n",
 		p.n,
+		state,
 		time.Since(p.start).Round(time.Microsecond),
 		(now.self - p.last.self).Round(time.Microsecond),
 		(now.children - p.last.children).Round(time.Microsecond),
