@@ -15,10 +15,11 @@
 #      control-mode client is attached, so exactly one window is on screen.
 #      Only that window's monitor renders; `select-window` moves the work to
 #      the other one at once, through the hooks the monitors installed.
-#   C. The safety net: the hooks are removed by hand, and the next poll puts
-#      them back and records WARN-0034. Across that wait, the hidden monitor's
-#      CPU stays under 0.1%.
-#   D. `endless-go monitor-wake` outside tmux is silent and exits 0.
+#   C. The hidden monitor's idle cost, over a window holding one safety-net
+#      poll: under 0.1% CPU, and the poll is one tmux exec and no git.
+#   D. The safety net's repair: the hooks are removed by hand, and the next
+#      poll puts them back and records WARN-0034.
+#   E. `endless-go monitor-wake` outside tmux is silent and exits 0.
 #
 # Everything runs against throwaway state: a temp --db-dir database and a tmux
 # server under a temp TMUX_TMPDIR. All removed on exit.
@@ -33,6 +34,7 @@ SERVER_STARTED=""
 CLIENT_PID=""
 
 cleanup() {
+    exec 9>&- 2>/dev/null
     [[ -n "${CLIENT_PID}" ]] && kill "${CLIENT_PID}" 2>/dev/null
     if [[ -n "${SERVER_STARTED}" ]]; then
         TMUX_TMPDIR="${SCRATCH}/tmx" tmux kill-server 2>/dev/null
@@ -105,9 +107,13 @@ for _ in $(seq 1 50); do
 done
 assert_eq "both monitors tag their panes for the wake" "2" "${tagged}"
 
-# A control-mode client: a real attached client, needing no terminal.
-sleep 600 | tmux -C attach -t probe >/dev/null 2>&1 &
+# A control-mode client: a real attached client, needing no terminal. Its
+# stdin is a FIFO this shell holds open on fd 9, so it stays attached without a
+# helper process that would outlive the suite holding the runner's stdout.
+mkfifo "${SCRATCH}/client" || setup_error "mkfifo"
+tmux -C attach -t probe <"${SCRATCH}/client" >/dev/null 2>&1 &
 CLIENT_PID=$!
+exec 9>"${SCRATCH}/client"
 
 visible_lines() { grep -c 'state=visible' "${SCRATCH}/prof-$1/ticks.log" 2>/dev/null || true; }
 
@@ -139,32 +145,17 @@ assert_eq "two monitors starting together leave one wake hook" "1" \
     "$(printf '%s\n' "${hooks}" | grep -c 'monitor-wake')"
 
 # ─────────────────────────────────────────────────────────────────────
-section "C — hooks removed by hand come back at the next poll"
+section "C — a hidden monitor's idle cost"
 
+# w0 has been hidden since the switch. Measure it over a window long enough to
+# hold one safety-net poll (every 20s), and with nothing else happening in it.
 w0_pid="$(tmux list-panes -t probe:w0 -F '#{pane_pid}')"
 cpu_seconds() {
     ps -o cputime= -p "$1" | awk -F: '{ s = 0; for (i = 1; i <= NF; i++) s = s * 60 + $i; print s }'
 }
 cpu_before="$(cpu_seconds "${w0_pid}")"
 t_before="$(date +%s)"
-
-for h in session-window-changed client-session-changed client-attached client-detached; do
-    tmux set-hook -gu "${h}"
-done
-back=""
-for _ in $(seq 1 30); do
-    if tmux show-hooks -g client-detached | grep -q monitor-wake; then back=1; break; fi
-    sleep 1
-done
-if [[ -n "${back}" ]]; then
-    report_pass "the safety-net poll reinstalled the hooks"
-else
-    report_fail "the safety-net poll reinstalled the hooks" "monitor-wake on client-detached" \
-        "$(tmux show-hooks -g client-detached)"
-fi
-assert_eq "the reinstall recorded WARN-0034" "1" \
-    "$(sqlite3 "${dbdir}/endless.db" "SELECT COUNT(*) FROM errors WHERE code='WARN-0034'")"
-
+sleep 24
 cpu_after="$(cpu_seconds "${w0_pid}")"
 elapsed=$(( $(date +%s) - t_before ))
 pct="$(awk -v a="${cpu_before}" -v b="${cpu_after}" -v e="${elapsed}" 'BEGIN { printf "%.3f", (b - a) * 100 / e }')"
@@ -181,7 +172,31 @@ else
 fi
 
 # ─────────────────────────────────────────────────────────────────────
-section "D — monitor-wake outside tmux"
+section "D — hooks removed by hand come back at the next poll"
+
+for h in session-window-changed client-session-changed client-attached client-detached; do
+    tmux set-hook -gu "${h}"
+done
+back=""
+for _ in $(seq 1 30); do
+    if tmux show-hooks -g client-detached | grep -q monitor-wake; then back=1; break; fi
+    sleep 1
+done
+if [[ -n "${back}" ]]; then
+    report_pass "the safety-net poll reinstalled the hooks"
+else
+    report_fail "the safety-net poll reinstalled the hooks" "monitor-wake on client-detached" \
+        "$(tmux show-hooks -g client-detached)"
+fi
+# Both monitors may find the hooks gone at the same poll; it is one incident.
+assert_eq "the reinstall recorded one WARN-0034 incident" "1" \
+    "$(sqlite3 "${dbdir}/endless.db" "SELECT COUNT(*) FROM errors WHERE code='WARN-0034'")"
+sleep 1
+assert_eq "monitors repairing together still leave one wake hook" "1" \
+    "$(tmux show-hooks -g client-detached | grep -c 'monitor-wake')"
+
+# ─────────────────────────────────────────────────────────────────────
+section "E — monitor-wake outside tmux"
 
 out="$(env -u TMUX "${BIN}" monitor-wake 2>&1)"
 rc=$?
