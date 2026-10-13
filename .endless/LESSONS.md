@@ -7529,3 +7529,7 @@ Asked whether E-2240's tmux servers would depend on TMUX_TMPDIR, I re-opened -L 
 ### [2026-10-13] Search existing tasks before filing a fix for something already decided
 Situation: in E-2228 the profile showed dead tmux sockets piling up in the shared system tmux socket directory, and I filed E-2310 to auto-delete dead socket files without searching for prior work. Mike pointed out we had already agreed Endless's tmux servers need their own socket directory. That agreement is recorded on E-2240 (a per-user endless directory under tmp, 2026-10-12) and E-2278 (verify suites use a per-run TMUX_TMPDIR). Lesson: before filing a task for a problem in an area with active design work (here tmux sockets), search the task mirrors for that area's terms and frame the new task against the existing decision instead of proposing a new remedy.
 - **Project**: endless
+
+### [2026-10-13] Endless has no other users yet
+While planning E-2241 (recovering session prompts the transcript parser dropped), I weighed re-import options by 'every user who upgrades', making a migration look necessary for other users' machines. Mike: 'THERE ARE NO OTHER USERS YET!!!' Endless has one user, Mike. Weigh one-time recovery and upgrade steps for this machine; PRODUCT is how Mike asks for the other-user view, so don't raise it unprompted as a cost.
+- **Project**: endless
