@@ -26,9 +26,10 @@ spawns from the monitor server to the main tmux server".
 3. **Spawner display.** A session spawned from the console shows
    `↩ project monitor` in `session status` / `session monitor` where the ↩ from
    row would otherwise name the spawning session's task.
-4. **Target.** Anything run from the console that opens or focuses a tmux
-   window targets the `tasks` session on the task-session server. Auto-spawn
-   fired by the project monitor lands there too, whatever its target setting.
+4. **Target.** `session goto` run from the console focuses the task's window in
+   the `tasks` session on the task-session server. Spawns — `task spawn`,
+   auto-spawn fired by the project monitor — already open there under E-2240,
+   whenever that server is running; this task adds no spawn routing of its own.
 
 ## Commands, run from the console
 
@@ -42,7 +43,8 @@ spawns from the monitor server to the main tmux server".
   `snapshot`, `turn <id>`, `status <id>`
 
 **Allowed, acting on the task-session server:**
-- `task spawn` — the Claude window opens in `tasks`.
+- `task spawn` — runs without a Claude session; its window opens in `tasks`
+  by E-2240's spawn routing.
 - `session goto [--resume]` — the task's window comes to the front in the
   task-session terminal (resumed there first with `--resume`). It acts on the
   other terminal, not where the command runs, which is why it belongs here.
@@ -62,10 +64,11 @@ and has no session; they do not guess.
 
 ## Verification
 
-A suite on private tmux servers (short TMUX_TMPDIR) with a stubbed Claude:
+A suite with `tmux.socket_dir` pointed at a per-run `/tmp/endless-verify-<id>/`
+through the run's temporary `HOME` config (E-2240), and a stubbed Claude:
 each command class above behaves as listed from a console pane; the same
 commands on the task-session server are unchanged; a write from the console
 carries actor kind `project-monitor` and adds no `session_tasks` row; a console
-`task spawn` and a monitor-fired auto-spawn open windows in `tasks`; `session
+`task spawn` succeeds without a Claude session; `session
 goto` changes the task-session client's window and not the console's; a pane on
 the task-session server with no Claude session is not treated as the console.
