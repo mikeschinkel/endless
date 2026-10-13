@@ -51,7 +51,7 @@ environment.
 1. **Opening terminal windows.** A configured launch command, e.g.
    `"terminal": "ghostty -e {cmd}"` or `"wezterm start -- {cmd}"`, with a
    built-in default for terminals Endless can detect. With no command configured
-   or detected, start both servers and print the two `tmux -L … attach`
+   or detected, start both servers and print the two `tmux -S <path> attach`
    commands instead.
 2. **Running it again** always opens both terminal windows, reusing servers and
    sessions that are already running at the configured socket paths.
