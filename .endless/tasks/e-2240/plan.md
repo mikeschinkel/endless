@@ -100,3 +100,28 @@ attached; spawns land in `tasks`; after killing the task-session server, start
 recreates exactly the windows that were open (not one closed earlier) and
 resumes them, and `--no-restore` recreates none; both servers carry
 `@server_uuid` and their sessions read `live` in session liveness.
+
+## Grown scope (implementation session, 2026-10-13)
+
+Decided with Mike during implementation:
+
+- **The restore record is a state file**, `tmux-task-windows.json` in the
+  user's Endless config directory, not the database: it only remembers which
+  task windows WERE open, for after the server is gone, and it is machine-local
+  runtime state rather than ledger material. tmux itself answers what is open
+  now. It is read before the task-session server starts, because starting it
+  fires the hook that rewrites the record.
+- **The verify runner keeps every suite off the user's servers.** It writes
+  `{"tmux":{"socket_dir":"<run's private tmux dir>/endless"}}` into each run's
+  temporary HOME and kills any servers there at teardown. `_guard.sh` accepts
+  exactly that one-file config directory and still refuses anything more.
+
+Folded in:
+
+- Session liveness also enumerates tmux's default socket directory and
+  Endless's socket directory, so sessions on Endless's servers read `live`.
+- `tmux.session_name` is removed with the per-project monitor sessions it named;
+  the whole `tmux` config object is read from the CLI layer only.
+- Printed `tmux … -t =session` hints are single-quoted: zsh expands a bare
+  `=word` to a command path, so the pasted hint failed there (the existing
+  `task spawn --tmux-session` hint included).
