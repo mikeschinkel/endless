@@ -1,0 +1,1 @@
+E-2232 fixed this: the land gate splits commits by patch-id (baserewrite.Split), so a rewritten main's copies count as neither side's migrations; it refuses with 'git rebase main' and warns not to renumber. Covered by TestCheck_RewrittenMainIsNotACollision.
