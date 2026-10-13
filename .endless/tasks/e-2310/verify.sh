@@ -49,7 +49,7 @@ OUT=$(env -u TMUX -u TMUX_PANE TMUX_TMPDIR="${SHARED}" go test -count=1 ./intern
 if [[ $? -eq 0 ]]; then
     report_pass "go test ./internal/... is green"
 else
-    report_fail "go test ./internal/... is green" "$(printf '%s\n' "${OUT}" | grep -E '^(--- FAIL|FAIL|ok )' | grep -v '^ok ')"
+    report_fail "go test ./internal/... is green" "$(printf '%s\n' "${OUT}" | grep -E -A12 '^(--- FAIL|FAIL)')"
 fi
 assert_eq "no socket left in the stand-in shared dir" "" \
     "$(find "${SHARED}" -mindepth 1 -not -type d 2>/dev/null)"
