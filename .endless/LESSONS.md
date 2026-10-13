@@ -7501,3 +7501,7 @@ This supersedes the earlier lesson 'Plan items are approved individually, not al
 ### [2026-10-12] Don't assume a larger change is out of the current task's scope
 While settling E-2280's approval model, I said that adding a 'reviewed' status was bigger than E-2280's scope and would need a follow-up task. Mike: 'It would not have to be, that is just your bias.' Size alone does not put a change outside a task. Judge scope by whether the change is part of what the task is settling; if unsure, ask, rather than assert that it needs a separate task.
 - **Project**: endless
+
+### [2026-10-12] Answer the question Mike asked, not one tied to the current topic
+While planning E-2306 (task spawn on a primed task), Mike asked whether anything could 'mark a task and have its prime complete'. I took it as a question about spawn and answered with a spawn-time 'user is waiting' mark, plus a new Q3. He meant something unrelated to spawn: can a priming session record in the database that its priming has finished. When a question is ambiguous and reading it as part of the current topic means building new design to answer it, first check the simpler reading, a question about how things work now. Here that answer already existed in the code (endless session primed).
+- **Project**: endless
