@@ -7521,3 +7521,7 @@ Situation: E-2284 added `endless-go settings migrate` and the opt-in refusal (co
 ### [2026-10-12] Search go-pkgs by behavior, not by guessed function names
 Situation: after E-2284 landed, Mike asked that CLI output show paths with ~. I told him the Go side had no helper to turn $HOME into ~, based on a grep for function names I guessed (Tilde*, ShortenHome, ContractHome...). go-dt already has it in ~/Projects/go-pkgs/go-dt/tilde.go (FilepathToTilde, DirPathToTilde, ToTilde with TildeOption), and endless already depends on go-dt. Mike: 'If only you would pay attention to my code.' Before saying a helper doesn't exist, look through ~/Projects/go-pkgs (start with the file names, e.g. tilde.go) rather than grepping for names I made up, and don't claim it is missing until I have.
 - **Project**: endless
+
+### [2026-10-12] Re-read a task before raising questions about it
+Asked whether E-2240's tmux servers would depend on TMUX_TMPDIR, I re-opened -L versus -S as a new question. Another session had already agreed -S with Mike and written it into E-2240's context on 2026-10-11, after I last read the task; an earlier session (E-2266/E-2278) had settled the short /tmp socket directory. Mike was surprised to be relitigating it. Before presenting a design question about a task, re-read its current context and plan (another session may have changed it since) and search session history for the topic, and build on what was decided.
+- **Project**: endless
