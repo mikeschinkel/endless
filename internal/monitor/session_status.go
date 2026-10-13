@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/mikeschinkel/endless/internal/questionstatus"
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
 	"github.com/mikeschinkel/endless/internal/tasktype"
@@ -44,6 +45,9 @@ type SessionStatusRow struct {
 	// focal/parent/from/in-flight decorations still win over it, and ⏚ in turn
 	// wins over ⇥ closed for a landed terminal task (E-1871).
 	Landed bool
+	// Unanswered is true when the task has an open question — one waiting on
+	// the user (E-2280). An answered or closed question does not count.
+	Unanswered bool
 	// Unsettled is the landed-vs-worktree delta the flat view marks with ◆
 	// (E-1701): the task's worktree exists AND diverges from main — modified
 	// (uncommitted changes) or unlanded (commits not yet on main). It is NOT read
@@ -439,6 +443,9 @@ enr AS (
     -- filter) but the renderer routes it to ⏚ landed rather than a fresh ▶/✎/☑
     -- (E-1750 split the old ⁇ catch-all this line used to name into ⏚ + ⁇).
     EXISTS(SELECT 1 FROM task_landings tl WHERE tl.task_id = b.id) AS landed,
+    -- E-2280: a question still waiting on the user. With the status it picks
+    -- the row's glyph: ⚐ act, ¿ answer, ⚑ approve or ▶ do.
+    EXISTS(SELECT 1 FROM task_questions q WHERE q.task_id = b.id AND q.status = '` + string(questionstatus.Open) + `') AS unanswered,
     (SELECT count(*) FROM task_deps d JOIN live_tasks blk ON blk.id = d.source_id
        WHERE d.source_type = 'task' AND d.target_type = 'task'
          AND d.dep_type = 'blocks' AND d.target_id = b.id
@@ -453,7 +460,7 @@ enr AS (
   FROM allbase b
 )
 SELECT id, project_id, title, status, phase, type_slug, has_plan,
-       is_focal, is_parent, is_from, in_flight, landed, blocked_by_n, released_by_n, blocks_n,
+       is_focal, is_parent, is_from, in_flight, landed, unanswered, blocked_by_n, released_by_n, blocks_n,
        superseded_by, duplicates
   FROM enr
  WHERE (? = 1) OR is_focal OR is_parent OR is_from
@@ -480,7 +487,7 @@ func scanSessionStatusRows(rows *sql.Rows) ([]SessionStatusRow, error) {
 		var superseded, duplicates sql.NullString
 		if err := rows.Scan(
 			&r.ID, &r.ProjectID, &r.Title, &r.Status, &r.Phase, &r.TypeSlug, &r.HasPlan,
-			&r.IsFocal, &r.IsParent, &r.IsFrom, &r.InFlight, &r.Landed, &r.BlockedByN, &r.ReleasedByN, &r.BlocksN,
+			&r.IsFocal, &r.IsParent, &r.IsFrom, &r.InFlight, &r.Landed, &r.Unanswered, &r.BlockedByN, &r.ReleasedByN, &r.BlocksN,
 			&superseded, &duplicates,
 		); err != nil {
 			return nil, err
@@ -554,6 +561,9 @@ enr AS (
         WHERE s.state IN (` + liveSessionStates + `) AND s.task_id = b.id
      ) AS in_flight,
     EXISTS(SELECT 1 FROM task_landings tl WHERE tl.task_id = b.id) AS landed,
+    -- E-2280: a question still waiting on the user. With the status it picks
+    -- the row's glyph: ⚐ act, ¿ answer, ⚑ approve or ▶ do.
+    EXISTS(SELECT 1 FROM task_questions q WHERE q.task_id = b.id AND q.status = '` + string(questionstatus.Open) + `') AS unanswered,
     (SELECT count(*) FROM task_deps d JOIN live_tasks blk ON blk.id = d.source_id
        WHERE d.source_type = 'task' AND d.target_type = 'task'
          AND d.dep_type = 'blocks' AND d.target_id = b.id
@@ -568,7 +578,7 @@ enr AS (
   FROM base b
 )
 SELECT id, project_id, title, status, phase, type_slug, has_plan,
-       is_focal, is_parent, is_from, in_flight, landed, blocked_by_n, released_by_n, blocks_n,
+       is_focal, is_parent, is_from, in_flight, landed, unanswered, blocked_by_n, released_by_n, blocks_n,
        superseded_by, duplicates
   FROM enr
  WHERE (? = 1) OR status NOT IN (` + terminalStatusSet + `)

@@ -55,7 +55,9 @@ const (
 	actFrom    = taskrow.From
 	actDoing   = taskrow.Doing
 	actDo      = taskrow.Do
+	actAnswer  = taskrow.Answer
 	actReview  = taskrow.Review
+	actAct     = taskrow.Act
 	actPlan    = taskrow.Plan
 	actVerify  = taskrow.Verify
 	actRead    = taskrow.Read
@@ -1232,7 +1234,7 @@ func classify(r monitor.SessionStatusRow) action {
 	// status` shares (taskrow.Classify): ⏚ landed (E-1693) outranks ⇥ closed
 	// (E-1871), which outranks the status switch. A landed task a live session is
 	// on still reads ⟳, because the decorations above win.
-	return taskrow.Classify(r.Status, r.Landed)
+	return taskrow.Classify(r.Status, r.Landed, r.Unanswered)
 }
 
 func sortRows(rows []monitor.SessionStatusRow) {
@@ -1305,7 +1307,7 @@ func phaseRank(phase string) int {
 //     (E-1765, E-2107). The width test below is still written; it simply cannot
 //     fail.
 //   - Its silhouette is a horizontal wave, colliding with nothing in a vocabulary
-//     of circles, diamonds, arrows and boxes — actions ● ↑ ↩ ⟳ ▶ ⚑ ✎ ☑ ◷ ⏚ ⁇ ⇥ ◌,
+//     of circles, diamonds, arrows and boxes — actions ● ↑ ↩ ⟳ ▶ ¿ ⚑ ⚐ ✎ ☑ ◷ ⏚ ⁇ ⇥ ◌,
 //     unsettled ◆ ⊙, phase ✓ ! 1 2 3 ?, hidden ⊘, relation ⊕ ·, block ⊗ ⏸ — and
 //     "approximate, unresolved" is the right reading of it.
 const (

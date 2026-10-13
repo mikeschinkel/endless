@@ -7,6 +7,7 @@ import (
 	"os"
 	"strings"
 
+	"github.com/mikeschinkel/endless/internal/questionstatus"
 	"github.com/mikeschinkel/endless/internal/sessionstate"
 )
 
@@ -39,6 +40,9 @@ type ProjectStatusRow struct {
 	// while its status is still open. Same fact, same glyph (⏚) as `session
 	// status`.
 	Landed bool
+	// Unanswered is true when the task has an open question — one waiting on
+	// the user (E-2280). Same fact, same glyphs as `session status`.
+	Unanswered bool
 	// LiveSession is true when a live session holds this task: a session in a
 	// sessionstate.Live state whose liveness was not observed `dead`.
 	LiveSession bool
@@ -168,6 +172,7 @@ func ProjectStatusRows(projectID int64, phases []string) ([]ProjectStatusRow, er
 		SELECT t.id, t.title, t.status, t.phase,
 		       COALESCE(ty.slug, ''), COALESCE(t.updated_at, ''),
 		       EXISTS(SELECT 1 FROM task_landings tl WHERE tl.task_id = t.id),
+		       EXISTS(SELECT 1 FROM task_questions q WHERE q.task_id = t.id AND q.status = '` + string(questionstatus.Open) + `'),
 		       EXISTS(SELECT 1 ` + liveHolder + `),
 		       EXISTS(SELECT 1 ` + liveHolder + ` AND s.state = '` + string(sessionstate.Prompted) + `'),
 		       EXISTS(SELECT 1 ` + liveHolder + ` AND s.state = '` + string(sessionstate.Primed) + `')
@@ -187,7 +192,7 @@ func ProjectStatusRows(projectID int64, phases []string) ([]ProjectStatusRow, er
 		r := ProjectStatusRow{ProjectID: projectID}
 		if err = rows.Scan(
 			&r.TaskID, &r.Title, &r.Status, &r.Phase, &r.TypeSlug, &r.TaskUpdated,
-			&r.Landed, &r.LiveSession, &r.Prompted, &r.Primed,
+			&r.Landed, &r.Unanswered, &r.LiveSession, &r.Prompted, &r.Primed,
 		); err != nil {
 			return nil, fmt.Errorf("project status tasks: %w", err)
 		}

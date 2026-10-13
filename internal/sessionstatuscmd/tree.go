@@ -97,12 +97,14 @@ func buildSpine(focal, parent, from int64, backlogRoots []*treeNode) []*treeNode
 // Focal, parent, from, in-flight, verify, and terminal rows are excluded. So is
 // actReview (submitted): a plan the user has not reviewed yet. It is spawnable
 // (E-2200), but the implementation-order backlog is the reviewed work, so it
-// joins the tree when the user approves it to ready.
+// joins the tree when the user approves it to ready. A ready task with a
+// question waiting on the user (¿ answer, E-2280) is reviewed work too, so it
+// stays in the tree; ⚐ act, like ⚑, is not yet reviewed.
 func doPlanIDs(rows []monitor.SessionStatusRow) []int64 {
 	var ids []int64
 	for _, r := range rows {
 		switch classify(r) {
-		case actDo, actPlan:
+		case actDo, actAnswer, actPlan:
 			ids = append(ids, r.ID)
 		}
 	}

@@ -50,8 +50,14 @@ const (
 	// Ranked right after Doing: a session is there, and it wants nothing until
 	// the user is ready. ◇ is U+25C7, the session state's own glyph.
 	Primed
-	// Do: a `ready` task — reviewed, waiting to start.
+	// Do: a `ready` task — reviewed, waiting to start — with no question
+	// waiting on the user.
 	Do
+	// Answer: a `ready` task with a question waiting on the user (E-2280). The
+	// plan is approved; the answers are what stands between it and ▶ do. Spawn
+	// refuses it unless told --allow-open-questions. ¿ (U+00BF) is Latin-1 and
+	// one column in every font, like ».
+	Answer
 	// Review: a `submitted` task — a plan waiting for the user's review. Its
 	// label is "approve", the act `task approve` performs, because "review"
 	// belongs to Read (E-2156). Spawn
@@ -61,8 +67,13 @@ const (
 	// than folding into Do (▶), so a row separates "reviewed, ready to spawn" from
 	// "plan not yet reviewed". Ranked right after Do so it reads "here's what's
 	// been reviewed, then here's what's one review away". ⚑ is U+2691 BLACK FLAG
-	// (E-1765).
+	// (E-1765). E-2280: only when no question is waiting on the user; with one,
+	// it is ⚐ act.
 	Review
+	// Act: a `submitted` task with a question waiting on the user (E-2280) —
+	// both acts are the user's: approve the plan and answer. ⚐ (U+2690 WHITE
+	// FLAG) pairs with ⚑ approve.
+	Act
 	// Plan: a task with no usable plan — `unplanned` or `revisit`.
 	Plan
 	// Verify: an `unverified` task, implementation awaiting the user's verdict.
@@ -105,7 +116,9 @@ var meta = [...]struct{ icon, label string }{
 	Doing:   {"⟳", "doing"},
 	Primed:  {"◇", "primed"},
 	Do:      {"▶", "do"},
+	Answer:  {"¿", "answer"},
 	Review:  {"⚑", "approve"},
+	Act:     {"⚐", "act"},
 	Plan:    {"✎", "plan"},
 	Verify:  {"☑", "verify"},
 	Read:    {"»", "review"},
@@ -133,8 +146,10 @@ func Actions() []Action {
 // Classify maps a task's own facts to its action, below whatever decorations a
 // view applies first. Landed outranks a terminal status (⏚ over ⇥, so ⇥ marks
 // only closed work that never merged), and a terminal status outranks the
-// status switch.
-func Classify(status string, landed bool) Action {
+// status switch. unanswered (a question waiting on the user, E-2280) splits a
+// reviewed task between ▶ do and ¿ answer, and one awaiting review between
+// ⚑ approve and ⚐ act.
+func Classify(status string, landed, unanswered bool) Action {
 	if landed {
 		return Landed
 	}
@@ -143,8 +158,14 @@ func Classify(status string, landed bool) Action {
 	}
 	switch status {
 	case "ready":
+		if unanswered {
+			return Answer
+		}
 		return Do
 	case "submitted":
+		if unanswered {
+			return Act
+		}
 		return Review
 	case "unplanned", "needs_plan", "revisit":
 		return Plan

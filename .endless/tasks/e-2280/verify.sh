@@ -199,6 +199,23 @@ assert_contains "a commit touching only .endless/ leaves it current" '"pass":tru
 ( cd "$PROJ" && echo 'func Render() {}' >>widget.go && git add widget.go && git commit -qm "code" )
 assert_contains "a code change makes it stale" "code changed since the last reconciliation" "$(gate 1)"
 
+section "The board: approval and unanswered questions"
+board() {  # board <id> — that task's row in project status
+    es project status --sort id | grep -E " E-$1 "
+}
+es task add "Add a knob" --description "Add a knob to the probe project" --plan "Write the knob." \
+    --items-file "$TMP/items.toml" --complexity low --risk low >/dev/null
+es task add "Add a dial" --description "Add a dial to the probe project" --plan "Write the dial." \
+    --items-file "$TMP/items.toml" --complexity low --risk low >/dev/null
+assert_contains "not approved, nothing unanswered: approve" "⚑ T E-4" "$(board 4)"
+es question ask E-3 "Which way does it turn?" >/dev/null
+assert_contains "not approved, a question unanswered: act" "⚐ T E-3" "$(board 3)"
+es task approve E-3 >/dev/null
+assert_contains "approved, a question unanswered: answer" "¿ T E-3" "$(board 3)"
+q="$(es question list E-3 | grep -oE 'EQ-[0-9]+' | head -1)"
+es question answer "$q" "Clockwise" --by user >/dev/null
+assert_contains "approved, every question answered: do" "▶ T E-3" "$(board 3)"
+
 section "The old redirect"
 out="$(es plan list)"
 assert_not_contains "'endless plan' no longer redirects to 'task'" "renamed to 'task'" "$out"
