@@ -26,6 +26,7 @@ import (
 	"bytes"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 
@@ -125,6 +126,11 @@ type snapshot struct {
 	// entries maps each hook name to its array entries running WakeVerb, as
 	// show-hooks names them (`session-window-changed[2]`), in index order.
 	entries map[string][]string
+	// stale lists entries of ours whose binary no longer exists — installed
+	// by an endless-go since moved or deleted, such as a removed worktree's
+	// bin/. They are not counted in entries: a hook that can only fail is a
+	// hook that is missing.
+	stale []string
 }
 
 // parsePoll reads the output of pollArgs. show-hooks prints one line per entry
@@ -142,6 +148,10 @@ func parsePoll(out string) (s snapshot) {
 		default:
 			entry, command, ok := strings.Cut(line, " ")
 			if !ok || !isWakeHook(command) {
+				continue
+			}
+			if !hookBinaryExists(command) {
+				s.stale = append(s.stale, entry)
 				continue
 			}
 			name, _, _ := strings.Cut(entry, "[")
@@ -165,6 +175,26 @@ func addClientWindow(visible map[string]bool, line string) {
 // as a whole word, so a user's own `monitor-wakeful` is not taken for it.
 func isWakeHook(command string) bool {
 	return wakeHookPattern.MatchString(command)
+}
+
+// hookBinaryExists reports whether the binary a wake hook runs is still there:
+// the word before WakeVerb, unquoted. Only an absolute path can be checked; a
+// bare name is resolved by tmux's PATH and is taken as present.
+func hookBinaryExists(command string) bool {
+	loc := wakeHookPattern.FindStringIndex(command)
+	if loc == nil {
+		return true
+	}
+	fields := strings.Fields(command[:loc[0]])
+	if len(fields) == 0 {
+		return true
+	}
+	bin := strings.TrimLeft(fields[len(fields)-1], `"'`)
+	if !filepath.IsAbs(bin) {
+		return true
+	}
+	_, err := os.Stat(bin)
+	return err == nil
 }
 
 // wakeHookPattern matches WakeVerb as an argument: after whitespace, and
@@ -289,6 +319,7 @@ func showHooksArgs() (args []string) {
 // apply` calls.
 func EnsureHooks(bin string) (err error) {
 	var out string
+	var snap snapshot
 
 	out, err = runTmux(showHooksArgs()...)
 	if err != nil {
@@ -302,7 +333,9 @@ func EnsureHooks(bin string) (err error) {
 		})
 		goto end
 	}
-	err = installMissing(bin, parsePoll(out).missingHooks())
+	snap = parsePoll(out)
+	removeStaleHooks(snap)
+	err = installMissing(bin, snap.missingHooks())
 
 end:
 	return err
@@ -337,6 +370,13 @@ func installMissing(bin string, missing []string) (err error) {
 
 end:
 	return err
+}
+
+// removeStaleHooks unsets the entries of ours whose binary is gone.
+func removeStaleHooks(s snapshot) {
+	for _, entry := range s.stale {
+		_, _ = runTmux("set-hook", "-gu", entry)
+	}
 }
 
 // removeDuplicateHooks unsets every entry of ours after the first on each hook.

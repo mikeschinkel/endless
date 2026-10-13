@@ -2,6 +2,7 @@ package monitorvis
 
 import (
 	"errors"
+	"os"
 	"reflect"
 	"strings"
 	"syscall"
@@ -48,10 +49,14 @@ func (f *fakeTmux) installs() (hooks []string) {
 	return hooks
 }
 
+// liveBin is a binary path that exists — this test binary — so hooks naming
+// it are not stale.
+var liveBin = os.Args[0]
+
 func allHooksOutput(extra string) string {
 	var b strings.Builder
 	for _, hook := range HookNames {
-		b.WriteString(hook + "[0] run-shell -b \"/opt/bin/endless-go monitor-wake\"\n")
+		b.WriteString(hook + "[0] run-shell -b \"" + liveBin + " monitor-wake\"\n")
 	}
 	return b.String() + extra
 }
@@ -87,9 +92,9 @@ func TestParsePoll(t *testing.T) {
 		"client main @1",
 		"client work @3",
 		"session-window-changed[0] run-shell \"~/bin/my-own-thing\"",
-		"session-window-changed[1] run-shell -b \"/opt/bin/endless-go monitor-wake\"",
+		"session-window-changed[1] run-shell -b \"" + liveBin + " monitor-wake\"",
 		"client-session-changed",
-		"client-attached[0] run-shell -b \"/elsewhere/endless-go monitor-wake\"",
+		"client-attached[0] run-shell -b \"/elsewhere/gone/endless-go monitor-wake\"",
 		"client-detached[4] run-shell \"echo monitor-wakeful\"",
 		"",
 	}, "\n")
@@ -100,11 +105,16 @@ func TestParsePoll(t *testing.T) {
 	if !s.visible["@1"] || !s.visible["@3"] || s.visible["@2"] {
 		t.Errorf("visible = %v, want @1 and @3 only", s.visible)
 	}
-	if got, want := s.missingHooks(), []string{"client-session-changed", "client-detached"}; !reflect.DeepEqual(got, want) {
+	// client-attached's only wake hook names a binary that is gone, so it is
+	// stale and the hook counts as missing.
+	if got, want := s.missingHooks(), []string{"client-session-changed", "client-attached", "client-detached"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("missingHooks = %v, want %v", got, want)
 	}
 	if got := s.entries["session-window-changed"]; !reflect.DeepEqual(got, []string{"session-window-changed[1]"}) {
 		t.Errorf("entries = %v, want only our [1]", got)
+	}
+	if !reflect.DeepEqual(s.stale, []string{"client-attached[0]"}) {
+		t.Errorf("stale = %v, want client-attached[0]", s.stale)
 	}
 }
 
@@ -156,7 +166,7 @@ func TestGateCheck_ReinstallsMissingHooksAndRecords(t *testing.T) {
 		t.Fatalf("hooks already present: installed %v, raised %v", f.installs(), *raised)
 	}
 
-	hooks = strings.Replace(hooks, "client-detached[0] run-shell -b \"/opt/bin/endless-go monitor-wake\"\n", "client-detached\n", 1)
+	hooks = strings.Replace(hooks, "client-detached[0] run-shell -b \""+liveBin+" monitor-wake\"\n", "client-detached\n", 1)
 	g.Check()
 	if got := f.installs(); !reflect.DeepEqual(got, []string{"client-detached"}) {
 		t.Errorf("reinstalled %v, want only client-detached", got)
@@ -170,7 +180,7 @@ func TestGateCheck_ReinstallsMissingHooksAndRecords(t *testing.T) {
 // together: every entry of ours after the lowest index is unset.
 func TestGateCheck_RemovesDuplicateHooks(t *testing.T) {
 	useFaultCapture(t)
-	hooks := allHooksOutput("session-window-changed[3] run-shell -b \"/opt/bin/endless-go monitor-wake\"\n")
+	hooks := allHooksOutput("session-window-changed[3] run-shell -b \"" + liveBin + " monitor-wake\"\n")
 	f := useFakeTmux(t, func(args []string) (string, error) {
 		if args[0] == "display-message" {
 			return "self @2\n" + hooks, nil
@@ -201,6 +211,37 @@ func TestGateCheck_TmuxFailureFailsVisible(t *testing.T) {
 	}
 	if len(*raised) != 1 || (*raised)[0].Code.ID != "WARN-0033" {
 		t.Errorf("raised %+v, want one WARN-0033", *raised)
+	}
+}
+
+// TestGateCheck_ReplacesStaleHooks pins the repair for a hook left by a binary
+// since deleted: it is unset, and ours is installed in its place.
+func TestGateCheck_ReplacesStaleHooks(t *testing.T) {
+	raised := useFaultCapture(t)
+	hooks := strings.Replace(allHooksOutput(""),
+		"client-detached[0] run-shell -b \""+liveBin+" monitor-wake\"",
+		"client-detached[0] run-shell -b \"/elsewhere/gone/endless-go monitor-wake\"", 1)
+	f := useFakeTmux(t, func(args []string) (string, error) {
+		if args[0] == "display-message" {
+			return "self @2\n" + hooks, nil
+		}
+		return "", nil
+	})
+	(&Gate{pane: "%5", bin: liveBin}).Check()
+	var unset [][]string
+	for _, c := range f.calls {
+		if c[0] == "set-hook" && c[1] == "-gu" {
+			unset = append(unset, c)
+		}
+	}
+	if want := [][]string{{"set-hook", "-gu", "client-detached[0]"}}; !reflect.DeepEqual(unset, want) {
+		t.Errorf("unset %q, want %q", unset, want)
+	}
+	if got := f.installs(); !reflect.DeepEqual(got, []string{"client-detached"}) {
+		t.Errorf("installed %v, want client-detached", got)
+	}
+	if len(*raised) != 1 || (*raised)[0].Code.ID != "WARN-0034" {
+		t.Errorf("raised %+v, want one WARN-0034", *raised)
 	}
 }
 

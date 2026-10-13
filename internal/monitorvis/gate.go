@@ -91,6 +91,8 @@ func (g *Gate) poll(missingIsFault bool) (visible bool) {
 		return true
 	}
 	s := parsePoll(out)
+	// Before the install: a stale entry is replaced, not kept beside the new.
+	removeStaleHooks(s)
 	if missing := s.missingHooks(); len(missing) > 0 {
 		if missingIsFault {
 			record(faults.Fault{

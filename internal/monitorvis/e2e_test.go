@@ -212,7 +212,7 @@ func TestEnsureHooksIsIdempotentBesideUserHooks(t *testing.T) {
 	useFaultCapture(t)
 
 	for range 2 {
-		if err := EnsureHooks("/opt/bin/endless-go"); err != nil {
+		if err := EnsureHooks(os.Args[0]); err != nil {
 			t.Fatalf("EnsureHooks: %v", err)
 		}
 	}
