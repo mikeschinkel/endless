@@ -8,15 +8,43 @@ Decided with Mike, 2026-10-05 to 2026-10-12.
 Endless's own and a terminal window attached to each. Neither is the user's
 default tmux server, which stays theirs.
 
-- **console** — server `endless-console`, session `console`. One tmux window
+- **console** — server socket `endless-console`, session `console`. One tmux window
   per use: a window per project monitor (named for its project; the project
   monitor above a shell prompt), and non-project windows such as the planned
   `terms`.
-- **task-session server** — server `endless-tasks`, session `tasks`, where
-  Claude task sessions live.
+- **task-session server** — server socket `endless-tasks`, session `tasks`,
+  where Claude task sessions live.
 
-Server and session names are configurable (`tmux.console_server`,
-`tmux.tasks_server`, `tmux.tasks_session`), defaulting to the names above.
+## Sockets
+
+Every Endless tmux command addresses its server by a full socket path,
+`tmux -S <path>`, never `-L <name>` (agreed 2026-10-11). A `-L` name resolves
+inside `TMUX_TMPDIR`, which differs between shells, so two shells could reach
+two different servers of the same name; a full path cannot be redirected by the
+environment.
+
+- **Directory:** `/tmp/endless-<uid>/` — short and independent of `HOME`, the
+  reasoning agreed for E-2278's verify sockets on 2026-10-09. `/tmp` resolves to
+  `/private/tmp` on macOS, so `/private/tmp/endless-501/endless-tasks` is 37
+  bytes, far inside the ~104-byte socket limit. A path under
+  `~/.config/endless/` was rejected: it grows with `HOME`, and sockets are
+  runtime state, not config. Not `$TMPDIR`, which on macOS is a long
+  `/var/folders/…` path.
+- **Ownership:** created with mode 0700; start refuses if the directory exists
+  but is not a directory, is not owned by the user, or is writable by others —
+  `/tmp` is shared, and a pre-created directory would hand another user the
+  sockets.
+- **Reboot** clears `/tmp`; the servers do not survive a reboot either, and
+  restore (below) rebuilds from the database.
+- **Configuration:** `tmux.socket_dir`, `tmux.console_server`,
+  `tmux.tasks_server` (socket file names) and `tmux.tasks_session`, defaulting
+  to the values above. `tmux.socket_dir` and both socket names are read from the
+  user-level config only — a project-level value would let two projects reach
+  two different servers. A verify run points `tmux.socket_dir` at its own
+  directory through its temporary `HOME`'s config, so no suite can reach the
+  user's servers.
+- **E-2156's `project monitor --tmux`** currently uses `tmux -L endless`; this
+  task replaces that server, so nothing keeps using `-L`.
 
 ## Behaviour
 
@@ -26,10 +54,11 @@ Server and session names are configurable (`tmux.console_server`,
    or detected, start both servers and print the two `tmux -L … attach`
    commands instead.
 2. **Running it again** always opens both terminal windows, reusing servers and
-   sessions that are already running.
+   sessions that are already running at the configured socket paths.
 3. **tmux configuration.** Each server loads the user's `~/.tmux.conf`, then an
    Endless config file that sets what Endless needs — window naming, the status
-   line, and `@server_uuid` so session liveness can observe the server.
+   line, and `@server_uuid` so session liveness can observe the server until
+   E-2300 judges liveness by asking these known sockets directly.
 4. **Restoring task windows**, without tmux-resurrect or tmux-continuum:
    - While the task-session server runs, Endless records which task sessions
      have a live window there, written when that set changes rather than on
@@ -58,8 +87,11 @@ E-2238 makes the console's shell act on the task-session server.
 
 ## Verification
 
-On private tmux servers (short TMUX_TMPDIR), with a stub terminal command and a
-stubbed Claude: start creates both servers with the configured names and loads
+With `tmux.socket_dir` pointed at a per-run `/tmp/endless-verify-<id>/` through
+the run's temporary `HOME` config, a stub terminal command and a stubbed Claude:
+both servers' sockets are at `<socket_dir>/endless-console` and
+`<socket_dir>/endless-tasks` whatever `TMUX_TMPDIR` is set to; a socket directory
+owned by someone else or writable by others is refused; start creates both servers with the configured names and loads
 both config layers; with no terminal command it prints both attach commands; a
 second start reuses the servers; the console opens with the cwd project's window
 (a shell outside a project); `project monitor <name> --tmux` adds a window
