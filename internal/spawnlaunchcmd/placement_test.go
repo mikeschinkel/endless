@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/mikeschinkel/endless/internal/tmuxtest"
 )
 
 // TestPlacementFor pins the new-window position each placement becomes
@@ -142,7 +144,7 @@ func TestResolveTarget_OnlyRelativeAsksForActiveWindow(t *testing.T) {
 }
 
 // TestPlacement_LiveTmux runs each placement against a scratch tmux server
-// (`tmux -L`), so tmux itself — not just the argv — is what is checked: where
+// (`tmux -L`, in a private socket directory), so tmux itself — not just the argv — is what is checked: where
 // the window's tab lands, and that a detached (`--no-refocus`) spawn leaves the
 // previously active window active. The session's numbering has a hole (0, 2)
 // because that is where `<session>:` alone went wrong.
@@ -150,6 +152,7 @@ func TestPlacement_LiveTmux(t *testing.T) {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux not installed")
 	}
+	tmuxtest.Private(t)
 	sock := "endless-e2234-" + strings.ReplaceAll(t.Name(), "/", "-")
 	tm := func(args ...string) (string, error) {
 		out, err := exec.Command("tmux", append([]string{"-L", sock, "-f", "/dev/null"}, args...)...).CombinedOutput()
@@ -163,7 +166,6 @@ func TestPlacement_LiveTmux(t *testing.T) {
 		}
 		return out
 	}
-	t.Cleanup(func() { _, _ = tm("kill-server") })
 
 	run, runOut := tmuxRun, tmuxRunOut
 	t.Cleanup(func() { tmuxRun, tmuxRunOut = run, runOut })
