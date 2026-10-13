@@ -189,14 +189,22 @@ func TestRun_NoSuiteNamesBothFilenames(t *testing.T) {
 // here. If the runner ever stopped isolating, the guard would start refusing
 // every suite, so pinning both to one statement is what keeps that from
 // becoming a surprise.
+//
+// Since E-2240 the one Endless config directory the runner leaves reachable is
+// its own: nothing but the config.json that points tmux.socket_dir inside the
+// run's private tmux directory — the exception the guard accepts.
 func TestRun_ScriptSuite_RunsIsolated(t *testing.T) {
 	enterScriptSuite(t, "E-9", `#!/usr/bin/env bash
 [[ -d "$HOME" ]] || exit 20
 [[ -d "$XDG_CONFIG_HOME" ]] || exit 21
 [[ "$HOME" != "$XDG_CONFIG_HOME" ]] || exit 22
 [[ "$(dirname "$HOME")" == "$(dirname "$XDG_CONFIG_HOME")" ]] || exit 23
-[[ ! -d "$HOME/.config/endless" ]] || exit 24
-[[ ! -d "$XDG_CONFIG_HOME/endless" ]] || exit 25
+shape='^\{"tmux":\{"socket_dir":"/[^"]*/endless-verify-[^/"]+/endless"\}\}$'
+runners_own() {
+    [[ "$(ls -A "$1")" == config.json ]] && [[ "$(cat "$1/config.json")" =~ ${shape} ]]
+}
+runners_own "$HOME/.config/endless" || exit 24
+runners_own "$XDG_CONFIG_HOME/endless" || exit 25
 exit 0
 `)
 	code, err := run("E-9", false)
@@ -204,7 +212,7 @@ exit 0
 		t.Fatalf("run: %v", err)
 	}
 	if code != 0 {
-		t.Errorf("exit code = %d; the suite reports what was not isolated (20=HOME, 21=XDG, 22=same dir, 23=different parents, 24/25=an endless config is reachable)", code)
+		t.Errorf("exit code = %d; the suite reports what was not isolated (20=HOME, 21=XDG, 22=same dir, 23=different parents, 24/25=an endless config other than the runner's own is reachable)", code)
 	}
 }
 
