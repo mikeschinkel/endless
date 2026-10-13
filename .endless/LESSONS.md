@@ -7509,3 +7509,7 @@ While planning E-2306 (task spawn on a primed task), Mike asked whether anything
 ### [2026-10-12] Recommend the fix the epic's design already provides before a new mechanism
 Planning E-2228 (session monitor idle CPU), I recommended throttling the per-tick liveness refresh with a shared freshness timestamp. Mike asked why not just run it only in a visible tmux window, which is the gate the epic (E-2229, ED-1606) already chose. The throttle also rested on an unchecked premise: the liveness observation tables are per-connection TEMP tables (E-1898), so one pane cannot refresh for the others. Before recommending a fix for a cost, check whether the epic's chosen mechanism already removes it, and read how the thing works before proposing to share it.
 - **Project**: endless
+
+### [2026-10-12] Mark blocked_by only for a practical dependency, not an ideal-path one
+Planning E-2229 (gate monitor work on tmux visibility), Mike asked why E-1850 (tmux layout brainstorm) and E-2086 (setup installs tmux config) were blockers. They block the ideal home for the visibility hooks (an Endless-owned tmux config), not the work itself: hooks can be installed at runtime the way 'endless tmux apply' already installs options. Mike says agents have repeatedly marked tasks as blockers when they block an ideal path rather than the practical one. Before recording or relying on blocked_by, ask whether the task truly cannot proceed without the other, or only would prefer it; the latter is relates-to.
+- **Project**: endless
