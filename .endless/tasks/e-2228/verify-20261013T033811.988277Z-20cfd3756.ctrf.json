@@ -1,0 +1,54 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 7,
+      "passed": 7,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "monitor, jobs, liveview and faults unit tests pass",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "--no-optional-locks status leaves .git/index untouched",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "control: plain status does rewrite the stale index",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the diagnostic wrote one line per tick (5 ticks)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the diagnostic flushed a CPU profile on Ctrl-C",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "an idle tick costs 2 tmux execs among 40 dead sockets (was 2 per socket)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no job-scheduling writes while nothing is due",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
