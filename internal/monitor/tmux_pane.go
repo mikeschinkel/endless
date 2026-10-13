@@ -2,7 +2,6 @@ package monitor
 
 import (
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
 )
@@ -37,7 +36,7 @@ func PaneWindowHeight(pane string) int {
 	if pane == "" {
 		return 0
 	}
-	out, err := exec.Command("tmux", paneWindowHeightArgs(pane)...).Output()
+	out, err := tmuxCommand(paneWindowHeightArgs(pane)...).Output()
 	if err != nil {
 		return 0
 	}
@@ -57,7 +56,7 @@ func ResizePaneHeight(pane string, rows int) error {
 		return fmt.Errorf("resize pane: no pane id")
 	}
 	args := resizePaneHeightArgs(pane, rows)
-	if err := exec.Command("tmux", args...).Run(); err != nil {
+	if err := tmuxCommand(args...).Run(); err != nil {
 		return fmt.Errorf("tmux %v: %w", args, err)
 	}
 	return nil
@@ -75,7 +74,7 @@ func PaneWindowPanes(pane string) int {
 	if pane == "" {
 		return 0
 	}
-	out, err := exec.Command("tmux", paneWindowPanesArgs(pane)...).Output()
+	out, err := tmuxCommand(paneWindowPanesArgs(pane)...).Output()
 	if err != nil {
 		return 0
 	}

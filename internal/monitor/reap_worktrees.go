@@ -592,8 +592,8 @@ func recordReapDefaultBranchFault(dir string, taskID int64, err error) {
 // fixture-driven implementation without building real git fixtures; they assign
 // it directly and restore it from t.Cleanup.
 var runGit = func(ctx context.Context, dir string, args ...string) (string, error) {
-	full := append([]string{"-C", dir}, args...)
-	cmd := exec.CommandContext(ctx, "git", full...)
+	gitExecs.Add(1)
+	cmd := exec.CommandContext(ctx, "git", gitArgv(dir, args...)...)
 	out, err := cmd.CombinedOutput()
 	switch {
 	case killedBySIGINT(err):
@@ -613,6 +613,18 @@ var runGit = func(ctx context.Context, dir string, args ...string) (string, erro
 		err = fmt.Errorf("%w: %v", ErrGitInterrupted, err)
 	}
 	return string(out), err
+}
+
+// gitArgv is runGit's argv after `git`: `--no-optional-locks -C <dir> <args...>`.
+//
+// --no-optional-locks (E-2228): without it a read-only `git status` refreshes
+// the index and rewrites .git/index whenever stat data has moved, and on macOS
+// every rewrite is an fseventsd event. The monitor runs status on every tick of
+// every pane, so that was a steady write stream from a view that only reads.
+// The flag skips only OPTIONAL locks; a command that must write (worktree
+// remove, branch -D) still takes the locks it needs.
+func gitArgv(dir string, args ...string) []string {
+	return append([]string{"--no-optional-locks", "-C", dir}, args...)
 }
 
 // ErrGitInterrupted marks a git child that died on SIGINT rather than failing.

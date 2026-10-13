@@ -560,3 +560,66 @@ func TestLastOkAt_ReadsThePreviousSuccessfulRun(t *testing.T) {
 		t.Errorf("after a failure: %v ok=%v err=%v, want unchanged %v", again, ok, err, at)
 	}
 }
+
+// totalChanges reads SQLite's count of rows changed on the test DB's one
+// connection since it opened.
+func totalChanges(t *testing.T, db *sql.DB) (n int64) {
+	t.Helper()
+	if err := db.QueryRow(`SELECT total_changes()`).Scan(&n); err != nil {
+		t.Fatalf("total_changes: %v", err)
+	}
+	return n
+}
+
+// The trigger fires on every tick of every live view, and nearly every tick has
+// nothing due. Such a tick must cost the database a read and nothing else
+// (E-2228): before, it issued an ensureRow INSERT and a claim UPDATE per job.
+func TestRunDue_NothingDueWritesNothing(t *testing.T) {
+	db := newTestDB(t)
+	job := &fakeJob{name: "hourly", schedule: Schedule{Interval: time.Hour}}
+	register(t, job)
+
+	RunDue(context.Background()) // first tick: the row is created, the job runs
+	if got := job.runs.Load(); got != 1 {
+		t.Fatalf("job ran %d times on its first tick, want 1", got)
+	}
+
+	before, writesBefore := totalChanges(t, db), WriteStatements()
+	result := RunDue(context.Background())
+	if after := totalChanges(t, db); after != before {
+		t.Errorf("an idle tick changed %d rows, want 0", after-before)
+	}
+	if n := WriteStatements() - writesBefore; n != 0 {
+		t.Errorf("an idle tick issued %d write statements, want 0", n)
+	}
+	if len(result.Outcomes) != 1 || result.Outcomes[0].Claimed {
+		t.Errorf("outcomes = %+v, want one unclaimed outcome for the job", result.Outcomes)
+	}
+}
+
+// The due check is a read in front of the claim, not a replacement for it: a
+// job whose lease has expired is due again and is re-run.
+func TestDueJobs_MissingRowIsDueAndLiveLeaseIsNot(t *testing.T) {
+	db := newTestDB(t)
+	jobs := []Job{
+		&fakeJob{name: "new", schedule: Schedule{Interval: time.Hour}},
+		&fakeJob{name: "leased", schedule: Schedule{Interval: time.Hour}},
+		&fakeJob{name: "expired", schedule: Schedule{Interval: time.Hour}},
+	}
+	_, err := db.Exec(`INSERT INTO jobs (name, next_due_at, lease_owner, lease_expires_at, created_at, updated_at) VALUES
+		('leased',  '2000-01-01T00:00:00', 'other', '2999-01-01T00:00:00', '2000-01-01T00:00:00', '2000-01-01T00:00:00'),
+		('expired', '2000-01-01T00:00:00', 'other', '2000-01-01T00:00:00', '2000-01-01T00:00:00', '2000-01-01T00:00:00')`)
+	if err != nil {
+		t.Fatalf("seed: %v", err)
+	}
+	due, err := dueJobs(db, jobs)
+	if err != nil {
+		t.Fatalf("dueJobs: %v", err)
+	}
+	want := map[string]bool{"new": true, "leased": false, "expired": true}
+	for name, w := range want {
+		if due[name] != w {
+			t.Errorf("due[%q] = %v, want %v", name, due[name], w)
+		}
+	}
+}

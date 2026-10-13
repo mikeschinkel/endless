@@ -31,6 +31,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/jobs"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
 // Interval is the redraw cadence for every live view, inherited from the bash
@@ -123,6 +124,7 @@ type LoopConfig struct {
 // view knows its row count, whatever built the layout cannot, so the pane sizes
 // itself instead of being guessed at creation. Best-effort and silent: outside
 // tmux, or when tmux refuses (a single-pane window), the view is unchanged.
+// The fit asks tmux only when what it decides on has changed (paneFit).
 //
 // It also watches the binary it was started from, and re-execs in place when an
 // install replaces it (E-2193; see restart.go). A replacement that cannot start
@@ -138,12 +140,23 @@ func Loop(cfg LoopConfig) {
 		fatal = func(err error) { os.Exit(1) }
 	}
 
+	prof, err := startProfiler()
+	if err != nil {
+		refusal.NoReport(profileEnv+" cannot be used: "+err.Error(),
+			"point "+profileEnv+" at a writable directory, or unset it").Exit(1)
+	}
+
 	io.WriteString(out, "\x1b[?25l")                         // hide cursor
 	restore := func() { io.WriteString(out, "\x1b[?25h\n") } // show cursor + trailing newline
 
 	sigs := make(chan os.Signal, 1)
 	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
 	defer signal.Stop(sigs)
+	// SIGWINCH says the pane changed size, which is when the pane fit has to
+	// ask tmux again even though the frame did not change.
+	winch := make(chan os.Signal, 1)
+	signal.Notify(winch, syscall.SIGWINCH)
+	defer signal.Stop(winch)
 
 	io.WriteString(out, "\x1b[2J\x1b[H") // clear screen, cursor home
 	tick := cfg.Tick
@@ -172,7 +185,8 @@ func Loop(cfg LoopConfig) {
 		}()
 	}
 
-	prev, fitted := "", 0
+	prev := ""
+	fit := &paneFit{pane: cfg.Pane}
 
 	// The binary watch (E-2193). Before an exec the cursor comes back and the
 	// signal relay stops, so the new image starts from a terminal and a signal
@@ -181,10 +195,12 @@ func Loop(cfg LoopConfig) {
 	watch := newRestarter(
 		func() {
 			signal.Stop(sigs)
+			signal.Stop(winch)
 			io.WriteString(out, "\x1b[?25h")
 		},
 		func() {
 			signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+			signal.Notify(winch, syscall.SIGWINCH)
 			io.WriteString(out, "\x1b[?25l")
 			prev = "" // force a full repaint over whatever the attempt left
 		},
@@ -192,6 +208,7 @@ func Loop(cfg LoopConfig) {
 
 	for {
 		var b strings.Builder
+		prof.begin()
 
 		// Checked BEFORE jobs fire: on the tick that decides to exec, nothing
 		// is fired — and once a restart has failed, nothing ever is again.
@@ -199,6 +216,7 @@ func Loop(cfg LoopConfig) {
 		cols := DetectCols(cfg.ColsOverride, cfg.FallbackCols)
 		rows, err := cfg.Render(&b, cols, cfg.Color)
 		if err != nil {
+			prof.stop()
 			restore()
 			fatal(err)
 			return
@@ -206,17 +224,26 @@ func Loop(cfg LoopConfig) {
 		if notice := watch.Notice(); notice != "" {
 			fmt.Fprintln(&b, Strong("⚠ "+notice, cfg.Color))
 		}
-		if frame := b.String(); frame != prev {
+		resized := false
+		select {
+		case <-winch:
+			resized = true
+			fit.resized()
+		default:
+		}
+		if frame := b.String(); frame != prev || resized {
 			// Resize BEFORE painting so the frame lands in a pane already the
 			// right size (a shrink after the paint would scroll rows away).
-			fitted = FitPaneToFrame(cfg.Pane, frame, cols, rows, fitted)
+			fit.fit(frame, cols, rows)
 			// Home, repaint each line (erased to end-of-line), then clear to
 			// end-of-display so a now-shorter frame leaves no stale rows behind.
 			io.WriteString(out, "\x1b[H"+EraseEachLineToEOL(frame)+"\x1b[J")
 			prev = frame
 		}
+		prof.end()
 		select {
 		case <-sigs:
+			prof.stop()
 			restore()
 			return
 		case <-ticker.C:
@@ -316,6 +343,58 @@ func FitPaneToFrame(pane, frame string, cols, rows, fitted int) int {
 		return fitted
 	}
 	return height
+}
+
+// paneWindowHeight and resizePaneHeight are the tmux calls the pane fit makes,
+// held as vars so a test can count them without a tmux server.
+var (
+	paneWindowHeight = monitor.PaneWindowHeight
+	resizePaneHeight = monitor.ResizePaneHeight
+)
+
+// paneFit is Loop's pane fit with memory (E-2228). FitPaneToFrame asks tmux for
+// the window height on every changed frame, but a frame changes far more often
+// than the height it needs: a row's text moves while its line count does not.
+// So paneFit remembers what its last decision was based on, and asks tmux again
+// only when one of those inputs moved — the frame's measured height, the row
+// count, the width — or when the terminal was resized (SIGWINCH), which is
+// the one way the window height changes underneath an unchanged frame.
+//
+// A failed resize is remembered the same way: the same inputs will not retry
+// it on every repaint, and the next change of input or size will.
+type paneFit struct {
+	pane    string
+	decided bool
+	lines   int
+	rows    int
+	cols    int
+	fitted  int
+}
+
+// resized forgets the last decision, so the next fit asks tmux again.
+func (f *paneFit) resized() {
+	f.decided = false
+}
+
+// fit resizes the pane to hold frame when its inputs changed since the last
+// decision.
+func (f *paneFit) fit(frame string, cols, rows int) {
+	if f.pane == "" {
+		return
+	}
+	lines := FrameDisplayRows(frame, cols)
+	if f.decided && lines == f.lines && rows == f.rows && cols == f.cols {
+		return
+	}
+	f.decided, f.lines, f.rows, f.cols = true, lines, rows, cols
+	height := PaneHeightForFrame(lines, rows, paneWindowHeight(f.pane))
+	if height == f.fitted {
+		return
+	}
+	if resizePaneHeight(f.pane, height) != nil {
+		return
+	}
+	f.fitted = height
 }
 
 // EraseEachLineToEOL wraps a rendered frame so that repainting it over a prior

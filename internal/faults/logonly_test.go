@@ -427,3 +427,48 @@ func TestLogOnly_ListsAndClearsPreRenameLines(t *testing.T) {
 		t.Errorf("LogOnlyCount = %d after clearing, want 0", n)
 	}
 }
+
+// LogOnlyCount backs the fault row, which repaints every two seconds. While
+// neither the log nor its watermark has changed it answers from the last read
+// rather than reading again (E-2228); a new occurrence is still seen at once.
+func TestLogOnlyCount_ReadsOnlyWhenTheLogChanged(t *testing.T) {
+	logDir := newBrokenStore(t)
+	record := func() {
+		faults.Record(faults.Fault{
+			Code:    faults.ErrCodeHookWriteFailed,
+			Source:  "hook:claude",
+			Summary: "database unreachable",
+		})
+	}
+
+	record()
+	if n := faults.LogOnlyCount(); n != 1 {
+		t.Fatalf("LogOnlyCount = %d, want 1", n)
+	}
+
+	// Make the log unreadable without changing its size, mtime or identity. A
+	// count that still comes back 1 did not open the file; one that read it
+	// would fail and answer 0.
+	log := filepath.Join(logDir, "errors.jsonl")
+	if err := os.Chmod(log, 0); err != nil {
+		t.Fatal(err)
+	}
+	if n := faults.LogOnlyCount(); n != 1 {
+		t.Errorf("LogOnlyCount over an unchanged log = %d, want the remembered 1", n)
+	}
+	if err := os.Chmod(log, 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	record()
+	if n := faults.LogOnlyCount(); n != 2 {
+		t.Errorf("LogOnlyCount after a new occurrence = %d, want 2", n)
+	}
+
+	if _, err := faults.ClearLogOnly(); err != nil {
+		t.Fatalf("ClearLogOnly: %v", err)
+	}
+	if n := faults.LogOnlyCount(); n != 0 {
+		t.Errorf("LogOnlyCount after a clear = %d, want 0", n)
+	}
+}

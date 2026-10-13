@@ -2,7 +2,6 @@ package monitor
 
 import (
 	"os"
-	"os/exec"
 	"strings"
 
 	"crypto/rand"
@@ -69,7 +68,7 @@ func (tc *TmuxContext) ToMap() map[string]string {
 }
 
 func tmuxDisplay(format string) string {
-	out, err := exec.Command("tmux", "display-message", "-p", format).Output()
+	out, err := tmuxCommand("display-message", "-p", format).Output()
 	if err != nil {
 		return ""
 	}
@@ -82,7 +81,7 @@ func ensureTmuxUUID(target, key string) (string, error) {
 	if target != "" {
 		args = []string{"display-message", "-p", "-t", target, fmt.Sprintf("#{%s}", key)}
 	}
-	out, err := exec.Command("tmux", args...).Output()
+	out, err := tmuxCommand(args...).Output()
 	if err != nil {
 		return "", err
 	}
@@ -97,7 +96,7 @@ func ensureTmuxUUID(target, key string) (string, error) {
 	if target != "" {
 		setArgs = []string{"set-option", "-t", target, key, uuid}
 	}
-	err = exec.Command("tmux", setArgs...).Run()
+	err = tmuxCommand(setArgs...).Run()
 	if err != nil {
 		return "", err
 	}

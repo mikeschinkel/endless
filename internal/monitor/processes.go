@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"strings"
 
 	"github.com/mikeschinkel/endless/internal/processkind"
@@ -237,7 +236,7 @@ func TmuxServerUUID() (string, error) {
 
 // liveTmuxServerUUID is TmuxServerUUID's real implementation; see that doc.
 func liveTmuxServerUUID() (string, error) {
-	out, err := exec.Command("tmux", tmuxShowServerUUIDArgs()...).Output()
+	out, err := tmuxCommand(tmuxShowServerUUIDArgs()...).Output()
 	if err == nil {
 		if uuid := strings.TrimSpace(string(out)); uuid != "" {
 			return uuid, nil
@@ -247,7 +246,7 @@ func liveTmuxServerUUID() (string, error) {
 	// here is indistinguishable from "unset" — try to stamp, and let THAT tell
 	// us whether a server is reachable at all.
 	uuid := generateUUID()
-	if err = exec.Command("tmux", tmuxSetServerUUIDArgs(uuid)...).Run(); err != nil {
+	if err = tmuxCommand(tmuxSetServerUUIDArgs(uuid)...).Run(); err != nil {
 		return "", nil // no reachable tmux server
 	}
 	return uuid, nil

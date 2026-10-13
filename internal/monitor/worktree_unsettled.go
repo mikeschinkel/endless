@@ -335,7 +335,7 @@ func worktreeUnsettledAt(ctx context.Context, worktreePath string, mode unlanded
 	// Probe 1 — uncommitted changes, LIVE on every path. Partitioned for display
 	// only: BOTH halves count toward unsettled, matching the predicate's
 	// unfiltered `status` test.
-	out, gerr := runGit(ctx, worktreePath, "status", "--porcelain")
+	out, gerr := gitStatusPorcelain(ctx, worktreePath)
 	if gerr != nil {
 		d.StatusErr = firstLine(out, gerr)
 		d.Interrupted = errors.Is(gerr, ErrGitInterrupted)

@@ -2,6 +2,7 @@ package sessionstatuscmd
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"os"
 	"reflect"
@@ -387,7 +388,7 @@ func TestRenderFrame_GraphAfterHiddenFooter(t *testing.T) {
 	}
 	g := newGB(102, 103).blocks(103, 102).build()
 	var b bytes.Buffer
-	renderFrame(&b, rows, 100, hintClaimBind, 200, false, hiddenOmit, g)
+	renderFrame(context.Background(), &b, rows, 100, hintClaimBind, 200, false, hiddenOmit, g)
 	out := b.String()
 	footer := strings.Index(out, hiddenFooter(1))
 	graph := strings.Index(out, "E-103 => E-102")

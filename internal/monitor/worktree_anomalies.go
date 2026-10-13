@@ -187,7 +187,7 @@ func worktreeAnomaliesAt(ctx context.Context, projectRoot, wt string) []Worktree
 	var anomalies []WorktreeAnomaly
 
 	// 1. Uncommitted/untracked USER files — auto-managed churn partitioned out.
-	if out, gerr := runGit(ctx, wt, "status", "--porcelain"); gerr == nil {
+	if out, gerr := gitStatusPorcelain(ctx, wt); gerr == nil {
 		if user := userStatusPaths(out); len(user) > 0 {
 			anomalies = append(anomalies, WorktreeAnomaly{
 				Kind:   AnomalyUncommitted,

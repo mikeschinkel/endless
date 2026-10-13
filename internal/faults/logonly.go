@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/mikeschinkel/go-doterr"
 )
@@ -131,18 +132,75 @@ end:
 // LogOnlyCount returns how many log-only occurrences are outstanding. Zero
 // on any read failure: this backs a notice, and a notice must not be able to
 // fail the view it annotates.
+//
+// The answer is a function of two files, the log and its watermark, so it is
+// remembered against their stat (E-2228): while neither has changed, a repaint
+// costs two stats instead of an open, a prefix digest and a tail read.
 func LogOnlyCount() (n int) {
 	var details []Detail
 	var err error
+	var stamp logOnlyStamp
+
+	stamp = stampLogOnly()
+	logOnlyMemo.mu.Lock()
+	defer logOnlyMemo.mu.Unlock()
+	if logOnlyMemo.valid && logOnlyMemo.stamp.same(stamp) {
+		n = logOnlyMemo.n
+		goto end
+	}
 
 	details, err = LogOnly()
 	if err != nil {
+		logOnlyMemo.valid = false
 		goto end
 	}
 	n = len(details)
+	logOnlyMemo.stamp, logOnlyMemo.n, logOnlyMemo.valid = stamp, n, true
 
 end:
 	return n
+}
+
+// logOnlyMemo is LogOnlyCount's last answer and the stat it was read under.
+var logOnlyMemo struct {
+	mu    sync.Mutex
+	valid bool
+	stamp logOnlyStamp
+	n     int
+}
+
+// logOnlyStamp is the stat of both files LogOnlyCount's answer depends on. A
+// path that cannot be resolved or stat'ed stamps as absent, which is itself a
+// state: the log appearing for the first time is a change.
+type logOnlyStamp struct {
+	logPath, markPath string
+	log, mark         os.FileInfo
+}
+
+func stampLogOnly() (st logOnlyStamp) {
+	st.logPath, st.markPath = DetailLogPath(), WatermarkPath()
+	if st.logPath != "" {
+		st.log, _ = os.Stat(st.logPath)
+	}
+	if st.markPath != "" {
+		st.mark, _ = os.Stat(st.markPath)
+	}
+	return st
+}
+
+// same reports whether two stamps describe the same two files, unchanged: same
+// paths, and each file either absent in both or the same file (device and
+// inode, so a rotation is a change) at the same size and modification time.
+func (a logOnlyStamp) same(b logOnlyStamp) bool {
+	return a.logPath == b.logPath && a.markPath == b.markPath &&
+		sameFileState(a.log, b.log) && sameFileState(a.mark, b.mark)
+}
+
+func sameFileState(a, b os.FileInfo) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return os.SameFile(a, b) && a.Size() == b.Size() && a.ModTime().Equal(b.ModTime())
 }
 
 // ClearLogOnly moves the watermark to the end of the log, dismissing every

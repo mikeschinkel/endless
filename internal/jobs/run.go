@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/mikeschinkel/go-doterr"
@@ -29,6 +30,18 @@ const (
 	sqlNow       = `strftime('%Y-%m-%dT%H:%M:%S', 'now')`
 	sqlNowOffset = `strftime('%Y-%m-%dT%H:%M:%S', 'now', ?)`
 )
+
+// writeStatements counts the scheduling-table write statements this process
+// has issued (E-2228). The trigger fires on every live-view tick, so what an
+// idle tick costs the database is this counter's delta, and the
+// ENDLESS_MONITOR_PROFILE diagnostic reports it per tick.
+var writeStatements atomic.Int64
+
+// WriteStatements returns how many scheduling-table write statements this
+// process has issued. Monotonic: a caller diffs two readings.
+func WriteStatements() int64 {
+	return writeStatements.Load()
+}
 
 // Outcome is what happened to one job during a single RunDue invocation.
 type Outcome struct {
@@ -79,6 +92,7 @@ func RunDue(ctx context.Context) (result Result) {
 	var err error
 	var job Job
 	var jobs []Job
+	var due map[string]bool
 
 	if Suppressed() {
 		goto end
@@ -113,12 +127,87 @@ func RunDue(ctx context.Context) (result Result) {
 		})
 		goto end
 	}
+	due, err = dueJobs(db, jobs)
+	if err != nil {
+		faults.Record(faults.Fault{
+			Code:        faults.ErrCodeJobScheduling,
+			Source:      "jobs",
+			Fingerprint: "runner-due-check-failed",
+			Summary:     "background job runner could not read which jobs are due",
+			Detail:      err.Error(),
+		})
+		goto end
+	}
 	for _, job = range jobs {
+		if !due[job.Name()] {
+			result.Outcomes = append(result.Outcomes, Outcome{Name: job.Name()})
+			continue
+		}
 		result.Outcomes = append(result.Outcomes, runOne(ctx, db, job))
 	}
 
 end:
 	return result
+}
+
+// dueJobs answers, in ONE read, which registered jobs a claim could succeed on
+// now: those with no scheduling row yet, and those due whose lease is free or
+// expired (claim's own WHERE clause). RunDue claims only these (E-2228).
+//
+// The trigger fires on every tick of every live view, and before this it wrote
+// on every one: an ensureRow INSERT and a claim UPDATE per registered job,
+// about twenty statements a tick when nothing was due — which is nearly every
+// tick. A read answers "nothing to do" without taking SQLite's write lock.
+//
+// It is an optimization, not the arbitration: a job this read calls due may
+// still lose its claim to another process, and claim's compare-and-set decides
+// that exactly as before. A job it calls not due is simply asked again next
+// tick. A missing row counts as due, so ensureRow still runs for a newly
+// registered job on its first tick.
+func dueJobs(db *sql.DB, jobs []Job) (due map[string]bool, err error) {
+	var rows *sql.Rows
+	var name string
+	var claimable bool
+	var args []any
+	var marks []string
+
+	due = make(map[string]bool, len(jobs))
+	if len(jobs) == 0 {
+		goto end
+	}
+	for _, job := range jobs {
+		due[job.Name()] = true
+		args = append(args, job.Name())
+		marks = append(marks, "?")
+	}
+	rows, err = db.Query(
+		`SELECT name,
+		        next_due_at <= `+sqlNow+`
+		        AND (lease_owner IS NULL OR lease_expires_at <= `+sqlNow+`)
+		   FROM jobs
+		  WHERE name IN (`+strings.Join(marks, ", ")+`)`,
+		args...,
+	)
+	if err != nil {
+		err = doterr.NewErr(ErrJobs, ErrDatabase, ErrQuery, err)
+		goto end
+	}
+	defer rows.Close()
+	for rows.Next() {
+		err = rows.Scan(&name, &claimable)
+		if err != nil {
+			err = doterr.NewErr(ErrJobs, ErrDatabase, ErrQuery, err)
+			goto end
+		}
+		due[name] = claimable
+	}
+	err = rows.Err()
+	if err != nil {
+		err = doterr.NewErr(ErrJobs, ErrDatabase, ErrQuery, err)
+	}
+
+end:
+	return due, err
 }
 
 // RunNamed forces one named job to run NOW, bypassing the due check but NOT the
@@ -301,6 +390,7 @@ func isBusy(err error) (busy bool) {
 }
 
 func ensureRow(db *sql.DB, name string) (err error) {
+	writeStatements.Add(1)
 	_, err = db.Exec(
 		`INSERT INTO jobs (name, next_due_at, created_at, updated_at)
 		 VALUES (?, `+sqlNow+`, `+sqlNow+`, `+sqlNow+`)
@@ -316,6 +406,7 @@ func ensureRow(db *sql.DB, name string) (err error) {
 // markDue forces a job due now without touching its failure history. Used by
 // RunNamed; `jobs retry` uses Retry, which also clears the backoff.
 func markDue(db *sql.DB, name string) (err error) {
+	writeStatements.Add(1)
 	_, err = db.Exec(
 		`UPDATE jobs SET next_due_at = `+sqlNow+`, updated_at = `+sqlNow+` WHERE name = ?`,
 		name,
@@ -334,6 +425,7 @@ func markDue(db *sql.DB, name string) (err error) {
 // It returns the job's CURRENT consecutive-failure count alongside, so complete
 // can compute the backoff without a second read.
 func claim(db *sql.DB, name, owner string, ttl time.Duration) (claimed bool, failCount int, err error) {
+	writeStatements.Add(1)
 	err = db.QueryRow(
 		`UPDATE jobs
 		    SET lease_owner      = ?,
@@ -388,6 +480,7 @@ func complete(db *sql.DB, job Job, owner string, priorFailCount int, runErr erro
 		lastNote = note
 	}
 
+	writeStatements.Add(1)
 	result, err = db.Exec(
 		`UPDATE jobs
 		    SET lease_owner      = NULL,

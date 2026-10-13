@@ -537,7 +537,12 @@ func renderSnapshot(w io.Writer, a anchor, all bool, cols int, color bool, hm hi
 	// Flat view only: fill each row's Unsettled flag from its worktree's git state
 	// so the renderer can mark the landed-vs-worktree delta with ◆ (E-1701). --tree
 	// takes a separate path and skips this git cost.
-	monitor.AnnotateSessionStatusUnsettled(context.Background(), rows)
+	//
+	// One frame, one memo (E-2228): the focal row's anomaly lines read the same
+	// worktree status this annotation does, so they share it rather than run
+	// git status twice.
+	ctx := monitor.WithFrameMemo(context.Background())
+	monitor.AnnotateSessionStatusUnsettled(ctx, rows)
 	// Layer the VIEWING session's hides on top (E-1914). Annotating rather than
 	// filtering in the query keeps the row set viewer-agnostic and leaves the
 	// omit/show/only decision entirely to the renderer — which is also what lets
@@ -563,7 +568,7 @@ func renderSnapshot(w io.Writer, a anchor, all bool, cols int, color bool, hm hi
 	if err != nil {
 		return 0, err
 	}
-	renderFrame(w, rows, a.focal, a.hint, cols, color, hm, graph)
+	renderFrame(ctx, w, rows, a.focal, a.hint, cols, color, hm, graph)
 	return len(rows), nil
 }
 
@@ -699,13 +704,14 @@ func eraseEachLineToEOL(frame string) string { return liveview.EraseEachLineToEO
 var worktreeAnomalies = monitor.WorktreeAnomalies
 
 func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskHint string, cols int, color bool, hm hiddenMode) {
-	renderFrame(w, rows, focal, noTaskHint, cols, color, hm, orderGraph{})
+	renderFrame(context.Background(), w, rows, focal, noTaskHint, cols, color, hm, orderGraph{})
 }
 
 // renderFrame is renderTo with the ordering graph (E-2164), which it draws
 // after the hidden-rows footer and before the fault row. renderTo is the
-// graph-less form every table-only caller keeps using.
-func renderFrame(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskHint string, cols int, color bool, hm hiddenMode, graph orderGraph) {
+// graph-less form every table-only caller keeps using. ctx carries the frame's
+// git memo (monitor.WithFrameMemo) to the focal anomaly probe.
+func renderFrame(ctx context.Context, w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskHint string, cols int, color bool, hm hiddenMode, graph orderGraph) {
 	// Gate on rows, not focal: a session with no claimed goal (focal == 0) still
 	// has surfaced/revisited rows to render (E-1802). Only the truly-empty case —
 	// no goal AND no session work — falls through to the claim/bind (or register-
@@ -819,7 +825,7 @@ func renderFrame(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTa
 		// (it correctly means unsettled — modified-or-unlanded, E-1701); only this
 		// detail line goes.
 		if r.IsFocal {
-			for _, a := range worktreeAnomalies(context.Background(), r.ProjectID, r.ID) {
+			for _, a := range worktreeAnomalies(ctx, r.ProjectID, r.ID) {
 				if a.Kind == monitor.AnomalyUncommitted {
 					continue
 				}

@@ -3,11 +3,12 @@ package monitor
 import (
 	"database/sql"
 	"fmt"
+	"net"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/mikeschinkel/endless/internal/processkind"
 )
@@ -462,7 +463,7 @@ func tmuxListPanesArgs(socket string) []string {
 // justified a destructive write; here it costs only certainty about rows we
 // then decline to judge.
 func observeTmuxServers() []observedServer {
-	out, err := exec.Command("tmux", tmuxSocketDirArgs()...).Output()
+	out, err := tmuxCommand(tmuxSocketDirArgs()...).Output()
 	if err != nil {
 		// No tmux, or no server at all. Observe nothing; every session reads
 		// `unknown`. Not an error — see RefreshLiveness's contract.
@@ -481,8 +482,15 @@ func observeTmuxServers() []observedServer {
 			continue
 		}
 		socket := filepath.Join(dir, entry.Name())
+		if !socketAccepts(socket) {
+			// A socket file nothing is listening on — a server that was killed
+			// without unlinking it. Answered here by a connect() rather than by
+			// the tmux exec below, which would say the same thing for the price
+			// of a fork (E-2228).
+			continue
+		}
 
-		uuidOut, uuidErr := exec.Command("tmux", tmuxServerUUIDArgs(socket)...).Output()
+		uuidOut, uuidErr := tmuxCommand(tmuxServerUUIDArgs(socket)...).Output()
 		if uuidErr != nil {
 			// Stale socket (no server listening) or a live server with no
 			// @server_uuid set. Both exit non-zero; neither is identifiable.
@@ -493,7 +501,7 @@ func observeTmuxServers() []observedServer {
 			continue
 		}
 
-		panesOut, panesErr := exec.Command("tmux", tmuxListPanesArgs(socket)...).Output()
+		panesOut, panesErr := tmuxCommand(tmuxListPanesArgs(socket)...).Output()
 		if panesErr != nil {
 			// Reached it a moment ago, cannot read it now (it died mid-refresh).
 			// Do NOT record it as observed: an observed server with zero panes
@@ -503,6 +511,31 @@ func observeTmuxServers() []observedServer {
 		servers = append(servers, observedServer{uuid: uuid, panes: parsePaneList(string(panesOut))})
 	}
 	return servers
+}
+
+// socketAcceptTimeout bounds the liveness connect() below. A listening server
+// accepts at once; the bound only matters for one wedged mid-accept.
+const socketAcceptTimeout = 200 * time.Millisecond
+
+// socketAccepts reports whether a server is listening on the unix socket at
+// path. It is the cheap half of observeTmuxServers' probe (E-2228): a dead
+// socket refuses the connect immediately, so it costs no tmux child.
+//
+// Dead sockets are not rare. Every tmux server killed without unlinking its
+// socket — a test's private server, a verify run's — leaves one, and they
+// accumulate in the directory every refresh scans. On the machine that found
+// this, 151 of 153 were dead: two tmux execs each, on every tick of every
+// monitor, about 1s of child CPU per tick, for servers that did not exist.
+//
+// A false "accepts" costs only the exec it would have cost anyway: the tmux
+// probe that follows is still the verdict.
+func socketAccepts(path string) bool {
+	conn, err := net.DialTimeout("unix", path, socketAcceptTimeout)
+	if err != nil {
+		return false
+	}
+	conn.Close()
+	return true
 }
 
 // parsePaneList turns `list-panes -F "#{pane_id}\t#{pane_current_command}"`

@@ -4,7 +4,6 @@ import (
 	"database/sql"
 	"errors"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
-	"os/exec"
 	"strings"
 )
 
@@ -125,9 +124,7 @@ func queryTaskForPanes(db *sql.DB, panes []string) (*TaskInfo, error) {
 // is scoped to the target's window only — not the whole session, not
 // all sessions on the server.
 func listPanesInSameWindow(targetPane string) ([]string, error) {
-	out, err := exec.Command("tmux",
-		"list-panes", "-t", targetPane, "-F", "#{pane_id}",
-	).Output()
+	out, err := tmuxCommand("list-panes", "-t", targetPane, "-F", "#{pane_id}").Output()
 	if err != nil {
 		return nil, err
 	}
@@ -313,9 +310,7 @@ func isShellCommand(cmd string) bool {
 // it. A hint that is briefly wrong misleads nobody and owns nothing; a liveness
 // verdict that is briefly wrong loses work. See internal/monitor/liveness.go.
 func paneIsRunningShell(tmuxPane string) (isShell, known bool) {
-	out, err := exec.Command("tmux",
-		"display-message", "-p", "-t", tmuxPane, "#{pane_current_command}",
-	).Output()
+	out, err := tmuxCommand("display-message", "-p", "-t", tmuxPane, "#{pane_current_command}").Output()
 	if err != nil {
 		return false, false
 	}

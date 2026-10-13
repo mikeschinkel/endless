@@ -1,9 +1,8 @@
 package monitor
 
 import (
-	"github.com/mikeschinkel/endless/internal/taskcontent"
 	"database/sql"
-	"os/exec"
+	"github.com/mikeschinkel/endless/internal/taskcontent"
 	"strconv"
 	"strings"
 
@@ -287,9 +286,7 @@ func tmuxWindowOption(pane, name string) string {
 	if pane == "" {
 		return ""
 	}
-	out, err := exec.Command(
-		"tmux", "display-message", "-p", "-t", pane, "#{"+name+"}",
-	).Output()
+	out, err := tmuxCommand("display-message", "-p", "-t", pane, "#{"+name+"}").Output()
 	if err != nil {
 		return ""
 	}
