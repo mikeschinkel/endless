@@ -10,8 +10,10 @@
 # What is verified here, against real tmux servers in a socket directory of
 # this run's own (tmux.socket_dir, set through the run's temporary HOME), a
 # throwaway database, a stub terminal command and a stub Claude:
-#   A. Fail-fast: this task's Go and Python tests.
-#  B0. The runner wrote this run's own tmux.socket_dir into the temp HOME.
+#   A. Fail-fast: this task's Go and Python tests — among them the runner's
+#      own half of the isolation (it writes a per-run tmux.socket_dir into
+#      every run's temp HOME), which cannot be observed from here: the runner
+#      executing this suite is the installed one until this task lands.
 #   B. Both sockets land in tmux.socket_dir whatever TMUX_TMPDIR says; with no
 #      terminal to open, both attach commands are printed; both config layers
 #      load; both servers carry @server_uuid.
@@ -122,18 +124,6 @@ start() {
     (cd "$1" && env -u TMUX -u TMUX_PANE -u TERM_PROGRAM TERM=dumb \
         TMUX_TMPDIR="${TMP}/tmuxtmp" "${GO[@]}" tmux start "${@:2}" 2>&1)
 }
-
-# ---------------------------------------------------------------------------
-section "B0. The runner keeps every suite off the user's Endless servers"
-# ---------------------------------------------------------------------------
-
-RUNNER_CFG="$(cat "${CFG_DIR}/config.json" 2>/dev/null)"
-shape='^\{"tmux":\{"socket_dir":"/[^"]*/endless-verify-[^/"]+/endless"\}\}$'
-[[ "${RUNNER_CFG}" =~ ${shape} ]] \
-    && report_pass "the runner pointed tmux.socket_dir inside this run's private tmux dir" \
-    || report_fail "the runner pointed tmux.socket_dir inside this run's private tmux dir" "${shape}" "${RUNNER_CFG}"
-"${GO[@]}" tmux tasks-target >/dev/null 2>&1
-assert_eq "so no task-session server is reachable before this suite starts one" "1" "$?"
 
 # ---------------------------------------------------------------------------
 section "B. Sockets, attach commands, config layers, identity"
