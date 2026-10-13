@@ -7525,3 +7525,7 @@ Situation: after E-2284 landed, Mike asked that CLI output show paths with ~. I 
 ### [2026-10-12] Re-read a task before raising questions about it
 Asked whether E-2240's tmux servers would depend on TMUX_TMPDIR, I re-opened -L versus -S as a new question. Another session had already agreed -S with Mike and written it into E-2240's context on 2026-10-11, after I last read the task; an earlier session (E-2266/E-2278) had settled the short /tmp socket directory. Mike was surprised to be relitigating it. Before presenting a design question about a task, re-read its current context and plan (another session may have changed it since) and search session history for the topic, and build on what was decided.
 - **Project**: endless
+
+### [2026-10-13] Search existing tasks before filing a fix for something already decided
+Situation: in E-2228 the profile showed dead tmux sockets piling up in the shared system tmux socket directory, and I filed E-2310 to auto-delete dead socket files without searching for prior work. Mike pointed out we had already agreed Endless's tmux servers need their own socket directory. That agreement is recorded on E-2240 (a per-user endless directory under tmp, 2026-10-12) and E-2278 (verify suites use a per-run TMUX_TMPDIR). Lesson: before filing a task for a problem in an area with active design work (here tmux sockets), search the task mirrors for that area's terms and frame the new task against the existing decision instead of proposing a new remedy.
+- **Project**: endless
