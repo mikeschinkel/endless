@@ -15,7 +15,7 @@ endless project info <name>                    # for a named project
 endless project status                         # the project's open urgent/now/next tasks
 endless project status <name>                  # for a named project
 endless project monitor                        # the same lists, live, until Ctrl-C
-endless project monitor --tmux                 # the monitor on its own tmux server, in its own terminal
+endless project monitor <name> --tmux          # a monitor window for <name> in Endless's console
 ```
 
 `project info` is the registration card — metadata, notes, dependencies.
@@ -77,6 +77,52 @@ endless sql "SELECT name FROM pragma_table_info('tasks') ORDER BY cid" --tsv
 For straightforward task queries, prefer `endless task list --agent --status <...>` — it's purpose-built for agent consumption and respects business logic (e.g., `unverified` vs `confirmed` for blocking). Reach for `sql` when you need a count/aggregate or a join the CLI doesn't expose.
 
 ---
+
+## Endless's tmux servers (`endless start`)
+
+```bash
+endless start                   # alias of `endless tmux start`
+endless tmux start --no-restore # without recreating the task windows
+```
+
+Endless runs on two tmux servers of its own, never on your default server,
+which stays yours:
+
+- **console** — socket `endless-console`, session `console`: one window per
+  project monitor (the monitor above a shell), named for the project.
+- **task-session server** — socket `endless-tasks`, session `tasks`: where
+  task sessions live. While it runs, every spawned window — `task spawn`,
+  `task claim`'s window, auto-spawn — opens here, from inside tmux or not.
+
+`start` starts whichever is not running and opens a terminal window attached
+to each. A console it starts opens with a monitor window for the project
+enclosing the working directory, or a shell outside a project. Running it
+again reuses what is running and opens both terminal windows again.
+
+Every Endless command reaches these servers by full socket path
+(`tmux -S /tmp/endless-<uid>/endless-tasks`), never by `-L` name, so no
+environment variable can point two shells at two different servers. The
+directory is created 0700; Endless refuses one it does not own or that others
+can write.
+
+**Restoring task windows.** While the task-session server runs, Endless keeps
+a record of which task windows are open, rewritten when that set changes. When
+`start` finds the server gone — killed, crashed, rebooted — it recreates each
+recorded window that is not open and resumes Claude in it, as `session resume
+--tmux-session` would. A window closed before the server went away is not
+recreated; neither is a plain shell window.
+
+**Settings**, all in `~/.config/endless/config.json` (never a project's):
+`tmux.socket_dir`, `tmux.console_server`, `tmux.tasks_server`,
+`tmux.tasks_session`, and `tmux.terminal` — the command that opens a terminal,
+with `{cmd}` where the attach command goes, e.g. `"ghostty -e {cmd}"` or
+`"wezterm start -- {cmd}"`. Without one, Endless detects Ghostty, WezTerm,
+kitty, Terminal.app and iTerm2; when it can detect nothing it prints the two
+attach commands instead.
+
+`endless project monitor <name> --tmux` adds a window for that project to the
+console — another one each run — starting the console if needed and opening a
+terminal onto it when none is attached.
 
 ## Tmux integration
 

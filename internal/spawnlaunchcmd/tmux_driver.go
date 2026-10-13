@@ -301,9 +301,22 @@ var (
 	tmuxRunOut = runTmuxOut
 )
 
+// tmuxSocket, when set, puts every tmux command this process runs on the
+// server at that path: the task-session server, when a spawn is routed there
+// (E-2240). Unset, commands reach the server the caller is in.
+var tmuxSocket string
+
+// tmuxCommand builds one tmux invocation on the chosen server.
+func tmuxCommand(args ...string) *exec.Cmd {
+	if tmuxSocket != "" {
+		args = append([]string{"-S", tmuxSocket}, args...)
+	}
+	return exec.Command("tmux", args...)
+}
+
 // runTmux execs one tmux command, surfacing its stderr on failure.
 func runTmux(args ...string) error {
-	cmd := exec.Command("tmux", args...)
+	cmd := tmuxCommand(args...)
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = refusal.Passthrough()
 	if err := cmd.Run(); err != nil {
@@ -317,7 +330,7 @@ func runTmux(args ...string) error {
 // failure is visible; stdout is captured rather than inherited so tmux's `-P`
 // pane-id echo never leaks into the spawner's terminal.
 func runTmuxOut(args ...string) (string, error) {
-	cmd := exec.Command("tmux", args...)
+	cmd := tmuxCommand(args...)
 	cmd.Stderr = refusal.Passthrough()
 	out, err := cmd.Output()
 	if err != nil {

@@ -1,13 +1,22 @@
 package projectstatuscmd
 
 import (
+	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/mikeschinkel/go-cfgstore"
+
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
+
+// config.Load logs through go-cfgstore, which panics without a logger.
+func init() {
+	cfgstore.SetLogger(slog.New(slog.NewTextHandler(io.Discard, nil)))
+}
 
 func writeProjectConfig(t *testing.T, body string) string {
 	t.Helper()

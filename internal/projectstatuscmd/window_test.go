@@ -14,41 +14,25 @@ import (
 func joined(args []string) string { return strings.Join(args, " ") }
 
 var demoLayout = windowLayout{
-	Session:    "demo",
+	Session:    "console",
+	Window:     "demo",
 	Dir:        "/tmp/demo",
 	MonitorCmd: []string{"endless", "project", "monitor", "demo"},
 }
 
-// TestNewSessionArgsIsADetachedShell pins two things at once, and the second is
-// the one that bites.
-//
-// Detached (-d): creating the monitor must never yank the user out of what they
-// are doing.
-//
-// And NO COMMAND: the session's first pane is the user's shell, because the
-// SHELL is created first and the monitor inserted above it. Creating the monitor
-// first and splitting a shell off it races the monitor's own self-resize — E-1851
-// learned that in the spawn layout, and this launcher shipped with it backwards
-// (E-1976). The symptom is a window with no second pane at all.
-func TestNewSessionArgsIsADetachedShell(t *testing.T) {
-	got := newSessionArgs(demoLayout)
-	if !strings.Contains(joined(got), "new-session -d -s demo") {
-		t.Errorf("new-session is not detached or misnames the session: %v", got)
+// TestTheFirstWindowIsAShell pins what the console's new-session is given
+// when the project window is its first: the window's name and directory, and
+// NO command. The session's first pane is the user's shell, because the SHELL
+// is created first and the monitor inserted above it. Creating the monitor
+// first and splitting a shell off it races the monitor's own self-resize —
+// E-1851 learned that in the spawn layout, and this launcher shipped with it
+// backwards (E-1976). The symptom is a window with no second pane at all.
+func TestTheFirstWindowIsAShell(t *testing.T) {
+	got := newSessionExtra(demoLayout)
+	if joined(got) != "-n demo -c /tmp/demo" {
+		t.Errorf("new-session extra = %v, want the window name and dir only", got)
 	}
-	if !strings.Contains(joined(got), "-c /tmp/demo") {
-		t.Errorf("new-session does not start in the project dir: %v", got)
-	}
-	if indexOf(got, "--") >= 0 {
-		t.Errorf("new-session names a command; the first pane must be the user's shell: %v", got)
-	}
-	if !strings.Contains(joined(got), "-P -F #{pane_id}") {
-		t.Errorf("new-session does not report the shell's pane id: %v", got)
-	}
-}
-
-func TestNewSessionArgsOmitsAnEmptyDir(t *testing.T) {
-	got := newSessionArgs(windowLayout{Session: "s"})
-	if strings.Contains(joined(got), "-c ") {
+	if got := newSessionExtra(windowLayout{Window: "demo"}); joined(got) != "-n demo" {
 		t.Errorf("an empty dir still produced a -c flag: %v", got)
 	}
 }
@@ -83,53 +67,23 @@ func TestFocusReturnsToTheShell(t *testing.T) {
 	}
 }
 
-// TestEveryWindowIsNamedProjects: both ways a launch gets a window name it
-// `projects`, and -n is what keeps tmux from renaming it to the shell.
-func TestEveryWindowIsNamedProjects(t *testing.T) {
-	for name, args := range map[string][]string{
-		"new-session": newSessionArgs(demoLayout),
-		"new-window":  newWindowArgs(demoLayout),
-	} {
-		if i := indexOf(args, "-n"); i < 0 || args[i+1] != "projects" {
-			t.Errorf("%s does not name its window projects: %v", name, args)
-		}
-		if indexOf(args, "-P") < 0 {
-			t.Errorf("%s does not report the shell pane's id: %v", name, args)
-		}
+// TestTheWindowIsNamedForItsProject: the window carries the project's name,
+// folded to a legal tmux name, and -n keeps tmux from renaming it to the shell.
+func TestTheWindowIsNamedForItsProject(t *testing.T) {
+	args := newWindowArgs(layoutFor("my.project", "/tmp/p"))
+	if i := indexOf(args, "-n"); i < 0 || args[i+1] != "my-project" {
+		t.Errorf("new-window does not name its window for the project: %v", args)
+	}
+	if indexOf(args, "-P") < 0 {
+		t.Errorf("new-window does not report the shell pane's id: %v", args)
 	}
 }
 
-// TestNewWindowTargetsTheSessionExactly: `=demo:` is the session itself, matched
-// exactly, so `demo` never resolves to `demo-legacy`.
-func TestNewWindowTargetsTheSessionExactly(t *testing.T) {
-	if !strings.Contains(joined(newWindowArgs(demoLayout)), "-t =demo:") {
-		t.Errorf("new-window does not target the session exactly: %v", newWindowArgs(demoLayout))
-	}
-}
-
-// TestLauncherUsesItsOwnServer: every command the launcher runs goes to the
-// monitor's server, never the user's default one.
-func TestLauncherUsesItsOwnServer(t *testing.T) {
-	got := tmuxArgs([]string{"has-session", "-t", "=demo"})
-	if joined(got[:2]) != "-L endless" {
-		t.Errorf("launcher command is not on the endless server: %v", got)
-	}
-	if attachHint("demo") != "tmux -L endless attach -t demo" {
-		t.Errorf("attach hint = %q", attachHint("demo"))
-	}
-}
-// TestSessionTargetsAreExact pins the `=` prefix. Without it tmux matches a
-// session name as a PREFIX, so a project whose name is a prefix of another's
-// (`h2pp` inside `h2pp-legacy`) resolves to the wrong monitor, and the launcher
-// attaches to — or declares already existing — a session that is not its own.
-func TestSessionTargetsAreExact(t *testing.T) {
-	for name, args := range map[string][]string{
-		"has-session":    hasSessionArgs("e-demo-monitor"),
-		"attach-session": attachArgs("e-demo-monitor"),
-	} {
-		if !strings.Contains(joined(args), "=e-demo-monitor") {
-			t.Errorf("%s targets the session by prefix, not exactly: %v", name, args)
-		}
+// TestNewWindowTargetsTheConsoleExactly: `=console:` is the session itself,
+// matched exactly.
+func TestNewWindowTargetsTheConsoleExactly(t *testing.T) {
+	if !strings.Contains(joined(newWindowArgs(demoLayout)), "-t =console:") {
+		t.Errorf("new-window does not target the console exactly: %v", newWindowArgs(demoLayout))
 	}
 }
 

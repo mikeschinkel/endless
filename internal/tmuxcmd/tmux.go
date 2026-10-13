@@ -3,6 +3,8 @@
 //
 // Subcommands:
 //
+//	start        Start Endless's own tmux servers and open a terminal on each
+//	             (E-2240; see internal/tmuxstartcmd).
 //	apply        Ephemerally configure the running tmux server: enable a
 //	             second status line, wire status-format[1] to the printer,
 //	             install hotkey and right-click popup menus. No file I/O;
@@ -25,6 +27,7 @@ import (
 	"strings"
 
 	"github.com/mikeschinkel/endless/internal/refusal"
+	"github.com/mikeschinkel/endless/internal/tmuxstartcmd"
 )
 
 func Run(args []string) {
@@ -44,6 +47,12 @@ func Run(args []string) {
 	// longer exists: liveness is derived at read time from a per-invocation
 	// observation rather than swept into the sessions table, so there is no
 	// stale state for an operator verb to clear.
+	case "start":
+		tmuxstartcmd.Run(args[1:])
+	case "record-windows":
+		tmuxstartcmd.RunRecord(args[1:])
+	case "tasks-target":
+		tmuxstartcmd.RunTasksTarget(args[1:])
 	case "status-line":
 		runStatusLine(args[1:])
 	case "active-id":
@@ -72,11 +81,14 @@ func Run(args []string) {
 
 // usageText is the command list, printed for --help and carried as the body of
 // the two usage refusals above. It advertises init/apply/status-line only:
-// active-id and show-menu are plumbing for the menus, not verbs a user types.
+// active-id and show-menu are plumbing for the menus, and record-windows and
+// tasks-target for the task-session server's hooks and the spawn paths — not
+// verbs a user types.
 func usageText() string {
 	return strings.Join([]string{
 		"Usage: endless-go tmux <command> [flags]",
 		"Commands:",
+		"  start        Start Endless's console and task-session tmux servers (E-2240)",
 		"  init         Init the current tmux server (apply, gated by @server_uuid)",
 		"  apply        Configure the running tmux server (ephemeral)",
 		"  status-line  Print one styled line for status-format[1]",

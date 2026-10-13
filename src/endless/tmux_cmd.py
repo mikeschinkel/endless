@@ -12,6 +12,7 @@ module owning that shellout beats two spellings of it. E-1302.
 """
 
 import os
+import shlex
 import shutil
 import subprocess
 
@@ -66,6 +67,67 @@ def run_init(hotkey: str, status_interval: int) -> None:
     result = subprocess.run(cmd)
     if result.returncode != 0:
         agent_help.passthrough_exit(result.returncode)  # as in run_apply
+
+
+def run_start(no_restore: bool) -> None:
+    """Shell out to `endless-go tmux start` (E-2240), stdio inherited."""
+    cmd = [_binary(), "tmux", "start"]
+    if no_restore:
+        cmd.append("--no-restore")
+    result = subprocess.run(cmd)
+    if result.returncode != 0:
+        agent_help.passthrough_exit(result.returncode)  # as in run_apply
+
+
+def tasks_server() -> tuple[str, str] | None:
+    """The task-session server's (socket, session) while it runs, else None.
+
+    While it runs, every spawned task window opens there (E-2240), so a spawn or
+    a claim no longer needs its caller to be inside tmux. Never raises: a
+    missing endless-go answers "not running", and the caller then behaves as
+    it did before the server existed.
+    """
+    path = shutil.which("endless-go")
+    if not path:
+        return None
+    result = subprocess.run([path, "tmux", "tasks-target"],
+                            capture_output=True, text=True)
+    if result.returncode != 0:
+        return None
+    socket, _, session = result.stdout.strip().partition("\t")
+    if not socket or not session:
+        return None
+    return socket, session
+
+
+def in_server(socket: str) -> bool:
+    """Whether this process runs inside the tmux server at `socket`."""
+    tmux = os.environ.get("TMUX", "")
+    if not tmux:
+        return False
+    here = tmux.split(",", 1)[0]
+    try:
+        return os.path.samefile(here, socket)
+    except OSError:
+        return here == socket
+
+
+def reach_window_line(window: str) -> str | None:
+    """The command that reaches a spawned window on the task-session server.
+
+    None when that server is not running, and the caller keeps its own hint.
+    """
+    target = tasks_server()
+    if target is None:
+        return None
+    socket, session = target
+    # Quoted: zsh expands a bare `=word` to the path of command `word`.
+    target = shlex.quote(f"={session}:{window}")
+    if target[0] != "'":
+        target = f"'{target}'"
+    if in_server(socket):
+        return f"tmux select-window -t {target}"
+    return f"tmux -S {shlex.quote(socket)} attach -t {target}"
 
 
 def run_status_line() -> None:

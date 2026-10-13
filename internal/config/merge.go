@@ -91,12 +91,9 @@ func (c *EndlessConfig) Merge(other cfgstore.RootConfig) cfgstore.RootConfig {
 	// rules. See mergeChecks.
 	out.Checks = mergeChecks(c.Checks, o.Checks)
 
-	// Layered field: Tmux. Merged PER FIELD rather than wholesale, so a
-	// project that sets one tmux preference does not silently blank the
-	// others it inherits. Same receiver-wins-on-non-empty rule as Tracking.
-	if out.Tmux.SessionName == "" {
-		out.Tmux.SessionName = o.Tmux.SessionName
-	}
+	// Tmux is CLI-only (E-2240): every field is read from the CLI layer alone,
+	// so nothing a project sets here may reach the merged config.
+	out.Tmux = o.Tmux
 
 	// Layered field: ProjectStatus.Colors, per list and per attribute, so a
 	// project recoloring one list keeps the others it inherits.

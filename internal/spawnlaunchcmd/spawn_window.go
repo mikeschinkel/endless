@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/mikeschinkel/endless/internal/refusal"
+	"github.com/mikeschinkel/endless/internal/tmuxservers"
 )
 
 // runSpawnWindow is the outer orchestrator — the only spawn verb Python calls.
@@ -100,6 +101,20 @@ func runSpawnWindow(args []string) {
 		spawnWindowReport(fmt.Sprintf("spawn-window: resolve self: %v", err),
 			"whether to reinstall endless-go, which could not resolve the path of its own running binary").
 			Exit(1)
+	}
+
+	// E-2240: while Endless's task-session server is running, every spawn's
+	// window opens in its tasks session — task spawn, task claim's window and
+	// auto-spawn alike. An auto-spawn's --target-session is a session id on
+	// whichever server the job runs beside, which is not where task windows
+	// live once that server exists. Only a person's explicit --tmux-session
+	// still names a session on the server they are in.
+	if *tmuxSess == "" {
+		if tasks, ok := tmuxservers.RunningTasks(); ok {
+			tmuxSocket = tasks.Socket
+			*targetSess = ""
+			*tmuxSess = tasks.Session
+		}
 	}
 
 	// Resolve the landing session BEFORE the window is asked for, so a spawn

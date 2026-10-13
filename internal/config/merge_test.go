@@ -119,32 +119,16 @@ func TestMerge_ProjectOnlyFieldsPreserved(t *testing.T) {
 	}
 }
 
-// TestTmuxSessionNameMerge pins that the tmux object layers PER FIELD, project
-// over global — the same rule Tracking follows.
-//
-// Per field rather than wholesale, because a project that sets one tmux
-// preference must not silently blank the others it inherits. The object has one
-// field today, which is exactly when this is easy to get wrong and impossible to
-// notice: a wholesale copy passes every test until the second field is added.
-func TestTmuxSessionNameMerge(t *testing.T) {
-	tests := []struct {
-		name            string
-		project, global string
-		want            string
-	}{
-		{"project wins", "{{project}}-watch", "e-{{project}}-monitor", "{{project}}-watch"},
-		{"project inherits when unset", "", "e-{{project}}-monitor", "e-{{project}}-monitor"},
-		{"neither set stays empty (caller applies the default)", "", "", ""},
-		{"project-only", "watch", "", "watch"},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			proj := &EndlessConfig{Tmux: Tmux{SessionName: tt.project}}
-			glob := &EndlessConfig{Tmux: Tmux{SessionName: tt.global}}
-			got := proj.Merge(glob).(*EndlessConfig)
-			if got.Tmux.SessionName != tt.want {
-				t.Errorf("merged session_name = %q, want %q", got.Tmux.SessionName, tt.want)
-			}
-		})
+// TestTmuxIsCLIOnly pins that the tmux object comes from the CLI layer alone
+// (E-2240). Its socket fields decide which server every Endless command
+// reaches, so a project-level value would let two projects reach two different
+// servers of the same name.
+func TestTmuxIsCLIOnly(t *testing.T) {
+	proj := &EndlessConfig{Tmux: Tmux{SocketDir: "/tmp/project", TasksSession: "mine"}}
+	glob := &EndlessConfig{Tmux: Tmux{SocketDir: "/tmp/user", Terminal: "wezterm start -- {cmd}"}}
+	got := proj.Merge(glob).(*EndlessConfig).Tmux
+	want := glob.Tmux
+	if got != want {
+		t.Errorf("merged tmux = %+v, want the CLI layer's %+v", got, want)
 	}
 }

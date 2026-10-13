@@ -28,7 +28,7 @@ const ConfigFile = "config.json"
 //   - Project-only: Name, Label, Description, Language, Status, Dependencies, Documents,
 //     Migrations.
 //     These have no CLI-layer analog; the CLI layer ignores them.
-//   - Layered: Tracking, Checks, Tmux, ProjectStatus. Project values override
+//   - Layered: Tracking, Checks, ProjectStatus. Project values override
 //     CLI values.
 //
 // JSON tags MUST stay byte-identical to the existing on-disk schema so files
@@ -64,9 +64,7 @@ type EndlessConfig struct {
 	// default is its registered setting's (see monitor.Checks).
 	Checks map[string]OptInText `json:"checks,omitempty"`
 
-	// Tmux holds multiplexer preferences. Layered per field, not wholesale:
-	// setting one of its fields in a project must not blank the others
-	// inherited from the CLI layer.
+	// Tmux holds multiplexer preferences. CLI-only: see Tmux.
 	Tmux Tmux `json:"tmux,omitzero"`
 
 	// AutoSpawn configures the auto-spawn job (E-1814). Its fields are split
@@ -243,22 +241,42 @@ const (
 	AutoSpawnTargetMonitor = "monitor"
 )
 
-// Tmux is the "tmux" object: how Endless names and shapes what it creates in
-// the multiplexer.
+// Tmux is the "tmux" object: where Endless's own tmux servers live and how a
+// terminal window is opened onto them (E-2240).
+//
+// Every field is read from the CLI layer (~/.config/endless/config.json) only,
+// and none is merged from a project. The socket fields decide WHICH server
+// every Endless command reaches; a project-level value would let two projects
+// reach two different servers of the same name. The tasks session and the
+// terminal are the user's for the same reason: one server serves every
+// project, and one person sits in front of it.
+//
+// Empty means the built-in default, which tmuxservers.Resolve supplies.
 type Tmux struct {
-	// SessionName is the Go text/template rendering the tmux session name that
-	// `endless project monitor --tmux` opens for a project (E-1976). Empty
-	// inherits, and a fully-empty result falls back to projectstatuscmd's
-	// built-in default.
-	//
-	// `{{project}}` is available as a function, so the value reads the way a user
-	// would write it; `{{.Project}}` resolves to the same string for anyone who
-	// prefers the data form.
-	//
-	// The rendered result is folded to a legal tmux session name, so a template
-	// may hold spaces, dots or slashes without the user having to know tmux's
-	// rules.
-	SessionName string `json:"session_name,omitempty"`
+	// SocketDir is the directory both servers' sockets live in. Default
+	// `/tmp/endless-<uid>`: short (a socket path is limited to ~104 bytes) and
+	// independent of HOME. Endless creates it 0700 and refuses one it does not
+	// own or that others can write.
+	SocketDir string `json:"socket_dir,omitempty"`
+
+	// ConsoleServer is the console server's socket file name inside SocketDir.
+	// Default `endless-console`.
+	ConsoleServer string `json:"console_server,omitempty"`
+
+	// TasksServer is the task-session server's socket file name inside
+	// SocketDir. Default `endless-tasks`.
+	TasksServer string `json:"tasks_server,omitempty"`
+
+	// TasksSession is the session on the task-session server where task
+	// windows open. Default `tasks`.
+	TasksSession string `json:"tasks_session,omitempty"`
+
+	// Terminal is the command that opens a terminal window running a given
+	// command, with `{cmd}` where the command goes — e.g. `ghostty -e {cmd}`
+	// or `wezterm start -- {cmd}`. Run by `sh -c`, with `{cmd}` replaced by
+	// the shell-quoted attach command. Empty: detect the terminal, and print
+	// the attach commands when none is detected.
+	Terminal string `json:"terminal,omitempty"`
 }
 
 // Documents is the per-project "documents" object. Currently holds only

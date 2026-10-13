@@ -83,11 +83,9 @@ def project_status_resolve(
     _run(args)
 
 
-def project_window_resolve(project: str | None, no_switch: bool = False) -> None:
-    """Open (or switch to) the dedicated two-pane tmux session for the monitor."""
-    args = [_go_binary(), "project-window"]
-    if project:
-        args += ["--project", project]
+def project_window_resolve(project: str, no_switch: bool = False) -> None:
+    """Add a monitor window for the project to Endless's console tmux server."""
+    args = [_go_binary(), "project-window", "--project", project]
     if no_switch:
         args.append("--no-switch")
     _run(args)

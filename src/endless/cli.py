@@ -942,12 +942,13 @@ def project_status(name, later, sort, as_json):
 @click.argument("name", default=None, required=False)
 @_sort_option
 @click.option("--tmux", "use_tmux", is_flag=True,
-              help="Open the monitor on its own tmux server (`tmux -L endless`): "
-                   "a `projects` window, the monitor above a bare shell, in a "
-                   "session named for the project. Attaches when run outside "
-                   "tmux; inside tmux it prints the attach command.")
+              help="Add a window named for the project to Endless's console "
+                   "tmux server: the monitor above a bare shell. Requires NAME. "
+                   "Starts the console if needed, and opens a terminal onto it "
+                   "when none is attached.")
 @click.option("--no-switch", is_flag=True,
-              help="With --tmux: build the window but do not attach.")
+              help="With --tmux: add the window but do not open a terminal "
+                   "onto the console.")
 def project_monitor(name, sort, use_tmux, no_switch):
     """Live monitor: repeatedly render `project status` until interrupted.
 
@@ -956,14 +957,21 @@ def project_monitor(name, sort, use_tmux, no_switch):
     list takes whatever height is left and says how many rows it could not fit.
     `project status` shows them all. Ctrl-C exits.
 
-    --tmux gives it the home it is designed for, meant for a terminal window of
-    its own: a tmux server separate from your task sessions, holding a session
-    named for the project. Each run adds a `projects` window there — the monitor
-    on top, a bare shell beneath it for running `endless` commands against what
-    it shows — so a run always ends with a live monitor; close a window you have
-    no use for. Drag the divider to see more rows or fewer.
+    --tmux gives it the home it is designed for: a window in the `console`
+    session on Endless's console tmux server (see `endless tmux start`), named
+    for the project — the monitor on top, a bare shell beneath it for running
+    `endless` commands against what it shows. Each run adds a window, even when
+    one exists for the project, so a run always ends with a live monitor; close
+    a window you have no use for. Drag the divider to see more rows or fewer.
     """
     if use_tmux:
+        if not name:
+            raise agent_help.no_report(
+                "project monitor --tmux needs the project NAME: the window is "
+                "named for it. Nothing ran.",
+                "Re-run as `endless project monitor <name> --tmux` "
+                "(`endless project list` lists the names)", exit_code=2,
+                text="project monitor --tmux needs the project NAME.")
         project_status_cmd.project_window_resolve(name, no_switch=no_switch)
         return
     if no_switch:
@@ -5743,6 +5751,38 @@ def tmux_init(hotkey, status_interval):
     """
     from endless.tmux_cmd import run_init
     run_init(hotkey, status_interval)
+
+
+@tmux_cmd.command("start")
+@click.option("--no-restore", is_flag=True,
+              help="Do not recreate the task windows that were open when the "
+                   "task-session server last ran.")
+def tmux_start(no_restore):
+    """Start Endless's tmux servers and open a terminal window on each.
+
+    Endless runs on two tmux servers of its own, never on your default one:
+    the console (session `console`: a project monitor above a shell, one
+    window per project) and the task-session server (session `tasks`, where
+    task sessions live). Both sockets live in `/tmp/endless-<uid>/` unless
+    `tmux.socket_dir` says otherwise.
+
+    A console it starts opens with a monitor window for the project enclosing
+    the working directory, or a shell outside a project. Task windows that
+    were open when the task-session server last ran, and are not open now,
+    are recreated and Claude resumed in them; --no-restore skips that.
+
+    Each run opens a terminal window attached to each server, using
+    `tmux.terminal` (e.g. "ghostty -e {cmd}") or a detected terminal, and
+    prints the attach commands when it can do neither. Running it again
+    reuses the servers already running.
+    """
+    from endless.tmux_cmd import run_start
+    run_start(no_restore)
+
+
+# `endless start` is `endless tmux start`: the way Endless is launched (E-2240).
+# The same command object, so the two spellings cannot drift.
+main.add_command(tmux_start, name="start")
 
 
 # `tmux task` is an alias for `task id` — the same command object, so the two

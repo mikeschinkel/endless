@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/processkind"
+	"github.com/mikeschinkel/endless/internal/tmuxservers"
 )
 
 // liveness.go derives whether a session is running, WITHOUT storing the answer.
@@ -462,14 +463,55 @@ func tmuxListPanesArgs(socket string) []string {
 // incomplete enumeration was a safety hole, because completeness was what
 // justified a destructive write; here it costs only certainty about rows we
 // then decline to judge.
+//
+// Three directories are enumerated: the one holding the socket of the server
+// this process can reach (the one it is inside, else the default), tmux's
+// default socket directory — which differs from the first inside one of
+// Endless's servers — and Endless's own socket directory (E-2240), where the
+// console and task-session servers live at fixed paths. Any may be absent; a
+// directory listed twice is read once.
 func observeTmuxServers() []observedServer {
-	out, err := tmuxCommand(tmuxSocketDirArgs()...).Output()
-	if err != nil {
-		// No tmux, or no server at all. Observe nothing; every session reads
-		// `unknown`. Not an error — see RefreshLiveness's contract.
-		return nil
+	var dirs []string
+	if out, err := tmuxCommand(tmuxSocketDirArgs()...).Output(); err == nil {
+		dirs = append(dirs, filepath.Dir(strings.TrimSpace(string(out))))
 	}
-	dir := filepath.Dir(strings.TrimSpace(string(out)))
+	dirs = append(dirs, defaultTmuxSocketDir(), tmuxservers.SocketDir())
+
+	var servers []observedServer
+	seen := map[string]bool{}
+	for _, dir := range dirs {
+		if dir == "" {
+			continue
+		}
+		// /tmp is a symlink on macOS, so one directory can arrive under two
+		// spellings.
+		key := filepath.Clean(dir)
+		if real, err := filepath.EvalSymlinks(dir); err == nil {
+			key = real
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		servers = append(servers, observeSocketDir(dir)...)
+	}
+	return servers
+}
+
+// defaultTmuxSocketDir is where tmux puts `-L` sockets: $TMUX_TMPDIR, else
+// /tmp, then tmux-<uid>.
+func defaultTmuxSocketDir() string {
+	base := os.Getenv("TMUX_TMPDIR")
+	if base == "" {
+		base = "/tmp"
+	}
+	return filepath.Join(base, fmt.Sprintf("tmux-%d", os.Getuid()))
+}
+
+// observeSocketDir reads every identifiable tmux server whose socket is in dir.
+// An unreadable or missing directory observes nothing — see RefreshLiveness's
+// contract.
+func observeSocketDir(dir string) []observedServer {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil

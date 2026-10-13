@@ -18,6 +18,7 @@ from endless import agent_help, authority, content_names
 from endless import db, config
 from endless import doc_mirror
 from endless import provenance
+from endless import tmux_cmd
 from endless import ratings
 from endless import rowcap
 from endless import session_states
@@ -4208,7 +4209,9 @@ def _require_tmux_for_claim(item_id: int) -> None:
     live Claude session in a sibling pane picks the task up (E-1242): that
     claim binds an existing session rather than starting one.
     """
-    if os.environ.get("TMUX"):
+    # E-2240: while Endless's task-session server runs, the session's window
+    # opens there, so a shell outside tmux can start one.
+    if os.environ.get("TMUX") or tmux_cmd.tasks_server() is not None:
         return
     # CONDITIONAL on what the caller wants out of the claim, which this command
     # cannot see: working the task with no bound session is a retry away, but
@@ -4307,7 +4310,8 @@ def _launch_claude_for_claim(
         + click.style(f"'{window_name}'", bold=True)
         + ". Switch to it:"
     )
-    click.echo(f"      tmux select-window -t {window_name}")
+    reach = tmux_cmd.reach_window_line(window_name)
+    click.echo(f"      {reach or f'tmux select-window -t {window_name}'}")
 
 
 def _current_session_task_id() -> int | None:
@@ -7817,7 +7821,10 @@ def spawn_plan(item_id: int, project_name: str | None = None,
             "Pass --tmux-session the exact name of an existing session "
             "(`tmux ls` lists them), or omit it to spawn in your own, and retry",
         )
-    if not (target_session or tmux_session) and not os.environ.get("TMUX"):
+    # E-2240: while Endless's task-session server runs, the window opens there
+    # whoever asks, so the spawner need not be inside tmux at all.
+    if (not (target_session or tmux_session) and not os.environ.get("TMUX")
+            and tmux_cmd.tasks_server() is None):
         raise agent_help.report(
             "Not in a tmux session. "
             "endless spawn requires tmux.",
@@ -8035,8 +8042,12 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     _echo_labeled_rows(rows)
     click.echo("")
     click.echo("  Switch to it:")
-    if tmux_session is not None:
-        click.echo(f"      tmux switch-client -t ={tmux_session}:{window_name}")
+    reach = None if tmux_session is not None else tmux_cmd.reach_window_line(window_name)
+    if reach is not None:
+        click.echo(f"      {reach}")
+    elif tmux_session is not None:
+        # Quoted: zsh expands a bare `=word` to the path of command `word`.
+        click.echo(f"      tmux switch-client -t '={tmux_session}:{window_name}'")
     else:
         click.echo(f"      tmux select-window -t {window_name}")
 

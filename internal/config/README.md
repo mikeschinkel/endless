@@ -107,7 +107,7 @@ These are not expected to appear in CLI files. Same safety-net pattern.
 | ---------- | ----------------- | ----------------------------------------------------------------------------------------- |
 | `tracking` | `string`          | Receiver wins when set to a non-empty string; empty string inherits from other.           |
 | `checks`   | `map[string]opt-in` | Per-key merge: for each key, receiver value wins if set; otherwise inherit from other. |
-| `tmux`     | `object`          | Merged PER FIELD, not wholesale — see `tmux` below.                                        |
+| `tmux`     | `object`          | CLI layer only — see `tmux` below.                                                          |
 | `auto_spawn` | `object`        | Split by field — see `auto_spawn` below.                                                   |
 | `main_sync` | `object`         | Split by field — see `main_sync` below.                                                    |
 | `fault_triage` | `object`      | Split by field — see `fault_triage` below.                                                 |
@@ -121,30 +121,22 @@ apply a default ("enforce" for registered projects, "off" for anonymous).
 
 #### `tmux`
 
-Multiplexer preferences.
+Where Endless's own tmux servers live, and how a terminal is opened onto them
+(`endless tmux start`, E-2240). **CLI layer only**: a value in a project's
+config is ignored, because the socket fields decide which server every Endless
+command reaches, and two projects must never reach two different servers.
 
-| Field          | Type     | Meaning |
-| -------------- | -------- | ------- |
-| `session_name` | `string` | Go `text/template` naming the tmux session `endless project monitor --tmux` opens for a project. Default `{{project}}`. The session lives on the monitor's own tmux server (`tmux -L endless`). |
-
-`{{project}}` is available as a function, so the setting reads the way you would
-write it; `{{.Project}}` resolves to the same string. The rendered result is
-folded to a legal tmux session name, so a template may hold spaces, dots or
-slashes without you having to know tmux's rules.
+| Field            | Type     | Meaning |
+| ---------------- | -------- | ------- |
+| `socket_dir`     | `string` | Directory both servers' sockets live in. Default `/tmp/endless-<uid>`. Created 0700; refused when owned by someone else or writable by others. |
+| `console_server` | `string` | The console server's socket file name. Default `endless-console`. |
+| `tasks_server`   | `string` | The task-session server's socket file name. Default `endless-tasks`. |
+| `tasks_session`  | `string` | The session task windows open in. Default `tasks`. |
+| `terminal`       | `string` | Command that opens a terminal window, with `{cmd}` where the attach command goes; run by `sh -c`. Default: detect the terminal, else print the attach commands. |
 
 ```json
-{ "tmux": { "session_name": "{{project}}-watch" } }
+{ "tmux": { "terminal": "ghostty -e {cmd}" } }
 ```
-
-A template that fails to parse or renders to nothing falls back to the default
-and warns on stderr: this is a preference, and a typo in one must not stop the
-monitor from opening.
-
-The session lives on its own tmux server, so a name cannot collide with a
-session you keep on your usual one. Each launch adds a `projects` window to it.
-
-Merged per field rather than wholesale, so a project that sets one tmux
-preference does not silently blank the others it inherits from the CLI layer.
 
 #### `project_status`
 

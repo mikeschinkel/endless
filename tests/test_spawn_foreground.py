@@ -281,3 +281,17 @@ def test_cli_threads_no_refocus_and_tmux_session(isolated_env, monkeypatch):
     assert result.exit_code == 0, result.output
     assert calls[0]["no_refocus"] is True
     assert calls[0]["tmux_session"] == "work"
+
+
+def test_spawn_outside_tmux_while_the_tasks_server_runs(isolated_env, fg_env, monkeypatch, capsys):
+    """E-2240: while Endless's task-session server runs, the window opens there,
+    so a spawner outside tmux is not refused, and is told how to reach it."""
+    from endless import tmux_cmd
+    monkeypatch.delenv("TMUX")
+    monkeypatch.setattr(tmux_cmd, "tasks_server", lambda: ("/s/endless-tasks", "tasks"))
+    _seed_project_and_task(1705)
+
+    spawn_plan(1705)
+
+    assert len([c for c in fg_env if "spawn-window" in c]) == 1
+    assert "tmux -S /s/endless-tasks attach -t '=tasks:E-1705'" in capsys.readouterr().out

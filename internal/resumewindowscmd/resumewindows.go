@@ -229,12 +229,18 @@ func gather(w window, selfPane string) facts {
 	if f.LiveErr != nil || f.LiveSession != 0 {
 		return f
 	}
+	resolveTarget(&f)
+	return f
+}
 
+// resolveTarget fills in where the task's session resumes from.
+func resolveTarget(f *facts) {
+	id := f.TaskID
 	target, err := monitor.ResolveResumeTarget(fmt.Sprintf("E-%d", id))
 	if err != nil {
 		f.ResolveErr = err
 		f.ProjectRoot, _ = monitor.TaskProjectPath(id)
-		return f
+		return
 	}
 	f.Resolved = true
 	f.Worktree = target.WorktreePath
@@ -242,7 +248,47 @@ func gather(w window, selfPane string) facts {
 	if f.ProjectRoot == "" {
 		f.ProjectRoot, _ = monitor.TaskProjectPath(id)
 	}
-	return f
+}
+
+// Restore resumes Claude in task windows `endless tmux start` has just
+// recreated on the task-session server at socketPath (E-2240), and writes the
+// same summary the sweep does. Only the named windows are touched: a window
+// the user left without Claude on purpose is not this command's to resume.
+//
+// The live-session check is skipped. Each window was created a moment ago with
+// a bare shell, so nothing can be running in it — and its pane ids belong to a
+// server the liveness observation may not be keyed to.
+func Restore(socketPath string, windowIDs []string, w io.Writer) error {
+	socket = socketPath
+	defer func() { socket = "" }()
+
+	windows, err := listWindows()
+	if err != nil {
+		return err
+	}
+	want := map[string]bool{}
+	for _, id := range windowIDs {
+		want[id] = true
+	}
+	var plans []plan
+	for _, win := range windows {
+		if !want[win.ID] {
+			continue
+		}
+		f := facts{Window: win}
+		if id, ok := parseTaskName(win.Name); ok {
+			f.TaskID = id
+			resolveTarget(&f)
+		}
+		plans = append(plans, decide(f))
+	}
+	for i := range plans {
+		if plans[i].Skip == "" {
+			plans[i].DispatchErr = dispatch(plans[i])
+		}
+	}
+	report(w, plans, false)
+	return nil
 }
 
 // ── the decision ─────────────────────────────────────────────────────────────
@@ -349,9 +395,18 @@ func shellQuote(s string) string {
 
 // ── tmux ─────────────────────────────────────────────────────────────────────
 
+// socket is the server Restore addresses; "" for the ambient one.
+var socket string
+
 // tmuxOut is the one seam through which this package talks to tmux, so the
 // dispatch sequence is tested by recording argv rather than driving a server.
+//
+// socket, when set, puts every command on the server at that path (Restore);
+// unset, they reach the server the caller is in, or the default one.
 var tmuxOut = func(args ...string) (string, error) {
+	if socket != "" {
+		args = append([]string{"-S", socket}, args...)
+	}
 	cmd := exec.Command("tmux", args...)
 	var stderr strings.Builder
 	cmd.Stderr = &stderr

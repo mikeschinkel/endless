@@ -253,6 +253,21 @@ def isolated_env(tmp_path, monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def no_endless_tasks_server(monkeypatch, request):
+    """E-2240: report Endless's task-session server as not running.
+
+    Its socket path defaults to /tmp/endless-<uid>/, outside the isolated HOME,
+    so a real server on the developer's machine would otherwise route every
+    spawn under test into it. Tests of the routing itself opt out with
+    `@pytest.mark.tasks_server` and stub the answer they need.
+    """
+    if request.node.get_closest_marker("tasks_server"):
+        return
+    from endless import tmux_cmd
+    monkeypatch.setattr(tmux_cmd, "tasks_server", lambda: None)
+
+
+@pytest.fixture(autouse=True)
 def reset_session_choice_cache():
     """E-1402: the resolver caches a single chosen session id at module
     scope so a multi-event command only prompts once. Reset before AND
