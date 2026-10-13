@@ -46,3 +46,20 @@ func Private(t testing.TB) {
 		_ = os.RemoveAll(dir)
 	})
 }
+
+// Server is Private plus a scratch server on the private directory's default
+// socket, for a test whose code under test needs SOME reachable tmux server —
+// to stamp or read its server identity, say — and would otherwise find the
+// caller's. Its one session runs sleep rather than a shell, which would write
+// its history on the way down.
+func Server(t testing.TB) {
+	t.Helper()
+	if _, err := exec.LookPath("tmux"); err != nil {
+		t.Skip("tmux not installed")
+	}
+	Private(t)
+	out, err := exec.Command("tmux", "-f", "/dev/null", "new-session", "-d", "sleep", "300").CombinedOutput()
+	if err != nil {
+		t.Fatalf("tmuxtest: start scratch tmux server: %v: %s", err, out)
+	}
+}

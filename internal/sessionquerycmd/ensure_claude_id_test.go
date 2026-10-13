@@ -11,6 +11,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/mikeschinkel/endless/internal/schema"
+	"github.com/mikeschinkel/endless/internal/tmuxtest"
 )
 
 // seedEnsureClaudeIDDB writes an endless.db at $cfgDir/endless.db with the
@@ -68,6 +69,7 @@ func readSessionsRow(t *testing.T, cfgDir, sessionID string) (id int64, state, p
 // session row already exists (hook has fired previously). The verb prints
 // that row's integer id and does not duplicate the row.
 func TestEnsureClaudeID_ReturnsExistingRow(t *testing.T) {
+	tmuxtest.Server(t) // --process resolves through a reachable server; keep it off the caller's
 	cfgDir := t.TempDir()
 	projectPath := t.TempDir()
 	seedEnsureClaudeIDDB(t, cfgDir, projectPath, []sessionSeed{
@@ -100,6 +102,7 @@ func TestEnsureClaudeID_ReturnsExistingRow(t *testing.T) {
 // Claude session. The verb INSERTs an 'idle' row keyed to the
 // session_id and prints the new row's id.
 func TestEnsureClaudeID_LazyCreatesMissingRow(t *testing.T) {
+	tmuxtest.Server(t) // --process resolves through a reachable server; keep it off the caller's
 	cfgDir := t.TempDir()
 	projectPath := t.TempDir()
 	seedEnsureClaudeIDDB(t, cfgDir, projectPath, nil)
