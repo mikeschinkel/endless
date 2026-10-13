@@ -7537,3 +7537,7 @@ While planning E-2241 (recovering session prompts the transcript parser dropped)
 ### [2026-10-13] Don't narrow a task's scope beyond what was asked
 While planning E-2241, Mike mentioned a vector search task he'd filed. I found E-1738, titled 'Implement semantic search over tasks and decisions', and said it might not be the one he meant because it doesn't cover session messages. It was the one he meant: another session had added 'over tasks and decisions' when filing it. Mike compared that to a D-student reporting too many significant figures. A scope the requester didn't state makes the task look narrower than intended, and later readers trust it. When filing, state only the scope Mike gave.
 - **Project**: endless
+
+### [2026-10-13] Don't report things that didn't change
+When Mike asked to close E-2223, the reply added 'the synthesis in its outcome is unchanged'. That was a leftover from internal problem-solving (the first command tried would have replaced the outcome). Mike asked why it was mentioned, since nothing had asked about changing it. Report the requested result; don't narrate the negative of a risk only the agent was considering.
+- **Project**: endless
