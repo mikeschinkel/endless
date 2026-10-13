@@ -13,3 +13,8 @@
 
 - `just test-go` leaves no new entry in the system tmux socket directory: compare `ls` of it before and after the run.
 - `just test-go` is green, including the new guard.
+
+
+## Grown scope (found while implementing)
+
+- `internal/sessionquerycmd/ensure_claude_id_test.go`: `TestEnsureClaudeID_ReturnsExistingRow` and `TestEnsureClaudeID_LazyCreatesMissingRow` pass `--process`, which resolves through any reachable tmux server. They stamped a server-uuid option onto the caller's live server, and `_LazyCreatesMissingRow` failed when no server was reachable (a no-tmux shell, or under `endless task verify`'s empty private server). Added `tmuxtest.Server` (Private plus a scratch server on the private default socket) and used it in both.
