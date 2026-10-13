@@ -84,3 +84,19 @@ Measured before and after on one idle `session-status --monitor` pane, using the
 - Pane fit does not query tmux when the needed height is unchanged, via the `PaneWindowHeight` seam, extending `internal/sessionstatuscmd/pane_fit_test.go`.
 - `LogOnlyCount` skips the read when the log is unchanged.
 - `just test-go` and `just test` green.
+
+
+
+## Scope grown during implementation
+
+### 8. Liveness skips dead tmux sockets (folded in on Mike's call)
+
+The baseline profile showed the dominant idle cost was not on this plan: `observeTmuxServers` ran two tmux execs for every socket in the tmux socket directory, every tick. On this machine 151 of 153 sockets there were dead (135 leaked by a test before E-1908 fixed it, the rest by verify suites and probes), which came to about 157 tmux forks and 1s of child CPU per tick. A `connect()` to each socket now skips the dead ones before any exec. This changes which sockets get probed, not the liveness cadence, which stays with E-2229. Removing the dead files themselves is E-2310.
+
+### Deviation from step 4
+
+Step 4 said to run `ensureRow` once per process. Instead, one read-only query (`dueJobs`) treats a missing row as due, so `ensureRow` and `claim` run only for a job that is due. That gives the same target, zero writes on a tick where nothing is due, with no per-process state to go stale.
+
+### Deviation from step 5
+
+`FitPaneToFrame` (stateless) is kept for the existing tests. `Loop` uses a new `paneFit` that remembers its inputs.
