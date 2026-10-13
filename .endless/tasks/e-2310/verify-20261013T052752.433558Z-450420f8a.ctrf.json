@@ -1,0 +1,39 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 4,
+      "passed": 4,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "tmuxtest guard, placement and tag tests pass",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go test ./internal/... is green",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no socket left in the stand-in shared dir",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no private tmuxtest dir left under /tmp",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
