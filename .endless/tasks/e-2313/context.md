@@ -1,0 +1,1 @@
+Raised by Mike while planning E-2241: he replies by pasting '> <something Claude wrote>' then his answer, which Claude Code wraps as pasted_content and which the transcript parser dropped whole when it led a prompt. He asked whether a better approach is needed, to follow after E-2241 lands.
