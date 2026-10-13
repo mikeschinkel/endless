@@ -96,6 +96,12 @@ fi
 
 BIN="${TMP}/endless-go"
 go build -o "${BIN}" ./cmd/endless-go || setup_error "cannot build cmd/endless-go from this tree"
+# This tree's binary first on PATH, for everything the servers' panes run too
+# (they inherit this environment). An older endless-go loading this run's
+# config would not know the tmux keys, read it as empty, and go-cfgstore then
+# rewrites an empty config over it — taking tmux.socket_dir, and with it this
+# run's isolation, away mid-run.
+export PATH="${TMP}:${PATH}"
 PROBE="${TMP}/db"
 mkdir -p "${PROBE}" "${TMP}/proj" "${TMP}/elsewhere" "${TMP}/tmuxtmp"
 GO=("${BIN}" --db-dir "${PROBE}")
