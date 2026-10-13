@@ -79,7 +79,9 @@ task.
 The runner is the only front door, and it is enough on its own: it resolves the
 task, runs in that task's worktree, builds the isolation a suite needs (a temp
 `HOME` and `XDG_CONFIG_HOME`, so a suite cannot read or pollute your real config
-or the main database), and refuses a task's suite that is not yours. Executing a
+or the main database, with a `tmux.socket_dir` of the run's own in that `HOME`,
+so a suite cannot reach your Endless tmux servers), and refuses a task's suite
+that is not yours. Executing a
 script directly skips all of it — which is why every suite here refuses to run
 that way.
 

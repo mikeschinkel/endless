@@ -51,6 +51,16 @@ _endless_guard_refuse() {
     exit 2
 }
 
+# _endless_guard_runner_config reports whether a config directory is exactly
+# what the verify runner writes into a run's temporary HOME: one config.json,
+# whose whole content points tmux.socket_dir inside the run's private
+# /tmp/endless-verify-* directory. Keep in step with runnerTmuxConfig.
+_endless_guard_runner_config() {
+    local shape='^\{"tmux":\{"socket_dir":"/[^"]*/endless-verify-[^/"]+/endless"\}\}$'
+    [[ "$(ls -A "$1" 2>/dev/null)" == "config.json" ]] || return 1
+    [[ "$(cat "$1/config.json" 2>/dev/null)" =~ ${shape} ]]
+}
+
 _endless_guard() {
     local suite dir owner here cfg
 
@@ -96,8 +106,14 @@ _endless_guard() {
     # checked: main follows XDG_CONFIG_HOME when set (E-2186), and a machine
     # whose user set it may still hold an older ~/.config/endless, so testing
     # only one leaves the other reachable.
+    #
+    # One directory is accepted: the runner's own, holding nothing but the
+    # config file it writes to keep a suite off the user's Endless tmux servers
+    # (E-2240, internal/verifycmd/endless_tmux.go). A real config directory
+    # always holds more than that, and never that file.
     for cfg in "${XDG_CONFIG_HOME:-${HOME:-}/.config}/endless" "${HOME:-}/.config/endless"; do
         [[ -d "${cfg}" ]] || continue
+        _endless_guard_runner_config "${cfg}" && continue
         _endless_guard_refuse \
             "This verification suite must be run through the verify runner:" \
             "" \

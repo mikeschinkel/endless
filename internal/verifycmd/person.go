@@ -212,6 +212,7 @@ func killPrivateTmux(tmuxDir dt.DirPath) {
 	if tmuxDir == "" {
 		return
 	}
+	killEndlessTmux(tmuxDir)
 	_ = tmuxCommand(os.Environ(), tmuxDir, "kill-server").Run()
 	_ = tmuxDir.RemoveAll()
 }

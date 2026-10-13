@@ -307,6 +307,51 @@ def test_refuses_when_a_real_config_is_reachable(tmp_path):
     )
 
 
+RUNNER_TMUX_CONFIG = '{"tmux":{"socket_dir":"/private/tmp/endless-verify-123456/endless"}}\n'
+
+
+def test_accepts_the_runners_own_tmux_config(tmp_path):
+    """E-2240: the runner writes one config file into the temp HOME, pointing
+    tmux.socket_dir inside the run's private tmux directory, so a suite cannot
+    reach the user's Endless tmux servers. A directory holding exactly that is
+    the runner's, not a real config, and the guard lets the suite run."""
+    suite = _checkout(tmp_path, worktree_task="1001", suite_task="1001")
+    home = tmp_path / "home"
+    for cfg in (home / ".config" / "endless",):
+        cfg.mkdir(parents=True)
+        (cfg / "config.json").write_text(RUNNER_TMUX_CONFIG)
+    res = _run(suite, home)
+    assert res.returncode == 0 and "RAN" in res.stdout, res.stderr
+
+
+@pytest.mark.parametrize("extra, body", [
+    ("endless.db", RUNNER_TMUX_CONFIG),
+    (None, '{"tmux":{"socket_dir":"/tmp/elsewhere"}}\n'),
+    (None, '{"tmux":{"socket_dir":"/private/tmp/endless-verify-1/endless"},"roots":["/x"]}\n'),
+])
+def test_anything_beyond_the_runners_config_is_refused(tmp_path, extra, body):
+    """A real config directory always holds more than the runner's one file,
+    or a different file — and either is refused as before."""
+    suite = _checkout(tmp_path, worktree_task="1001", suite_task="1001")
+    home = tmp_path / "home"
+    cfg = home / ".config" / "endless"
+    cfg.mkdir(parents=True)
+    (cfg / "config.json").write_text(body)
+    if extra:
+        (cfg / extra).write_text("")
+    res = _run(suite, home)
+    assert res.returncode == 2 and "RAN" not in res.stdout
+
+
+def test_the_runner_writes_the_shape_the_guard_accepts():
+    """The guard's accepted shape and the runner's file are two halves of one
+    contract, in two languages; this keeps them from drifting apart."""
+    go = (REPO / "internal" / "verifycmd" / "endless_tmux.go").read_text()
+    assert '"{\\"tmux\\":{\\"socket_dir\\":%q}}\\n"' in go
+    assert 'endlessTmuxDirName = "endless"' in go
+    assert "endless-verify-" in GUARD.read_text()
+
+
 # ── the TAP stream the harness hands the runner (E-2083) ────────────────────
 #
 # These live here, beside the guard tests, for the same reason those do: the

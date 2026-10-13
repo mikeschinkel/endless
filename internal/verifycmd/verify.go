@@ -356,6 +356,10 @@ func prepareEnv(id string, root, runDir, tmuxDir dt.DirPath) (env []string, err 
 	if err != nil {
 		goto end
 	}
+	err = writeEndlessTmuxConfig(env, tmuxDir)
+	if err != nil {
+		goto end
+	}
 	env, err = suiteEnv(env, id, root)
 	if err != nil {
 		goto end

@@ -11,6 +11,7 @@
 # this run's own (tmux.socket_dir, set through the run's temporary HOME), a
 # throwaway database, a stub terminal command and a stub Claude:
 #   A. Fail-fast: this task's Go and Python tests.
+#  B0. The runner wrote this run's own tmux.socket_dir into the temp HOME.
 #   B. Both sockets land in tmux.socket_dir whatever TMUX_TMPDIR says; with no
 #      terminal to open, both attach commands are printed; both config layers
 #      load; both servers carry @server_uuid.
@@ -80,15 +81,16 @@ section "A. This task's own tests (fail-fast)"
 
 PKGS=(./internal/tmuxservers ./internal/tmuxstartcmd ./internal/projectstatuscmd
       ./internal/resumewindowscmd ./internal/spawnlaunchcmd ./internal/config
-      ./internal/monitor ./internal/tmuxcmd)
+      ./internal/monitor ./internal/tmuxcmd ./internal/verifycmd)
 if out=$(go test "${PKGS[@]}" 2>&1); then
-    report_pass "go test: tmuxservers, tmuxstartcmd, projectstatuscmd, resumewindowscmd, spawnlaunchcmd, config, monitor, tmuxcmd"
+    report_pass "go test: tmuxservers, tmuxstartcmd, projectstatuscmd, resumewindowscmd, spawnlaunchcmd, config, monitor, tmuxcmd, verifycmd"
 else
     report_fail "go test" "exit 0" "$(printf '%s' "${out}" | tail -30)"
     summary
 fi
-if out=$(uv run pytest tests/test_tmux_start.py tests/test_spawn_foreground.py tests/test_guide_map.py -q 2>&1); then
-    report_pass "pytest: tmux start, spawn routing, guide map"
+if out=$(uv run pytest tests/test_tmux_start.py tests/test_spawn_foreground.py tests/test_guide_map.py \
+        tests/test_suite_guard.py -k "not every_suite" -q 2>&1); then
+    report_pass "pytest: tmux start, spawn routing, guide map, the guard's runner-config exception"
 else
     report_fail "pytest" "exit 0" "$(printf '%s' "${out}" | tail -30)"
     summary
@@ -120,6 +122,18 @@ start() {
     (cd "$1" && env -u TMUX -u TMUX_PANE -u TERM_PROGRAM TERM=dumb \
         TMUX_TMPDIR="${TMP}/tmuxtmp" "${GO[@]}" tmux start "${@:2}" 2>&1)
 }
+
+# ---------------------------------------------------------------------------
+section "B0. The runner keeps every suite off the user's Endless servers"
+# ---------------------------------------------------------------------------
+
+RUNNER_CFG="$(cat "${CFG_DIR}/config.json" 2>/dev/null)"
+shape='^\{"tmux":\{"socket_dir":"/[^"]*/endless-verify-[^/"]+/endless"\}\}$'
+[[ "${RUNNER_CFG}" =~ ${shape} ]] \
+    && report_pass "the runner pointed tmux.socket_dir inside this run's private tmux dir" \
+    || report_fail "the runner pointed tmux.socket_dir inside this run's private tmux dir" "${shape}" "${RUNNER_CFG}"
+"${GO[@]}" tmux tasks-target >/dev/null 2>&1
+assert_eq "so no task-session server is reachable before this suite starts one" "1" "$?"
 
 # ---------------------------------------------------------------------------
 section "B. Sockets, attach commands, config layers, identity"
