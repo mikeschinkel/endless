@@ -1,0 +1,89 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 14,
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "monitorvis, liveview, faults and tmuxcmd tests pass",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "both monitors tag their panes for the wake",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the window on screen renders (2 ticks)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the window off screen renders nothing",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "switching to w1 makes its monitor render within 1.5s (1 ticks)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the monitor switched away from stops rendering",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "two monitors starting together leave one wake hook",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the hidden monitor used 0.040% CPU over 25s, including a poll",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a hidden poll costs one tmux exec and no git: tick=3 state=hidden wall=6.378ms self_cpu=11.738ms child_cpu=3.287ms git=0 tmux=1 job_writes=0",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the safety-net poll reinstalled the hooks",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the reinstall recorded one WARN-0034 incident",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "monitors repairing together still leave one wake hook",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "monitor-wake outside tmux exits 0",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "monitor-wake outside tmux prints nothing",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
