@@ -7517,3 +7517,7 @@ Planning E-2229 (gate monitor work on tmux visibility), Mike asked why E-1850 (t
 ### [2026-10-12] CLI output shows paths with ~, not the full $HOME path
 Situation: E-2284 added `endless-go settings migrate` and the opt-in refusal (config.OptInError); both print absolute paths like /Users/mikeschinkel/.config/endless/config.json. Mike said: all paths the CLI generates as output should use ~ in place of the full path to $HOME. This is about paths shown to a person in CLI output (messages, refusals, reports), not paths written into files or passed to other programs. Python already has endless.config.tilde(); the Go side (internal/, cmd/endless-go) had no equivalent as of E-2284.
 - **Project**: endless
+
+### [2026-10-12] Search go-pkgs by behavior, not by guessed function names
+Situation: after E-2284 landed, Mike asked that CLI output show paths with ~. I told him the Go side had no helper to turn $HOME into ~, based on a grep for function names I guessed (Tilde*, ShortenHome, ContractHome...). go-dt already has it in ~/Projects/go-pkgs/go-dt/tilde.go (FilepathToTilde, DirPathToTilde, ToTilde with TildeOption), and endless already depends on go-dt. Mike: 'If only you would pay attention to my code.' Before saying a helper doesn't exist, look through ~/Projects/go-pkgs (start with the file names, e.g. tilde.go) rather than grepping for names I made up, and don't claim it is missing until I have.
+- **Project**: endless
