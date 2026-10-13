@@ -7533,3 +7533,7 @@ Situation: in E-2228 the profile showed dead tmux sockets piling up in the share
 ### [2026-10-13] Endless has no other users yet
 While planning E-2241 (recovering session prompts the transcript parser dropped), I weighed re-import options by 'every user who upgrades', making a migration look necessary for other users' machines. Mike: 'THERE ARE NO OTHER USERS YET!!!' Endless has one user, Mike. Weigh one-time recovery and upgrade steps for this machine; PRODUCT is how Mike asks for the other-user view, so don't raise it unprompted as a cost.
 - **Project**: endless
+
+### [2026-10-13] Don't narrow a task's scope beyond what was asked
+While planning E-2241, Mike mentioned a vector search task he'd filed. I found E-1738, titled 'Implement semantic search over tasks and decisions', and said it might not be the one he meant because it doesn't cover session messages. It was the one he meant: another session had added 'over tasks and decisions' when filing it. Mike compared that to a D-student reporting too many significant figures. A scope the requester didn't state makes the task look narrower than intended, and later readers trust it. When filing, state only the scope Mike gave.
+- **Project**: endless
