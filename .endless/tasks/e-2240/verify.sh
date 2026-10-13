@@ -120,11 +120,11 @@ section "B. Sockets, attach commands, config layers, identity"
 # ---------------------------------------------------------------------------
 
 write_config "{\"tmux\":{\"socket_dir\":\"${SOCK}\"}}"
-OUT="$(start "${TMP}/elsewhere")"
+OUT="$(start "${TMP}/elsewhere")"; rc=$?
 # Nothing below may run unless the binary read this run's socket directory:
 # the default is the user's real one.
 [[ -S "${CONSOLE}" ]] || setup_error "start did not use this run's tmux.socket_dir: ${OUT}"
-assert_eq "start exits 0" "0" "$?"
+assert_eq "start exits 0" "0" "${rc}"
 [[ -S "${CONSOLE}" ]] && report_pass "the console socket is at <socket_dir>/endless-console" \
     || report_fail "the console socket is at <socket_dir>/endless-console" "${CONSOLE}" "$(ls -la "${SOCK}" 2>&1)"
 [[ -S "${TASKS}" ]] && report_pass "the task-session socket is at <socket_dir>/endless-tasks" \
