@@ -26,6 +26,14 @@ Ownership itself stays in `sessions.task_id` (`_task_claimants`, the write gate)
 - `touched` keeps queued's place: it ranks just below `bound`, above `filed`. It keeps the ⊕ mark, and counts as decided work in `session status`.
 - Update every reader and doc that names `queued` or calls touch `revisited`: the Go switch statements, `relation_tier.go`'s glyph comment, the help for `touch` and `session task add`, and the sessions guide's relation table and verb list.
 
+## 1d. Rename `task show`'s "Touched by:" header to "Sessions:"
+- After 1c, "touched" names one relation, so the header that lists every `session_tasks` relation can no longer use the word. Rename it to `Sessions:`. Each row's label already says how that session is involved.
+- The header is printed in one place, `_echo_touched_by_section` in `src/endless/task_cmd.py`. Rename the function to match.
+- Update the comments, docstrings and help that cite "Touched by:": `task_cmd.py`, `session_cmd.py`, `session_task_cmd.py`, `cli.py` (`session goto`, `session task remove`, `session hide`), and the comment in `internal/events/session_task_membership.go`.
+- Update the guide: `docs/guide/tasks.md` (the block's section and its example), `docs/guide/sessions.md` (`remove`), and `docs/guide/appendix-a.md` (`session goto`).
+- Update `tests/test_task_show_sessions.py` to assert `Sessions:`.
+- Old task plans and analyses under `.endless/tasks/` stay as written.
+
 ## 2. Which relation each path writes
 - `task claim` → `claimed`. No change.
 - `task bind` → `bound`, whatever the task's status (Q1 a).
@@ -70,6 +78,7 @@ Ownership itself stays in `sessions.task_id` (`_task_claimants`, the write gate)
 - Python:
   - `task bind` emits `task.bound`
   - claim's no-plan refusal includes the bind line, and spawn's does not
+  - `task show` prints `Sessions:` and no longer prints `Touched by:`
 
 ## 7. Backfill existing ownership rows
 - Today 563 of the 574 sessions that hold a `sessions.task_id` have no `claimed` row for it, mostly spawned sessions, through the auto-bind gap.
