@@ -50,12 +50,15 @@ cleanup() {
 }
 trap cleanup EXIT
 
-# The config the runner's temporary HOME points at. Every tmux setting is read
-# from this file alone.
-CFG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/endless"
-mkdir -p "${CFG_DIR}" || setup_error "cannot create ${CFG_DIR}"
-write_config() { printf '%s\n' "$1" >"${CFG_DIR}/config.json"; }
-STATE="${CFG_DIR}/tmux-task-windows.json"
+# The user config in the runner's temporary HOME; every tmux setting is read
+# from it alone. Written under BOTH spellings: the config loader reads
+# ~/.config on macOS and XDG_CONFIG_HOME on Linux.
+CFG_DIR="${HOME}/.config/endless"
+XDG_CFG_DIR="${XDG_CONFIG_HOME:-${HOME}/.config}/endless"
+mkdir -p "${CFG_DIR}" "${XDG_CFG_DIR}" || setup_error "cannot create the config directories"
+write_config() { printf '%s\n' "$1" | tee "${CFG_DIR}/config.json" >"${XDG_CFG_DIR}/config.json"; }
+# Where the record lives is the loader's choice, so it is found, not assumed.
+state() { cat "${CFG_DIR}/tmux-task-windows.json" 2>/dev/null || cat "${XDG_CFG_DIR}/tmux-task-windows.json" 2>/dev/null; }
 
 # The user's own tmux.conf, which both servers must load before Endless's layer.
 printf 'set -g @user_conf_loaded yes\n' >"${HOME}/.tmux.conf"
@@ -118,6 +121,9 @@ section "B. Sockets, attach commands, config layers, identity"
 
 write_config "{\"tmux\":{\"socket_dir\":\"${SOCK}\"}}"
 OUT="$(start "${TMP}/elsewhere")"
+# Nothing below may run unless the binary read this run's socket directory:
+# the default is the user's real one.
+[[ -S "${CONSOLE}" ]] || setup_error "start did not use this run's tmux.socket_dir: ${OUT}"
 assert_eq "start exits 0" "0" "$?"
 [[ -S "${CONSOLE}" ]] && report_pass "the console socket is at <socket_dir>/endless-console" \
     || report_fail "the console socket is at <socket_dir>/endless-console" "${CONSOLE}" "$(ls -la "${SOCK}" 2>&1)"
@@ -230,7 +236,7 @@ assert_contains "the window is in tasks on the task-session server" "E-11" \
     "$(t "${TASKS}" list-windows -t '=tasks:' -F '#{window_name}')"
 spawn 12 >/dev/null; spawn 13 >/dev/null
 sleep 1
-assert_eq "the record holds the open task windows" '{"windows":[11,12,13]}' "$(cat "${STATE}")"
+assert_eq "the record holds the open task windows" '{"windows":[11,12,13]}' "$(state)"
 
 # ---------------------------------------------------------------------------
 section "H. Restore after the task-session server is killed"
@@ -238,10 +244,10 @@ section "H. Restore after the task-session server is killed"
 
 t "${TASKS}" kill-window -t '=tasks:E-13'
 sleep 1
-assert_eq "closing a window drops it from the record" '{"windows":[11,12]}' "$(cat "${STATE}")"
+assert_eq "closing a window drops it from the record" '{"windows":[11,12]}' "$(state)"
 t "${TASKS}" kill-server
 sleep 0.5
-assert_eq "killing the server leaves the record alone" '{"windows":[11,12]}' "$(cat "${STATE}")"
+assert_eq "killing the server leaves the record alone" '{"windows":[11,12]}' "$(state)"
 
 OUT="$(start "${TMP}/elsewhere")"
 assert_contains "start reports the restore" "restored 2 task window(s): E-11 E-12" "${OUT}"
