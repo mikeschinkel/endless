@@ -7505,3 +7505,7 @@ While settling E-2280's approval model, I said that adding a 'reviewed' status w
 ### [2026-10-12] Answer the question Mike asked, not one tied to the current topic
 While planning E-2306 (task spawn on a primed task), Mike asked whether anything could 'mark a task and have its prime complete'. I took it as a question about spawn and answered with a spawn-time 'user is waiting' mark, plus a new Q3. He meant something unrelated to spawn: can a priming session record in the database that its priming has finished. When a question is ambiguous and reading it as part of the current topic means building new design to answer it, first check the simpler reading, a question about how things work now. Here that answer already existed in the code (endless session primed).
 - **Project**: endless
+
+### [2026-10-12] Recommend the fix the epic's design already provides before a new mechanism
+Planning E-2228 (session monitor idle CPU), I recommended throttling the per-tick liveness refresh with a shared freshness timestamp. Mike asked why not just run it only in a visible tmux window, which is the gate the epic (E-2229, ED-1606) already chose. The throttle also rested on an unchecked premise: the liveness observation tables are per-connection TEMP tables (E-1898), so one pane cannot refresh for the others. Before recommending a fix for a cost, check whether the epic's chosen mechanism already removes it, and read how the thing works before proposing to share it.
+- **Project**: endless
