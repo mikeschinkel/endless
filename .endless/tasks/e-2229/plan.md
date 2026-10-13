@@ -95,3 +95,19 @@ Measured with E-2228's `ENDLESS_MONITOR_PROFILE` diagnostic:
 - `monitor-wake` signals the right pids for a given client and window set (a pure function over parsed tmux output).
 - An end-to-end case on the verify suite's private tmux server (the E-1851 isolation): two windows, two monitors, `select-window` flips which one renders.
 - `just test-go` and `just test` green.
+
+
+## As built (where the implementation departs from or adds to the above)
+
+- **Tag option is `@endless_monitor_upid`, holding the monitor's UPID**, not a bare pid. `monitor-wake` signals a tag only while `UPID.Alive()`, so a tag outliving its monitor never signals a process that reused the pid.
+- **One tmux exec per safety-net poll.** The pane's window, every client's window and the four hooks are read in one chained invocation; the hook check costs nothing extra. Measured: a hidden poll is `git=0 tmux=1`, and a hidden monitor used 0.042% CPU over 24s.
+- **A missed hook is a `monitor-visibility` line in `user-machine.jsonl`** (`monitor.LogMonitorMissedHook`). `faults.LogOnly` is a reader, not a writer, and a log-only detail line would surface on the fault row as an unread notice, which is what "only logged" was meant to avoid.
+- **WARN-0033 `monitor-visibility-unreadable`** covers both the `monitor-wake` hook failing and a monitor's own poll failing. A monitor that cannot ask counts as visible (it draws instead of hiding from someone). **WARN-0034** `monitor-hooks-missing`, **WARN-0035** `monitor-hooks-install-failed` as planned.
+- **Concurrent installs are deduplicated.** Monitors started together, such as a restored server's windows, each found the hooks missing and each appended them; the end-to-end test caught two copies. After each install a monitor reads the hooks back and unsets every entry of ours after the lowest index. The last installer's read-back sees every copy, so the copies converge to one. Every poll also deduplicates.
+- **`endless tmux apply` installs the hooks from `runApply`, after `retireNavHooks`**, not as `buildApplySteps` entries. An idempotent install has to read the live server, which is the reason `retireNavHooks` is not a step either, and the retire's `set-hook -gu` clears a hook's whole array, ours included.
+- **SIGUSR1/SIGUSR2 are ignored across a restart's exec** (E-2193), so a wake landing before the new image subscribes is dropped instead of killing it. The tag survives the exec, because the UPID does.
+- `monitor-wake` is pinned to the main database like `tmux`, since tmux invokes it. Its only write is a fault.
+- The profile's tick line gains `state=visible|hidden|poll`.
+- Tests: `liveview` state machine (`visibility_test.go`); `monitorvis` unit tests over a fake tmux; and real-tmux end-to-end tests in `monitorvis/e2e_test.go` using a helper built from `testdata/visprobe`, a private server and a control-mode client. They check that `select-window` moves the work, that removed hooks are reinstalled, and that `EnsureHooks` is idempotent beside a user's own hook. The verify suite repeats the switch with the real `endless-go session-status --monitor`.
+
+Known limit, not addressed: a hook installed by a binary at a path that later disappears, such as a removed worktree's `bin/`, still counts as installed, because the marker is the verb and not the path. `monitor-wake` then fails with 127 inside tmux, unrecorded, and monitors fall back to the 20s safety net until the server restarts.
