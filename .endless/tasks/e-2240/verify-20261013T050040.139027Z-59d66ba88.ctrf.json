@@ -1,0 +1,274 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 51,
+      "passed": 51,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test: tmuxservers, tmuxstartcmd, projectstatuscmd, resumewindowscmd, spawnlaunchcmd, config, monitor, tmuxcmd",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest: tmux start, spawn routing, guide map",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "start exits 0",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the console socket is at \u003csocket_dir\u003e/endless-console",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the task-session socket is at \u003csocket_dir\u003e/endless-tasks",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "nothing was created under TMUX_TMPDIR",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the socket directory is 0700",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the console attach command is printed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the task-session attach command is printed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "outside a project the console opens on a shell",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "endless-console: the user's tmux.conf loaded",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "endless-console: Endless's layer loaded (@endless_server=console)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "endless-console: carries @server_uuid",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "endless-tasks: the user's tmux.conf loaded",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "endless-tasks: Endless's layer loaded (@endless_server=tasks)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "endless-tasks: carries @server_uuid",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the sessions are console and tasks",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the console is reused",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the task-session server is reused",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "same task-session server",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "same console server",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the console still has one window",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a directory owned by someone else is refused (exit 1)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and says whose it is",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a directory others can write is refused (exit 1)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and says why",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and no server was started in it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "configured socket names are used",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the configured tasks session is used",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the start says so",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the console's window is named for the project",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a configured terminal is opened on the console",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and on the task-session server",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a second window named for the project",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and a third on the next run",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "with no terminal attached, each run opens one onto the console",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it starts the console when none is running",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "with the project's window",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and @server_uuid",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "spawn-window exits 0 outside tmux",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the window is in tasks on the task-session server",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the record holds the open task windows",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "closing a window drops it from the record",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "killing the server leaves the record alone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "start reports the restore",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "exactly the windows that were open are back",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "Claude is resumed in each",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and in the other",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "--no-restore restores nothing",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and no task window exists",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the task-session server's session is live, and the console's",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
