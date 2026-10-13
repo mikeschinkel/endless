@@ -1,0 +1,1 @@
+Raised by Mike while planning E-2241, which will store every user message, including slash commands, so /tl-dr and /needs-plan bodies repeat in session_messages every time they run. Some bodies are identical each run; others, like /needs-plan, vary with their arguments.
