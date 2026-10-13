@@ -286,7 +286,7 @@ INSERT INTO sessions (id, project_id, state, task_id, process_id) VALUES
   (901, 1, 'working', 11, 901), (902, 1, 'idle', NULL, 902);
 SQL
 LIVE="$(cd "${TMP}/elsewhere" && env -u TMUX -u TMUX_PANE "${GO[@]}" session-query session-liveness 901 902 2>&1)"
-assert_contains "the task-session server's session is live, and the console's" '"live","live"' \
-    "$(printf '%s' "${LIVE}" | tr -d ' \n')"
+assert_eq "the task-session server's session is live, and the console's" "live live" \
+    "$(printf '%s' "${LIVE}" | python3 -c 'import json,sys; print(" ".join(r["liveness"] for r in json.load(sys.stdin)["rows"]))' 2>&1)"
 
 summary
