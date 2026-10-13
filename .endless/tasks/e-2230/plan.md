@@ -4,17 +4,19 @@ Terms used below:
 - **Findings lane:** the task statuses whose deliverable is outcome text (`underway → unreviewed → completed`), used today by research and brainstorm tasks. Defined in the canonical status lifecycle.
 - **Settled:** a worktree with a clean working tree and every commit's content on the base branch (`endless task unsettled`). Unsettled is shown as ◆ in `session status`.
 - **Sandbox database:** the per-worktree database that `endless` commands use in a self-dev worktree unless given `--db main`. It exists only in projects with self-dev enabled.
-- **Spike:** a task whose agent writes code to answer a question. The code is not meant to land, and the deliverable is the outcome text.
+- **Spike:** a task whose agent writes code to answer a question, for example a proof-of-concept Go app. The deliverable is the outcome text. When the user is ready to complete it, they tell the agent to either **keep** the code or **discard** it.
+- **Standalone spike:** a spike whose code is self-contained (its own app or module) and changes none of the project's existing files.
+- **In-place spike:** a spike that changes the project's existing code, for example trying an approach inside `internal/`.
 
 ## Q1. How is a spike represented?
 
 | Option | Pros | Cons |
 |---|---|---|
-| **A. A new task type, `spike`** | Type is what selects a lifecycle lane today, so its behavior (findings lane, gets a worktree, `worktree land` refuses) keys off one value; visible in every task list's type column | Every place that enumerates types (transition table, filters, validators, guide) gains a value |
-| **B. A flag on research tasks** (for example `--throwaway`, set by `task add` / `task update`) | No new type | The research justification gate applies to spikes; a spike is invisible in a list unless the flag is displayed |
-| **C. No distinct kind:** a spike is a research task whose agent is told not to land | Nothing to build | Nothing stops an accidental land; its worktree stays unsettled forever, so ◆ is permanently on for it |
+| **A. A new task type, `spike`** | Type is what selects a lifecycle lane today, so a spike's rules (findings lane, gets a worktree, keep-or-discard at completion instead of a normal land) key off one value; visible in every task list's type column | Every place that enumerates types (transition table, filters, validators, guide) gains a value |
+| **B. A flag on research tasks** (for example `--spike`, set by `task add` / `task update`) | No new type | The research justification gate applies to spikes; a spike is invisible in a list unless the flag is displayed |
+| **C. No distinct kind:** a spike is a research task, and the agent is told what to do with the code | Nothing to build | Nothing stops a normal `worktree land` merging spike code into the project's tree; a discarded spike's worktree stays unsettled forever, so ◆ is permanently on for it |
 
-**Recommendation: A.** Type already selects behavior, so a spike's one distinctive rule (never land) lives where the rest of the lane rules live.
+**Recommendation: A.** Type already selects behavior, and keep-or-discard is a completion rule no other type has.
 
 **Answer:**
 
@@ -47,14 +49,50 @@ The states that matter: the agent is working; the agent is waiting for the user'
 
 **Answer:**
 
-## Q4. What happens to a spike's worktree and branch after the spike is completed?
+## Q4. Which kinds of spike does Endless support?
 
 | Option | Pros | Cons |
 |---|---|---|
-| **A. Both become reapable like any landed task's,** despite the unlanded code | Nothing accumulates | The spike's code is gone once reaped; anyone wanting to revisit it has only the outcome text |
-| **B. Reap the worktree directory, keep the branch** | Code stays retrievable from git | Branches accumulate, one per spike, until someone prunes them |
-| **C. Reap both, but keep a tag** on the final commit first (for example `spike/<id>`) | Code stays retrievable; `git branch` stays uncluttered | Tags accumulate instead, and are less visible than branches |
+| **A. Standalone only** | Keeping is always "put this directory somewhere"; one retention path | Can't try an approach inside the project's own code without reclassifying the work as a todo |
+| **B. Both standalone and in-place** | Covers experiments on existing code, which is often what needs answering | An in-place spike's code is a diff to existing files, so it can't be kept as a self-contained directory; it needs a second retention form (branch, tag or patch) |
 
-**Recommendation: C.** Retrievable without cluttering the branch list.
+**Recommendation: B.** Experiments on the project's own code are a common reason to spike. Q6 then gives each kind its own retention form.
+
+**Answer:**
+
+## Q5. Where does a kept standalone spike live?
+
+| Option | Pros | Cons |
+|---|---|---|
+| **A. `.endless/spikes/<name>/` in the project repo, committed to main** | Versioned and travels with every clone; Go's `./...` pattern skips directories whose names start with `.`, so a kept Go spike never enters the project's builds or tests | Puts user code inside Endless's own state directory, next to the ledger; editors and file pickers often hide dot-directories |
+| **B. A project-configurable directory, default a visible top-level one** (for example `spikes/<name>/`) | Visible; the user picks the home | Language tooling may sweep it into the project's builds, tests and linters (Go's `./...` includes it unless it has its own `go.mod`) |
+| **C. Outside the repo,** in a per-user Endless data directory | Nothing added to the repo | Not versioned with the project, and not shared with anyone else who clones it |
+| **D. Its own new git repository** | The spike can grow into a real project | A repository to create, name and host for every kept spike |
+
+**Recommendation: A**, pending your view on mixing user code into `.endless/`. If that's a problem, B with a default whose name starts with `.` or `_` (for example `_spikes/`), which Go tooling also skips.
+
+**Answer:**
+
+## Q6. How does a spike's code get to its final form when the user says keep or discard?
+
+| Option | Pros | Cons |
+|---|---|---|
+| **A. A standalone spike is written in its final directory from the start;** keep is a normal land of that directory, discard drops the branch. An in-place spike is kept as a tag on its final commit (for example `spike/<id>`), never landed | Keeping a standalone spike needs no move or rewrite; the in-place diff stays retrievable without touching main | The directory name is fixed at claim, before the spike's shape is known; an in-place spike that's kept is only reachable through git |
+| **B. Written anywhere in the worktree; at keep, the agent moves it into the spike directory** | The agent works wherever is natural; the name is chosen when the result is known | A move step at completion that can miss files or break relative paths; doesn't apply to an in-place spike at all |
+| **C. Kept as a git tag or branch only, for both kinds** | One mechanism; nothing added to main | A kept standalone app isn't visible in the tree, and is lost if tags or branches aren't pushed |
+
+**Recommendation: A.** Renaming the directory before keeping is a simple step, and a tag is the natural form for a diff.
+
+**Answer:**
+
+## Q7. When is keep or discard chosen?
+
+| Option | Pros | Cons |
+|---|---|---|
+| **A. At completion, required:** completing a spike refuses without an explicit keep or discard | The user decides with the result in hand; nothing is lost or kept by accident | Completing a spike always needs one more answer from the user |
+| **B. At completion, defaulting to discard** | No extra answer for the common throwaway case | A spike the user meant to keep, but forgot to say so, is lost |
+| **C. Set when the spike is created, changeable until completion** | The agent knows from the start whether the code is meant to last | The intent is set before the result is known, and is easy to leave stale |
+
+**Recommendation: A.** You described the choice as made when you're ready to complete, and an explicit choice protects the code you meant to keep.
 
 **Answer:**
