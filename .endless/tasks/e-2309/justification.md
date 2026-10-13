@@ -1,0 +1,1 @@
+The approach (version field, step format, forward/backward compatibility, schema tooling) is a design decision Mike wants to discuss before any implementation task can be planned.
