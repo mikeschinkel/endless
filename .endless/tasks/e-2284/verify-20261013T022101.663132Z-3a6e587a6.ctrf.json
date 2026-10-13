@@ -1,0 +1,179 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 32,
+      "passed": 32,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test: settings, settingscmd, config, jobs, the job packages, cmd/endless-go",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestInitialize",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestEveryConfigKeyIsRegistered",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestInitialize_ReportsEveryFailure",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestAccessorsRefuseBeforeInitialize",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestParseOptIn",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestInitialize_RejectsEveryBadRegistration",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestNormalize_RefusesALegacyBoolean",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestMigrateFile",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestBuild_ValuesAndSources",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest: project set over the exported registry",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a legacy boolean stops settings list",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "one line names the machine file, the key and the fix",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and the project file's true",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and its false",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and the refusal names the migrate command",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "--metadata reads no file, so the broken files do not stop it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "migrate reports each rewrite",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "migrate changes only the opt-in literals (the array's enabled stays true)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the machine file's check is rewritten too",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a second migrate finds nothing",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "after migrating, settings list succeeds",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "main_sync.enabled is on",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "from the project file",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "prime.enabled is an explicit off",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "auto_spawn.enabled is unset, so its default",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a suggestable opt-in carries a rationale",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "checks.bash_git_writes defaults on",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "auto_spawn.interval is a machine-file setting",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "settings list over this repo's .endless/config.json succeeds",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "main_sync.enabled is on, from this repo's file",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "prime.enabled is on, from this repo's file",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
