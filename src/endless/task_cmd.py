@@ -5245,11 +5245,60 @@ def _require_in_order(item_id: int, verb: str, out_of_order: bool) -> None:
     )
 
 
+def _live_blockers(item_id: int) -> list[dict]:
+    """Every task linked as blocking this one whose status is not terminal.
+
+    E-2296. The release rule the session-status display uses (a blocker holds
+    its dependent until it is terminal), read the way `_unfinished_predecessors`
+    reads `preceded_by`. Each row is {id, title, status}, id-ascending — every
+    blocker, where the status line's GetActiveBlockers stops at three.
+    """
+    rows = get_all_relations(item_id).get("blocked_by", [])
+    return sorted(
+        (r for r in rows if r["status"] not in _TERMINAL_STATUSES),
+        key=lambda r: r["id"],
+    )
+
+
+def _require_unblocked(item_id: int, verb: str) -> None:
+    """Refuse to start a task while a task that blocks it is not terminal.
+
+    E-2296. `blocks` is the hard dependency, so unlike `precedes` there is no
+    override: a block that should not apply is removed with `task unblock`,
+    which records that the dependency was wrong rather than ignored once.
+    NO_REPORT: an agent may unblock on its own judgment (EQ-45).
+    """
+    blockers = _live_blockers(item_id)
+    if not blockers:
+        return
+    tid = task_id_display(item_id)
+    rows = "\n".join(
+        f"  {task_id_display(b['id'])}  {b['status']}  {b['title']}"
+        for b in blockers)
+    named = ", ".join(
+        f"{task_id_display(b['id'])} [{b['status']}]" for b in blockers)
+    unblocks = "\n".join(
+        f"    endless task unblock {tid} --by {task_id_display(b['id'])}"
+        for b in blockers)
+    raise agent_help.no_report(
+        f"Cannot {verb} {tid}: it is blocked by {named}. {NOTHING_CHANGED}",
+        f"Finish the blocking tasks first, or, if a block is wrong, remove it: "
+        f"endless task unblock {tid} --by <blocker>",
+        text=(
+            f"Cannot {verb} {tid}: it is blocked by tasks that are not finished:\n"
+            f"{rows}\n"
+            f"Finish those first. If a block is wrong, remove it:\n"
+            f"{unblocks}"
+        ),
+    )
+
+
 def _require_spawnable(item_id: int, verb: str, require_plan: bool = True,
                        out_of_order: bool = False,
                        allow_open_questions: bool = False) -> None:
     """Refuse to claim or spawn a task that has no plan or has open questions,
-    or (E-2270) whose predecessors are unfinished unless `out_of_order`.
+    or (E-2296) a live blocker, or (E-2270) whose predecessors are unfinished
+    unless `out_of_order`.
 
     E-2280: `allow_open_questions` (spawn's flag, the user's call) starts it
     with its questions still open; each is named, so it is never silent.
@@ -5333,6 +5382,9 @@ def _require_spawnable(item_id: int, verb: str, require_plan: bool = True,
                          f"      endless task spawn {tid} --allow-open-questions")
         problems.append("\n".join(lines))
     if not problems:
+        # E-2296: the hard dependency before the advisory one, and outside
+        # `_require_in_order`, so --out-of-order never reaches it.
+        _require_unblocked(item_id, verb)
         # E-2270: after the plan and question refusals, which --out-of-order
         # does not touch — so the override never lets either through.
         _require_in_order(item_id, verb, out_of_order)
