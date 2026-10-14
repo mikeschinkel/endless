@@ -7545,3 +7545,7 @@ When Mike asked to close E-2223, the reply added 'the synthesis in its outcome i
 ### [2026-10-13] Frame task behavior by task properties (landable, produces an outcome, needs a worktree), not by type names (todo/bug, research/brainstorm)
 During the E-2230 brainstorm I described 'finished when the worktree is settled' as true for todo and bug tasks, and the outcome deliverable as belonging to research and brainstorm tasks. Mike corrected this: the rule applies to any task with a landable result, including future docs tasks, and code that keys behavior off type names is harder to maintain than code keyed off properties a type declares (for example 'needs worktree'). When discussing or designing type-dependent behavior in Endless, name the property and let types declare it.
 - **Project**: endless
+
+### [2026-10-13] Non-self-dev projects still need a per-worktree sandbox for things like config files; only the Endless-specific sandbox databases are self-dev only
+During the E-2230 brainstorm I said that for a PRODUCT project without self-dev the sandbox part of the worktree question disappears. Mike corrected this: only the sandboxed Endless databases go away; most projects still need a sandbox, at least for config files. Don't treat 'sandbox' as meaning only the self-dev sandbox database when reasoning about other users' projects.
+- **Project**: endless
