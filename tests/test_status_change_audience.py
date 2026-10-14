@@ -51,7 +51,7 @@ def _ready_task() -> int:
                                 plan="# plan\noriginal\n")
     task_cmd.update_plan(item_id=item_id, complexity="low", risk="low",
                          keep_status=True)
-    itemize(item_id)  # approval needs an itemized plan (E-2280)
+    itemize(item_id, approved=True)  # approval needs approved items (E-2280)
     task_cmd.update_plan(item_id=item_id, status="ready")
     return item_id
 

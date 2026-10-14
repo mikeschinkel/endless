@@ -92,9 +92,14 @@ type PlanItemOp struct {
 }
 
 // TaskPlanBaselinedPayload copies every active item's statement and kind into
-// its baseline, and clears the baseline of every withdrawn item. Empty: the
-// rows at the event's position in the ledger are the whole input.
-type TaskPlanBaselinedPayload struct{}
+// its baseline, and clears the baseline of every withdrawn item. With no Items
+// the rows at the event's position in the ledger are the whole input — `task
+// approve`, and every event recorded before items could be approved one at a
+// time. Items (sequence numbers) limits it to those items: the user approving
+// them one at a time (E-2280), a withdrawn one by accepting its withdrawal.
+type TaskPlanBaselinedPayload struct {
+	Items []int64 `json:"items,omitempty"`
+}
 
 // TaskReconciledPayload records one reconciliation of the task named by the
 // entity ref. Seq, Series and every question id are allocated under the lock.
@@ -411,13 +416,29 @@ func ptrNullIfEmpty(s *string) any {
 
 // PreparePlanBaselined refuses a baseline the gate could never pass: a task of
 // one that must be itemized, or that has items, with no active deliverable. It also refuses a frozen task.
-func PreparePlanBaselined(db dbQuerier, taskID int64) error {
+// Approving named items refuses a number the task does not have; the
+// deliverable rule is the whole set's, so it is not applied to them.
+func PreparePlanBaselined(db dbQuerier, taskID int64, p *TaskPlanBaselinedPayload) error {
 	facts, err := readTaskFacts(db, taskID)
 	if err != nil {
 		return err
 	}
 	if planitem.IsFrozen(facts.Status) {
 		return fmt.Errorf("E-%d is %s, so its plan items are frozen", taskID, facts.Status)
+	}
+	if len(p.Items) > 0 {
+		for _, seq := range p.Items {
+			var n int
+			if err := db.QueryRow(
+				`SELECT count(*) FROM task_plan_items WHERE task_id = ? AND seq = ?`,
+				taskID, seq).Scan(&n); err != nil {
+				return fmt.Errorf("read %s of E-%d: %w", planitem.Label(seq), taskID, err)
+			}
+			if n == 0 {
+				return fmt.Errorf("E-%d has no plan item %s", taskID, planitem.Label(seq))
+			}
+		}
+		return nil
 	}
 	var active, n int
 	if err := db.QueryRow(
@@ -454,19 +475,34 @@ func applyTaskPlanBaselined(db dbQuerier, evt *Event) error {
 	if err := requireLiveTask(db, taskID); err != nil {
 		return err
 	}
+	var p TaskPlanBaselinedPayload
+	if len(evt.Payload) > 0 {
+		if err := json.Unmarshal(evt.Payload, &p); err != nil {
+			return fmt.Errorf("events: decode task.plan_baselined payload: %w", err)
+		}
+	}
+	// Which items: all of them, or the ones named. The seq list is bound as
+	// arguments, never spliced into the SQL.
+	only, args := "", []any{}
+	if len(p.Items) > 0 {
+		only = " AND seq IN (?" + strings.Repeat(", ?", len(p.Items)-1) + ")"
+		for _, seq := range p.Items {
+			args = append(args, seq)
+		}
+	}
 	ts := kairosToISO(evt.TS)
 	if _, err := db.Exec(
 		`UPDATE task_plan_items
 		    SET approved_statement = statement, approved_kind = kind, approved_at = ?
-		  WHERE task_id = ? AND state = ?`,
-		ts, taskID, planitem.StateActive); err != nil {
+		  WHERE task_id = ? AND state = ?`+only,
+		append([]any{ts, taskID, planitem.StateActive}, args...)...); err != nil {
 		return fmt.Errorf("events: baseline E-%d: %w", taskID, err)
 	}
 	if _, err := db.Exec(
 		`UPDATE task_plan_items
 		    SET approved_statement = NULL, approved_kind = NULL, approved_at = NULL
-		  WHERE task_id = ? AND state = ?`,
-		taskID, planitem.StateWithdrawn); err != nil {
+		  WHERE task_id = ? AND state = ?`+only,
+		append([]any{taskID, planitem.StateWithdrawn}, args...)...); err != nil {
 		return fmt.Errorf("events: baseline E-%d: %w", taskID, err)
 	}
 	return nil

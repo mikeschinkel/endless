@@ -319,13 +319,84 @@ def test_update_to_ready_refuses_a_todo_without_items(seeded_project_at_cwd):
         task_cmd.update_plan(item_id=tid, status="ready")
 
 
-def test_update_to_ready_baselines_the_items(seeded_project_at_cwd):
+def test_update_to_ready_needs_every_item_approved(seeded_project_at_cwd):
     from endless import task_cmd
     from plan_item_steps import itemize
     tid = _submitted_todo()
     itemize(tid)
+    with pytest.raises(ClickException, match="P1 are not approved as they stand"):
+        task_cmd.update_plan(item_id=tid, status="ready")
+    plan_items.approve(tid, ("P1",))
     task_cmd.update_plan(item_id=tid, status="ready")
-    assert plan_items.readiness(tid)["unapproved"] is False
+    assert _status(tid) == "ready"
+
+
+# --- items are approved one at a time by default ------------------------------
+
+def _status(tid: int) -> str:
+    from endless import db
+    return db.query("SELECT status FROM tasks WHERE id = ?", (tid,))[0]["status"]
+
+
+def test_approve_refuses_unapproved_items_and_names_the_route(seeded_project_at_cwd):
+    from endless import task_cmd
+    from plan_item_steps import itemize
+    tid = _submitted_todo()
+    itemize(tid, "One")
+    itemize(tid, "Two")
+    plan_items.approve(tid, ("P1",))
+    with pytest.raises(ClickException) as exc:
+        task_cmd.approve_item(tid)
+    msg = str(exc.value)
+    assert "plan items P2 are not approved" in msg
+    assert f"endless task plan approve E-{tid} P2" in msg
+    assert "--include-plan-items" in msg
+    assert _status(tid) == "submitted"
+
+
+def test_approving_each_item_then_the_task(seeded_project_at_cwd, capsys):
+    from endless import task_cmd
+    from plan_item_steps import itemize
+    tid = _submitted_todo()
+    itemize(tid, "One")
+    itemize(tid, "Two")
+    plan_items.approve(tid, ("P1",))
+    assert "Still to approve: P2" in capsys.readouterr().out
+    plan_items.approve(tid, ("P2",))
+    assert "Every plan item" in capsys.readouterr().out
+    task_cmd.approve_item(tid)
+    assert _status(tid) == "ready"
+
+
+def test_include_plan_items_approves_them_all(seeded_project_at_cwd):
+    from endless import task_cmd
+    from plan_item_steps import itemize
+    tid = _submitted_todo()
+    itemize(tid, "One")
+    itemize(tid, "Two")
+    task_cmd.approve_item(tid, include_plan_items=True)
+    assert _status(tid) == "ready"
+    assert plan_items.unapproved(tid) == []
+
+
+def test_approving_a_withdrawn_item_accepts_its_withdrawal(seeded_project_at_cwd):
+    from plan_item_steps import itemize
+    tid = _submitted_todo()
+    itemize(tid, "One")
+    itemize(tid, "Two")
+    plan_items.approve(tid, ("P1", "P2"))
+    plan_items.emit_ops(tid, [{"op": "withdraw", "seq": 2}], quiet=True, keep_status=True)
+    assert [it["seq"] for it in plan_items.unapproved(tid)] == [2]
+    plan_items.approve(tid, ("P2",))
+    assert plan_items.unapproved(tid) == []
+
+
+def test_approving_an_unknown_item_is_refused(seeded_project_at_cwd):
+    from plan_item_steps import itemize
+    tid = _submitted_todo()
+    itemize(tid)
+    with pytest.raises(ClickException, match="no plan item P9"):
+        plan_items.approve(tid, ("P9",))
 
 
 def test_spawn_refuses_items_the_user_has_not_approved(seeded_project_at_cwd):
@@ -335,7 +406,7 @@ def test_spawn_refuses_items_the_user_has_not_approved(seeded_project_at_cwd):
     with pytest.raises(ClickException) as exc:
         plan_items.require_approved(tid, "spawned")
     assert "have not been approved" in str(exc.value)
-    assert f"endless task approve E-{tid}" in str(exc.value)
+    assert f"endless task plan approve E-{tid} P1" in str(exc.value)
     plan_items.baseline(tid)
     plan_items.require_approved(tid, "spawned")
 

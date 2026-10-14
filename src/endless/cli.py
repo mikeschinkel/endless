@@ -3817,17 +3817,23 @@ def task_submit(item_ids, complexity, risk):
               help="Ratify with this complexity rating instead of the proposed one")
 @click.option("--risk", default=None, type=ratings.CHOICES,
               help="Ratify with this risk rating instead of the proposed one")
-def task_approve(item_ids, complexity, risk):
+@click.option("--include-plan-items", "include_plan_items", is_flag=True,
+              help="Also approve every plan item not yet approved, as it stands")
+def task_approve(item_ids, complexity, risk, include_plan_items):
     """Approve one or more submitted tasks (submitted → ready).
 
     Records that a human reviewed the plan. It does not unlock spawning:
     `task spawn` and `task claim` accept a submitted task as they accept a
     ready one. Approving also ratifies the task's complexity and risk ratings, so an unrated task is
     refused — supply or override either rating here.
+
+    A task with plan items is approved only once each item is: one at a time
+    with `task plan approve`, or all at once with --include-plan-items.
     """
     from endless.task_cmd import approve_item
     for item_id in item_ids:
-        approve_item(item_id, complexity=complexity, risk=risk)
+        approve_item(item_id, complexity=complexity, risk=risk,
+                     include_plan_items=include_plan_items)
 
 
 @task_cmd.command("complete")
@@ -4383,6 +4389,19 @@ def task_plan_withdraw(item_id, items):
     from endless import plan_items
     plan_items.emit_ops(item_id, [{"op": "withdraw", "seq": plan_items.parse_label(i)}
                                   for i in items])
+
+
+@task_plan_group.command("approve")
+@click.argument("item_id", type=TASK_ID)
+@click.argument("items", nargs=-1, required=True)
+def task_plan_approve(item_id, items):
+    """Approve plan items, named P<n>, as they stand — the user's review.
+
+    Spawn needs every active item approved. A withdrawn item named has its
+    withdrawal accepted. The task itself is approved with `task approve`.
+    """
+    from endless import plan_items
+    plan_items.approve(item_id, items)
 
 
 @task_plan_group.command("move")

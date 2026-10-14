@@ -37,7 +37,7 @@ def _add(**kw) -> int:
     as approval requires (E-2280)."""
     item_id = task_cmd.add_item(**kw)
     task_cmd.update_plan(item_id=item_id, plan="# Plan\nbody\n", keep_status=True)
-    itemize(item_id)
+    itemize(item_id, approved=True)
     return item_id
 
 

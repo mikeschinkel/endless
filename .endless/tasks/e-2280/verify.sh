@@ -123,10 +123,17 @@ out="$(es task approve E-2)"
 assert_contains "approve refuses a todo with no deliverable item" "no active deliverable plan item" "$out"
 out="$(with_tmux es task spawn E-2)"
 assert_contains "spawn refuses a todo with a prose-only plan" "so it cannot be spawned" "$out"
-es task approve E-1 >/dev/null
-assert_eq "approve moves E-1 to ready" "ready" "$(field E-1 'd["status"]')"
+out="$(with_tmux es task spawn E-1)"
+assert_contains "spawn refuses items not yet approved" "task plan approve E-1 P1 P2" "$out"
+out="$(es task plan approve E-1 P1)"
+assert_contains "items are approved one at a time" "Still to approve: P2" "$out"
+out="$(es task approve E-1)"
+assert_contains "the task is approved only once each item is" "plan items P2 are not approved" "$out"
+assert_eq "so E-1 is still submitted" "submitted" "$(field E-1 'd["status"]')"
+es task approve E-1 --include-plan-items >/dev/null
+assert_eq "--include-plan-items approves the rest and the task" "ready" "$(field E-1 'd["status"]')"
 out="$(es task plan list E-1)"
-assert_not_contains "approval baselines every item" "unapproved" "$out"
+assert_not_contains "every item is approved" "unapproved" "$out"
 es task update E-1 --plan "Write the widget, carefully." >/dev/null
 assert_eq "a prose edit on a ready task keeps it ready" "ready" "$(field E-1 'd["status"]')"
 out="$(es task plan edit E-1 P1 --statement "The widget renders quickly")"
@@ -134,8 +141,9 @@ assert_contains "an item edit on a ready task drops its approval" "→ submitted
 assert_eq "it is submitted again" "submitted" "$(field E-1 'd["status"]')"
 out="$(with_tmux es task spawn E-1)"
 assert_contains "spawn refuses items not approved as they stand" "have not been approved" "$out"
+es task plan approve E-1 P1 >/dev/null
 es task approve E-1 >/dev/null
-assert_eq "re-approved" "ready" "$(field E-1 'd["status"]')"
+assert_eq "the edited item approved, then the task" "ready" "$(field E-1 'd["status"]')"
 
 section "Reconciling, and the gate"
 # The work lives on a task branch, as it does in a worktree; the fingerprint is
@@ -210,7 +218,7 @@ es task add "Add a dial" --description "Add a dial to the probe project" --plan 
 assert_contains "not approved, nothing unanswered: approve" "⚑ T E-4" "$(board 4)"
 es question ask E-3 "Which way does it turn?" >/dev/null
 assert_contains "not approved, a question unanswered: act" "⚐ T E-3" "$(board 3)"
-es task approve E-3 >/dev/null
+es task approve E-3 --include-plan-items >/dev/null
 assert_contains "approved, a question unanswered: answer" "¿ T E-3" "$(board 3)"
 q="$(es question list E-3 | grep -oE 'EQ-[0-9]+' | head -1)"
 es question answer "$q" "Clockwise" --by user >/dev/null

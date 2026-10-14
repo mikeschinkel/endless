@@ -74,7 +74,7 @@ func (h *planHarness) mustItems(ops ...PlanItemOp) TaskPlanItemsChangedPayload {
 
 func (h *planHarness) baseline() {
 	h.t.Helper()
-	if err := PreparePlanBaselined(h.db, questionTask); err != nil {
+	if err := PreparePlanBaselined(h.db, questionTask, &TaskPlanBaselinedPayload{}); err != nil {
 		h.t.Fatalf("baseline: %v", err)
 	}
 	h.run(h.event(KindTaskPlanBaselined, TaskPlanBaselinedPayload{}))
@@ -203,12 +203,54 @@ func TestPlanItems_EditAndWithdrawApprovedItemWhileUnderwayIsAllowed(t *testing.
 
 func TestPlanBaselined_RefusesGatedTaskWithoutDeliverable(t *testing.T) {
 	h := newPlanHarness(t)
-	if err := PreparePlanBaselined(h.db, questionTask); err == nil {
+	if err := PreparePlanBaselined(h.db, questionTask, &TaskPlanBaselinedPayload{}); err == nil {
 		t.Error("baseline of a todo with no items accepted")
 	}
 	h.mustItems(add("exclusion", "no ledger change"))
-	if err := PreparePlanBaselined(h.db, questionTask); err == nil {
+	if err := PreparePlanBaselined(h.db, questionTask, &TaskPlanBaselinedPayload{}); err == nil {
 		t.Error("baseline of a todo with only an exclusion accepted")
+	}
+}
+
+// TestPlanBaselined_NamedItemsOnly: approving named items (E-2280) approves
+// those and leaves the rest as they were; a withdrawn one named has its
+// withdrawal accepted; a number the task lacks is refused.
+func TestPlanBaselined_NamedItemsOnly(t *testing.T) {
+	h := newPlanHarness(t)
+	h.mustItems(add("deliverable", "a"), add("deliverable", "b"), add("deliverable", "c"))
+	h.baseline()
+	h.mustItems(PlanItemOp{Op: PlanOpWithdraw, Seq: 3})
+	h.mustItems(add("deliverable", "d"))
+
+	bad := &TaskPlanBaselinedPayload{Items: []int64{9}}
+	if err := PreparePlanBaselined(h.db, questionTask, bad); err == nil {
+		t.Error("approving P9, which the task does not have, was accepted")
+	}
+	p := TaskPlanBaselinedPayload{Items: []int64{3, 4}}
+	if err := PreparePlanBaselined(h.db, questionTask, &p); err != nil {
+		t.Fatalf("approve P3, P4: %v", err)
+	}
+	h.run(h.event(KindTaskPlanBaselined, p))
+
+	approved := map[int64]bool{}
+	rows, err := h.db.Query(`SELECT seq, approved_at IS NOT NULL FROM task_plan_items ORDER BY seq`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var seq int64
+		var a bool
+		if err := rows.Scan(&seq, &a); err != nil {
+			t.Fatal(err)
+		}
+		approved[seq] = a
+	}
+	want := map[int64]bool{1: true, 2: true, 3: false, 4: true}
+	for seq, w := range want {
+		if approved[seq] != w {
+			t.Errorf("P%d approved = %v, want %v", seq, approved[seq], w)
+		}
 	}
 }
 

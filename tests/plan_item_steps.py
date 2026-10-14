@@ -11,12 +11,16 @@ from pathlib import Path
 from endless import plan_items
 
 
-def itemize(task_id: int, statement: str = "The change works") -> None:
+def itemize(task_id: int, statement: str = "The change works",
+            approved: bool = False) -> None:
     """Give the task one planned deliverable item, as a planning session would
-    before submitting it."""
-    plan_items.emit_ops(task_id, [{"op": "add", "kind": "deliverable",
-                                   "statement": statement}],
-                        quiet=True, keep_status=True)
+    before submitting it — and, with `approved`, have the user approve it as
+    `task plan approve` does, which approving the task needs (E-2280)."""
+    out = plan_items.emit_ops(task_id, [{"op": "add", "kind": "deliverable",
+                                         "statement": statement}],
+                              quiet=True, keep_status=True)
+    if approved:
+        plan_items.baseline(task_id, [plan_items.parse_label(s) for s in out["added"]])
 
 
 def reconcile_as_planned(task_id: int) -> None:

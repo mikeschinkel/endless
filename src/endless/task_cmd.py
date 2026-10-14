@@ -4059,7 +4059,7 @@ def submit_item(item_id: int, complexity: str | None = None,
 
 
 def approve_item(item_id: int, complexity: str | None = None,
-                 risk: str | None = None):
+                 risk: str | None = None, include_plan_items: bool = False):
     """Approve a `submitted` task → `ready` (a record of the user's review).
 
     Approval gates nothing: `_require_spawnable` (plan, open questions) is the
@@ -4074,6 +4074,11 @@ def approve_item(item_id: int, complexity: str | None = None,
     E-1813: approving RATIFIES the proposed ratings (ED-1538), so an unrated
     task is refused. `--complexity` / `--risk` supply or override a rating in
     the same call; the ratings approved are reported either way.
+
+    E-2280: a task with plan items is approved only once every item is, as it
+    stands — one at a time with `task plan approve`, or all of them in this
+    call with `include_plan_items`. So ▶ do on the board always means its items
+    are the ones the user agreed to.
     """
     from endless.event_bridge import emit_event
 
@@ -4081,9 +4086,9 @@ def approve_item(item_id: int, complexity: str | None = None,
 
     row = _read_for_rating(item_id)
     current = row["status"]
-    # E-2280: approving copies the plan items into their baseline. On a task
-    # already under way it is a re-approval: the baseline moves to the items as
-    # they are now — a redesign accepted in one place — and the status stays.
+    # E-2280: on a task already under way, approving is a re-approval of its
+    # items: the baseline moves to the items as they are now — a redesign
+    # accepted in one place — and the status stays.
     if current in ("ready", "underway", "revisit"):
         if not plan_items.readiness(item_id)["unapproved"]:
             click.echo(
@@ -4093,6 +4098,8 @@ def approve_item(item_id: int, complexity: str | None = None,
             )
             return
         plan_items.require_deliverable(item_id, "approved")
+        if not include_plan_items:
+            plan_items.require_items_approved(item_id, "re-approved")
         plan_items.baseline(item_id)
         click.echo(
             click.style("•", fg="cyan")
@@ -4114,6 +4121,8 @@ def approve_item(item_id: int, complexity: str | None = None,
     effective, changed = _resolve_ratings(row, complexity, risk)
     _refuse_unrated_approve(item_id, effective)
     plan_items.require_deliverable(item_id, "approved")
+    if not include_plan_items:
+        plan_items.require_items_approved(item_id, "approved")
 
     _, proj_name = _resolve_project(None)
     _emit_ratings(item_id, proj_name, changed)
@@ -4129,7 +4138,8 @@ def approve_item(item_id: int, complexity: str | None = None,
         },
     )
 
-    plan_items.baseline(item_id)
+    if include_plan_items:
+        plan_items.baseline(item_id)
 
     _emit_field_changes(
         item_id, row["title"],
@@ -6090,9 +6100,11 @@ def update_plan(
             )
         else:
             _refuse_unrated_approve(item_id, effective)
-            # E-2280: and the item rule, and the baseline below, as approve does.
+            # E-2280: and the item rules, as approve does: a deliverable, and
+            # every item approved as it stands.
             from endless import plan_items
             plan_items.require_deliverable(item_id, "approved")
+            plan_items.require_items_approved(item_id, "approved")
 
     if status in _ABANDONMENT_STATUSES and outcome is not None and reason is None:
         reason, outcome = outcome, None
@@ -6396,9 +6408,6 @@ def update_plan(
         entity_id=str(item_id),
         payload={"fields": fields},
     )
-    if gated and status == "ready":
-        from endless import plan_items
-        plan_items.baseline(item_id)
 
     # E-2120: audience-gate the status render. An agent is shown the fields it
     # ASKED to change; a status entry it did not ask for — the E-1993

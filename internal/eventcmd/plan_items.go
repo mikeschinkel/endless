@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"github.com/mikeschinkel/endless/internal/dbprovenance"
 	"github.com/mikeschinkel/endless/internal/events"
@@ -69,8 +70,13 @@ func emitPrepared(evtKind events.Kind, ts kairos.Timestamp, project,
 		}
 		payload, summary = p, map[string]any{"added": seqs}
 	case events.KindTaskPlanBaselined:
-		p := events.TaskPlanBaselinedPayload{}
-		err = events.PreparePlanBaselined(lock.DB, taskID)
+		var p events.TaskPlanBaselinedPayload
+		if strings.TrimSpace(payloadStr) != "" {
+			err = json.Unmarshal([]byte(payloadStr), &p)
+		}
+		if err == nil {
+			err = events.PreparePlanBaselined(lock.DB, taskID, &p)
+		}
 		payload, summary = p, map[string]any{}
 	case events.KindTaskReconciled:
 		var p events.TaskReconciledPayload

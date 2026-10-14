@@ -48,7 +48,7 @@ def _finish(item_id: int, status: str, **kwargs) -> None:
     """
     # E-1813: approving ratifies both ratings, so the walk supplies them.
     # E-2280: approval needs an itemized plan, and `unverified` a reconciliation.
-    itemize(item_id)
+    itemize(item_id, approved=True)
     task_cmd.update_plan(item_id=item_id, status="ready",
                          complexity="low", risk="low")
     task_cmd.update_plan(item_id=item_id, status="underway")
@@ -61,7 +61,7 @@ def _approve(item_id: int) -> None:
     """Take an unrated pre-work task to `ready` the legal way: submit with
     ratings, then approve (E-1813 removed the tier-1 shortcut). Approval needs
     an itemized plan (E-2280)."""
-    itemize(item_id)
+    itemize(item_id, approved=True)
     task_cmd.update_plan(item_id=item_id, status="submitted",
                          complexity="low", risk="low")
     task_cmd.update_plan(item_id=item_id, status="ready")

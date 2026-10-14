@@ -125,27 +125,92 @@ def unapprove_if_material(task_id: int) -> bool:
     if not agent_help.agent_facing():
         click.echo(
             f"E-{task_id} → submitted (its plan items changed, and approval was "
-            "granted against the old ones). Approve it again with "
-            f"`endless task approve E-{task_id}`.")
+            "granted against the old ones). Approve the changed items, then the "
+            f"task: {approve_route(task_id)}.")
     return True
 
 
-def baseline(task_id: int) -> None:
-    """Copy the item set into its approved baseline, and close as moot every
-    open discrepancy question on an item that is now withdrawn.
+def baseline(task_id: int, seqs: list[int] | None = None) -> None:
+    """Copy the item set — or only the items `seqs` names — into its approved
+    baseline, and close as moot every open discrepancy question on an item
+    whose withdrawal that accepts.
     """
     emit_event(
         kind="task.plan_baselined",
         project=_project(task_id),
         entity_type="task",
         entity_id=str(task_id),
-        payload={},
+        payload={"items": seqs} if seqs else {},
     )
     from endless.question_cmd import resolve_questions
     for m in provenance.rows_of(_go(["moot-questions", "--id", str(task_id)])):
+        if seqs and m["item_seq"] not in seqs:
+            continue
         resolve_questions(
             "withdraw", (m["id"],),
             f"moot: {label(m['item_seq'])} was withdrawn and the plan re-approved")
+
+
+def unapproved(task_id: int) -> list[dict]:
+    """The items not approved as they stand: an active item never approved or
+    changed since (statement or kind), and a withdrawn one whose withdrawal is
+    not yet accepted. The same rule as the readiness count, item by item."""
+    out = []
+    for it in items(task_id, all_items=True):
+        if it["state"] == "active":
+            if (not it.get("approved_at") or it["statement"] != it.get("approved_statement")
+                    or it["kind"] != it.get("approved_kind")):
+                out.append(it)
+        elif it.get("approved_at"):
+            out.append(it)
+    return out
+
+
+def approve_route(task_id: int, then_task: bool = True) -> str:
+    """The commands that approve a task's outstanding items — and then the task,
+    unless `then_task` is False (spawn needs only the items)."""
+    labels = " ".join(label(it["seq"]) for it in unapproved(task_id))
+    if not then_task:
+        return f"`endless task plan approve E-{task_id} {labels}`"
+    return (f"`endless task plan approve E-{task_id} {labels}` then "
+            f"`endless task approve E-{task_id}` (or both at once: "
+            f"`endless task approve E-{task_id} --include-plan-items`)")
+
+
+def approve(task_id: int, labels: tuple[str, ...]) -> None:
+    """Approve the named items as they stand — the user's review of each, one
+    at a time by default (E-2280). A withdrawn item named has its withdrawal
+    accepted. The task's own approval stays `task approve`'s."""
+    seqs = sorted({parse_label(lbl) for lbl in labels})
+    baseline(task_id, seqs)
+    write_mirror(task_id)
+    left = unapproved(task_id)
+    done = ", ".join(label(s) for s in seqs)
+    if left:
+        click.echo(f"Approved {done}. Still to approve: "
+                   + ", ".join(label(it["seq"]) for it in left) + ".")
+    else:
+        click.echo(f"Approved {done}. Every plan item of E-{task_id} is "
+                   "approved as it stands.")
+
+
+def require_items_approved(task_id: int, action: str) -> None:
+    """Refuse `action` — approving the task — while any of its items is not
+    approved as it stands. Approving them is the user's, item by item or all
+    at once with --include-plan-items."""
+    left = unapproved(task_id)
+    if not left:
+        return
+    labels = ", ".join(label(it["seq"]) for it in left)
+    raise agent_help.report(
+        f"E-{task_id} cannot be {action}: plan items {labels} are not approved "
+        "as they stand. Nothing changed.",
+        "whether to approve those plan items",
+        text=(f"E-{task_id} cannot be {action}: plan items {labels} are not "
+              f"approved as they stand. Read them "
+              f"(`endless task show E-{task_id} --plan`) and approve them: "
+              f"{approve_route(task_id)}."),
+    )
 
 
 def write_mirror(task_id: int) -> Path | None:
@@ -559,9 +624,9 @@ def require_approved(task_id: int, action: str) -> None:
             f"it cannot be {action}. Nothing changed.",
             "whether to approve the plan items",
             text=(f"E-{task_id}'s plan items have not been approved as they "
-                  f"stand, so it cannot be {action}. Read them and approve them:\n"
-                  f"    endless task show E-{task_id} --plan\n"
-                  f"    endless task approve E-{task_id}"),
+                  f"stand, so it cannot be {action}. Read them "
+                  f"(`endless task show E-{task_id} --plan`) and approve them: "
+                  f"{approve_route(task_id, then_task=False)}."),
         )
 
 

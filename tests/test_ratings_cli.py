@@ -148,8 +148,9 @@ def test_submit_and_approve_flags_through_the_cli(seeded_project_at_cwd):
     tid = _add("Add a thing")
     # E-1993: submit needs a plan; attach one without promotion.
     _run("task", "update", f"E-{tid}", "--plan", "# Plan", "--keep-status")
-    # E-2280: approval needs an itemized plan.
+    # E-2280: approval needs an itemized plan, its items approved.
     _run("task", "plan", "add", f"E-{tid}", "The thing is added")
+    _run("task", "plan", "approve", f"E-{tid}", "P1")
     out = _run("task", "submit", f"E-{tid}", ok=False)
     assert "unrated" in out
 
