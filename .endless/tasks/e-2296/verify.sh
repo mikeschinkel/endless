@@ -57,7 +57,7 @@ cd "${PROJ}" || setup_error "cannot cd to ${PROJ}"
 
 add() {
     "${ENDLESS}" task add "$1" --description "$1 for the blocking suite." \
-        --plan "# Plan" --complexity low --risk low "${@:2}" >"${TMP}/add.log" 2>&1 || cp "${TMP}/add.log" "${TMP}/add-failed.log"
+        --plan "# Plan" --complexity low --risk low --no-session "${@:2}" >"${TMP}/add.log" 2>&1 || cp "${TMP}/add.log" "${TMP}/add-failed.log"
     grep -oE 'Added E-[0-9]+' "${TMP}/add.log" | head -1 | cut -d' ' -f2
 }
 status_of() {
