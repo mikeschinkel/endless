@@ -7565,3 +7565,7 @@ During the E-2230 brainstorm I proposed that agents draft follow-ups in the synt
 ### [2026-10-13] Don't propose e-NNNN-<slug> directory names; Endless used them for worktrees, they became a mess, and it backtracked
 During the E-2230 brainstorm I proposed naming kept tool directories e-NNNN-<slug> so they could be found by browsing. Mike pointed out that Endless once named worktrees e-NNNN-<slug>, it became a mess, and it went back to e-NNNN. The criteria may have differed, but propose findability through something other than the directory name (an index, or metadata in each directory).
 - **Project**: endless
+
+### [2026-10-13] ED-1550 (fewer tasks) is a current, deliberately temporary rule; don't frame work as a way to retire it
+During the E-2230 brainstorm I said the draft-follow-ups mechanism could be the path to retiring ED-1550 that Mike was looking for. He clarified he isn't actively looking to retire it: it isn't meant to be permanent, but it stays while it works. Mention when something affects ED-1550, but don't present retiring it as a goal.
+- **Project**: endless
