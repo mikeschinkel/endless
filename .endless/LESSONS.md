@@ -7549,3 +7549,7 @@ During the E-2230 brainstorm I described 'finished when the worktree is settled'
 ### [2026-10-13] Non-self-dev projects still need a per-worktree sandbox for things like config files; only the Endless-specific sandbox databases are self-dev only
 During the E-2230 brainstorm I said that for a PRODUCT project without self-dev the sandbox part of the worktree question disappears. Mike corrected this: only the sandboxed Endless databases go away; most projects still need a sandbox, at least for config files. Don't treat 'sandbox' as meaning only the self-dev sandbox database when reasoning about other users' projects.
 - **Project**: endless
+
+### [2026-10-13] A utility built for Endless's own data (for example transcript recovery) belongs to the Endless project, even if PRODUCT users would never need to build it
+During the E-2230 brainstorm I said the TimeMachine transcript-recovery script isn't about any project, so kept utilities might need a per-user home. Mike corrected this: that script IS about the Endless project, just not something PRODUCT users should expect to build. The per-user question still holds for tools that really are about no project, but don't assume a tool has no project just because it isn't product code.
+- **Project**: endless
