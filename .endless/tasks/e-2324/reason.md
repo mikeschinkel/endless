@@ -1,0 +1,1 @@
+Combined per ED-1550: it shares one cause with E-2319 (accepting a findings task needs the agent) and changes the same command for the same lane. Its content, including the analysis note, now lives in E-2319.
