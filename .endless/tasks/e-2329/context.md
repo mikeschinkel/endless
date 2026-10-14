@@ -1,0 +1,1 @@
+Kept directories are named e-NNNN, so browsing them on GitHub or in an IDE needs an index. A generated index cannot drift, and regenerating it on a schedule avoids conflicts between concurrent lands. Which scheduler runs the job is left to this task.
