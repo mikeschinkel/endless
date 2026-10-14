@@ -7573,3 +7573,7 @@ During the E-2230 brainstorm I said the draft-follow-ups mechanism could be the 
 ### [2026-10-13] Keep a session's working directory inside the project repo; out-of-repo task directories are a nightmare for IDE users
 During the E-2230 brainstorm I proposed that findings tasks without a worktree run in a per-task directory outside the repo, under a per-user data directory. Mike rejected it because that makes things a nightmare for IDE users. He chose the worktrees directory path, with land processes that differ by task properties.
 - **Project**: endless
+
+### [2026-10-13] Don't use phase next; it is being deprecated
+While filing E-2318 (shipping Endless's Claude Code commands), the agent set --phase next. Mike said next is being deprecated. When filing, choose a phase other than next.
+- **Project**: endless
