@@ -1,0 +1,1 @@
+Combined per ED-1550: prototype and tool share the transition-table change and keep-or-discard completion with experiment. The rules now live in E-2326.
