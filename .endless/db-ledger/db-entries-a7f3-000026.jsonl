@@ -1,0 +1,1 @@
+{"v":1,"ts":"6065N1X0KF019ZK","kind":"task.status_changed","project":"endless","entity":{"type":"task","id":"2317"},"actor":{"kind":"cli","id":"mikeschinkel@m4macmini.local","session_id":"1335"},"payload":{"old_status":"unverified","new_status":"unlanded","verified_sha":"aa1e33ce55e0a1662cf4b3caef817dcb3c7a501f"}}
