@@ -7585,3 +7585,7 @@ During the E-2230 brainstorm I said land for an outcome-only task 'closes the wo
 ### [2026-10-14] Put a brainstorm's synthesis in the task outcome for review with task show, not in a scratch file handed over as a path
 During the E-2230 brainstorm I drafted the synthesis in a scratchpad file and gave Mike its long path to review. He said it should have been written as the task's outcome, so he can review it with 'endless task show'. Write drafts of a deliverable into the task field it belongs in (with task update, without changing status), and point to the task.
 - **Project**: endless
+
+### [2026-10-14] When something is worth checking in a filed task, record it in that task; don't just say it
+After completing E-2230 I told Mike an oddity (task complete reporting the outcome as empty before it wrote) was worth checking as part of E-2324, but I didn't add it to E-2324. He asked whether I had. If I say a filed task should look at something, put it in that task (analysis or context) in the same step.
+- **Project**: endless
