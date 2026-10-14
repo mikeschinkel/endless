@@ -7581,3 +7581,7 @@ While filing E-2318 (shipping Endless's Claude Code commands), the agent set --p
 ### [2026-10-13] Land never removes a worktree directory; removal is the reaper's job, after no session is in it
 During the E-2230 brainstorm I said land for an outcome-only task 'closes the worktree', without saying how. Mike reminded me that Endless once lost weeks to land deleting a worktree immediately, which removed the directory the agent was running in. When describing or designing any land process, say that land leaves the directory alone and the reaper removes it later.
 - **Project**: endless
+
+### [2026-10-14] Put a brainstorm's synthesis in the task outcome for review with task show, not in a scratch file handed over as a path
+During the E-2230 brainstorm I drafted the synthesis in a scratchpad file and gave Mike its long path to review. He said it should have been written as the task's outcome, so he can review it with 'endless task show'. Write drafts of a deliverable into the task field it belongs in (with task update, without changing status), and point to the task.
+- **Project**: endless
