@@ -22,7 +22,7 @@ import (
 )
 
 func planItems() *goose.Migration {
-	return goose.NewGoMigration(20, &goose.GoFunc{RunTx: planItemsUp}, nil)
+	return goose.NewGoMigration(21, &goose.GoFunc{RunTx: planItemsUp}, nil)
 }
 
 var planItemsTables = []string{

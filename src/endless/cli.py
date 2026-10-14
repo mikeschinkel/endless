@@ -4311,27 +4311,6 @@ def task_sessions(item_id, include_ended, agent, as_json):
                        agent=agent, as_json=as_json)
 
 
-@main.command("plan", context_settings={"ignore_unknown_options": True})
-@click.argument("args", nargs=-1, type=click.UNPROCESSED)
-def plan_redirect(args):
-    """Renamed to 'task'. Prints corrected command."""
-    corrected = " ".join(["endless", "task"] + list(args))
-    click.echo(
-        click.style("The 'plan' command has been renamed to 'task'.", fg="yellow")
-    )
-    click.echo()
-    click.echo(f"  Use: {click.style(corrected, bold=True)}")
-    click.echo()
-    click.echo(
-        "If recording a Claude plan (from ~/.claude/plans/), "
-        "use --type=plan with 'task add'."
-    )
-    raise agent_help.no_report(
-        "The 'plan' command has been renamed to 'task'. Nothing ran.",
-        f"Re-run as `{corrected}`",
-        text="The 'plan' command has been renamed to 'task'.")
-
-
 @task_cmd.group("plan")
 def task_plan_group():
     """Manage a task's plan items: one-line statements of what will be true.
