@@ -81,12 +81,9 @@ Decisions:
 - ED-1626: a session's working directory never reaches main's repository
 - (`.endless/work/` and the empty-repo form are task-level detail, carried by E-2325)
 
-Tasks (all clean up E-2230):
-- E-2323: declare task-type properties in one table (blocks E-2325 to E-2328)
-- E-2324: accept the existing outcome when completing a reviewed task
-- E-2325: give research and brainstorm tasks an empty-repo directory, including the move to `.endless/work/`
-- E-2326: add the experiment task type
-- E-2327: add the prototype and tool task types
+Tasks, all under the epic E-2330 (let task types declare their lifecycle and workspace):
+- E-2323: declare task-type properties, extending the existing task_types columns (blocks E-2325, E-2326, E-2328)
+- E-2325: give research and brainstorm tasks an empty-repo directory, including the move to `.endless/work/` (blocks E-2326)
+- E-2326: add the experiment, prototype and tool task types, with generated indexes (absorbed E-2327 and E-2329)
 - E-2328: show tasks waiting for the user first in the session monitor
-- E-2329: generate index files for kept tools, prototypes and tasks
-- E-2319: draft follow-ups in an outcome and file them on completion
+- E-2319: accept a finished findings task in one step (absorbed E-2324)
