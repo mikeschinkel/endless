@@ -87,7 +87,7 @@ assert_eq "the blocked task's status still did not move" "submitted" "$(status_o
 
 section "4. Unblocking releases the task"
 
-"${ENDLESS}" task unblock "${B}" --by "${A}" >"${TMP}/unblock.log" 2>&1 \
+"${ENDLESS}" task unblock "${B}" --by "${A}" --no-session >"${TMP}/unblock.log" 2>&1 \
     || setup_error "task unblock failed: $(tail -8 "${TMP}/unblock.log")"
 OUT="$("${ENDLESS}" task claim "${B}" --unattended 2>&1)"
 assert_eq "claim after unblock exits 0" "0" "$?"
