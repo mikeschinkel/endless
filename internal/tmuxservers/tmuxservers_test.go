@@ -143,7 +143,7 @@ func TestConfSourcesTheUserFirst(t *testing.T) {
 }
 
 func TestShellQuoteGuardsZshEquals(t *testing.T) {
-	got := ShellJoin([]string{"tmux", "-S", "/tmp/x y", "attach-session", "-t", "=console"})
+	got := Server{Socket: "/tmp/x y", Session: "console"}.AttachCommand()
 	want := `tmux -S '/tmp/x y' attach-session -t '=console'`
 	if got != want {
 		t.Errorf("ShellJoin = %s, want %s", got, want)
@@ -152,14 +152,14 @@ func TestShellQuoteGuardsZshEquals(t *testing.T) {
 
 func TestTemplateLauncherSubstitutesTheCommand(t *testing.T) {
 	l := templateLauncher("ghostty -e {cmd}")
-	got := l.Argv([]string{"tmux", "-S", "/s", "attach-session", "-t", "=tasks"})
+	got := l.Argv(Server{Socket: "/s", Session: "tasks"}.AttachArgv())
 	want := []string{"sh", "-c", "ghostty -e tmux -S /s attach-session -t '=tasks'"}
 	if !slices.Equal(got, want) {
 		t.Errorf("argv = %q, want %q", got, want)
 	}
 	// No placeholder: the command is appended.
-	got = templateLauncher("my-term").Argv([]string{"tmux"})
-	if got[2] != "my-term tmux" {
+	got = templateLauncher("my-term").Argv([]string{"top"})
+	if got[2] != "my-term top" {
 		t.Errorf("argv = %q", got)
 	}
 }
@@ -183,8 +183,8 @@ func TestDetectLauncher(t *testing.T) {
 			t.Errorf("%s/%s: ok = %v", tt.term, tt.goos, ok)
 			continue
 		}
-		if ok && l.Argv([]string{"tmux"})[0] != tt.first {
-			t.Errorf("%s/%s: argv = %q", tt.term, tt.goos, l.Argv([]string{"tmux"}))
+		if ok && l.Argv([]string{"top"})[0] != tt.first {
+			t.Errorf("%s/%s: argv = %q", tt.term, tt.goos, l.Argv([]string{"top"}))
 		}
 	}
 }
