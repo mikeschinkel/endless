@@ -1,0 +1,1 @@
+Type properties partly exist already: the task_types table has columns lands, requires_verify_suite, settles_on_land and auto_spawnable. Extend those (and whatever reads them) rather than adding a separate table, and find the type-name checks that duplicate or bypass them.
