@@ -11,7 +11,7 @@ The principle is recorded as decision ED-1623, which applies to any kind, not ju
 Endless code should test a property that each type declares, never the type's name ("todo and bugfix tasks", "research and brainstorm tasks"). The properties identified so far:
 
 - **Deliverable:** one or more of `landed` (a branch merged to main), `outcome` (text on the task), `artifact` (code kept but not merged into the project).
-- **Isolation:** what claim creates under `.endless/work/e-NNNN/`. Either a **project worktree** (a checkout of the project), or an **empty repo** (`git init` on an empty directory). A task that runs code (a project worktree, a prototype, a tool) gets a sandbox, which at minimum is a subdirectory. Research and brainstorm don't: they run no code and default to the main database (open: Mike to confirm).
+- **Isolation:** what claim creates under `.endless/work/e-NNNN/`. Either a **project worktree** (a checkout of the project), or an **empty repo** (`git init` on an empty directory). A task that runs code (a project worktree, a prototype, a tool) gets a sandbox, which at minimum is a subdirectory. Research and brainstorm don't: they run no code and default to the main database.
 - **Default database:** which database `endless` commands use inside the task directory. For a task whose only deliverable is an outcome, the default is main, so no `--db main` is needed.
 - **Interaction:** plan-driven or collaborative. This affects the handoff template and probably more. Mike vetoes ever offering a collaborative todo.
 - **Branch pattern:** for example `task/NNNN` or `experiment/NNNN`.
@@ -42,7 +42,7 @@ Graduation (an experiment or prototype becoming project code, a tool becoming an
 
 Common to prototypes and tools:
 - They are **self-contained**: they depend only on external packages. Anything that needs the project's own code is an experiment.
-- Each needs a `README.md` with YAML front matter: task id, title, the question it answers or the problem it solves, how to run it, and (for a tool) how to run its tests. Land refuses without it. The front matter is how the test command is found in any language.
+- Each needs a `README.md` whose metadata is YAML front matter wrapped in an HTML comment (`<!--` / `---` … `---` / `-->`) at the top of the file. GitHub strips the comment, so nothing shows above the title, and Endless strips the comment markers before parsing. The metadata holds: task id, title, the question it answers or the problem it solves, how to run it, and (for a tool) how to run its tests. Land refuses without it. The front matter is how the test command is found in any language.
 - Directories are named `e-NNNN`, never `e-NNNN-<slug>`; slugged worktree names became a mess before. They are found through the task list (`task list --type tool`), and by browsing via generated indexes.
 - A periodic job regenerates `INDEX.md` from the front matter in `.endless/tools/`, `.endless/prototypes/` and `.endless/tasks/`, and commits it to main the way the ledger's auto-record commits are made.
 
@@ -69,6 +69,22 @@ Common to prototypes and tools:
 ## Open, left to follow-ups
 
 - Moving the existing `.endless/worktrees/` to `.endless/work/` is a migration: the reaper, gitignore, hooks and path checks all refer to it.
-- The README metadata format: standard `---` front matter, which GitHub shows as a table above the title; YAML inside an HTML comment, which is hidden but needs a custom parser; or a separate metadata file.
 - Whether a copy-on-land keeps the empty repo's commit history in any form.
 - Copy-on-write worktrees (git-cow-worktree, git-sprout) were mentioned as a separate, later idea.
+
+## Follow-ups spawned
+
+Decisions:
+- ED-1623: branch on the attributes a kind declares, not on which kind it is (applies to any kind, not only task types)
+- ED-1624: add the experiment, prototype and tool task types
+- ED-1625: every task works in a directory under `.endless/work/`
+
+Tasks (all clean up E-2230):
+- E-2323: declare task-type properties in one table (blocks E-2325 to E-2328)
+- E-2324: accept the existing outcome when completing a reviewed task
+- E-2325: give research and brainstorm tasks an empty-repo directory, including the move to `.endless/work/`
+- E-2326: add the experiment task type
+- E-2327: add the prototype and tool task types
+- E-2328: show tasks waiting for the user first in the session monitor
+- E-2329: generate index files for kept tools, prototypes and tasks
+- E-2319: draft follow-ups in an outcome and file them on completion
