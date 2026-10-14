@@ -1,0 +1,1 @@
+The design has several open sub-choices (agent-led vs. CLI, the marks, pros and cons in advance, messaging a session) that need deciding with Mike before any do-task can be planned.
