@@ -1,0 +1,1 @@
+Combined per ED-1550: the indexes only matter once kept prototype and tool directories exist. The index job now lives in E-2326.
