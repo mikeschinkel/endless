@@ -7557,3 +7557,7 @@ During the E-2230 brainstorm I said the TimeMachine transcript-recovery script i
 ### [2026-10-13] Don't propose tmux send-keys for load-bearing Endless features; it was already ruled out except for okay-to-fail niceties
 During the E-2230 brainstorm I offered tmux send-keys as a third way for Endless to tell a session to close after the user accepts its work. Mike pointed out that tmux send-keys was already decided to be a non-starter in Endless, except perhaps for a non-load-bearing nice-to-have feature that is allowed to fail. Don't put it forward as a mechanism something depends on.
 - **Project**: endless
+
+### [2026-10-13] Drafted follow-up tasks must pass the same validation gates as filed tasks
+During the E-2230 brainstorm I proposed that agents draft follow-ups in the synthesis instead of filing them, so the user reviews them before anything is written. Mike pointed out that free-form drafting would bypass every gate that catches an agent's filing errors (titles without verbs, titles and descriptions that are too long, and so on). Any draft mechanism has to run the same checks that filing does, for example a 'task add --draft' that validates and emits a reviewable, replayable snippet instead of writing.
+- **Project**: endless
