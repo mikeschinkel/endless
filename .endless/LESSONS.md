@@ -7577,3 +7577,7 @@ During the E-2230 brainstorm I proposed that findings tasks without a worktree r
 ### [2026-10-13] Don't use phase next; it is being deprecated
 While filing E-2318 (shipping Endless's Claude Code commands), the agent set --phase next. Mike said next is being deprecated. When filing, choose a phase other than next.
 - **Project**: endless
+
+### [2026-10-13] Land never removes a worktree directory; removal is the reaper's job, after no session is in it
+During the E-2230 brainstorm I said land for an outcome-only task 'closes the worktree', without saying how. Mike reminded me that Endless once lost weeks to land deleting a worktree immediately, which removed the directory the agent was running in. When describing or designing any land process, say that land leaves the directory alone and the reaper removes it later.
+- **Project**: endless
