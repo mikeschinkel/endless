@@ -7561,3 +7561,7 @@ During the E-2230 brainstorm I offered tmux send-keys as a third way for Endless
 ### [2026-10-13] Drafted follow-up tasks must pass the same validation gates as filed tasks
 During the E-2230 brainstorm I proposed that agents draft follow-ups in the synthesis instead of filing them, so the user reviews them before anything is written. Mike pointed out that free-form drafting would bypass every gate that catches an agent's filing errors (titles without verbs, titles and descriptions that are too long, and so on). Any draft mechanism has to run the same checks that filing does, for example a 'task add --draft' that validates and emits a reviewable, replayable snippet instead of writing.
 - **Project**: endless
+
+### [2026-10-13] Don't propose e-NNNN-<slug> directory names; Endless used them for worktrees, they became a mess, and it backtracked
+During the E-2230 brainstorm I proposed naming kept tool directories e-NNNN-<slug> so they could be found by browsing. Mike pointed out that Endless once named worktrees e-NNNN-<slug>, it became a mess, and it went back to e-NNNN. The criteria may have differed, but propose findability through something other than the directory name (an index, or metadata in each directory).
+- **Project**: endless
