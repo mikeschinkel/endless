@@ -1,0 +1,74 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 11,
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "pytest: the blocks refusal and the gates beside it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "claim of the blocked task exits 1",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it names the blocker and its status",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it points at task unblock",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it offers no override",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the blocked task's status did not move",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "claim --out-of-order still exits 1",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it still names the blocker",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the blocked task's status still did not move",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "claim after unblock exits 0",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the task is underway",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
