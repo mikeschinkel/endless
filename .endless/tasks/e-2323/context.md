@@ -1,0 +1,1 @@
+Decision ED-1623 rules out branching on which type a task is. Today checks such as 'research or brainstorm' and 'todo or bugfix' are spread through the code. The new experiment, prototype and tool types, the task-directory forms and the monitor's done cue all key off these properties, so this comes first.
