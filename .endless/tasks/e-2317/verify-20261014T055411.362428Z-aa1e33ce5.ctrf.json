@@ -1,0 +1,104 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 17,
+      "passed": 17,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "pytest tests/test_guide_decision_tests.py",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go test ./internal/templatecmd -run TestRender_Brainstorm",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "has the 'Is it a decision?' section",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "all three tests must pass",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "test: real alternative",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "test: outlives the task",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "test: the user made it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "at least one qualifying kind",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "kind: user-visible convention, any interface",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "zero is normal",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "failures route to a lesson",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "unclear means lesson",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "unconditional 'Always document' is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "still asks for decisions (both places)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "each ask carries the tests, pointer and zero-is-normal",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "guide_map check (index block in sync)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "index lists the 'is it a decision?' topic",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
