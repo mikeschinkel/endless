@@ -1,0 +1,1 @@
+Today the monitor's main cue is the unsettled marker. That means nothing for a task whose deliverable is an outcome, and unreviewed (the agent has delivered) is not shown prominently, so the user has to keep asking whether the agent is done. Whether a session is waiting for input matters less; the tmux tab marker already covers it.
