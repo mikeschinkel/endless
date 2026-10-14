@@ -63,9 +63,13 @@ decision yet. The decision drafted in the last item records them.
 4. `task show --plan` renders the items first (P-number, kind, statement,
    verify), each with its latest verdict and the answer to its question,
    then the plan prose.
-5. `task approve`, and `task update --status ready` from `submitted` (the
-   same approval under another verb), copy each active item's statement and
-   kind into `approved_statement` and `approved_kind`. Both, and `task spawn`,
+5. Items are approved one at a time by default: `task plan approve E-NNNN
+   P1 P3` copies each named item's statement and kind into
+   `approved_statement` and `approved_kind` (a withdrawn item named has its
+   withdrawal accepted). `task approve`, and `task update --status ready`
+   from `submitted` (the same approval under another verb), approve the task
+   only once every item is approved; `task approve --include-plan-items`
+   approves the remaining items and the task in one call. Both, and `task spawn`,
    refuse a todo or bugfix task with no active deliverable item, and any task
    whose only active items are exclusions. Spawn refuses an already
    `ready` task with a prose-only plan too, and any task whose items are
