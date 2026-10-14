@@ -1,0 +1,1 @@
+task complete requires --outcome even when the task already has one. Reaching unreviewed already requires an outcome, so unreviewed is the agent declaring that outcome final. The user then has to prompt the agent again just to complete the task.
