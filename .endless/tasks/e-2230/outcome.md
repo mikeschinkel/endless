@@ -76,7 +76,7 @@ Common to prototypes and tools:
 
 Decisions:
 - ED-1623: branch on the attributes a kind declares, not on which kind it is (applies to any kind, not only task types)
-- ED-1624: add the experiment, prototype and tool task types
+- ED-1624 (rejected as task-level; the type rules live in E-2326 and E-2327)
 - ED-1625: only the reaper removes a task directory, once no session is in it
 - ED-1626: a session's working directory never reaches main's repository
 - (`.endless/work/` and the empty-repo form are task-level detail, carried by E-2325)
