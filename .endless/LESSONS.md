@@ -7541,3 +7541,7 @@ While planning E-2241, Mike mentioned a vector search task he'd filed. I found E
 ### [2026-10-13] Don't report things that didn't change
 When Mike asked to close E-2223, the reply added 'the synthesis in its outcome is unchanged'. That was a leftover from internal problem-solving (the first command tried would have replaced the outcome). Mike asked why it was mentioned, since nothing had asked about changing it. Report the requested result; don't narrate the negative of a risk only the agent was considering.
 - **Project**: endless
+
+### [2026-10-13] Frame task behavior by task properties (landable, produces an outcome, needs a worktree), not by type names (todo/bug, research/brainstorm)
+During the E-2230 brainstorm I described 'finished when the worktree is settled' as true for todo and bug tasks, and the outcome deliverable as belonging to research and brainstorm tasks. Mike corrected this: the rule applies to any task with a landable result, including future docs tasks, and code that keys behavior off type names is harder to maintain than code keyed off properties a type declares (for example 'needs worktree'). When discussing or designing type-dependent behavior in Endless, name the property and let types declare it.
+- **Project**: endless
