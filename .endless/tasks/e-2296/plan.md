@@ -78,3 +78,18 @@ folded in; this one applies to every task type.
 - No flag bypasses the refusal, and `--out-of-order` does not cover it. The
   refusal points at `task unblock` as the way forward.
 - `just test` and `just test-go` pass.
+
+
+
+## Answered (EQ-44, EQ-45)
+
+- `task prime` refuses a blocked task too, the same as claim and spawn. The
+  gate lives in `_require_spawnable`, which all three call.
+- An agent may run `task unblock` itself, so the refusal is NO_REPORT: the
+  remedy names `task unblock`, and the agent may follow it. If that becomes a
+  problem, gates come later.
+- Blockers are read through `get_all_relations(...)["blocked_by"]` filtered by
+  the terminal set, the way `_unfinished_predecessors` reads `preceded_by`. The
+  terminal set comes from `internal/taskstatus` through `statuses.get`, so this
+  is the display's rule, not a third copy. `GetActiveBlockers` is not called:
+  its `LIMIT 3` would cut short the blockers the refusal must name.
