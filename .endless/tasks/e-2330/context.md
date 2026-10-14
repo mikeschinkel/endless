@@ -1,0 +1,1 @@
+Spawned by the brainstorm E-2230. Decisions ED-1623 (branch on attributes, not kinds), ED-1625 (only the reaper removes a task directory) and ED-1626 (a session's directory never reaches main's repository) bind its children.
