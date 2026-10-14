@@ -7569,3 +7569,7 @@ During the E-2230 brainstorm I proposed naming kept tool directories e-NNNN-<slu
 ### [2026-10-13] ED-1550 (fewer tasks) is a current, deliberately temporary rule; don't frame work as a way to retire it
 During the E-2230 brainstorm I said the draft-follow-ups mechanism could be the path to retiring ED-1550 that Mike was looking for. He clarified he isn't actively looking to retire it: it isn't meant to be permanent, but it stays while it works. Mention when something affects ED-1550, but don't present retiring it as a goal.
 - **Project**: endless
+
+### [2026-10-13] Keep a session's working directory inside the project repo; out-of-repo task directories are a nightmare for IDE users
+During the E-2230 brainstorm I proposed that findings tasks without a worktree run in a per-task directory outside the repo, under a per-user data directory. Mike rejected it because that makes things a nightmare for IDE users. He chose the worktrees directory path, with land processes that differ by task properties.
+- **Project**: endless
