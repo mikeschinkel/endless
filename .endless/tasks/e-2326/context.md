@@ -1,0 +1,1 @@
+Decision ED-1624. An experiment tries an approach on the project's own code. Its code is a diff, so it is kept as a branch, not a directory. Keep preserves the branch; discard leaves it for the reaper.
