@@ -72,6 +72,7 @@ Your worktree is: {{.worktree_path}} (branch {{.branch}}) — confirm with `pwd`
 */ -}}
 {{define "handoff_focus" -}}
 Stay focused on E-{{.spawned_id}} — one session, one task. {{if eq .task_type "brainstorm"}}As ideas resolve into concrete work, file them as new tasks (`--cleans-up E-{{.spawned_id}}`) or decisions (`endless decision add`) rather than building inline.
+   Decisions only if they pass all three tests — real alternative, outlives the task, the user made it (`endless guide decisions`); zero is normal.
    Filing more than one? Check whether they share a root cause — file the
    cause, not each symptom.{{else}}Filing is the exception, not the default. For anything you discover along the way:
    - Could it reasonably be done now? Do it — note it in the commit message,
@@ -140,7 +141,7 @@ The work is landed from the owner's side — this session's — by the user in a
 {{define "handoff_deliverable" -}}
 {{if eq .task_type "research"}}Findings are the deliverable. Write them into `tasks.outcome` via `endless task update E-{{.spawned_id}} --outcome-file <path> --db main` (or `--outcome '<inline text>'`). End state is `unreviewed` — not `unverified` (research never enters that lane, ED-1502) and not `completed`, which is your user's call after they read the findings (E-2016).
 
-{{else if eq .task_type "brainstorm"}}The synthesis is the deliverable. Write it into `tasks.outcome` via `endless task update E-{{.spawned_id}} --outcome-file <path> --db main` (or `--outcome '<inline text>'`), and spawn the decisions/tasks it produces (`endless decision add ...`, `endless task add ... --cleans-up E-{{.spawned_id}}`). End state is `unreviewed --outcome` — a brainstorm produces information, not testable behavior, so it never enters the `unverified` lane; and `completed` is your user's call after they read the synthesis (E-2016).
+{{else if eq .task_type "brainstorm"}}The synthesis is the deliverable. Write it into `tasks.outcome` via `endless task update E-{{.spawned_id}} --outcome-file <path> --db main` (or `--outcome '<inline text>'`), and spawn the decisions/tasks it produces (`endless decision add ...`, `endless task add ... --cleans-up E-{{.spawned_id}}`). Decisions only if they pass all three tests — real alternative, outlives the task, the user made it (`endless guide decisions`); zero is normal. End state is `unreviewed --outcome` — a brainstorm produces information, not testable behavior, so it never enters the `unverified` lane; and `completed` is your user's call after they read the synthesis (E-2016).
 
 {{else if eq .task_type "epic"}}You're the coordinator on this epic. Don't implement directly — draft plans, tell the user which children to spawn, verify their work.
 

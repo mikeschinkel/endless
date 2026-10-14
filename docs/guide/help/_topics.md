@@ -10,6 +10,10 @@ topic: who am I / current session
 section: sessions
 covers: Discovering your session id and the task it's bound to.
 
+topic: is it a decision?
+section: decisions
+covers: Three tests (real alternative, outlives the task, the user made it); zero is normal; else a lesson.
+
 topic: preference vs prohibition
 section: decisions
 covers: Soft signals ('ideally','usually') are not rules - verify before recording.

@@ -4,7 +4,7 @@ Decisions are first-class items in Endless. They live alongside tasks and captur
 
 ## STRONG guidance (read this before writing decisions)
 
-**Always document decisions where applicable.** When you and your user resolve a non-obvious question — choosing between approaches, scoping in/out, picking conventions, deferring something to later — file it. Decisions you didn't write down will be re-argued in three weeks.
+**File a decision only when it passes the tests in [Is it a decision?](#is-it-a-decision) below.** Most of what a session settles is not a decision, and zero decisions is the normal outcome. A filed non-decision costs your user a review, and once accepted it is cited as authority.
 
 **Verify with your user before stating a decision as binding.** Especially: do **not** record a *prohibition* when your user only expressed a *preference*.
 
@@ -27,6 +27,26 @@ Hard signals (rules):
 When you're not sure which you heard, **ask before writing**. A wrongly-recorded prohibition is harder to recover from than an undocumented preference — the prohibition gets cited as authority in future sessions, calcifies, and becomes part of "how things are."
 
 **Don't self-cite.** If you wrote a decision yesterday and you're now treating it as established convention, verify with `git blame` or with your user first. Your own prior plans are not authority (see also the user's session-memory notes if any).
+
+## Is it a decision?
+
+Before `endless decision add`, check the candidate against three tests. **All three must pass.**
+
+1. **Real alternative.** Someone could have argued the other side. If nobody would, it is a platitude, not a decision.
+2. **Outlives the task.** It would still bind if the task that prompted it were reworked or deleted. A statement that describes one task's implementation — its mechanisms, values or symbols — belongs in that task's plan or analysis, not in a decision.
+3. **The user made it.** Your user made the choice, in this session or an earlier one. A preference you inferred from tone, or a rule you think ought to exist, is not one.
+
+It must also be **at least one** of these kinds:
+
+- it affects the project's structure;
+- it cuts across components;
+- it sets a scope boundary or a deferral;
+- it sets a convention the project's users see — vocabulary, naming, or the shape of its interface (web UI, API, CLI or other);
+- it reverses or modifies an earlier decision.
+
+**Zero decisions is the normal outcome of a session.** If a candidate maps one-to-one onto a single task's implementation, it is implementation detail: put it in that task's plan or analysis.
+
+**Anything that fails a test is a lesson, not a decision** — record it with `endless lesson write`. That includes conventions about how an agent works. When it is unclear which, it is a lesson.
 
 ## Pairing a decision to its task is the preferred form
 
@@ -182,16 +202,19 @@ Same item is rarely both. When in doubt: if the verb in the title is imperative 
 
 ## What deserves a decision
 
-- Choosing between alternatives (database X vs Y, library X vs Y, pattern X vs Y).
-- Scoping in or out (we will not do X because ...).
-- Naming / vocabulary conventions.
-- Deferrals ("not now because ...").
-- Reversals of prior decisions.
+A candidate that passes all three tests in [Is it a decision?](#is-it-a-decision) and is one of the qualifying kinds:
+
+- A structural choice between alternatives (database X vs Y, library X vs Y, pattern X vs Y) that the project's structure or several components depend on.
+- A scope boundary (we will not do X because ...) or a deferral (not now because ...).
+- A convention the project's users see: vocabulary, naming, or the shape of its interface.
+- A reversal or modification of an earlier decision.
 
 What doesn't:
 
-- Routine implementation details (variable names, where a function goes).
+- Routine implementation details (variable names, where a function goes, a value one task picked).
+- Anything that describes a single task's implementation — it goes in that task's plan or analysis.
 - One-time choices with no future ambiguity ("file lives at this path because that's where the test fixture loader looks").
+- Conventions about how an agent works, preferences inferred from tone, and rules you think ought to exist — those are lessons (`endless lesson write`).
 
 ## See also
 

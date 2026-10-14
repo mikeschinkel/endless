@@ -230,6 +230,35 @@ func TestRender_Brainstorm_InterviewModeFraming(t *testing.T) {
 	}
 }
 
+// TestRender_Brainstorm_DecisionTests pins E-2317: a brainstorm handoff asks
+// for decisions only behind the three tests in `endless guide decisions`, at
+// both places it mentions `endless decision add` (the focus line and the
+// deliverable block). An unconditional "spawn the decisions it produces" is
+// what filed ED-1606, a one-task implementation note dressed as a decision.
+func TestRender_Brainstorm_DecisionTests(t *testing.T) {
+	root := projectFixture(t)
+	vars := `{"spawned_id":1,"label_prefix":"E-1","title":"T","task_type":"brainstorm",` +
+		`"worktree_path":"/w","branch":"b","child_count":0,` +
+		`"children_state":"none"}`
+	out, errOut, err := runRenderInProject(t, root, "handoff/brainstorm", vars)
+	if err != nil {
+		t.Fatalf("render: %v\nstderr: %s", err, errOut)
+	}
+	adds := strings.Count(out, "endless decision add")
+	if adds == 0 {
+		t.Fatalf("brainstorm handoff no longer mentions `endless decision add`\n--- output ---\n%s", out)
+	}
+	for _, w := range []string{
+		"real alternative, outlives the task, the user made it",
+		"`endless guide decisions`",
+		"zero is normal",
+	} {
+		if got := strings.Count(out, w); got != adds {
+			t.Errorf("brainstorm handoff carries %q %d time(s), want %d (once per `endless decision add`)\n--- output ---\n%s", w, got, adds, out)
+		}
+	}
+}
+
 // TestRender_MissingVar_PrintsNoValuePlaceholder confirms graceful
 // degradation matching Python's string.Template.safe_substitute.
 func TestRender_MissingVar_PrintsNoValuePlaceholder(t *testing.T) {

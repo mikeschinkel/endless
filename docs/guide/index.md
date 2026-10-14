@@ -233,6 +233,8 @@ endless task recent                              # recently updated
 endless task add "Verb-first title" --parent <current_id> --description "..."
 
 # Record a decision discovered during work (links to the current task via `documents`)
+# — only if it passes all three tests (real alternative, outlives the task, the user
+# made it) in `endless guide decisions`; zero is normal
 endless decision add "Statement of the decision" --about <current_id>
 
 # Mark for replanning
@@ -253,7 +255,7 @@ For details, run `endless guide <section>`:
 
 - **tasks** — task CRUD reference, field semantics (title/description/text/analysis/notes/outcome), and verbs.
 - **orchestration** — per-task worktrees, spawning sessions, commit-to-main policy.
-- **decisions** — documenting decisions as first-class items, **including STRONG guidance about preference vs prohibition — read this**.
+- **decisions** — documenting decisions as first-class items, **including the tests for what counts as one and STRONG guidance about preference vs prohibition — read this**.
 - **sessions** — recording session status snapshots (`endless session snapshot add`), the `session_statuses` row shape, when to call it, and discovery patterns for "who am I."
 - **reference** — projects, SQL, snapshots, tmux integration, file layout.
 - **appendix-a** — _(user-facing appendix, deprioritize)_ commands a human runs interactively; an agent reads it only to point a user at one.
@@ -273,7 +275,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 |---|---|---|
 | `db` | orchestration | Choosing the database (--db main/sandbox) in self-dev worktrees. |
 | `db restore` | reference | Recovering the database from a backup — holders, sidecars, WAL, and the reversible pre-restore copy. |
-| `decision` | decisions | Decisions as first-class items; preference vs prohibition (read this). |
+| `decision` | decisions | Decisions as first-class items; what counts as one; preference vs prohibition (read this). |
 | `docs` | _(none yet)_ | the `docs` command is temporarily disabled and not covered by the guide. |
 | `epic` | _(none yet)_ | the `endless epic` convenience surface (add/show/list/update over type=epic tasks) isn't covered by the guide yet. |
 | `errors` | reference | Recorded errors: the session-status fault row, showing and clearing them, and the error-code catalog. |
@@ -313,6 +315,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | commit-to-main policy | orchestration | When to commit to main vs work only in a worktree. |
 | committing your work | orchestration | You commit your own changes on the task branch; endless commits only its own files. |
 | who am I / current session | sessions | Discovering your session id and the task it's bound to. |
+| is it a decision? | decisions | Three tests (real alternative, outlives the task, the user made it); zero is normal; else a lesson. |
 | preference vs prohibition | decisions | Soft signals ('ideally','usually') are not rules - verify before recording. |
 | the handoff (generated, not authored) | orchestration | Spawned sessions get a rendered handoff; agents never write it. |
 | worktree DB sandbox (--db main vs sandbox) | orchestration | Self-dev DB routing and the --db choice. |

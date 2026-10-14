@@ -313,7 +313,7 @@ Both record the relation and **nothing else**. `endless task supersede <old> --b
 a shipped status); `--supersedes` deliberately does not, so it never closes
 something you only meant to link.
 
-To record a decision prompted by a task, use `endless decision add "..." --about <id>` — see `endless guide decisions`. (There is no `--decision` flag on `task add` or `task update`.)
+To record a decision prompted by a task, use `endless decision add "..." --about <id>` — but only if it passes the three tests in **Is it a decision?** in `endless guide decisions` (real alternative, outlives the task, the user made it); zero is normal. (There is no `--decision` flag on `task add` or `task update`.)
 
 Use the task ID printed by `task add` **literally**. IDs advance globally across parallel sessions — never guess.
 
@@ -410,7 +410,7 @@ A `brainstorm` task is the requester-led sibling of `research`. They produce the
 
 **The behavioral contract — a session working a brainstorm task must:**
 
-> Open by interviewing the requester. Ask questions first. Do **not** research autonomously or jump to a plan. Surface tensions, offer options, challenge the thinking, and capture ideas as they emerge. Conclude with a synthesis in `outcome` and spawn the follow-up tasks/decisions it produced.
+> Open by interviewing the requester. Ask questions first. Do **not** research autonomously or jump to a plan. Surface tensions, offer options, challenge the thinking, and capture ideas as they emerge. Conclude with a synthesis in `outcome` and spawn the follow-up tasks/decisions it produced. Decisions only if they pass all three tests — real alternative, outlives the task, the user made it (`endless guide decisions`); zero is normal.
 
 Field model (mirrors the research model):
 
@@ -419,7 +419,7 @@ Field model (mirrors the research model):
 | `plan`    | The **seed / framing** — the spark, written up front: "I want to explore X; here's what's nagging me." A starting point, not a script. |
 | `outcome` | The **synthesis** of what was landed on, plus `cleans_up` / `implements` links to the decision / research / do-tasks it spawned. Set at completion; a brainstorm's only terminal status is `completed` (with `--outcome`). |
 
-**Ungated.** Unlike `research`, `brainstorm` requires no `--justification` — frictionless ideation is the point. A brainstorm is typically a *precursor* that resolves into an `endless decision add` and/or new tasks linked from its outcome. Because the type itself signals an information deliverable, `completed` does not require an investigation-category title verb (the same exemption epics get).
+**Ungated.** Unlike `research`, `brainstorm` requires no `--justification` — frictionless ideation is the point. A brainstorm is typically a *precursor* that resolves into new tasks linked from its outcome, and sometimes an `endless decision add` — only for a candidate that passes the three tests in `endless guide decisions`. Because the type itself signals an information deliverable, `completed` does not require an investigation-category title verb (the same exemption epics get).
 
 ---
 
