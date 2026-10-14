@@ -6,6 +6,8 @@ Mike can tell a task is finished when its worktree is settled. That works only f
 
 ## 1. Behavior keys off properties, not type names
 
+The principle is recorded as decision ED-1623, which applies to any kind, not just task types. The properties below apply it to task types.
+
 Endless code should test a property that each type declares, never the type's name ("todo and bugfix tasks", "research and brainstorm tasks"). The properties identified so far:
 
 - **Deliverable:** one or more of `landed` (a branch merged to main), `outcome` (text on the task), `artifact` (code kept but not merged into the project).
