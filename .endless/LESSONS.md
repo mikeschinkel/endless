@@ -7553,3 +7553,7 @@ During the E-2230 brainstorm I said that for a PRODUCT project without self-dev 
 ### [2026-10-13] A utility built for Endless's own data (for example transcript recovery) belongs to the Endless project, even if PRODUCT users would never need to build it
 During the E-2230 brainstorm I said the TimeMachine transcript-recovery script isn't about any project, so kept utilities might need a per-user home. Mike corrected this: that script IS about the Endless project, just not something PRODUCT users should expect to build. The per-user question still holds for tools that really are about no project, but don't assume a tool has no project just because it isn't product code.
 - **Project**: endless
+
+### [2026-10-13] Don't propose tmux send-keys for load-bearing Endless features; it was already ruled out except for okay-to-fail niceties
+During the E-2230 brainstorm I offered tmux send-keys as a third way for Endless to tell a session to close after the user accepts its work. Mike pointed out that tmux send-keys was already decided to be a non-starter in Endless, except perhaps for a non-load-bearing nice-to-have feature that is allowed to fail. Don't put it forward as a mechanism something depends on.
+- **Project**: endless
