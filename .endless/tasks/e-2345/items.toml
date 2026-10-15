@@ -58,3 +58,8 @@ verify = "internal/monitor session-graph test with a blocks cycle"
 id = "P10"
 kind = "deliverable"
 statement = "The --graph-only render annotates the viewing session's relations before building the graph, so its starting set matches the inline graph's"
+
+[[item]]
+id = "P11"
+kind = "deliverable"
+statement = "internal/monitorvis/e2e_test.go calls tmuxtest.Private, clearing TestTmuxTestsUsePrivate, which went red on main from E-2229 and E-2310 landing separately"
