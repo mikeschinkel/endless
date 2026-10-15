@@ -1,0 +1,1 @@
+Folded into E-2348: worktree move exists only to recover from the wrong-repo bug that E-2348 fixes, so one task owns both (ED-1550 rule 3).
