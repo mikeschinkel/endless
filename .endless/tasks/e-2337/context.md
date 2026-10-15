@@ -18,8 +18,10 @@ Seen on 2026-10-14: four tasks were linked
 E-2333 -> E-2332 -> E-2334 -> E-2331 with `precedes`. Spawning E-2333 removed
 it from the graph at once, although it had not landed.
 
-What the user asked for: as with blocked tasks, a spawned task's id stays in
-the graph, shown bright, until it lands; only its row in the task table is
-dimmed. The renderer currently dims every in-flight id (`lineSegments`, via
-`GraphNode.InFlight`). The planning session should check how blocked chains
-actually render today, and make `precedes` match.
+What the user asked for:
+- In the graph, a spawned task's id stays bright until the task lands.
+- In the task table, that task's row stays dimmed, as it is today.
+
+Today the renderer dims every in-flight id in the graph (`lineSegments`, via
+`GraphNode.InFlight`). That dimming has to stop for spawned tasks, while the
+row's dimming in the table is left as is.
