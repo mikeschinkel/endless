@@ -7597,3 +7597,7 @@ At the end of the E-2230 brainstorm I filed seven follow-up tasks one by one, wi
 ### [2026-10-14] Treat Claude Research reports as starting points, not the user's position
 Situation: filing and starting E-2335 from docs/research-2026-10-14-claude-hooks-and-mods-across-platforms.md. Mike pointed out that the doc came from Claude Research and its recommendations are not his. It is a starting point for discussing what needs doing, and he expects follow-up questions and possibly more research after the findings. In this case, don't frame the report's recommendations as adopted or as the target; evaluate them against Endless's code and decisions, and ask open questions up front before researching.
 - **Project**: endless
+
+### [2026-10-14] Keep research deliverables in Endless, not scratchpad paths
+Situation: E-2335 (hook hardening research). I built a probe kit in the session scratchpad and handed Mike a long temp-directory path to a README with steps for him to run. Mike: that is not the Endless way. Research findings go in the task's outcome; work like a probe kit is either run by me, or filed as a todo task (or an experiment, prototype or tool task once those task types exist). Don't hand Mike scratchpad file paths as deliverables or as to-do lists.
+- **Project**: endless
