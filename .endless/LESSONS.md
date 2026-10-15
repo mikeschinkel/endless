@@ -7617,3 +7617,7 @@ Situation: finishing E-2335 (hook hardening research), Mike had chosen 'outcome 
 ### [2026-10-14] A proposed decision is not Mike's position
 Situation: E-2335 (hook hardening research). My findings and a subagent's survey cited ED-1357 (all hook errors block) as accepted policy, while Mike had only just accepted it. Mike: agents file many decisions and often don't tell him, which is why so many are proposed; a proposed decision does not mean he requested it, and he rejects as often as he accepts. In this case, check a decision's actual status before citing it, say 'proposed' plainly when it is, never present a proposed decision as his policy, and tell him whenever I file a decision.
 - **Project**: endless
+
+### [2026-10-14] One project does not do another project's work
+On E-2333 (an endless task) I found the root cause in go-cfgstore, a separate repo and project: mergeRootConfigs throws away the merged config. ED-1550 says to fold in cheap fixes, so I recommended making the fix inside E-2333. Mike corrected me: the separate repo is exactly the reason to file a separate task, because one project should not do another project's work. A fix in a different repo or project goes into that project's own task, however small it is.
+- **Project**: endless
