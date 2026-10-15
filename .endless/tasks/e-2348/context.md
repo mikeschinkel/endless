@@ -1,3 +1,4 @@
 E-2206 belongs to go-cfgstore, but it was spawned from a session in the endless repo (ES-1259, working E-1814). The spawn created its worktree at `.endless/worktrees/e-2206` in the endless repo, on branch `task/2206` in the **endless** repo. The agent noticed only after it started. Running `endless task claim E-2206` again from go-cfgstore created the correct worktree at `.endless/worktrees/e-2206` in go-cfgstore. Mike then removed the stray worktree and deleted the branch by hand.
 
 PRODUCT: anyone who manages several repos from one Endless session hits this the first time they spawn a task that belongs to a different repo.
+When a worktree is created in the wrong place , the only recovery is to remove it by hand, claim again, and carry any uncommitted work across manually. In E-2206 the wrong worktree happened to be clean. If work had already started there, nothing in Endless could move it.
