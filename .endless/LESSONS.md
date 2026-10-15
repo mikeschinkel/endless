@@ -7605,3 +7605,7 @@ Situation: E-2335 (hook hardening research). I built a probe kit in the session 
 ### [2026-10-14] Endless's Claude Desktop skip is deliberate
 Situation: E-2335 (hook hardening research). I reported that agentenv treating Claude Desktop as unsupported conflicts with Mike's scope answer. Mike: Endless deliberately does not support Claude Desktop. The recognize-and-skip logic was added when Desktop caused many problems and Endless was not designed for it. He still uses Desktop, but not for Claude tasks on Endless projects. Present the Desktop skip as an intentional design choice, not a defect, when weighing Desktop findings.
 - **Project**: endless
+
+### [2026-10-14] Check for an existing fix before asking about a design problem
+On E-2333 I found that the plan's <tmp_path>/endless-test-tmux socket path overruns macOS's 104-byte socket limit, and asked Mike to choose between options. Mike pointed out that a recent task had already solved this: make the tmux directory with mkdtemp under the short system tmp root, as internal/tmuxtest.Private, verifycmd's tmuxTmpRoot and tests/test_task_sessions.py do. When I hit a problem the plan doesn't cover, search the codebase for a prior solution first, and ask only if none exists.
+- **Project**: endless
