@@ -1,0 +1,1 @@
+When a worktree is created in the wrong place (see the sibling bugfix about spawn using the spawner's repo), the only recovery is to remove it by hand, claim again, and carry any uncommitted work across manually. In E-2206 the wrong worktree happened to be clean. If work had already started there, nothing in Endless could move it.
