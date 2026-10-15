@@ -1,0 +1,1 @@
+Folded into E-2134: E-2335 showed Endless's own hook entry, committed per project with onFailure block, is the cloud block. Evidence moved to E-2134's context.
