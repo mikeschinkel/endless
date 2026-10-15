@@ -1,0 +1,1 @@
+Folded into E-1358: hooks that cannot run are the same failure class as hook errors under ED-1357, and the opt-out must cover both. Evidence moved to E-1358's context.
