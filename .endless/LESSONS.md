@@ -7629,3 +7629,7 @@ While presenting E-1358's open questions, I defined each coined term (log-and-co
 ### [2026-10-15] Don't recommend behaviour that contradicts an accepted decision on the strength of code comments
 On E-1358 Q5 I recommended keeping schema refusals non-blocking because E-2020's code comment argued for it, although accepted ED-1357 says every hook error blocks. Mike was confused why I'd let sessions continue on a schema mismatch. A comment or earlier task's reasoning is not authority; an accepted decision is.
 - **Project**: endless
+
+### [2026-10-15] When task text contradicts an accepted decision, add a note saying it is superseded
+During E-1358 planning I flagged E-2063, E-1972 and E-1887 as still saying hooks fail open but did not edit them. Mike asked why not, and asked at least for text saying the statement is superseded. Add a note naming the decision instead of only flagging it.
+- **Project**: endless
