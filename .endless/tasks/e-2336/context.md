@@ -1,0 +1,9 @@
+Anthropic relaunched Projects in Claude Code on 2026-09-17 (beta): one coordinator conversation that starts parallel worker threads, usually cloud sessions on their own branches, with shared memory, instructions and a Library; available on claude.ai/code, the desktop Code tab and mobile, not the terminal CLI. It overlaps Endless on parallel isolated sessions, handoff and monitoring, and collides with Endless's use of the word 'project'.
+
+Sources: docs/research-2026-10-14-claude-hooks-and-mods-across-platforms.md (where sessions execute per surface; cloud sessions skip user settings hooks, repo-listed plugins and mod drawing; onFailure:block gates; Remote Control as the local bridge; issue #100737 asks for user mods in cloud sessions and Projects) and docs/research-2026-10-14-claude-projects-and-endless.md (Projects overlap analysis; no project ID exposed to hooks, env, agents --json, SDK or API; recommends renaming Endless 'project' to 'repo'). Treat both reports as starting points, not settled findings.
+
+Questions to discuss:
+- Leverage: what Endless can use from Projects where applicable (Remote Control monitoring/push, WorktreeCreate hook, any future Projects API), and what it should refuse to depend on.
+- Differentiate: rename Endless 'project' to 'repo' (or another term), and how to describe Endless so it is not read as a Projects clone — human-owned decomposition, plan gate, human verification before landing, Git-ledger shared state, local-first execution, no github.com dependency.
+- Value beyond a Claude account: what Endless offers someone who already has Projects and agent view, including multi-person collaboration via the ledger, non-Claude harnesses, and work that must not run in Anthropic's cloud.
+- PRODUCT: how this lands for a user on another machine managing a project that is not Endless.
