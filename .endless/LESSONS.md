@@ -7593,3 +7593,7 @@ After completing E-2230 I told Mike an oddity (task complete reporting the outco
 ### [2026-10-14] Before filing several follow-ups, consider combining them under ED-1550 and grouping them under an epic
 At the end of the E-2230 brainstorm I filed seven follow-up tasks one by one, without checking whether any could be combined (ED-1550: several symptoms of one cause are one task) or whether they belonged under an existing or new epic. Mike pointed out that this added a lot to the backlog and left the tasks hard to track. Before filing a batch, propose the combined set and its epic to Mike, then file.
 - **Project**: endless
+
+### [2026-10-14] Treat Claude Research reports as starting points, not the user's position
+Situation: filing and starting E-2335 from docs/research-2026-10-14-claude-hooks-and-mods-across-platforms.md. Mike pointed out that the doc came from Claude Research and its recommendations are not his. It is a starting point for discussing what needs doing, and he expects follow-up questions and possibly more research after the findings. In this case, don't frame the report's recommendations as adopted or as the target; evaluate them against Endless's code and decisions, and ask open questions up front before researching.
+- **Project**: endless
