@@ -7621,3 +7621,7 @@ Situation: E-2335 (hook hardening research). My findings and a subagent's survey
 ### [2026-10-14] One project does not do another project's work
 On E-2333 (an endless task) I found the root cause in go-cfgstore, a separate repo and project: mergeRootConfigs throws away the merged config. ED-1550 says to fold in cheap fixes, so I recommended making the fix inside E-2333. Mike corrected me: the separate repo is exactly the reason to file a separate task, because one project should not do another project's work. A fix in a different repo or project goes into that project's own task, however small it is.
 - **Project**: endless
+
+### [2026-10-15] Define coined terms before using them
+While presenting E-1358's open questions, I defined each coined term (log-and-continue site, hook-fix session) before the questions used it. Mike called it an excellent way to communicate and wants the tactic rolled into handoffs and the guide.
+- **Project**: endless
