@@ -12,8 +12,8 @@ the items before the plan prose.
 Reusable today: internal/mdterm already lays out GFM tables to a width,
 wrapping cells on whitespace and never shrinking a column below a floor.
 Python reaches it through `endless-go markdown render --width`, as task_cmd
-does. Its tables have column separators and a header rule but no outer
-border.
+does, and its tables are the layout wanted here: no border is needed.
 
 E-720 (replace tabulate with rich for all CLI tables) is related but broader
 and unplanned; this task is about the plan-item view alone.
+
