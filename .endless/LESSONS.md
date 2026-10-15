@@ -7601,3 +7601,7 @@ Situation: filing and starting E-2335 from docs/research-2026-10-14-claude-hooks
 ### [2026-10-14] Keep research deliverables in Endless, not scratchpad paths
 Situation: E-2335 (hook hardening research). I built a probe kit in the session scratchpad and handed Mike a long temp-directory path to a README with steps for him to run. Mike: that is not the Endless way. Research findings go in the task's outcome; work like a probe kit is either run by me, or filed as a todo task (or an experiment, prototype or tool task once those task types exist). Don't hand Mike scratchpad file paths as deliverables or as to-do lists.
 - **Project**: endless
+
+### [2026-10-14] Endless's Claude Desktop skip is deliberate
+Situation: E-2335 (hook hardening research). I reported that agentenv treating Claude Desktop as unsupported conflicts with Mike's scope answer. Mike: Endless deliberately does not support Claude Desktop. The recognize-and-skip logic was added when Desktop caused many problems and Endless was not designed for it. He still uses Desktop, but not for Claude tasks on Endless projects. Present the Desktop skip as an intentional design choice, not a defect, when weighing Desktop findings.
+- **Project**: endless
