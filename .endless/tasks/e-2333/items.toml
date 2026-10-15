@@ -46,3 +46,9 @@ id = "P9"
 kind = "deliverable"
 statement = "tmuxservers.Resolve reads the tmux settings from the user's config alone, so a project config in the working directory cannot drop them"
 verify = "internal/tmuxservers TestResolveReadsTheUserConfigInsideAProject"
+
+[[item]]
+id = "P10"
+kind = "deliverable"
+statement = "The Python isolation tests pass with the repo root, which holds a project config, as the working directory"
+verify = "tests/test_tmux_test_isolation.py run by just test"
