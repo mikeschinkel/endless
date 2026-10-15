@@ -1,1 +1,3 @@
 Agents use terms the user never agreed to, either coined ("attention board", "board") or drifted ("owner" carrying three meanings). The E-2154 brainstorm settled on a glossary as a destination table with commands: proposing a term is good, using an unagreed one is bad. See E-2154's outcome for the full design.
+
+2026-10-15, E-1358 planning: the agent defined each term it coined in a short "terms used below" list before the questions used them. Mike called it an excellent way to communicate and wants the tactic in handoffs and the guide: a term not yet in the glossary is defined in place, before its first use.
