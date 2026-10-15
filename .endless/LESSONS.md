@@ -7609,3 +7609,7 @@ Situation: E-2335 (hook hardening research). I reported that agentenv treating C
 ### [2026-10-14] Check for an existing fix before asking about a design problem
 On E-2333 I found that the plan's <tmp_path>/endless-test-tmux socket path overruns macOS's 104-byte socket limit, and asked Mike to choose between options. Mike pointed out that a recent task had already solved this: make the tmux directory with mkdtemp under the short system tmp root, as internal/tmuxtest.Private, verifycmd's tmuxTmpRoot and tests/test_task_sessions.py do. When I hit a problem the plan doesn't cover, search the codebase for a prior solution first, and ask only if none exists.
 - **Project**: endless
+
+### [2026-10-14] Apply the filing rules before filing research follow-ups
+Situation: finishing E-2335 (hook hardening research), Mike had chosen 'outcome and file follow-ups', and I filed seven new tasks at once. Mike: that is a TON of tasks; read ED-1550 and check for duplicates. ED-1550 says filing is the exception: fold findings into open tasks as evidence, file the cause rather than each symptom, search for an owning task first, and a request to file is not unlimited. In this case several of the seven belonged in open tasks (hook errors block, per-project hook install, hooks outside an Endless server). Before filing research follow-ups, map each finding to an existing open task and propose the consolidated set.
+- **Project**: endless
