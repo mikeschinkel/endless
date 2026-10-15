@@ -1,0 +1,7 @@
+E-2335 found that no hook Endless installs on the user's machine reaches Claude Desktop or cloud sessions. Desktop ran a remote session with tools executed by remote-bash in the local Cowork VM, the checkout mounted read-write, and no hook fired at any scope. Cloud sessions load hooks only from the repo they started on. Plugins enabled on the user's claude.ai account are the one mechanism reported to sync into those sessions, and a plugin can carry a hook. Cowork plugin hooks have a history of not firing (claude-code issues #27398, #16288).
+
+The test: a minimal plugin whose only hook refuses (UserPromptSubmit and PreToolUse, onFailure block) when the working folder contains .endless/. Enable it on the account and check whether Desktop/Cowork sessions and cloud sessions on an Endless checkout obey it. While enabled it applies to every session on the account, so it is removed after the probe unless the result is adopted.
+
+If it works, Endless provides it for PRODUCT users: someone else, on their own machine, managing a non-Endless project, gets the plugin from Endless (published in a plugin marketplace) and is guided by endless setup to enable it on their account, with setup reporting whether it is enabled where that can be detected. If it does not work, the outcome records that, and detect-and-warn (E-2342) remains the only Desktop protection.
+
+Mike, 2026-10-15: file the test and a way for Endless to configure this for PRODUCT users as one task.
