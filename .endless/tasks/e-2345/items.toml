@@ -41,3 +41,9 @@ statement = "Does not change which rows the session-status table dims, hides or 
 id = "P7"
 kind = "exclusion"
 statement = "Does not change the in_flight or on_list fields of the graph's --json output"
+
+[[item]]
+id = "P8"
+kind = "deliverable"
+statement = "Every task the graph draws, whether in the starting set, a blocker or a downstream task, has its open blockers added, and theirs, until a task has no open blocker"
+verify = "internal/monitor session-graph test: a downstream task's blocker chain three deep is drawn"
