@@ -23,8 +23,8 @@ verify = "internal/monitor session-graph test with two projects; reproduces the 
 [[item]]
 id = "P4"
 kind = "deliverable"
-statement = "The graph draws every open task the session's own task directly blocks or should precede, and nothing beyond that one step"
-verify = "internal/monitor session-graph test: a downstream task's own dependents and blockers are not added"
+statement = "The graph draws every open task the session's own task directly blocks or should precede; their own downstream tasks are not added"
+verify = "internal/monitor session-graph test: a downstream task's own dependents are not added"
 
 [[item]]
 id = "P5"
