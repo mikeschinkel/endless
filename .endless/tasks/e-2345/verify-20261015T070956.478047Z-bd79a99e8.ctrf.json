@@ -1,0 +1,114 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 19,
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test: monitor, sessionstatuscmd",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestSessionGraphData_TerminalOwnTaskBlockersDrawn",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestSessionGraphData_CrossProjectChainToOwnTask",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestSessionGraphData_DownstreamOneStepWithBlockerChains",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestSessionGraphData_BlocksCycleTerminates",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestGraphSeeds_BrightUnlandedRowsAndOwnTask",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestGraphSeeds_OwnTaskUntilLanded",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestGatherGraph_OwnTaskSeedsAndIsPassedAsOwn",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestGraph_RepeatsDimInFlightDoesNot",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestGraph_CycleIsReportedNotTruncated",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the own task's cross-project chain and one step downstream draw",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a downstream task's own dependents are not added",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "--graph renders the same lines",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "--json still flags the other session's blocker in flight",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the in-flight blocker draws bright, not dim",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the in-flight blocker is never dim",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a repeated id still draws dim",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a confirmed, unlanded own task still draws its blocker chain",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a landed own task drops out of the graph",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
