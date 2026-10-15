@@ -7625,3 +7625,7 @@ On E-2333 (an endless task) I found the root cause in go-cfgstore, a separate re
 ### [2026-10-15] Define coined terms before using them
 While presenting E-1358's open questions, I defined each coined term (log-and-continue site, hook-fix session) before the questions used it. Mike called it an excellent way to communicate and wants the tactic rolled into handoffs and the guide.
 - **Project**: endless
+
+### [2026-10-15] Don't recommend behaviour that contradicts an accepted decision on the strength of code comments
+On E-1358 Q5 I recommended keeping schema refusals non-blocking because E-2020's code comment argued for it, although accepted ED-1357 says every hook error blocks. Mike was confused why I'd let sessions continue on a schema mismatch. A comment or earlier task's reasoning is not authority; an accepted decision is.
+- **Project**: endless
