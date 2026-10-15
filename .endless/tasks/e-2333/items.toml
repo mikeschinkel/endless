@@ -37,11 +37,6 @@ kind = "deliverable"
 statement = "Tmux servers started by the new tests are killed at teardown"
 
 [[item]]
-id = "P7"
-kind = "exclusion"
-statement = "Does not change how the product resolves its tmux socket directory"
-
-[[item]]
 id = "P8"
 kind = "exclusion"
 statement = "Does not change Go test isolation (tmuxtest.Private)"
