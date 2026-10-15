@@ -1,0 +1,1 @@
+Mike asked for future cloud support to be its own later research or brainstorm task, separate from blocking cloud now.
