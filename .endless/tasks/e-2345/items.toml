@@ -53,3 +53,8 @@ id = "P9"
 kind = "deliverable"
 statement = "A circular chain of blockers ends the walk without repeating a task and is drawn as the graph's cycle line"
 verify = "internal/monitor session-graph test with a blocks cycle"
+
+[[item]]
+id = "P10"
+kind = "deliverable"
+statement = "The --graph-only render annotates the viewing session's relations before building the graph, so its starting set matches the inline graph's"
