@@ -7613,3 +7613,7 @@ On E-2333 I found that the plan's <tmp_path>/endless-test-tmux socket path overr
 ### [2026-10-14] Apply the filing rules before filing research follow-ups
 Situation: finishing E-2335 (hook hardening research), Mike had chosen 'outcome and file follow-ups', and I filed seven new tasks at once. Mike: that is a TON of tasks; read ED-1550 and check for duplicates. ED-1550 says filing is the exception: fold findings into open tasks as evidence, file the cause rather than each symptom, search for an owning task first, and a request to file is not unlimited. In this case several of the seven belonged in open tasks (hook errors block, per-project hook install, hooks outside an Endless server). Before filing research follow-ups, map each finding to an existing open task and propose the consolidated set.
 - **Project**: endless
+
+### [2026-10-14] A proposed decision is not Mike's position
+Situation: E-2335 (hook hardening research). My findings and a subagent's survey cited ED-1357 (all hook errors block) as accepted policy, while Mike had only just accepted it. Mike: agents file many decisions and often don't tell him, which is why so many are proposed; a proposed decision does not mean he requested it, and he rejects as often as he accepts. In this case, check a decision's actual status before citing it, say 'proposed' plainly when it is, never present a proposed decision as his policy, and tell him whenever I file a decision.
+- **Project**: endless
