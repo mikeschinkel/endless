@@ -1632,7 +1632,7 @@ def session_status(show_all, tree, graph, show_hidden, only_hidden,
       E-1 <> E-2        must not run at the same time (declared with
                         conflicts_with, or both worktrees touch a file)
       <> E-1 | E-2 | E-3  no two of these may run at the same time
-      dim id            already in flight, or a repeat of an id drawn above
+      dim id            a repeat of an id drawn above
       cycle: E-1, E-2   the relations form a cycle — fix the data
     """
     from endless.session_cmd import session_status_resolve

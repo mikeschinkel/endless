@@ -10,13 +10,14 @@ import (
 	"testing"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 )
 
 // TestMain defaults the graph's database seam to an empty graph, so every
 // table test that stubs the row source stays database-free. Graph tests
 // install their own data with stubGraph.
 func TestMain(m *testing.M) {
-	graphData = func([]int64) (monitor.GraphData, error) {
+	graphData = func([]int64, int64) (monitor.GraphData, error) {
 		return monitor.GraphData{Nodes: map[int64]monitor.GraphNode{}}, nil
 	}
 	graphProjectRoot = func(int64) (string, error) { return "", nil }
@@ -177,8 +178,9 @@ func TestGraph_CycleIsReportedNotTruncated(t *testing.T) {
 	}
 }
 
-// Every occurrence of an id after its first is dim, and so is an in-flight id.
-func TestGraph_RepeatsAndInFlightRenderDim(t *testing.T) {
+// Every occurrence of an id after its first is dim. An in-flight id is not
+// (E-2345): until it lands it still holds back what it blocks.
+func TestGraph_RepeatsDimInFlightDoesNot(t *testing.T) {
 	b := newGB(1, 2, 3, 4)
 	n := b.nodes[4]
 	n.InFlight, n.OnList = true, false
@@ -189,8 +191,8 @@ func TestGraph_RepeatsAndInFlightRenderDim(t *testing.T) {
 	var out bytes.Buffer
 	renderGraph(&out, g, 200, true)
 	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
-	if !strings.HasPrefix(lines[0], dim("E-4", true)) {
-		t.Errorf("in-flight E-4 not dim: %q", lines[0])
+	if !strings.HasPrefix(lines[0], ansiBold+"E-4"+ansiReset) {
+		t.Errorf("in-flight E-4 should be normal, not dim: %q", lines[0])
 	}
 	if !strings.Contains(lines[0], ansiBold+"E-3") {
 		t.Errorf("first E-3 should be bright: %q", lines[0])
@@ -241,23 +243,82 @@ func TestGraph_ByteStableAcrossRenders(t *testing.T) {
 	}
 }
 
-// gatherGraph's seeds: the session's actionable backlog only; blockers join
-// through the database seam.
-func TestGraphSeeds_Exclusions(t *testing.T) {
+// E-2345: the starting set is every unlanded row that is the own task, at any
+// status, or that the table draws bright and another session does not steward.
+func TestGraphSeeds_BrightUnlandedRowsAndOwnTask(t *testing.T) {
 	rows := []monitor.SessionStatusRow{
-		{ID: 1, Status: "underway", Phase: "now", IsFocal: true},
-		{ID: 2, Status: "ready", Phase: "now", IsFrom: true},
-		{ID: 3, Status: "ready", Phase: "now", IsParent: true},
-		{ID: 4, Status: "underway", Phase: "now", InFlight: true},
-		{ID: 5, Status: "ready", Phase: "now", Hidden: true},
-		{ID: 6, Status: "ready", Phase: "later"},
-		{ID: 7, Status: "confirmed", Phase: "now"},
-		{ID: 8, Status: "ready", Phase: "now", StewardedElsewhere: true},
-		{ID: 9, Status: "ready", Phase: "now"},
-		{ID: 10, Status: "unplanned", Phase: "next"},
+		{ID: 1, Status: "underway", Phase: "now", IsFocal: true},                                  // own task: in
+		{ID: 2, Status: "ready", Phase: "now", IsFrom: true},                                      // spawning task, bright: in
+		{ID: 3, Status: "ready", Phase: "now", IsParent: true},                                    // parent dims: out
+		{ID: 4, Status: "underway", Phase: "now", InFlight: true},                                 // spawned elsewhere dims: out
+		{ID: 5, Status: "ready", Phase: "now", Hidden: true},                                      // hidden dims: out
+		{ID: 6, Status: "ready", Phase: "later"},                                                  // later dims: out
+		{ID: 7, Status: "confirmed", Phase: "now"},                                                // terminal dims: out
+		{ID: 8, Status: "ready", Phase: "now", StewardedElsewhere: true},                          // suppressed: out
+		{ID: 9, Status: "ready", Phase: "now"},                                                    // bright: in
+		{ID: 10, Status: "unplanned", Phase: "urgent"},                                            // bold: in
+		{ID: 11, Status: "ready", Phase: "now", Landed: true},                                     // landed: out
+		{ID: 12, Status: "confirmed", Phase: "now", Unsettled: true},                              // unsettled vetoes dim: in
+		{ID: 13, Status: "ready", Phase: "maybe"},                                                 // maybe dims: out
+		{ID: 14, Status: "ready", Phase: "now", Relation: sessiontaskrelation.RelationReferenced}, // referenced dims: out
 	}
-	if got := graphSeeds(rows); !reflect.DeepEqual(got, []int64{9, 10}) {
-		t.Fatalf("seeds = %v, want [9 10]", got)
+	if got := graphSeeds(rows); !reflect.DeepEqual(got, []int64{1, 2, 9, 10, 12}) {
+		t.Fatalf("seeds = %v, want [1 2 9 10 12]", got)
+	}
+}
+
+// The own task stays in at a terminal status, and even when stewarded
+// elsewhere, until it lands.
+func TestGraphSeeds_OwnTaskUntilLanded(t *testing.T) {
+	own := monitor.SessionStatusRow{ID: 1, Status: "confirmed", Phase: "later", IsFocal: true, StewardedElsewhere: true}
+	if got := graphSeeds([]monitor.SessionStatusRow{own}); !reflect.DeepEqual(got, []int64{1}) {
+		t.Fatalf("unlanded confirmed own task: seeds = %v, want [1]", got)
+	}
+	own.Landed = true
+	if got := graphSeeds([]monitor.SessionStatusRow{own}); len(got) != 0 {
+		t.Fatalf("landed own task: seeds = %v, want none", got)
+	}
+}
+
+// The E-2333 shape: every row but the own task is excluded, yet the own task
+// seeds the graph and is handed over as the task whose downstream to add.
+func TestGatherGraph_OwnTaskSeedsAndIsPassedAsOwn(t *testing.T) {
+	rows := []monitor.SessionStatusRow{
+		{ID: 2333, Status: "underway", Phase: "now", IsFocal: true},
+		{ID: 2240, Status: "underway", Phase: "now", InFlight: true},
+		{ID: 2206, Status: "underway", Phase: "now", StewardedElsewhere: true},
+		{ID: 2208, Status: "ready", Phase: "now", StewardedElsewhere: true},
+	}
+	var gotSeeds []int64
+	var gotOwn int64
+	prev := graphData
+	t.Cleanup(func() { graphData = prev })
+	graphData = func(seeds []int64, own int64) (monitor.GraphData, error) {
+		gotSeeds, gotOwn = seeds, own
+		return monitor.GraphData{
+			Nodes: map[int64]monitor.GraphNode{2333: gNode(2333, true), 2208: gNode(2208, false), 2206: gNode(2206, true)},
+			Edges: []monitor.GraphEdge{
+				{From: 2206, To: 2208, Type: monitor.DepBlocks},
+				{From: 2208, To: 2333, Type: monitor.DepBlocks},
+			},
+		}, nil
+	}
+	g, err := gatherGraph(rows)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(gotSeeds, []int64{2333}) || gotOwn != 2333 {
+		t.Fatalf("graphData(%v, %d), want ([2333], 2333)", gotSeeds, gotOwn)
+	}
+	assertLines(t, g, "E-2206 => E-2208 => E-2333")
+
+	// Landed own task: not seeded, so no downstream either.
+	rows[0].Landed = true
+	if _, err = gatherGraph(rows); err != nil {
+		t.Fatal(err)
+	}
+	if len(gotSeeds) != 0 || gotOwn != 0 {
+		t.Fatalf("landed own task: graphData(%v, %d), want ([], 0)", gotSeeds, gotOwn)
 	}
 }
 
@@ -266,7 +327,7 @@ func stubGraph(t *testing.T, data monitor.GraphData, changed map[int64][]string)
 	t.Helper()
 	prevData, prevRoot, prevChanged := graphData, graphProjectRoot, graphWorktreeChanged
 	t.Cleanup(func() { graphData, graphProjectRoot, graphWorktreeChanged = prevData, prevRoot, prevChanged })
-	graphData = func([]int64) (monitor.GraphData, error) { return data, nil }
+	graphData = func([]int64, int64) (monitor.GraphData, error) { return data, nil }
 	graphProjectRoot = func(int64) (string, error) { return "/proj", nil }
 	graphWorktreeChanged = func(root string, id int64) ([]string, bool) {
 		p, ok := changed[id]
@@ -325,7 +386,7 @@ func TestGatherGraph_DetectedAndDeclaredConflicts(t *testing.T) {
 	}
 }
 
-// An off-list blocker renders; an in-flight one renders dim; --json carries
+// An off-list blocker renders; --json carries
 // the same lines the text draws, from one fixture.
 func TestGatherGraph_OffListBlockerAndJSONParity(t *testing.T) {
 	data := monitor.GraphData{

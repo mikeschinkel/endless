@@ -186,10 +186,10 @@ E-113 <> E-114
 | `A => B \| C` | B and C both stand in that relation. `\|` binds tighter than either arrow, so `A => B \| C => D` reads `A => (B \| C) => D`; a group only ever claims what is true of every member. |
 | `A <> B` | A and B **must not run at the same time**. Symmetric, and never chained: `A <> B` and `B <> C` do not mean `A <> C`. |
 | `<> A \| B \| C` | A mutual-exclusion set: no two of these may run at the same time. |
-| dim id | Already in flight (a session is on it), or a repeat of an id drawn on an earlier line. |
+| dim id | A repeat of an id drawn on an earlier line. A task another session is working on is **not** dim here, though its table row is: until it lands, it still holds back what it blocks. |
 | `cycle: A, B` | The relations form a cycle. That is a data error to fix, never silently dropped. |
 
-Which tasks appear: your session's rows, minus your own task, the spawning task, the parent row, anything in flight or stewarded by another session, hidden rows, phase `later`, and anything finished — then **plus** every open task that blocks one of those, even when that blocker is `later` or in flight, because it is the reason its dependent is not available. `unverified` and `unreviewed` blockers still block and appear; finished ones impose no order and do not. A task appears only when it has an edge of some kind; a session with none draws nothing — no header, no blank line.
+Which tasks appear: your own task until it lands, at any status, plus every row the table draws at full brightness that has not landed and that another session does not steward — the table and the graph share one rule, so a row the table dims (in flight, the parent, hidden, `later`/`maybe`, `referenced`, finished) is not a starting point here. Then **plus** every open task your own task directly blocks or should precede (one step: what finishing it releases, not what that releases in turn), and **plus** every open task that blocks any of those, walked to the end of the chain, in any project and whoever is working on it, because it is the reason its dependent is not available. `unverified` and `unreviewed` blockers still block and appear; finished ones impose no order and do not. A task appears only when it has an edge of some kind; a session with none draws nothing — no header, no blank line.
 
 Line order is derived, never authored: a topological order over both arrows, ties broken by the longest chain leading on, then lowest id — so the first line leads with the task to start on.
 

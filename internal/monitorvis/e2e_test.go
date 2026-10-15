@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/mikeschinkel/endless/internal/tmuxtest"
 )
 
 // visServer is a private tmux server for one test: its own socket in its own
@@ -25,6 +27,7 @@ func newVisServer(t *testing.T) *visServer {
 	if _, err := exec.LookPath("tmux"); err != nil {
 		t.Skip("tmux not installed")
 	}
+	tmuxtest.Private(t)
 	// Short, because a unix socket path is capped near 104 bytes on macOS and
 	// t.TempDir() there can exceed it on its own.
 	dir, err := os.MkdirTemp("/tmp", "e2229-")

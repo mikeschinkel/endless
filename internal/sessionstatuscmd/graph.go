@@ -15,8 +15,9 @@ package sessionstatuscmd
 // the same relation to everything on their left and right on that line (it
 // binds tighter than either arrow), `<>` marks two tasks that must not run
 // concurrently, and a line opening with `<>` is a set of which no two may.
-// Every occurrence of an id after its first, and every id already in flight,
-// is dim.
+// Every occurrence of an id after its first is dim. An id in flight is not:
+// until it lands, the viewer must still weigh it before starting what waits on
+// it (E-2345).
 //
 // Everything here is pure: the database half is monitor.SessionGraphData and
 // the detected-conflict half is monitor.WorktreeChangedPaths, both reached
@@ -65,7 +66,7 @@ type graphNode struct {
 	Phase    string
 	InFlight bool
 	// OnList is true for a task seeded from the session's own rows, false for
-	// a blocker the graph pulled in because a seeded task waits on it.
+	// a blocker or downstream task the graph pulled in from outside them.
 	OnList bool
 }
 
@@ -125,23 +126,43 @@ type orderGraph struct {
 
 func (g orderGraph) empty() bool { return len(g.lines) == 0 }
 
-// graphSeeds picks the rows that seed the graph: the session's own backlog,
-// excluding the viewing session's task, the spawning task, the parent row, any
-// task another session is already on (in flight, or stewarded elsewhere), hidden
-// rows, phase `later`, and anything finished. What remains is the set of tasks
-// someone reading this view might pick up next.
+// graphSeeds picks the rows the graph starts from (E-2345): every row that has
+// not landed and is either the session's own task, at any status, or drawn at
+// full brightness and not stewarded by another session. "Full brightness" is
+// rowIntensity, the rule colorize draws the table with, so a change to which
+// rows the table dims moves the graph's starting set with it. The own task is
+// in at any status because the chain blocking it is what the viewer most needs
+// to see. Stewardship is tested on its own because suppression is not an
+// intensity: under --show-suppressed a stewarded row draws bright.
 func graphSeeds(rows []monitor.SessionStatusRow) []int64 {
 	var ids []int64
 	for _, r := range rows {
 		switch {
-		case r.IsFocal, r.IsFrom, r.IsParent, r.InFlight, r.StewardedElsewhere, r.Hidden:
+		case r.Landed:
 			continue
-		case r.Phase == "later", isTerminal(r.Status):
+		case r.IsFocal:
+		case r.StewardedElsewhere, rowIntensity(r) == intensityDim:
 			continue
 		}
 		ids = append(ids, r.ID)
 	}
 	return ids
+}
+
+// ownSeed is the session's own task when it is in seeds, else 0: the graph
+// adds the own task's downstream tasks only while the own task is drawn.
+func ownSeed(rows []monitor.SessionStatusRow, seeds []int64) int64 {
+	for _, r := range rows {
+		if !r.IsFocal {
+			continue
+		}
+		for _, id := range seeds {
+			if id == r.ID {
+				return id
+			}
+		}
+	}
+	return 0
 }
 
 // Seams: the database and the changed-path cache, replaced in tests.
@@ -154,7 +175,7 @@ var (
 // gatherGraph builds the ordering graph for a session's rows.
 func gatherGraph(rows []monitor.SessionStatusRow) (orderGraph, error) {
 	seeds := graphSeeds(rows)
-	data, err := graphData(seeds)
+	data, err := graphData(seeds, ownSeed(rows, seeds))
 	if err != nil {
 		return orderGraph{}, err
 	}
@@ -723,13 +744,15 @@ type segment struct {
 // lineSegments renders each line into segments. A chain yields one segment per
 // `|` group, each after the first led by its arrow; any other line is a single
 // segment, because a set or pair is never split. seen tracks ids already drawn,
-// so every later occurrence dims.
+// so every later occurrence dims. In-flight ids are not dimmed (E-2345): the
+// table dims an in-flight row because there is nothing to spawn, but the graph
+// is about order, and an in-flight task still holds back what it blocks.
 func (g orderGraph) lineSegments(color bool) [][]segment {
 	st := graphStyle{color: color}
 	seen := map[int64]bool{}
 	idText := func(id int64) (string, string) {
 		label := taskLabel(id)
-		dimmed := seen[id] || g.nodes[id].InFlight
+		dimmed := seen[id]
 		seen[id] = true
 		return label, st.id(label, dimmed)
 	}

@@ -587,6 +587,12 @@ func renderGraphOnly(w io.Writer, a anchor, all bool, cols int, color bool) erro
 	if err = annotateHidden(rows, a.emittingSession); err != nil {
 		return err
 	}
+	// The graph's starting set is the rows the table draws bright (E-2345), and
+	// rowIntensity dims a referenced row, so the relation must be on the rows
+	// here exactly as it is under the table.
+	if err = annotateRelation(rows, a.emittingSession); err != nil {
+		return err
+	}
 	if err = annotateStewardship(rows, a.emittingSession, a.focal); err != nil {
 		return err
 	}

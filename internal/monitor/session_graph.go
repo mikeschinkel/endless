@@ -54,16 +54,20 @@ type GraphData struct {
 // SessionGraphData returns the ordering graph's node set grown from seeds, and
 // every blocks / precedes / conflicts_with edge between two of its nodes.
 //
-// The node set is seeds plus every OPEN task that blocks one of them, walked
-// transitively: a blocker is the task you most need to see, and one hidden
-// behind a `later` phase or another session's claim is still the reason its
-// dependent is not available (E-2164's plan: "then add every task that blocks
-// one of the survivors"). Terminal blockers are not walked — they impose no
-// order, exactly as the row query's upchain treats them.
+// The node set is seeds, plus every OPEN task that own (the session's own
+// task, or 0 for none) directly blocks or should precede, plus every OPEN task
+// that blocks any of those, walked transitively (E-2345). A downstream task is
+// what finishing the own task releases; one step only, so its own downstream
+// tasks are not added, but its blockers are, since they decide when it can
+// start. A blocker is the task you most need to see, and one hidden behind a
+// `later` phase, another session's claim or another project is still the
+// reason its dependent is not available. Terminal blockers are not walked —
+// they impose no order, exactly as the row query's upchain treats them.
 //
-// Terminal SEEDS are dropped for the same reason: a finished task has nothing
-// left to order. The caller normally never passes one; --all can.
-func SessionGraphData(seeds []int64) (GraphData, error) {
+// Seeds are taken at any status: the caller alone decides the starting set, and
+// it keeps the own task in it at a terminal status until the task lands.
+// The walk's UNION never adds a task twice, so a blocks cycle ends it.
+func SessionGraphData(seeds []int64, own int64) (GraphData, error) {
 	out := GraphData{Nodes: map[int64]GraphNode{}}
 	if len(seeds) == 0 {
 		return out, nil
@@ -74,10 +78,18 @@ func SessionGraphData(seeds []int64) (GraphData, error) {
 	}
 
 	ph, args := intPlaceholders(seeds)
+	args = append(args, own)
 	nodeQ := `
 WITH RECURSIVE nodes(id) AS (
-  SELECT id FROM live_tasks
-   WHERE id IN (` + ph + `) AND status NOT IN (` + terminalStatusSet + `)
+  SELECT id FROM live_tasks WHERE id IN (` + ph + `)
+  UNION
+  SELECT d.target_id
+    FROM task_deps d
+    JOIN live_tasks dn ON dn.id = d.target_id
+   WHERE d.source_type = 'task' AND d.target_type = 'task'
+     AND d.dep_type IN ('` + DepBlocks + `', '` + DepPrecedes + `')
+     AND d.source_id = ? AND d.target_id <> d.source_id
+     AND dn.status NOT IN (` + terminalStatusSet + `)
   UNION
   SELECT d.source_id
     FROM task_deps d
