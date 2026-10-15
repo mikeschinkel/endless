@@ -40,3 +40,9 @@ statement = "Tmux servers started by the new tests are killed at teardown"
 id = "P8"
 kind = "exclusion"
 statement = "Does not change Go test isolation (tmuxtest.Private)"
+
+[[item]]
+id = "P9"
+kind = "deliverable"
+statement = "tmuxservers.Resolve reads the tmux settings from the user's config alone, so a project config in the working directory cannot drop them"
+verify = "internal/tmuxservers TestResolveReadsTheUserConfigInsideAProject"
