@@ -1,0 +1,1 @@
+Mike asked for a review first: the gaps span the Go hook, the CLI, decisions and many open tasks, and the findings decide which follow-up tasks to file.
