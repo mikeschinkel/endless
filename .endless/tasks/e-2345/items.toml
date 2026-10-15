@@ -47,3 +47,9 @@ id = "P8"
 kind = "deliverable"
 statement = "Every task the graph draws, whether in the starting set, a blocker or a downstream task, has its open blockers added, and theirs, until a task has no open blocker"
 verify = "internal/monitor session-graph test: a downstream task's blocker chain three deep is drawn"
+
+[[item]]
+id = "P9"
+kind = "deliverable"
+statement = "A circular chain of blockers ends the walk without repeating a task and is drawn as the graph's cycle line"
+verify = "internal/monitor session-graph test with a blocks cycle"
