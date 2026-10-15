@@ -2,7 +2,12 @@
 
 **Input:** docs/research-2026-10-14-claude-hooks-and-mods-across-platforms.md (sections 1, 4 and 5 especially: the execution/control matrix, failure modes and gates, and the ranked options).
 
-**Scope:** Endless's own code, accepted decisions, and open and settled tasks — not further research into Claude Code itself, except where a claim in the report must be confirmed to answer a question below (use the report's section 7 probe list for that, and say which claims were taken on trust).
+**Scope (Mike, 2026-10-14):**
+- Supported surfaces: (1) CCC sessions in an Endless tmux server, (2) CCC + Remote Control steered from CW/CM/CCD, (3) CCD local sessions on the user's machine. Cloud execution (CW, CM, CCD Cloud, Open in > Cloud, `claude --cloud`, routines) is explicitly **blocked if possible, for now**. How Endless could support cloud later is a separate research or brainstorm task, filed as a follow-up.
+- Claude Code only. Other harnesses and humans editing without hooks are out of scope (they belong with the hook adaptor-layer work).
+- The report's recommendations are Claude Research's, not Mike's: evaluate them, don't adopt them.
+
+**Probes:** verify the report's claims hands-on for every supported surface (CCC, CCC + Remote Control including server-mode slots, CCD local: new, resumed, worktree, Dispatch, scheduled), plus the failure and off-switch behaviors (`onFailure: "block"` with a missing binary, `disableAllHooks`, `--safe-mode`, `--bare`). No probes of cloud support itself, EXCEPT probes of how to keep cloud sessions from causing problems in repos managed by Endless (for example, whether a committed guard blocks a cloud session, and what a cloud session can push to branches Endless owns). Probes that need a Desktop, web or phone session are prepared as a kit with steps for Mike to run. Probes must not write to Endless's real database or ledger.
 
 ### Questions to answer
 
@@ -15,4 +20,4 @@
 
 ### Deliverable
 
-An `outcome` that gives: the list of hardening gaps ranked by risk; for each, the recommended gate (block, detect-and-flag, document as unsupported) and whether an existing task owns it; proposed follow-up tasks (filed, and linked from this task with `cleans_up`/`relates_to`) for unowned gaps; and any decision Endless should record (for instance "Endless does not support cloud execution" or a minimum Claude Code version). If the findings are long, write them to `docs/research-<date>-endless-hook-hardening.md` and summarize in the outcome.
+The task's `outcome` (Mike's choice: outcome, not a separate doc) gives: probe results; the list of hardening gaps ranked by risk; for each, the proposed gate (block, detect-and-flag, document as unsupported) and whether an existing task owns it; and any decision Endless should record (for instance a minimum Claude Code version). Follow-up tasks for unowned gaps are filed and linked from this task with `cleans_up`, including one to research or brainstorm future cloud support. Mike expects follow-up questions and possibly more research after reading.
