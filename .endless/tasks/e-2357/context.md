@@ -1,0 +1,1 @@
+During E-2206 (go-cfgstore), Mike noticed the task vanished from the session status graph the moment it landed. Removal was intended, but the landed task is what tells him 'now that this landed, the tasks I was waiting on are unblocked'. Keeping it, dimmed, preserves that signal.
