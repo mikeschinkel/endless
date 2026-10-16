@@ -1,0 +1,1 @@
+Mike ran worktree land E-2206 from a shell pane with no resolvable session. It fast-forwarded main, then failed to emit task.landed, leaving merged work recorded nowhere until a bound session re-ran the land.
