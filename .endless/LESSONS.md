@@ -7645,3 +7645,7 @@ On the E-1358 opt-out question I wrote that a forgotten --all bypass is 'the sam
 ### [2026-10-15] A discrepancy with only one viable option is not a question
 During E-2333's reconciliation, the agent presented EQ-54 (P2 done in the /tmp directory instead of tmp_path) as options A/B, where A had no con and B had no pro, because it followed directly from Mike's answer to EQ-53. Mike asked why it was a question at all. When one option dominates, say what will be recorded and why, and ask only for an objection, instead of manufacturing an alternative to make it look like a choice.
 - **Project**: endless
+
+### [2026-10-15] Write-once by design is for normal use, not for repairing bug-caused corruption
+While recovering from a tmux crash, a bug (the recovery agent's environment leaking into every tmux pane) bound task E-2206 to the recovery session ES-1319. I found sessions.task_id is write-once, task release is disabled and session task remove refuses a session's own claim, so I stopped and called the binding impossible to undo. Mike said rules that hold 'by design' are meant for normal usage, not for cleaning up data corrupted by a bug, and that endless sql exists to bypass them when needed. Sessions are not in the ledger, so a direct fix there cannot leave the ledger missing a change. When a bug corrupts session data, repair it with endless sql --write (and say so) rather than declaring it unfixable.
+- **Project**: endless
