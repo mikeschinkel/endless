@@ -1,0 +1,1 @@
+In E-2206 Mike ran endless task bind from his own pane; the status line showed the task but the Claude session never resolved it. Mike wants a user to be able to bind without asking Claude to, and a clear error when only Claude can.
