@@ -1,0 +1,1 @@
+_live_sessions in session_cmd.py passes the cwd's --project-root to session-query list-live, so sessions whose project is not the cwd's are never live from there. Both sessions belong to project endless.
