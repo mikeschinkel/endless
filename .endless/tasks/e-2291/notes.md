@@ -1,0 +1,1 @@
+From E-2206 (2026-10-16): Mike ran `endless task bind E-2206` from his own shell pane beside Claude; the status line showed the task, but the Claude session could not resolve it. A user should be able to bind from their own pane, and when only Claude can, the refusal should say so and say from where.
