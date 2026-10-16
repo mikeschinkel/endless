@@ -1,0 +1,1 @@
+In E-2206 a stray ignored row for the go-cfgstore worktree path was more specific than go-cfgstore itself, so every command in the worktree resolved to it and session resolution failed with 'directory is ignored by Endless'. Removing the row fixed the symptom; this fixes the cause.
