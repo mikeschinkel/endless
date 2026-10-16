@@ -1,0 +1,1 @@
+ES-1339 worked only on E-2206 in go-cfgstore but is recorded under project endless, because it started in the endless repo before /cd moved it. Project-scoped lookups then miss it from go-cfgstore.
