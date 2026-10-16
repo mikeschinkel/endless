@@ -7641,3 +7641,7 @@ During E-1358 planning I wrote 'E-1358 is still waiting on Q2' after several tur
 ### [2026-10-15] Don't restate Mike's objection as something broader than he said
 On the E-1358 opt-out question I wrote that a forgotten --all bypass is 'the same leak you object to in environment variables'. Mike: not the same. His objection to env vars is that something meant to affect A can affect B (a known unknown); a forgotten bypass affects A at a time we didn't intend (a known). Characterize his reasons in his terms.
 - **Project**: endless
+
+### [2026-10-15] A discrepancy with only one viable option is not a question
+During E-2333's reconciliation, the agent presented EQ-54 (P2 done in the /tmp directory instead of tmp_path) as options A/B, where A had no con and B had no pro, because it followed directly from Mike's answer to EQ-53. Mike asked why it was a question at all. When one option dominates, say what will be recorded and why, and ask only for an objection, instead of manufacturing an alternative to make it look like a choice.
+- **Project**: endless
