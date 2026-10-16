@@ -7633,3 +7633,7 @@ On E-1358 Q5 I recommended keeping schema refusals non-blocking because E-2020's
 ### [2026-10-15] When task text contradicts an accepted decision, add a note saying it is superseded
 During E-1358 planning I flagged E-2063, E-1972 and E-1887 as still saying hooks fail open but did not edit them. Mike asked why not, and asked at least for text saying the statement is superseded. Add a note naming the decision instead of only flagging it.
 - **Project**: endless
+
+### [2026-10-15] Restate a question when referring back to it, not just its number
+During E-1358 planning I wrote 'E-1358 is still waiting on Q2' after several turns. Mike had lost track of what Q2 meant; with formal per-task questions this is a recurring problem for him. Refer to a question by its subject (e.g. 'the hook-fix opt-out question'), not only its number.
+- **Project**: endless
