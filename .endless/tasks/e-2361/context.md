@@ -1,0 +1,1 @@
+In E-2206 Mike's shell pane resolved to ES-1319, an older Claude session recorded on that pane, instead of ES-1339, the live session the window's @endless_session_uuid named. The pane-match layer of _current_endless_session_id runs before the window-uuid layer, so the stale claim wins.
