@@ -1,0 +1,1 @@
+Same cause as E-2364: land merges before ensuring it can record (ED-1550 rule 3).
