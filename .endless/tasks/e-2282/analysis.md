@@ -32,3 +32,39 @@ Two things to settle, and they are separable:
    themselves, and this one does not.
 
 A fix for 1 alone would close the symptom on this machine and leave the trap set.
+
+## Decisions taken when this was planned
+
+**The pass reaches main by removing the pin, not by replacing it.** The verify
+recipe drops its database argument rather than naming main, because
+`run_verify` already calls `config.default_db_to_main`, which pins main inside a
+self-dev worktree precisely so a forced-main operation does not fall foul of the
+no-database gate. Naming main at the call site would restate that and give a
+change to where a pass is recorded two places to be made.
+
+**The invocation is refused before the suite runs, not after.** The alternative
+was to let the suite run and then explain that nothing could be recorded. Both
+tell the truth, but only one of them tells it while the invocation can still be
+corrected, and the other spends a full suite run first.
+
+The refusal is conditioned on a read that SUCCEEDS and finds nothing. A read
+that cannot answer at all lets the verify proceed: a suite is a proof about a
+checkout and keeps its value even when the bookkeeping cannot be filed, so a
+database this cannot reach must not become a reason to refuse to verify. The
+cost of that choice is accepted — an unreachable database still loses the
+recording, exactly as today.
+
+**Raising from the empty read loses nothing.** It was assumed that a raise there
+would cost the passing run its report. It does not: `run_verify` writes the
+report through `_record_passing_run` before it calls `record_pass`, so by then
+the report is already on disk. A raise changes one thing, the command's exit
+code — which is the whole of what was being traded. With the pre-flight in
+place that branch is a backstop, so reaching it means something upstream is
+wrong and a non-zero exit is the honest answer.
+
+**Deleting the recipe is a separate task.** Everything the recipe does beyond the
+pin is now done by the command: it derives the task id from the session and then
+the cwd, and resolves the task's worktree to run in. So the recipe is redundant
+and should go — but only once `endless verify` exists, because `just verify` is
+shorter than `endless task verify` and is typed constantly. Splitting it keeps
+the fix that is blocking sessions out from behind a new command's verify suite.
