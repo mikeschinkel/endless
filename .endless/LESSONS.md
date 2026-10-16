@@ -7637,3 +7637,7 @@ During E-1358 planning I flagged E-2063, E-1972 and E-1887 as still saying hooks
 ### [2026-10-15] Restate a question when referring back to it, not just its number
 During E-1358 planning I wrote 'E-1358 is still waiting on Q2' after several turns. Mike had lost track of what Q2 meant; with formal per-task questions this is a recurring problem for him. Refer to a question by its subject (e.g. 'the hook-fix opt-out question'), not only its number.
 - **Project**: endless
+
+### [2026-10-15] Don't restate Mike's objection as something broader than he said
+On the E-1358 opt-out question I wrote that a forgotten --all bypass is 'the same leak you object to in environment variables'. Mike: not the same. His objection to env vars is that something meant to affect A can affect B (a known unknown); a forgotten bypass affects A at a time we didn't intend (a known). Characterize his reasons in his terms.
+- **Project**: endless
