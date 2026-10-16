@@ -1,0 +1,1 @@
+E-2206's land rebased task/2206 (77e3ad9 became 75c1d2b) and merged, but recording failed. The rebase then demoted E-2206 to unverified: verify refused until a reconcile, and reconcile refused on an unverified task until Mike reopened it to revisit and it was walked back through underway. Same content, three extra user steps.
