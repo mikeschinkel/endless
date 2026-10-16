@@ -1,0 +1,1 @@
+E-2206's land was refused twice: first over .endless/worktrees/ (the gitignore entry was part of the task being landed), then over .endless/logs/ (missing from project init's gitignore block). Neither is user work; Mike unblocked both with .git/info/exclude.
