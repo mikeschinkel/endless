@@ -1,0 +1,1 @@
+Ignored rows still have to mean 'this directory is not a project' for discovery and registration. The open question is what a command run inside an ignored path nested in a registered project should resolve to: the enclosing project, or a refusal that names the ignored row and how to remove it. Silent failure is the one wrong answer.
