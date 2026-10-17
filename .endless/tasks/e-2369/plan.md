@@ -11,19 +11,19 @@ Each list entry has a scope:
    - **Linux (FHS)**
      - subtree: /bin, /sbin, /lib, /lib32, /lib64, /libx32, /boot, /dev, /proc, /sys, /run, /etc, /usr/bin, /usr/sbin, /usr/lib, /usr/lib64, /usr/libexec, /usr/include, /usr/share, /var/lib, /var/log, /var/cache, /var/spool, /var/tmp, /lost+found
      - self: /usr, /usr/local, /var, /var/www, /opt, /srv, /mnt, /media, /tmp, /root. Children are allowed: /opt/app, /srv/site and /var/www/site are real project homes.
-     - desktop (XDG): ~/.config, ~/.local and ~/.cache as subtree. The user dirs (Desktop, Documents, Downloads, Music, Pictures, Videos, Public, Templates) as self. Ubuntu, Fedora and other desktop distros create them through xdg-user-dirs. They are read from `~/.config/user-dirs.dirs` when present, because their names are localized (~/Dokumente on a German desktop). They are skipped when absent, as on servers.
+     - desktop (XDG): ~/.config, ~/.local and ~/.cache as subtree. The user dirs Download, Music, Pictures and Videos as subtree; Desktop, Documents, Public and Templates as self. Ubuntu, Fedora and other desktop distros create them through xdg-user-dirs. They are read from `~/.config/user-dirs.dirs` when present, because their names are localized (~/Dokumente on a German desktop). They are skipped when absent, as on servers.
    - **macOS**
-     - subtree: /System, /Library, /Applications, /private, /bin, /sbin, /usr/bin, /usr/sbin, /usr/lib, /usr/libexec, /usr/share, /etc, /var, /dev, /cores, ~/Library, ~/Applications, ~/.Trash
-     - self: /usr, /usr/local, /tmp, /opt, /Volumes, ~/Desktop, ~/Documents, ~/Downloads, ~/Movies, ~/Music, ~/Pictures, ~/Public
+     - subtree: /System, /Library, /Applications, /private, /bin, /sbin, /usr/bin, /usr/sbin, /usr/lib, /usr/libexec, /usr/share, /etc, /var, /dev, /cores, ~/Library, ~/Applications, ~/.Trash, ~/Downloads, ~/Movies, ~/Music, ~/Pictures
+     - self: /usr, /usr/local, /tmp, /opt, /Volumes, ~/Desktop, ~/Documents, ~/Public
    - **Windows**
-     - subtree: C:\Windows, C:\Program Files, C:\Program Files (x86), C:\ProgramData, C:\Users\Public, C:\Users\Default, ~\AppData. Program Files is right to refuse whole: it is written by installers, needs elevation to write, and UAC virtualizes writes to it.
-     - self: ~\Desktop, ~\Documents, ~\Downloads, ~\Music, ~\Pictures, ~\Videos, ~\OneDrive
+     - subtree: C:\Windows, C:\Program Files, C:\Program Files (x86), C:\ProgramData, C:\Users\Public, C:\Users\Default, ~\AppData, ~\Downloads, ~\Music, ~\Pictures, ~\Videos. Program Files is right to refuse whole: it is written by installers, needs elevation to write, and UAC virtualizes writes to it.
+     - self: ~\Desktop, ~\Documents, ~\OneDrive
      - Known folders are resolved through the Windows known-folder API, not hard-coded, because they can be relocated (OneDrive redirection, a different system drive).
    - **Localized names are the OS's job.** Endless keeps no translation tables:
      - Linux: xdg-user-dirs writes the real localized paths into `~/.config/user-dirs.dirs`, and Endless reads that file.
      - macOS: the folders are always English on disk; Finder only translates the display name.
      - Windows: the known-folder API returns the real path.
-   - **User-data folders are self-scoped on purpose.** Many people keep projects in ~/Documents/foo rather than ~/Projects/foo, so the children of ~/Documents, ~/Desktop and similar stay allowed. Only the folder itself is refused.
+   - **User-data folders are self-scoped on purpose.** Many people keep projects in ~/Documents/foo rather than ~/Projects/foo, so the children of ~/Documents, ~/Desktop and similar stay allowed. Only the folder itself is refused. Downloads and the media folders (Music, Pictures, Videos, Movies) are refused as subtrees: unzipping a repo into ~/Downloads to look it over and running Claude there would otherwise auto-register a throwaway project, and media folders hold media, not code. The overrides file is the escape hatch.
 3. **Parent directory.** Not a project itself, and the walk-up stops there, so nothing below inherits a project registered above. ~/Projects ships as one. A directory is declared a parent directory either way:
    - a JSON override entry with `"parent_dir": true`
    - an on-disk `.endless-parent-dir` marker file. At the same rung the marker wins, as `.endless-ignore` does.
