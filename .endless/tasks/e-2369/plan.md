@@ -19,6 +19,11 @@ Each list entry has a scope:
      - subtree: C:\Windows, C:\Program Files, C:\Program Files (x86), C:\ProgramData, C:\Users\Public, C:\Users\Default, ~\AppData. Program Files is right to refuse whole: it is written by installers, needs elevation to write, and UAC virtualizes writes to it.
      - self: ~\Desktop, ~\Documents, ~\Downloads, ~\Music, ~\Pictures, ~\Videos, ~\OneDrive
      - Known folders are resolved through the Windows known-folder API, not hard-coded, because they can be relocated (OneDrive redirection, a different system drive).
+   - **Localized names are the OS's job.** Endless keeps no translation tables:
+     - Linux: xdg-user-dirs writes the real localized paths into `~/.config/user-dirs.dirs`, and Endless reads that file.
+     - macOS: the folders are always English on disk; Finder only translates the display name.
+     - Windows: the known-folder API returns the real path.
+   - **User-data folders are self-scoped on purpose.** Many people keep projects in ~/Documents/foo rather than ~/Projects/foo, so the children of ~/Documents, ~/Desktop and similar stay allowed. Only the folder itself is refused.
 3. **Parent directory.** Not a project itself, and the walk-up stops there, so nothing below inherits a project registered above. ~/Projects ships as one. A directory is declared a parent directory either way:
    - a JSON override entry with `"parent_dir": true`
    - an on-disk `.endless-parent-dir` marker file. At the same rung the marker wins, as `.endless-ignore` does.
