@@ -27,6 +27,12 @@ statement = "Every task worktree (task claim, task spawn, and session resume --r
 verify = "tests (claim, spawn and resume each run from another project's directory)"
 
 [[item]]
+id = "P14"
+kind = "deliverable"
+statement = "create_task_worktree and recreate_dropped_worktree no longer accept a project root from their caller, and share one lower-level helper for git worktree add plus bootstrap"
+verify = "grep: no caller passes a project root to create_task_worktree or recreate_dropped_worktree"
+
+[[item]]
 id = "P4"
 kind = "deliverable"
 statement = "--recreate is mutually exclusive with --review and --reopen"
@@ -75,9 +81,3 @@ statement = "Does not change --review or --reopen behavior, or how task claim cr
 id = "P12"
 kind = "exclusion"
 statement = "Does not fix resume looking in the wrong repo for a cross-project task (that is E-2299) or add worktree move (that is E-2348)"
-
-[[item]]
-id = "P14"
-kind = "deliverable"
-statement = "create_task_worktree and recreate_dropped_worktree no longer accept a project root from their caller, and share one lower-level helper for git worktree add plus bootstrap"
-verify = "grep: no caller passes a project root to create_task_worktree or recreate_dropped_worktree"
