@@ -1075,6 +1075,14 @@ func ProjectIDForPath(dir string) (int64, bool, error) {
 		return v.ProjectID, true, nil
 	case VerdictIgnored:
 		return 0, false, fmt.Errorf("%w: %s (at %s)", ErrIgnoredDirectory, dir, v.At)
+	case VerdictDisallowed:
+		// E-2369: $HOME, a system directory, a parent directory. Never a
+		// project, so never auto-registered either.
+		return 0, false, fmt.Errorf("%w: %s (at %s: %s)", ErrDisallowedDirectory, dir, v.At, v.Rule)
+	}
+	if v.Encloses != "" {
+		// Registering dir would nest the project inside it (E-2369).
+		return 0, false, fmt.Errorf("%w: %s holds the project at %s", ErrDisallowedDirectory, dir, v.Encloses)
 	}
 
 	// No registered project found — auto-register as active

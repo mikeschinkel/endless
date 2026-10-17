@@ -3,9 +3,9 @@
 import click
 from tabulate import tabulate
 
-from endless import db
+from endless import config, db
 from endless import rowcap
-from endless.project_path import stored
+from endless.project_path import resolved, stored
 
 STATUS_COLORS = {
     "active": "green",
@@ -59,6 +59,10 @@ def list_projects(status_filter: str | None = None, group: bool = False,
     total = len(rows)
     rows, hidden = rowcap.cap_rows(rows, cap)
 
+    # One resolve call for every row shown, to mark the rows that can never
+    # resolve or that nest (E-2369).
+    config.prime_ignored(resolved(r["path"]) for r in rows)
+
     current_group = None
     table_rows = []
 
@@ -90,7 +94,10 @@ def list_projects(status_filter: str | None = None, group: bool = False,
         )
 
         notes = row["pending_notes"]
-        if notes > 0:
+        problem = _registration_problem(row["path"])
+        if problem:
+            notes_str = click.style(problem, fg="red")
+        elif notes > 0:
             notes_str = click.style(f"{notes} pending", fg="yellow")
         else:
             notes_str = click.style("-", dim=True)
@@ -110,6 +117,19 @@ def list_projects(status_filter: str | None = None, group: bool = False,
     rowcap.echo_footer(hidden)
     click.echo()
     click.echo(click.style(f"{total} project(s)", dim=True))
+
+
+def _registration_problem(path: str) -> str | None:
+    """A short flag for a row that should not be a project (E-2369): one at a
+    directory that can never be one, or one nested with another."""
+    v = config.verdict(resolved(path))
+    if v["kind"] == config.DISALLOWED:
+        return "cannot be a project"
+    if v["kind"] == "project" and v.get("within"):
+        return f"nested in {v['name']}"
+    if v.get("encloses"):
+        return f"holds {v['encloses']}"
+    return None
 
 
 def _print_table(rows: list[list]):

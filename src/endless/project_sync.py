@@ -111,7 +111,8 @@ def sync_projects():
             # explicit `project register` may register under an ignored tree.
             if (cfg.get("status") != "unregistered"
                     and resolved_str not in forgotten_paths
-                    and not config.is_ignored(disk_path)):
+                    and not config.is_ignored(disk_path)
+                    and not config.registration_refusal(disk_path)):
                 _insert_from_config(disk_path, cfg, now)
 
     # Reconcile: DB entries whose paths no longer exist

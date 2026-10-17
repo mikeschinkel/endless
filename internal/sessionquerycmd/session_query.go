@@ -8,7 +8,6 @@ package sessionquerycmd
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -1180,7 +1179,7 @@ func runListLive(args []string) error {
 	}
 
 	projectID, _, err := monitor.ProjectIDForPath(*projectRoot)
-	if err != nil && !errors.Is(err, monitor.ErrIgnoredDirectory) {
+	if err != nil && !monitor.NotAProject(err) {
 		return fmt.Errorf("resolve project for %s: %w", *projectRoot, err)
 	}
 	if projectID == 0 {
@@ -1254,11 +1253,11 @@ func runEnsureClaudeID(args []string) error {
 	}
 
 	projectID, _, err := monitor.ProjectIDForPath(*projectRoot)
-	if errors.Is(err, monitor.ErrIgnoredDirectory) {
-		// No session row is recorded in an ignored directory (E-2251) — the hook
-		// skips it — so there is none to ensure either.
+	if monitor.NotAProject(err) {
+		// No session row is recorded in an ignored (E-2251) or disallowed
+		// (E-2369) directory — the hook skips it — so there is none to ensure.
 		return refusal.NoReport(err.Error(),
-			"The directory is ignored by Endless; there is no session to resolve here")
+			"The directory is not an Endless project; there is no session to resolve here")
 	}
 	if err != nil {
 		return fmt.Errorf("resolve project for %s: %w", *projectRoot, err)

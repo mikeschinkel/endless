@@ -21,6 +21,7 @@ help:
     @echo "Guide docs:"
     @echo "  just guide-check    Validate command->section map coverage (pre-land gate)"
     @echo "  just guide-index    Rebuild the cross-reference block in docs/guide/index.md"
+    @echo "  just disallowed-doc  Regenerate docs/guide/disallowed-paths.md from the Go list"
     @echo "  just guide-scaffold Print the skeleton for /regenerate-guide"
     @echo "  just lifecycle-check  Validate the status-lifecycle diagram is current (pre-land gate)"
     @echo "  just lifecycle-index  Rebuild docs/status-lifecycle.mmd from internal/taskstatus"
@@ -621,6 +622,12 @@ lifecycle-index:
 # Non-zero exit on drift — a pre-land / CI gate next to guide-check.
 lifecycle-check:
     uv run python -m endless.lifecycle_map check
+
+# Regenerate docs/guide/disallowed-paths.md from the built-in list of
+# directories that cannot be projects (E-2369). TestDisallowedPathsDocIsCurrent
+# fails `just test-go` when the committed page drifts from the code.
+disallowed-doc:
+    go run ./cmd/endless-go project disallowed-doc > docs/guide/disallowed-paths.md
 
 # Build just the Go binary
 # Build endless-go atomically (E-2205): compile to bin/endless-go.next, then

@@ -361,6 +361,8 @@ def project_registry(verb: str, *args: str):
     if result.returncode != 0:
         raise _child_refusal(result.stderr, result.returncode, f"project {verb}")
     payload = json.loads(result.stdout) if result.stdout.strip() else {}
+    if verb in ("ignore", "activate", "clear"):
+        config.forget_verdicts()
     if isinstance(payload, dict) and "rows" in payload:
         return provenance.rows_of(payload)
     return payload

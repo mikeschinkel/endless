@@ -155,6 +155,23 @@ def register_project(
     )
     is_update = len(existing) > 0
 
+    # $HOME, system and user-data directories, parent directories, and nested
+    # projects (E-2369). A project already registered here is exempt from the
+    # nesting rule only, so re-running register on a pre-existing nested
+    # project updates it rather than stranding it.
+    refusal = config.registration_refusal(project_path)
+    v = config.verdict(project_path)
+    config.forget_verdicts()  # this registration is about to change the answer
+    live_update = is_update and existing[0]["status"] != config.IGNORED_STATUS
+    if refusal and (v["kind"] == config.DISALLOWED or not live_update):
+        raise agent_help.no_report(
+            f"{refusal}. Nothing was registered.",
+            "Register a directory that is not listed in `endless guide "
+            "disallowed-paths` and holds no other project, or edit the "
+            "overrides file that page names",
+            text=f"Cannot register {project_path}: {refusal}",
+        )
+
     # The identity decides whether this checkout is a project already
     # registered somewhere else, so it is settled before anything is prompted
     # for or written (E-2217).

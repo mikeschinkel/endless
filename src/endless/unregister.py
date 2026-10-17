@@ -46,6 +46,28 @@ def unregister_project(name: str):
             )
         )
 
+    if config.verdict(project_path)["kind"] == config.DISALLOWED:
+        # A row at a directory that can never be a project (E-2369) is
+        # deleted, not ignored: an ignored row at $HOME would read as "ignore
+        # everything under ~". `clear` keeps a row that still holds tasks; it
+        # is inert either way, since a disallowed directory never resolves.
+        project_registry("ignore", str(project_path))
+        try:
+            project_registry("clear", str(project_path))
+        except click.ClickException:
+            click.echo(
+                click.style("•", fg="cyan")
+                + f" Unregistered {click.style(name, bold=True)}"
+                + " (kept as ignored: it still holds tasks)"
+            )
+            return
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" Unregistered {click.style(name, bold=True)}"
+            + f" and removed its row: {project_path} cannot be a project"
+        )
+        return
+
     project_registry("ignore", str(project_path))
 
     click.echo(

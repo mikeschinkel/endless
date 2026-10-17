@@ -246,8 +246,9 @@ func runClaude(args []string) (err error) {
 	payload.CWD = resolvedCWD
 
 	projectID, isRegistered, err := monitor.ProjectIDForPath(payload.CWD)
-	if errors.Is(err, monitor.ErrIgnoredDirectory) {
-		// The user said this directory is not a project (E-2251): there is no
+	if monitor.NotAProject(err) {
+		// The user said this directory is not a project (E-2251), or a rule
+		// says it can never be one (E-2369): there is no
 		// project to record activity against, enforce for, or inject context
 		// from, and auto-registering it is exactly what ignoring forbids.
 		return nil

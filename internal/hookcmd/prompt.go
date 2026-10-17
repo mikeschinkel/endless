@@ -1,7 +1,6 @@
 package hookcmd
 
 import (
-	"errors"
 	"fmt"
 	"log"
 
@@ -23,8 +22,8 @@ func runPrompt(args []string) error {
 
 	// Look up project
 	projectID, _, err := monitor.ProjectIDForPath(dir)
-	if errors.Is(err, monitor.ErrIgnoredDirectory) {
-		return nil // not a project (E-2251): nothing to record
+	if monitor.NotAProject(err) {
+		return nil // not a project (E-2251, E-2369): nothing to record
 	}
 	if err != nil {
 		return dbReadFailed(fmt.Errorf("looking up project for %s: %w", dir, err))

@@ -124,6 +124,8 @@ func ProjectForCwd() (id int64, name string, err error) {
 		return v.ProjectID, v.Name, nil
 	case VerdictIgnored:
 		return 0, "", fmt.Errorf("%w: %s is ignored by Endless (at %s)", ErrNoProject, cwd, v.At)
+	case VerdictDisallowed:
+		return 0, "", fmt.Errorf("%w: %s cannot be an Endless project (%s is %s)", ErrNoProject, cwd, v.At, v.Rule)
 	}
 	return 0, "", fmt.Errorf("%w: no registered project encloses %s", ErrNoProject, cwd)
 }

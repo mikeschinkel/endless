@@ -43,6 +43,10 @@ func Run(args []string) {
 		err = runListIgnored(rest)
 	case "forget":
 		err = runForget(rest)
+	case "disallowed-doc":
+		// E-2369: the guide page listing the built-in disallowed directories,
+		// generated so it cannot drift from the list in the code.
+		fmt.Print(monitor.DisallowedPathsMarkdown())
 	case "-h", "--help", "help":
 		refusal.Info(usageText()).Print()
 		return
@@ -63,12 +67,13 @@ func usageText() string {
 	var b strings.Builder
 	fmt.Fprintln(&b, "Usage: endless-go project <subcommand> [args...]")
 	fmt.Fprintln(&b, "Subcommands:")
-	fmt.Fprintln(&b, "  resolve <dir>...   JSON verdict per directory: project, ignored or none")
+	fmt.Fprintln(&b, "  resolve <dir>...   JSON verdict per directory: project, ignored, disallowed or none")
 	fmt.Fprintln(&b, "  ignore <dir>       record <dir> (and its subtree) as not a project")
 	fmt.Fprintln(&b, "  activate <dir>     re-activate <dir>'s existing ignored row")
 	fmt.Fprintln(&b, "  clear <dir>        delete <dir>'s ignored row (refused if it holds tasks)")
 	fmt.Fprintln(&b, "  list-ignored       JSON list of ignored rows")
 	fmt.Fprintln(&b, "  forget <dir>       tombstone <dir>'s registration (refused if it holds tasks)")
+	fmt.Fprintln(&b, "  disallowed-doc     Markdown guide page of directories that cannot be projects")
 	return b.String()
 }
 

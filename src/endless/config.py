@@ -172,36 +172,85 @@ def get_roots() -> list[Path]:
 IGNORED_STATUS = "ignored"
 IGNORE_MARKER = ".endless-ignore"
 
-# Verdicts already fetched this invocation, keyed by resolved path. Filled in
-# bulk by prime_ignored() so a walk over many directories (discover) is one
-# shellout rather than one per directory.
-_ignored_cache: dict[str, bool] = {}
+# Verdicts already fetched this invocation, keyed by path as asked and as
+# resolved. Filled in bulk by prime_ignored() so a walk over many directories
+# (discover) is one shellout rather than one per directory.
+_verdict_cache: dict[str, dict] = {}
 
 
 def prime_ignored(paths) -> None:
-    """Fetch the ignore verdict for many directories in one call."""
+    """Fetch the resolve verdict for many directories in one call."""
     from endless.event_bridge import project_registry
 
-    todo = [str(p) for p in paths if str(p) not in _ignored_cache]
+    todo = [str(p) for p in paths if str(p) not in _verdict_cache]
     if not todo:
         return
     for v in project_registry("resolve", *todo):
-        _ignored_cache[v["path"]] = v["kind"] == IGNORED_STATUS
+        _verdict_cache[v["path"]] = v
     # Go answers in RESOLVED form; remember the spelling asked about too.
     for p in todo:
-        if p not in _ignored_cache:
+        if p not in _verdict_cache:
             r = str(Path(p).resolve())
-            if r in _ignored_cache:
-                _ignored_cache[p] = _ignored_cache[r]
+            if r in _verdict_cache:
+                _verdict_cache[p] = _verdict_cache[r]
+
+
+def forget_verdicts() -> None:
+    """Drop cached verdicts: a registry write has made them stale."""
+    _verdict_cache.clear()
+
+
+def verdict(path: Path) -> dict:
+    """`endless-go project resolve`'s verdict for one directory."""
+    key = str(path)
+    if key not in _verdict_cache:
+        prime_ignored([path])
+    return _verdict_cache.get(key, {"kind": "none"})
 
 
 def is_ignored(path: Path) -> bool:
     """Whether path is, or sits under, a directory Endless ignores — the
-    nearest registered or ignored ancestor deciding."""
-    key = str(path)
-    if key not in _ignored_cache:
-        prime_ignored([path])
-    return _ignored_cache.get(key, False)
+    nearest registered or ignored ancestor deciding — or under a directory a
+    rule disallows whole (E-2369). A walk may skip everything below it."""
+    v = verdict(path)
+    return (v["kind"] == IGNORED_STATUS
+            or (v["kind"] == DISALLOWED and v.get("scope") == "subtree"))
+
+
+# A directory a rule says can never be a project (E-2369): $HOME and above it,
+# OS system and user-data directories, parent directories like ~/Projects. The
+# rules live in Go (internal/monitor/disallowed_paths.go); the full list is
+# `endless guide disallowed-paths`.
+DISALLOWED = "disallowed"
+
+
+def registration_refusal(path: Path) -> str | None:
+    """Why path cannot be registered as a project, or None if it can.
+
+    Disallowed by rule, inside another project, or holding one (E-2369).
+    Ignored is not a reason here: an explicit `project register` may register
+    under an ignored tree, so callers that must also skip ignored directories
+    check is_ignored() too.
+    """
+    v = verdict(path)
+    if v["kind"] == DISALLOWED:
+        return f"{v['at']} cannot be an Endless project: it is {v['rule']}"
+    if v["kind"] == "project" and v.get("within"):
+        return (f"{path} is inside the project '{v['name']}' at {v['at']}, "
+                "and Endless does not nest projects")
+    if v.get("encloses"):
+        return (f"{path} holds the project at {v['encloses']}, "
+                "and Endless does not nest projects")
+    return None
+
+
+def is_home_or_above(path: Path) -> bool:
+    """Whether path is $HOME or a directory above it — never a project, by a
+    rule no override reaches (E-2369). Checked here, without a shellout, where
+    a hot path needs only that rule."""
+    home = Path(os.environ.get("HOME", "") or Path.home()).resolve()
+    p = Path(path).resolve()
+    return p == home or p in home.parents
 
 
 def add_ignore(path: Path):
@@ -209,7 +258,6 @@ def add_ignore(path: Path):
     from endless.event_bridge import project_registry
 
     project_registry("ignore", str(path))
-    _ignored_cache.clear()
 
 
 def write_ignore_marker(path: Path) -> list[str]:

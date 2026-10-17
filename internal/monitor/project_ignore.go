@@ -43,9 +43,10 @@ var ErrIgnoredDirectory = errors.New("directory is ignored by Endless")
 
 // DirVerdict kinds.
 const (
-	VerdictProject = "project"
-	VerdictIgnored = "ignored"
-	VerdictNone    = "none"
+	VerdictProject    = "project"
+	VerdictIgnored    = "ignored"
+	VerdictNone       = "none"
+	VerdictDisallowed = "disallowed" // E-2369: a rule says it can never be a project
 )
 
 // DirVerdict is what resolving one directory concluded.
@@ -61,40 +62,85 @@ type DirVerdict struct {
 
 	// Marker is true when an IgnoreMarker file, not a row, decided.
 	Marker bool `json:"marker,omitempty"`
+
+	// For VerdictDisallowed (E-2369): why, and whether the rule covers the
+	// directory alone (ScopeSelf) or everything under it (ScopeSubtree). A
+	// walk that skips SELF-disallowed directories may still descend into them.
+	Rule  string `json:"rule,omitempty"`
+	Scope string `json:"scope,omitempty"`
+
+	// Within is true for VerdictProject when the project is an ANCESTOR's, not
+	// the directory's own row: registering the directory would nest a project.
+	Within bool `json:"within,omitempty"`
+
+	// Encloses is the stored path of a registered project INSIDE the
+	// directory, set for VerdictNone and for a directory's own project row:
+	// registering the directory would nest that project inside it.
+	Encloses string `json:"encloses,omitempty"`
 }
 
-// ResolveDirectory answers whether dir belongs to a project, is ignored, or is
-// neither — the one implementation every registration path consults (the hook's
-// auto-registration here, and Python's register, discover and reconcile through
-// `endless-go project resolve`).
+// ResolveDirectory answers whether dir belongs to a project, is ignored, is
+// disallowed, or is none of these — the one implementation every registration
+// path consults (the hook's auto-registration here, and Python's register,
+// discover and reconcile through `endless-go project resolve`).
 //
 // dir arrives RESOLVED. The walk climbs resolved ancestors and queries each in
 // STORED form (E-2011); only when every rung misses does it fall back to a scan
 // for a row written in an older spelling, which cannot be outranked by a marker
 // because the walk already looked for one at every rung.
+//
+// The disallowed rules (E-2369, disallowed_paths.go) shape the walk: a
+// directory inside a SUBTREE rule is disallowed whatever rows sit nearer; a
+// SELF rule refuses that directory and hides any row at that rung from the
+// directories below it; a parent directory ends the walk, so nothing below it
+// inherits a project registered above.
 func ResolveDirectory(db *sql.DB, dir string) (DirVerdict, error) {
 	v := DirVerdict{Path: dir, Kind: VerdictNone}
 	home, err := resolvedHomeDir()
 	if err != nil {
 		return v, err
 	}
+	rules, err := loadDirRules(home)
+	if err != nil {
+		return v, err
+	}
+	if at, r, ok := rules.subtreeRoot(dir); ok {
+		return disallowed(v, homeRelative(at, home), r), nil
+	}
 
+	floor := ""
 	for check := dir; ; {
 		stored := homeRelative(check, home)
 		if hasIgnoreMarker(check) {
 			v.Kind, v.At, v.Marker = VerdictIgnored, stored, true
 			return v, nil
 		}
-		var id int64
-		var name, status string
-		err = db.QueryRow(
-			"SELECT id, name, status FROM projects WHERE path = ?", stored,
-		).Scan(&id, &name, &status)
-		if err == nil {
-			return rowVerdict(v, stored, id, name, status), nil
+		r, ruled := rules[pathKey(check)]
+		if hasParentDirMarker(check) {
+			r, ruled = dirRule{Scope: ScopeSelf, ParentDir: true, Why: whyParentDir}, true
 		}
-		if !errors.Is(err, sql.ErrNoRows) {
-			return v, err
+		if ruled {
+			if check == dir {
+				return disallowed(v, stored, r), nil
+			}
+			if r.ParentDir {
+				floor = check
+				break
+			}
+		} else {
+			var id int64
+			var name, status string
+			err = db.QueryRow(
+				"SELECT id, name, status FROM projects WHERE path = ?", stored,
+			).Scan(&id, &name, &status)
+			if err == nil {
+				v = rowVerdict(v, stored, id, name, status)
+				v.Within = v.Kind == VerdictProject && check != dir
+				return withEncloses(db, v, dir, home, rules)
+			}
+			if !errors.Is(err, sql.ErrNoRows) {
+				return v, err
+			}
 		}
 		parent := filepath.Dir(check)
 		if parent == check {
@@ -103,11 +149,62 @@ func ResolveDirectory(db *sql.DB, dir string) (DirVerdict, error) {
 		check = parent
 	}
 
-	row, found, err := deepestRowForResolvedPath(db, dir)
-	if err != nil || !found {
+	row, found, err := deepestRowForResolvedPath(db, dir, floor, rules)
+	if err != nil {
 		return v, err
 	}
-	return rowVerdict(v, row.path, row.id, row.name, row.status), nil
+	if found {
+		resolved, rerr := ResolvedProjectPath(row.path)
+		if rerr != nil {
+			return v, rerr
+		}
+		v = rowVerdict(v, row.path, row.id, row.name, row.status)
+		v.Within = v.Kind == VerdictProject && resolved != dir
+	}
+	return withEncloses(db, v, dir, home, rules)
+}
+
+func disallowed(v DirVerdict, at string, r dirRule) DirVerdict {
+	v.Kind, v.At, v.Rule, v.Scope = VerdictDisallowed, at, r.Why, r.Scope
+	if r.ParentDir {
+		v.Rule = "a parent directory: " + r.Why
+	}
+	return v
+}
+
+// withEncloses fills Encloses when dir is unregistered or is its own project:
+// the cases where registering it, or keeping it, would hold another project.
+// Rows that can never resolve — ignored, or at a disallowed path — don't count.
+func withEncloses(db *sql.DB, v DirVerdict, dir, home string, rules dirRules) (DirVerdict, error) {
+	if v.Kind != VerdictNone && (v.Kind != VerdictProject || v.Within) {
+		return v, nil
+	}
+	rows, err := db.Query(
+		"SELECT path FROM projects WHERE status != ? ORDER BY path", ProjectStatusIgnored,
+	)
+	if err != nil {
+		return v, err
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var p string
+		if err = rows.Scan(&p); err != nil {
+			return v, err
+		}
+		resolved, rerr := ResolvedProjectPath(p)
+		if rerr != nil {
+			return v, rerr
+		}
+		if !strings.HasPrefix(resolved, dir+string(filepath.Separator)) {
+			continue
+		}
+		if _, ruled := rules[pathKey(resolved)]; ruled {
+			continue
+		}
+		v.Encloses = homeRelative(resolved, home)
+		break
+	}
+	return v, rows.Err()
 }
 
 func rowVerdict(v DirVerdict, at string, id int64, name, status string) DirVerdict {
@@ -118,6 +215,11 @@ func rowVerdict(v DirVerdict, at string, id int64, name, status string) DirVerdi
 		v.Kind = VerdictProject
 	}
 	return v
+}
+
+func hasParentDirMarker(dir string) bool {
+	st, err := os.Stat(filepath.Join(dir, ParentDirMarker))
+	return err == nil && !st.IsDir()
 }
 
 func hasIgnoreMarker(dir string) bool {
@@ -135,7 +237,11 @@ type projectRow struct {
 // that is dir or an ancestor of it — the nearest-enclosing answer the walk
 // gives, reached without the index. Deepest, not first, because rows nest.
 // Ties (two rows denoting one directory) go to the lower id.
-func deepestRowForResolvedPath(db *sql.DB, dir string) (projectRow, bool, error) {
+//
+// It honors the same rules as the walk: a row at a disallowed path never
+// matches, and none at or above floor — the parent directory that ended the
+// walk — does.
+func deepestRowForResolvedPath(db *sql.DB, dir, floor string, rules dirRules) (projectRow, bool, error) {
 	var best projectRow
 	rows, err := db.Query("SELECT id, name, path, status FROM projects ORDER BY id")
 	if err != nil {
@@ -154,6 +260,12 @@ func deepestRowForResolvedPath(db *sql.DB, dir string) (projectRow, bool, error)
 			return best, false, rerr
 		}
 		if resolved != dir && !strings.HasPrefix(dir, resolved+string(filepath.Separator)) {
+			continue
+		}
+		if _, ruled := rules[pathKey(resolved)]; ruled {
+			continue
+		}
+		if floor != "" && len(resolved) <= len(floor) {
 			continue
 		}
 		if len(resolved) > bestLen {

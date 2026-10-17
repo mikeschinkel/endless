@@ -249,6 +249,8 @@ def run_discover(
                         continue
                     if not reset and _is_registered(subdir):
                         continue
+                    if config.registration_refusal(subdir):
+                        continue
                     if not is_mine(subdir):
                         config.add_ignore(subdir)
                         not_mine += 1
@@ -261,6 +263,8 @@ def run_discover(
                 continue
 
             if not reset and _is_registered(child):
+                continue
+            if config.registration_refusal(child):
                 continue
 
             # Skip repos that aren't mine — auto-ignore them
@@ -290,6 +294,7 @@ def run_discover(
         tiers[tier_num] = [
             sig for sig in tiers[tier_num]
             if not config.is_ignored(sig.path)
+            and not config.registration_refusal(sig.path)
         ]
 
     total_registered = 0
