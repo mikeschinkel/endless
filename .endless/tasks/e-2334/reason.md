@@ -1,0 +1,1 @@
+Same incident (ES-1316 / go-cliutil E-2289). Its proposed fix, resuming in the directory the session ran in (the project root), was rejected by Mike on 2026-10-16: sessions in the project root break other sessions' ability to land. E-2370 instead adds an explicit --recreate that builds a fresh task worktree.
