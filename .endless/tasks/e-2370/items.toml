@@ -80,4 +80,4 @@ statement = "Does not change --review or --reopen semantics (base resolution, de
 [[item]]
 id = "P12"
 kind = "exclusion"
-statement = "Does not fix resume looking in the wrong repo for a cross-project task (that is E-2299) or add worktree move (that is E-2348)"
+statement = "Does not add worktree move (E-2348) or change how resume finds an existing worktree in another project's repo (E-2299)"
