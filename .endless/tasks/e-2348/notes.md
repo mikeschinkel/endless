@@ -1,0 +1,1 @@
+2026-10-17: the creation half (claim/spawn creating the worktree in the task's own project repo) moved to E-2370, which makes both worktree creators resolve the repo from the task. This task now covers only worktree move.
