@@ -1,0 +1,154 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 27,
+      "passed": 27,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test: monitor",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestResolveDirectory_HomeAndAboveAreDisallowed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestResolveDirectory_OutsideHomeIsAllowed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestResolveDirectory_HomeRowIsNeverInherited",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestProjectIDForPath_NeverAutoRegistersHome",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestResolveDirectory_SelfAndSubtreeOverrides",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestResolveDirectory_OverrideRemovesABuiltin",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestResolveDirectory_HomeCannotBeRemoved",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestResolveDirectory_ParentDirStopsTheWalk",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestResolveDirectory_NestedProjects",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestXDGUserDir_LocalizedAndDisabled",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestDisallowedPathsDocIsCurrent",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest: tests/test_disallowed_projects.py",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "$HOME is disallowed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the directory above $HOME is disallowed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "~/Projects is disallowed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "~/Projects is a parent directory",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a directory in ~/Projects may be a project",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a directory outside $HOME may be a project",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "~/Downloads/\u003crepo\u003e is disallowed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "~/Downloads is refused as a subtree",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the overrides skeleton is written on first need",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a row at $HOME is not inherited below it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a directory inside a project is Within it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a directory around a project Encloses it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "docs/guide/disallowed-paths.md matches the list in the code",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "endless guide disallowed-paths prints the page",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
