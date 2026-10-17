@@ -23,4 +23,10 @@
 - `tests/test_session_resume_recover.py`: one test per classification kind on bare resume; `--recreate` happy path (worktree created on a fresh `task/N`, status unchanged, notice in argv); each refusal (existing worktree, local branch, remote branch, landed); exclusivity; dry-run creates nothing; epic and declined still refused under `--recreate`.
 - `internal/resumewindowscmd/resumewindows_test.go`: `TestDecide_DroppedWorktreeGetsReview` keeps passing with `Landed: true`; new tests for not-landed (skip, suggests `--recreate`).
 
-**Task's own repo (P13).** `_recover_dropped_worktree` currently takes its root from `worktree_cmd._project_root()`, which resolves the project enclosing the shell's cwd. For the `recreate` intent and for `_missing_worktree_kind`, the root instead comes from the task's own `project_id` → `projects.path`. That keeps the worktree, the branch check and the landing check in the task's repo, even when resume runs from another project's directory. If the task's project has no registered path, the command refuses (REPORT) and creates nothing. `--review`/`--reopen` keep their current root resolution here (P11). Fixing them is E-2299, and fixing claim/spawn is E-2348.
+**Task's own repo (P13, P14).** Task worktrees are created in exactly two functions in `src/endless/worktree_cmd.py`: `create_task_worktree` (callers: claim, spawn, and a third in `task_cmd.py`) and `recreate_dropped_worktree` (resume `--review`/`--reopen`/`--recreate`). Both currently take a `project_root` that callers compute from cwd via `_project_root()`.
+- Add `task_repo_root(task_id)`: `tasks.project_id` → `projects.path`. If the project has no registered path, it refuses (REPORT) and creates nothing.
+- Both creators call it themselves, and their `project_root` parameter is removed.
+- The shared `git worktree add` + `_bootstrap_task_worktree` step becomes one lower-level helper that takes the resolved root.
+- Callers use the returned worktree path for the `/cd` line, hooks and companion files. Any caller that also needs the repo root gets it from `task_repo_root`.
+- `_missing_worktree_kind` uses the same root for its branch and landing checks.
+- The land rehearsal's temp-dir checkout is not a task worktree and is untouched.
