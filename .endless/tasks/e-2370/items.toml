@@ -21,6 +21,12 @@ statement = "--recreate refuses, creating nothing, when the task's worktree exis
 verify = "tests/test_session_resume_recover.py"
 
 [[item]]
+id = "P13"
+kind = "deliverable"
+statement = "The --recreate path and the missing-worktree classification resolve the git repo from the task's own project (its projects.path), not from the project enclosing the shell's cwd, so the worktree, the task/N branch check and the landing check all happen in the task's repo"
+verify = "tests/test_session_resume_recover.py (resume run from another project's directory)"
+
+[[item]]
 id = "P4"
 kind = "deliverable"
 statement = "--recreate is mutually exclusive with --review and --reopen"
@@ -69,9 +75,3 @@ statement = "Does not change --review or --reopen behavior, or how task claim cr
 id = "P12"
 kind = "exclusion"
 statement = "Does not fix resume looking in the wrong repo for a cross-project task (that is E-2299) or add worktree move (that is E-2348)"
-
-[[item]]
-id = "P13"
-kind = "deliverable"
-statement = "The --recreate path and the missing-worktree classification resolve the git repo from the task's own project (its projects.path), not from the project enclosing the shell's cwd, so the worktree, the task/N branch check and the landing check all happen in the task's repo"
-verify = "tests/test_session_resume_recover.py (resume run from another project's directory)"
