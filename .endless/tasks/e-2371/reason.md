@@ -1,0 +1,1 @@
+Folded into E-2369: nested-project refusal shares its cause and its resolver, which decides which directories may be projects (per ED-1550, file the cause once).
