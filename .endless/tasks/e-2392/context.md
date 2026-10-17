@@ -1,0 +1,3 @@
+(a) Refuse a task ID belonging to another project in any task text field (description, context, plan, notes, analysis), and point at the relation flags (--blocked-by, --relates-to, ...) instead. Look up the ID's project in the DB rather than matching patterns, so it stays exact now and after IDs become <prefix>-<id>. Same-project IDs stay allowed where they are today.
+
+(b) Add a rule to endless guide tasks and the AGENT banner of task add/task update: write every task for a reader who knows only that project. No user names, no app or session that drove the work; describe an upstream dependency well enough to stand alone; relate projects only through links.
