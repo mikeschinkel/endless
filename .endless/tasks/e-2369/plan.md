@@ -1,36 +1,55 @@
-# Plan: refuse $HOME as a project
+# Plan: refuse $HOME and other non-project directories as projects
 
-## Approach
+## Rules
 
-`monitor.ResolveDirectory` (internal/monitor/project_ignore.go) is the one place that answers "which project is this directory in". The hook's auto-registration and Python's register, discover and reconcile (through `endless-go project resolve`) all use it. Teach it the rule once, and every path follows.
+1. **Never a project, not editable.** $HOME itself, and the per-user roots above it (/Users on macOS, /home on Linux, C:\Users on Windows, and `/`). Directories outside $HOME stay allowed (/work/my-project in Docker, VMs, CI/CD).
+2. **Disallowed, children allowed.** Well-known per-OS directories:
+   - macOS: ~/Documents, ~/Desktop, ~/Downloads, ~/Library, ~/Movies, ~/Music, ~/Pictures, ~/Public
+   - Linux: ~/Documents, ~/Desktop, ~/Downloads, ~/Music, ~/Pictures, ~/Videos, ~/Public, ~/.config, ~/.local, ~/.cache
+   - Windows: ~/Documents, ~/Desktop, ~/Downloads, ~/AppData, ~/Music, ~/Pictures, ~/Videos
+   The directory itself can never be a project. ~/Documents/foo can.
+3. **Parent directory.** Not a project itself, AND the walk-up stops there. A directory below it never inherits a project registered above it. ~/Projects ships as a default parent directory. A directory becomes a parent directory in either of two ways:
+   - an entry in the JSON overrides with `"parent_dir": true`
+   - an on-disk `.endless-parent-dir` marker file in the directory, which travels with it and needs no config edit. At the same rung, the marker wins, as `.endless-ignore` does.
 
-Rule: $HOME and every ancestor of it (`/Users`, `/`) are never a project. $HOME comes from `os.UserHomeDir`, resolved the way `resolvedHomeDir` already does. This works the same on any machine and for any user. It is not tied to this machine's layout.
+## Where the list lives
 
-1. **ResolveDirectory**
-   - For `dir` == $HOME or an ancestor of it, return a new verdict, `VerdictHome`. Callers treat it like ignored: nothing to record, never auto-register.
-   - For `dir` below $HOME, the walk-up stops before $HOME. A row at $HOME is never matched, so a repo under ~/Projects with no config of its own resolves to None. It no longer inherits the home row.
-   - `deepestRowForResolvedPath` skips any row whose resolved path is $HOME or an ancestor.
-   - Result: the existing home row stops resolving as soon as this lands, with no data change.
-2. **ProjectIDForPath and the hook.** `VerdictHome` maps to `ErrIgnoredDirectory`, or a sibling error that the hook treats the same way. A Claude session started in ~ records nothing and registers nothing.
-3. **Python register, init and discover.** An explicit `project register ~` (and `init`, and discover offering ~) is refused with a clear message: "$HOME cannot be an Endless project; register a directory under it". `project ignore ~` is unnecessary but harmless.
-4. **Python `project_name_for_cwd`.** Skip the on-disk `<cwd>/.endless/config.json` check when cwd is $HOME, so a stray `~/.endless/config.json` cannot make home a project.
-5. **cwd-defaulted verbs** (`project status`, `project monitor`, `task add`, and so on). Run from ~, they now fail with "not in a registered project, name one". Check that the message says so, rather than a generic error. No new NAME requirement: defaulting to the enclosing project is intended, and `--tmux` already requires NAME.
-6. **The existing home row** (`mikeschinkel`, path `~`). After step 1 it is inert. `project list` should flag it or omit it. The user removes it with `endless project unregister`, which is a user command, not an agent one. Do not hand-edit the database.
-7. **Stray ~/.endless/db-ledger.** It holds two events (E-1063 phase, E-2336 claim) stamped with project "mikeschinkel", written from a cwd under ~. Leave the file untouched: ledgers are never hand-edited. Stamping events by cwd is E-2216's subject. Add a note on E-2216 that this is evidence, and ask the user whether those two events need replaying into endless's ledger.
+- **Built-in defaults** live in the Go binary, per OS.
+- **User overrides** live in `~/.config/endless/disallowed-paths.json` (the machine config dir, `monitor.ConfigDir`). The file holds only additions, and removals of built-in entries. It is loaded on demand and created on first need with an empty, commented skeleton. New defaults in later versions reach every user automatically, and the user's edits still win. Rule 1 cannot be removed by an override.
+- **Documented full list.** It is generated from the built-in defaults into `docs/guide/disallowed-paths.md`, readable with `endless guide disallowed-paths`. A `just` recipe regenerates it. A check fails `just test` when the doc drifts from the code, following the lifecycle-check pattern.
+
+## Enforcement point
+
+`monitor.ResolveDirectory` (internal/monitor/project_ignore.go) is the one resolver used by hook auto-registration and by Python's register, discover and reconcile (through `endless-go project resolve`).
+
+- For a rule-1 or rule-2 directory, a new verdict, `VerdictDisallowed`, carries which rule matched. Callers treat it like ignored: never auto-register, record nothing.
+- The walk-up never matches a row at a rule-1 or rule-2 rung, and stops at a parent directory. So the existing home row goes inert at once, and a repo under ~/Projects with no config resolves to none.
+- `deepestRowForResolvedPath` applies the same skips and the same stop.
+- Python `register`, `init` and `discover` refuse a disallowed directory, naming the rule and the overrides file. Python `project_name_for_cwd` skips the on-disk `.endless/config.json` check at a disallowed directory. No new SQLite in Python: the list is loaded in Go and reached through `endless-go project resolve`.
+
+## The existing home row
+
+Inert after this lands. `project list` marks a row whose path is disallowed. The user removes it (`endless project unregister mikeschinkel`).
+
+## Out of scope (separate tasks)
+
+- Refusing nested projects.
+- A release valve for nested projects (git submodules), as a maybe.
 
 ## Tests
 
-- Go: `ResolveDirectory` table tests with a temp $HOME. Cover:
-  - $HOME → home verdict
-  - an ancestor of $HOME → home verdict
-  - $HOME/Projects/x with a row at $HOME → none
-  - $HOME/Projects/x with its own row → project
-  - an ignored row and a marker still win below $HOME
-  - a legacy-spelling scan skips the home row
-- Go: hook payload with cwd = $HOME → no project row is created.
-- Python: `project register` on $HOME refuses with the message; discover never offers $HOME.
-- Manual: from ~, `endless project monitor` refuses with the "name a project" message, and `endless project monitor endless` works.
+- Go table tests with a temp $HOME and temp config dir:
+  - rule 1: $HOME, an ancestor of $HOME → disallowed
+  - a directory outside $HOME → allowed
+  - rule 2: ~/Documents → disallowed; ~/Documents/foo → allowed
+  - a JSON override adds a directory; a JSON override removes a built-in entry; an override that tries to remove $HOME is ignored
+  - a parent directory via JSON and via marker: walk stops, so a row above it is not inherited
+  - an ignored row and `.endless-ignore` still win below
+  - the legacy-spelling scan applies the same rules
+- Go: hook with cwd = $HOME → no project created.
+- Python: `project register` on $HOME and on ~/Documents refuses with the message; discover never offers them.
+- Doc drift check: the generated guide page matches the built-in list.
 
 ## Verify
 
-`just test` and `just test-go` pass. From a fresh shell in ~, `endless project status` refuses cleanly. `endless project list` shows the home row flagged or hidden.
+`just test` and `just test-go` pass. From ~, `endless project status` refuses cleanly. `endless guide disallowed-paths` prints the list.
