@@ -23,8 +23,8 @@ verify = "tests/test_session_resume_recover.py"
 [[item]]
 id = "P13"
 kind = "deliverable"
-statement = "The --recreate path and the missing-worktree classification resolve the git repo from the task's own project (its projects.path), not from the project enclosing the shell's cwd, so the worktree, the task/N branch check and the landing check all happen in the task's repo"
-verify = "tests/test_session_resume_recover.py (resume run from another project's directory)"
+statement = "Every task worktree (task claim, task spawn, and session resume --review/--reopen/--recreate) is created in the task's own project repo, resolved from the task's project_id inside the worktree-creation functions, whichever directory the command runs from; the missing-worktree classification checks branches and landings in that same repo"
+verify = "tests (claim, spawn and resume each run from another project's directory)"
 
 [[item]]
 id = "P4"
