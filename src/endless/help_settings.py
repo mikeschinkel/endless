@@ -20,7 +20,7 @@ case where a reader would otherwise edit the wrong file.
 Reads `config` directly rather than through `task_cmd._report_gate_on`: that
 helper answers one question ("is the channel live?") for emitters that need a
 bool, while this needs both switches AND the reason behind each, including the
-distinction between "explicitly true" and "defaulted true" that the bool erases.
+distinction between an explicit value and a defaulted one that the bool erases.
 """
 
 from __future__ import annotations
@@ -48,8 +48,8 @@ def _render_minimizer(cwd: Path | None = None) -> str:
         return "\n".join([
             "Current setting:",
             f"{_INDENT}Not inside a registered project, so there is nothing to",
-            f"{_INDENT}resolve. Both switches default ON; a project turns either",
-            f"{_INDENT}off in its own .endless/config.json:",
+            f"{_INDENT}resolve. enabled defaults OFF and optimizer defaults ON;",
+            f"{_INDENT}a project sets either in its own .endless/config.json:",
             "",
             f'{_INDENT}    {{"minimizer": {{"enabled": true, "optimizer": false}}}}',
         ])
@@ -70,8 +70,9 @@ def _render_minimizer(cwd: Path | None = None) -> str:
         f"   {_OPTIMIZER_MEANING[switches['optimizer']]}",
         "",
         f"{_INDENT}{source}",
-        f"{_INDENT}Both default on. `endless minimizer status` shows what the",
-        f"{_INDENT}loop currently believes; this is only whether it may run.",
+        f"{_INDENT}enabled defaults off, optimizer on. `endless minimizer status`",
+        f"{_INDENT}shows what the loop currently believes; this is only whether",
+        f"{_INDENT}it may run.",
     ]
     return "\n".join(lines)
 

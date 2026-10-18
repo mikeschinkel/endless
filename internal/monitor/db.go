@@ -439,24 +439,22 @@ type MinimizerConfig struct {
 // MinimizerEnabled reports whether the minimizer's Stop gate is live for the
 // project rooted at root (E-1953, reshaped by E-1975). Reads "minimizer" from
 // <root>/.endless/config.json — falling back to the old scalar "report_gate" —
-// and DEFAULTS TO TRUE: absent file, absent key, unreadable, or malformed all
-// mean enabled.
+// and DEFAULTS TO FALSE: absent file, absent key, unreadable, or malformed all
+// mean disabled (E-2373).
 //
-// Default-on is the product decision, not a fallback: the pain of an ungated
-// session is what the gate exists to remove, so shipping it inert would ship
-// nothing. Only an explicit false turns it off, which is why the pointers in
-// readMinimizer are required — with plain bools, "absent" and "false" collapse
-// into the same zero value and every project would ship ungated while appearing
-// to be configured.
+// Default-off because the report channel is deprecated: a project that never
+// heard of the setting must not inherit the report instructions and a Stop hook
+// that holds every reply. Only an explicit true turns it on. The pointers in
+// readMinimizer are still required — with plain bools, "absent" and "false"
+// collapse into the same zero value, and an explicit optimizer false could not
+// be told apart from the optimizer's default of true.
 //
 // The switch lives in .endless/config.json and NOT in .claude/settings.json,
 // and that is a security property rather than a filing preference: a gate an
 // agent can switch off is not a gate, and agents edit .claude/settings.json in
 // the course of normal work. Nor is it a code constant — it has to be settable
 // per project, so that Endless's own checkout could opt out while the minimizer
-// prompt was being tuned by hand without every other project shipping ungated
-// too. (That exemption lapsed with E-1975: tuning is automated now, so the
-// checkout that hosts the loop is the one place it must run.)
+// prompt was being tuned by hand. Endless's own config sets enabled to false.
 func MinimizerEnabled(root string) bool {
 	cfg, _ := readMinimizer(root)
 	return cfg.Enabled
@@ -470,6 +468,7 @@ func MinimizerOptimizerEnabled(root string) bool {
 }
 
 // readMinimizer reads the minimizer switches from <root>/.endless/config.json.
+// Undeclared switches take their defaults: enabled off, optimizer on.
 // declared is false when the file is absent, unreadable, malformed, or says
 // nothing about the minimizer — which is what lets a caller distinguish "this
 // layer says nothing" from "this layer says false" and fall through to another
@@ -479,6 +478,7 @@ func MinimizerOptimizerEnabled(root string) bool {
 //
 //	"minimizer": {"enabled": true, "optimizer": false}   the current shape
 //	"minimizer": false                                   shorthand for both off
+//	"minimizer": true                                    shorthand for both on
 //	"report_gate": false                                 E-1953's name
 //
 // The old scalar is still read because the rename must not silently re-enable a
@@ -488,7 +488,7 @@ func MinimizerOptimizerEnabled(root string) bool {
 // optimizer default, which is the loop's own design (ED-1556: the user is a
 // sensor, not a gate).
 func readMinimizer(root string) (cfg MinimizerConfig, declared bool) {
-	cfg = MinimizerConfig{Enabled: true, Optimizer: true}
+	cfg = MinimizerConfig{Enabled: false, Optimizer: true}
 
 	data, err := os.ReadFile(filepath.Join(root, ".endless", "config.json"))
 	if err != nil {

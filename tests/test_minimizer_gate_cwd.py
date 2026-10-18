@@ -116,8 +116,8 @@ def test_absent_worktree_config_inherits_too(project):
     ({"minimizer": True}, True, True),
     ({"report_gate": False}, False, True),              # E-1953's name
     ({"report_gate": True}, True, True),
-    ({"name": "proj"}, True, True),                     # silent -> both default
-    ({}, True, True),
+    ({"name": "proj"}, False, True),                    # silent -> defaults (E-2373)
+    ({}, False, True),
 ])
 def test_the_accepted_spellings(project, payload, enabled, optimizer):
     root, worktree = project
@@ -147,9 +147,29 @@ def test_malformed_config_is_silence_not_false(project):
     assert config.minimizer_config_for_cwd(worktree)["enabled"] is False
 
 
-def test_outside_any_project_defaults_on(tmp_path):
-    """Ignorance is not an opt-out — the channel ships on."""
-    assert config.minimizer_config_for_cwd(tmp_path)["enabled"] is True
+def test_outside_any_project_defaults_off(tmp_path):
+    """The deprecated channel ships off (E-2373); the optimizer default stays on."""
+    got = config.minimizer_config_for_cwd(tmp_path)
+    assert (got["enabled"], got["optimizer"]) == (False, True)
+
+
+@pytest.mark.parametrize("payload", [
+    None,                                   # no config file
+    {"name": "proj"},                       # no minimizer key
+])
+def test_project_without_the_key_defaults_off(project, payload):
+    root, _ = project
+    write_config(root, payload)
+    got = config.project_minimizer_config(root)
+    assert (got["enabled"], got["optimizer"]) == (False, True)
+
+
+def test_malformed_project_config_defaults_off(project):
+    root, _ = project
+    (root / ".endless" / "config.json").write_text('{"minimizer": fal')
+    got, declared = config.minimizer_config_declared(root)
+    assert not declared
+    assert (got["enabled"], got["optimizer"]) == (False, True)
 
 
 # --------------------------------------------------------------------------- #
@@ -213,5 +233,7 @@ def test_help_block_says_where_a_default_came_from(project, monkeypatch):
     root, _ = project
     monkeypatch.chdir(root)
     block = help_settings.render(help_settings.MINIMIZER, cwd=root)
-    assert "minimizer.enabled    true" in block
+    assert "minimizer.enabled    false" in block
+    assert "minimizer.optimizer  true" in block
     assert "at their default" in block
+    assert "enabled defaults off, optimizer on" in block

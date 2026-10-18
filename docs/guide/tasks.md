@@ -834,8 +834,8 @@ directives are `$A` / `$B` (pick between paired options) and `$MORE` / `$LESS`
 (how often to see pairs).
 
 It is **not a mode switch**. The next turn returns to the default.
-{{else}}**This project has the report channel off** — `"report_gate": false` in
-`.endless/config.json`. There is no `endless task report` step here and no Stop
+{{else}}**This project has the report channel off** — the default unless
+`.endless/config.json` sets `{"minimizer": {"enabled": true}}`. There is no `endless task report` step here and no Stop
 hook holding your turn against one. Write your reply and send it.
 
 The command still runs if you invoke it — a gate-off project is opting out of
@@ -846,9 +846,8 @@ What your user is owed does not change. A command they have to RUN, a table, a
 fenced code block, and a direct answer to a direct question all have to reach
 them, whatever else you leave out.
 
-Turning the channel on is one key: drop `"report_gate": false` from
-`.endless/config.json`, or set it to `true`. It defaults **on**, and it
-deliberately does not live in `.claude/settings.json` — a gate an agent can
+Turning the channel on is one key: set `{"minimizer": {"enabled": true}}` in
+`.endless/config.json`. It defaults **off**, and the switch deliberately does not live in `.claude/settings.json` — a gate an agent can
 switch off in the course of normal work is not a gate.
 
 The channel also runs only under an agent harness Endless **supports** — today,

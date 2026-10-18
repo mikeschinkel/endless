@@ -17,28 +17,27 @@ func writeConfig(t *testing.T, root, body string) {
 	}
 }
 
-// TestMinimizerEnabled_DefaultsOn pins the product decision (E-1953 answer 6):
-// the gate ships enabled, and only an explicit `false` turns it off.
+// TestMinimizerEnabled_DefaultsOff pins E-2373: the report channel is
+// deprecated, so it ships disabled and only an explicit `true` turns it on.
 //
-// The absent-key case is the one that matters. With a plain `bool` field,
-// "absent" and "false" would collapse into the same zero value and every project
-// on earth would ship ungated while appearing to be configured — which is why
-// the fields are pointers.
-func TestMinimizerEnabled_DefaultsOn(t *testing.T) {
+// The absent-key case is the one that matters: a project that never heard of
+// the setting must not inherit the report instructions and the Stop-hook gate.
+func TestMinimizerEnabled_DefaultsOff(t *testing.T) {
 	cases := []struct {
 		name string
 		body string // "" = no config file at all
 		want bool
 	}{
-		{"no config file", "", true},
-		{"config without the key", `{"name":"proj"}`, true},
+		{"no config file", "", false},
+		{"config without the key", `{"name":"proj"}`, false},
 		{"explicitly enabled", `{"minimizer": {"enabled": true}}`, true},
 		{"explicitly disabled", `{"minimizer": {"enabled": false}}`, false},
-		{"object naming only the optimizer", `{"minimizer": {"optimizer": false}}`, true},
+		{"object naming only the optimizer", `{"minimizer": {"optimizer": false}}`, false},
 		{"bare false is shorthand for both off", `{"minimizer": false}`, false},
-		// Malformed must not silently disable the gate: a typo in an unrelated
-		// field would otherwise switch off enforcement everywhere with no signal.
-		{"malformed json", `{"minimizer": fal`, true},
+		{"bare true is shorthand for both on", `{"minimizer": true}`, true},
+		{"legacy report_gate true", `{"report_gate": true}`, true},
+		// Malformed falls to the default, which is off.
+		{"malformed json", `{"minimizer": fal`, false},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -48,6 +47,31 @@ func TestMinimizerEnabled_DefaultsOn(t *testing.T) {
 			}
 			if got := MinimizerEnabled(root); got != c.want {
 				t.Errorf("MinimizerEnabled = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// TestMinimizerOptimizer_DefaultsOn pins the half E-2373 left alone: flipping
+// enabled's default did not flip the optimizer's.
+func TestMinimizerOptimizer_DefaultsOn(t *testing.T) {
+	cases := []struct {
+		name string
+		body string // "" = no config file at all
+	}{
+		{"no config file", ""},
+		{"config without the key", `{"name":"proj"}`},
+		{"malformed json", `{"minimizer": fal`},
+		{"object naming only enabled", `{"minimizer": {"enabled": false}}`},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			root := t.TempDir()
+			if c.body != "" {
+				writeConfig(t, root, c.body)
+			}
+			if !MinimizerOptimizerEnabled(root) {
+				t.Error("MinimizerOptimizerEnabled = false, want true")
 			}
 		})
 	}

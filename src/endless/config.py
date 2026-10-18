@@ -375,11 +375,12 @@ def project_minimizer_config(project_path: Path) -> dict[str, bool]:
 
         "minimizer": {"enabled": true, "optimizer": false}   the current shape
         "minimizer": false                                   both off
+        "minimizer": true                                    both on
         "report_gate": false                                 E-1953's name
 
-    Absent file, absent key, or unreadable all mean BOTH ON. Only an explicit
-    false turns either off, so a project that has never heard of the setting
-    still gets the channel and the loop behind it.
+    Absent file, absent key, or unreadable mean enabled OFF and optimizer ON
+    (E-2373). The report channel is deprecated, so a project that has never
+    heard of the setting gets no channel; only an explicit true turns it on.
 
     The old scalar is still read because the rename must not silently re-enable
     a gate a project had switched off — a config change that turns enforcement
@@ -391,7 +392,7 @@ def project_minimizer_config(project_path: Path) -> dict[str, bool]:
     enforces and nothing reads — pure overhead, and worse, an instruction the
     project has explicitly declined.
     """
-    default = {"enabled": True, "optimizer": True}
+    default = {"enabled": False, "optimizer": True}
     cfg = project_config_read(project_path)
     if cfg is None:
         return default
@@ -420,7 +421,7 @@ def minimizer_config_declared(dir_path: Path) -> tuple[dict[str, bool], bool]:
     is what lets a caller tell "this layer says nothing" apart from "this layer
     says false" and fall through to the next one.
     """
-    default = {"enabled": True, "optimizer": True}
+    default = {"enabled": False, "optimizer": True}
     try:
         cfg = project_config_read(dir_path)
     except (OSError, json.JSONDecodeError):
@@ -476,7 +477,7 @@ def minimizer_config_for_cwd(
             break
 
     if project_root is None:
-        return {"enabled": True, "optimizer": True}
+        return {"enabled": False, "optimizer": True}
     return minimizer_config_declared(project_root)[0]
 
 

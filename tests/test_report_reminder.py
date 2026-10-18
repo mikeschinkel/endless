@@ -44,6 +44,21 @@ def _agent_gate_open(monkeypatch):
     monkeypatch.setattr(agent_help, "_AGENT_VIEW", False)
 
 
+@pytest.fixture
+def channel_on(seeded_project_at_cwd):
+    """The cwd project with the report channel switched on.
+
+    The channel defaults off (E-2373), so the transition and agent-gate tests
+    below opt in explicitly — otherwise every silence would be the config's
+    doing and every "does not fire" would pass for the wrong reason.
+    """
+    config.project_config_write(
+        seeded_project_at_cwd,
+        {"name": "test", "status": "active", "minimizer": {"enabled": True}},
+    )
+    return seeded_project_at_cwd
+
+
 def _add_task(title: str, status: str = "underway", type_id: int = 1) -> int:
     # type_id per task_types seed (internal/schema/schema.sql):
     # 1=task, 2=bug, 3=research, 4=epic, 5=brainstorm.
@@ -106,7 +121,7 @@ def test_is_report_wind_down(old, new, outcome, expected):
 # ─── the three firing paths ───────────────────────────────────────────────────
 
 
-def test_update_underway_to_unverified_fires(seeded_project_at_cwd, capsys):
+def test_update_underway_to_unverified_fires(channel_on, capsys):
     tid = _add_task("Fix the login bug", status="underway")
     task_cmd.update_plan(tid, status="unverified")
     out = capsys.readouterr().out
@@ -114,19 +129,19 @@ def test_update_underway_to_unverified_fires(seeded_project_at_cwd, capsys):
     assert f"endless task report E-{tid}" in out
 
 
-def test_assume_item_fires(seeded_project_at_cwd, capsys):
+def test_assume_item_fires(channel_on, capsys):
     tid = _add_task("Fix the parser", status="underway")
     task_cmd.assume_item(tid, outcome="believed correct")
     assert _fired(capsys)
 
 
-def test_update_to_assumed_fires(seeded_project_at_cwd, capsys):
+def test_update_to_assumed_fires(channel_on, capsys):
     tid = _add_task("Fix the cache", status="underway")
     task_cmd.update_plan(tid, status="assumed", outcome="believed correct")
     assert _fired(capsys)
 
 
-def test_mark_completed_item_fires(seeded_project_at_cwd, capsys):
+def test_mark_completed_item_fires(channel_on, capsys):
     # E-1658: `completed` is a findings-type terminal; use research (todo/bugfix
     # no longer reach completed). `task complete` bypasses the Go table.
     tid = _add_task("Audit the auth module", status="underway", type_id=3)
@@ -134,7 +149,7 @@ def test_mark_completed_item_fires(seeded_project_at_cwd, capsys):
     assert _fired(capsys)
 
 
-def test_update_to_completed_fires(seeded_project_at_cwd, capsys):
+def test_update_to_completed_fires(channel_on, capsys):
     # Research reaches completed via the review track; seed at unreviewed so
     # update_plan takes the legal unreviewed→completed edge.
     tid = _add_task("Review the middleware", status="unreviewed", type_id=3)
@@ -145,19 +160,19 @@ def test_update_to_completed_fires(seeded_project_at_cwd, capsys):
 # ─── the excluded transitions do NOT fire ─────────────────────────────────────
 
 
-def test_claim_to_underway_does_not_fire(seeded_project_at_cwd, capsys):
+def test_claim_to_underway_does_not_fire(channel_on, capsys):
     tid = _add_task("Fix the router", status="ready")
     task_cmd.update_plan(tid, status="underway")
     assert not _fired(capsys)
 
 
-def test_confirm_does_not_fire(seeded_project_at_cwd, capsys):
+def test_confirm_does_not_fire(channel_on, capsys):
     tid = _add_task("Fix the timeout", status="unverified")
     task_cmd.complete_item(tid)
     assert not _fired(capsys)
 
 
-def test_submit_does_not_fire(seeded_project_at_cwd, capsys):
+def test_submit_does_not_fire(channel_on, capsys):
     tid = _add_task("Fix the leak", status="unplanned")
     task_cmd.update_plan(tid, plan="# plan\n", keep_status=True)
     capsys.readouterr()
@@ -165,13 +180,13 @@ def test_submit_does_not_fire(seeded_project_at_cwd, capsys):
     assert not _fired(capsys)
 
 
-def test_decline_does_not_fire(seeded_project_at_cwd, capsys):
+def test_decline_does_not_fire(channel_on, capsys):
     tid = _add_task("Fix the flake", status="underway")
     task_cmd.decline_item(tid, reason="not doing it")
     assert not _fired(capsys)
 
 
-def test_non_status_update_does_not_fire(seeded_project_at_cwd, capsys):
+def test_non_status_update_does_not_fire(channel_on, capsys):
     tid = _add_task("Fix the icon", status="underway")
     task_cmd.update_plan(tid, description="new description")
     assert not _fired(capsys)
@@ -184,7 +199,7 @@ def test_non_status_update_does_not_fire(seeded_project_at_cwd, capsys):
 # --agent-view flag to preview what an agent sees.
 
 
-def test_agent_session_fires(seeded_project_at_cwd, capsys, monkeypatch):
+def test_agent_session_fires(channel_on, capsys, monkeypatch):
     # The real gate, from the real harness signal — conftest strips it, so this
     # line is what makes the session an agent's (E-2097 replaced the patched
     # `task_cmd._running_under_agent` with `agent_help.agent_facing`, which
@@ -196,7 +211,7 @@ def test_agent_session_fires(seeded_project_at_cwd, capsys, monkeypatch):
     assert _fired(capsys)
 
 
-def test_human_invocation_stays_silent(seeded_project_at_cwd, capsys, monkeypatch):
+def test_human_invocation_stays_silent(channel_on, capsys, monkeypatch):
     monkeypatch.delenv("CLAUDE_CODE_ENTRYPOINT", raising=False)
     monkeypatch.setattr(agent_help, "_AGENT_VIEW", False)
     tid = _add_task("Fix the human path", status="underway")
@@ -204,7 +219,7 @@ def test_human_invocation_stays_silent(seeded_project_at_cwd, capsys, monkeypatc
     assert not _fired(capsys)
 
 
-def test_agent_view_flag_lets_human_preview(seeded_project_at_cwd, capsys, monkeypatch):
+def test_agent_view_flag_lets_human_preview(channel_on, capsys, monkeypatch):
     # Not an agent session, but the human passed --agent-view (sets _AGENT_VIEW).
     monkeypatch.delenv("CLAUDE_CODE_ENTRYPOINT", raising=False)
     monkeypatch.setattr(agent_help, "_AGENT_VIEW", True)
@@ -251,20 +266,19 @@ def test_report_gate_on_still_fires(seeded_project_at_cwd, capsys):
     assert _fired(capsys)
 
 
-def test_report_gate_unset_still_fires(seeded_project_at_cwd, capsys):
-    # A project that never heard of the setting keeps the channel: only an
-    # explicit `false` turns it off (config.project_report_gate's default).
+def test_report_gate_unset_stays_silent(seeded_project_at_cwd, capsys):
+    # A project that never heard of the setting gets no channel: the deprecated
+    # report channel defaults off, and only an explicit true turns it on (E-2373).
     _write_gate(seeded_project_at_cwd, None)
     _wind_down("Fix the gate-unset path")
-    assert _fired(capsys)
+    assert not _fired(capsys)
 
 
-def test_unresolvable_project_root_fails_open(seeded_project_at_cwd, capsys, monkeypatch):
-    # Ignorance is not an opt-out. Dropping the nudge because a path lookup
-    # failed would leave sessions ungoverned in a project that wanted the gate.
+def test_unresolvable_project_root_uses_the_default(seeded_project_at_cwd, capsys, monkeypatch):
+    # With no project root to read, the default applies — and the default is off.
     monkeypatch.setattr(config, "enclosing_project_root", lambda cwd=None: None)
     _wind_down("Fix the no-root path")
-    assert _fired(capsys)
+    assert not _fired(capsys)
 
 
 def test_gate_is_read_from_the_shared_helper(seeded_project_at_cwd, capsys, monkeypatch):

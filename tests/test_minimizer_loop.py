@@ -648,9 +648,9 @@ def test_approval_is_not_a_complaint(monkeypatch):
 # --- the config switches -----------------------------------------------------
 
 @pytest.mark.parametrize("body,enabled,optimizer", [
-    ({}, True, True),
+    ({}, False, True),                                  # enabled defaults off (E-2373)
     ({"minimizer": {"enabled": False}}, False, True),
-    ({"minimizer": {"optimizer": False}}, True, False),
+    ({"minimizer": {"optimizer": False}}, False, False),
     ({"minimizer": False}, False, False),
     ({"report_gate": False}, False, True),
     ({"report_gate": False, "minimizer": {"enabled": True}}, True, True),
