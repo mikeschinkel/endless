@@ -354,3 +354,56 @@ def test_backfill_reports_two_checkouts_registered_before_the_rule(
     assert _row("alpha")["identity"] == root_commit(first)
     assert outcomes["alpha-clone"].startswith("skipped: another checkout of 'alpha'")
     assert _row("alpha-clone")["identity"] is None
+
+
+# --- moved and unregistered checkouts ----------------------------------------
+
+
+def test_a_checkout_whose_original_is_gone_takes_the_project_over(
+    isolated_env,
+):
+    """A moved checkout is the same project: register adopts its row, tasks
+    and all, instead of refusing or registering a second project."""
+    import shutil
+
+    root = isolated_env["projects_root"]
+    first = init_git_repo(root / "alpha")
+    register_project(first, infer=True)
+    _commit_config(first)
+    clone = root / "alpha-moved"
+    _git(root, "clone", "-q", str(first), str(clone))
+    original_id = db.query("SELECT id FROM projects WHERE name = 'alpha'")[0]["id"]
+    shutil.rmtree(first)
+
+    register_project(clone, infer=True)
+
+    rows = db.query("SELECT id, name, path, slug FROM projects")
+    assert len(rows) == 1
+    assert rows[0]["id"] == original_id
+    assert rows[0]["name"] == "alpha"
+    assert rows[0]["slug"] == "alpha"
+    assert Path(rows[0]["path"]).expanduser() == clone.resolve()
+
+
+def test_a_clone_of_an_unregistered_project_is_refused_accurately(
+    isolated_env,
+):
+    """An unregistered project keeps its row and tasks (E-2251), so a clone of
+    it is still a second checkout, and the refusal says it was unregistered."""
+    from endless.unregister import unregister_project
+
+    root = isolated_env["projects_root"]
+    first = init_git_repo(root / "alpha")
+    register_project(first, infer=True)
+    _commit_config(first)
+    clone = root / "alpha-clone"
+    _git(root, "clone", "-q", str(first), str(clone))
+    unregister_project("alpha")
+
+    with pytest.raises(Refusal) as e:
+        register_project(clone, name="alpha-two", infer=True)
+    assert "unregistered" in str(e.value).lower()
+    assert str(first) in str(e.value)
+
+    register_project(first, infer=True)  # the way back still works
+    assert _row("alpha")["path"]

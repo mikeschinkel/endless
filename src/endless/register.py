@@ -132,11 +132,30 @@ def register_project(
     # registered somewhere else, so it is settled before anything is prompted
     # for or written (E-2217).
     identity = _identity_or_refuse(project_path)
-    _refuse_duplicate_identity(
-        identity, project_path, existing[0]["id"] if is_update else None,
-    )
+    moved_from = None
+    holder = _identity_holder(identity, existing[0]["id"] if is_update else None)
+    if holder is not None:
+        if is_update or resolved(holder["path"]).exists():
+            _refuse_duplicate_identity(holder, project_path)
+        # The checkout that holds this identity is gone, so this one is where
+        # the project lives now: adopt its row, tasks and all, rather than
+        # registering a second project or refusing a move.
+        moved_from = resolved(holder["path"])
+        existing = db.query(
+            "SELECT id, name, label, description, language, status "
+            "FROM projects WHERE id = ?",
+            (holder["id"],),
+        )
+        is_update = True
 
-    if is_update:
+    if moved_from is not None:
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" {click.style(existing[0]['name'], bold=True)} moved from "
+            + click.style(str(moved_from), dim=True)
+            + " — updating its path"
+        )
+    elif is_update:
         row = existing[0]
         click.echo(
             click.style("•", fg="cyan")
@@ -272,10 +291,10 @@ def register_project(
         db.execute(
             "UPDATE projects SET name=?, label=?, group_name=?, "
             "description=?, status=?, language=?, updated_at=?, "
-            "identity=?, slug=COALESCE(slug, ?) "
-            "WHERE path=?",
+            "identity=?, slug=COALESCE(slug, ?), path=? "
+            "WHERE id=?",
             (name, label, group_name, description, status,
-             language, now, identity, name, stored_path),
+             language, now, identity, name, stored_path, existing[0]["id"]),
         )
         click.echo(
             click.style("•", fg="cyan")
@@ -353,42 +372,59 @@ def _identity_or_refuse(project_path: Path) -> str:
         ) from e
 
 
-def _refuse_duplicate_identity(
-    identity: str, project_path: Path, own_id: int | None,
-) -> None:
-    """Refuse a checkout whose identity another registered project holds.
+def _identity_holder(identity: str, own_id: int | None):
+    """The other row holding `identity`, or None.
+
+    Every row counts, an unregistered (ignored) one included: E-2251 keeps an
+    unregistered project's row, with its tasks, so it is still that project.
+    """
+    rows = db.query(
+        "SELECT id, name, path, status FROM projects WHERE identity = ?",
+        (identity,),
+    )
+    return next((r for r in rows if r["id"] != own_id), None)
+
+
+def _refuse_duplicate_identity(holder, project_path: Path) -> None:
+    """Refuse a checkout whose identity another project's existing checkout holds.
 
     One registered checkout per project per machine (E-2217). A second clone
     and a fork are indistinguishable here, since both carry the upstream's root
     commit, so the message names both: parallel work belongs in a worktree of
-    the registered checkout, and forks are not yet supported.
+    the registered checkout, and forks are not yet supported. A holder that was
+    unregistered is still that project, so the way back is to register its
+    checkout again, or to move it away so this one takes the project over.
     """
-    rows = db.query(
-        "SELECT id, name, path FROM projects WHERE identity = ?", (identity,),
-    )
-    other = next((r for r in rows if r["id"] != own_id), None)
-    if other is None:
-        return
-    other_path = resolved(other["path"])
-    moved = (
-        f" That path no longer exists: if the checkout moved, unregister the "
-        f"old entry (endless project unregister {other['name']}) and retry."
-        if not other_path.exists() else ""
-    )
+    other_path = resolved(holder["path"])
+    name = holder["name"]
+    if holder["status"] == config.IGNORED_STATUS:
+        raise agent_help.report(
+            f"{project_path} is a checkout of '{name}', which was unregistered "
+            f"at {other_path} and still holds that project's tasks. Nothing "
+            "was registered.",
+            f"whether to register {other_path} again, or retire it so this "
+            "checkout takes the project over",
+            text=(f"Unregistered project: '{name}' at {other_path}\n"
+                  f"{project_path} is another checkout (or a fork) of it. "
+                  f"Register {other_path} again to bring it back, or move or "
+                  "delete that checkout and register this one: a project "
+                  "whose checkout is gone moves to the new one, tasks and "
+                  "all."),
+        )
     raise agent_help.report(
-        f"{project_path} is a checkout of '{other['name']}', which is already "
+        f"{project_path} is a checkout of '{name}', which is already "
         f"registered at {other_path}. Endless registers one checkout per "
         "project per machine; for parallel work use a worktree of the "
         "registered checkout (endless task claim creates one). Forks are not "
-        f"yet supported. Nothing was registered.{moved}",
-        "whether to work in the registered checkout instead, or unregister it "
-        "and register this one",
-        text=(f"Already registered: '{other['name']}' at {other_path}\n"
+        "yet supported. Nothing was registered.",
+        "whether to work in the registered checkout instead, or retire it so "
+        "this checkout takes the project over",
+        text=(f"Already registered: '{name}' at {other_path}\n"
               f"{project_path} is another checkout (or a fork) of the same "
               "project. Endless registers one checkout per project per "
               "machine: for parallel work, use a worktree of the registered "
               "checkout (endless task claim creates one). Forks are not yet "
-              f"supported.{moved}"),
+              "supported."),
     )
 
 
@@ -401,26 +437,30 @@ def _refuse_name_clash(name: str, own_id: int | None) -> None:
     arrives with per-project databases (E-2215).
     """
     rows = db.query(
-        "SELECT id, name, path FROM projects WHERE name = ? OR slug = ?",
+        "SELECT id, name, path, status FROM projects WHERE name = ? OR slug = ?",
         (name, name),
     )
     other = next((r for r in rows if r["id"] != own_id), None)
     if other is None:
         return
     other_path = resolved(other["path"])
+    # An unregistered project keeps its row and its name (E-2251).
+    held_by = ("the unregistered project at"
+               if other["status"] == config.IGNORED_STATUS
+               else "the project registered at")
     # Who picked the name decides the class, and this function cannot see
     # that: the same call arrives whether the user dictated it or --infer
     # took the directory's own. The rename refusal names both branches too.
     raise agent_help.report_if(
-        f"'{name}' is already the name of the project registered at "
+        f"'{name}' is already the name of {held_by} "
         f"{other_path}, and one machine cannot register two projects under one "
         "name yet. Nothing was registered.",
         "the user chose this name",
         "retry with --name set to an unused name",
         "another name for this project, which is written to its committed "
         "config, is theirs to pick",
-        text=(f"Name '{name}' is already registered at {other_path}\n"
-              "Choose another with --name."),
+        text=(f"Name '{name}' is already the name of {held_by} "
+              f"{other_path}\nChoose another with --name."),
     )
 
 
