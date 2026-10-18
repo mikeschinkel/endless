@@ -1,0 +1,1 @@
+Honour the global --db, as `endless db path` does. Open the database file directly, as `endless db upgrade` does, so it still works when every other command refuses the database over a version mismatch, which is when someone needs it most.
