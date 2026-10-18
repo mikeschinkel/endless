@@ -31,3 +31,9 @@ id = "P5"
 kind = "deliverable"
 statement = "Register refuses a name another registered project holds as its name or slug, naming its path and the --name fix"
 verify = "verify.sh section 4"
+
+[[item]]
+id = "P6"
+kind = "deliverable"
+statement = "projects.slug is machine-local: it defaults to the name, survives a rename, and never reaches a committed file or the ledger"
+verify = "verify.sh section 7"
