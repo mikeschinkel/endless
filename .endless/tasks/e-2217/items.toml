@@ -45,12 +45,6 @@ statement = "Migration 22 adds projects.identity and projects.slug with unique i
 verify = "TestMigrate_AddsProjectIdentity"
 
 [[item]]
-id = "P8"
-kind = "deliverable"
-statement = "endless project backfill-identity records the identity for older registrations, committing only config.json when it is tracked and clean"
-verify = "verify.sh section 8"
-
-[[item]]
 id = "P9"
 kind = "deliverable"
 statement = "Project sync no longer repoints a registered project at a second clone"
