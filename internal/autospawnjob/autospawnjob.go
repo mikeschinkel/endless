@@ -61,8 +61,8 @@ import (
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/rating"
 	"github.com/mikeschinkel/endless/internal/spawnlaunchcmd"
-	"github.com/mikeschinkel/endless/internal/tmuxservers"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
+	"github.com/mikeschinkel/endless/internal/tmuxservers"
 )
 
 // JobName keys this job's scheduling row. It must stay stable: changing it
