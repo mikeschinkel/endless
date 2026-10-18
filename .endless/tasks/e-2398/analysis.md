@@ -1,0 +1,7 @@
+Three changes, all confined to `--db sandbox` (a self_dev worktree). Without it, nothing changes. A PRODUCT user never uses `--db sandbox`, so for them only the go-cfgstore merge fix matters.
+
+1. **Go's user layer follows the DB context.** Under `--db sandbox`, `config.Load` takes its user layer from the sandbox's `config.json`, the same file Python already uses. Otherwise it keeps $XDG_CONFIG_HOME, else $HOME/.config. This works only once go-cfgstore returns merged configs: a project layer always exists in a worktree, so today the sandbox layer would be discarded.
+
+2. **The sandbox seed names a private tmux socket directory.** The seeded `config.json` gets `tmux.socket_dir` set to a short per-worktree directory under /tmp, for example `/tmp/endless-<uid>-<worktree-name>`. It reuses the rule already settled for the ~104-byte Unix socket path limit: config's default `/tmp/endless-<uid>`, verifycmd's tmuxTmpRoot and tmuxtest's tmpRoot all choose /tmp for that reason, and never a directory under HOME or the OS temp dir. Removing the sandbox removes that directory, and kills any servers in it.
+
+3. **The inherited $TMUX is ignored.** Under `--db sandbox`, the tmux commands Go runs (monitor's tmuxCommand, and the spawn driver's) run with TMUX and TMUX_PANE removed from their environment. That follows verifycmd's tmuxCommand and tmux_cmd.py's pattern. Observation then sees only the sandbox's socket directory and TMUX_TMPDIR. Hooks still read TMUX_PANE to bind the real session to main; they are pinned to main and untouched.
