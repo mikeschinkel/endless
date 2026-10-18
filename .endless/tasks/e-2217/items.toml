@@ -43,3 +43,9 @@ id = "P7"
 kind = "deliverable"
 statement = "Migration 22 adds projects.identity and projects.slug with unique indexes and sets slug = name on existing projects"
 verify = "TestMigrate_AddsProjectIdentity"
+
+[[item]]
+id = "P8"
+kind = "deliverable"
+statement = "endless project backfill-identity records the identity for older registrations, committing only config.json when it is tracked and clean"
+verify = "verify.sh section 8"
