@@ -42,14 +42,13 @@ var unregisteredKeys = []string{
 	"roots",
 	"scan_interval",
 	"status",
-	"tmux.session_name",
 	"tracking",
 }
 
 // maxUnregistered pins the allowlist's size, so growing it shows up in a diff
 // of this line rather than slipping in with an appended key. Lower it when
 // you register a key; never raise it.
-const maxUnregistered = 21
+const maxUnregistered = 20
 
 // TestEveryConfigKeyIsRegistered walks the config file schema: each leaf key
 // is registered, or allowlisted above. A map leaf (`checks`) counts as

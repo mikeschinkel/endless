@@ -142,6 +142,11 @@ kitty, Terminal.app and iTerm2; when it can detect nothing it opens the
 platform's default terminal — Terminal.app on macOS, and on Linux (WSL
 included) `xdg-terminal-exec` or `x-terminal-emulator` when on PATH — and only
 with none of those prints the two attach commands instead.
+`endless-go settings list` names each key's kind and default. A value of the
+wrong shape is refused when a server is started or addressed: the socket
+directory must be absolute or under `~`; the server and session names may not
+hold `/`, whitespace, `:` or `.`; the terminal must contain `{cmd}`; and a
+socket path longer than tmux accepts (103 bytes on macOS) is refused.
 
 `endless project monitor <name> --tmux` adds a window for that project to the
 console — another one each run — and opens a terminal onto it when none is

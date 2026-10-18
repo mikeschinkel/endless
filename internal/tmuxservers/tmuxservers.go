@@ -36,6 +36,7 @@ import (
 	"syscall"
 
 	"github.com/mikeschinkel/endless/internal/config"
+	"github.com/mikeschinkel/endless/internal/settings"
 )
 
 const (
@@ -83,6 +84,7 @@ func DefaultDir() string {
 // default. A config file that cannot be read is an error rather than a silent
 // fall back to the defaults: reaching a different server than the one the
 // user configured is exactly the failure fixed socket paths exist to prevent.
+// So is a configured value of the wrong shape (see resolveFrom).
 func Resolve() (s Servers, err error) {
 	var cfg *config.EndlessConfig
 	cfg, err = config.Load("")
@@ -90,26 +92,70 @@ func Resolve() (s Servers, err error) {
 		err = fmt.Errorf("read the tmux settings: %w", err)
 		goto end
 	}
-	s = resolveFrom(cfg.Tmux)
+	s, err = resolveFrom(cfg.Tmux)
 end:
 	return s, err
 }
 
-// resolveFrom applies the defaults to one tmux config object. Pure.
-func resolveFrom(t config.Tmux) Servers {
-	dir := t.SocketDir
-	if dir == "" {
-		dir = DefaultDir()
+// ErrInvalidTmuxSetting is returned by Resolve for a configured tmux value
+// Endless will not use.
+var ErrInvalidTmuxSetting = errors.New("invalid tmux setting")
+
+// maxSocketPath is the longest socket path tmux accepts: the platform's
+// sun_path, less its terminating NUL (103 bytes on macOS, 107 on Linux).
+var maxSocketPath = len(syscall.RawSockaddrUnix{}.Path) - 1
+
+// resolveFrom applies the defaults to one tmux config object, refusing a
+// configured value that fails its key's shape check — the check the settings
+// registry applies to the key's default — and a socket path longer than tmux
+// accepts. Pure. Ownership and permissions of the directory are EnsureDir's:
+// they depend on the machine when a server starts, not on the value.
+func resolveFrom(t config.Tmux) (s Servers, err error) {
+	var dir, console, tasks string
+
+	for _, f := range []struct {
+		id    settings.ID
+		value string
+		check func(string) error
+		takes string
+	}{
+		{SocketDirSetting, t.SocketDir, settings.CheckPath, settings.PathAccepts},
+		{ConsoleServerSetting, t.ConsoleServer, settings.CheckName, settings.NameAccepts},
+		{TasksServerSetting, t.TasksServer, settings.CheckName, settings.NameAccepts},
+		{TasksSessionSetting, t.TasksSession, settings.CheckName, settings.NameAccepts},
+		{TerminalSetting, t.Terminal, settings.CheckCommand, settings.CommandAccepts},
+	} {
+		// Empty (or blank) is unset: the default applies.
+		if strings.TrimSpace(f.value) == "" {
+			continue
+		}
+		if cerr := f.check(f.value); cerr != nil {
+			err = fmt.Errorf("%w: %s is %q in the user config, but it takes %s: %w",
+				ErrInvalidTmuxSetting, f.id, f.value, f.takes, cerr)
+			goto end
+		}
 	}
+
+	dir = orDefault(t.SocketDir, DefaultDir())
 	dir = expandHome(dir)
-	console := orDefault(t.ConsoleServer, DefaultConsoleServer)
-	tasks := orDefault(t.TasksServer, DefaultTasksServer)
-	return Servers{
+	console = orDefault(t.ConsoleServer, DefaultConsoleServer)
+	tasks = orDefault(t.TasksServer, DefaultTasksServer)
+	s = Servers{
 		Dir:      dir,
 		Console:  Server{Role: RoleConsole, Socket: filepath.Join(dir, console), Session: ConsoleSession},
 		Tasks:    Server{Role: RoleTasks, Socket: filepath.Join(dir, tasks), Session: orDefault(t.TasksSession, DefaultTasksSession)},
 		Terminal: t.Terminal,
 	}
+	for _, srv := range []Server{s.Console, s.Tasks} {
+		if len(srv.Socket) > maxSocketPath {
+			err = fmt.Errorf("%w: the %s socket path %s is %d bytes, longer than the %d tmux accepts; shorten %s or the server name",
+				ErrInvalidTmuxSetting, srv.Role, srv.Socket, len(srv.Socket), maxSocketPath, SocketDirSetting)
+			s = Servers{}
+			goto end
+		}
+	}
+end:
+	return s, err
 }
 
 // RunningTasks returns the task-session server when it is running with its

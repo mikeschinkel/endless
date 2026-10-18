@@ -82,6 +82,16 @@ const (
 
 	// ChoiceKind is one of the strings in Setting.Choices.
 	ChoiceKind
+
+	// PathKind is an absolute path, or one under ~ (see CheckPath).
+	PathKind
+
+	// NameKind is a plain file or tmux session name (see CheckName).
+	NameKind
+
+	// CommandKind is a command template containing {cmd}, or empty (see
+	// CheckCommand).
+	CommandKind
 )
 
 // String names the kind as the JSON export spells it.
@@ -95,6 +105,12 @@ func (k Kind) String() string {
 		return "int"
 	case ChoiceKind:
 		return "choice"
+	case PathKind:
+		return "path"
+	case NameKind:
+		return "name"
+	case CommandKind:
+		return "command"
 	}
 	return "unknown"
 }
@@ -261,6 +277,18 @@ func validate(i int, s Setting) (errs []error) {
 			add(ErrNoChoices)
 		} else if !slices.Contains(s.Choices, s.Default) {
 			add(ErrInvalidDefault, "default", s.Default, "want", "one of its choices")
+		}
+	case PathKind:
+		if CheckPath(s.Default) != nil {
+			add(ErrInvalidDefault, "default", s.Default, "want", PathAccepts)
+		}
+	case NameKind:
+		if CheckName(s.Default) != nil {
+			add(ErrInvalidDefault, "default", s.Default, "want", NameAccepts)
+		}
+	case CommandKind:
+		if CheckCommand(s.Default) != nil {
+			add(ErrInvalidDefault, "default", s.Default, "want", CommandAccepts)
 		}
 	default:
 		add(ErrUnknownKind, "kind", int(s.Kind))

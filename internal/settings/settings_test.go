@@ -2,6 +2,7 @@ package settings
 
 import (
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -32,6 +33,9 @@ func TestInitialize_ValidRegistryIsOrderedAndFrozen(t *testing.T) {
 		Setting{ID: "a.cap", Feature: "a", Files: ProjectFile, Kind: IntKind, Default: "3"},
 		Setting{ID: "a.target", Feature: "a", Files: MachineFile, Kind: ChoiceKind,
 			Choices: []string{"active", "monitor"}, Default: "active"},
+		Setting{ID: "a.dir", Feature: "a", Files: MachineFile, Kind: PathKind, Default: "/tmp/a"},
+		Setting{ID: "a.name", Feature: "a", Files: MachineFile, Kind: NameKind, Default: "a-b_c"},
+		Setting{ID: "a.term", Feature: "a", Files: MachineFile, Kind: CommandKind, Default: ""},
 	)
 	if err := Initialize(); err != nil {
 		t.Fatalf("Initialize() = %v", err)
@@ -44,7 +48,7 @@ func TestInitialize_ValidRegistryIsOrderedAndFrozen(t *testing.T) {
 	for _, s := range all {
 		got = append(got, s.ID)
 	}
-	want := []ID{"a.cap", "a.enabled", "a.interval", "a.target", "z.enabled"}
+	want := []ID{"a.cap", "a.dir", "a.enabled", "a.interval", "a.name", "a.target", "a.term", "z.enabled"}
 	if len(got) != len(want) {
 		t.Fatalf("All() = %v, want %v", got, want)
 	}
@@ -96,6 +100,76 @@ func TestInitialize_ReportsEveryFailure(t *testing.T) {
 	}
 	if _, err := All(); !errors.Is(err, ErrNotInitialized) {
 		t.Errorf("All() after a failed Initialize = %v, want ErrNotInitialized", err)
+	}
+}
+
+// TestInitialize_RefusesAMalformedShapedDefault: a path, name or command
+// default that fails its kind's shape check fails Initialize, naming the key.
+func TestInitialize_RefusesAMalformedShapedDefault(t *testing.T) {
+	for _, s := range []Setting{
+		{ID: "p.dir", Feature: "p", Files: MachineFile, Kind: PathKind, Default: "relative/dir"},
+		{ID: "p.dir", Feature: "p", Files: MachineFile, Kind: PathKind, Default: ""},
+		{ID: "n.name", Feature: "n", Files: MachineFile, Kind: NameKind, Default: "a.b"},
+		{ID: "n.name", Feature: "n", Files: MachineFile, Kind: NameKind, Default: ""},
+		{ID: "c.term", Feature: "c", Files: MachineFile, Kind: CommandKind, Default: "ghostty -e"},
+	} {
+		t.Run(s.Kind.String()+"="+s.Default, func(t *testing.T) {
+			t.Cleanup(resetForTest())
+			Register(s)
+			err := Initialize()
+			if !errors.Is(err, ErrInvalidDefault) {
+				t.Fatalf("Initialize() = %v, want ErrInvalidDefault", err)
+			}
+			if !strings.Contains(err.Error(), string(s.ID)) {
+				t.Errorf("Initialize() = %v, does not name %s", err, s.ID)
+			}
+		})
+	}
+}
+
+func TestShapeChecks(t *testing.T) {
+	for _, c := range []struct {
+		check func(string) error
+		in    string
+		want  error // nil: accepted
+	}{
+		{CheckPath, "/tmp/endless-501", nil},
+		{CheckPath, "~", nil},
+		{CheckPath, "~/sock", nil},
+		{CheckPath, "sock", ErrNotAbsolutePath},
+		{CheckPath, "./sock", ErrNotAbsolutePath},
+		{CheckPath, "~other/sock", ErrNotAbsolutePath},
+		{CheckPath, "", ErrNotAbsolutePath},
+		{CheckName, "endless-tasks", nil},
+		{CheckName, "work_2", nil},
+		{CheckName, "", ErrMalformedName},
+		{CheckName, "a/b", ErrMalformedName},
+		{CheckName, "a b", ErrMalformedName},
+		{CheckName, "a\tb", ErrMalformedName},
+		{CheckName, "a:b", ErrMalformedName},
+		{CheckName, "a.b", ErrMalformedName},
+		{CheckCommand, "", nil},
+		{CheckCommand, "ghostty -e {cmd}", nil},
+		{CheckCommand, "ghostty -e", ErrNoCommandPlaceholder},
+		{CheckCommand, "{CMD}", ErrNoCommandPlaceholder},
+	} {
+		err := c.check(c.in)
+		switch {
+		case c.want == nil && err != nil:
+			t.Errorf("check(%q) = %v, want accepted", c.in, err)
+		case c.want != nil && !errors.Is(err, c.want):
+			t.Errorf("check(%q) = %v, want %v", c.in, err, c.want)
+		case c.want != nil && !errors.Is(err, ErrInvalidValue):
+			t.Errorf("check(%q) = %v, not an ErrInvalidValue", c.in, err)
+		}
+	}
+}
+
+func TestKindExportNames(t *testing.T) {
+	for k, want := range map[Kind]string{PathKind: "path", NameKind: "name", CommandKind: "command"} {
+		if got := k.String(); got != want {
+			t.Errorf("%d.String() = %q, want %q", k, got, want)
+		}
 	}
 }
 

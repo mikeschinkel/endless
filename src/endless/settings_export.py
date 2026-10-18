@@ -16,6 +16,15 @@ from endless import agent_help, config
 # A Go duration as time.ParseDuration accepts it, e.g. "5m", "1h30m", "250ms".
 _DURATION = re.compile(r"^(\d+(\.\d+)?(ns|us|µs|ms|s|m|h))+$")
 
+# The path, name and command kinds' shapes, as internal/settings/shapes.go
+# checks them: a path is absolute or under ~; a name is non-empty with no /,
+# whitespace, : or .; a command contains {cmd}, or is empty.
+_NAME = re.compile(r"^[^/:.\s]+$")
+
+
+def _is_path(value: str) -> bool:
+    return value == "~" or value.startswith("~/") or value.startswith("/")
+
 
 def _candidates() -> list[str]:
     """The worktree's endless-go first — the coherent partner of the Python
@@ -85,6 +94,12 @@ def accepted(setting: dict) -> str:
         return "an integer"
     if kind == "duration":
         return 'a Go duration such as "5m"'
+    if kind == "path":
+        return "an absolute path, or one under ~"
+    if kind == "name":
+        return "a non-empty name with no /, whitespace, : or ."
+    if kind == "command":
+        return "a command containing {cmd}, or empty to detect the terminal"
     return "a value"
 
 
@@ -101,4 +116,10 @@ def parse(setting: dict, value: str):
         return int(value) if re.fullmatch(r"-?\d+", value) else None
     if kind == "duration":
         return value if _DURATION.match(value) else None
+    if kind == "path":
+        return value if _is_path(value) else None
+    if kind == "name":
+        return value if _NAME.match(value) else None
+    if kind == "command":
+        return value if value == "" or "{cmd}" in value else None
     return None

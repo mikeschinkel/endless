@@ -26,4 +26,8 @@ var (
 	ErrNoChoices        = errors.New("choice setting lists no choices")
 	ErrUnknownOptIn     = errors.New(`opt-in value must be "on", "off" or "unset"`)
 	ErrLegacyBool       = errors.New(`opt-in value is a legacy boolean; write "on" for true, "off" for false`)
+
+	ErrNotAbsolutePath      = errors.New("path value is not absolute and not under ~")
+	ErrMalformedName        = errors.New("name value is empty or holds a /, whitespace, : or .")
+	ErrNoCommandPlaceholder = errors.New("command value does not contain {cmd}")
 )

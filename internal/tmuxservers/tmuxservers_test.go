@@ -14,6 +14,7 @@ import (
 	"github.com/mikeschinkel/go-cfgstore"
 
 	"github.com/mikeschinkel/endless/internal/config"
+	"github.com/mikeschinkel/endless/internal/settings"
 )
 
 // config.Load logs through go-cfgstore, which panics without a logger.
@@ -24,7 +25,10 @@ func init() {
 // TestDefaultsAreFullSocketPaths pins the decided layout: both servers under
 // one short directory, addressed by full path, with the decided names.
 func TestDefaultsAreFullSocketPaths(t *testing.T) {
-	s := resolveFrom(config.Tmux{})
+	s, err := resolveFrom(config.Tmux{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	dir := filepath.Join("/tmp", "endless-"+strconv.Itoa(os.Getuid()))
 	if s.Dir != dir {
 		t.Errorf("Dir = %q, want %q", s.Dir, dir)
@@ -38,13 +42,100 @@ func TestDefaultsAreFullSocketPaths(t *testing.T) {
 }
 
 func TestConfiguredValuesWin(t *testing.T) {
-	s := resolveFrom(config.Tmux{SocketDir: "/x", ConsoleServer: "c", TasksServer: "t", TasksSession: "work"})
+	s, err := resolveFrom(config.Tmux{SocketDir: "/x", ConsoleServer: "c", TasksServer: "t", TasksSession: "work"})
+	if err != nil {
+		t.Fatal(err)
+	}
 	if s.Console.Socket != "/x/c" || s.Tasks.Socket != "/x/t" || s.Tasks.Session != "work" {
 		t.Errorf("configured values lost: %+v", s)
 	}
 	// The console session is not configurable.
 	if s.Console.Session != ConsoleSession {
 		t.Errorf("console session = %q", s.Console.Session)
+	}
+}
+
+// TestResolveRefusesAMalformedValue: a configured value that fails its key's
+// shape check is refused, naming the key and what it takes.
+func TestResolveRefusesAMalformedValue(t *testing.T) {
+	for _, c := range []struct {
+		tmux  config.Tmux
+		key   settings.ID
+		takes string
+	}{
+		{config.Tmux{SocketDir: "relative"}, SocketDirSetting, settings.PathAccepts},
+		{config.Tmux{ConsoleServer: "a/b"}, ConsoleServerSetting, settings.NameAccepts},
+		{config.Tmux{TasksServer: "a b"}, TasksServerSetting, settings.NameAccepts},
+		{config.Tmux{TasksSession: "work:1"}, TasksSessionSetting, settings.NameAccepts},
+		{config.Tmux{TasksSession: "work.1"}, TasksSessionSetting, settings.NameAccepts},
+		{config.Tmux{Terminal: "ghostty -e"}, TerminalSetting, settings.CommandAccepts},
+	} {
+		_, err := resolveFrom(c.tmux)
+		if !errors.Is(err, ErrInvalidTmuxSetting) || !errors.Is(err, settings.ErrInvalidValue) {
+			t.Errorf("resolveFrom(%+v) = %v, want ErrInvalidTmuxSetting wrapping ErrInvalidValue", c.tmux, err)
+			continue
+		}
+		if msg := err.Error(); !strings.Contains(msg, string(c.key)) || !strings.Contains(msg, c.takes) {
+			t.Errorf("resolveFrom(%+v) = %q, want it to name %s and %q", c.tmux, msg, c.key, c.takes)
+		}
+	}
+}
+
+// TestResolveAcceptsWellShapedValues: home-relative directories, blank
+// (unset) values and a terminal template all resolve.
+func TestResolveAcceptsWellShapedValues(t *testing.T) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Skip(err)
+	}
+	s, err := resolveFrom(config.Tmux{SocketDir: "~/s", TasksSession: " ", Terminal: "ghostty -e {cmd}"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Dir != filepath.Join(home, "s") || s.Tasks.Session != DefaultTasksSession {
+		t.Errorf("resolveFrom = %+v", s)
+	}
+}
+
+// TestResolveRefusesASocketPathTooLong: tmux cannot bind a socket path longer
+// than sun_path, so Resolve refuses it rather than let `tmux -S` fail later.
+func TestResolveRefusesASocketPathTooLong(t *testing.T) {
+	fits := "/" + strings.Repeat("d", maxSocketPath-1-len("/"+DefaultConsoleServer))
+	if _, err := resolveFrom(config.Tmux{SocketDir: fits, TasksServer: "t"}); err != nil {
+		t.Errorf("a %d-byte socket path: %v", maxSocketPath, err)
+	}
+	_, err := resolveFrom(config.Tmux{SocketDir: fits + "d", TasksServer: "t"})
+	if !errors.Is(err, ErrInvalidTmuxSetting) || !strings.Contains(err.Error(), string(SocketDirSetting)) {
+		t.Errorf("a %d-byte socket path = %v, want ErrInvalidTmuxSetting naming %s", maxSocketPath+1, err, SocketDirSetting)
+	}
+}
+
+// TestSettingsDefaultsMatchResolve: each registered default is what Resolve
+// supplies when the key is unset, and every key is machine-only and never
+// suggested.
+func TestSettingsDefaultsMatchResolve(t *testing.T) {
+	s, err := resolveFrom(config.Tmux{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[settings.ID]string{
+		SocketDirSetting:     s.Dir,
+		ConsoleServerSetting: filepath.Base(s.Console.Socket),
+		TasksServerSetting:   filepath.Base(s.Tasks.Socket),
+		TasksSessionSetting:  s.Tasks.Session,
+		TerminalSetting:      s.Terminal,
+	}
+	got := Servers{}.Settings()
+	if len(got) != len(want) {
+		t.Fatalf("Settings() has %d keys, want %d", len(got), len(want))
+	}
+	for _, st := range got {
+		if st.Default != want[st.ID] {
+			t.Errorf("%s default = %q, want %q", st.ID, st.Default, want[st.ID])
+		}
+		if st.Feature != "tmux" || st.Files != settings.MachineFile || st.Suggestable {
+			t.Errorf("%s = %+v, want feature tmux, machine file only, not suggestable", st.ID, st)
+		}
 	}
 }
 

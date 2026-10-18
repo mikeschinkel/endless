@@ -46,9 +46,28 @@ def test_export_relays_a_legacy_boolean(tmp_path):
     ({"kind": "duration"}, "soon", None),
     ({"kind": "choice", "choices": ["a", "b"]}, "b", "b"),
     ({"kind": "choice", "choices": ["a", "b"]}, "c", None),
+    ({"kind": "path"}, "/tmp/endless-501", "/tmp/endless-501"),
+    ({"kind": "path"}, "~/sock", "~/sock"),
+    ({"kind": "path"}, "~", "~"),
+    ({"kind": "path"}, "sock", None),
+    ({"kind": "path"}, "~other/sock", None),
+    ({"kind": "name"}, "endless-tasks", "endless-tasks"),
+    ({"kind": "name"}, "", None),
+    ({"kind": "name"}, "a/b", None),
+    ({"kind": "name"}, "a b", None),
+    ({"kind": "name"}, "a:b", None),
+    ({"kind": "name"}, "a.b", None),
+    ({"kind": "command"}, "ghostty -e {cmd}", "ghostty -e {cmd}"),
+    ({"kind": "command"}, "", ""),
+    ({"kind": "command"}, "ghostty -e", None),
 ])
 def test_parse(setting, value, want):
     assert settings_export.parse(setting, value) == want
+
+
+@pytest.mark.parametrize("kind", ["path", "name", "command"])
+def test_accepted_describes_the_shaped_kinds(kind):
+    assert settings_export.accepted({"kind": kind}) != "a value"
 
 
 _REGISTRY = {
