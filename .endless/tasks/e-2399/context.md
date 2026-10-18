@@ -1,0 +1,1 @@
+Today the only way to see the applied version is to query goose_db_version with an SQL client. Mike asked for this on 2026-10-18, after the main database was migrated to 22 from a worktree and E-2217 had to repair it: no command could confirm the fix.
