@@ -1,0 +1,289 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 54,
+      "passed": 54,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test: tmuxstopcmd, tmuxservers, tmuxstartcmd, spawnlaunchcmd, autospawnjob, projectstatuscmd, monitor, tmuxcmd",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest: stop, start, spawn and claim gates, prime, guide map",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "outside tmux: spawn-window exits 1",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and says Endless isn't running",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and no server was started",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "inside another tmux server: spawn-window exits 1",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and refuses the same way",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and opened no window on the server it is in",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "naming a session there: still refused",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "with the same words",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and still no window",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no server was started by any of them",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "project-window with the console down exits 1",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and says Endless isn't running",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and starts no console",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a session on endless-tasks is found from inside another server",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and the window is in it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a session only the caller's server has is refused",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "naming the task-session server",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and no window opened on the caller's server",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the record lists the windows in tab order",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a swap alone rewrites the record",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and swapping back rewrites it again",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "stop tasks exits 1",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and lists the working session",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "but not the idle one",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the server is still running",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and nothing was typed into it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "stop tasks exits 0",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it asked each Claude to quit",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and stopped the server",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the server is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "every window closed as its Claude quit, yet the record holds them, in order",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the console was left alone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "start restores all three",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "in the recorded tab order",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "stop all exits 1",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and lists the pane Claude is still running in",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the console is left running too",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the task-session server is still running",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and so is the console",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the record is not frozen on a server left running",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "--force stops it anyway",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the server is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "stop console exits 0",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and says so",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the console is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "stop --all with nothing running exits 0",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the task-session server reads already stopped",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and the console too",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a bare stop exits 2",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and prints usage",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "endless stop with no argument exits 2",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and prints usage",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
