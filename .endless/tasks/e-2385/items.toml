@@ -92,3 +92,8 @@ statement = "Does not move existing sessions off the user's default tmux server"
 id = "P18"
 kind = "deliverable"
 statement = "endless task prime refuses while endless-tasks is not running, like spawn and claim"
+
+[[item]]
+id = "P19"
+kind = "deliverable"
+statement = "The pytest isolated_env fixture points tmux.socket_dir at a private directory, so no test can reach the real endless-tasks server"
