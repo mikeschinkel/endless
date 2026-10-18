@@ -7685,3 +7685,7 @@ E-2402 (removing 18 event kinds with no executor or emitter): I decided without 
 ### [2026-10-18] Treat warnings as work to address, not as ignorable
 Reviewing endless errors list on 2026-10-18 (E-2385 session), I called WARN-0021 (output style installed but not active, homelab-app) 'just a warning' and set it apart from the bugs. Mike: 'Warnings are still things we need to address.' When triaging the errors channel, give a warning the same treatment as an error: find its cause, say whether it will recur, and propose a fix or a better remedy, rather than dismissing it by severity.
 - **Project**: endless
+
+### [2026-10-18] Fix a footgun by doing the right thing, not by refusing
+Spawning a go-cfgstore task from the endless checkout would have created its worktree in the wrong repository. I proposed a check that refuses and tells the user which directory to run from or which --project to pass. Mike rejected it: the task already knows which project owns it, so spawn should simply work in that project's directory. A refusal that asks the user for information the system already holds is the wrong fix. Make the command use what it knows.
+- **Project**: endless
