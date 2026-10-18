@@ -37,3 +37,9 @@ id = "P6"
 kind = "deliverable"
 statement = "projects.slug is machine-local: it defaults to the name, survives a rename, and never reaches a committed file or the ledger"
 verify = "verify.sh section 7"
+
+[[item]]
+id = "P7"
+kind = "deliverable"
+statement = "Migration 22 adds projects.identity and projects.slug with unique indexes and sets slug = name on existing projects"
+verify = "TestMigrate_AddsProjectIdentity"
