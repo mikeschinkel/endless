@@ -26,19 +26,12 @@ Gone servers go into a new TEMP table beside `observed_servers` (same connection
 
 ## 4. Recovery from an `unknown` session
 
-**The claim/spawn refusal** (`_check_task_ownership` in `src/endless/task_cmd.py`), when the blocking session reads `unknown`, says its tmux server cannot be reached and offers, in order: `endless start` (when the session's recorded socket is one of Endless's and that server is not running), `endless session resume ES-N` to continue it, and `endless session end ES-N` to discard it. The `live` case keeps today's text.
-
-**`endless session end <ref>`** (new; ref as `session resume` takes it):
-1. Refuses a session that reads `live`.
-2. Refuses a session whose `last_activity` is within the last 10 minutes unless `--force` (a running Claude fires hooks).
-3. Shows the session's task, last activity and liveness and asks y/N; `--yes` skips the prompt. With no terminal to ask on and no `--yes`, it refuses.
-4. Emits the existing `session.ended` event through `endless-go event emit`.
-5. Prints: "Ended ES-N (E-M). Its transcript is kept. To get it back, run `endless session resume ES-N`. Until then, E-M can be claimed by another session."
+The claim/spawn refusal (`_check_task_ownership` in `src/endless/task_cmd.py`), when the blocking session reads `unknown`, says its tmux server cannot be reached and offers, in order: `endless start` (when the session's recorded socket is one of Endless's and that server is not running), then `endless session resume ES-N` to continue it. The `live` case keeps today's text. A route to discard the session, `endless session end`, is its own task, which adds itself to this refusal.
 
 ## 5. Existing rows
 
-Sessions bound before this lands have no `tmux_servers` row, so they are never judged gone; they keep reading as today (`unknown` once their server is gone) and are cleared with `session end`.
+Sessions bound before this lands have no `tmux_servers` row, so they are never judged gone; they keep reading as today (`unknown` once their server is gone) and keep blocking claims on their tasks until resumed, or ended with `endless session end` (its own task).
 
 ## Tests
 
-Go: fixture tables and a stubbed socket prober, no real tmux — different uuid → dead; no uuid → dead; refused → dead; missing file → unknown; timeout → unknown; observed → live; binding with no `tmux_servers` row → unknown; `EnsureTmuxPaneProcess` records the path; stewardship counts an `unknown` session; the four state-only readers ignore a `dead` session. Python: the `unknown` refusal text; `session end` refusals (live, recent, no tty without `--yes`), prompt, `--force`, `--yes`, and the printed recovery line.
+Go: fixture tables and a stubbed socket prober, no real tmux — different uuid → dead; no uuid → dead; refused → dead; missing file → unknown; timeout → unknown; observed → live; binding with no `tmux_servers` row → unknown; `EnsureTmuxPaneProcess` records the path; stewardship counts an `unknown` session; the four state-only readers ignore a `dead` session. Python: the `unknown` refusal text.
