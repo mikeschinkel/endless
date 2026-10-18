@@ -66,3 +66,8 @@ statement = "Does not filter hooks by tmux server (E-2302) or change where spawn
 id = "P17"
 kind = "exclusion"
 statement = "Does not add endless session end (its own task)"
+
+[[item]]
+id = "P18"
+kind = "deliverable"
+statement = "The Python test fixture isolated_env names an empty tmux socket directory in its HOME config, so tests that spawn sessions never reach the user's running Endless tmux servers"
