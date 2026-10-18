@@ -4,7 +4,7 @@ Decided with Mike, 2026-10-17 (E-2300 /needs-plan, Q6 = B, Q7 = C).
 
 ## Command
 
-`endless session end <ref>`, ref resolved as `endless session resume` resolves it (E-NNNN, ES-NNNN, bare integer, Claude UUID prefix). Python CLI in `src/endless/session_cmd.py` / `src/endless/cli.py`; the write is the existing `session.ended` event through `endless-go event emit`. No SQLite added to Python: liveness and last activity come from Go (`SessionsLiveness` and the session read Go already exposes).
+`endless session end <ref>`, ref resolved as `endless session resume` resolves it (E-NNNN, ES-NNNN, bare integer, Claude UUID prefix). Python CLI in `src/endless/session_cmd.py` / `src/endless/cli.py`; the write is a new `endless-go session-query end-session --id N`, which does what the SessionEnd hook does: release the session's worktree lock, then `monitor.EndSession` by id. (Changed during implementation, with Mike, 2026-10-18: the plan first named the `session.ended` event, but that kind has no executor, and session rows are machine-local and never ledgered, so there was never a reason to route this through the ledger.) No SQLite added to Python: liveness comes from Go's `session-liveness`, and last activity from `resume-target`, which gains a `last_activity` field.
 
 Guards, in order:
 1. Refuse a session that reads `live`: it is running in a pane Endless can see.
