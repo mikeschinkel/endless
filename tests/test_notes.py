@@ -5,10 +5,12 @@ from click.testing import CliRunner
 from endless import db
 from endless.cli import main
 
+from conftest import init_git_repo
+
 
 def test_add_and_list_note(isolated_env):
     project_dir = isolated_env["projects_root"] / "note-test"
-    project_dir.mkdir()
+    init_git_repo(project_dir)
 
     runner = CliRunner()
     runner.invoke(main, ["project", "register", str(project_dir), "--infer"])
@@ -29,7 +31,7 @@ def test_add_and_list_note(isolated_env):
 
 def test_resolve_note(isolated_env):
     project_dir = isolated_env["projects_root"] / "resolve-test"
-    project_dir.mkdir()
+    init_git_repo(project_dir)
 
     runner = CliRunner()
     runner.invoke(main, ["project", "register", str(project_dir), "--infer"])
@@ -60,7 +62,7 @@ def test_resolve_note(isolated_env):
 
 def test_notes_empty(isolated_env):
     project_dir = isolated_env["projects_root"] / "empty-notes"
-    project_dir.mkdir()
+    init_git_repo(project_dir)
 
     runner = CliRunner()
     runner.invoke(main, ["project", "register", str(project_dir), "--infer"])

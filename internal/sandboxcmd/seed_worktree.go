@@ -70,9 +70,11 @@ func seedFromWorktree(sandboxDir string) error {
 	}
 
 	res, err := sandboxDB.Exec(
-		"INSERT INTO projects (name, label, path, group_name, description, status, language, created_at, updated_at) "+
-			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-		proj.Name, proj.Label, proj.Path, proj.GroupName, proj.Description,
+		// slug = name rather than main's value: the main database may predate
+		// migration 15, and a sandbox names no database file by it (E-2217).
+		"INSERT INTO projects (name, slug, label, path, group_name, description, status, language, created_at, updated_at) "+
+			"VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+		proj.Name, proj.Name, proj.Label, proj.Path, proj.GroupName, proj.Description,
 		proj.Status, proj.Language, proj.CreatedAt, proj.UpdatedAt,
 	)
 	if err != nil {

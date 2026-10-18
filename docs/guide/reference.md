@@ -34,6 +34,8 @@ endless project register --name <custom-name>  # with an explicit name
 
 After registering, `endless project list` should show the project and `endless project info` should work from inside the repo.
 
+A project is a git repo, identified by its root commit. `register` records that identity in `.endless/config.json`, so it refuses a directory that is not a repo or has no commits yet. It also refuses a second clone or a fork of a project this machine already has registered: for parallel work, use a worktree of the registered checkout (`endless task claim` creates one). A name another registered project already holds is refused as well; pick another with `--name`. `endless project backfill-identity` records the identity for projects registered before this rule existed.
+
 ---
 
 ## SQL queries

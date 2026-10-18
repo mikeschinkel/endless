@@ -12,6 +12,8 @@ from pathlib import Path
 from endless.register import register_project
 from endless.suite_rules import SUITE_RULES, scaffold_suite_rules
 
+from conftest import init_git_repo
+
 
 def _rules_path(project: Path) -> Path:
     return project / ".endless" / "tasks" / "CLAUDE.md"
@@ -19,7 +21,7 @@ def _rules_path(project: Path) -> Path:
 
 def test_registration_places_the_rules(isolated_env):
     project_dir = isolated_env["projects_root"] / "fresh-proj"
-    project_dir.mkdir()
+    init_git_repo(project_dir)
 
     register_project(project_dir, infer=True)
 
@@ -30,7 +32,7 @@ def test_registration_places_the_rules(isolated_env):
 
 def test_reregistration_does_not_overwrite_a_customized_copy(isolated_env):
     project_dir = isolated_env["projects_root"] / "customized-proj"
-    project_dir.mkdir()
+    init_git_repo(project_dir)
 
     register_project(project_dir, infer=True)
     rules = _rules_path(project_dir)

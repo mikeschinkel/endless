@@ -28,7 +28,30 @@ CREATE TABLE IF NOT EXISTS projects (
     language TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
-);
+    , identity TEXT, slug TEXT);
+
+-- E-2217: a project's identity and its machine-local slug, two of the three
+-- jobs `name` used to do alone.
+--
+-- identity is the committed identity: the SHA of the repo's root commit (the
+-- oldest, when unrelated histories were merged), derived at registration and
+-- stored in `.endless/config.json` so a later history rewrite does not change
+-- it. Every clone and fork carries the same value, so UNIQUE here is what lets
+-- `register` refuse a second checkout of one project on one machine. NULL for a
+-- row nobody registered (the monitor's auto-registered directories, a
+-- projector's minimal row) and for a project not yet backfilled.
+--
+-- slug is machine-local: it names the project's database file under the config
+-- dir (E-2215) and is never written to the ledger or to any committed file. It
+-- defaults to `name` and keeps its value across a rename, so the file it names
+-- does not move. Every writer of a projects row sets it.
+--
+-- Both are added by migration 22, which is why they sit after updated_at on
+-- a line of their own: ALTER TABLE splices added columns in just before the
+-- closing parenthesis, and TestMigrate_MatchesSchemaSQL compares the two
+-- spellings.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_identity ON projects(identity);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_slug ON projects(slug);
 
 -- Project dependencies
 CREATE TABLE IF NOT EXISTS project_deps (

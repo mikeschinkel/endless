@@ -6,6 +6,8 @@ from pathlib import Path
 from endless import db, config
 from endless.register import register_project, validate_name
 
+from conftest import init_git_repo
+
 
 def test_validate_name_accepts_valid():
     assert validate_name("my-project")
@@ -24,7 +26,7 @@ def test_validate_name_rejects_invalid():
 
 def test_register_creates_config_and_db_entry(isolated_env):
     project_dir = isolated_env["projects_root"] / "new-proj"
-    project_dir.mkdir()
+    init_git_repo(project_dir)
 
     name = register_project(project_dir, infer=True)
     assert name == "new-proj"
@@ -44,7 +46,7 @@ def test_register_creates_config_and_db_entry(isolated_env):
 
 def test_register_with_explicit_fields(isolated_env):
     project_dir = isolated_env["projects_root"] / "custom"
-    project_dir.mkdir()
+    init_git_repo(project_dir)
 
     register_project(
         project_dir,
@@ -69,7 +71,7 @@ def test_register_with_explicit_fields(isolated_env):
 
 def test_register_update_existing(isolated_env):
     project_dir = isolated_env["projects_root"] / "updatable"
-    project_dir.mkdir()
+    init_git_repo(project_dir)
 
     register_project(project_dir, infer=True)
     register_project(
@@ -88,7 +90,7 @@ def test_register_detects_group_name(isolated_env):
     group_dir = isolated_env["projects_root"] / "my-group"
     group_dir.mkdir()
     project_dir = group_dir / "sub-proj"
-    project_dir.mkdir()
+    init_git_repo(project_dir)
 
     register_project(project_dir, infer=True)
 

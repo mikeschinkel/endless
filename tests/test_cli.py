@@ -4,6 +4,8 @@ from click.testing import CliRunner
 
 from endless.cli import main
 
+from conftest import init_git_repo
+
 
 def test_help():
     runner = CliRunner()
@@ -91,7 +93,7 @@ def test_sql_write_commits_mutation(isolated_env):
 
 def test_register_and_list(isolated_env):
     project_dir = isolated_env["projects_root"] / "cli-test"
-    project_dir.mkdir()
+    init_git_repo(project_dir)
 
     runner = CliRunner()
 
@@ -114,7 +116,7 @@ def test_register_and_list(isolated_env):
 # follow the card.
 def test_info_by_name(isolated_env):
     project_dir = isolated_env["projects_root"] / "status-test"
-    project_dir.mkdir()
+    init_git_repo(project_dir)
 
     runner = CliRunner()
     runner.invoke(
@@ -129,7 +131,7 @@ def test_info_by_name(isolated_env):
 
 def test_set_field(isolated_env):
     project_dir = isolated_env["projects_root"] / "set-test"
-    project_dir.mkdir()
+    init_git_repo(project_dir)
 
     runner = CliRunner()
     runner.invoke(
@@ -149,7 +151,7 @@ def test_set_field(isolated_env):
 
 def test_rename(isolated_env):
     project_dir = isolated_env["projects_root"] / "old-name"
-    project_dir.mkdir()
+    init_git_repo(project_dir)
 
     runner = CliRunner()
     runner.invoke(
@@ -173,7 +175,7 @@ def test_rename(isolated_env):
 
 def test_unregister(isolated_env):
     project_dir = isolated_env["projects_root"] / "doomed"
-    project_dir.mkdir()
+    init_git_repo(project_dir)
 
     runner = CliRunner()
     runner.invoke(
@@ -203,7 +205,7 @@ def test_unregister(isolated_env):
 
 def test_scan(isolated_env):
     project_dir = isolated_env["projects_root"] / "scan-test"
-    project_dir.mkdir()
+    init_git_repo(project_dir)
     (project_dir / "README.md").write_text("# Hello\n")
 
     runner = CliRunner()

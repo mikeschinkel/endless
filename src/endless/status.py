@@ -36,7 +36,7 @@ def show_status(name: str | None = None):
 
     row = db.query(
         "SELECT id, name, label, description, status, language, "
-        "group_name, path, created_at, updated_at "
+        "group_name, path, created_at, updated_at, identity, slug "
         "FROM live_projects WHERE name = ?",
         (name,),
     )
@@ -82,6 +82,10 @@ def show_status(name: str | None = None):
     if p["group_name"]:
         click.echo(f"  {'Group:':<14} {p['group_name']}")
     click.echo(f"  {'Path:':<14} {short_path}")
+    # E-2217: the committed identity and the machine-local slug.
+    click.echo(f"  {'Identity:':<14} {p['identity'] or '-'}")
+    if p["slug"] and p["slug"] != p["name"]:
+        click.echo(f"  {'Slug:':<14} {p['slug']}")
     click.echo(f"  {'Registered:':<14} {p['created_at']}")
     click.echo(f"  {'Updated:':<14} {p['updated_at']}")
 

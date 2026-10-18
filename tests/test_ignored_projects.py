@@ -10,6 +10,8 @@ from endless.cli import main
 from endless.project_path import stored
 from endless.project_sync import sync_projects
 
+from conftest import init_git_repo
+
 
 def _row(path):
     rows = db.query(
@@ -33,8 +35,7 @@ def _register(path, name=None):
 
 
 def test_unregister_keeps_the_row_as_ignored_and_register_restores_it(isolated_env):
-    project_dir = isolated_env["projects_root"] / "keeper"
-    project_dir.mkdir()
+    project_dir = init_git_repo(isolated_env["projects_root"] / "keeper")
     _register(project_dir)
 
     result = _invoke("project", "unregister", "keeper")
@@ -97,8 +98,7 @@ def test_register_refuses_a_directory_carrying_the_marker(isolated_env):
 def test_explicit_register_is_allowed_under_an_ignored_parent(isolated_env):
     """Rule A: ignore ~/Projects, still register ~/Projects/endless."""
     parent = isolated_env["projects_root"] / "tree"
-    child = parent / "mine"
-    child.mkdir(parents=True)
+    child = init_git_repo(parent / "mine")
     config.add_ignore(parent)
 
     _register(child)
@@ -122,8 +122,7 @@ def test_sync_projects_skips_projects_under_an_ignored_directory(isolated_env):
 
 
 def test_sync_projects_leaves_ignored_rows_alone(isolated_env):
-    project_dir = isolated_env["projects_root"] / "gone-quiet"
-    project_dir.mkdir()
+    project_dir = init_git_repo(isolated_env["projects_root"] / "gone-quiet")
     _register(project_dir)
     assert _invoke("project", "unregister", "gone-quiet").exit_code == 0
     # An ignored path that does not exist yet still records intent.

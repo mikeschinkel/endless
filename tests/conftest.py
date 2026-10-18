@@ -416,11 +416,40 @@ def seeded_project_at_cwd(isolated_env, monkeypatch):
     return proj_dir
 
 
+def init_git_repo(path: Path) -> Path:
+    """Make `path` a git repo with one commit, so it can be registered.
+
+    A project is a repo identified by its root commit (E-2217). The commit
+    message names the path because two empty commits made in the same second
+    with the same message are the same commit, and would make two unrelated
+    test projects one project.
+    """
+    import subprocess
+
+    path.mkdir(parents=True, exist_ok=True)
+
+    def _git(*args: str) -> None:
+        subprocess.run(
+            ["git", "-c", "user.email=test@example.com", "-c", "user.name=Test",
+             *args],
+            cwd=str(path), check=True, capture_output=True,
+        )
+
+    _git("init", "-q", "-b", "main")
+    _git("commit", "--allow-empty", "-q", "-m", f"initial {path}")
+    return path
+
+
+@pytest.fixture
+def git_repo():
+    """`init_git_repo` as a fixture, for tests that register directories."""
+    return init_git_repo
+
+
 @pytest.fixture
 def sample_project(isolated_env):
     """Create a sample project directory with .endless/config.json."""
-    project_dir = isolated_env["projects_root"] / "my-project"
-    project_dir.mkdir()
+    project_dir = init_git_repo(isolated_env["projects_root"] / "my-project")
     endless_dir = project_dir / ".endless"
     endless_dir.mkdir()
 

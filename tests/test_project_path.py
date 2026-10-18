@@ -20,6 +20,8 @@ from endless.project_path import (
 )
 from endless.register import register_project
 
+from conftest import init_git_repo
+
 
 @pytest.fixture
 def temp_home(tmp_path, monkeypatch):
@@ -175,8 +177,7 @@ def test_match_tolerates_a_row_stored_unresolved(isolated_env, tmp_path):
     """The legacy-database case, and the reason E-2002 needs no data migration:
     normalization at the comparison boundary makes the stored spelling
     irrelevant."""
-    real = (tmp_path / "acme").resolve()
-    real.mkdir()
+    real = init_git_repo((tmp_path / "acme").resolve())
     link = tmp_path / "link-to-acme"
     link.symlink_to(real)
     _seed(link)  # written before the rule existed
@@ -189,8 +190,7 @@ def test_match_prefers_the_older_of_two_rows_for_one_directory(
 ):
     """A database that already caught the bug holds the real registration AND the
     auto-registered duplicate. The lower id — the row with the tasks — wins."""
-    real = (tmp_path / "acme").resolve()
-    real.mkdir()
+    real = init_git_repo((tmp_path / "acme").resolve())
     link = tmp_path / "link-to-acme"
     link.symlink_to(real)
     _seed(real, name="acme", pid=1)
@@ -237,8 +237,7 @@ def test_register_stores_the_canonical_path(isolated_env, tmp_path):
     hook — which normalizes the cwd Claude Code hands it — matches on the
     indexed fast path rather than the legacy scan. Outside $HOME that form is
     still absolute."""
-    real = (tmp_path / "acme").resolve()
-    real.mkdir()
+    real = init_git_repo((tmp_path / "acme").resolve())
     link = tmp_path / "link-to-acme"
     link.symlink_to(real)
 
@@ -255,8 +254,7 @@ def test_register_stores_a_project_under_home_relative(
     """The E-2011 write side, end to end through the real command: the column
     holds `~/...`, which is the whole point — `endless sql` over the database is
     readable."""
-    proj = temp_home / "Projects" / "acme"
-    proj.mkdir(parents=True)
+    proj = init_git_repo(temp_home / "Projects" / "acme")
 
     register_project(proj, name="acme", infer=True)
 

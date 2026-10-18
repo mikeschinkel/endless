@@ -999,12 +999,13 @@ func ensureAutoRegisteredProject(db *sql.DB, dir string) (int64, error) {
 	name := filepath.Base(dir)
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 
-	// Ensure unique name
+	// Ensure unique name. The name doubles as the slug, so it must be free in
+	// both columns: a renamed project keeps its old name as its slug (E-2217).
 	base := name
 	for i := 2; ; i++ {
 		var exists int
 		db.QueryRow(
-			"SELECT count(*) FROM projects WHERE name = ?", name,
+			"SELECT count(*) FROM projects WHERE name = ? OR slug = ?", name, name,
 		).Scan(&exists)
 		if exists == 0 {
 			break
@@ -1013,9 +1014,9 @@ func ensureAutoRegisteredProject(db *sql.DB, dir string) (int64, error) {
 	}
 
 	result, err := db.Exec(
-		"INSERT INTO projects (name, path, status, created_at, updated_at) "+
-			"VALUES (?, ?, 'active', ?, ?)",
-		name, stored, now, now,
+		"INSERT INTO projects (name, slug, path, status, created_at, updated_at) "+
+			"VALUES (?, ?, ?, 'active', ?, ?)",
+		name, name, stored, now, now,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("auto-registering project %s at %s: %w", name, stored, err)

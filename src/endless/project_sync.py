@@ -6,6 +6,7 @@ from pathlib import Path
 import click
 
 from endless import db, config
+from endless.project_identity import NoIdentity, identity_for
 from endless.project_path import resolved, stored
 
 
@@ -58,6 +59,12 @@ def sync_projects():
 
         if name in db_by_name:
             db_entry = db_by_name[name]
+            if not _same_checkout(db_entry["path"], disk_path):
+                # The registered checkout is still there, so this is a second
+                # clone or a fork carrying the same name, not a move. Repointing
+                # would silently hand the project to whichever copy the scan
+                # met last (E-2217).
+                continue
             if db_entry["path"] != stored_path:
                 # Path changed (moved/renamed), or the row is in an older
                 # spelling → update
@@ -221,6 +228,16 @@ def _scan_dir_for_projects(
                             found[name] = (subdir, sub_cfg)
 
 
+def _same_checkout(row_path: str, disk_path: Path) -> bool:
+    """True when a row's path and a directory found on disk are one checkout.
+
+    Either the two spell the same directory, or the row's directory is gone,
+    which is what a moved checkout looks like from here.
+    """
+    row_dir = resolved(row_path)
+    return row_dir == disk_path or not row_dir.exists()
+
+
 def _detect_group(project_path: Path) -> str | None:
     """Detect group_name from parent directory."""
     parent = project_path.parent
@@ -258,13 +275,29 @@ def _sync_config_to_db(db_entry: dict, cfg: dict, now: str):
 def _insert_from_config(
     project_path: Path, cfg: dict, now: str,
 ):
-    """Insert a new project from its on-disk config."""
+    """Insert a new project from its on-disk config.
+
+    Skipped, not inserted, when the name is already some project's slug or the
+    identity is already registered: both are a second checkout of a project
+    this machine has, which `register` refuses outright (E-2217). A directory
+    with no root commit is inserted with no identity, as it always was; the
+    git requirement is `register`'s to enforce, not a scan's.
+    """
     name = cfg.get("name", project_path.name)
+    try:
+        identity = identity_for(project_path, cfg)
+    except NoIdentity:
+        identity = None
+    if db.exists(
+        "SELECT 1 FROM projects WHERE slug = ? OR identity = ?",
+        (name, identity),
+    ):
+        return
     db.execute(
         "INSERT INTO projects "
         "(name, label, path, group_name, description, "
-        "status, language, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "status, language, created_at, updated_at, identity, slug) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             name,
             cfg.get("label", ""),
@@ -275,5 +308,7 @@ def _insert_from_config(
             cfg.get("language", ""),
             now,
             now,
+            identity,
+            name,
         ),
     )

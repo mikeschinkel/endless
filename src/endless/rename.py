@@ -25,10 +25,12 @@ def rename_project(
 
     project = resolve_project(old_name, path_hint)
 
-    # Check new name isn't taken
+    # Check new name isn't taken — as a name, or as the slug a renamed project
+    # keeps (E-2217). The project's own slug is no clash: renaming back to the
+    # name it was registered under is fine.
     if db.exists(
-        "SELECT 1 FROM projects WHERE name = ?",
-        (new_name,),
+        "SELECT 1 FROM projects WHERE (name = ? OR slug = ?) AND id != ?",
+        (new_name, new_name, project["id"]),
     ):
         # Who picked the new name decides the class, and this function cannot
         # see that: the same call arrives whether the user dictated the name or

@@ -588,3 +588,48 @@ func TestMigrate_RenamesReplacesToSupersedes(t *testing.T) {
 		t.Errorf("task_deps = %v, want %v", got, want)
 	}
 }
+
+// TestMigrate_AddsProjectIdentity drives 00022 (E-2217) over a database at
+// version 21: every existing project gets slug = name and no identity, an
+// ignored directory's row gets no slug, and both columns are unique, with NULLs
+// allowed side by side.
+func TestMigrate_AddsProjectIdentity(t *testing.T) {
+	db := buildDB(t, func(db *sql.DB) error { return schema.MigrateUpTo(db, 21) })
+
+	mustExec(t, db, `INSERT INTO projects (id, name, path) VALUES (1, 'alpha', '/a'), (2, 'beta', '/b')`)
+	mustExec(t, db, `INSERT INTO projects (id, name, path, status) VALUES (3, '/ignored', '/ignored', 'ignored')`)
+
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	for id, want := range map[int]string{1: "alpha", 2: "beta"} {
+		var slug string
+		var identity sql.NullString
+		if err := db.QueryRow(`SELECT slug, identity FROM projects WHERE id = ?`, id).Scan(&slug, &identity); err != nil {
+			t.Fatalf("project %d: %v", id, err)
+		}
+		if slug != want {
+			t.Errorf("project %d slug = %q, want %q", id, slug, want)
+		}
+		if identity.Valid {
+			t.Errorf("project %d identity = %q, want NULL until backfilled", id, identity.String)
+		}
+	}
+
+	var ignoredSlug sql.NullString
+	if err := db.QueryRow(`SELECT slug FROM projects WHERE id = 3`).Scan(&ignoredSlug); err != nil {
+		t.Fatalf("ignored row: %v", err)
+	}
+	if ignoredSlug.Valid {
+		t.Errorf("an ignored directory got slug %q; it is not a project and names no database", ignoredSlug.String)
+	}
+
+	mustExec(t, db, `UPDATE projects SET identity = 'abc' WHERE id = 1`)
+	if _, err := db.Exec(`UPDATE projects SET identity = 'abc' WHERE id = 2`); err == nil {
+		t.Error("two projects took one identity; projects.identity must be unique")
+	}
+	if _, err := db.Exec(`INSERT INTO projects (name, slug, path) VALUES ('gamma', 'alpha', '/c')`); err == nil {
+		t.Error("two projects took one slug; projects.slug must be unique")
+	}
+}

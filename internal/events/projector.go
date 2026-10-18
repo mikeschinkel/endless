@@ -618,8 +618,8 @@ func ensureProject(db *sql.DB, name string) (int64, error) {
 	}
 
 	result, err := db.Exec(
-		"INSERT INTO projects (name, path, status, created_at, updated_at) VALUES (?, '', 'active', '', '')",
-		name,
+		"INSERT INTO projects (name, slug, path, status, created_at, updated_at) VALUES (?, ?, '', 'active', '', '')",
+		name, name,
 	)
 	if err != nil {
 		return 0, fmt.Errorf("ensure project %q: %w", name, err)
