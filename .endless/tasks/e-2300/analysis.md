@@ -7,5 +7,5 @@ Decisions from the /needs-plan session (Mike, 2026-10-11 to 2026-10-17).
 - Read time only (Mike, Q3 = A): a wrong verdict corrects itself on the next refresh.
 - Steward test switches to "not dead" (Mike, Q4 = B): one presence test everywhere.
 - State-only readers (WorktreeInUse, in_flight, session graph) counted ghosts as present; they switch to "not dead".
-- Existing rows stay unknown (Mike, Q5 = A); recovery is `session end` (Mike, Q6 = B), guarded by both a recency refusal and a y/N prompt (Mike, Q7 = C). Recency guards against ending a session still running on an unreachable server; the prompt guards against a wrong id. `session resume` already resumes ended sessions, so an accidental end is recoverable, though the task can be claimed meanwhile.
+- Existing rows stay unknown (Mike, Q5 = A); recovery is `session end` (Mike, Q6 = B; split into its own task, 2026-10-17), guarded by both a recency refusal and a y/N prompt (Mike, Q7 = C). Recency guards against ending a session still running on an unreachable server; the prompt guards against a wrong id. `session resume` already resumes ended sessions, so an accidental end is recoverable, though the task can be claimed meanwhile.
 - Rejected: lsof/process-table enumeration of tmux servers (unnecessary once only Endless's servers are supported); writing `ended` from a verdict.
