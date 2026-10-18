@@ -10,7 +10,9 @@
   },
   "self_dev": true,
   "migrations": {
-    "dirs": ["internal/schema/migrations"]
+    "dirs": [
+      "internal/schema/migrations"
+    ]
   },
   "minimizer": {
     "enabled": false,
@@ -21,5 +23,6 @@
   },
   "main_sync": {
     "enabled": "on"
-  }
+  },
+  "identity": "1019f08102586e87571d2f3098ebbe92fd2605b2"
 }
