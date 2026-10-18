@@ -7681,3 +7681,7 @@ E-2394 (endless session end): the plan named the session.ended event as the writ
 ### [2026-10-18] Don't retire never-used event kinds while Mike is the only user
 E-2402 (removing 18 event kinds with no executor or emitter): I decided without asking to move them to RetiredKinds so a hand-emitted orphan in someone's ledger would still replay. Mike: once there are users other than him that makes sense; before then it is legacy cruft for no benefit. I had checked every local ledger and found none of the kinds. For this case, delete outright; revisit when Endless has other users.
 - **Project**: endless
+
+### [2026-10-18] Treat warnings as work to address, not as ignorable
+Reviewing endless errors list on 2026-10-18 (E-2385 session), I called WARN-0021 (output style installed but not active, homelab-app) 'just a warning' and set it apart from the bugs. Mike: 'Warnings are still things we need to address.' When triaging the errors channel, give a warning the same treatment as an error: find its cause, say whether it will recur, and propose a fix or a better remedy, rather than dismissing it by severity.
+- **Project**: endless
