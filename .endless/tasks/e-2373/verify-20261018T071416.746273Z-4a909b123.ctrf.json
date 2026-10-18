@@ -1,0 +1,124 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 21,
+      "passed": 21,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test ./internal/monitor -run TestMinimizer",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest (minimizer config, loop switches, wind-down reminder)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go build ./cmd/endless-go (this worktree's hook)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no config file: SessionStart gives no report-channel instructions",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no config file: the Stop hook says nothing and holds nothing",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "config without the key: SessionStart gives no report-channel instructions",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "config without the key: the Stop hook says nothing and holds nothing",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "object naming only the optimizer: SessionStart gives no report-channel instructions",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "object naming only the optimizer: the Stop hook says nothing and holds nothing",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "malformed config: SessionStart gives no report-channel instructions",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "malformed config: the Stop hook says nothing and holds nothing",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "explicit \"enabled\": true: SessionStart gives the report-channel instructions",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "explicit \"enabled\": true: the Stop hook gates the turn on task report",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "\"minimizer\": true shorthand: SessionStart gives the report-channel instructions",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "\"minimizer\": true shorthand: the Stop hook gates the turn on task report",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "legacy \"report_gate\": true: SessionStart gives the report-channel instructions",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "legacy \"report_gate\": true: the Stop hook gates the turn on task report",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "minimizer --help: enabled defaults off, optimizer on",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "minimizer --help no longer says both default on",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "guide: the channel is off unless a project sets enabled true",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "guide: it defaults off",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
