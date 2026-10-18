@@ -7669,3 +7669,7 @@ In E-2385, a pytest test reached Mike's real endless-tasks server and opened an 
 ### [2026-10-18] Don't report a migration-number clash in another task's worktree
 Context: verifying the main-DB repair after E-2217 (2026-10-18), I globbed every worktree's migrations and reported that E-2063's worktree still numbered migrations 22-24, clashing with main. Mike: that's nothing for me to report. Landing E-2063 will fail on the clash, and he will have E-2063 renumber then. Reason: land already catches it, so a heads-up beforehand adds nothing. Scope: migration clashes in worktrees of tasks other than the one I'm working on.
 - **Project**: endless
+
+### [2026-10-18] Look for the settled answer before raising a design question
+While rewriting E-2398 (isolating a sandbox's tmux), I raised the ~104-byte Unix socket path limit as an open problem. Mike pointed out it had already been solved on earlier tasks and asked why that logic couldn't be reused: config's default socket dir, verifycmd's tmuxTmpRoot and tmuxtest's tmpRoot all put sockets under the system tmp root for that reason. I also claimed the verify runner leaks $TMUX when it already strips it (callerIdentityVars). Before presenting a constraint as a new design problem, search the code and earlier tasks for an existing answer and propose reusing it.
+- **Project**: endless
