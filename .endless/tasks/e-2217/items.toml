@@ -61,3 +61,8 @@ id = "P10"
 kind = "deliverable"
 statement = "A checkout whose registered original no longer exists takes the project over, tasks and all"
 verify = "test_a_checkout_whose_original_is_gone_takes_the_project_over"
+
+[[item]]
+id = "P11"
+kind = "exclusion"
+statement = "Prompting for a different slug at registration, and naming per-project database files by slug, are left to E-2215"
