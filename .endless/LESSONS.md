@@ -7673,3 +7673,7 @@ Context: verifying the main-DB repair after E-2217 (2026-10-18), I globbed every
 ### [2026-10-18] Look for the settled answer before raising a design question
 While rewriting E-2398 (isolating a sandbox's tmux), I raised the ~104-byte Unix socket path limit as an open problem. Mike pointed out it had already been solved on earlier tasks and asked why that logic couldn't be reused: config's default socket dir, verifycmd's tmuxTmpRoot and tmuxtest's tmpRoot all put sockets under the system tmp root for that reason. I also claimed the verify runner leaks $TMUX when it already strips it (callerIdentityVars). Before presenting a constraint as a new design problem, search the code and earlier tasks for an existing answer and propose reusing it.
 - **Project**: endless
+
+### [2026-10-18] Session rows are machine-local; don't route session writes through the ledger
+E-2394 (endless session end): the plan named the session.ended event as the write, and I offered 'make session.ended real' as an option. Mike asked why we would ever need a session.ended event for the ledger. Session state is written directly by Go's monitor (the SessionEnd hook calls monitor.EndSession) and is never ledgered; the git-shared ledger is for task state. When a plan names a ledger event for a session write, check that the event has an executor and that the entity is ledgered at all before presenting it as an option.
+- **Project**: endless
