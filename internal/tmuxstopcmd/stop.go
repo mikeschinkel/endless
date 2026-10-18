@@ -57,12 +57,13 @@ func Run(args []string) {
 	all := fs.Bool("all", false, "stop the task-session server, then the console")
 	force := fs.Bool("force", false, "stop the task-session server even while sessions are working or Claude has not quit")
 	timeout := fs.Duration("timeout", 30*time.Second, "how long to wait for every Claude to quit")
-	if err := fs.Parse(args); err != nil {
+	positional, err := parseInterspersed(fs, args)
+	if err != nil {
 		fs.ExitOnHelp(err)
 		refusal.NoReport(err.Error(), "Correct the flag and retry").
 			Command("tmux stop").Text(fs.Output()).Exit(2)
 	}
-	target, err := parseTarget(*all, fs.Args())
+	target, err := parseTarget(*all, positional)
 	if err != nil {
 		refusal.NoReport(fmt.Sprintf("tmux stop: %v", err),
 			"Name one of tasks, console or all and retry").
@@ -81,13 +82,30 @@ func Run(args []string) {
 	if target == "tasks" || target == "all" {
 		if !stopTasks(out, servers.Tasks, opts) {
 			if target == "all" {
-				fmt.Fprintln(out, "• console: left running, because the task-session server is")
+				fmt.Fprintln(out, "• console: left running, because the task-session server is still running")
 			}
 			os.Exit(1)
 		}
 	}
 	if target == "console" || target == "all" {
 		stopConsole(out, servers.Console)
+	}
+}
+
+// parseInterspersed parses flags on either side of the target (`stop tasks
+// --timeout 10s`), returning the positionals: the flag package stops at the
+// first positional, so it parses again after each one.
+func parseInterspersed(fs *refusal.Flags, args []string) ([]string, error) {
+	var positional []string
+	for {
+		if err := fs.Parse(args); err != nil {
+			return nil, err
+		}
+		if fs.NArg() == 0 {
+			return positional, nil
+		}
+		positional = append(positional, fs.Arg(0))
+		args = fs.Args()[1:]
 	}
 }
 

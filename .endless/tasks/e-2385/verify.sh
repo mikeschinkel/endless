@@ -151,6 +151,7 @@ assert_eq "outside tmux: spawn-window exits 1" "1" "${rc}"
 assert_contains "and says Endless isn't running" "Endless isn't running. Run \`endless start\`, then retry." "${OUT}"
 assert_eq "and no server was started" "" "$(ls -A "${SOCK}" 2>/dev/null)"
 
+with_tmux true # with_tmux makes its fixture session on first use: count after it
 before="$(env -u TMUX -u TMUX_PANE tmux list-windows -a 2>/dev/null | wc -l | tr -d ' ')"
 OUT="$(cd "${TMP}/proj" && with_tmux spawn 11)"; rc=$?
 assert_eq "inside another tmux server: spawn-window exits 1" "1" "${rc}"

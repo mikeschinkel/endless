@@ -16,6 +16,7 @@ import (
 	"github.com/mikeschinkel/go-cfgstore"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/tmuxservers"
 	"github.com/mikeschinkel/endless/internal/tmuxtest"
 )
@@ -44,6 +45,23 @@ func TestParseTarget(t *testing.T) {
 		got, err := parseTarget(tt.all, tt.args)
 		if got != tt.want || (err == nil) != (tt.want != "") {
 			t.Errorf("parseTarget(%v, %q) = %q, %v; want %q", tt.all, tt.args, got, err, tt.want)
+		}
+	}
+}
+
+// TestParseInterspersed: flags count on either side of the target.
+func TestParseInterspersed(t *testing.T) {
+	for _, args := range [][]string{
+		{"tasks", "--timeout", "10s", "--force"},
+		{"--force", "tasks", "--timeout=10s"},
+		{"--timeout", "10s", "--force", "tasks"},
+	} {
+		fs := refusal.NewFlags("tmux stop")
+		force := fs.Bool("force", false, "")
+		timeout := fs.Duration("timeout", time.Second, "")
+		got, err := parseInterspersed(fs, args)
+		if err != nil || !slices.Equal(got, []string{"tasks"}) || !*force || *timeout != 10*time.Second {
+			t.Errorf("parseInterspersed(%q) = %q, %v; force %v, timeout %v", args, got, err, *force, *timeout)
 		}
 	}
 }
