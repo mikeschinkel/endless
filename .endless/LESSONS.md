@@ -7689,3 +7689,7 @@ Reviewing endless errors list on 2026-10-18 (E-2385 session), I called WARN-0021
 ### [2026-10-18] Fix a footgun by doing the right thing, not by refusing
 Spawning a go-cfgstore task from the endless checkout would have created its worktree in the wrong repository. I proposed a check that refuses and tells the user which directory to run from or which --project to pass. Mike rejected it: the task already knows which project owns it, so spawn should simply work in that project's directory. A refusal that asks the user for information the system already holds is the wrong fix. Make the command use what it knows.
 - **Project**: endless
+
+### [2026-10-18] Search the target project's tasks before filing there
+While planning E-2300's follow-ups I filed E-2400 in go-cfgstore for mergeRootConfigs returning the unmerged layer. go-cfgstore already had E-2208 for exactly that, planned since October 1, and Mike found the overlap only when I listed the project's tasks while planning E-2400. Endless's duplicate nudge checks only this session's filings, not the target project's backlog. Before filing a task, list the target project's open tasks (endless task list --project <name>) and search them for the same defect.
+- **Project**: endless
