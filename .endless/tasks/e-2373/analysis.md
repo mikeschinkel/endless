@@ -1,0 +1,3 @@
+The `task report` requirement is deprecated but not removed. `minimizer.enabled` defaults to true, so a session that enters a project with no `minimizer` key in `.endless/config.json` gets the report-channel instructions and the Stop hook gate. This hits every project that has never set the key. Mike hit it on 2026-10-17 in go-cliutil (E-2289): the PreToolUse worktree gate blocked `endless task report`, and the Stop hook then refused every reply.
+
+The optimizer default stays on: the self-tuning loop learns from task reports, which are not produced while enabled is off, so the switch has no effect by default either way and leaving it keeps the change to one switch.
