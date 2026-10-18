@@ -58,3 +58,8 @@ statement = "Does not register any config key outside tmux (E-2303)"
 id = "P10"
 kind = "exclusion"
 statement = "Does not make the tmux keys settable from a project file"
+
+[[item]]
+id = "P11"
+kind = "deliverable"
+statement = "The path kind accepts ~ and paths under ~/ as well as absolute paths, since Resolve expands them (decided with Mike in session)"
