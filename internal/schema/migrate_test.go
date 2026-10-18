@@ -658,7 +658,7 @@ func TestMigrate_AddsProjectIdentity(t *testing.T) {
 			t.Errorf("project %d slug = %q, want %q", id, slug, want)
 		}
 		if identity.Valid {
-			t.Errorf("project %d identity = %q, want NULL until backfilled", id, identity.String)
+			t.Errorf("project %d identity = %q, want NULL: a schema step runs no git", id, identity.String)
 		}
 	}
 

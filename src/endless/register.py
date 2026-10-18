@@ -9,9 +9,7 @@ import click
 
 from endless import agent_help, db, config, main_commit
 from endless.git_hook import LEFTHOOK_CONFIGS
-from endless.project_identity import (
-    CONFIG_KEY, NoIdentity, identity_for, stored_identity,
-)
+from endless.project_identity import CONFIG_KEY, NoIdentity, identity_for
 from endless.project_path import resolved, stored
 
 NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
@@ -837,112 +835,6 @@ def _refuse_name_clash(name: str, own_id: int | None) -> None:
         text=(f"Name '{name}' is already the name of {held_by} "
               f"{other_path}\nChoose another with --name."),
     )
-
-
-CONFIG_REL = ".endless/config.json"
-
-
-def backfill_identities(dry_run: bool = False) -> list[tuple[str, str]]:
-    """Give every registered project its identity (E-2217).
-
-    For each row: derive the identity (the stored copy, else the root commit),
-    record it in the project's `.endless/config.json` and commit that one file
-    in the project's own repo, then set the column. Returns (name, outcome)
-    per project, and echoes each as it goes.
-
-    The config is committed only when it is tracked and was clean before the
-    write: committing it otherwise would sweep the user's own uncommitted edits,
-    or a file they never chose to commit, into an Endless commit. Such a config
-    is written and left for them to commit. A project whose identity another
-    row already holds is a second checkout registered before this check
-    existed; it is reported and left alone, since which copy stays is theirs
-    to say.
-    """
-    outcomes: list[tuple[str, str]] = []
-
-    def note(name: str, outcome: str, ok: bool = True) -> None:
-        outcomes.append((name, outcome))
-        click.echo(
-            click.style("•", fg="cyan" if ok else "yellow")
-            + f" {click.style(name, bold=True)}: {outcome}"
-        )
-
-    rows = db.query(
-        "SELECT id, name, path, identity FROM projects "
-        "WHERE status != 'forgotten' ORDER BY id"
-    )
-    for row in rows:
-        name = row["name"]
-        path = resolved(row["path"])
-        if not (path / CONFIG_REL).is_file():
-            note(name, f"skipped: no {CONFIG_REL} at {path}", ok=False)
-            continue
-        cfg = config.project_config_read(path) or {}
-        try:
-            identity = identity_for(path, cfg)
-        except NoIdentity as e:
-            note(name, f"skipped: {e}", ok=False)
-            continue
-        holder = db.query(
-            "SELECT name, path FROM projects WHERE identity = ? AND id != ?",
-            (identity, row["id"]),
-        )
-        if holder:
-            note(name, f"skipped: another checkout of '{holder[0]['name']}' "
-                       f"(registered at {resolved(holder[0]['path'])})",
-                 ok=False)
-            continue
-        if stored_identity(cfg) is None:
-            if dry_run:
-                note(name, f"would record {identity}")
-                continue
-            committable = _config_committable(path)
-            cfg[CONFIG_KEY] = identity
-            config.project_config_write(path, cfg)
-            if committable:
-                try:
-                    main_commit.commit_path(
-                        path, CONFIG_REL, "Endless: record project identity",
-                    )
-                    outcome = f"recorded {identity} and committed {CONFIG_REL}"
-                except RuntimeError as e:
-                    outcome = f"recorded {identity}; commit failed: {e}"
-            else:
-                outcome = (f"recorded {identity}; {CONFIG_REL} left "
-                           "uncommitted (it had changes of its own, or was "
-                           "never committed)")
-        elif row["identity"] == identity:
-            note(name, "already recorded")
-            continue
-        else:
-            outcome = f"set {identity} from {CONFIG_REL}"
-            if dry_run:
-                note(name, f"would {outcome}")
-                continue
-        db.execute(
-            "UPDATE projects SET identity = ? WHERE id = ?",
-            (identity, row["id"]),
-        )
-        note(name, outcome)
-    return outcomes
-
-
-def _config_committable(project_path: Path) -> bool:
-    """True when the project's config is tracked and has no changes of its own."""
-    env = main_commit.sanitized_git_env()
-    tracked = subprocess.run(
-        ["git", "-C", str(project_path), "ls-files", "--error-unmatch", "--",
-         CONFIG_REL],
-        capture_output=True, text=True, env=env,
-    )
-    if tracked.returncode != 0:
-        return False
-    clean = subprocess.run(
-        ["git", "-C", str(project_path), "diff", "--quiet", "HEAD", "--",
-         CONFIG_REL],
-        capture_output=True, text=True, env=env,
-    )
-    return clean.returncode == 0
 
 
 def _scaffold_output_style(project_path: Path) -> None:

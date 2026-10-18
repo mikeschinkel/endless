@@ -789,20 +789,6 @@ def init(path, infer, name, label, desc, lang, status, git_hooks):
 project_cmd.add_command(init, name="register")
 
 
-@project_cmd.command("backfill-identity")
-@click.option("--dry-run", is_flag=True,
-              help="Show what would be recorded without writing anything")
-def backfill_identity(dry_run):
-    """Record every registered project's identity (its repo's root commit).
-
-    Writes the identity into each project's .endless/config.json and commits
-    that one file in the project's own repo, when the file is tracked and was
-    clean. Idempotent; safe to re-run.
-    """
-    from endless.register import backfill_identities
-    backfill_identities(dry_run=dry_run)
-
-
 @project_cmd.command("unregister")
 @click.argument("name")
 def unregister(name):

@@ -7,9 +7,9 @@
 //
 // Existing projects get slug = name, the default every writer applies; an
 // ignored directory's row (E-2251) is not a project and gets none. identity is
-// left NULL: deriving it means running git in each project's checkout and
-// writing its `.endless/config.json`, which is `endless project
-// backfill-identity`'s job, not a schema step's.
+// left NULL: deriving it means running git in each project's checkout, which
+// `endless project register` does when a project is registered or
+// re-registered, not a schema step.
 //
 // A .go step for the reason the package header gives: schema.sql already
 // declares both columns, and SQLite has no ADD COLUMN IF NOT EXISTS, so each is

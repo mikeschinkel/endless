@@ -15,7 +15,6 @@
 #     of a registered project (names the path, points at worktrees, says forks
 #     are unsupported); a name another registered project holds.
 #   - project sync no longer repoints a project at a second clone.
-#   - `project backfill-identity` records identities for older registrations.
 #
 # ISOLATION: throwaway repos under a temp HOME/XDG_CONFIG_HOME, and a COPY of
 # this branch's endless-go outside the worktree (a binary run from inside a
@@ -147,26 +146,5 @@ assert_contains "the slug kept the registered name" "alpha" "$(sql "SELECT slug 
 cfg="$(cat "${P}/alpha/.endless/config.json")"
 assert_not_contains "config.json carries no slug" "slug" "${cfg}"
 assert_not_contains "config.json does not carry the old name" "\"alpha\"" "${cfg}"
-
-# ── 8. backfill ──────────────────────────────────────────────────────────────
-section "8. backfill-identity records older registrations"
-new_repo "${P}/legacy"
-mkdir -p "${P}/legacy/.endless"
-printf '{"name": "legacy", "status": "active"}\n' > "${P}/legacy/.endless/config.json"
-git -C "${P}/legacy" add .endless/config.json
-git -C "${P}/legacy" -c commit.gpgsign=false commit -q -m "config"
-es sql --write "INSERT INTO projects (name, slug, path, status) VALUES ('legacy', 'legacy', '${P}/legacy', 'active')" >/dev/null
-LEGACY_SHA="$(git -C "${P}/legacy" rev-list --max-parents=0 HEAD)"
-before="$(git -C "${P}/legacy" rev-parse HEAD)"
-out="$(es project backfill-identity)"
-assert_contains "it reports the commit" "committed .endless/config.json" "${out}"
-assert_contains "config.json now carries the identity" "${LEGACY_SHA}" "$(cat "${P}/legacy/.endless/config.json")"
-assert_eq "exactly one commit was made" "${before}" "$(git -C "${P}/legacy" rev-parse HEAD~1)"
-assert_eq "it committed only config.json" ".endless/config.json" "$(git -C "${P}/legacy" show --name-only --format= HEAD)"
-assert_contains "the row carries the identity" "${LEGACY_SHA}" "$(sql "SELECT identity FROM projects WHERE name='legacy'")"
-head="$(git -C "${P}/legacy" rev-parse HEAD)"
-out="$(es project backfill-identity)"
-assert_contains "a second run changes nothing" "legacy: already recorded" "${out}"
-assert_eq "and commits nothing" "${head}" "$(git -C "${P}/legacy" rev-parse HEAD)"
 
 summary

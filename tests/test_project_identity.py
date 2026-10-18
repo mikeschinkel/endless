@@ -18,7 +18,7 @@ from endless import config, db
 from endless.agent_help import Refusal
 from endless.project_identity import NoIdentity, identity_for, root_commit
 from endless.project_sync import sync_projects
-from endless.register import backfill_identities, register_project
+from endless.register import register_project
 from endless.rename import rename_project
 
 from conftest import init_git_repo
@@ -271,92 +271,6 @@ def test_sync_skips_a_second_clone_under_another_name(isolated_env):
     sync_projects()
 
     assert len(db.query("SELECT 1 FROM projects")) == 1
-
-
-# --- backfill ----------------------------------------------------------------
-
-
-def _legacy_register(repo: Path, name: str) -> None:
-    """A project registered before identities existed: committed config with
-    no identity, a row with none."""
-    (repo / ".endless").mkdir(exist_ok=True)
-    config.project_config_write(repo, {"name": name, "status": "active"})
-    _commit_config(repo)
-    db.execute(
-        "INSERT INTO projects (name, slug, path, status) VALUES (?, ?, ?, 'active')",
-        (name, name, str(repo)),
-    )
-
-
-def test_backfill_records_commits_and_is_idempotent(isolated_env):
-    repo = init_git_repo(isolated_env["projects_root"] / "alpha")
-    _legacy_register(repo, "alpha")
-    before = _head(repo)
-
-    backfill_identities()
-
-    expected = root_commit(repo)
-    assert config.project_config_read(repo)["identity"] == expected
-    assert _row("alpha")["identity"] == expected
-    assert _git(repo, "rev-parse", "HEAD~1") == before, "expected one commit"
-    assert _git(repo, "show", "--name-only", "--format=", "HEAD") == ".endless/config.json"
-    assert _git(repo, "status", "--porcelain") == ""
-
-    head = _head(repo)
-    assert backfill_identities() == [("alpha", "already recorded")]
-    assert _head(repo) == head
-
-
-def test_backfill_dry_run_writes_nothing(isolated_env):
-    repo = init_git_repo(isolated_env["projects_root"] / "alpha")
-    _legacy_register(repo, "alpha")
-    head = _head(repo)
-
-    backfill_identities(dry_run=True)
-
-    assert "identity" not in config.project_config_read(repo)
-    assert _row("alpha")["identity"] is None
-    assert _head(repo) == head
-
-
-def test_backfill_leaves_a_config_with_its_own_edits_uncommitted(isolated_env):
-    repo = init_git_repo(isolated_env["projects_root"] / "alpha")
-    _legacy_register(repo, "alpha")
-    cfg = config.project_config_read(repo)
-    cfg["label"] = "an edit of the user's own"
-    config.project_config_write(repo, cfg)
-    head = _head(repo)
-
-    backfill_identities()
-
-    assert _head(repo) == head, "the user's edit was swept into a commit"
-    assert config.project_config_read(repo)["identity"] == root_commit(repo)
-    assert _row("alpha")["identity"] == root_commit(repo)
-
-
-def test_backfill_reports_two_checkouts_registered_before_the_rule(
-    isolated_env,
-):
-    root = isolated_env["projects_root"]
-    first = init_git_repo(root / "alpha")
-    _legacy_register(first, "alpha")
-    clone = root / "alpha-clone"
-    _git(root, "clone", "-q", str(first), str(clone))
-    cfg = config.project_config_read(clone)
-    cfg["name"] = "alpha-clone"
-    config.project_config_write(clone, cfg)
-    _commit_config(clone)
-    db.execute(
-        "INSERT INTO projects (name, slug, path, status) VALUES "
-        "('alpha-clone', 'alpha-clone', ?, 'active')",
-        (str(clone),),
-    )
-
-    outcomes = dict(backfill_identities())
-
-    assert _row("alpha")["identity"] == root_commit(first)
-    assert outcomes["alpha-clone"].startswith("skipped: another checkout of 'alpha'")
-    assert _row("alpha-clone")["identity"] is None
 
 
 # --- moved and unregistered checkouts ----------------------------------------

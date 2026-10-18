@@ -39,7 +39,8 @@ CREATE TABLE IF NOT EXISTS projects (
 -- it. Every clone and fork carries the same value, so UNIQUE here is what lets
 -- `register` refuse a second checkout of one project on one machine. NULL for a
 -- row nobody registered (the monitor's auto-registered directories, a
--- projector's minimal row) and for a project not yet backfilled.
+-- projector's minimal row) and for a project registered before E-2217 and not
+-- re-registered since.
 --
 -- slug is machine-local: it names the project's database file under the config
 -- dir (E-2215) and is never written to the ledger or to any committed file. It
