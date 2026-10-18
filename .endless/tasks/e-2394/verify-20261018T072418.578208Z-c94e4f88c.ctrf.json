@@ -1,0 +1,114 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 19,
+      "passed": 19,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "contract test runs and passes: TestEndSession_EndsTheRowAndReleasesItsLock",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestEndSession_UnknownIDRefuses",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestResumeTarget_CarriesLastActivity",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest: session end guards and output, and the claim refusal",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no terminal and no --yes: refused",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the refusal says how to confirm",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it shows the liveness it judged",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the refused ghost is untouched",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "activity 2 minutes ago: refused",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the refusal names --force",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the recent session is untouched",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the ghost ends",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "its row reads ended",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it prints how to get it back",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no other session was ended",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "ending it again exits zero",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and says it is already ended",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the resume route still resolves the ended session",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "--force ends the recently active session",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
