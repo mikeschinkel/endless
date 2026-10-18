@@ -5830,7 +5830,12 @@ def tmux_stop(ctx, target, all_, force, timeout):
     reported as already stopped.
     """
     if target is None and not all_:
-        raise click.UsageError("name what to stop: tasks, console or all", ctx)
+        raise agent_help.no_report(
+            "endless stop: name what to stop: tasks, console or all.",
+            "Re-run as `endless stop tasks`, `endless stop console` or "
+            "`endless stop all`",
+            text=ctx.get_usage(), exit_code=2,
+        )
     from endless.tmux_cmd import run_stop
     run_stop(target, all_, force, timeout)
 
