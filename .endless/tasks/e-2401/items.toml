@@ -63,3 +63,8 @@ statement = "Does not make the tmux keys settable from a project file"
 id = "P11"
 kind = "deliverable"
 statement = "The path kind accepts ~ and paths under ~/ as well as absolute paths, since Resolve expands them (decided with Mike in session)"
+
+[[item]]
+id = "P12"
+kind = "deliverable"
+statement = "tests/conftest.py creates the isolated user config once, not twice: E-2300 and E-2385 each added the block, so every fixture setup failed with FileExistsError"
