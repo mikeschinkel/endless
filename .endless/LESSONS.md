@@ -7677,3 +7677,7 @@ While rewriting E-2398 (isolating a sandbox's tmux), I raised the ~104-byte Unix
 ### [2026-10-18] Session rows are machine-local; don't route session writes through the ledger
 E-2394 (endless session end): the plan named the session.ended event as the write, and I offered 'make session.ended real' as an option. Mike asked why we would ever need a session.ended event for the ledger. Session state is written directly by Go's monitor (the SessionEnd hook calls monitor.EndSession) and is never ledgered; the git-shared ledger is for task state. When a plan names a ledger event for a session write, check that the event has an executor and that the entity is ledgered at all before presenting it as an option.
 - **Project**: endless
+
+### [2026-10-18] Don't retire never-used event kinds while Mike is the only user
+E-2402 (removing 18 event kinds with no executor or emitter): I decided without asking to move them to RetiredKinds so a hand-emitted orphan in someone's ledger would still replay. Mike: once there are users other than him that makes sense; before then it is legacy cruft for no benefit. I had checked every local ledger and found none of the kinds. For this case, delete outright; revisit when Endless has other users.
+- **Project**: endless
