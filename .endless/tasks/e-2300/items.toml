@@ -40,27 +40,7 @@ statement = "WorktreeInUse, session status's in_flight marker and the session gr
 [[item]]
 id = "P8"
 kind = "deliverable"
-statement = "When a claim or spawn is blocked by an unknown session, the refusal says its server cannot be reached and names endless start (when its Endless server is down), endless session resume ES-N and endless session end ES-N"
-
-[[item]]
-id = "P9"
-kind = "deliverable"
-statement = "endless session end <ref> refuses a live session"
-
-[[item]]
-id = "P10"
-kind = "deliverable"
-statement = "endless session end refuses a session with activity in the last 10 minutes unless --force"
-
-[[item]]
-id = "P11"
-kind = "deliverable"
-statement = "endless session end shows the session's task, last activity and liveness and asks y/N; --yes skips the prompt; with no terminal and no --yes it refuses"
-
-[[item]]
-id = "P12"
-kind = "deliverable"
-statement = "After ending, session end prints how to get the session back (endless session resume ES-N) and that its task can now be claimed"
+statement = "When a claim or spawn is blocked by an unknown session, the refusal says its server cannot be reached and names endless start (when its Endless server is down) and endless session resume ES-N"
 
 [[item]]
 id = "P13"
@@ -81,3 +61,8 @@ statement = "Does not set sessions.state = 'ended' automatically from any livene
 id = "P16"
 kind = "exclusion"
 statement = "Does not filter hooks by tmux server (E-2302) or change where spawns open (E-2385)"
+
+[[item]]
+id = "P17"
+kind = "exclusion"
+statement = "Does not add endless session end (its own task)"
