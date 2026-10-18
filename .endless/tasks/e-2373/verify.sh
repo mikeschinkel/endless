@@ -12,7 +12,10 @@
 # (--db-dir under a temp dir) seeded with one registered project, and rewrites
 # that project's .endless/config.json between cases. Every "off" case is paired
 # with an "on" control, so a hook that fails to run cannot pass as one that
-# stayed silent.
+# stayed silent. An "on" Stop is judged by its output naming `task report`, not
+# by "decision":"block": every call here lands on one Endless session, whose hold
+# budget runs out after two blocks and then releases the turn with a message
+# that still names the command.
 source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
@@ -91,8 +94,7 @@ for case in "no config file|" \
     set_config "$body"
     assert_not_contains "$label: SessionStart gives no report-channel instructions" \
         "endless task report" "$(session_start)"
-    assert_not_contains "$label: the Stop hook does not demand task report" \
-        '"decision":"block"' "$(stop_hook)"
+    assert_eq "$label: the Stop hook says nothing and holds nothing" "" "$(stop_hook)"
 done
 
 # ── 3. explicit opt-in still works ───────────────────────────────────────────
@@ -104,8 +106,8 @@ for case in 'explicit "enabled": true|{"name":"e2373","minimizer":{"enabled":tru
     set_config "$body"
     assert_contains "$label: SessionStart gives the report-channel instructions" \
         "endless task report" "$(session_start)"
-    assert_contains "$label: the Stop hook demands task report" \
-        '"decision":"block"' "$(stop_hook)"
+    assert_contains "$label: the Stop hook gates the turn on task report" \
+        "task report" "$(stop_hook)"
 done
 
 # ── 4. what a reader is told ─────────────────────────────────────────────────
