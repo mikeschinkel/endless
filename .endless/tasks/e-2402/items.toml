@@ -33,3 +33,8 @@ statement = "Does not add the removed kinds to RetiredKinds"
 id = "P6"
 kind = "exclusion"
 statement = "Does not change any kind that has an executor or projector case, including epic.status_derived, or the ledger format"
+
+[[item]]
+id = "P7"
+kind = "deliverable"
+statement = "The conversation, message and note entity types, used only by the removed kinds, are removed from the EntityType constants and validEntityTypes"
