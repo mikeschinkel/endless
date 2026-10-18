@@ -384,9 +384,15 @@ def test_spawn_force_still_demotes_but_warns(project_at_cwd, monkeypatch, capsys
         status="unverified", plan="plan",
     )
 
-    # The launcher cannot open a window against a fake $TMUX, so the spawn
-    # itself dies downstream. What is being pinned is upstream of that: the
-    # warning fired, and the settled-status gate let the call through.
+    # The spawn is made to die at the launch, so no window opens. It used to
+    # die there on its own, against a fake $TMUX, and no longer does: the
+    # launcher now succeeds under the suite's isolated tmux environment.
+    # What is being pinned is upstream of the launch: the warning fired, and
+    # the settled-status gate let the call through.
+    def _no_launch():
+        raise RuntimeError("launch stubbed out by the test")
+
+    monkeypatch.setattr("endless.task_cmd._claude_binary", _no_launch)
     with pytest.raises(Exception):
         spawn_plan(1611, force=True)
 
