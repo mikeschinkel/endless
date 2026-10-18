@@ -84,10 +84,10 @@ func TestResolveRefusesAMalformedValue(t *testing.T) {
 // TestResolveAcceptsWellShapedValues: home-relative directories, blank
 // (unset) values and a terminal template all resolve.
 func TestResolveAcceptsWellShapedValues(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		t.Skip(err)
-	}
+	// A short HOME, so the expanded socket path stays under the length limit
+	// whatever the caller's HOME is.
+	home := "/h"
+	t.Setenv("HOME", home)
 	s, err := resolveFrom(config.Tmux{SocketDir: "~/s", TasksSession: " ", Terminal: "ghostty -e {cmd}"})
 	if err != nil {
 		t.Fatal(err)
