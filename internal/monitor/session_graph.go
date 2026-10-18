@@ -76,6 +76,10 @@ func SessionGraphData(seeds []int64, own int64) (GraphData, error) {
 	if err != nil {
 		return out, err
 	}
+	// The live-session flag reads session_liveness (E-2300).
+	if err = livenessReady(); err != nil {
+		return out, err
+	}
 
 	ph, args := intPlaceholders(seeds)
 	args = append(args, own)
@@ -100,8 +104,8 @@ WITH RECURSIVE nodes(id) AS (
      AND blk.status NOT IN (` + terminalStatusSet + `)
 )
 SELECT t.id, t.project_id, t.status, t.phase,
-       EXISTS(SELECT 1 FROM sessions s
-               WHERE s.state IN (` + liveSessionStates + `) AND s.task_id = t.id)
+       EXISTS(SELECT 1 FROM sessions s JOIN session_liveness sl ON sl.session_id = s.id
+               WHERE ` + presentSession + ` AND s.task_id = t.id)
   FROM live_tasks t JOIN nodes n ON n.id = t.id`
 	rows, err := db.Query(nodeQ, args...)
 	if err != nil {

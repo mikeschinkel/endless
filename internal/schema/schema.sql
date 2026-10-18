@@ -142,6 +142,22 @@ CREATE TABLE IF NOT EXISTS processes (
 CREATE UNIQUE INDEX IF NOT EXISTS processes_identity
     ON processes (kind_id, ifnull(server_uuid, ''), address);
 
+-- Which socket each tmux server lived on (E-2300). A processes row names its
+-- server only by @server_uuid, and a uuid alone cannot say whether that server
+-- is gone: "not found where we looked" is the 2026-08-05 kind of judgment. With
+-- the socket recorded, liveness can ask the exact socket a binding's server
+-- used, and a different server answering there — or nothing listening — proves
+-- the recorded one is gone (internal/monitor/liveness.go).
+--
+-- Written once, where a binding is made (EnsureTmuxPaneProcess), and never
+-- rewritten: a uuid names one server lifetime, so its socket cannot change.
+-- A server with no row (every binding from before E-2300) is never judged gone.
+CREATE TABLE IF NOT EXISTS tmux_servers (
+    server_uuid TEXT PRIMARY KEY,
+    socket_path TEXT NOT NULL,
+    first_seen_at TEXT NOT NULL
+);
+
 -- AI coding sessions
 --
 -- task_id (E-1571 as active_task_id, renamed E-1969): the ONE task this session

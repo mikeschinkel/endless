@@ -23,6 +23,9 @@ func newReaperTestDB(t *testing.T) *sql.DB {
 	}
 	t.Cleanup(func() { db.Close() })
 	db.SetMaxOpenConns(1)
+	// WorktreeInUse observes liveness (E-2300); keep that observation off the
+	// developer's tmux, as withTestDB does.
+	t.Cleanup(SetTestTmuxServer(TestServerUUID))
 	if err := schema.Migrate(db); err != nil {
 		t.Fatalf("apply schema: %v", err)
 	}

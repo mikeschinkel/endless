@@ -2346,6 +2346,10 @@ def _live_sessions(project_root: Path, harness: str = "claude") -> list[dict]:
             "state": r.get("state"),
             "task_id": r.get("task_id"),
             "last_activity": r.get("last_activity") or "",
+            # E-2300: the claim refusal words an `unknown` owner differently,
+            # and names `endless start` only when its Endless server is down.
+            "liveness": r.get("liveness") or "",
+            "endless_server_down": bool(r.get("endless_server_down")),
         })
     return live
 

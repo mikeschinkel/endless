@@ -322,30 +322,57 @@ func TestStewardship_HiddenButFocusedCounts(t *testing.T) {
 }
 
 // stewBindUnreachable binds session s to a pane on a tmux server this process
-// never reached — a server that is gone, as after a tmux restart. Its liveness
-// reads `unknown`.
+// never reached and has no recorded socket for. Its liveness reads `unknown`.
 func stewBindUnreachable(t *testing.T, db *sql.DB, s int64) {
 	t.Helper()
-	pid := mustSeedPane(t, db, "vanished-server", "%265")
+	pid := mustSeedPane(t, db, "unreachable-server", "%265")
 	if _, err := db.Exec(`UPDATE sessions SET process_id = ? WHERE id = ?`, pid, s); err != nil {
 		t.Fatalf("bind s=%d: %v", s, err)
 	}
 }
 
-// TestStewardship_UnreachableSessionDoesNotSteward is E-2293's measured case:
+// stewBindGone binds session s to a pane on a tmux server whose recorded socket
+// now refuses connections — gone, as after a tmux restart (E-2300). Its
+// liveness reads `dead`.
+func stewBindGone(t *testing.T, db *sql.DB, s int64) {
+	t.Helper()
+	seedTmuxServer(t, db, goneServer, goneSocket)
+	stubSocketProbes(t, map[string]socketProbe{goneSocket: {refused: true}})
+	pid := mustSeedPane(t, db, goneServer, "%265")
+	if _, err := db.Exec(`UPDATE sessions SET process_id = ? WHERE id = ?`, pid, s); err != nil {
+		t.Fatalf("bind s=%d: %v", s, err)
+	}
+}
+
+// TestStewardship_GoneServerSessionDoesNotSteward is E-2293's measured case:
 // E-1993/E-1995 were withheld from their own epic's board by a session bound to
-// a tmux server that no longer exists. It reads `unknown`, which the claim guard
-// rightly treats as live, but a session nobody can prove is there must not take
-// a row off a board that can see it.
-func TestStewardship_UnreachableSessionDoesNotSteward(t *testing.T) {
+// a tmux server that no longer exists. E-2293 fixed it by requiring `live`;
+// E-2300 fixes it at the root — that server is judged gone, so the session
+// reads `dead` — and stewardship returns to the claim guard's test.
+func TestStewardship_GoneServerSessionDoesNotSteward(t *testing.T) {
+	db := stewFixture(t)
+	snSessionTaskRel(t, db, 4, 150, stewRelSurfaced)
+	snSessionTaskRel(t, db, 1, 150, stewRelRevisited)
+	stewSetState(t, db, 4, "idle")
+	stewBindGone(t, db, 4)
+
+	if r := stewBoard(t, 100, 1)[150]; r.StewardedElsewhere || r.DuplicateWork {
+		t.Errorf("A's board: %+v, want shown, unmarked (the filer's server is gone)", r)
+	}
+}
+
+// TestStewardship_UnreachableSessionStewards: a session whose server could not
+// be reached is present, as it is to the claim guard (E-2300: one presence test
+// everywhere). Unprovable is not gone.
+func TestStewardship_UnreachableSessionStewards(t *testing.T) {
 	db := stewFixture(t)
 	snSessionTaskRel(t, db, 4, 150, stewRelSurfaced)
 	snSessionTaskRel(t, db, 1, 150, stewRelRevisited)
 	stewSetState(t, db, 4, "idle")
 	stewBindUnreachable(t, db, 4)
 
-	if r := stewBoard(t, 100, 1)[150]; r.StewardedElsewhere || r.DuplicateWork {
-		t.Errorf("A's board: %+v, want shown, unmarked (the filer is not provably present)", r)
+	if r := stewBoard(t, 100, 1)[150]; !r.StewardedElsewhere {
+		t.Errorf("A's board: %+v, want stewarded elsewhere (the filer is not provably gone)", r)
 	}
 }
 
@@ -395,10 +422,26 @@ func TestStewardship_OneClaimerClearsDuplicate(t *testing.T) {
 	}
 }
 
-// TestStewardship_UnprovenClaimerKeepsDuplicate: a claimer that cannot be shown
-// to be present does not clear the warning — that would be the ghost problem in
-// the other direction.
-func TestStewardship_UnprovenClaimerKeepsDuplicate(t *testing.T) {
+// TestStewardship_GoneClaimerKeepsDuplicate: a claimer whose server is gone does
+// not clear the warning — that would be the ghost problem in the other
+// direction.
+func TestStewardship_GoneClaimerKeepsDuplicate(t *testing.T) {
+	db := stewFixture(t)
+	snSessionTaskRel(t, db, 2, 151, stewRelRevisited)
+	snSessionTaskRel(t, db, 3, 151, stewRelRevisited)
+	snSession(t, db, 5, 1, 151, "working")
+	snSessionTaskRel(t, db, 5, 151, stewRelClaimed)
+	stewBindGone(t, db, 5)
+
+	if r := stewBoard(t, 101, 2)[151]; !r.DuplicateWork {
+		t.Errorf("B's board: %+v, want the duplicate mark (the claimer's server is gone)", r)
+	}
+}
+
+// TestStewardship_UnreachableClaimerClearsDuplicate: a claimer that is merely
+// unreachable still holds the task — the claim guard refuses a second claim on
+// it — so it clears the warning as a live one does (E-2300).
+func TestStewardship_UnreachableClaimerClearsDuplicate(t *testing.T) {
 	db := stewFixture(t)
 	snSessionTaskRel(t, db, 2, 151, stewRelRevisited)
 	snSessionTaskRel(t, db, 3, 151, stewRelRevisited)
@@ -406,8 +449,8 @@ func TestStewardship_UnprovenClaimerKeepsDuplicate(t *testing.T) {
 	snSessionTaskRel(t, db, 5, 151, stewRelClaimed)
 	stewBindUnreachable(t, db, 5)
 
-	if r := stewBoard(t, 101, 2)[151]; !r.DuplicateWork {
-		t.Errorf("B's board: %+v, want the duplicate mark (the claimer is not provably present)", r)
+	if r := stewBoard(t, 101, 2)[151]; r.DuplicateWork {
+		t.Errorf("B's board: %+v, want no duplicate mark (the claimer is not provably gone)", r)
 	}
 }
 

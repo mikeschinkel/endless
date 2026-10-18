@@ -19,17 +19,13 @@ package monitor
 // different thing). It is computed here, every time a board is drawn, and never
 // written anywhere, so it corrects itself the moment a session ends. The rules:
 //
-//   - Only sessions PROVEN PRESENT count (E-2293): a live recorded state AND a
-//     session_liveness of `live` — its pane was seen on a tmux server this
-//     process reached. `unknown` (the server is gone or unreachable), `unbound`
-//     and `dead` take nothing off anyone's board. This is deliberately stricter
-//     than the claim guard's `!= 'dead'` (ListLiveSessions), because the costs
-//     run the other way: a wrong refusal there costs a retry, while a wrong
-//     suppression here hides open work, and a wrong show costs one line. A
-//     session bound to a tmux server that no longer exists reads `unknown`
-//     forever; under the claim guard's rule it stewarded its filings forever
-//     too. Idle state is irrelevant: an idle session whose pane is there is
-//     present.
+//   - Only PRESENT sessions count: presentSession, the claim guard's own test
+//     — a live recorded state and a liveness that is not `dead` (E-2300).
+//     E-2293 had required `live` here, because a session on a tmux server that
+//     no longer existed read `unknown` forever and so stewarded its filings
+//     forever; now such a server is judged gone where it can be proven, and the
+//     one presence test serves every reader. Idle state is irrelevant: an idle
+//     session whose pane is there is present.
 //   - A task's CLAIMING session is left out of the count entirely: being worked
 //     by the session that claimed it is the expected case, not a duplicate, and
 //     it already shows as ⟳ doing everywhere else. So is that session's focus on
@@ -178,11 +174,6 @@ func AnnotateSessionStatusStewardship(rows []SessionStatusRow, viewer, focal int
 	}
 	return nil
 }
-
-// presentSession is the SQL predicate (over sessions s and session_liveness sl)
-// for a session that counts toward stewardship: recorded live, and its pane
-// observed. See the file header for why `unknown` does not qualify here.
-var presentSession = `s.state IN (` + liveSessionStates + `) AND sl.liveness = 'live'`
 
 // isBoardFrame reports whether a row is one stewardship never touches: the
 // board's claimed task, its parent, and its spawner.

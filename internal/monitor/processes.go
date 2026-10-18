@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/mikeschinkel/endless/internal/processkind"
@@ -90,7 +91,45 @@ func EnsureTmuxPaneProcess(pane string) (int64, error) {
 	if err != nil || uuid == "" {
 		return 0, ErrNoProcessIdentity
 	}
-	return EnsureProcess(processkind.ProcessKindTmux, uuid, pane)
+	id, err := EnsureProcess(processkind.ProcessKindTmux, uuid, pane)
+	if err != nil {
+		return 0, err
+	}
+	recordTmuxServer(uuid)
+	return id, nil
+}
+
+// recordTmuxServer remembers which socket the server named uuid lives on, the
+// first time a binding is made against it (E-2300). Liveness later probes that
+// socket to tell a server that is gone from one it could not reach.
+//
+// Best-effort, and silent on failure: a server with no row is simply never
+// judged gone, which is how every binding from before E-2300 reads. Failing the
+// binding over it would trade a session's whole identity for a refinement.
+//
+// The exists check comes first so the common case — a hook on a server already
+// recorded — costs one indexed read rather than a tmux exec.
+func recordTmuxServer(uuid string) {
+	db, err := DB()
+	if err != nil {
+		return
+	}
+	var one int
+	err = db.QueryRow(`SELECT 1 FROM tmux_servers WHERE server_uuid = ?`, uuid).Scan(&one)
+	if err != sql.ErrNoRows {
+		return
+	}
+	socket := tmuxSocketPathFn()
+	// A relative path (`tmux -S ./s`) names a socket only from the cwd it was
+	// typed in, which a later probe does not share.
+	if !filepath.IsAbs(socket) {
+		return
+	}
+	_, _ = db.Exec(
+		`INSERT OR IGNORE INTO tmux_servers (server_uuid, socket_path, first_seen_at)
+		 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%S', 'now'))`,
+		uuid, socket,
+	)
 }
 
 // currentPaneProcessID resolves this process's own TMUX_PANE to a processes.id
@@ -211,6 +250,20 @@ func tmuxSetServerUUIDArgs(uuid string) []string {
 // stamps an option on the developer's real tmux server. Production always uses
 // liveTmuxServerUUID.
 var tmuxServerUUIDFn = liveTmuxServerUUID
+
+// tmuxSocketPathFn is the seam setTestTmux swaps so no test records a real
+// socket path. Production always uses liveTmuxSocketPath.
+var tmuxSocketPathFn = liveTmuxSocketPath
+
+// liveTmuxSocketPath returns the socket of the ambient tmux server — the one
+// TmuxServerUUID names — or "" when none is reachable.
+func liveTmuxSocketPath() string {
+	out, err := tmuxCommand(tmuxSocketDirArgs()...).Output()
+	if err != nil {
+		return ""
+	}
+	return strings.TrimSpace(string(out))
+}
 
 // TmuxServerUUID returns the identity of the tmux server this process is
 // talking to, STAMPING a fresh one if the server does not have it yet.

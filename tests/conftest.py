@@ -140,6 +140,16 @@ def isolated_env(tmp_path, monkeypatch):
     monkeypatch.setenv("HOME", str(isolated_home))
     monkeypatch.setenv("XDG_CONFIG_HOME", str(isolated_home / ".config"))
 
+    # E-2300: give Go its own, empty tmux socket directory, as the verify runner
+    # does. Endless's servers default to /tmp/endless-<uid>/ whatever HOME says,
+    # and `no_endless_tasks_server` below stubs only the Python side — so a spawn
+    # under test reached the developer's running task-session server through
+    # endless-go and opened a real window there.
+    go_config_dir = isolated_home / ".config" / "endless"
+    go_config_dir.mkdir(parents=True)
+    with open(go_config_dir / "config.json", "w") as f:
+        json.dump({"tmux": {"socket_dir": str(tmp_path / "endless-tmux")}}, f)
+
     # E-1859: suppress automatic file-time triage. Every `task add` in the
     # suite would otherwise fan out a detached model call — slow, costly, and
     # nondeterministic (it races the assertions by mutating task status).

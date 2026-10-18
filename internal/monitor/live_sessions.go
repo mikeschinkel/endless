@@ -2,7 +2,10 @@ package monitor
 
 import (
 	"fmt"
+	"path/filepath"
 	"strings"
+
+	"github.com/mikeschinkel/endless/internal/tmuxservers"
 )
 
 // LiveSession is the row shape returned by ListLiveSessions, intended for
@@ -41,7 +44,21 @@ type LiveSession struct {
 	// a proven-live owner from one we merely could not disprove, rather than
 	// inferring it from the row's presence.
 	Liveness string `json:"liveness"`
+	// EndlessServerDown is set on an `unknown` session whose recorded socket is
+	// one of Endless's own tmux servers (E-2240) and nothing answers there, so
+	// `endless start` is what brings its server back (E-2300). False whenever
+	// that cannot be shown, including every session bound before E-2300.
+	EndlessServerDown bool `json:"endless_server_down"`
 }
+
+// presentSession is the ONE SQL predicate (over sessions s and session_liveness
+// sl) for "this session is still here": recorded live, and not observably gone.
+// The claim guard (ListLiveSessions), stewardship, WorktreeInUse, session
+// status's in_flight marker and the session graph all use it (E-2300), so a
+// session cannot be gone to one of them and present to another. `unknown`
+// qualifies — unprovable is not gone — and since E-2300 a session whose server
+// is proven gone reads `dead`, so it does not.
+var presentSession = `s.state IN (` + liveSessionStates + `) AND sl.liveness != 'dead'`
 
 // ListLiveSessions returns the non-ended sessions for projectID that are not
 // OBSERVABLY gone, ordered by most-recent activity first. Replaces the
@@ -74,12 +91,12 @@ func ListLiveSessions(projectID int64) ([]LiveSession, error) {
 		`SELECT s.session_id, s.id, COALESCE(s.project_id, 0), s.platform, s.state,
 		        s.task_id, COALESCE(p.address, ''),
 		        COALESCE(s.started_at, ''), COALESCE(s.last_activity, ''),
-		        sl.liveness, COALESCE(p.server_uuid, '')
+		        sl.liveness, COALESCE(p.server_uuid, ''), COALESCE(ts.socket_path, '')
 		 FROM sessions s
 		 LEFT JOIN processes p ON p.id = s.process_id
+		 LEFT JOIN tmux_servers ts ON ts.server_uuid = p.server_uuid
 		 JOIN session_liveness sl ON sl.session_id = s.id
-		 WHERE s.state IN (`+liveSessionStates+`) AND s.project_id = ?
-		   AND sl.liveness != 'dead'
+		 WHERE `+presentSession+` AND s.project_id = ?
 		 ORDER BY s.last_activity DESC`,
 		projectID,
 	)
@@ -93,15 +110,24 @@ func ListLiveSessions(projectID int64) ([]LiveSession, error) {
 	here, _ := TmuxServerUUID()
 
 	out := []LiveSession{}
+	down := map[string]bool{}
 	for rows.Next() {
 		var s LiveSession
-		var server string
+		var server, socket string
 		if err := rows.Scan(
 			&s.SessionID, &s.EndlessSessionID, &s.ProjectID, &s.Platform, &s.State,
 			&s.TaskID, &s.Process, &s.StartedAt, &s.LastActivity,
-			&s.Liveness, &server,
+			&s.Liveness, &server, &socket,
 		); err != nil {
 			return nil, fmt.Errorf("scan live session: %w", err)
+		}
+		if s.Liveness == string(LivenessUnknown) && socket != "" {
+			d, ok := down[socket]
+			if !ok {
+				d = endlessServerDown(socket)
+				down[socket] = d
+			}
+			s.EndlessServerDown = d
 		}
 		if strings.HasPrefix(s.Process, "%") && here != "" && server == here {
 			p := s.Process
@@ -113,4 +139,36 @@ func ListLiveSessions(projectID int64) ([]LiveSession, error) {
 		return nil, fmt.Errorf("iterate live sessions: %w", err)
 	}
 	return out, nil
+}
+
+// endlessServerDown reports whether socket is one of Endless's own tmux servers
+// and nothing answers on it. A seam: setTestTmux stubs it, so no test asks a
+// real Endless server.
+var endlessServerDown = liveEndlessServerDown
+
+func liveEndlessServerDown(socket string) bool {
+	servers, err := tmuxservers.Resolve()
+	if err != nil {
+		return false
+	}
+	for _, srv := range []tmuxservers.Server{servers.Console, servers.Tasks} {
+		if sameSocketPath(srv.Socket, socket) {
+			return !srv.Reachable()
+		}
+	}
+	return false
+}
+
+// sameSocketPath compares two socket paths through a symlinked directory
+// (/tmp is /private/tmp on macOS). The socket itself may be gone, so only its
+// directory is resolved.
+func sameSocketPath(a, b string) bool {
+	canon := func(p string) string {
+		p = filepath.Clean(p)
+		if dir, err := filepath.EvalSymlinks(filepath.Dir(p)); err == nil {
+			return filepath.Join(dir, filepath.Base(p))
+		}
+		return p
+	}
+	return canon(a) == canon(b)
 }

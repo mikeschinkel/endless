@@ -334,6 +334,11 @@ func SessionStatusRows(focal, parentSession int64, includeAll bool) ([]SessionSt
 	if err != nil {
 		return nil, err
 	}
+	// in_flight reads session_liveness (E-2300), so the view must exist and
+	// hold an observation before the row query runs.
+	if err = livenessReady(); err != nil {
+		return nil, err
+	}
 
 	allFlag := 0
 	if includeAll {
@@ -435,8 +440,8 @@ enr AS (
     -- task). is_from yields to is_parent in the renderer when both are true.
     COALESCE(b.id = (SELECT stid FROM sfoc), 0) AND b.id <> (SELECT tid FROM ftask) AS is_from,
     (EXISTS(
-       SELECT 1 FROM sessions s
-        WHERE s.state IN (` + liveSessionStates + `) AND s.task_id = b.id
+       SELECT 1 FROM sessions s JOIN session_liveness sl ON sl.session_id = s.id
+        WHERE ` + presentSession + ` AND s.task_id = b.id
      ) AND b.id <> (SELECT tid FROM ftask)) AS in_flight,
     -- E-1693: the task's work has already merged (>=1 task_landings row). A
     -- landed non-terminal task stays visible (it still passes the terminal-status
@@ -528,6 +533,11 @@ func SessionStatusRowsForSession(sessionID int64, includeAll bool) ([]SessionSta
 	if err != nil {
 		return nil, err
 	}
+	// in_flight reads session_liveness (E-2300), so the view must exist and
+	// hold an observation before the row query runs.
+	if err = livenessReady(); err != nil {
+		return nil, err
+	}
 
 	allFlag := 0
 	if includeAll {
@@ -557,8 +567,8 @@ enr AS (
     0 AS is_parent,
     0 AS is_from,
     EXISTS(
-       SELECT 1 FROM sessions s
-        WHERE s.state IN (` + liveSessionStates + `) AND s.task_id = b.id
+       SELECT 1 FROM sessions s JOIN session_liveness sl ON sl.session_id = s.id
+        WHERE ` + presentSession + ` AND s.task_id = b.id
      ) AS in_flight,
     EXISTS(SELECT 1 FROM task_landings tl WHERE tl.task_id = b.id) AS landed,
     -- E-2280: a question still waiting on the user. With the status it picks

@@ -129,3 +129,80 @@ def test_unreachable_server_owner_still_raises(seeded_project_at_cwd, monkeypatc
     with pytest.raises(click.ClickException):
         task_cmd._check_task_ownership(task_id, current_eid=None)
     assert _session_state(unprovable) == "working"
+
+
+# --------------------------------------------------------------------------
+# E-2300: the refusal for an owner whose server cannot be reached
+# --------------------------------------------------------------------------
+
+
+def _refuse_with_owner(seeded_project_at_cwd, monkeypatch, **comp) -> tuple[int, str]:
+    task_id = _add_task()
+    eid = _seed_session(task_id, pane="%7")
+    monkeypatch.setattr(session_cmd, "_project_root_for_cwd", lambda: seeded_project_at_cwd)
+    monkeypatch.setattr(
+        session_cmd, "_live_sessions",
+        lambda root: [{"endless_session_id": eid, "pane_id": "", **comp}],
+    )
+    with pytest.raises(click.ClickException) as excinfo:
+        task_cmd._check_task_ownership(task_id, current_eid=None)
+    return eid, excinfo.value.format_message()
+
+
+def test_unknown_owner_on_a_down_endless_server_names_start_then_resume(
+    seeded_project_at_cwd, monkeypatch
+):
+    eid, msg = _refuse_with_owner(
+        seeded_project_at_cwd, monkeypatch,
+        liveness="unknown", endless_server_down=True,
+    )
+    assert "tmux server cannot be reached" in msg
+    assert "endless start" in msg
+    assert f"endless session resume ES-{eid}" in msg
+    assert msg.index("endless start") < msg.index("endless session resume"), (
+        "the server has to be up before the session can be resumed on it"
+    )
+    # "Switch to that session" names a pane nobody can reach.
+    assert "Switch to that session" not in msg
+
+
+def test_unknown_owner_elsewhere_names_resume_only(seeded_project_at_cwd, monkeypatch):
+    eid, msg = _refuse_with_owner(
+        seeded_project_at_cwd, monkeypatch,
+        liveness="unknown", endless_server_down=False,
+    )
+    assert "tmux server cannot be reached" in msg
+    assert "endless start" not in msg
+    assert f"endless session resume ES-{eid}" in msg
+
+
+def test_live_owner_keeps_its_text(seeded_project_at_cwd, monkeypatch):
+    eid, msg = _refuse_with_owner(
+        seeded_project_at_cwd, monkeypatch,
+        liveness="live", endless_server_down=False,
+    )
+    assert f"is already active in session {eid}" in msg
+    assert "cannot be reached" not in msg
+
+
+def test_live_sessions_carries_liveness_and_server_down(
+    seeded_project_at_cwd, monkeypatch
+):
+    """`_live_sessions` used to drop `liveness`, so no caller could tell an
+    unknown owner from a live one."""
+    import json
+    import subprocess
+
+    payload = {"rows": [{
+        "endless_session_id": 12, "session_id": "uuid-12", "platform": "claude",
+        "pane_id": None, "state": "idle", "task_id": None,
+        "liveness": "unknown", "endless_server_down": True,
+    }]}
+    monkeypatch.setattr(
+        subprocess, "run",
+        lambda *a, **k: subprocess.CompletedProcess(a, 0, json.dumps(payload), ""),
+    )
+    monkeypatch.setattr(session_cmd, "_tmux_pane_cwd_map", lambda: {})
+    (row,) = session_cmd._live_sessions(seeded_project_at_cwd)
+    assert row["liveness"] == "unknown"
+    assert row["endless_server_down"] is True

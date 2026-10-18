@@ -2,12 +2,14 @@ package monitor
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/processkind"
@@ -38,7 +40,8 @@ import (
 // # The four states
 //
 //	live     — the address was present on a server we actually reached
-//	dead     — we reached its server, and the address was absent
+//	dead     — we reached its server, and the address was absent; or its
+//	           server is proven gone (see "Gone servers" below)
 //	unknown  — we could NOT reach its server; we have no opinion
 //	unbound  — the session has no process binding at all (background agents,
 //	           and any session started outside a multiplexer)
@@ -53,6 +56,30 @@ import (
 //
 // `unbound` exists so a background agent, whose `process_id` is legitimately
 // NULL, is never mistaken for a session whose pane vanished.
+//
+// # Gone servers (E-2300)
+//
+// `unknown` used to be forever for a session whose server had exited: nothing
+// told "unreachable right now" from "gone for good", so a ghost from before a
+// tmux restart counted as live in every guard that reads `unknown` as live.
+// Enumerating sockets cannot settle it — a uuid absent from every socket we
+// listed is exactly the "not found where we looked" judgment of 2026-08-05.
+//
+// So each binding's server records its socket path (tmux_servers, written by
+// EnsureTmuxPaneProcess), and for a recorded server we did not observe, we ask
+// THAT socket directly:
+//
+//	a different @server_uuid answers, or none   → gone (`dead`)
+//	the socket file exists, nothing listening   → gone (`dead`)
+//	the socket file is missing                  → no verdict (`unknown`)
+//	anything else (timeout, permission)         → no verdict (`unknown`)
+//
+// A missing file is no verdict because a server outlives its socket file when
+// macOS cleans /tmp; judging it gone would hand a running session's worktree
+// to someone else. A server with no tmux_servers row — every binding from
+// before E-2300 — is never probed, so never judged gone. Gone servers are
+// observation like the rest: a TEMP table, rebuilt per refresh, never written
+// to sessions.
 //
 // # What is deliberately NOT here
 //
@@ -82,8 +109,9 @@ type Liveness string
 const (
 	// LivenessLive — address present on a server we reached.
 	LivenessLive Liveness = "live"
-	// LivenessDead — we reached the server; the address was absent. The ONLY
-	// state that may be read as "this session is over".
+	// LivenessDead — we reached the server and the address was absent, or the
+	// server's recorded socket proves it gone (E-2300). The ONLY state that may
+	// be read as "this session is over".
 	LivenessDead Liveness = "dead"
 	// LivenessUnknown — the server was not reached. No opinion. Never `dead`.
 	LivenessUnknown Liveness = "unknown"
@@ -143,6 +171,20 @@ const (
 	createObservedServersIdentity = `CREATE UNIQUE INDEX IF NOT EXISTS observed_servers_identity
 		ON observed_servers (kind_id, ifnull(server_uuid, ''))`
 
+	// createGoneServers records which servers this snapshot PROVED gone by
+	// probing their recorded socket (E-2300). Never inferred from absence: a
+	// server lands here only when its own socket answered as someone else, or
+	// refused. server_uuid is NOT NULL because only a recorded server can be
+	// probed, and a NULL binding must never match one.
+	createGoneServers = `CREATE TEMP TABLE IF NOT EXISTS gone_servers (
+		kind_id     INTEGER NOT NULL,
+		server_uuid TEXT NOT NULL
+	)`
+
+	// The same row-multiplication guard as observed_servers_identity.
+	createGoneServersIdentity = `CREATE UNIQUE INDEX IF NOT EXISTS gone_servers_identity
+		ON gone_servers (kind_id, server_uuid)`
+
 	// createLivenessView is the single definition of liveness. Consumers SELECT
 	// from it; none re-derive the CASE. ifnull() on both sides of the server
 	// comparison because SQL equality with NULL is never true, and a NULL
@@ -156,10 +198,12 @@ const (
 			p.address      AS address,
 			l.command      AS command,
 			CASE
-				WHEN p.id IS NULL      THEN 'unbound'
-				WHEN o.kind_id IS NULL THEN 'unknown'
-				WHEN l.address IS NULL THEN 'dead'
-				ELSE                        'live'
+				WHEN p.id IS NULL          THEN 'unbound'
+				WHEN o.kind_id IS NOT NULL
+				 AND l.address IS NULL     THEN 'dead'
+				WHEN o.kind_id IS NOT NULL THEN 'live'
+				WHEN g.kind_id IS NOT NULL THEN 'dead'
+				ELSE                            'unknown'
 			END AS liveness
 		FROM sessions s
 		LEFT JOIN processes p
@@ -167,6 +211,9 @@ const (
 		LEFT JOIN observed_servers o
 			   ON o.kind_id = p.kind_id
 			  AND ifnull(o.server_uuid, '') = ifnull(p.server_uuid, '')
+		LEFT JOIN gone_servers g
+			   ON g.kind_id = p.kind_id
+			  AND g.server_uuid = p.server_uuid
 		LEFT JOIN live_processes l
 			   ON l.kind_id = p.kind_id
 			  AND ifnull(l.server_uuid, '') = ifnull(p.server_uuid, '')
@@ -187,6 +234,10 @@ var (
 	// tables, which is why the liveness truth table can be tested exhaustively
 	// with no tmux server in existence (E-1898 invariant I4).
 	observeServers = observeTmuxServers
+
+	// probeSocket is the seam through which a recorded server's own socket is
+	// asked who is there (E-2300). Tests stub it, so no test reaches a socket.
+	probeSocket = probeTmuxSocket
 )
 
 // SetTestTmuxServer pins ONLY the server IDENTITY, leaving the observation
@@ -223,8 +274,14 @@ func SetTestTmuxObservation(serverUUID string, panes map[string]string) (restore
 
 func setTestTmux(serverUUID string, panes map[string]string, reachable bool) (restore func()) {
 	prevObserve, prevUUID, prevOnce := observeServers, tmuxServerUUIDFn, livenessOnce
+	prevSocket, prevProbe, prevDown := tmuxSocketPathFn, probeSocket, endlessServerDown
 
 	tmuxServerUUIDFn = func() (string, error) { return serverUUID, nil }
+	// No socket is recorded and none is probed: a fixture server has no socket,
+	// and a probe of a real path would judge real servers from a test.
+	tmuxSocketPathFn = func() string { return "" }
+	probeSocket = func(string) socketProbe { return socketProbe{} }
+	endlessServerDown = func(string) bool { return false }
 	observeServers = func() []observedServer {
 		if !reachable {
 			return nil
@@ -242,6 +299,7 @@ func setTestTmux(serverUUID string, panes map[string]string, reachable bool) (re
 
 	return func() {
 		observeServers, tmuxServerUUIDFn, livenessOnce = prevObserve, prevUUID, prevOnce
+		tmuxSocketPathFn, probeSocket, endlessServerDown = prevSocket, prevProbe, prevDown
 		livenessErr = nil
 	}
 }
@@ -258,6 +316,7 @@ func EnsureLivenessTables(db *sql.DB) error {
 	for _, stmt := range []string{
 		createLiveProcesses, createLiveProcessesIdentity,
 		createObservedServers, createObservedServersIdentity,
+		createGoneServers, createGoneServersIdentity,
 		createLivenessView,
 	} {
 		if _, err := db.Exec(stmt); err != nil {
@@ -297,7 +356,9 @@ func refreshLiveness(db *sql.DB) error {
 	// Replace wholesale rather than merge: a stale row from a previous
 	// observation is indistinguishable from a fresh one, and "I saw this a
 	// minute ago" is exactly the kind of half-truth this design removes.
-	for _, stmt := range []string{`DELETE FROM live_processes`, `DELETE FROM observed_servers`} {
+	for _, stmt := range []string{
+		`DELETE FROM live_processes`, `DELETE FROM observed_servers`, `DELETE FROM gone_servers`,
+	} {
 		if _, err = tx.Exec(stmt); err != nil {
 			return fmt.Errorf("liveness: clear snapshot: %w", err)
 		}
@@ -321,7 +382,70 @@ func refreshLiveness(db *sql.DB) error {
 		}
 	}
 
+	gone, err := goneTmuxServers(tx)
+	if err != nil {
+		return err
+	}
+	for _, uuid := range gone {
+		if _, err = tx.Exec(
+			`INSERT OR IGNORE INTO gone_servers (kind_id, server_uuid) VALUES (?, ?)`,
+			int(processkind.ProcessKindTmux), uuid,
+		); err != nil {
+			return fmt.Errorf("liveness: record gone server: %w", err)
+		}
+	}
+
 	return tx.Commit()
+}
+
+// goneTmuxServers returns the recorded servers this snapshot did not observe
+// whose own socket proves them gone. Runs after observed_servers is filled, so
+// a server we reached is never probed: its panes already decide.
+//
+// Each socket is probed once however many servers recorded it — every restart
+// of the task-session server records the same fixed path, and one answer there
+// judges all of them.
+func goneTmuxServers(tx *sql.Tx) ([]string, error) {
+	rows, err := tx.Query(
+		`SELECT ts.server_uuid, ts.socket_path
+		   FROM tmux_servers ts
+		  WHERE EXISTS (SELECT 1 FROM processes p
+		                 WHERE p.kind_id = ? AND p.server_uuid = ts.server_uuid)
+		    AND NOT EXISTS (SELECT 1 FROM observed_servers o
+		                     WHERE o.kind_id = ? AND o.server_uuid = ts.server_uuid)`,
+		int(processkind.ProcessKindTmux), int(processkind.ProcessKindTmux),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("liveness: read recorded servers: %w", err)
+	}
+	type recorded struct{ uuid, socket string }
+	var candidates []recorded
+	for rows.Next() {
+		var r recorded
+		if err = rows.Scan(&r.uuid, &r.socket); err != nil {
+			rows.Close()
+			return nil, fmt.Errorf("liveness: scan recorded server: %w", err)
+		}
+		candidates = append(candidates, r)
+	}
+	rows.Close()
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("liveness: read recorded servers: %w", err)
+	}
+
+	probes := map[string]socketProbe{}
+	var gone []string
+	for _, c := range candidates {
+		probe, ok := probes[c.socket]
+		if !ok {
+			probe = probeSocket(c.socket)
+			probes[c.socket] = probe
+		}
+		if probe.proves(c.uuid) {
+			gone = append(gone, c.uuid)
+		}
+	}
+	return gone, nil
 }
 
 // livenessReady performs the one automatic observation for short-lived
@@ -553,6 +677,53 @@ func observeSocketDir(dir string) []observedServer {
 		servers = append(servers, observedServer{uuid: uuid, panes: parsePaneList(string(panesOut))})
 	}
 	return servers
+}
+
+// socketProbe is what a recorded server's socket said when asked directly. The
+// zero value is "no verdict", so a probe that gives up says nothing.
+type socketProbe struct {
+	// refused: the socket file exists and nothing is listening on it.
+	refused bool
+	// answered: a server answered; uuid is its @server_uuid, "" when it has none.
+	answered bool
+	uuid     string
+}
+
+// proves reports whether this probe proves the server named uuid gone. A server
+// that answered with no uuid is a different one: the recorded server had an id
+// in memory, and a running server does not lose an option.
+func (p socketProbe) proves(uuid string) bool {
+	return p.refused || (p.answered && p.uuid != uuid)
+}
+
+// tmuxProbeServerUUIDArgs builds `tmux -S <socket> show-options -gqv
+// @server_uuid`. The -q is load-bearing: without it an unset option exits
+// non-zero, the same as a failed exec, and "no id" — which proves the recorded
+// server gone — could not be told from "could not ask", which proves nothing.
+func tmuxProbeServerUUIDArgs(socket string) []string {
+	return []string{"-S", socket, "show-options", "-gqv", "@server_uuid"}
+}
+
+// probeTmuxSocket asks the socket at path who is there (E-2300). See the file
+// header's "Gone servers" for the verdicts and why a missing file is none.
+//
+// tmux is exec'd only after a connect succeeds, so a probe never starts a
+// server on a dead socket.
+func probeTmuxSocket(path string) socketProbe {
+	info, err := os.Stat(path)
+	if err != nil || info.Mode()&os.ModeSocket == 0 {
+		return socketProbe{}
+	}
+	conn, err := net.DialTimeout("unix", path, socketAcceptTimeout)
+	if err != nil {
+		return socketProbe{refused: errors.Is(err, syscall.ECONNREFUSED)}
+	}
+	conn.Close()
+	out, err := tmuxCommand(tmuxProbeServerUUIDArgs(path)...).Output()
+	if err != nil {
+		return socketProbe{}
+	}
+	return socketProbe{answered: true, uuid: strings.TrimSpace(string(out))}
 }
 
 // socketAcceptTimeout bounds the liveness connect() below. A listening server

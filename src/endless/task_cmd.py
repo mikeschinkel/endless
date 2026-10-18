@@ -4675,7 +4675,10 @@ def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
     # absent. No reaper runs first: nothing is written to make the task free,
     # the ghost simply is not reported as live. A session whose tmux server
     # could not be reached is reported as `unknown` and DOES still hold the
-    # task — unprovable is not the same as gone.
+    # task — unprovable is not the same as gone — and is refused with routes
+    # that can reach it (E-2300). One whose server is provably gone (its
+    # recorded socket answers as another server, or refuses) reads `dead` and
+    # is omitted like a ghost.
     from endless.session_cmd import _live_sessions, _project_root_for_cwd
     project_root = _project_root_for_cwd()
 
@@ -4705,6 +4708,8 @@ def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
         comp = live_by_eid.get(eid)
         if comp is None:
             continue
+        if comp.get("liveness") == "unknown":
+            raise _unreachable_owner_refusal(item_id, eid, comp)
         pane = comp.get("pane_id") or "?"
         # REPORT: both routes out are the user's. An agent cannot switch tmux
         # panes, and it cannot make another live session let go of a task —
@@ -4722,6 +4727,32 @@ def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
         )
 
     return owned_by_current
+
+
+def _unreachable_owner_refusal(item_id: int, eid: int, comp: dict):
+    """The refusal for a task held by a session whose tmux server cannot be
+    reached (E-2300).
+
+    That session is not provably gone, so it still holds the task — but "switch
+    to that session" names a pane nobody can reach. The routes are the ones that
+    can work: bring its Endless server back when that is what is down, then
+    resume the session to continue it.
+    """
+    routes = []
+    if comp.get("endless_server_down"):
+        routes.append("endless start")
+    routes.append(f"endless session resume ES-{eid}")
+    listed = "\n".join(f"    {r}" for r in routes)
+    return agent_help.report(
+        f"E-{item_id} is held by session ES-{eid}, whose tmux server cannot be "
+        f"reached. {NOTHING_CHANGED}",
+        "whether to bring that session back and continue the work in it",
+        text=(
+            f"E-{item_id} is held by session ES-{eid}, whose tmux server "
+            f"cannot be reached.\n"
+            f"To continue the work in that session:\n{listed}"
+        ),
+    )
 
 
 # E-1891: `settled` — the work is over one way or another, shipped or

@@ -12,8 +12,8 @@ type InUseReason string
 const (
 	// ReasonNone is the not-in-use answer.
 	ReasonNone InUseReason = ""
-	// ReasonActiveSession: a sessions row that has not ended still has this
-	// task active. Catches a bound Claude session whose cwd has stepped OUT of
+	// ReasonActiveSession: a session that has not ended, and is not observably
+	// gone (presentSession), still has this task active. Catches a bound Claude session whose cwd has stepped OUT of
 	// the worktree — invisible to the live-process probe, but the directory is
 	// still that session's home and removing it orphans the session.
 	ReasonActiveSession InUseReason = "a live session has this task active"
@@ -48,9 +48,17 @@ const (
 // to remove a directory.
 func WorktreeInUse(db *sql.DB, dir string, taskID int64) (bool, InUseReason, error) {
 	if taskID > 0 {
+		// A fresh observation, never the once-guarded one: the reaper is
+		// long-lived, and a verdict from its first tick would read a session
+		// resumed since then as gone. A failed refresh fails closed below.
+		if err := refreshLiveness(db); err != nil {
+			return true, ReasonUndetermined, fmt.Errorf("observe liveness: %w", err)
+		}
 		var activeSessions int
 		err := db.QueryRow(
-			`SELECT count(*) FROM sessions WHERE task_id = ? AND state IN (`+liveSessionStates+`)`,
+			`SELECT count(*) FROM sessions s
+			   JOIN session_liveness sl ON sl.session_id = s.id
+			  WHERE s.task_id = ? AND `+presentSession,
 			taskID,
 		).Scan(&activeSessions)
 		if err != nil {
