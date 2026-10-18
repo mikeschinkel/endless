@@ -4734,7 +4734,8 @@ def _unreachable_owner_refusal(item_id: int, eid: int, comp: dict):
     That session is not provably gone, so it still holds the task — but "switch
     to that session" names a pane nobody can reach. The routes are the ones that
     can work: bring its Endless server back when that is what is down, then
-    resume the session to continue it.
+    resume the session to continue it — or, when it is not coming back, end it
+    with `session end` (E-2394), after which the claim guard no longer counts it.
     """
     routes = []
     if comp.get("endless_server_down"):
@@ -4744,11 +4745,14 @@ def _unreachable_owner_refusal(item_id: int, eid: int, comp: dict):
     return agent_help.report(
         f"E-{item_id} is held by session ES-{eid}, whose tmux server cannot be "
         f"reached. {NOTHING_CHANGED}",
-        "whether to bring that session back and continue the work in it",
+        "whether to bring that session back and continue the work in it, or "
+        "end it so the task can be claimed",
         text=(
             f"E-{item_id} is held by session ES-{eid}, whose tmux server "
             f"cannot be reached.\n"
-            f"To continue the work in that session:\n{listed}"
+            f"To continue the work in that session:\n{listed}\n"
+            f"Or, if that session is gone for good, end it:\n"
+            f"    endless session end ES-{eid}"
         ),
     )
 

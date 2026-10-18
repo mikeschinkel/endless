@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"strconv"
 	"strings"
@@ -161,6 +162,10 @@ func Run(args []string) {
 		if err := runResumeTarget(args[1:]); err != nil {
 			fail("resume-target", err)
 		}
+	case "end-session":
+		if err := runEndSession(args[1:]); err != nil {
+			fail("end-session", err)
+		}
 	case "-h", "--help", "help":
 		// Help stays on STDERR, where this command has always put it. Every verb
 		// below writes its answer — a JSON document, a raw column value, an
@@ -191,6 +196,7 @@ func usageText() string {
 		"subcommands:",
 		"  list-live --project-root <path>   JSON array of live sessions for the project",
 		"                                    end non-ended sessions whose tmux pane is gone (silent; DB error → exit 1)",
+		"  end-session --id <session-id>     end one session (releases its worktree lock); prints nothing",
 		"  session-liveness <session-id>...  JSON array [{session_id, liveness, pane}] in argument order (E-2294);",
 		"                                    liveness is live|dead|unknown|unbound, pane set only when live",
 		"  task-plan --id <task-id>          raw plan for the task (empty if none)",
@@ -737,6 +743,46 @@ func runResumeTarget(args []string) error {
 		return err
 	}
 	return dbprovenance.Encode(os.Stdout, target)
+}
+
+// runEndSession ends one session by its sessions.id, the write behind `endless
+// session end` (E-2394). It does what the SessionEnd hook does for a session
+// that exits cleanly — release any worktree lock the session holds, then mark
+// the row ended — for a session that never will, because its pane is gone.
+//
+// The guards (live, recent activity, the y/N prompt) are the Python command's:
+// this verb is the write, and refuses only what it cannot write. Ending is not
+// ledgered, as no session end is: session rows are local to the machine whose
+// hooks recorded them.
+func runEndSession(args []string) error {
+	fs := refusal.NewFlags("end-session")
+	id := fs.Int64("id", 0, "sessions.id (the N of ES-N) to end")
+	if err := parseFlags(fs, "end-session", args); err != nil {
+		return err
+	}
+	if *id <= 0 {
+		return refusal.NoReport("--id is required", "Pass --id <sessions.id> and retry")
+	}
+	target, err := monitor.ResolveResumeTarget(fmt.Sprintf("ES-%d", *id))
+	if err != nil {
+		return err
+	}
+	if wtPath, err := monitor.FindLockBySessionID(target.ProjectID, target.SessionID); err == nil && wtPath != "" {
+		if err := monitor.ReleaseWorktreeLock(wtPath); err != nil {
+			// Non-fatal, as in the SessionEnd hook: the stale-PID check reaps
+			// the lock on the next claim attempt.
+			log.Printf("releasing worktree lock at %s: %v", wtPath, err)
+		}
+	}
+	if err := monitor.EndSessionByID(*id); err != nil {
+		// A write the user asked for did not happen, and the session still
+		// holds its task: they have to hear about it.
+		return refusal.Report(
+			fmt.Sprintf("ending session ES-%d failed: %s", *id, err),
+			"a session end that did not write — the session still holds its task",
+		).Cause(err)
+	}
+	return nil
 }
 
 // runGateClear closes the session's open gate of the given kind, recording the

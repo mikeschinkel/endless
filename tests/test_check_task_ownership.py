@@ -206,3 +206,23 @@ def test_live_sessions_carries_liveness_and_server_down(
     (row,) = session_cmd._live_sessions(seeded_project_at_cwd)
     assert row["liveness"] == "unknown"
     assert row["endless_server_down"] is True
+
+
+def test_unknown_owner_names_session_end(seeded_project_at_cwd, monkeypatch):
+    """E-2394: an unreachable owner can also be discarded."""
+    eid, msg = _refuse_with_owner(
+        seeded_project_at_cwd, monkeypatch,
+        liveness="unknown", endless_server_down=False,
+    )
+    assert f"endless session end ES-{eid}" in msg
+    assert msg.index("endless session resume") < msg.index("endless session end"), (
+        "ending is the last route: it discards what resuming would keep"
+    )
+
+
+def test_live_owner_does_not_name_session_end(seeded_project_at_cwd, monkeypatch):
+    _, msg = _refuse_with_owner(
+        seeded_project_at_cwd, monkeypatch,
+        liveness="live", endless_server_down=False,
+    )
+    assert "session end" not in msg

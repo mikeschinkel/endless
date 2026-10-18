@@ -40,9 +40,13 @@ type ResumeTarget struct {
 	TaskStatus   string `json:"task_status,omitempty"`
 	TaskTitle    string `json:"task_title,omitempty"`
 	LandedSHA    string `json:"landed_sha,omitempty"`
+	// LastActivity is the session row's last_activity, "" when unset. `session
+	// end` reads it to refuse a session whose hooks fired recently (E-2394).
+	LastActivity string `json:"last_activity"`
 }
 
-const resumeSelect = `SELECT id, session_id, COALESCE(project_id, 0), task_id, COALESCE(state, '')
+const resumeSelect = `SELECT id, session_id, COALESCE(project_id, 0), task_id, COALESCE(state, ''),
+	COALESCE(last_activity, '')
 	FROM sessions`
 
 // ResolveResumeTarget resolves a task or session reference to the session
@@ -156,7 +160,7 @@ func resumeByUUID(db *sql.DB, ref string) (ResumeTarget, error) {
 	var raws []resumeRow
 	for rows.Next() {
 		var r resumeRow
-		if err := rows.Scan(&r.id, &r.sessionID, &r.projectID, &r.taskID, &r.state); err != nil {
+		if err := rows.Scan(&r.id, &r.sessionID, &r.projectID, &r.taskID, &r.state, &r.lastActivity); err != nil {
 			rows.Close()
 			return ResumeTarget{}, fmt.Errorf("scan session: %w", err)
 		}
@@ -187,6 +191,7 @@ type resumeRow struct {
 	sessionID     sql.NullString
 	taskID        sql.NullInt64
 	state         string
+	lastActivity  string
 }
 
 // scanResume adapts a single-row query; found is false on sql.ErrNoRows. The
@@ -194,7 +199,7 @@ type resumeRow struct {
 // releases the connection once Scan returns.
 func scanResume(row *sql.Row) (ResumeTarget, bool, error) {
 	var r resumeRow
-	err := row.Scan(&r.id, &r.sessionID, &r.projectID, &r.taskID, &r.state)
+	err := row.Scan(&r.id, &r.sessionID, &r.projectID, &r.taskID, &r.state, &r.lastActivity)
 	if err == sql.ErrNoRows {
 		return ResumeTarget{}, false, nil
 	}
@@ -207,10 +212,11 @@ func scanResume(row *sql.Row) (ResumeTarget, bool, error) {
 
 func buildResumeTarget(r resumeRow) (ResumeTarget, error) {
 	t := ResumeTarget{
-		EndlessID: r.id,
-		SessionID: r.sessionID.String,
-		State:     r.state,
-		ProjectID: r.projectID,
+		EndlessID:    r.id,
+		SessionID:    r.sessionID.String,
+		State:        r.state,
+		ProjectID:    r.projectID,
+		LastActivity: r.lastActivity,
 	}
 	// Best-effort, and outside the task branch on purpose (E-1918). A session
 	// whose project row is missing (or whose project_id is 0) is not an error

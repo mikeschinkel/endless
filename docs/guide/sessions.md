@@ -266,6 +266,10 @@ The **duplicate** mark — `◫`, and the id near-black on red (256-colour 232 o
 
 The **unblocked** mark — `▷`, and the id near-black on green (232 on 118) — is news: a task that was blocked has had a blocker released (a terminal status), nothing still holds it, and nobody has claimed it. It stays until someone claims or spawns it; it is computed each draw, not delivered once. On one id, duplicate outranks unblocked, which outranks focus. `--json` carries it as `spawnable`.
 
+## A ghost session holding a task
+
+A claim or spawn refused because the task "is held by session ES-N, whose tmux server cannot be reached" names three routes: `endless start` (when it is Endless's own server that is down), `endless session resume ES-N` to continue that session, or `endless session end ES-N` to discard it so the task can be claimed. Which one is the user's call — report the refusal rather than choosing. `session end` refuses a live session and one with activity in the last 10 minutes (`--force` overrides), asks y/N (`--yes` skips it), and prints how to get the session back: `endless session resume ES-N`.
+
 ## Interactive, user-run session commands
 
 The `session` group also carries commands a human runs interactively — session navigation, the live-watch dashboard, history / search, and hide / unhide. These aren't part of an agent's working flow; they're documented in `endless guide appendix-a`, which you read only to point a user at one.

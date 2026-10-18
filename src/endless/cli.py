@@ -2101,6 +2101,35 @@ def session_resume(ref, tmux_session, all_tmux_sessions, review, reopen,
                    no_sibling_panes=no_sibling_panes)
 
 
+@session_cmd.command("end")
+@click.argument("ref")
+@click.option(
+    "--force", is_flag=True,
+    help="End it even though it had activity in the last 10 minutes.",
+)
+@click.option(
+    "--yes", "-y", is_flag=True,
+    help="Skip the y/N confirmation. Required when there is no terminal.",
+)
+def session_end(ref, force, yes):
+    """End a session that is not live — a ghost still holding its task.
+
+    REF resolves as `session resume` resolves it: E-NNNN, ES-NNNN, a bare
+    integer, or a Claude UUID prefix.
+
+    A session whose tmux server cannot be reached reads `unknown` and keeps
+    blocking claims on its task. This ends it, so the task can be claimed.
+    Refuses a session that reads live, and one with activity in the last 10
+    minutes unless --force. Shows the session's task, last activity and
+    liveness and asks y/N; --yes skips the prompt.
+
+    Ending keeps the transcript. To undo it, run `endless session resume
+    ES-NNNN`.
+    """
+    from endless.session_cmd import end_session
+    end_session(ref, force=force, yes=yes)
+
+
 @session_cmd.command("back")
 def session_back():
     """Return to the previous session, browser-style (see `session goto`).

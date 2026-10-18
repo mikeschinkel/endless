@@ -638,12 +638,29 @@ func ResumeFromPrimed(sessionID string) (resumed bool, err error) {
 // tmux pane ids can't pull the ended row into a lookup after a tmux
 // server restart (E-1530, Layer A).
 func EndSession(sessionID string) error {
+	return endSessionWhere("session_id", sessionID, SnapshotSession(sessionID), "monitor.EndSession")
+}
+
+// EndSessionByID ends the session whose sessions.id is `id`, exactly as
+// EndSession ends one by Claude UUID. It backs `endless session end` (E-2394),
+// which names a session by its ES-N and may have to end a row that never
+// recorded a UUID. An id with no row is not an error: nothing is updated, as
+// for EndSession.
+func EndSessionByID(id int64) error {
+	db, err := DB()
+	if err != nil {
+		return err
+	}
+	return endSessionWhere("id", id, SnapshotSessionByID(db, id), "monitor.EndSessionByID")
+}
+
+// endSessionWhere is the one write that ends a session, keyed by `column`.
+func endSessionWhere(column string, key any, snap SessionSnapshot, caller string) error {
 	db, err := DB()
 	if err != nil {
 		return err
 	}
 
-	snap := SnapshotSession(sessionID)
 	now := time.Now().UTC().Format("2006-01-02T15:04:05")
 	// process_id is deliberately PRESERVED across the end (E-1898). Ending a
 	// session is a fact about the session, not about where it ran: "session 512
@@ -652,21 +669,21 @@ func EndSession(sessionID string) error {
 	// an ended row holding "%414" winning a lookup against a reissued "%414" —
 	// no longer applies, because the reissued pane is a different processes row.
 	_, err = db.Exec(
-		"UPDATE sessions SET state=?, last_activity=? WHERE session_id=?",
-		sessionstate.Ended, now, sessionID,
+		"UPDATE sessions SET state=?, last_activity=? WHERE "+column+"=?",
+		sessionstate.Ended, now, key,
 	)
 	if err != nil {
 		return err
 	}
 	if snap.Found { // only record a transition that actually had a prior row
 		LogSessionTxn(SessionTxn{
-			SessionGUID: sessionID,
+			SessionGUID: snap.SessionGUID,
 			OldState:    snap.State,
 			NewState:    sessionstate.Ended,
 			OldTaskID:   snap.TaskID,
 			NewTaskID:   snap.TaskID, // end does not change task_id
 			Reason:      SessionLogEnd,
-			Caller:      "monitor.EndSession",
+			Caller:      caller,
 		})
 	}
 	return nil

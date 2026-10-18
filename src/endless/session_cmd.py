@@ -3700,3 +3700,131 @@ def session_back() -> None:
         "no previous session",
         "There is nothing to go back to; continue from here",
     ))
+
+
+# E-2394: `session end` refuses a session whose hooks fired this recently. A
+# running Claude touches `last_activity` on every hook event, so recent
+# activity is evidence the session is alive even when its tmux server cannot be
+# reached to show it.
+END_RECENT_ACTIVITY_SECONDS = 10 * 60
+
+
+def _activity_age_seconds(last_activity: str) -> float | None:
+    """Seconds since `last_activity` (a UTC sessions timestamp), or None when it
+    is empty or unparseable — an unknown age is not evidence of activity."""
+    from datetime import datetime, timezone
+
+    if not last_activity:
+        return None
+    try:
+        then = datetime.fromisoformat(last_activity.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if then.tzinfo is None:
+        then = then.replace(tzinfo=timezone.utc)
+    return (datetime.now(timezone.utc) - then).total_seconds()
+
+
+def _describe_age(seconds: float | None) -> str:
+    if seconds is None:
+        return "unknown"
+    minutes = int(seconds // 60)
+    if minutes < 60:
+        return f"{minutes} min ago"
+    hours = minutes // 60
+    if hours < 48:
+        return f"{hours} h ago"
+    return f"{hours // 24} days ago"
+
+
+def end_session(ref: str, *, force: bool = False, yes: bool = False) -> None:
+    """End a session that is not live — a ghost whose pane is gone (E-2394).
+
+    `ref` resolves as `session resume` resolves it. Refuses a session that
+    reads live, and one with activity in the last ten minutes unless `force`.
+    Shows what is about to be ended and asks y/N unless `yes`; with no terminal
+    to ask on, `yes` is required. The end is the same write the SessionEnd hook
+    makes, so `session resume` brings the session back exactly as it brings
+    back any other ended one.
+    """
+    import subprocess
+
+    from endless import config
+    from endless.event_bridge import _resolve_endless_go
+    from endless.task_cmd import _attach_liveness
+
+    target = _resume_target(ref)
+    eid = target["endless_id"]
+    task_id = target.get("task_id")
+    task_label = f"E-{task_id}" if task_id else "no task"
+
+    if target.get("state") == "ended":
+        agent_help.info(f"ES-{eid} ({task_label}) is already ended. Nothing was changed.")
+        return
+
+    touch = _attach_liveness([{"session_id": eid}])[0]
+    liveness = touch["liveness"]
+    if liveness == "live":
+        pane = touch.get("pane") or "?"
+        raise agent_help.report(
+            f"ES-{eid} ({task_label}) is live in tmux pane {pane}, so it was not "
+            f"ended. Nothing was changed.",
+            "whether to stop the session running in that pane",
+            text=(f"ES-{eid} ({task_label}) is live in tmux pane {pane}.\n"
+                  f"`session end` is for a session whose pane is gone. To end "
+                  f"this one, exit Claude in that pane."),
+        )
+
+    age = _activity_age_seconds(target.get("last_activity") or "")
+    if age is not None and age < END_RECENT_ACTIVITY_SECONDS and not force:
+        raise agent_help.report(
+            f"ES-{eid} ({task_label}) had activity {_describe_age(age)}, so it "
+            f"may still be running. Nothing was changed.",
+            "whether that session is really gone and should be ended anyway",
+            text=(f"ES-{eid} ({task_label}) had activity {_describe_age(age)}, "
+                  f"so it may still be running somewhere Endless cannot see.\n"
+                  f"If you are sure it is gone, end it anyway with:\n"
+                  f"    endless session end ES-{eid} --force"),
+        )
+
+    title = target.get("task_title") or ""
+    summary = (
+        f"Session ES-{eid}\n"
+        f"  task:          {task_label}{f' — {title}' if title else ''}\n"
+        f"  last activity: {target.get('last_activity') or 'none'} "
+        f"({_describe_age(age)})\n"
+        f"  tmux:          {liveness}"
+    )
+    if not yes:
+        if not sys.stdin.isatty():
+            raise agent_help.report(
+                f"ES-{eid} ({task_label}) was not ended: there is no terminal to "
+                f"confirm on and --yes was not given. Nothing was changed.",
+                f"whether to end session ES-{eid}",
+                text=(f"{summary}\n"
+                      f"No terminal to confirm on. To end it, re-run with --yes:\n"
+                      f"    endless session end ES-{eid} --yes"),
+            )
+        agent_help.info(summary)
+        if not click.confirm(f"End ES-{eid}?", default=False):
+            agent_help.info("Not ended. Nothing was changed.")
+            return
+
+    config.require_db_context()
+    result = subprocess.run(
+        [_resolve_endless_go(), *config.go_db_context_args(),
+         "session-query", "end-session", "--id", str(eid)],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        # Go classified this where it was raised; relay it.
+        raise agent_help.relay(
+            result.stderr.strip() or "endless-go session-query end-session failed",
+            exit_code=result.returncode,
+        )
+
+    lines = [f"Ended ES-{eid} ({task_label}). Its transcript is kept.",
+             f"To get it back, run `endless session resume ES-{eid}`."]
+    if task_id:
+        lines.append(f"Until then, E-{task_id} can be claimed by another session.")
+    agent_help.info(" ".join(lines))
