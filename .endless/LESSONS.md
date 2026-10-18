@@ -7665,3 +7665,7 @@ Working E-2217, I added 'endless project backfill-identity' to migrate existing 
 ### [2026-10-18] Don't claim a side effect cleaned itself up without checking
 In E-2385, a pytest test reached Mike's real endless-tasks server and opened an E-1611 window. I told Mike the window 'died at once and nothing was left behind'. In fact Mike had closed it himself. I had not checked how it went away, only that it was gone. When reporting that a stray side effect on the user's live environment is gone, say what I actually observed (e.g. 'it is no longer there') rather than asserting it cleaned itself up, and don't use its absence to make the incident sound harmless.
 - **Project**: endless
+
+### [2026-10-18] Don't report a migration-number clash in another task's worktree
+Context: verifying the main-DB repair after E-2217 (2026-10-18), I globbed every worktree's migrations and reported that E-2063's worktree still numbered migrations 22-24, clashing with main. Mike: that's nothing for me to report. Landing E-2063 will fail on the clash, and he will have E-2063 renumber then. Reason: land already catches it, so a heads-up beforehand adds nothing. Scope: migration clashes in worktrees of tasks other than the one I'm working on.
+- **Project**: endless
