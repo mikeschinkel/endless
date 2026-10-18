@@ -1,0 +1,189 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 34,
+      "passed": 34,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go: migration 22 and schema.sql parity",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "just build",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest: identity, register, project sync, ignored projects, cli",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "alpha registers",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "config.json carries the root commit, not HEAD",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the row carries the same identity",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the slug defaults to the name",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "project info shows the identity",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "registering a clone exits non-zero",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the refusal names the registered path",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the refusal points at worktrees",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the refusal says forks are unsupported",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the clone was not registered",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the clone was left untouched",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "registering the clash exits non-zero",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the refusal names the clashing path",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the refusal names the fix",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it registers under another name",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a plain directory is refused",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it says why",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a repo with no commits is refused",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it says why",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "alpha is still registered at its own checkout",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "alpha was not repointed at the clone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the slug kept the registered name",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "config.json carries no slug",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "config.json does not carry the old name",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it reports the commit",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "config.json now carries the identity",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "exactly one commit was made",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it committed only config.json",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the row carries the identity",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a second run changes nothing",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and commits nothing",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
