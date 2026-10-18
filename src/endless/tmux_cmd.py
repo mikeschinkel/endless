@@ -79,13 +79,39 @@ def run_start(no_restore: bool) -> None:
         agent_help.passthrough_exit(result.returncode)  # as in run_apply
 
 
+# Every spawn's refusal while the task-session server is down (E-2385). The
+# same words as spawnlaunchcmd.NotRunningMessage, which refuses there too.
+NOT_RUNNING = "Endless isn't running. Run `endless start`, then retry."
+NOT_RUNNING_DECISION = (
+    "whether to run `endless start`, which starts Endless's tmux servers and "
+    "opens a terminal on each"
+)
+
+
+def run_stop(target: str | None, all_: bool, force: bool,
+             timeout: str | None) -> None:
+    """Shell out to `endless-go tmux stop` (E-2385), stdio inherited."""
+    cmd = [_binary(), "tmux", "stop"]
+    if all_:
+        cmd.append("--all")
+    if force:
+        cmd.append("--force")
+    if timeout:
+        cmd += ["--timeout", timeout]
+    if target:
+        cmd.append(target)
+    result = subprocess.run(cmd)
+    if result.returncode != 0:
+        agent_help.passthrough_exit(result.returncode)  # as in run_apply
+
+
 def tasks_server() -> tuple[str, str] | None:
     """The task-session server's (socket, session) while it runs, else None.
 
-    While it runs, every spawned task window opens there (E-2240), so a spawn or
-    a claim no longer needs its caller to be inside tmux. Never raises: a
-    missing endless-go answers "not running", and the caller then behaves as
-    it did before the server existed.
+    Every spawned task window opens there (E-2240) and only there (E-2385):
+    with it down, a spawn or a claim's window is refused rather than opened on
+    the caller's own tmux server. Never raises: a missing endless-go answers
+    "not running".
     """
     path = shutil.which("endless-go")
     if not path:
@@ -112,15 +138,29 @@ def in_server(socket: str) -> bool:
         return here == socket
 
 
-def reach_window_line(window: str) -> str | None:
-    """The command that reaches a spawned window on the task-session server.
+def session_exists(socket: str, name: str) -> bool:
+    """Whether the tmux server at `socket` has a session of exactly this name.
+
+    `=` makes tmux match exactly: a bare name also matches as a prefix and
+    then as a glob, so `end` would answer for a session called `endless`.
+    """
+    env = {k: v for k, v in os.environ.items() if k not in ("TMUX", "TMUX_PANE")}
+    return subprocess.run(
+        ["tmux", "-S", socket, "has-session", "-t", f"={name}"],
+        capture_output=True, env=env,
+    ).returncode == 0
+
+
+def reach_window_line(window: str, session: str | None = None) -> str | None:
+    """The command that reaches a spawned window on the task-session server,
+    in `session` when given, else the server's own tasks session.
 
     None when that server is not running, and the caller keeps its own hint.
     """
     target = tasks_server()
     if target is None:
         return None
-    socket, session = target
+    socket, session = target[0], session or target[1]
     # Quoted: zsh expands a bare `=word` to the path of command `word`.
     target = shlex.quote(f"={session}:{window}")
     if target[0] != "'":

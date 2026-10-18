@@ -70,6 +70,24 @@ func runSpawnWindow(args []string) {
 		missingFlag("--handoff-file")
 	}
 
+	// Every spawn's window opens on Endless's task-session server — task spawn,
+	// task claim's window and auto-spawn alike (E-2240) — and only there
+	// (E-2385): with that server down the spawn is refused, never sent to
+	// whichever tmux server the caller is in. An auto-spawn's --target-session
+	// is a session id on whichever server the job runs beside, so it is
+	// dropped; --tmux-session names a session on the task-session server.
+	tasks, running := tmuxservers.RunningTasks()
+	if !running {
+		refusal.Report(NotRunningMessage,
+			"whether to run `endless start`, which starts Endless's tmux servers and opens a terminal on each; nothing was created").
+			Command("spawn-window").Exit(1)
+	}
+	tmuxSocket = tasks.Socket
+	*targetSess = ""
+	if *tmuxSess == "" {
+		*tmuxSess = tasks.Session
+	}
+
 	spec := LaunchSpec{
 		ClaudeBin:      *claudeBin,
 		HandoffFile:    *handoff,
@@ -101,20 +119,6 @@ func runSpawnWindow(args []string) {
 		spawnWindowReport(fmt.Sprintf("spawn-window: resolve self: %v", err),
 			"whether to reinstall endless-go, which could not resolve the path of its own running binary").
 			Exit(1)
-	}
-
-	// E-2240: while Endless's task-session server is running, every spawn's
-	// window opens in its tasks session — task spawn, task claim's window and
-	// auto-spawn alike. An auto-spawn's --target-session is a session id on
-	// whichever server the job runs beside, which is not where task windows
-	// live once that server exists. Only a person's explicit --tmux-session
-	// still names a session on the server they are in.
-	if *tmuxSess == "" {
-		if tasks, ok := tmuxservers.RunningTasks(); ok {
-			tmuxSocket = tasks.Socket
-			*targetSess = ""
-			*tmuxSess = tasks.Session
-		}
 	}
 
 	// Resolve the landing session BEFORE the window is asked for, so a spawn
@@ -168,6 +172,10 @@ func runSpawnWindow(args []string) {
 	buildLayoutAround(claudePane, *cwd)
 }
 
+// NotRunningMessage is the refusal of every spawn while Endless's
+// task-session server is not running. The Python gates print the same words.
+const NotRunningMessage = "Endless isn't running. Run `endless start`, then retry."
+
 // resolveTarget is where new-window puts the window: the session named by id
 // or by name when one is given, else the spawner's own (E-2125), and the
 // position within it the placement asks for (E-2234).
@@ -210,8 +218,8 @@ end:
 func namedSession(name string) (sid string, err error) {
 	if err = tmuxRun(hasSessionArgs(name)...); err != nil {
 		err = refusal.NoReport(
-			fmt.Sprintf("no tmux session is named %q", name),
-			"Pass --tmux-session the exact name of an existing session (tmux ls lists them) and retry").
+			fmt.Sprintf("no tmux session on Endless's task-session server is named %q", name),
+			"Pass --tmux-session the exact name of a session on the task-session server (`tmux -S <socket> ls` lists them) and retry").
 			Cause(err)
 		goto end
 	}

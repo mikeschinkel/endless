@@ -5,6 +5,8 @@
 //
 //	start        Start Endless's own tmux servers and open a terminal on each
 //	             (E-2240; see internal/tmuxstartcmd).
+//	stop         Wind Endless's tmux servers down: tasks, console or all
+//	             (E-2385; see internal/tmuxstopcmd).
 //	apply        Ephemerally configure the running tmux server: enable a
 //	             second status line, wire status-format[1] to the printer,
 //	             install hotkey and right-click popup menus. No file I/O;
@@ -28,6 +30,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/tmuxstartcmd"
+	"github.com/mikeschinkel/endless/internal/tmuxstopcmd"
 )
 
 func Run(args []string) {
@@ -49,6 +52,8 @@ func Run(args []string) {
 	// stale state for an operator verb to clear.
 	case "start":
 		tmuxstartcmd.Run(args[1:])
+	case "stop":
+		tmuxstopcmd.Run(args[1:])
 	case "record-windows":
 		tmuxstartcmd.RunRecord(args[1:])
 	case "tasks-target":
@@ -89,6 +94,7 @@ func usageText() string {
 		"Usage: endless-go tmux <command> [flags]",
 		"Commands:",
 		"  start        Start Endless's console and task-session tmux servers (E-2240)",
+		"  stop         Stop them: tasks, console or all (E-2385)",
 		"  init         Init the current tmux server (apply, gated by @server_uuid)",
 		"  apply        Configure the running tmux server (ephemeral)",
 		"  status-line  Print one styled line for status-format[1]",

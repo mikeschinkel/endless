@@ -85,6 +85,9 @@ For straightforward task queries, prefer `endless task list --agent --status <..
 ```bash
 endless start                   # alias of `endless tmux start`
 endless tmux start --no-restore # without recreating the task windows
+endless stop tasks              # alias of `endless tmux stop tasks`
+endless stop console
+endless stop all                # also `endless stop --all`
 ```
 
 Endless runs on two tmux servers of its own, never on your default server,
@@ -93,8 +96,11 @@ which stays yours:
 - **console** — socket `endless-console`, session `console`: one window per
   project monitor (the monitor above a shell), named for the project.
 - **task-session server** — socket `endless-tasks`, session `tasks`: where
-  task sessions live. While it runs, every spawned window — `task spawn`,
-  `task claim`'s window, auto-spawn — opens here, from inside tmux or not.
+  task sessions live. Every spawned window — `task spawn`, `task claim`'s
+  window, auto-spawn, `task prime` — opens here, from inside tmux or not, and
+  only here: while it is not running, each of them refuses ("Endless isn't
+  running. Run `endless start`") and creates nothing. `--tmux-session` names
+  a session on this server. Only `endless start` starts either server.
 
 `start` starts whichever is not running and opens a terminal window attached
 to each. A console it starts opens with a monitor window for the project
@@ -108,23 +114,39 @@ directory is created 0700; Endless refuses one it does not own or that others
 can write.
 
 **Restoring task windows.** While the task-session server runs, Endless keeps
-a record of which task windows are open, rewritten when that set changes. When
-`start` finds the server gone — killed, crashed, rebooted — it recreates each
-recorded window that is not open and resumes Claude in it, as `session resume
---tmux-session` would. A window closed before the server went away is not
-recreated; neither is a plain shell window.
+a record of which task windows are open, in tab order, rewritten when they or
+their order change. When `start` finds the server gone — killed, crashed,
+rebooted — it recreates each recorded window that is not open, puts the task
+windows back in recorded order, and resumes Claude in the recreated ones, as
+`session resume --tmux-session` would. A window closed before the server went
+away is not recreated; neither is a plain shell window.
+
+**Stopping.** `stop tasks` refuses while any session on the task-session
+server is working, and lists them; `--force` skips that. Otherwise it types
+`/exit` into each Claude there, so each quits through its own exit path and is
+recorded as ended, waits for all of them (`--timeout`, default 30s), and stops
+the server. Any still running at the timeout are listed and the server is left
+running, unless `--force`. Closing windows during the stop does not rewrite the
+record, so the next `start` restores the windows open when the stop began.
+`stop console` stops the console, which holds only monitors and shells. `stop
+all` stops the task-session server first, and leaves the console running when
+that refuses or leaves its server running. A server that is not running is
+reported as already stopped.
 
 **Settings**, all in `~/.config/endless/config.json` (never a project's):
 `tmux.socket_dir`, `tmux.console_server`, `tmux.tasks_server`,
 `tmux.tasks_session`, and `tmux.terminal` — the command that opens a terminal,
 with `{cmd}` where the attach command goes, e.g. `"ghostty -e {cmd}"` or
 `"wezterm start -- {cmd}"`. Without one, Endless detects Ghostty, WezTerm,
-kitty, Terminal.app and iTerm2; when it can detect nothing it prints the two
-attach commands instead.
+kitty, Terminal.app and iTerm2; when it can detect nothing it opens the
+platform's default terminal — Terminal.app on macOS, and on Linux (WSL
+included) `xdg-terminal-exec` or `x-terminal-emulator` when on PATH — and only
+with none of those prints the two attach commands instead.
 
 `endless project monitor <name> --tmux` adds a window for that project to the
-console — another one each run — starting the console if needed and opening a
-terminal onto it when none is attached.
+console — another one each run — and opens a terminal onto it when none is
+attached. It refuses when the console is not running: only `endless start`
+starts Endless's servers.
 
 ## Tmux integration
 

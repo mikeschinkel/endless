@@ -270,6 +270,8 @@ def prime_env(monkeypatch, tmp_path):
     def arm():
         monkeypatch.setattr(shutil, "which", lambda name: f"/usr/bin/{name}")
         monkeypatch.setenv("TMUX", "/tmp/tmux-sock,1,0")
+        # E-2385: a spawn needs Endless's task-session server, not just tmux.
+        monkeypatch.setattr("endless.tmux_cmd.tasks_server", lambda: ("/s/endless-tasks", "tasks"))
         monkeypatch.setattr(task_cmd, "_claude_binary", lambda: "claude")
         monkeypatch.setattr(task_cmd, "_check_task_ownership", lambda *a, **k: None)
         monkeypatch.setattr(task_cmd, "_open_questions", lambda item_id: [])

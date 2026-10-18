@@ -24,6 +24,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 
 	"github.com/mikeschinkel/endless/internal/monitor"
@@ -164,8 +165,8 @@ func startTasks(out io.Writer, tasks tmuxservers.Server, self string) (placehold
 	return pane
 }
 
-// restore recreates the recorded task windows that are not open, then resumes
-// Claude in them.
+// restore recreates the recorded task windows that are not open, puts the task
+// windows in recorded tab order, then resumes Claude in the recreated ones.
 //
 // A session start creates needs a first window, and that window is a plain
 // shell. When restore brings task windows back into such a session, the
@@ -178,6 +179,7 @@ func restore(out io.Writer, tasks tmuxservers.Server, recorded []int64, placehol
 	}
 	missing := missingIDs(recorded, open)
 	if len(missing) == 0 {
+		reorder(tasks, recorded)
 		return
 	}
 
@@ -200,11 +202,13 @@ func restore(out io.Writer, tasks tmuxservers.Server, recorded []int64, placehol
 		names = append(names, name)
 	}
 	if len(windowIDs) == 0 {
+		reorder(tasks, recorded)
 		return
 	}
 	if placeholder != "" {
 		_ = tasks.Run("kill-pane", "-t", placeholder)
 	}
+	reorder(tasks, recorded)
 	fmt.Fprintf(out, "• tasks: restored %d task window(s): %s\n", len(names), strings.Join(names, " "))
 	var summary strings.Builder
 	if err := resumewindowscmd.Restore(tasks.Socket, windowIDs, &summary); err != nil {
@@ -216,6 +220,68 @@ func restore(out io.Writer, tasks tmuxservers.Server, recorded []int64, placehol
 	for _, line := range strings.Split(strings.TrimRight(summary.String(), "\n"), "\n") {
 		fmt.Fprintf(out, "  %s\n", line)
 	}
+}
+
+// reorder swaps the session's task windows into recorded order (E-2385).
+// new-window puts a recreated window at the next free index, which is not
+// where it stood, and a window that stayed open has kept its own place; both
+// are moved among the positions task windows hold, so a non-task window stays
+// where it is. Cosmetic when it fails: every window is still there.
+func reorder(tasks tmuxservers.Server, recorded []int64) {
+	wins, ok := tasks.Windows()
+	if !ok {
+		return
+	}
+	for _, sw := range orderSwaps(wins, recorded) {
+		if err := tasks.Run("swap-window", "-d", "-s", sw[0], "-t", sw[1]); err != nil {
+			refusal.NoReport(fmt.Sprintf("tmux start: putting the task windows in order: %v", err),
+				"Continue; every window was restored, some out of their recorded order").
+				Command("tmux start").Print()
+			return
+		}
+	}
+}
+
+// orderSwaps is the swap-window pairs (source, target window ids) that put
+// the task windows of wins, a session's windows in tab order, into the order
+// of recorded. Task windows the record does not name keep their relative
+// order after the recorded ones; a second window for one task counts as one
+// the record does not name. Pure.
+func orderSwaps(wins []tmuxservers.Window, recorded []int64) (swaps [][2]string) {
+	var slots []string // window ids at the positions task windows hold, in order
+	first := map[int64]string{}
+	for _, w := range wins {
+		if w.TaskID <= 0 {
+			continue
+		}
+		slots = append(slots, w.ID)
+		if _, dup := first[w.TaskID]; !dup {
+			first[w.TaskID] = w.ID
+		}
+	}
+	placed := map[string]bool{}
+	var want []string
+	for _, id := range recorded {
+		if wid, open := first[id]; open && !placed[wid] {
+			placed[wid] = true
+			want = append(want, wid)
+		}
+	}
+	for _, wid := range slots {
+		if !placed[wid] {
+			want = append(want, wid)
+		}
+	}
+	cur := slices.Clone(slots)
+	for i := range cur {
+		if cur[i] == want[i] {
+			continue
+		}
+		j := slices.Index(cur, want[i])
+		swaps = append(swaps, [2]string{want[i], cur[i]})
+		cur[i], cur[j] = cur[j], cur[i]
+	}
+	return swaps
 }
 
 // missingIDs is the recorded ids with no open window, in recorded order. Pure.

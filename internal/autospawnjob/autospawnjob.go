@@ -61,6 +61,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/rating"
 	"github.com/mikeschinkel/endless/internal/spawnlaunchcmd"
+	"github.com/mikeschinkel/endless/internal/tmuxservers"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
 
@@ -434,8 +435,20 @@ var tmuxOutput = func(args ...string) (string, error) {
 	return strings.TrimSpace(string(out)), err
 }
 
+// tasksRunning reports whether Endless's task-session server is running. A
+// package var so target resolution can be tested without one.
+var tasksRunning = func() bool {
+	_, ok := tmuxservers.RunningTasks()
+	return ok
+}
+
 // resolveTarget turns the auto_spawn.target setting into the session id the
 // window opens in, or a reason to skip this run.
+//
+// With Endless's task-session server down there is nowhere for the window to
+// go — a spawn opens only there (E-2385) — so the run skips, saying so in its
+// note, and spawns nothing. It does not start the server: only `endless start`
+// does.
 //
 //   - active: the session of the most recently active ATTACHED client — where
 //     the user is. No attached client means nobody is looking, and a spawn now
@@ -461,6 +474,10 @@ func resolveTarget(setting string) (target, skip string, err error) {
 	default:
 		err = fmt.Errorf("auto_spawn.target %q is not one of %q or %q",
 			setting, config.AutoSpawnTargetActive, config.AutoSpawnTargetMonitor)
+	}
+	// After the setting is validated, so a misconfiguration is still seen.
+	if err == nil && !tasksRunning() {
+		target, skip = "", spawnlaunchcmd.NotRunningMessage
 	}
 	return target, skip, err
 }

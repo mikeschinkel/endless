@@ -162,6 +162,8 @@ def test_spawn_runs_the_live_check_first(seeded_project_at_cwd, monkeypatch):
 
     monkeypatch.setattr(shutil, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setenv("TMUX", "/tmp/tmux-sock,1,0")
+    # E-2385: a spawn needs Endless's task-session server, not just tmux.
+    monkeypatch.setattr("endless.tmux_cmd.tasks_server", lambda: ("/s/endless-tasks", "tasks"))
     monkeypatch.setattr(task_cmd, "_check_task_ownership", live_raises)
     monkeypatch.setattr(
         task_cmd, "_check_prior_claim",
@@ -188,6 +190,8 @@ def test_spawn_refuses_when_only_a_dead_session_ever_claimed_it(
 
     monkeypatch.setattr(shutil, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setenv("TMUX", "/tmp/tmux-sock,1,0")
+    # E-2385: a spawn needs Endless's task-session server, not just tmux.
+    monkeypatch.setattr("endless.tmux_cmd.tasks_server", lambda: ("/s/endless-tasks", "tasks"))
     monkeypatch.setattr(task_cmd, "_check_task_ownership", lambda *a, **k: None)
 
     def must_not_run(**kwargs):

@@ -198,8 +198,9 @@ func TestTaskIDOfWindow(t *testing.T) {
 	}
 }
 
-// TestStateWritesOnlyOnChange: the record is rewritten when the set changes,
-// and left alone when it does not.
+// TestStateWritesOnlyOnChange: the record is rewritten when the windows or
+// their order change (E-2385), and left alone when neither does. Repeats keep
+// their first position.
 func TestStateWritesOnlyOnChange(t *testing.T) {
 	t.Setenv("HOME", t.TempDir())
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
@@ -211,13 +212,79 @@ func TestStateWritesOnlyOnChange(t *testing.T) {
 	if wrote, err := WriteState([]int64{7, 5, 7}); err != nil || !wrote {
 		t.Fatalf("first write = %v, %v", wrote, err)
 	}
-	if got, _ = ReadState(); !slices.Equal(got, []int64{5, 7}) {
-		t.Errorf("record = %v, want [5 7]", got)
+	if got, _ = ReadState(); !slices.Equal(got, []int64{7, 5}) {
+		t.Errorf("record = %v, want [7 5], in the order given", got)
 	}
-	if wrote, _ := WriteState([]int64{5, 7}); wrote {
-		t.Errorf("an unchanged set was rewritten")
+	if wrote, _ := WriteState([]int64{7, 5}); wrote {
+		t.Errorf("an unchanged record was rewritten")
+	}
+	if wrote, _ := WriteState([]int64{5, 7}); !wrote {
+		t.Errorf("a reorder alone was not written")
+	}
+	if got, _ = ReadState(); !slices.Equal(got, []int64{5, 7}) {
+		t.Errorf("record = %v, want [5 7] after the reorder", got)
 	}
 	if wrote, _ := WriteState(nil); !wrote {
 		t.Errorf("an emptied set was not written")
+	}
+}
+
+// TestParseWindowsIsTabOrder: windows come back by index, with the task each
+// one is named for.
+func TestParseWindowsIsTabOrder(t *testing.T) {
+	got := parseWindows("3\t@9\tE-12\n0\t@1\tzsh\n1\t@4\t *E-5\nbad line\n")
+	want := []Window{{"@1", 0, "zsh", 0}, {"@4", 1, " *E-5", 5}, {"@9", 3, "E-12", 12}}
+	if !slices.Equal(got, want) {
+		t.Errorf("parseWindows = %+v, want %+v", got, want)
+	}
+}
+
+// TestRecordHooksIncludeReorders: a reorder fires no window-* hook, so the
+// commands that reorder are hooked too.
+func TestRecordHooksIncludeReorders(t *testing.T) {
+	body := confBody(Server{Role: RoleTasks, Socket: "/s/t", Session: "tasks"}, "/bin/endless-go", nil)
+	for _, hook := range []string{"after-move-window", "after-swap-window"} {
+		if !strings.Contains(body, "set-hook -g "+hook+" ") {
+			t.Errorf("tasks conf lacks the %s hook:\n%s", hook, body)
+		}
+	}
+}
+
+// TestDefaultLauncher: with no terminal configured or detected, macOS opens
+// Terminal.app, Linux the first of xdg-terminal-exec and x-terminal-emulator on
+// PATH, and anything else nothing (E-2385).
+func TestDefaultLauncher(t *testing.T) {
+	has := func(names ...string) func(string) bool {
+		return func(n string) bool { return slices.Contains(names, n) }
+	}
+	for _, tt := range []struct {
+		goos   string
+		onPath func(string) bool
+		argv   []string // nil: no launcher
+	}{
+		{"darwin", has(), []string{"osascript"}},
+		{"linux", has("xdg-terminal-exec", "x-terminal-emulator"), []string{"xdg-terminal-exec", "top"}},
+		{"linux", has("x-terminal-emulator"), []string{"x-terminal-emulator", "-e", "top"}},
+		{"linux", has(), nil},
+		{"freebsd", has("xdg-terminal-exec"), nil},
+	} {
+		l, ok := defaultLauncher(tt.goos, tt.onPath)
+		if ok != (tt.argv != nil) {
+			t.Errorf("%s: ok = %v", tt.goos, ok)
+			continue
+		}
+		if !ok {
+			continue
+		}
+		got := l.Argv([]string{"top"})
+		if tt.argv[0] == "osascript" {
+			if got[0] != "osascript" || !strings.Contains(strings.Join(got, " "), `application "Terminal"`) {
+				t.Errorf("%s: argv = %q, want Terminal.app", tt.goos, got)
+			}
+			continue
+		}
+		if !slices.Equal(got, tt.argv) {
+			t.Errorf("%s: argv = %q, want %q", tt.goos, got, tt.argv)
+		}
 	}
 }

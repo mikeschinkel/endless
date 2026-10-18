@@ -85,6 +85,8 @@ def test_spawn_applies_the_gate(seeded_project_at_cwd, monkeypatch):
     monkeypatch.setattr(shutil, "which",
                         lambda name: "/usr/bin/tmux" if name == "tmux" else real_which(name))
     monkeypatch.setenv("TMUX", "/tmp/tmux-sock,1,0")
+    # E-2385: a spawn needs Endless's task-session server, not just tmux.
+    monkeypatch.setattr("endless.tmux_cmd.tasks_server", lambda: ("/s/endless-tasks", "tasks"))
     monkeypatch.setattr(task_cmd, "_check_task_ownership", lambda *a, **k: None)
     with pytest.raises(click.ClickException) as exc:
         task_cmd.spawn_plan(item_id)

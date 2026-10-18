@@ -70,6 +70,8 @@ def _claim(monkeypatch, capsys, *, session, in_claude, tmux=False, unattended=Fa
     monkeypatch.setattr(task_cmd, "_in_claude_session", lambda: in_claude)
     if tmux:
         monkeypatch.setenv("TMUX", "/tmp/tmux-501/default,1,0")
+        # E-2385: a spawn needs Endless's task-session server, not just tmux.
+        monkeypatch.setattr("endless.tmux_cmd.tasks_server", lambda: ("/s/endless-tasks", "tasks"))
     task_cmd.claim_item(task_id, unattended=unattended)
     return capsys.readouterr().out
 
@@ -228,7 +230,8 @@ def test_a_shell_that_bound_nothing_starts_a_session_and_names_none(
     )
     assert calls, "no session was launched"
     assert f"Started Claude on E-{tid} in window" in out
-    assert f"      tmux select-window -t E-{tid}" in out.splitlines()
+    # E-2385: the window is on Endless's task-session server, reached from here.
+    assert f"      tmux -S /s/endless-tasks attach -t '=tasks:E-{tid}'" in out.splitlines()
     assert "ES-" not in out
     assert "bound to session" not in out
 
@@ -275,6 +278,8 @@ def test_spawn_prints_the_same_aligned_rows_and_always_says_where_it_landed(
     """Deliverable C: the same discipline on the sibling verb."""
     tid = project_with_task["task_id"]
     monkeypatch.setenv("TMUX", "/tmp/tmux-501/default,1,0")
+    # E-2385: a spawn needs Endless's task-session server, not just tmux.
+    monkeypatch.setattr("endless.tmux_cmd.tasks_server", lambda: ("/s/endless-tasks", "tasks"))
     monkeypatch.setattr(task_cmd, "_claude_binary", lambda: "/bin/claude")
     real_run = task_cmd.subprocess.run
 
@@ -299,7 +304,8 @@ def test_spawn_prints_the_same_aligned_rows_and_always_says_where_it_landed(
     assert f"Spawned a Claude session on E-{tid}:" in out
     assert f"  • Window: E-{tid}" in out.splitlines()
     assert "  Switch to it:" in out.splitlines()
-    assert f"      tmux select-window -t E-{tid}" in out.splitlines()
+    # E-2385: the window is on Endless's task-session server, reached from here.
+    assert f"      tmux -S /s/endless-tasks attach -t '=tasks:E-{tid}'" in out.splitlines()
     # The worktree is named once, by the claim block above. `Session cwd` is
     # for the `--worktree` override, and this spawn did not override.
     assert "Session cwd" not in out
@@ -316,6 +322,8 @@ def test_spawn_names_the_session_cwd_when_worktree_overrides_it(
     elsewhere = tmp_path / "elsewhere"
     elsewhere.mkdir()
     monkeypatch.setenv("TMUX", "/tmp/tmux-501/default,1,0")
+    # E-2385: a spawn needs Endless's task-session server, not just tmux.
+    monkeypatch.setattr("endless.tmux_cmd.tasks_server", lambda: ("/s/endless-tasks", "tasks"))
     monkeypatch.setattr(task_cmd, "_claude_binary", lambda: "/bin/claude")
     real_run = task_cmd.subprocess.run
 

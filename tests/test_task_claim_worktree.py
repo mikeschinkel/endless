@@ -129,8 +129,9 @@ def test_claim_refuses_when_no_session_and_names_unattended(project_with_task):
     E-2106 narrowed WHEN it fires. It used to cover every caller that could not
     name a session, including the most ordinary one there is: a user in a
     shell, in tmux, picking up a task — for whom a session is available, just
-    not started yet. What is left is the caller who cannot start one at all: no
-    tmux. (No TMUX in the environment here; `isolated_env` strips it.)
+    not started yet. What is left is the caller who cannot start one at all:
+    Endless's task-session server is not running (E-2385; `$TMUX` is no
+    substitute).
 
     It also fires BEFORE the claim now, so a refusal leaves no half-claimed
     task behind.
@@ -147,8 +148,10 @@ def test_claim_refuses_when_no_session_and_names_unattended(project_with_task):
         with pytest.raises(click.ClickException) as exc:
             claim_item(tid)
     msg = str(exc.value)
-    assert "No Claude session to bind this task to" in msg
-    assert "no tmux" in msg
+    # E-2385: the session would start on Endless's task-session server, which
+    # is not running (the autouse stub), so that is what the refusal says.
+    assert "Endless isn't running. Run `endless start`" in msg
+    assert "Nothing was claimed" in msg
     assert "--unattended" in msg
     assert "--force" not in msg
     assert db.query("SELECT status FROM tasks WHERE id = ?", (tid,))[0]["status"] \
@@ -164,8 +167,9 @@ def test_claim_from_a_shell_in_tmux_starts_a_session(project_with_task,
     from unittest.mock import patch
     from endless import task_cmd
 
+    from endless import tmux_cmd
     task_cmd._reset_session_choice_cache()
-    monkeypatch.setenv("TMUX", "/tmp/tmux-501/default,1,0")
+    monkeypatch.setattr(tmux_cmd, "tasks_server", lambda: ("/s/endless-tasks", "tasks"))
     launched: list[tuple] = []
     monkeypatch.setattr(
         task_cmd, "_launch_claude_for_claim",
@@ -485,6 +489,8 @@ def test_spawn_takes_a_submitted_task_without_approval(project_with_task, monkey
     monkeypatch.setattr(shutil, "which",
                         lambda name: "/usr/bin/tmux" if name == "tmux" else real_which(name))
     monkeypatch.setenv("TMUX", "/tmp/tmux-sock,1,0")
+    # E-2385: a spawn needs Endless's task-session server, not just tmux.
+    monkeypatch.setattr("endless.tmux_cmd.tasks_server", lambda: ("/s/endless-tasks", "tasks"))
     monkeypatch.setattr(task_cmd, "_check_task_ownership", lambda *a, **k: None)
 
     class Stop(Exception):

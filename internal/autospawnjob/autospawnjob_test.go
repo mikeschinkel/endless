@@ -16,6 +16,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/jobs"
 	"github.com/mikeschinkel/endless/internal/schema"
+	"github.com/mikeschinkel/endless/internal/spawnlaunchcmd"
 )
 
 // init wires cfgstore's package-global logger, which it panics without; the
@@ -332,8 +333,9 @@ func TestLoadProjectPolicy_DefaultsAndOptIn(t *testing.T) {
 
 // TestResolveTarget covers the three target outcomes and the misconfiguration.
 func TestResolveTarget(t *testing.T) {
-	prev := tmuxOutput
-	t.Cleanup(func() { tmuxOutput = prev })
+	prev, prevRunning := tmuxOutput, tasksRunning
+	t.Cleanup(func() { tmuxOutput, tasksRunning = prev, prevRunning })
+	tasksRunning = func() bool { return true }
 
 	tmuxOutput = func(args ...string) (string, error) {
 		return "1700000100 $2\n1700000900 $5\n1700000500 $2", nil
@@ -370,6 +372,27 @@ func TestResolveTarget(t *testing.T) {
 
 	if _, _, err = resolveTarget("elsewhere"); err == nil {
 		t.Error("an unknown target must be a failure, not a silent skip")
+	}
+}
+
+// TestResolveTargetSkipsWhileEndlessIsNotRunning: with the task-session server
+// down every target skips with the spawn's own refusal, so nothing is spawned
+// anywhere else (E-2385); a misconfigured target is still a failure.
+func TestResolveTargetSkipsWhileEndlessIsNotRunning(t *testing.T) {
+	prev, prevRunning := tmuxOutput, tasksRunning
+	t.Cleanup(func() { tmuxOutput, tasksRunning = prev, prevRunning })
+	tasksRunning = func() bool { return false }
+	tmuxOutput = func(args ...string) (string, error) { return "1700000900 $5", nil }
+	t.Setenv("TMUX_PANE", "%9")
+
+	for _, setting := range []string{"", "active", "monitor"} {
+		target, skip, err := resolveTarget(setting)
+		if err != nil || target != "" || skip != spawnlaunchcmd.NotRunningMessage {
+			t.Errorf("%q: target=%q skip=%q err=%v, want the not-running skip", setting, target, skip, err)
+		}
+	}
+	if _, _, err := resolveTarget("elsewhere"); err == nil {
+		t.Error("an unknown target must still be a failure")
 	}
 }
 

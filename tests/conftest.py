@@ -196,6 +196,18 @@ def isolated_env(tmp_path, monkeypatch):
     tmux_tmpdir.mkdir()
     monkeypatch.setenv("TMUX_TMPDIR", str(tmux_tmpdir))
 
+    # E-2385: TMUX_TMPDIR does not reach Endless's own servers, which are
+    # addressed by full socket path under tmux.socket_dir (default
+    # /tmp/endless-<uid>, independent of HOME). Every spawn goes there, so a
+    # Go subprocess under test would open its window on the developer's real
+    # task-session server. Point tmux.socket_dir, in the isolated home's user
+    # config (where Go reads it), at a directory with no server in it.
+    go_config = isolated_home / ".config" / "endless"
+    go_config.mkdir(parents=True)
+    (go_config / "config.json").write_text(
+        json.dumps({"tmux": {"socket_dir": str(tmp_path / "endless-sockets")}})
+    )
+
     # E-1455: strip Claude Code env vars leaked from a runner shell whose
     # parent IS a Claude Code session. The env-vars-as-truth layer in
     # _current_endless_session_id branches on CLAUDECODE=1 and would

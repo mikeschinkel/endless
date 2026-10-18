@@ -77,7 +77,11 @@ def test_reach_line_is_none_without_the_server():
 def test_claim_from_a_plain_shell_needs_no_tmux_while_the_server_runs(monkeypatch):
     from endless import task_cmd
     monkeypatch.delenv("TMUX", raising=False)
-    # Not running (the autouse stub): a shell outside tmux is refused.
+    # Not running (the autouse stub): a shell outside tmux is refused, and
+    # (E-2385) so is one inside another tmux server.
+    with pytest.raises(Exception):
+        task_cmd._require_tmux_for_claim(1)
+    monkeypatch.setenv("TMUX", "/tmp/tmux-501/default,1,0")
     with pytest.raises(Exception):
         task_cmd._require_tmux_for_claim(1)
     # Running: the session's window opens there, so the claim proceeds.

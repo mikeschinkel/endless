@@ -22,11 +22,18 @@ import (
 //     task window is named for its task, and that name is what restore and
 //     the resume sweep read back.
 //   - @endless_server, naming the server's role for anything that inspects it.
-//   - on the task-session server, hooks that re-record the set of open task
-//     windows whenever a window is linked, unlinked or renamed (see state.go).
+//   - on the task-session server, hooks that re-record the open task windows
+//     whenever a window is linked, unlinked or renamed, and — since the record
+//     keeps tab order (E-2385) — moved or swapped (see state.go).
 //
 // The status line and @server_uuid are applied by `tmux init` (Init), not
 // here: init is the one place that owns them, on every server.
+
+// RecordHooks are the task-session server's hooks that re-record its task
+// windows. A reorder fires none of the window-* hooks, so the commands that
+// reorder are hooked after they run.
+var RecordHooks = []string{"window-linked", "window-unlinked", "window-renamed",
+	"after-move-window", "after-swap-window"}
 
 // writeConf writes the server's configuration file, 0600.
 func writeConf(s Server, self string) error {
@@ -51,7 +58,7 @@ func confBody(s Server, self string, userConf []string) string {
 		record := ShellJoin([]string{self, "tmux", "record-windows",
 			"--socket", s.Socket, "--session", s.Session})
 		b.WriteString("\n# Keep the record of open task windows that `endless tmux start` restores.\n")
-		for _, hook := range []string{"window-linked", "window-unlinked", "window-renamed"} {
+		for _, hook := range RecordHooks {
 			fmt.Fprintf(&b, "set-hook -g %s %s\n", hook,
 				tmuxQuote("run-shell -b "+tmuxQuote(record)))
 		}

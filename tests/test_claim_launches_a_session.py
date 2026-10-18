@@ -35,9 +35,12 @@ def shell_in_tmux(monkeypatch):
     """
     import types
 
+    from endless import tmux_cmd
     calls: list[list[str]] = []
     monkeypatch.setenv("TMUX", "/tmp/tmux-501/default,1,0")
     monkeypatch.setenv("TMUX_PANE", "%3")
+    # E-2385: the session's window opens on Endless's task-session server.
+    monkeypatch.setattr(tmux_cmd, "tasks_server", lambda: ("/s/endless-tasks", "tasks"))
     monkeypatch.setattr(task_cmd, "_claude_binary", lambda: "/bin/claude")
     monkeypatch.setattr(
         "endless.event_bridge._resolve_endless_go",
@@ -127,14 +130,15 @@ def test_a_populated_window_is_no_longer_refused(shell_in_tmux):
     task_cmd._require_tmux_for_claim(77)   # does not raise
 
 
-def test_no_tmux_is_refused_with_the_unattended_route(monkeypatch):
-    monkeypatch.delenv("TMUX", raising=False)
+def test_no_tasks_server_is_refused_with_the_unattended_route(monkeypatch):
+    """E-2385: inside some other tmux server is no substitute for Endless's."""
+    monkeypatch.setenv("TMUX", "/tmp/tmux-501/default,1,0")
 
     with pytest.raises(click.ClickException) as err:
         task_cmd._require_tmux_for_claim(77)
 
     msg = err.value.format_message()
-    assert "no tmux" in msg
+    assert "Endless isn't running. Run `endless start`" in msg
     assert "endless task claim E-77 --unattended" in msg
 
 

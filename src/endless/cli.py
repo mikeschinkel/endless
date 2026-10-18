@@ -5786,8 +5786,11 @@ def tmux_start(no_restore):
     are recreated and Claude resumed in them; --no-restore skips that.
 
     Each run opens a terminal window attached to each server, using
-    `tmux.terminal` (e.g. "ghostty -e {cmd}") or a detected terminal, and
-    prints the attach commands when it can do neither. Running it again
+    `tmux.terminal` (e.g. "ghostty -e {cmd}"), a detected terminal, or the
+    platform's default (Terminal.app on macOS; xdg-terminal-exec or
+    x-terminal-emulator on Linux), and prints the attach commands when it can
+    do none of these. Task windows come back in the tab order they were
+    recorded in. Running it again
     reuses the servers already running.
     """
     from endless.tmux_cmd import run_start
@@ -5797,6 +5800,43 @@ def tmux_start(no_restore):
 # `endless start` is `endless tmux start`: the way Endless is launched (E-2240).
 # The same command object, so the two spellings cannot drift.
 main.add_command(tmux_start, name="start")
+
+
+@tmux_cmd.command("stop")
+@click.argument("target", required=False,
+                type=click.Choice(["tasks", "console", "all"]))
+@click.option("--all", "all_", is_flag=True,
+              help="Stop the task-session server, then the console (same as "
+                   "`stop all`).")
+@click.option("--force", is_flag=True,
+              help="Stop the task-session server even while sessions there "
+                   "are working, or Claude has not quit by the timeout.")
+@click.option("--timeout", metavar="DURATION",
+              help="How long to wait for every Claude to quit (default 30s).")
+@click.pass_context
+def tmux_stop(ctx, target, all_, force, timeout):
+    """Stop Endless's tmux servers: tasks, console, or all.
+
+    `stop tasks` refuses while any session on the task-session server is
+    working, listing them (--force skips that). Otherwise it types /exit into
+    each Claude there, waits for every one to quit, and stops the server; one
+    still running at the timeout is listed and the server is left running
+    (--force stops it anyway). The task windows open when the stop began are
+    what the next `endless start` restores.
+
+    `stop console` stops the console server. `stop all` (or `--all`) stops
+    the task-session server first, and leaves the console running when that
+    refuses or leaves its server running. A server that is not running is
+    reported as already stopped.
+    """
+    if target is None and not all_:
+        raise click.UsageError("name what to stop: tasks, console or all", ctx)
+    from endless.tmux_cmd import run_stop
+    run_stop(target, all_, force, timeout)
+
+
+# `endless stop` is `endless tmux stop`, as `endless start` is `tmux start`.
+main.add_command(tmux_stop, name="stop")
 
 
 # `tmux task` is an alias for `task id` — the same command object, so the two

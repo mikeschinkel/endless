@@ -4193,8 +4193,9 @@ def _require_tmux_for_claim(item_id: int) -> None:
     """Refuse a shell claim with nowhere to start a Claude session (E-2106).
 
     A shell cannot become the session, so claiming from one means starting
-    Claude, and Claude is delivered in a tmux window. Without tmux there is
-    nowhere to put it.
+    Claude, and Claude is delivered in a window on Endless's task-session
+    server (E-2240) — only there (E-2385): being inside some other tmux server
+    is no substitute, so `$TMUX` is not consulted.
 
     That is the whole gate now. It used to also refuse a window holding more
     than one pane, because the launch exec'd over the pane the claim was typed
@@ -4209,28 +4210,25 @@ def _require_tmux_for_claim(item_id: int) -> None:
     live Claude session in a sibling pane picks the task up (E-1242): that
     claim binds an existing session rather than starting one.
     """
-    # E-2240: while Endless's task-session server runs, the session's window
-    # opens there, so a shell outside tmux can start one.
-    if os.environ.get("TMUX") or tmux_cmd.tasks_server() is not None:
+    if tmux_cmd.tasks_server() is not None:
         return
     # CONDITIONAL on what the caller wants out of the claim, which this command
     # cannot see: working the task with no bound session is a retry away, but
-    # only the user can start tmux, so a claim that genuinely needs a Claude
+    # only the user starts Endless, so a claim that genuinely needs a Claude
     # session stops here.
     raise agent_help.report_if(
-        f"No Claude session to bind E-{item_id} to, and no tmux to start one "
-        f"in. Nothing was claimed.",
+        f"{tmux_cmd.NOT_RUNNING} Nothing was claimed: claiming E-{item_id} "
+        f"from a shell starts Claude in a window on Endless's task-session "
+        f"server.",
         "a Claude session is wanted for this task",
         f"retry with endless task claim E-{item_id} --unattended and work it "
         f"by hand",
-        "only the user can start tmux",
+        "only the user starts Endless",
         text=(
-            "No Claude session to bind this task to, and no tmux to start one "
-            "in.\n"
-            "  Claiming from a shell starts Claude on the task, which needs a tmux "
-            "window.\n"
-            "  Start tmux and claim again, or claim with no session at all, to "
-            "work it by hand:\n"
+            f"{tmux_cmd.NOT_RUNNING}\n"
+            "  Claiming from a shell starts Claude on the task, in a window on "
+            "Endless's task-session server. Nothing was claimed.\n"
+            "  Or claim with no session at all, to work it by hand:\n"
             f"      endless task claim E-{item_id} --unattended"
         ),
     )
@@ -7771,18 +7769,6 @@ def _claude_binary() -> str:
     return claude_bin
 
 
-def _tmux_session_exists(name: str) -> bool:
-    """Whether a tmux session has exactly this name (E-2234).
-
-    `=` makes tmux match exactly: a bare name also matches as a prefix and
-    then as a glob, so `end` would answer for a session called `endless`.
-    """
-    return subprocess.run(
-        ["tmux", "has-session", "-t", f"={name}"],
-        capture_output=True,
-    ).returncode == 0
-
-
 def spawn_plan(item_id: int, project_name: str | None = None,
                worktree: str | None = None, force: bool = False,
                permission_mode: str = "auto", model: str | None = None,
@@ -7835,32 +7821,30 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     import tempfile
 
     # tmux is the only delivery surface (E-2074 removed the headless path), so
-    # the requirement is unconditional — and REPORT both ways round, because
-    # neither installing tmux nor moving the session into it is something an
-    # agent does on the user's machine. Being INSIDE tmux is required only when
-    # the spawner's own session is the target: a named target session needs a
-    # reachable server, not a pane.
+    # the requirement is unconditional — and REPORT, because installing tmux
+    # is not something an agent does on the user's machine.
     if not shutil.which("tmux"):
         raise agent_help.report(
             "tmux is not installed",
             "installing tmux — spawn's only delivery surface — or forgoing "
             "spawning",
         )
-    if tmux_session is not None and not _tmux_session_exists(tmux_session):
-        raise agent_help.no_report(
-            f"No tmux session is named {tmux_session!r}. Nothing was spawned.",
-            "Pass --tmux-session the exact name of an existing session "
-            "(`tmux ls` lists them), or omit it to spawn in your own, and retry",
-        )
-    # E-2240: while Endless's task-session server runs, the window opens there
-    # whoever asks, so the spawner need not be inside tmux at all.
-    if (not (target_session or tmux_session) and not os.environ.get("TMUX")
-            and tmux_cmd.tasks_server() is None):
+    # The window opens on Endless's task-session server whoever asks (E-2240),
+    # and nowhere else (E-2385): with it down the spawn is refused, whatever
+    # tmux server the spawner is in. Also REPORT: only the user starts Endless.
+    tasks = tmux_cmd.tasks_server()
+    if tasks is None:
         raise agent_help.report(
-            "Not in a tmux session. "
-            "endless spawn requires tmux.",
-            "whether to run the session inside tmux so it can spawn, or have "
-            "the agent work the task here without spawning",
+            f"{tmux_cmd.NOT_RUNNING} Nothing was spawned.",
+            tmux_cmd.NOT_RUNNING_DECISION,
+        )
+    if tmux_session is not None and not tmux_cmd.session_exists(tasks[0], tmux_session):
+        raise agent_help.no_report(
+            f"No session on Endless's task-session server is named "
+            f"{tmux_session!r}. Nothing was spawned.",
+            f"Pass --tmux-session the exact name of a session there "
+            f"(`tmux -S {tasks[0]} ls` lists them), or omit it to spawn in "
+            f"{tasks[1]!r}, and retry",
         )
 
     # Get the plan item
@@ -8073,14 +8057,8 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     _echo_labeled_rows(rows)
     click.echo("")
     click.echo("  Switch to it:")
-    reach = None if tmux_session is not None else tmux_cmd.reach_window_line(window_name)
-    if reach is not None:
-        click.echo(f"      {reach}")
-    elif tmux_session is not None:
-        # Quoted: zsh expands a bare `=word` to the path of command `word`.
-        click.echo(f"      tmux switch-client -t '={tmux_session}:{window_name}'")
-    else:
-        click.echo(f"      tmux select-window -t {window_name}")
+    reach = tmux_cmd.reach_window_line(window_name, tmux_session)
+    click.echo(f"      {reach or f'tmux select-window -t {window_name}'}")
 
 
 # Statuses a task may be primed from (E-1994): nobody has started it. A task
@@ -8122,10 +8100,12 @@ def prime_task(item_id: int, permission_mode: str = "auto",
             "installing tmux — the only surface a primed session can run in — "
             "or forgoing priming",
         )
-    if not target_session and not os.environ.get("TMUX"):
+    # A primed session's window opens where every spawn's does: on Endless's
+    # task-session server, and only there (E-2385).
+    if tmux_cmd.tasks_server() is None:
         raise agent_help.report(
-            "Not in a tmux session. endless task prime requires tmux.",
-            "whether to run inside tmux so a session can be primed",
+            f"{tmux_cmd.NOT_RUNNING} Nothing was primed.",
+            tmux_cmd.NOT_RUNNING_DECISION,
         )
 
     rows = db.query(

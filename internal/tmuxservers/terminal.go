@@ -16,8 +16,11 @@ import (
 // A configured `tmux.terminal` wins: a shell command with `{cmd}` where the
 // attach command goes, run by `sh -c` with `{cmd}` replaced by that command,
 // shell-quoted. Without one, Endless detects the terminal it is running in
-// and uses a built-in launcher for it. With neither, nothing is opened and
-// the caller prints the attach command instead.
+// and uses a built-in launcher for it. Without either, it falls back to the
+// platform's default terminal (E-2385): Terminal.app on macOS, which every Mac
+// has; on Linux `xdg-terminal-exec`, else Debian's `x-terminal-emulator`, when
+// on PATH. With none of these, nothing is opened and the caller prints the
+// attach command instead. Windows means WSL, which takes the Linux path.
 //
 // Detection reads TERM_PROGRAM, which the common macOS and cross-platform
 // terminals set. Inside tmux TERM_PROGRAM is tmux's own, so the attached
@@ -39,12 +42,42 @@ func (l Launcher) Argv(cmd []string) []string {
 }
 
 // ResolveLauncher picks the launcher: the configured template, else a
-// detected terminal. ok is false when there is neither.
+// detected terminal, else the platform's default. ok is false when there is
+// none of them.
 func ResolveLauncher(template string) (l Launcher, ok bool) {
 	if strings.TrimSpace(template) != "" {
 		return templateLauncher(template), true
 	}
-	return detectLauncher(detectTerminal(), runtime.GOOS)
+	if l, ok = detectLauncher(detectTerminal(), runtime.GOOS); ok {
+		return l, true
+	}
+	return defaultLauncher(runtime.GOOS, onPath)
+}
+
+func onPath(name string) bool {
+	_, err := exec.LookPath(name)
+	return err == nil
+}
+
+// defaultLauncher is the platform's default terminal, for when none is
+// configured or detected. Pure: onPath answers whether a command is on PATH.
+func defaultLauncher(goos string, onPath func(string) bool) (Launcher, bool) {
+	switch goos {
+	case "darwin":
+		return detectLauncher("apple_terminal", goos)
+	case "linux":
+		if onPath("xdg-terminal-exec") {
+			return Launcher{Name: "xdg-terminal-exec", argv: func(cmd []string) []string {
+				return append([]string{"xdg-terminal-exec"}, cmd...)
+			}}, true
+		}
+		if onPath("x-terminal-emulator") {
+			return Launcher{Name: "x-terminal-emulator", argv: func(cmd []string) []string {
+				return append([]string{"x-terminal-emulator", "-e"}, cmd...)
+			}}, true
+		}
+	}
+	return Launcher{}, false
 }
 
 // templateLauncher runs a configured template through `sh -c`.

@@ -35,8 +35,11 @@ def _seed_project_and_task(task_id: int, title: str = "Deliver spawn") -> None:
 def fg_env(monkeypatch):
     """Satisfy the tmux gate and stub the pre-claim / render machinery so only
     the launch mechanics run. Returns the captured subprocess.run cmd list."""
+    from endless import tmux_cmd
     monkeypatch.setattr(shutil, "which", lambda name: f"/usr/bin/{name}")
-    monkeypatch.setenv("TMUX", "/tmp/tmux-sock,1,0")
+    # E-2385: a spawn needs Endless's task-session server, and nothing else.
+    monkeypatch.delenv("TMUX", raising=False)
+    monkeypatch.setattr(tmux_cmd, "tasks_server", lambda: ("/s/endless-tasks", "tasks"))
     monkeypatch.setattr(task_cmd, "_claude_binary", lambda: "claude")
     monkeypatch.setattr(task_cmd, "_check_task_ownership",
                         lambda *a, **k: None)
@@ -151,20 +154,27 @@ def test_auto_spawn_threads_auto_and_target_session(isolated_env, fg_env):
     assert cmd[cmd.index("--spawned-by") + 1] == "auto-spawn"
 
 
-def test_named_target_session_does_not_require_being_in_tmux(
-        isolated_env, fg_env, monkeypatch):
-    """E-1814: the job may run where $TMUX is unset (`endless jobs run` from a
-    plain shell); a named target needs a reachable server, not a pane. Without
-    one, the old refusal still holds."""
+@pytest.mark.parametrize("kwargs", [{}, {"auto": True, "target_session": "$4"},
+                                    {"tmux_session": "work"}])
+def test_spawn_refuses_while_endless_is_not_running(
+        isolated_env, fg_env, monkeypatch, kwargs):
+    """E-2385: with the task-session server down every spawn is refused —
+    manual, auto-spawned or naming a session — and inside another tmux server
+    too: $TMUX is no substitute. Nothing is claimed and no window is asked for.
+    """
+    from endless import tmux_cmd
     _seed_project_and_task(1705)
-    monkeypatch.delenv("TMUX")
-
-    spawn_plan(1705, auto=True, target_session="$4")
-    assert [c for c in fg_env if "spawn-window" in c]
+    monkeypatch.setenv("TMUX", "/tmp/tmux-501/default,1,0")
+    monkeypatch.setattr(tmux_cmd, "tasks_server", lambda: None)
+    claimed = []
+    monkeypatch.setattr(task_cmd, "_perform_claim_work",
+                        lambda **k: claimed.append(k))
 
     import click
-    with pytest.raises(click.ClickException, match="Not in a tmux session"):
-        spawn_plan(1705)
+    with pytest.raises(click.ClickException, match="Endless isn't running. Run `endless start`"):
+        spawn_plan(1705, **kwargs)
+    assert claimed == []
+    assert not [c for c in fg_env if "spawn-window" in c]
 
 
 def test_auto_flags_are_hidden():
@@ -218,8 +228,10 @@ def test_manual_spawn_defaults_to_first_and_refocus(isolated_env, fg_env):
 def test_spawn_threads_placement_no_refocus_and_tmux_session(
         isolated_env, fg_env, monkeypatch):
     _seed_project_and_task(1705)
-    monkeypatch.setattr(task_cmd, "_tmux_session_exists", lambda name: True)
-    monkeypatch.delenv("TMUX")  # a named session needs a server, not a pane
+    from endless import tmux_cmd
+    asked = []
+    monkeypatch.setattr(tmux_cmd, "session_exists",
+                        lambda socket, name: asked.append((socket, name)) or True)
 
     spawn_plan(1705, placement="right", no_refocus=True, tmux_session="work")
 
@@ -228,6 +240,8 @@ def test_spawn_threads_placement_no_refocus_and_tmux_session(
     assert "--no-refocus" in cmd
     assert cmd[cmd.index("--tmux-session") + 1] == "work"
     assert "--auto" not in cmd
+    # E-2385: the name is looked up on the task-session server, not the caller's.
+    assert asked == [("/s/endless-tasks", "work")]
 
 
 def test_missing_tmux_session_refuses_before_pre_claim(
@@ -235,13 +249,14 @@ def test_missing_tmux_session_refuses_before_pre_claim(
     """A name no session has is refused before anything happens — no
     pre-claim, no worktree, no window."""
     _seed_project_and_task(1705)
-    monkeypatch.setattr(task_cmd, "_tmux_session_exists", lambda name: False)
+    from endless import tmux_cmd
+    monkeypatch.setattr(tmux_cmd, "session_exists", lambda socket, name: False)
     claimed = []
     monkeypatch.setattr(task_cmd, "_perform_claim_work",
                         lambda **k: claimed.append(k))
 
     import click
-    with pytest.raises(click.ClickException, match="No tmux session is named 'nope'"):
+    with pytest.raises(click.ClickException, match="No session on Endless's task-session server is named 'nope'"):
         spawn_plan(1705, tmux_session="nope")
     assert claimed == []
     assert not [c for c in fg_env if "spawn-window" in c]
@@ -286,12 +301,22 @@ def test_cli_threads_no_refocus_and_tmux_session(isolated_env, monkeypatch):
 def test_spawn_outside_tmux_while_the_tasks_server_runs(isolated_env, fg_env, monkeypatch, capsys):
     """E-2240: while Endless's task-session server runs, the window opens there,
     so a spawner outside tmux is not refused, and is told how to reach it."""
-    from endless import tmux_cmd
-    monkeypatch.delenv("TMUX")
-    monkeypatch.setattr(tmux_cmd, "tasks_server", lambda: ("/s/endless-tasks", "tasks"))
     _seed_project_and_task(1705)
 
     spawn_plan(1705)
 
     assert len([c for c in fg_env if "spawn-window" in c]) == 1
     assert "tmux -S /s/endless-tasks attach -t '=tasks:E-1705'" in capsys.readouterr().out
+
+
+def test_spawn_into_a_named_session_says_how_to_reach_it(
+        isolated_env, fg_env, monkeypatch, capsys):
+    """E-2385: --tmux-session is a session on the task-session server, so the
+    line that reaches the window names that server and that session."""
+    from endless import tmux_cmd
+    monkeypatch.setattr(tmux_cmd, "session_exists", lambda socket, name: True)
+    _seed_project_and_task(1705)
+
+    spawn_plan(1705, tmux_session="work")
+
+    assert "tmux -S /s/endless-tasks attach -t '=work:E-1705'" in capsys.readouterr().out

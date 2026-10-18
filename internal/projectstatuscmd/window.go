@@ -22,7 +22,8 @@ import (
 // The console server is one of Endless's own, never the user's default server:
 // the monitor and the task sessions want incompatible window layouts, and the
 // user's own tmux is theirs. `endless tmux start` starts it with the task-
-// session server; this command starts it too when it is not running.
+// session server, and only that does (E-2385): with the console not running
+// this command refuses rather than starting it.
 //
 // With no terminal attached to the console, the command opens one onto it (the
 // configured tmux.terminal, or a detected terminal). With no way to open one, a
@@ -206,6 +207,14 @@ func runWindow(args []string) {
 			Exit(1)
 	}
 
+	// Only `endless start` starts an Endless tmux server (E-2385); a window is
+	// added to a console that is running, never by starting one.
+	if !servers.Console.HasSession() {
+		windowReport("project-window: Endless isn't running. Run `endless start`, then retry.",
+			"whether to run `endless start`, which starts Endless's tmux servers and opens a terminal on each").
+			Exit(1)
+	}
+
 	projectID, name := resolveProject(options{project: *project})
 	dir, err := monitor.ProjectPath(projectID)
 	if err != nil {
@@ -223,7 +232,7 @@ func runWindow(args []string) {
 	}
 
 	console := servers.Console
-	started, warn, err := OpenProjectWindow(console, self, name, dir)
+	_, warn, err := OpenProjectWindow(console, self, name, dir)
 	if err != nil {
 		windowReport(fmt.Sprintf("project-window: %v", err),
 			"whether a tmux server that refused a new window is something they can clear").
@@ -236,9 +245,6 @@ func runWindow(args []string) {
 	}
 
 	where := fmt.Sprintf("added a %q window to the console", layoutFor(name, dir).Window)
-	if started {
-		where = fmt.Sprintf("started the console with a %q window", layoutFor(name, dir).Window)
-	}
 
 	switch {
 	case *noSwitch:

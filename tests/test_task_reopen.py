@@ -285,6 +285,8 @@ def test_spawn_no_flag_terminal_target_routes_to_the_session(project_at_cwd, mon
     from endless.task_cmd import spawn_plan
 
     monkeypatch.setenv("TMUX", "fake")
+    # E-2385: a spawn needs Endless's task-session server, not just tmux.
+    monkeypatch.setattr("endless.tmux_cmd.tasks_server", lambda: ("/s/endless-tasks", "tasks"))
 
     _insert_task(
         pk=1600, project_id=project_at_cwd["project_id"],
@@ -352,6 +354,8 @@ def test_spawn_no_flag_unverified_names_the_reopen_route(project_at_cwd, monkeyp
     from endless.task_cmd import spawn_plan
 
     monkeypatch.setenv("TMUX", "fake")
+    # E-2385: a spawn needs Endless's task-session server, not just tmux.
+    monkeypatch.setattr("endless.tmux_cmd.tasks_server", lambda: ("/s/endless-tasks", "tasks"))
 
     _insert_task(
         pk=1610, project_id=project_at_cwd["project_id"],
@@ -378,6 +382,8 @@ def test_spawn_force_still_demotes_but_warns(project_at_cwd, monkeypatch, capsys
     from endless.task_cmd import spawn_plan
 
     monkeypatch.setenv("TMUX", "fake")
+    # E-2385: a spawn needs Endless's task-session server, not just tmux.
+    monkeypatch.setattr("endless.tmux_cmd.tasks_server", lambda: ("/s/endless-tasks", "tasks"))
 
     _insert_task(
         pk=1611, project_id=project_at_cwd["project_id"],

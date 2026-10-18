@@ -295,6 +295,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `shell-init` | orchestration | Shell helpers (esu/esp/esf) to enter your task's worktree. |
 | `sql` | reference | Read-only SQL against the Endless DB. |
 | `start` | reference | Launching Endless: its console and task-session tmux servers, each in its own terminal window. |
+| `stop` | reference | Stopping Endless's tmux servers — tasks, console, or all — after every Claude in them has quit. |
 | `task` | tasks | Task CRUD, field semantics (title/description/text/analysis/notes/outcome), status transitions, relations. |
 | `task claim` | orchestration | Claiming a task: creates the per-task worktree and binds your session. |
 | `task handoff` | orchestration | The generated handoff text for a spawned session. |
