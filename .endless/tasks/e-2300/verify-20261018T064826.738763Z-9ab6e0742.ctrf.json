@@ -1,0 +1,144 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 25,
+      "passed": 25,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test: monitor, schema, sessionquerycmd, worktreecmd",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestLiveness_GoneServerTruthTable",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestLiveness_ObservedServerIsNeverProbed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestLiveness_ProbesEachSocketOnce",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestLiveness_GoneVerdictWritesNothing",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestProbeTmuxSocket_FileVerdicts",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestEnsureTmuxPaneProcess_RecordsSocketPath",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestEnsureTmuxPaneProcess_SkipsRelativeSocket",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestWorktreeInUse_IgnoresSessionOnGoneServer",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestSessionStatusRows_InFlightIgnoresSessionOnGoneServer",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestSessionGraphData_InFlightIgnoresSessionOnGoneServer",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestListLiveSessions_OmitsSessionOnGoneServer",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestListLiveSessions_ReportsEndlessServerDown",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestStewardship_GoneServerSessionDoesNotSteward",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestStewardship_UnreachableSessionStewards",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestStewardship_GoneClaimerKeepsDuplicate",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestStewardship_UnreachableClaimerClearsDuplicate",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestMigrate_MatchesSchemaSQL",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest: the claim refusal for an unknown owner, and spawn under test",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a socket now answering as another server: dead, not listed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a socket file nothing listens on: dead, not listed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a missing socket file of Endless's: unknown, and its server is down",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a binding with no recorded socket: unknown, never judged",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a pane on the running server: live",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no verdict was written to sessions",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
