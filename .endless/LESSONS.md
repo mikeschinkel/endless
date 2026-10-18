@@ -7661,3 +7661,7 @@ Working E-2217 (adds migration 22), I ran the full Python and Go suites from the
 ### [2026-10-18] Ask outright before adding a command to aid a task
 Working E-2217, I added 'endless project backfill-identity' to migrate existing registrations. It shipped and was used exactly once, then was removed: Mike is the only user and nothing would call it again. The only mention of it before building was one item in a long reconcile question (EQ-67), easy to miss. Mike: any time you want to add a command to aid a task, explicitly ask whether he wants it added, not by including it in a wall-of-text plan but in a way he cannot miss. Ask that as its own short question, with the alternative (a one-off script, or doing the step by hand), before writing it.
 - **Project**: endless
+
+### [2026-10-18] Don't claim a side effect cleaned itself up without checking
+In E-2385, a pytest test reached Mike's real endless-tasks server and opened an E-1611 window. I told Mike the window 'died at once and nothing was left behind'. In fact Mike had closed it himself. I had not checked how it went away, only that it was gone. When reporting that a stray side effect on the user's live environment is gone, say what I actually observed (e.g. 'it is no longer there') rather than asserting it cleaned itself up, and don't use its absence to make the incident sound harmless.
+- **Project**: endless
