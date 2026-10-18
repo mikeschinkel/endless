@@ -36,3 +36,8 @@ statement = "When a claim or spawn is blocked by an unknown session, the refusal
 id = "P7"
 kind = "exclusion"
 statement = "Does not end sessions automatically, and does not add SQLite access to Python"
+
+[[item]]
+id = "P8"
+kind = "deliverable"
+statement = "session end writes through a new endless-go session-query end-session verb (lock release + EndSession, as the SessionEnd hook does), not the session.ended event, which has no executor; resume-target gains last_activity"
