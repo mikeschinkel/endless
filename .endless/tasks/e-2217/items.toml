@@ -55,3 +55,9 @@ id = "P9"
 kind = "deliverable"
 statement = "Project sync no longer repoints a registered project at a second clone"
 verify = "verify.sh section 6"
+
+[[item]]
+id = "P10"
+kind = "deliverable"
+statement = "A checkout whose registered original no longer exists takes the project over, tasks and all"
+verify = "test_a_checkout_whose_original_is_gone_takes_the_project_over"
