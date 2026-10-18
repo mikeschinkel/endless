@@ -25,3 +25,9 @@ id = "P4"
 kind = "deliverable"
 statement = "Register refuses a second clone or a fork of a registered project, naming the registered path, pointing at worktrees and saying forks are unsupported"
 verify = "verify.sh section 3"
+
+[[item]]
+id = "P5"
+kind = "deliverable"
+statement = "Register refuses a name another registered project holds as its name or slug, naming its path and the --name fix"
+verify = "verify.sh section 4"
