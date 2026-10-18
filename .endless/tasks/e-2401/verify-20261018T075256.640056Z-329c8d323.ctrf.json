@@ -1,0 +1,59 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 8,
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "Go: internal/settings, internal/tmuxservers, cmd/endless-go",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "Python: settings_export parses and describes the new kinds",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "tmux.socket_dir",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "tmux.console_server",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "tmux.tasks_server",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "tmux.tasks_session",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "tmux.terminal",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "tmux.session_name is not registered",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
