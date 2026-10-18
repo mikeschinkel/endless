@@ -87,3 +87,8 @@ statement = "Does not open a Windows Terminal window from WSL or support native 
 id = "P17"
 kind = "exclusion"
 statement = "Does not move existing sessions off the user's default tmux server"
+
+[[item]]
+id = "P18"
+kind = "deliverable"
+statement = "endless task prime refuses while endless-tasks is not running, like spawn and claim"
