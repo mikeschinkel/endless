@@ -7701,3 +7701,7 @@ While planning E-2208 (go-cfgstore's mergeRootConfigs returning the unmerged lay
 ### [2026-10-19] Keep consumer projects out of a dependency's tasks
 While planning go-cfgstore's E-2208, I wrote its plan, analysis and items in terms of the projects that use it: endless, gomion, xmlui's svrcfg, doctool and others. Mike: an independent dependency's tasks must not mention the projects that depend on it, unless the reference is to something public with a public URL. Test it this way: would a PR to the Go standard library reference our internal project? Write a dependency's tasks only in its own terms, such as a type that embeds a config. Put anything about a consumer in that consumer's own project, and register the consumer if that is what it takes to give the note a home.
 - **Project**: endless
+
+### [2026-10-19] A ledger entry can be edited to repair corruption from a bug
+While planning E-2405, I told Mike that the stray E-2208 status_changed event, which a cross-project spawn wrote into endless's ledger, could not be edited. Mike corrected me: ledger entries CAN be edited to repair corruption caused by a bug or a missing gate, especially when it is done soon after the corruption and before it propagates. Ordinary state changes still go through endless commands. Treat a bug-caused bad entry as a repair to plan, ideally done promptly, not as something permanent.
+- **Project**: endless
