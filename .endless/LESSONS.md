@@ -7693,3 +7693,7 @@ Spawning a go-cfgstore task from the endless checkout would have created its wor
 ### [2026-10-18] Search the target project's tasks before filing there
 While planning E-2300's follow-ups I filed E-2400 in go-cfgstore for mergeRootConfigs returning the unmerged layer. go-cfgstore already had E-2208 for exactly that, planned since October 1, and Mike found the overlap only when I listed the project's tasks while planning E-2400. Endless's duplicate nudge checks only this session's filings, not the target project's backlog. Before filing a task, list the target project's open tasks (endless task list --project <name>) and search them for the same defect.
 - **Project**: endless
+
+### [2026-10-18] Ask before changing the API of Mike's Go packages
+While planning E-2208 (go-cfgstore's mergeRootConfigs returning the unmerged layer), I put two API changes in the plan as 'decided without asking': a new MergeFrom method on the generic constraint, and dropping Merge from the RootConfig interface. My main reason was to make deployment ordering with Endless easier. Mike is fiercely protective of his Go package APIs and agonized over go-cfgstore's design; he said that adding methods seems to be 'just a Tuesday' for me. Any addition, removal or signature change to an exported API in his packages is his decision. Present it as a question: show the full current and proposed signatures, and argue why it is right for the package as a whole, not just for the task at hand. Prefer a fix that leaves the API as it is when one exists.
+- **Project**: endless
