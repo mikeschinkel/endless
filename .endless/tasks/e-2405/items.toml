@@ -71,3 +71,9 @@ id = "P15"
 kind = "deliverable"
 statement = "When a session spawns a task, in any project, that session's session status lists the spawned task as a row labeled Spawned until the task settles"
 verify = "a Go test in internal/monitor with the spawner and the spawned task in different projects"
+
+[[item]]
+id = "P16"
+kind = "deliverable"
+statement = "The spawned task is recorded on the spawning session as a new session-task relation, spawned, written by spawn through the event pipeline"
+verify = "a Go test reading session_tasks after the event"
