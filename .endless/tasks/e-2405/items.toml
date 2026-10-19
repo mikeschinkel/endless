@@ -65,3 +65,9 @@ statement = "E-2208's task.status_changed (submitted to underway) is in go-cfgst
 id = "P12"
 kind = "exclusion"
 statement = "Does not change task unsettled --all, worktree list or any other command that surveys the current directory's project"
+
+[[item]]
+id = "P15"
+kind = "deliverable"
+statement = "When a session spawns a task, in any project, that session's session status lists the spawned task as a row labeled Spawned until the task settles"
+verify = "a Go test in internal/monitor with the spawner and the spawned task in different projects"
