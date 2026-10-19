@@ -3,76 +3,87 @@
 #   endless task update E-2349 --items-file <copy>
 
 [[item]]
-id = "P1"
+id = "P14"
 kind = "deliverable"
 statement = "Project init's managed .gitignore block includes .endless/logs/, and a re-run on an older project adds only the missing lines"
 verify = "tests/test_register.py"
 
 [[item]]
-id = "P2"
+id = "P15"
 kind = "deliverable"
 statement = "A test fails when Endless writes an uncommitted runtime path under .endless/ that GITIGNORE_ENTRIES does not list"
 verify = "tests/test_register.py"
 
 [[item]]
-id = "P3"
+id = "P16"
 kind = "deliverable"
 statement = "worktree land neither commits nor counts as user work an untracked Endless runtime path, even when the repo's .gitignore lacks it"
 verify = "worktree land test for the runtime-path class"
 
 [[item]]
-id = "P4"
+id = "P17"
 kind = "deliverable"
 statement = "Project init refuses, writing nothing, when run inside a git linked worktree or a registered project's .endless/worktrees/ directory, naming the owning project"
 verify = "tests/test_register.py"
 
 [[item]]
-id = "P5"
+id = "P18"
 kind = "deliverable"
-statement = "_harness.sh and _guard.sh ship with Endless from one source, and the bring-up command installs them into the project's .endless/tasks/"
-verify = "harness install test"
+statement = "_harness.sh and _guard.sh ship as package data, and a test fails if the endless repo's committed copies differ from it"
+verify = "tests/test_suite_rules.py"
 
 [[item]]
-id = "P6"
+id = "P19"
 kind = "deliverable"
-statement = "The bring-up command leaves the project's agent-instructions file pointing at endless guide"
-verify = "bring-up test"
+statement = "Project init installs _harness.sh and _guard.sh into the project's .endless/tasks/, replacing a copy whose bytes differ"
+verify = "tests/test_suite_rules.py"
 
 [[item]]
-id = "P7"
+id = "P20"
 kind = "deliverable"
-statement = "The files bring-up writes are committed on the project's main branch or reported for the user to commit, per the answered question"
-verify = "bring-up test"
+statement = "Project init leaves the project's CLAUDE.md or AGENTS.md mentioning endless guide, creating CLAUDE.md when neither exists and appending a marked block when the pointer is missing"
+verify = "tests/test_register.py"
 
 [[item]]
-id = "P8"
+id = "P21"
 kind = "deliverable"
-statement = "Running the bring-up command a second time on the same project changes no file and creates no commit"
+statement = "Project init commits the files it changed on a clean default branch, and otherwise lists them for the user and commits nothing"
+verify = "tests/test_register.py"
+
+[[item]]
+id = "P22"
+kind = "deliverable"
+statement = "Running project init a second time on the same project changes no file and creates no commit"
 verify = "E-2349 verify.sh end-to-end section"
 
 [[item]]
-id = "P9"
+id = "P23"
 kind = "deliverable"
-statement = "A project verb deletes a mistakenly registered project's row without writing to its .endless/config.json or the ignore list"
-verify = "internal/monitor Go test; Python CLI test"
+statement = "project forget deletes a mistakenly registered project's row without writing to its .endless/config.json or the ignore list, and refuses a row that has tasks"
+verify = "internal/monitor and internal/projectcmd Go tests; Python CLI test"
 
 [[item]]
-id = "P10"
+id = "P24"
 kind = "deliverable"
 statement = "go-cfgstore's .gitignore lists .endless/logs/ and its .endless/tasks/ holds _harness.sh and _guard.sh, committed on its main"
-verify = "git -C go-cfgstore show main:.gitignore; ls .endless/tasks/_harness.sh"
+verify = "git -C ~/Projects/go-pkgs/go-cfgstore show main:.gitignore"
 
 [[item]]
-id = "P11"
+id = "P25"
 kind = "deliverable"
 statement = "task_cmd._report_gate_on's docstring states the minimizer defaults off"
 
 [[item]]
-id = "P12"
+id = "P26"
 kind = "exclusion"
 statement = "Does not write a minimizer block; a missing block already means off"
 
 [[item]]
-id = "P13"
+id = "P27"
+kind = "exclusion"
+statement = "Does not port Makefiles to justfiles; that is per-repo policy, not Endless's"
+
+[[item]]
+id = "P28"
 kind = "exclusion"
 statement = "Does not add health checks or reporting; endless doctor owns those"
