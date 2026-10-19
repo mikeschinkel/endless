@@ -35,7 +35,7 @@ has no spawning session and records nothing. The new relation follows the
 package's rule for adding a value: an enum constant and Rank in
 `sessiontaskrelation`, a seed row in `schema.sql`, and the migration that
 introduces it. The spawning session's `session status` then lists the task as a
-row labelled `Spawned`, in whatever project the task belongs to, until it
+row labelled `Spawned`, no matter which project the task belongs to, until it
 settles.
 
 ## Ledger repair
