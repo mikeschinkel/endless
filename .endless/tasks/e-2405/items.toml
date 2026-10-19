@@ -65,8 +65,3 @@ statement = "E-2208's task.status_changed (submitted to underway) is in go-cfgst
 id = "P12"
 kind = "exclusion"
 statement = "Does not change task unsettled --all, worktree list or any other command that surveys the current directory's project"
-
-[[item]]
-id = "P14"
-kind = "exclusion"
-statement = "Does not make the tasks a session spawned appear as rows in that session's status"
