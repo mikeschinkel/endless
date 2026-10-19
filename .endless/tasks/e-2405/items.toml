@@ -77,3 +77,9 @@ id = "P16"
 kind = "deliverable"
 statement = "The spawned task is recorded on the spawning session as a new session-task relation, spawned, written by spawn through the event pipeline"
 verify = "a Go test reading session_tasks after the event"
+
+[[item]]
+id = "P17"
+kind = "deliverable"
+statement = "The spawned relation ranks below claimed and above the relation session task add records, so a task the session filed, edited or added and then spawned reads Spawned, and stewardship counts a spawned session as it counts a filing one"
+verify = "Go tests in internal/sessiontaskrelation and internal/monitor"
