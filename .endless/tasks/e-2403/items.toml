@@ -17,24 +17,48 @@ verify = "internal/hookcmd tests"
 [[item]]
 id = "P3"
 kind = "deliverable"
-statement = "The hook claude usage says it reads Claude Code's hook payload as JSON on stdin and is installed by endless setup claude-hook"
+statement = "The hook claude usage says it reads Claude Code's hook payload as JSON on stdin, that the installed command names its event, and that endless setup claude-hook installs it"
+
+[[item]]
+id = "P10"
+kind = "deliverable"
+statement = "With an event named on the command line and a payload naming the same event, hook claude behaves as before"
+verify = "internal/hookcmd tests"
+
+[[item]]
+id = "P11"
+kind = "deliverable"
+statement = "With an event named on the command line and a payload naming a different event, hook claude records a fault and grades the exit by the payload's event"
+verify = "internal/hookcmd tests"
+
+[[item]]
+id = "P12"
+kind = "deliverable"
+statement = "With an event named on the command line and an empty or whitespace-only payload, hook claude records a fault and exits 2, or 1 when the event is Stop or SubagentStop"
+verify = "internal/hookcmd tests"
+
+[[item]]
+id = "P13"
+kind = "deliverable"
+statement = "With an event named on the command line and a non-empty payload that is not valid JSON, hook claude records ERR-0017 and grades the exit by the named event"
+verify = "internal/hookcmd tests"
 
 [[item]]
 id = "P4"
 kind = "deliverable"
-statement = "endless-go hook claude with a terminal on stdin refuses with usage at once, exit 1, without reading stdin or recording a fault"
+statement = "With no event named, hook claude with a terminal on stdin refuses with usage at once, exit 1, without reading stdin or recording a fault"
 verify = "internal/hookcmd tests"
 
 [[item]]
 id = "P5"
 kind = "deliverable"
-statement = "endless-go hook claude with an empty or whitespace-only stdin refuses with usage, exit 1, and records no fault"
+statement = "With no event named, hook claude with an empty or whitespace-only stdin refuses with usage, exit 1, and records no fault"
 verify = "internal/hookcmd tests"
 
 [[item]]
 id = "P6"
 kind = "deliverable"
-statement = "endless-go hook claude with a non-empty payload that is not valid JSON still records ERR-0017"
+statement = "With no event named, hook claude with a non-empty payload that is not valid JSON still records ERR-0017"
 verify = "internal/hookcmd tests"
 
 [[item]]
@@ -44,6 +68,24 @@ statement = "endless-go hook prompt with no directory refuses with usage, exit 1
 verify = "internal/hookcmd tests"
 
 [[item]]
+id = "P14"
+kind = "deliverable"
+statement = "endless setup claude-hook installs each Endless hook entry as <bin> hook claude <Event>, naming the event it is registered under"
+verify = "tests for setup"
+
+[[item]]
+id = "P15"
+kind = "deliverable"
+statement = "endless setup claude-hook rewrites existing endless-go hook claude entries that do not name their event, idempotently, leaving foreign hooks untouched"
+verify = "tests for setup"
+
+[[item]]
+id = "P16"
+kind = "deliverable"
+statement = "After landing, endless setup claude-hook has been run on Mike's machine and every endless-go entry in the user-level Claude Code settings file names its event"
+verify = "inspect the user-level Claude Code settings file"
+
+[[item]]
 id = "P8"
 kind = "exclusion"
 statement = "Does not change how a valid payload from Claude Code is handled"
@@ -51,4 +93,4 @@ statement = "Does not change how a valid payload from Claude Code is handled"
 [[item]]
 id = "P9"
 kind = "exclusion"
-statement = "Does not change hook exit codes for failures other than these usage refusals"
+statement = "Does not change hook exit codes for failures other than those named here"
