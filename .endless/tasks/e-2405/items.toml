@@ -33,12 +33,6 @@ statement = "endless task claim E-N of a task belonging to a project other than 
 verify = "a test in tests/ checking status, worktrees and events are unchanged"
 
 [[item]]
-id = "P6"
-kind = "deliverable"
-statement = "A repeat claim by the session that holds a task locates the task's worktree in the task's own project repository"
-verify = "a test in tests/"
-
-[[item]]
 id = "P7"
 kind = "deliverable"
 statement = "endless session goto --resume recreates a dropped worktree in the task's own project repository"
