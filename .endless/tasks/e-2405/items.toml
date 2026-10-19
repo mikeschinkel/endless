@@ -5,7 +5,7 @@
 [[item]]
 id = "P1"
 kind = "deliverable"
-statement = "endless task spawn E-N creates the task's worktree in the task's own project repository, and starts the session there, whatever directory it is run from"
+statement = "endless task spawn E-N creates the task's worktree in the task's own project repository, and starts the session there, no matter the directory it is run from"
 verify = "a test in tests/ with two registered projects, run from the first"
 
 [[item]]
