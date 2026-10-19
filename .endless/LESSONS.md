@@ -7705,3 +7705,7 @@ While planning go-cfgstore's E-2208, I wrote its plan, analysis and items in ter
 ### [2026-10-19] A ledger entry can be edited to repair corruption from a bug
 While planning E-2405, I told Mike that the stray E-2208 status_changed event, which a cross-project spawn wrote into endless's ledger, could not be edited. Mike corrected me: ledger entries CAN be edited to repair corruption caused by a bug or a missing gate, especially when it is done soon after the corruption and before it propagates. Ordinary state changes still go through endless commands. Treat a bug-caused bad entry as a repair to plan, ideally done promptly, not as something permanent.
 - **Project**: endless
+
+### [2026-10-19] Don't exclude what Mike explicitly asked for
+While planning E-2405 (spawn a task in its own project's directory), Mike said explicitly that he wants to spawn a dependency package's task from an app's session and track it in that session's status. I wrote an exclusion instead: 'Does not make the tasks a session spawned appear as rows in that session's status', and asked separately whether to file it as another task. Mike pointed out the exclusion contradicts what he asked for. When the user has stated a requirement for the work being planned, put it in the plan. Don't scope it out and then ask whether to file it elsewhere.
+- **Project**: endless
