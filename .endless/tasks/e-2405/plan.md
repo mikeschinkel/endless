@@ -14,9 +14,7 @@ the repository root from that project's registered path through
   passes `--project-id` from the task and `--cwd` from the worktree.
 - `prime_task`: create the worktree under the task's project root.
 - `claim_item`: when the task's project is not the project the claim is run in,
-  refuse before changing anything and name `endless task spawn E-N`. A repeat
-  claim by the session that holds the task locates its worktree under the
-  task's project root.
+  refuse before changing anything and name `endless task spawn E-N`.
 - `session goto --resume` (`_recover_dropped_worktree`): recreate a dropped
   worktree under the task's project root.
 - `task unsettled E-N` (`unsettled_item`): inspect the task's worktree under the
@@ -26,6 +24,19 @@ When the task's project is not cwd's, spawn's and prime's output names it,
 for example `Project: go-cfgstore`, above the worktree line. When the task's
 project has no registered path, or that path is not a directory, each command
 refuses before changing anything and names the project and the path.
+
+## The spawning session tracks what it spawned
+
+When a session spawns a task, spawn records that task on the spawning session
+with a new session-task relation, `spawned`, written through the event
+pipeline. Spawn already knows the spawning session: it is the id it publishes
+as `@endless_spawned_by`. A spawn from a plain shell, or by the auto-spawn job,
+has no spawning session and records nothing. The new relation follows the
+package's rule for adding a value: an enum constant and Rank in
+`sessiontaskrelation`, a seed row in `schema.sql`, and the migration that
+introduces it. The spawning session's `session status` then lists the task as a
+row labelled `Spawned`, in whatever project the task belongs to, until it
+settles.
 
 ## Ledger repair
 
@@ -51,3 +62,6 @@ command run from the first:
 - `task unsettled E-N` and `session goto --resume` resolve the second
   project's worktree;
 - a missing project path refuses before anything changes.
+
+In `internal/monitor`, a spawning session's status rows include a task it
+spawned in another project, labelled `Spawned`.
