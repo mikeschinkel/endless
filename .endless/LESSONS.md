@@ -7717,3 +7717,7 @@ While working E-2405 (whose plan item P11 moves one misfiled E-2208 task.status_
 ### [2026-10-20] Hand Mike scripts to run from a sibling pane, not with the ! prefix
 In E-2405, I offered Mike a script for the two direct-to-main ledger commits (P11) and said to run it with '! <command>'. Mike: he always runs things from a sibling pane unless there is a reason it has to be run from '!'. So when handing him a command to run himself, give it as something to run in a sibling pane, with an absolute path, and only suggest '!' when its output has to land in this conversation or the command needs this session's context.
 - **Project**: endless
+
+### [2026-10-20] Define guide-only terms like pin before using them in needs-plan questions
+While framing E-2414's needs-plan questions I used 'pin' (session unhide --task on an unhidden task) as if it were settled vocabulary. It exists in code and in docs/guide/sessions.md since E-2293, but it is in no accepted decision or glossary, and Mike had never adopted it, so he read it as a term I coined. needs-plan allows only terms from an accepted decision, the glossary, or Mike's own words; a term that is only in the guide or the code must be defined in the question, and flagged as not yet settled.
+- **Project**: endless
