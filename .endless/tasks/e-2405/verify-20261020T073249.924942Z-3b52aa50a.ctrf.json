@@ -1,0 +1,134 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 23,
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test: sessiontaskrelation, events, monitor, sessionstatuscmd, schema",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest: spawn, prime, claim, unsettled and resume in the task's project",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "test_spawn_creates_the_worktree_in_the_tasks_project",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "test_spawn_tags_its_events_with_the_tasks_project",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "test_spawn_runs_the_tasks_projects_hook",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "test_spawn_names_the_project_when_it_is_not_cwds",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "test_spawn_in_cwds_own_project_does_not_name_it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "test_prime_creates_the_worktree_in_the_tasks_project",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "test_claim_across_projects_refuses_and_names_spawn",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "test_unsettled_inspects_the_tasks_projects_worktree",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "test_resume_recreates_a_dropped_worktree_in_the_tasks_project",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "test_every_command_refuses_a_missing_project_path",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "test_spawn_records_the_task_on_the_spawning_session",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "test_an_auto_spawn_records_no_spawning_session",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestRank_SpawnedSitsBetweenClaimedAndQueued",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestSpawned_IdSlugLabel",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestSessionTasksSpawned_RecordsRelationSix",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestSessionTasksSpawned_UpgradesWeakerKeepsClaimed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestSessionStatusRows_SpawnedTaskInAnotherProject",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestSessionStatusRowsForSession_SpawnedTaskInAnotherProject",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestStewardship_SpawnerStewardsLikeAFiler",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestRelationColumn_MarksSpawned",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestMigrate_MatchesSchemaSQL",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
