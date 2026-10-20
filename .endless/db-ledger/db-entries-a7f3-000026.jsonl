@@ -495,3 +495,4 @@
 {"v":1,"ts":"609Y8HMET6819ZK","kind":"decision.accepted","project":"endless","entity":{"type":"decision","id":"1631"},"actor":{"kind":"cli","id":"mikeschinkel@m4macmini.local","session_id":"1352"},"payload":{}}
 {"v":1,"ts":"609YAD6SXK019ZK","kind":"task.status_changed","project":"endless","entity":{"type":"task","id":"2291"},"actor":{"kind":"cli","id":"mikeschinkel@m4macmini.local","session_id":"1352"},"payload":{"old_status":"submitted","new_status":"ready","cascade":false}}
 {"v":1,"ts":"609YAD8T73019ZK","kind":"task.plan_baselined","project":"endless","entity":{"type":"task","id":"2291"},"actor":{"kind":"cli","id":"mikeschinkel@m4macmini.local","session_id":"1352"},"payload":{}}
+{"v":1,"ts":"609YAF7194819ZK","kind":"task.status_changed","project":"endless","entity":{"type":"task","id":"2291"},"actor":{"kind":"cli","id":"mikeschinkel@m4macmini.local","session_id":"1352"},"payload":{"old_status":"ready","new_status":"underway"}}
