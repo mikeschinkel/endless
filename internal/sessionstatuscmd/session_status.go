@@ -176,7 +176,7 @@ func Run(args []string) {
 	cols := fs.Int("cols", 0, "terminal width override (0 = auto-detect)")
 	taskFlag := fs.Int64("task", 0, "explicit task id (headless: bypasses tmux/session resolution and reads the DB context --db/--db-dir resolved instead of pinning the main DB; intended for tests)")
 	fromSession := fs.Int64("from-session", 0, "explicit spawning session id paired with --task (headless: drives the ↩ from row + --tree spawner annotation without tmux resolution; intended for tests)")
-	sessionFlag := fs.Int64("session", 0, "explicit viewing session id (headless: bypasses tmux resolution; alone it lists that session's surfaced/revisited rows — the no-goal view — and alongside --task it names the session whose hides apply; intended for tests)")
+	sessionFlag := fs.Int64("session", 0, "explicit viewing session id (headless: bypasses tmux resolution; alone it lists that session's filed/revisited/touched rows — the no-goal view — and alongside --task it names the session whose hides apply; intended for tests)")
 	showHidden := fs.Bool("show-hidden", false, "render this session's hidden task rows too, marked "+hiddenGlyph)
 	onlyHidden := fs.Bool("only-hidden", false, "render ONLY this session's hidden task rows (the discovery path for unhiding)")
 	showSuppressed := fs.Bool("show-suppressed", false, "render rows another live session stewards too, marked "+suppressedGlyph)
@@ -252,7 +252,7 @@ func Run(args []string) {
 	} else if *sessionFlag > 0 {
 		// Headless no-goal mode (E-1802 verify harness): the caller names the
 		// emitting session directly (no live pane to resolve it from), so the
-		// no-goal surfaced/revisited view is exercised against the seeded sandbox
+		// no-goal filed/revisited view is exercised against the seeded sandbox
 		// DB. Same PinMainDB skip rationale as the --task branch.
 		fixed := anchor{emittingSession: *sessionFlag, hint: hintClaimBind}
 		nextAnchor = func() (anchor, error) { return fixed, nil }
@@ -464,7 +464,7 @@ var resolveAnchor = func(process string) (anchor, error) {
 	// no-goal one, because per-session task hiding is scoped to whoever is
 	// looking: the focal-anchored view needs the viewer id to know which hides
 	// apply. Its OTHER job — anchoring the no-goal view (E-1802) on this pane's
-	// own session so its surfaced/revisited work is still listed rather than
+	// own session so its filed/revisited work is still listed rather than
 	// hidden behind the claim/bind hint — is unchanged.
 	//
 	// The error is fatal only in the no-goal case, where this id IS the anchor and
@@ -511,7 +511,7 @@ func (t *anchorTracker) refresh() anchor {
 }
 
 // gatherRows returns the rows to render: the focal-anchored what's-next set when
-// a goal is claimed (focal != 0), else the emitting session's own surfaced/
+// a goal is claimed (focal != 0), else the emitting session's own filed/
 // revisited rows (E-1802) when a session is present but unclaimed. Empty when
 // neither resolves — renderTo then prints the claim/bind hint.
 //
@@ -730,7 +730,7 @@ func renderTo(w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskH
 // git memo (monitor.WithFrameMemo) to the focal anomaly probe.
 func renderFrame(ctx context.Context, w io.Writer, rows []monitor.SessionStatusRow, focal int64, noTaskHint string, cols int, color bool, hm hiddenMode, graph orderGraph) {
 	// Gate on rows, not focal: a session with no claimed goal (focal == 0) still
-	// has surfaced/revisited rows to render (E-1802). Only the truly-empty case —
+	// has filed/revisited rows to render (E-1802). Only the truly-empty case —
 	// no goal AND no session work — falls through to the claim/bind (or register-
 	// session) hint, NEVER an unrelated task's rows (E-1698).
 	//
@@ -794,7 +794,7 @@ func renderFrame(ctx context.Context, w io.Writer, rows []monitor.SessionStatusR
 	}
 
 	// Relation-column width, same width-on-demand rule (E-1696): the ⊕/· slot
-	// exists only when a RENDERED row carries a mark, so a frame with no queued
+	// exists only when a RENDERED row carries a mark, so a frame with no touched
 	// or referenced rows is byte-identical to before.
 	rw := relationColWidth(rows)
 
@@ -1016,7 +1016,7 @@ func joinLegend(entries []legendEntry, sep, between string) string {
 // legendEntries is the ordered set of glyphs present in rows.
 func legendEntries(rows []monitor.SessionStatusRow) []legendEntry {
 	var present [taskrow.Count]bool
-	var done, blocked, blocks, unsettled, notStarted, undetermined, hidden, queued, referenced bool
+	var done, blocked, blocks, unsettled, notStarted, undetermined, hidden, touched, referenced bool
 	var focus, duplicate, spawnable, suppressed bool
 	for _, r := range rows {
 		present[classify(r)] = true
@@ -1030,8 +1030,8 @@ func legendEntries(rows []monitor.SessionStatusRow) []legendEntry {
 			suppressed = true
 		}
 		switch r.Relation {
-		case sessiontaskrelation.RelationQueued:
-			queued = true
+		case sessiontaskrelation.RelationTouched:
+			touched = true
 		case sessiontaskrelation.RelationReferenced:
 			referenced = true
 		}
@@ -1120,8 +1120,8 @@ func legendEntries(rows []monitor.SessionStatusRow) []legendEntry {
 	// ⊕/· join ⊘ in the view-scoped tail: like hidden, they describe how the row
 	// entered THIS SESSION's scope rather than anything about the task (E-1696).
 	// ⊕ before ·, matching the order they sort in.
-	if queued {
-		parts = append(parts, legendEntry{Icon: queuedGlyph, Label: "queued"})
+	if touched {
+		parts = append(parts, legendEntry{Icon: touchedGlyph, Label: "touched"})
 	}
 	if referenced {
 		parts = append(parts, legendEntry{Icon: referencedGlyph, Label: "referenced"})
@@ -1258,8 +1258,8 @@ func sortRows(rows []monitor.SessionStatusRow) {
 			return ai < aj
 		}
 		// E-1696, tiebreak only: between equally actionable rows, decided work
-		// (goal/queued) sorts above incidental work. Deliberately BELOW the action
-		// key — a queued task parked in `later` must not jump the row you are
+		// (claimed/bound/touched) sorts above incidental work. Deliberately BELOW the action
+		// key — a touched task parked in `later` must not jump the row you are
 		// actually working.
 		if pi, pj := prominence(rows[i]), prominence(rows[j]); pi != pj {
 			return pi < pj
@@ -1294,7 +1294,7 @@ func phaseRank(phase string) int {
 // BLACK DIAMOND) is E-1701's original. ⊙ (U+2299 CIRCLED DOT OPERATOR) is
 // E-2107's addition, chosen for its silhouette: within this column the only
 // distinction is circle vs diamond — which ◇ (U+25C7) would not have given. The
-// other circled operators — ⊗ blocked, ⏸ blocks, ⊘ hidden, ⊕ queued — all render
+// other circled operators — ⊗ blocked, ⏸ blocks, ⊘ hidden, ⊕ touched — all render
 // AFTER the id, so position disambiguates them. All measure one column (asserted
 // in TestUnsettledMark), like the space they replace.
 //

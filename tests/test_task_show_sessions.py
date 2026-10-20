@@ -2,9 +2,9 @@
 
 Two surfaces:
   - the `Created:` line gains ` by ES-NNN (E-NNN)` naming the session that
-    created the task (the `surfaced` session_tasks row, per ED-1497), and
-  - a `Touched by:` block lists every session that touched the task, laid out
-    as a peer of the existing `This task:` relations block.
+    created the task (the `filed` session_tasks row, per ED-1497), and
+  - a `Sessions:` block (`Touched by:` until E-2291) lists every session that
+    touched the task, laid out as a peer of the existing `This task:` block.
 
 Plus the input side that makes those ids usable: `session goto` accepts the
 `ES-NNNN` form the block prints (E-1261).
@@ -40,7 +40,7 @@ def _add_session(
 
 
 # Relation ids mirror session_task_relations' seeded rows (ED-1497).
-_CLAIMED, _SURFACED, _REVISITED = 1, 2, 3
+_CLAIMED, _FILED, _REVISITED, _TOUCHED, _BOUND = 1, 2, 3, 5, 6
 
 
 def _touch(session_id: int, task_id: int, relation: int | None, when: str) -> None:
@@ -84,20 +84,20 @@ def test_created_line_names_the_surfacing_session(seeded_project_at_cwd):
     tid = _add_task("Target")
     other = _add_task("The session's active task")
     _add_session(1020, state="idle", task_id=other)
-    _touch(1020, tid, _SURFACED, "2026-08-04T04:38:51")
+    _touch(1020, tid, _FILED, "2026-08-04T04:38:51")
 
     out = _show(tid, "--no-color")
     assert f"by ES-1020 (E-{other})" in out
 
 
-def test_created_line_omits_creator_without_a_surfaced_row(seeded_project_at_cwd):
+def test_created_line_omits_creator_without_a_filed_row(seeded_project_at_cwd):
     """A revisit is not a creation, so the Created: line stays as it was."""
     tid = _add_task("Target")
     _add_session(1020, task_id=None)
     _touch(1020, tid, _REVISITED, "2026-08-04T04:38:51")
 
     out = _show(tid, "--no-color")
-    assert "ES-1020" in out          # still listed under Touched by:
+    assert "ES-1020" in out          # still listed under Sessions:
     assert "by ES-1020" not in out   # but not credited with creating it
 
 
@@ -117,16 +117,16 @@ def test_created_line_untouched_when_no_session_touched_the_task(
     tid = _add_task("Filed outside any session")
     out = _show(tid, "--no-color")
     assert " by ES-" not in out
-    assert "Touched by:" not in out
+    assert "Sessions:" not in out
 
 
-def test_earliest_surfaced_row_wins(seeded_project_at_cwd):
+def test_earliest_filed_row_wins(seeded_project_at_cwd):
     """Two surfacing sessions (an import replayed) → the first one created it."""
     tid = _add_task("Target")
     _add_session(100)
     _add_session(200)
-    _touch(100, tid, _SURFACED, "2026-08-01T00:00:00")
-    _touch(200, tid, _SURFACED, "2026-08-02T00:00:00")
+    _touch(100, tid, _FILED, "2026-08-01T00:00:00")
+    _touch(200, tid, _FILED, "2026-08-02T00:00:00")
 
     out = _show(tid, "--no-color")
     assert "by ES-100" in out
@@ -134,11 +134,11 @@ def test_earliest_surfaced_row_wins(seeded_project_at_cwd):
 
 
 # --------------------------------------------------------------------------
-# Touched by: block
+# Sessions: block
 # --------------------------------------------------------------------------
 
 
-def test_touched_by_lists_every_session_with_relation_and_state(
+def test_sessions_lists_every_session_with_relation_and_state(
     seeded_project_at_cwd,
 ):
     tid = _add_task("Target")
@@ -146,16 +146,16 @@ def test_touched_by_lists_every_session_with_relation_and_state(
     b = _add_task("B")
     _add_session(994, state="idle", task_id=a)
     _add_session(996, state="working", task_id=b)
-    _touch(994, tid, _SURFACED, "2026-08-01T00:00:00")
+    _touch(994, tid, _FILED, "2026-08-01T00:00:00")
     _touch(996, tid, _REVISITED, "2026-08-02T00:00:00")
 
     out = _show(tid, "--no-color")
-    assert "Touched by:" in out
+    assert "Sessions:" in out
     assert f"- Revisited:  ES-996 (E-{b}) [working]" in out
-    assert f"- Surfaced:   ES-994 (E-{a}) [idle]" in out
+    assert f"- Filed:      ES-994 (E-{a}) [idle]" in out
 
 
-def test_touched_by_orders_most_recent_touch_first(seeded_project_at_cwd):
+def test_sessions_orders_most_recent_touch_first(seeded_project_at_cwd):
     """The block exists for navigation, so the freshest session leads."""
     tid = _add_task("Target")
     for sid, when in ((10, "2026-08-01"), (20, "2026-08-03"), (30, "2026-08-02")):
@@ -167,16 +167,16 @@ def test_touched_by_orders_most_recent_touch_first(seeded_project_at_cwd):
     assert order == sorted(order)
 
 
-def test_touched_by_labels_a_null_relation_as_touched(seeded_project_at_cwd):
+def test_sessions_labels_a_null_relation_as_unclassified(seeded_project_at_cwd):
     tid = _add_task("Target")
     _add_session(696, state="ended")
     _touch(696, tid, None, "2026-01-01T00:00:00")
 
     out = _show(tid, "--no-color")
-    assert "- Touched:  ES-696 [ended]" in out
+    assert "- Unclassified:  ES-696 [ended]" in out
 
 
-def test_touched_by_omits_parens_when_session_has_no_bound_task(
+def test_sessions_omits_parens_when_session_has_no_bound_task(
     seeded_project_at_cwd,
 ):
     """A `claimed` session_tasks row whose session no longer points at the task
@@ -195,18 +195,18 @@ def test_touched_by_omits_parens_when_session_has_no_bound_task(
 # --------------------------------------------------------------------------
 
 
-def test_claimant_renders_claimed_over_a_surfaced_row(seeded_project_at_cwd):
+def test_claimant_renders_claimed_over_a_filed_row(seeded_project_at_cwd):
     """`session_tasks.relation_id` is stamped at first touch and only ever
     upgraded, so a session that FILED a task and later claimed it kept reading
-    `Surfaced` forever. Ownership lives in `sessions.task_id`; the label follows
+    `Filed` (then `Surfaced`) forever. Ownership lives in `sessions.task_id`; the label follows
     it."""
     tid = _add_task("Target")
     _add_session(1046, state="ended", task_id=tid)
-    _touch(1046, tid, _SURFACED, "2026-08-01T00:00:00")
+    _touch(1046, tid, _FILED, "2026-08-01T00:00:00")
 
     out = _show(tid, "--no-color")
     assert f"- Claimed:  ES-1046 (E-{tid}) [ended]" in out
-    assert "Surfaced" not in out
+    assert "Filed:" not in out
 
 
 def test_claimant_renders_claimed_over_a_revisited_row(seeded_project_at_cwd):
@@ -237,11 +237,11 @@ def test_claimant_with_no_session_tasks_row_is_still_listed(
 def test_a_claim_does_not_cost_the_session_credit_for_filing(
     seeded_project_at_cwd,
 ):
-    """Created: is derived from the `surfaced` touch, so the Claimed: override
+    """Created: is derived from the `filed` touch, so the Claimed: override
     must not erase the raw relation underneath it."""
     tid = _add_task("Target")
     _add_session(1046, state="ended", task_id=tid)
-    _touch(1046, tid, _SURFACED, "2026-08-01T00:00:00")
+    _touch(1046, tid, _FILED, "2026-08-01T00:00:00")
 
     out = _show(tid, "--no-color")
     assert f"by ES-1046 (E-{tid})" in out
@@ -271,7 +271,7 @@ def test_json_and_agent_carry_the_claimed_relation(seeded_project_at_cwd):
     assert f"touched_by=claimed ES-1046 (E-{tid}) [ended]" in _show(tid, "--agent")
 
 
-def test_touched_by_survives_a_deleted_session(seeded_project_at_cwd):
+def test_sessions_survives_a_deleted_session(seeded_project_at_cwd):
     """session_tasks carries no FK on purpose: the touch outlives the session."""
     tid = _add_task("Target")
     _touch(555, tid, _REVISITED, "2026-08-01T00:00:00")
@@ -280,7 +280,7 @@ def test_touched_by_survives_a_deleted_session(seeded_project_at_cwd):
     assert "- Revisited:  ES-555 [gone]" in out
 
 
-def test_touched_by_colors_finished_sessions_like_terminal_relations(
+def test_sessions_colors_finished_sessions_like_terminal_relations(
     seeded_project_at_cwd,
 ):
     """A finished session reads green (like a resolved relation); a live one
@@ -299,7 +299,7 @@ def test_touched_by_colors_finished_sessions_like_terminal_relations(
     assert "ES-30 [\x1b[32mgone\x1b[0m]" in result.output
 
 
-def test_touched_by_shares_a_label_column_with_this_task(seeded_project_at_cwd):
+def test_sessions_shares_a_label_column_with_this_task(seeded_project_at_cwd):
     """The two bullet blocks are siblings, so their ids line up."""
     tid = _add_task("Target")
     blocked = _add_task("Downstream")
@@ -317,7 +317,7 @@ def test_touched_by_shares_a_label_column_with_this_task(seeded_project_at_cwd):
     assert links_row.index("E-") == touch_row.index("ES-")
 
 
-def test_touched_by_follows_this_task(seeded_project_at_cwd):
+def test_sessions_follows_this_task(seeded_project_at_cwd):
     tid = _add_task("Target")
     blocked = _add_task("Downstream")
     db.execute(
@@ -329,7 +329,7 @@ def test_touched_by_follows_this_task(seeded_project_at_cwd):
     _touch(994, tid, _REVISITED, "2026-08-01T00:00:00")
 
     out = _show(tid, "--no-color")
-    assert out.index("This task:") < out.index("Touched by:")
+    assert out.index("This task:") < out.index("Sessions:")
 
 
 # --------------------------------------------------------------------------
@@ -342,13 +342,13 @@ def test_json_reports_created_by_and_touched_by(seeded_project_at_cwd):
     a = _add_task("A")
     _add_session(994, state="idle", task_id=a)
     _add_session(996, state="working", task_id=None)
-    _touch(994, tid, _SURFACED, "2026-08-01T00:00:00")
+    _touch(994, tid, _FILED, "2026-08-01T00:00:00")
     _touch(996, tid, _REVISITED, "2026-08-02T00:00:00")
 
     payload = json.loads(_show(tid, "--json"))
     assert payload["created_by"] == {
         "session": "ES-994",
-        "relation": "surfaced",
+        "relation": "filed",
         "task": f"E-{a}",
         "state": "idle",
         # E-2294: no pane binding, so no tmux opinion either way.
@@ -371,11 +371,11 @@ def test_agent_reports_created_by_and_touched_by(seeded_project_at_cwd):
     tid = _add_task("Target")
     a = _add_task("A")
     _add_session(994, state="idle", task_id=a)
-    _touch(994, tid, _SURFACED, "2026-08-01T00:00:00")
+    _touch(994, tid, _FILED, "2026-08-01T00:00:00")
 
     out = _show(tid, "--agent")
     assert f"created_by=ES-994 (E-{a})" in out
-    assert f"touched_by=surfaced ES-994 (E-{a}) [idle]" in out
+    assert f"touched_by=filed ES-994 (E-{a}) [idle]" in out
 
 
 def test_agent_omits_both_lines_when_untouched(seeded_project_at_cwd):
@@ -448,7 +448,7 @@ def test_goto_still_resolves_e_prefix_to_a_task(monkeypatch):
 # task is read, instead of leaving it to surface as a failed resume weeks later.
 
 
-def test_touched_by_marks_a_gone_transcript(seeded_project_at_cwd):
+def test_sessions_marks_a_gone_transcript(seeded_project_at_cwd):
     """`isolated_env` points the transcript home at an empty directory, so this
     session's uuid has nothing behind it."""
     tid = _add_task("lost its session")
@@ -459,7 +459,7 @@ def test_touched_by_marks_a_gone_transcript(seeded_project_at_cwd):
     assert "(transcript gone)" in out
 
 
-def test_touched_by_is_quiet_when_the_transcript_is_there(
+def test_sessions_is_quiet_when_the_transcript_is_there(
     seeded_project_at_cwd, stage_transcript
 ):
     tid = _add_task("still resumable")
@@ -476,6 +476,38 @@ def test_a_session_with_no_uuid_is_not_reported_as_lost(seeded_project_at_cwd):
     there is no uuid to stat, and "nothing to look for" is not evidence of
     loss."""
     tid = _add_task("orphan touch")
-    _touch(9911, tid, _SURFACED, "2026-01-01T00:00:00")
+    _touch(9911, tid, _FILED, "2026-01-01T00:00:00")
 
     assert "transcript gone" not in _show(tid, "--no-color")
+
+
+# --------------------------------------------------------------------------
+# E-2291: the header is `Sessions:`, and a bound owner reads `Bound:`
+# --------------------------------------------------------------------------
+
+
+def test_header_is_sessions_not_touched_by(seeded_project_at_cwd):
+    """`touched` names one relation since E-2291, so the header listing every
+    relation cannot use the word."""
+    tid = _add_task("Target")
+    _add_session(1050, state="idle")
+    _touch(1050, tid, _TOUCHED, "2026-10-01T00:00:00")
+
+    out = _show(tid, "--no-color")
+    assert "Sessions:" in out
+    assert "Touched by:" not in out
+    assert "- Touched:  ES-1050 [idle]" in out
+
+
+def test_bound_owner_renders_bound(seeded_project_at_cwd):
+    """A session that bound the task without claiming it owns it, and reads as
+    such — `Bound:`, not `Claimed:`."""
+    tid = _add_task("Target", status="unplanned")
+    _add_session(1051, state="working", task_id=tid)
+    _touch(1051, tid, _BOUND, "2026-10-01T00:00:00")
+
+    out = _show(tid, "--no-color")
+    assert f"- Bound:  ES-1051 (E-{tid}) [working]" in out
+    assert "Claimed:" not in out
+    payload = json.loads(_show(tid, "--json"))
+    assert [t["relation"] for t in payload["touched_by"]] == ["bound"]

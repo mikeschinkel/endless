@@ -70,78 +70,6 @@ func hasSessionTask(t *testing.T, db *sql.DB, sessionID, taskID int64) bool {
 	return n > 0
 }
 
-// TestSessionTasksQueued_AddsAndPromotes covers the two things `session task
-// add` is for: enrolling a task the session has never touched (the case no
-// automatic capture can reach, since nothing happened to it), and strengthening
-// one it merely touched.
-func TestSessionTasksQueued_AddsAndPromotes(t *testing.T) {
-	db := newSessionTasksTestDB(t)
-	seedSession(t, db, 42)
-	seedLiveTask(t, db, 100)
-	seedLiveTask(t, db, 101)
-
-	// 101 is already revisited; 100 is untouched.
-	if err := upsertSessionTask(db, "42", 101, sessiontaskrelation.RelationRevisited); err != nil {
-		t.Fatalf("seed revisited: %v", err)
-	}
-
-	if _, err := dispatch(db, membershipEvent(
-		t, KindSessionTasksQueued, 42, []string{"E-100", "E-101"}), nil,
-	); err != nil {
-		t.Fatalf("dispatch queued: %v", err)
-	}
-	for _, id := range []int64{100, 101} {
-		if got := sessionTaskRelation(t, db, 42, id); got != "queued" {
-			t.Errorf("E-%d: relation = %q, want queued", id, got)
-		}
-	}
-}
-
-// TestSessionTasksQueued_LeavesClaimedAlone pins that queuing the session's own
-// claimed task does not demote it. The upgrade-only ladder is what enforces
-// this, so the executor needs no special case — but the behavior is load-bearing
-// and would be invisible until someone lost a `claimed` classification.
-func TestSessionTasksQueued_LeavesClaimedAlone(t *testing.T) {
-	db := newSessionTasksTestDB(t)
-	seedSession(t, db, 42)
-	seedLiveTask(t, db, 100)
-	if err := upsertSessionTask(db, "42", 100, sessiontaskrelation.RelationClaimed); err != nil {
-		t.Fatalf("seed claim: %v", err)
-	}
-
-	res, err := dispatch(db, membershipEvent(
-		t, KindSessionTasksQueued, 42, []string{"E-100"}), nil,
-	)
-	if err != nil {
-		t.Fatalf("dispatch queued: %v", err)
-	}
-	if got := sessionTaskRelation(t, db, 42, 100); got != "claimed" {
-		t.Errorf("claim was demoted: relation = %q, want claimed", got)
-	}
-	if res == nil || !strings.Contains(res.Markdown, "already claimed by this session") {
-		t.Errorf("expected the no-op to be reported, got %q", markdownOf(res))
-	}
-}
-
-// TestSessionTasksQueued_RejectsUnknownTask pins that a typo fails the whole
-// call rather than silently queuing nothing. Matches session_tasks.ordered's
-// treatment of ids that name no task.
-func TestSessionTasksQueued_RejectsUnknownTask(t *testing.T) {
-	db := newSessionTasksTestDB(t)
-	seedSession(t, db, 42)
-	seedLiveTask(t, db, 100)
-
-	_, err := dispatch(db, membershipEvent(
-		t, KindSessionTasksQueued, 42, []string{"E-100", "E-999"}), nil,
-	)
-	if err == nil || !strings.Contains(err.Error(), "E-999") {
-		t.Fatalf("expected an error naming E-999, got %v", err)
-	}
-	if hasSessionTask(t, db, 42, 100) {
-		t.Error("the valid id was queued despite the call failing")
-	}
-}
-
 // TestSessionTasksRemoved_DropsRowAndHide is the verb's whole contract: the
 // association is gone, and the hide on the same pair goes with it.
 //
@@ -210,6 +138,29 @@ func TestSessionTasksRemoved_RefusesClaimed(t *testing.T) {
 	}
 }
 
+// TestSessionTasksRemoved_RefusesBound pins E-2291: a bound task is the
+// session's own task exactly as a claimed one is — sessions.task_id names it
+// either way — so remove refuses it the same way and names session hide --task.
+func TestSessionTasksRemoved_RefusesBound(t *testing.T) {
+	db := newSessionTasksTestDB(t)
+	seedSession(t, db, 42)
+	seedLiveTask(t, db, 100)
+	if err := upsertSessionTask(db, "42", 100, sessiontaskrelation.RelationBound); err != nil {
+		t.Fatalf("seed bind: %v", err)
+	}
+
+	_, err := dispatch(db, membershipEvent(
+		t, KindSessionTasksRemoved, 42, []string{"E-100"}), nil,
+	)
+	if err == nil || !strings.Contains(err.Error(), "E-100") ||
+		!strings.Contains(err.Error(), "session hide --task") {
+		t.Fatalf("expected a refusal naming E-100 and session hide --task, got %v", err)
+	}
+	if got := sessionTaskRelation(t, db, 42, 100); got != "bound" {
+		t.Errorf("bound row changed despite the refusal: relation = %q", got)
+	}
+}
+
 // TestSessionTasksRemoved_AbsentIsReportedNoOp pins the deliberate asymmetry
 // with `add`: removing a task the session never touched is not an error (it
 // matches `session unhide --task`, and "make sure this is not on my list" is
@@ -231,7 +182,8 @@ func TestSessionTasksRemoved_AbsentIsReportedNoOp(t *testing.T) {
 }
 
 // TestSessionTasksTouched_EnrollsWithoutTouchingTheTask is `touch`'s whole
-// contract (E-2173): the task joins the session's scope at `revisited`, and
+// contract (E-2173): the task joins the session's scope at `touched` (E-2291;
+// it was `revisited` before), and
 // nothing about the task itself changes. The second half is the point of the
 // verb — the workaround it replaces rewrote tasks.phase to buy the same display
 // effect, so a test that only checked the session_tasks row would pass for the
@@ -248,8 +200,8 @@ func TestSessionTasksTouched_EnrollsWithoutTouchingTheTask(t *testing.T) {
 	if err != nil {
 		t.Fatalf("dispatch touched: %v", err)
 	}
-	if got := sessionTaskRelation(t, db, 42, 100); got != "revisited" {
-		t.Errorf("relation = %q, want revisited", got)
+	if got := sessionTaskRelation(t, db, 42, 100); got != "touched" {
+		t.Errorf("relation = %q, want touched", got)
 	}
 	if after := taskRowSnapshot(t, db, 100); after != before {
 		t.Errorf("touch altered the task row:\n before %s\n after  %s", before, after)
@@ -259,11 +211,11 @@ func TestSessionTasksTouched_EnrollsWithoutTouchingTheTask(t *testing.T) {
 	}
 }
 
-// TestSessionTasksTouched_LeavesStrongerRelationsAlone pins the half of the
-// ladder that only `touch` exercises. `revisited` is the weakest relation any
-// emitter produces, so THREE relations outrank it — and a demotion would lose a
-// claim, an agenda entry or a filing record. The report has to name which one
-// survived, or the reader cannot tell a claim from an incidental capture.
+// TestSessionTasksTouched_LeavesStrongerRelationsAlone pins that touching the
+// session's own task leaves it as it is (P14 of E-2291 for bound). Two
+// relations outrank `touched` — claimed and bound — and a demotion would lose
+// the ownership record. The report has to name which one survived, or the
+// reader cannot tell a claim from a bind.
 func TestSessionTasksTouched_LeavesStrongerRelationsAlone(t *testing.T) {
 	for _, tc := range []struct {
 		rel   sessiontaskrelation.Relation
@@ -271,8 +223,7 @@ func TestSessionTasksTouched_LeavesStrongerRelationsAlone(t *testing.T) {
 		label string
 	}{
 		{sessiontaskrelation.RelationClaimed, "claimed", "Claimed"},
-		{sessiontaskrelation.RelationQueued, "queued", "Queued"},
-		{sessiontaskrelation.RelationSurfaced, "surfaced", "Surfaced"},
+		{sessiontaskrelation.RelationBound, "bound", "Bound"},
 	} {
 		db := newSessionTasksTestDB(t)
 		seedSession(t, db, 42)
@@ -298,24 +249,31 @@ func TestSessionTasksTouched_LeavesStrongerRelationsAlone(t *testing.T) {
 	}
 }
 
-// TestSessionTasksTouched_UpgradesReferenced pins the other direction: a
-// read-only capture is strengthened by an explicit touch, because asking for a
-// task to be in scope is a stronger statement than having read it.
-func TestSessionTasksTouched_UpgradesReferenced(t *testing.T) {
-	db := newSessionTasksTestDB(t)
-	seedSession(t, db, 42)
-	seedLiveTask(t, db, 100)
-	if err := upsertSessionTask(db, "42", 100, sessiontaskrelation.RelationReferenced); err != nil {
-		t.Fatalf("seed referenced: %v", err)
-	}
+// TestSessionTasksTouched_UpgradesWeaker pins the other direction: filed,
+// revisited and referenced captures are strengthened by an explicit touch,
+// because asking for a task to be in scope is a decision about the session's
+// work, which none of those incidental captures is.
+func TestSessionTasksTouched_UpgradesWeaker(t *testing.T) {
+	for _, rel := range []sessiontaskrelation.Relation{
+		sessiontaskrelation.RelationFiled,
+		sessiontaskrelation.RelationRevisited,
+		sessiontaskrelation.RelationReferenced,
+	} {
+		db := newSessionTasksTestDB(t)
+		seedSession(t, db, 42)
+		seedLiveTask(t, db, 100)
+		if err := upsertSessionTask(db, "42", 100, rel); err != nil {
+			t.Fatalf("seed %s: %v", rel, err)
+		}
 
-	if _, err := dispatch(db, membershipEvent(
-		t, KindSessionTasksTouched, 42, []string{"E-100"}), nil,
-	); err != nil {
-		t.Fatalf("dispatch touched: %v", err)
-	}
-	if got := sessionTaskRelation(t, db, 42, 100); got != "revisited" {
-		t.Errorf("relation = %q, want revisited", got)
+		if _, err := dispatch(db, membershipEvent(
+			t, KindSessionTasksTouched, 42, []string{"E-100"}), nil,
+		); err != nil {
+			t.Fatalf("%s: dispatch touched: %v", rel, err)
+		}
+		if got := sessionTaskRelation(t, db, 42, 100); got != "touched" {
+			t.Errorf("%s: relation = %q, want touched", rel, got)
+		}
 	}
 }
 
@@ -358,7 +316,7 @@ func taskRowSnapshot(t *testing.T, db *sql.DB, taskID int64) string {
 // tasks fails rather than reporting a successful no-op, for every verb.
 func TestSessionTasksMembership_RejectsEmptyList(t *testing.T) {
 	for _, kind := range []Kind{
-		KindSessionTasksQueued, KindSessionTasksTouched, KindSessionTasksRemoved,
+		KindSessionTasksTouched, KindSessionTasksRemoved,
 	} {
 		db := newSessionTasksTestDB(t)
 		seedSession(t, db, 42)

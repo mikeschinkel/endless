@@ -44,13 +44,16 @@ ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
 
 INSERT INTO session_task_relations (id, slug, label) VALUES
     (1, 'claimed',    'Claimed'),
-    (2, 'surfaced',   'Surfaced'),
+    (2, 'filed',      'Filed'),
     (3, 'revisited',  'Revisited'),
     -- E-1696. Ids are APPENDED, never renumbered: they are persisted in
     -- session_tasks.relation_id, so inserting in the middle would reclassify
     -- live rows. Prominence order is Relation.Rank() in Go, not the id.
     (4, 'referenced', 'Referenced'),
-    (5, 'queued',     'Queued')
+    (5, 'touched',    'Touched'),
+    -- E-2291: renamed 2 surfaced→filed and 5 queued→touched (a label change,
+    -- upserted onto existing rows here), and appended 6.
+    (6, 'bound',      'Bound')
 ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
 
 -- E-1813: the rating-level mirrors of rating.Level, one table per axis. Ids 2

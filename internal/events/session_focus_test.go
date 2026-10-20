@@ -20,8 +20,8 @@ func sessionFocus(t *testing.T, db *sql.DB, sessionID int64) int64 {
 }
 
 // TestSessionFocus_FollowsWritesNotReads pins E-2188's rule for what moves a
-// session's focused task: claimed, surfaced and revisited captures do, on every
-// touch including a repeat one; queued and referenced do not.
+// session's focused task: claimed, bound, filed and revisited captures do, on every
+// touch including a repeat one; touched and referenced do not.
 func TestSessionFocus_FollowsWritesNotReads(t *testing.T) {
 	db := newSessionTasksTestDB(t)
 	seedSession(t, db, 42)
@@ -39,7 +39,7 @@ func TestSessionFocus_FollowsWritesNotReads(t *testing.T) {
 		t.Fatalf("dispatch create: %v", err)
 	}
 	if got := sessionFocus(t, db, 42); got != 101 {
-		t.Errorf("after filing: focus = %d, want 101 (surfaced moves focus)", got)
+		t.Errorf("after filing: focus = %d, want 101 (filed moves focus)", got)
 	}
 
 	seedLiveTask(t, db, 102)
@@ -51,11 +51,11 @@ func TestSessionFocus_FollowsWritesNotReads(t *testing.T) {
 	}
 
 	seedLiveTask(t, db, 103)
-	if _, err := dispatch(db, membershipEvent(t, KindSessionTasksQueued, 42, []string{"E-103"}), nil); err != nil {
-		t.Fatalf("dispatch queue: %v", err)
+	if _, err := dispatch(db, membershipEvent(t, KindSessionTasksTouched, 42, []string{"E-103"}), nil); err != nil {
+		t.Fatalf("dispatch touch: %v", err)
 	}
 	if got := sessionFocus(t, db, 42); got != 102 {
-		t.Errorf("after queueing: focus = %d, want 102 (queued must not steal focus)", got)
+		t.Errorf("after touching: focus = %d, want 102 (touched must not steal focus)", got)
 	}
 
 	if err := upsertSessionTask(db, "42", 104, sessiontaskrelation.RelationReferenced); err != nil {
@@ -110,9 +110,10 @@ func TestSessionFocus_OtherSessionsUntouched(t *testing.T) {
 func TestRelation_MovesFocus(t *testing.T) {
 	want := map[sessiontaskrelation.Relation]bool{
 		sessiontaskrelation.RelationClaimed:    true,
-		sessiontaskrelation.RelationSurfaced:   true,
+		sessiontaskrelation.RelationBound:      true,
+		sessiontaskrelation.RelationFiled:      true,
 		sessiontaskrelation.RelationRevisited:  true,
-		sessiontaskrelation.RelationQueued:     false,
+		sessiontaskrelation.RelationTouched:    false,
 		sessiontaskrelation.RelationReferenced: false,
 	}
 	for _, rel := range sessiontaskrelation.All() {

@@ -225,8 +225,8 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 -- sessions.focus_task_id (E-2188) is the task the session touched last — the
 -- one its conversation is on now — as opposed to task_id, the one it claimed.
--- Unlike task_id it moves freely: every claimed, surfaced or revisited touch in
--- upsertSessionTask repoints it. Display only; nothing gates on it. Declared on
+-- Unlike task_id it moves freely: every claimed, bound, filed or revisited
+-- touch in sessiontaskrelation.Record repoints it. Display only; nothing gates on it. Declared on
 -- the report_runs line because that is where ALTER TABLE ADD COLUMN splices it
 -- (migration 00009), and TestMigrate_MatchesSchemaSQL compares the two texts.
 --
@@ -1299,8 +1299,9 @@ CREATE INDEX IF NOT EXISTS session_statuses_session_recent_idx
 -- Session-task relations (E-1462). SQL mirror of the sessiontaskrelation.Relation
 -- Go enum (ED-1506: const-in-code is the source of truth, the table exists for FK
 -- enforcement and queryability). Classifies HOW a task entered a session's scope:
--- claimed (the session claimed it), surfaced (created during the session),
--- revisited (pre-existing, touched but not claimed). The startup integrity check
+-- claimed (the session claimed it), bound (owns it, not yet claimed), touched
+-- (put in scope with `touch`), filed (created during the session), revisited
+-- (pre-existing, edited but not claimed), referenced (read only). The startup integrity check
 -- fails closed on drift between this table and sessiontaskrelation.All(). Adding
 -- a value = add an enum constant + add a seed row here.
 --
@@ -1325,13 +1326,16 @@ CREATE TABLE IF NOT EXISTS session_task_relations (
 
 INSERT INTO session_task_relations (id, slug, label) VALUES
     (1, 'claimed',    'Claimed'),
-    (2, 'surfaced',   'Surfaced'),
+    (2, 'filed',      'Filed'),
     (3, 'revisited',  'Revisited'),
     -- E-1696. Ids are APPENDED, never renumbered: they are persisted in
     -- session_tasks.relation_id, so inserting in the middle would reclassify
     -- live rows. Prominence order is Relation.Rank() in Go, not the id.
     (4, 'referenced', 'Referenced'),
-    (5, 'queued',     'Queued')
+    (5, 'touched',    'Touched'),
+    -- E-2291: renamed 2 surfaced→filed and 5 queued→touched (a label change,
+    -- upserted onto existing rows here), and appended 6.
+    (6, 'bound',      'Bound')
 ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
 
 -- Which sessions touched which tasks (E-1322). Query-speed projection of the
@@ -1340,18 +1344,19 @@ ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
 -- deletion.
 -- relation_id (E-1462, revised E-1696): how the task entered this session's
 -- scope, FK to session_task_relations. Written at capture time by the
--- task-mutation executors (claim→goal, create/import→surfaced, else→revisited)
--- and by the session-task verbs (`session task add`→queued).
+-- task-mutation executors (claim→claimed, bind→bound, create/import→filed,
+-- else→revisited), by the session-task verbs (`touch` / `session task add`→
+-- touched) and by the SessionStart auto-bind (claimed or bound, E-2291).
 --
 -- E-1696 replaced E-1462's set-once rule with an UPGRADE-ONLY ladder
--- (sessiontaskrelation.Relation.Rank(): goal < queued < surfaced < revisited <
--- referenced). A later capture may strengthen a row's relation but never weaken
+-- (sessiontaskrelation.Relation.Rank(): claimed < bound < touched < filed <
+-- revisited < referenced). A later capture may strengthen a row's relation but never weaken
 -- it. Set-once was correct only while `referenced` did not exist: the documented
 -- happy path reads a task before claiming it, so the read gate would otherwise
 -- pin every session's own goal task at `referenced` permanently.
 --
 -- NULL = pre-E-1462 historical row (the live side-effect table is not replayed
--- from the ledger, so there is nothing to backfill). A NULL row is treated as
+-- from the ledger; E-2291's migration 24 backfilled the ownership rows only). A NULL row is treated as
 -- weaker than every real relation, so the first capture after the upgrade fills
 -- it in.
 CREATE TABLE IF NOT EXISTS session_tasks (

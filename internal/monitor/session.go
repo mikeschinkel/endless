@@ -8,6 +8,8 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/config"
 	"github.com/mikeschinkel/endless/internal/sessionstate"
+	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
+	"github.com/mikeschinkel/endless/internal/taskstatus"
 	"github.com/mikeschinkel/go-dt"
 )
 
@@ -60,6 +62,11 @@ func MarkSessionAutoSpawned(sessionID string) error {
 // pre-claim flow) owns that. Used by SessionStart's spawn-marker
 // auto-bind (claude.go) where the status was already flipped by spawn
 // before Claude launched.
+//
+// It also records the session's ownership in session_tasks, in the same
+// transaction (E-2291): the bind writes no event, so without this a spawned
+// session's own task had no row, or read `revisited`. See
+// recordAutoBindRelation for which relation.
 func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 	db, err := DB()
 	if err != nil {
@@ -90,6 +97,10 @@ func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 	)
 	if err != nil {
 		return fmt.Errorf("upsert session: %w", err)
+	}
+
+	if err = recordAutoBindRelation(tx, sessionID, taskID, now); err != nil {
+		return err
 	}
 
 	// Active-task-scoped fallback dedup for the empty-pane case (E-1640).
@@ -139,6 +150,33 @@ func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 			Reason:      SessionLogDedup,
 			Caller:      "monitor.BindSessionToTask",
 		})
+	}
+	return nil
+}
+
+// recordAutoBindRelation writes the session_tasks row for an auto-bind
+// (E-2291), choosing the relation from the task's status at bind time:
+// `claimed` for an underway task — `task spawn` claimed it for this session
+// before Claude launched — and `bound` for any other, which in practice is a
+// pre-work task a primed session (ED-1621) is reading in. Through
+// sessiontaskrelation.Record, so a stronger row already there is left alone.
+func recordAutoBindRelation(tx *sql.Tx, sessionGUID string, taskID int64, now string) error {
+	var sid int64
+	var status string
+	err := tx.QueryRow(
+		`SELECT s.id, t.status FROM sessions s JOIN tasks t ON t.id = ?
+		  WHERE s.session_id = ?`,
+		taskID, sessionGUID,
+	).Scan(&sid, &status)
+	if err != nil {
+		return fmt.Errorf("read session and task status for bind: %w", err)
+	}
+	rel := sessiontaskrelation.RelationBound
+	if status == taskstatus.Underway {
+		rel = sessiontaskrelation.RelationClaimed
+	}
+	if err = sessiontaskrelation.Record(tx, sid, taskID, rel, now); err != nil {
+		return fmt.Errorf("record bind relation: %w", err)
 	}
 	return nil
 }

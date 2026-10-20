@@ -1,11 +1,11 @@
-"""Tests for `session task add` / `touch` / `session task remove`
-(E-1696, E-2173).
+"""Tests for `session touch` (and its aliases `touch` / `session task add`) and
+`session task remove` (E-1696, E-2173, E-2291).
 
-Three verbs that say explicitly what a session's task list holds. Capture is
-otherwise automatic — the Go executors record a row for every task a session
-claims, files or edits — and these cover what automation cannot reach: work
-decided on but not yet touched (`add`), scope entry with no edit at all
-(`touch`), and a capture that should not have happened (`remove`).
+Two verbs and an alias that say explicitly what a session's task list holds.
+Capture is otherwise automatic — the Go executors record a row for every task a
+session claims, files or edits — and these cover what automation cannot reach:
+scope entry with no edit at all (`touch`, and since E-2291 its alias `session
+task add`), and a capture that should not have happened (`remove`).
 
 These run through the real CLI and the real Go executors, so they pin the
 whole path: id normalization, the upgrade-only relation ladder, the goal
@@ -65,14 +65,32 @@ def _run(*args):
 # --- add --------------------------------------------------------------------
 
 
-def test_add_enrolls_an_untouched_task_as_queued():
+def test_add_enrolls_an_untouched_task_as_touched():
     """The case no automatic capture can reach: nothing has happened to this
     task, so only an explicit verb can put it on the list."""
     _seed()
 
     result = _run("session", "task", "add", "E-500")
     assert result.exit_code == 0, result.output
-    assert _relation(500) == "queued"
+    assert _relation(500) == "touched"
+
+
+def test_add_is_an_alias_of_touch():
+    """E-2291: `session task add` emits exactly what `touch` emits — the same
+    event kind, the same payload — and nothing emits session_tasks.queued."""
+    from unittest.mock import patch
+
+    from endless import session_task_cmd
+
+    _seed()
+    calls = []
+    with patch.object(session_task_cmd.event_bridge, "emit_event",
+                      side_effect=lambda **kw: calls.append(kw) or {}):
+        for verb in (("session", "task", "add"), ("touch",)):
+            result = _run(*verb, "E-500")
+            assert result.exit_code == 0, result.output
+    assert [c["kind"] for c in calls] == ["session_tasks.touched"] * 2
+    assert calls[0]["payload"] == calls[1]["payload"]
 
 
 def test_add_accepts_several_ids_and_collapses_repeats():
@@ -81,8 +99,8 @@ def test_add_accepts_several_ids_and_collapses_repeats():
 
     result = _run("session", "task", "add", "E-500", "E-501", "E-500")
     assert result.exit_code == 0, result.output
-    assert _relation(500) == "queued"
-    assert _relation(501) == "queued"
+    assert _relation(500) == "touched"
+    assert _relation(501) == "touched"
 
 
 def test_add_promotes_a_weaker_existing_relation():
@@ -97,7 +115,7 @@ def test_add_promotes_a_weaker_existing_relation():
 
     result = _run("session", "task", "add", "E-500")
     assert result.exit_code == 0, result.output
-    assert _relation(500) == "queued"
+    assert _relation(500) == "touched"
     rows = db.query(
         "SELECT count(*) AS n FROM session_tasks "
         "WHERE session_id = ? AND task_id = 500",
@@ -107,7 +125,7 @@ def test_add_promotes_a_weaker_existing_relation():
 
 
 def test_add_leaves_the_session_claim_alone():
-    """Queuing your own claimed task is redundant, not wrong — the ladder
+    """Adding your own claimed task is redundant, not wrong — the ladder
     refuses the downgrade and the CLI reports it rather than erroring."""
     _seed()
     db.execute(
@@ -120,7 +138,7 @@ def test_add_leaves_the_session_claim_alone():
     result = _run("session", "task", "add", "E-500")
     assert result.exit_code == 0, result.output
     assert _relation(500) == "claimed"
-    assert "already claimed by this session" in result.output
+    assert "already in this session as Claimed" in result.output
 
 
 def test_add_rejects_an_unknown_task():
@@ -160,13 +178,14 @@ def _task_row(task_id):
     )[0]
 
 
-def test_touch_enrolls_a_task_as_revisited():
-    """The verb's whole job: scope entry, one relation weaker than `queued`."""
+def test_touch_enrolls_a_task_as_touched():
+    """The verb's whole job: scope entry, at relation `touched` (E-2291;
+    `revisited` before it, which now means only that the session edited it)."""
     _seed()
 
     result = _run("touch", "E-500")
     assert result.exit_code == 0, result.output
-    assert _relation(500) == "revisited"
+    assert _relation(500) == "touched"
 
 
 def test_touch_changes_nothing_about_the_task():
@@ -186,15 +205,14 @@ def test_touch_accepts_several_ids_and_collapses_repeats():
 
     result = _run("touch", "E-500", "E-501", "E-500")
     assert result.exit_code == 0, result.output
-    assert _relation(500) == "revisited"
-    assert _relation(501) == "revisited"
+    assert _relation(500) == "touched"
+    assert _relation(501) == "touched"
 
 
 def test_touch_leaves_a_stronger_relation_alone_and_says_which():
-    """`revisited` is the weakest relation anything emits, so a claim, an
-    agenda entry and a filing record all outrank it. The report has to name the
+    """Claimed and bound outrank `touched`. The report has to name the
     survivor — "already in this session" alone would leave the reader unable to
-    tell a claim from an incidental capture."""
+    tell a claim from a bind."""
     _seed()
     db.execute(
         "INSERT INTO session_tasks "
@@ -207,6 +225,23 @@ def test_touch_leaves_a_stronger_relation_alone_and_says_which():
     assert result.exit_code == 0, result.output
     assert _relation(500) == "claimed"
     assert "already in this session as Claimed" in result.output
+
+
+def test_touch_leaves_the_session_bound_task_bound():
+    """E-2291 P14: touching the task this session bound leaves it `bound` and
+    says so, without an error."""
+    _seed()
+    db.execute(
+        "INSERT INTO session_tasks "
+        "(session_id, task_id, relation_id, created_at, updated_at) "
+        "VALUES (?, 500, 6, '2026-08-21T00:00:00', '2026-08-21T00:00:00')",
+        (SESSION_ID,),
+    )
+
+    result = _run("touch", "E-500")
+    assert result.exit_code == 0, result.output
+    assert _relation(500) == "bound"
+    assert "already in this session as Bound" in result.output
 
 
 def test_touch_rejects_an_unknown_task():
@@ -235,6 +270,33 @@ def test_touch_requires_at_least_one_id():
     assert result.exit_code != 0
 
 
+@pytest.mark.parametrize("verb", [
+    ("session", "touch"), ("touch",), ("session", "task", "add"),
+])
+def test_all_three_names_record_touched(verb):
+    """E-2291 P24: `session touch` is the name; `touch` and `session task add`
+    are aliases of it, and all three record the same relation."""
+    _seed()
+
+    result = _run(*verb, "E-500")
+    assert result.exit_code == 0, result.output
+    assert _relation(500) == "touched"
+
+
+def test_session_touch_help_is_the_users_command():
+    """E-2291 P23: the help describes it as the user's command, and the two
+    aliases carry the same help."""
+    helps = [
+        CliRunner().invoke(main, [*verb, "--help"]).output
+        for verb in (("session", "touch"), ("touch",), ("session", "task", "add"))
+    ]
+    assert "A command for you, the user" in helps[0]
+    assert helps[1].split("Usage:")[1].split("\n", 1)[1] == \
+        helps[0].split("Usage:")[1].split("\n", 1)[1]
+    assert helps[2].split("Usage:")[1].split("\n", 1)[1] == \
+        helps[0].split("Usage:")[1].split("\n", 1)[1]
+
+
 def test_touch_is_reachable_at_the_top_level():
     """Top-level, not under `session` or `task` (E-2173): parking it under a
     parent would only schedule a rename as subcommands move up."""
@@ -248,7 +310,7 @@ def test_touch_is_reachable_at_the_top_level():
 def test_remove_drops_the_association():
     _seed()
     _run("session", "task", "add", "E-500")
-    assert _relation(500) == "queued"
+    assert _relation(500) == "touched"
 
     result = _run("session", "task", "remove", "E-500")
     assert result.exit_code == 0, result.output
@@ -288,6 +350,23 @@ def test_remove_refuses_the_session_claim():
     result = _run("session", "task", "remove", "E-500")
     assert result.exit_code != 0
     assert _relation(500) == "claimed"
+
+
+def test_remove_refuses_the_session_bound_task():
+    """E-2291 P13: a bound task is the session's own as a claimed one is, so
+    remove refuses it the same way and names `session hide --task`."""
+    _seed()
+    db.execute(
+        "INSERT INTO session_tasks "
+        "(session_id, task_id, relation_id, created_at, updated_at) "
+        "VALUES (?, 500, 6, '2026-08-21T00:00:00', '2026-08-21T00:00:00')",
+        (SESSION_ID,),
+    )
+
+    result = _run("session", "task", "remove", "E-500")
+    assert result.exit_code != 0
+    assert "session hide --task" in result.output
+    assert _relation(500) == "bound"
 
 
 def test_remove_of_an_untouched_task_is_a_reported_no_op():

@@ -697,7 +697,7 @@ def session_id_display(session_id: int) -> str:
     Sessions and tasks are separate id spaces that both used to render as
     `E-NNN`, so a session id sitting next to a task id in the same block was
     indistinguishable. The two-letter `ES-` prefix disambiguates. Introduced
-    here for `task show`'s Created:/Touched by: (E-1866); sweeping the rest of
+    here for `task show`'s Created:/Sessions: (E-1866); sweeping the rest of
     the session surfaces is E-1261's job.
     """
     return f"ES-{session_id}"
@@ -2801,7 +2801,7 @@ def _hint_same_session_root_cause(
         "FROM session_tasks st "
         "JOIN session_task_relations r ON r.id = st.relation_id "
         "JOIN live_tasks t ON t.id = st.task_id "
-        "WHERE st.session_id = ? AND r.slug = 'surfaced' AND st.task_id != ? "
+        "WHERE st.session_id = ? AND r.slug = 'filed' AND st.task_id != ? "
         "ORDER BY st.task_id",
         (session_id, item_id),
     )
@@ -4870,8 +4870,8 @@ def _task_claimants(item_id: int) -> list[dict]:
 
     NOT `session_tasks`. That table records INVOLVEMENT — how a task first
     entered a session's scope — so a session that merely read the task is in it
-    and a session that claimed a task it had already filed still reads
-    `surfaced`. Involvement is not ownership and cannot stand in for it.
+    and a session that bound a task reads `bound`, not `claimed`. Involvement is
+    not ownership and cannot stand in for it.
 
     Ordered to match monitor.resumeByTask (`ORDER BY last_activity DESC`), which
     is what `session goto <task> --resume` resolves through, so the session this
@@ -5267,6 +5267,14 @@ def _require_spawnable(item_id: int, verb: str, require_plan: bool = True,
             f"  A question the plan cannot settle without the user is not a reason\n"
             f"  to guess: ask it, and the task parks until it is answered:\n"
             f"      endless question ask {tid} \"<question>\""
+            # E-2291: only claim's refusal. The claimer is a session with a
+            # user beside it, who can own the task while they draft the plan;
+            # spawn and prime hand the task to a new session, which has nobody
+            # to plan with yet.
+            + (f"\n  If you and your user are working out the plan together now:\n"
+               f"      endless task bind {tid}\n"
+               f"  Claim once the plan is attached."
+               if verb == "claim" else "")
         )
     questions = _open_questions(item_id)
     if questions and allow_open_questions:
@@ -5330,14 +5338,20 @@ def _require_spawnable(item_id: int, verb: str, require_plan: bool = True,
             f"Write the framing and attach it with endless task update {tid} "
             f"--context-file <path>, or attach a plan with --plan-file <path>, "
             f"then {verb} it again — or start a session that drafts a plan and "
-            f"waits: endless task prime {tid}",
+            f"waits: endless task prime {tid}"
+            + (f" — or, if you and your user are working out the plan together "
+               f"now: endless task bind {tid}, and claim once the plan is "
+               f"attached" if verb == "claim" else ""),
             text=message,
         )
     raise agent_help.no_report(
         f"Cannot {verb} {tid}: it has no plan. {NOTHING_CHANGED}",
         f"Write the plan, attach it with endless task update {tid} "
         f"--plan-file <path>, then {verb} it again — or start a session that "
-        f"drafts it and waits: endless task prime {tid}",
+        f"drafts it and waits: endless task prime {tid}"
+        + (f" — or, if you and your user are working out the plan together "
+           f"now: endless task bind {tid}, and claim once the plan is attached"
+           if verb == "claim" else ""),
         text=message,
     )
 
@@ -5624,6 +5638,57 @@ def _echo_claim_next_step(
     _launch_claude_for_claim(item_id, project_id, worktree)
 
 
+def _resolve_bind_session(item_id: int, proj_name: str | None) -> int | None:
+    """The session `task bind` records as the task's owner (E-2291).
+
+    From inside a Claude session — or with ENDLESS_SESSION_ID naming one — this
+    is the usual resolution, `_resolve_session_id_with_prompt`.
+
+    From a shell pane it is the one live Claude session in the same tmux
+    window, read off the live sibling-pane set and nothing else. The general
+    resolver's other layers are wrong for this verb: the window's
+    @endless_session_uuid outlives the session that published it (E-1983), and
+    resolving it lazily creates or revives that row, so a user's bind could land
+    on a session that is gone while the Claude beside them never sees it — what
+    happened in E-2206. And ownership is set once and never moved, so with two
+    or more candidates it refuses instead of prompting: a wrong pick cannot be
+    undone. With none it refuses too, naming who can run it and from where.
+    """
+    if _in_claude_session() or os.environ.get("ENDLESS_SESSION_ID", "").isdigit():
+        return _resolve_session_id_with_prompt(
+            project_name=proj_name, prompt_verb="bound to",
+        )
+    tid = task_id_display(item_id)
+    eids = _list_sibling_claude_session_eids()
+    if len(eids) == 1:
+        return eids[0]
+    where = (
+        f"Run it from the Claude session that should own {tid} — ask that\n"
+        f"Claude to run `endless task bind {tid}` — or from a shell pane in\n"
+        f"the same tmux window as that one Claude session."
+    )
+    if not eids:
+        raise agent_help.no_report(
+            f"No live Claude session in this tmux window to bind {tid} to. "
+            f"Nothing was bound.",
+            f"Run endless task bind {tid} from the Claude session that should "
+            f"own it, or from a shell pane beside that one session",
+            text=(f"No live Claude session in this tmux window to bind {tid} "
+                  f"to.\n{where}"),
+        )
+    ids = ", ".join(session_id_display(e) for e in sorted(eids))
+    raise agent_help.no_report(
+        f"{len(eids)} live Claude sessions in this tmux window ({ids}); a "
+        f"bind from a shell pane needs exactly one. Nothing was bound.",
+        f"Run endless task bind {tid} from the Claude session that should own "
+        f"it, or set ENDLESS_SESSION_ID=<id> to name it",
+        text=(f"{len(eids)} live Claude sessions in this tmux window ({ids}), "
+              f"so it is not clear which should own {tid}.\n{where}\n"
+              f"Or name the session: ENDLESS_SESSION_ID=<id> endless task bind "
+              f"{tid}"),
+    )
+
+
 def bind_item(item_id: int) -> None:
     """Record this session as the owner of a task, without changing its status.
 
@@ -5642,15 +5707,22 @@ def bind_item(item_id: int) -> None:
     longer strands anybody: the session's next hook event wakes it, because it
     now holds a task. See monitor.WakeSession.)
 
-    Use it to attach a session to a task whose status should not move —
-    typically one already `assumed` / `confirmed` / `unverified`. To resume
-    WORKING such a task, reopen it and claim: `task update <id> --status
-    revisit`, then `task claim <id>`.
+    Use it in two cases (E-2291):
 
-    Target session resolution mirrors `claim_item`: env var / pane-
-    direct / single-sibling auto-pick / on-a-tty multi-sibling prompt.
-    Refuses when no session resolves — bind without a session is
-    meaningless (there is no owner to record).
+      - The step before a claim. A session and its user are working out a
+        task's plan together, so the task cannot be claimed yet (claim refuses
+        a task with no plan), but the session needs to own it now. Bind it,
+        attach the plan, then claim: the same session's claim moves the task to
+        `underway` and upgrades its `bound` row to `claimed`.
+      - A task whose status should not move — typically one already
+        `assumed` / `confirmed` / `unverified`. To resume WORKING such a task,
+        reopen it and claim: `task update <id> --status revisit`, then
+        `task claim <id>`.
+
+    Target session: see _resolve_bind_session. From inside a Claude session it
+    is that session; from a shell pane it is the one live Claude session in the
+    same tmux window. Refuses when no session resolves — bind without a session
+    is meaningless (there is no owner to record).
 
     FIRST-SET-ONLY (E-1968, per ED-1560). `sessions.task_id` is
     write-once: bind may fill a session that holds no task, but it may not move
@@ -5659,8 +5731,9 @@ def bind_item(item_id: int) -> None:
     here rather than only at the DB because E-1969's write-once trigger raises
     a SQLite abort, which is not an answer a user can act on.
 
-    Emits a `task.claimed` event (the existing event added in E-1242);
-    the Go executor performs the sessions DB write.
+    Emits a `task.bound` event (E-2291; binds before it emitted
+    `task.claimed`, which made a bind indistinguishable from a claim). The Go
+    executor performs the sessions DB write and records relation `bound`.
     """
     from endless.event_bridge import emit_event
 
@@ -5676,10 +5749,7 @@ def bind_item(item_id: int) -> None:
     current_status = row[0]["status"]
 
     _, proj_name = _resolve_project(None)
-    target_session = _resolve_session_id_with_prompt(
-        project_name=proj_name,
-        prompt_verb="bound to",
-    )
+    target_session = _resolve_bind_session(item_id, proj_name)
     if target_session is None:
         message = (
             "No Claude session available to bind this task to "
@@ -5738,7 +5808,7 @@ def bind_item(item_id: int) -> None:
         return
 
     emit_event(
-        kind="task.claimed",
+        kind="task.bound",
         project=proj_name,
         entity_type="task",
         entity_id=str(item_id),
@@ -7414,9 +7484,9 @@ def _render_detail_human(
     if children_line:
         click.echo(f"{label('Children:')} {val(children_line)}")
     # Links last: multi-line blocks sit below the single-line fields (E-1477).
-    # 'Touched by:' follows 'This task:' as its session-side peer (E-1866).
+    # 'Sessions:' follows 'This task:' as its session-side peer (E-1866).
     _echo_links_section(item_id, min_width=bullet_w, links=links)
-    _echo_touched_by_section(touches, min_width=bullet_w)
+    _echo_sessions_section(touches, min_width=bullet_w)
 
     # Multi-line sections after Description: Description first, then the full
     # bodies of any large field whose flag is set (otherwise its placeholder
@@ -8976,7 +9046,7 @@ def _flatten_relations(item_id: int) -> list[dict]:
 
 
 def _bullet_label_width(labels) -> int:
-    """Column width for a '- <Label>:' row in the 'This task:' / 'Touched by:'
+    """Column width for a '- <Label>:' row in the 'This task:' / 'Sessions:'
     blocks: the longest label plus ':' plus two trailing spaces. 0 for no labels.
     Shared so the two adjacent blocks can align to one column (E-1866)."""
     widths = [len(label) for label in labels]
@@ -9001,7 +9071,7 @@ def _echo_links_section(
     both render identically.
 
     `min_width` floors the label column so `task show` can align this block with the
-    'Touched by:' block that follows it; `links` accepts a pre-computed row set so the
+    'Sessions:' block that follows it; `links` accepts a pre-computed row set so the
     caller can measure both blocks without querying relations twice (E-1866)."""
     if links is None:
         links = _flatten_relations(item_id)
@@ -9020,8 +9090,9 @@ def _echo_links_section(
 
 # Label for a session_tasks row whose relation_id is NULL — a pre-E-1462
 # historical touch, recorded before the relation vocabulary existed. The row
-# still proves the session touched the task; only the *how* is unknown.
-_UNCLASSIFIED_TOUCH_LABEL = "Touched"
+# still proves the session touched the task; only the *how* is unknown. It read
+# "Touched" until E-2291 made `touched` the name of a real relation.
+_UNCLASSIFIED_TOUCH_LABEL = "Unclassified"
 
 # State shown for a touch whose session row is gone. session_tasks deliberately
 # carries no FK to sessions so a "session N touched task M" record outlives the
@@ -9052,13 +9123,24 @@ def _finished_session_states() -> tuple[str, ...]:
 # "who claimed this", which is what the `task spawn` guard refuses on.
 _CLAIMED_SLUG = "claimed"
 _CLAIMED_LABEL = "Claimed"
+_BOUND_SLUG = "bound"
+_BOUND_LABEL = "Bound"
+
+
+def _owner_relation(row) -> tuple[str, str]:
+    """The (slug, label) a session that owns the task displays (E-2291):
+    `bound` when its session_tasks row says so, `claimed` otherwise."""
+    if row["rel_slug"] == _BOUND_SLUG:
+        return _BOUND_SLUG, _BOUND_LABEL
+    return _CLAIMED_SLUG, _CLAIMED_LABEL
 
 
 def _session_touches(item_id: int) -> list[dict]:
     """Every session that touched this task, most-recent touch first (E-1866).
 
     One row per session, carrying the session id, how the task entered that
-    session's scope (claimed / surfaced / revisited, per ED-1497), the session's
+    session's scope (claimed / bound / touched / filed / revisited, per
+    ED-1497), the session's
     current task, and its state. Ordered by touch recency because the block
     exists for navigation — the session worth jumping to is almost always the one
     that touched the task last — which is deliberately *not* the id-ascending
@@ -9076,17 +9158,18 @@ def _session_touches(item_id: int) -> list[dict]:
         such bindings exist in this project's own database. Reading only
         session_tasks is what made "which sessions claimed this" unanswerable.
 
-    A session bound to this task renders `Claimed:` either way, overriding
-    whatever session_tasks says for the pair. `relation_id` is upgrade-only
-    (E-1696) but never revised downward or re-stamped, so a session that filed a
-    task in 2026-08 and claimed it in 2026-09 still reads `Surfaced` on the row
-    written at filing time. `sessions.task_id` is the record that cannot lie, and
-    reading the label off it is what makes this block agree with the `task spawn`
-    guard by construction — both consult the same column.
+    A session bound to this task renders as its owner either way, overriding
+    whatever session_tasks says for the pair: `Bound:` when its row says it
+    bound the task without claiming it (E-2291), `Claimed:` otherwise.
+    `sessions.task_id` is the record that cannot lie, and reading ownership off
+    it is what makes this block agree with the `task spawn` guard by
+    construction — both consult the same column. Since E-2291 every path that
+    sets it also writes the row, so the override matters only for a row a
+    pre-E-2291 binary left behind.
 
     `touch_slug` preserves the raw session_tasks relation underneath the
-    override, because the Created: line is derived from a `surfaced` touch and a
-    session that surfaced a task and then claimed it must not lose its credit for
+    override, because the Created: line is derived from a `filed` touch and a
+    session that filed a task and then claimed it must not lose its credit for
     filing it.
     """
     rows = db.query(
@@ -9129,10 +9212,11 @@ def _session_touches(item_id: int) -> list[dict]:
             "last_touch": row["last_touch"],
             # The displayed relation: ownership overrides involvement.
             "rel_slug": (
-                _CLAIMED_SLUG if row["task_id"] == item_id else row["rel_slug"]
+                _owner_relation(row)[0] if row["task_id"] == item_id
+                else row["rel_slug"]
             ),
             "rel_label": (
-                _CLAIMED_LABEL if row["task_id"] == item_id
+                _owner_relation(row)[1] if row["task_id"] == item_id
                 else (row["rel_label"] or _UNCLASSIFIED_TOUCH_LABEL)
             ),
             # The raw session_tasks relation, unoverridden — see the docstring.
@@ -9154,12 +9238,12 @@ def _session_touches(item_id: int) -> list[dict]:
 def _creating_session(touches: list[dict]) -> dict | None:
     """The touch that created the task, or None (E-1866).
 
-    A task created inside a session gets a `surfaced` session_tasks row (per
+    A task created inside a session gets a `filed` session_tasks row (per
     ED-1497 the relation is stamped at capture time; E-1696 made it upgrade-only,
     so a later claim or edit still never rewrites it downward). Absent for a task
     filed outside any session and for pre-E-1462 rows, whose relation is NULL —
     in both cases the Created: line stays as it was. The earliest touch wins if
-    more than one session ever surfaced the task (an import replayed in a second
+    more than one session ever filed the task (an import replayed in a second
     session).
 
     Reads `touch_slug`, the RAW session_tasks relation, not the displayed one:
@@ -9167,10 +9251,10 @@ def _creating_session(touches: list[dict]) -> dict | None:
     keying off that would strip a session of the credit for filing the task it
     went on to claim.
     """
-    surfaced = [t for t in touches if t["touch_slug"] == "surfaced"]
-    if not surfaced:
+    filed = [t for t in touches if t["touch_slug"] == "filed"]
+    if not filed:
         return None
-    return min(surfaced, key=lambda t: t["first_touch"] or "")
+    return min(filed, key=lambda t: t["first_touch"] or "")
 
 
 def _session_ref(touch: dict) -> str:
@@ -9202,7 +9286,7 @@ def _session_json(touch: dict) -> dict:
     }
 
 
-# E-2106: what a `Touched by:` row says when the session's Claude transcript is
+# E-2106: what a `Sessions:` row says when the session's Claude transcript is
 # no longer on disk. The row still names a real session that did real work — the
 # database row and the worktree survive — but `session goto --resume` /
 # `session resume` can no longer open it, so the loss is worth reading while
@@ -9290,21 +9374,22 @@ def _liveness_text(touch: dict, styled: bool = True) -> str:
     return click.style(text, fg=color) if color else click.style(text, dim=True)
 
 
-def _echo_touched_by_section(touches: list[dict], min_width: int = 0) -> bool:
-    """Emit the 'Touched by:' session block (E-1866) — the session-side peer of
+def _echo_sessions_section(touches: list[dict], min_width: int = 0) -> bool:
+    """Emit the 'Sessions:' block (E-1866; renamed by E-2291, when
+    `touched` became the name of one relation) — the session-side peer of
     'This task:', laid out identically so the two read as siblings: a cyan
     heading, then one '- '-bulleted row per session, '- <Relation>:  ES-NNN
     (E-NNN) [state]', plus '(transcript gone)' when that session can no longer
     be resumed because its Claude transcript has left the disk (E-2106). The relation carries how the task entered that session's
     scope, the ES-NNN id feeds `session goto` directly, and the parenthesized
     task is what the session is bound to now. A session bound to THIS task reads
-    `Claimed:` (E-1967) — see _session_touches. Emits nothing and returns False
+    `Claimed:` or `Bound:` (E-1967, E-2291) — see _session_touches. Emits nothing and returns False
     when no session ever touched the task."""
     if not touches:
         return False
     width = max(_bullet_label_width(t["rel_label"] for t in touches), min_width)
     finished_states = _finished_session_states()
-    click.echo(click.style("Touched by:", fg="cyan"))
+    click.echo(click.style("Sessions:", fg="cyan"))
     for t in touches:
         color = "green" if t["state"] in finished_states else "yellow"
         label = (t["rel_label"] + ":").ljust(width)

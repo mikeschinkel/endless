@@ -12,20 +12,16 @@ import (
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 )
 
-// Session-task membership verbs (E-1696, E-2173). `session task add`, the
-// top-level `touch`, and `session task remove` — the explicit path into and out
-// of a session's scope, alongside the otherwise-automatic session_tasks capture.
-//
-// `add` and `touch` differ only in the relation they offer the ladder, and that
-// difference is the whole of each verb's meaning: `queued` is decided work that
-// belongs on the session's agenda, `revisited` is a task the session merely has
-// in scope. Both share enrollSessionTasks.
+// Session-task membership verbs (E-1696, E-2173, E-2291). The top-level
+// `touch`, its alias `session task add`, and `session task remove` — the
+// explicit path into and out of a session's scope, alongside the
+// otherwise-automatic session_tasks capture.
 //
 // The two are NOT symmetric with `session hide --task` / `session unhide --task`
 // (E-1914), and the asymmetry is the point:
 //
 //   - hide   — display suppression. The session_tasks row survives, so
-//     `task show`'s "Touched by:" still reports the touch that really happened.
+//     `task show`'s "Sessions:" still reports the touch that really happened.
 //     For a capture that is real but noisy.
 //   - remove — the association itself. DELETEs the session_tasks row (and its
 //     relation with it), and clears any hide alongside. For a capture that was
@@ -35,36 +31,10 @@ import (
 // `process` field carries either the "__session_id=N" sentinel or a raw tmux
 // pane id, and membershipRequest turns it into a sessions.id.
 
-// execSessionTasksQueued handles KindSessionTasksQueued: promote each named task
-// to relation `queued` for the emitting session, creating the session_tasks row
-// if the session has not touched the task before.
-//
-// The write goes through upsertSessionTask rather than a direct UPDATE so the
-// upgrade-only ladder governs it exactly as it governs an automatic capture. Two
-// behaviors fall out of that rather than being special-cased here:
-//
-//   - Queuing a task already captured as `referenced`, `revisited` or `surfaced`
-//     upgrades it — `queued` outranks all three.
-//   - Queuing the session's OWN claimed task leaves it `claimed`; the ladder
-//     refuses the downgrade. That is reported as a no-op rather than an error,
-//     because asking to work on what you already claimed is redundant, not wrong.
-//
-// `claimed` is the only relation that outranks `queued`, so enrollSessionTasks'
-// generic "left alone" set is exactly the already-claimed set here, and
-// renderQueued can name it as such.
-func execSessionTasksQueued(db dbQuerier, evt *Event) (*ExecuteResult, error) {
-	queued, alreadyClaimed, _, err := enrollSessionTasks(
-		db, evt, "session_tasks.queued", sessiontaskrelation.RelationQueued,
-	)
-	if err != nil {
-		return nil, err
-	}
-	return &ExecuteResult{Markdown: renderQueued(queued, alreadyClaimed)}, nil
-}
-
-// execSessionTasksTouched handles KindSessionTasksTouched: put each named task
-// in the emitting session's scope at relation `revisited` (E-2173), changing
-// nothing about the task itself.
+// execSessionTasksTouched handles KindSessionTasksTouched — `touch` and its
+// alias `session task add` (E-2291): put each named task in the emitting
+// session's scope at relation `touched`, changing nothing about the task
+// itself.
 //
 // This is the verb whose WHOLE job is scope entry. Before it existed the only
 // way onto `session status` was to edit the task — in practice rewriting
@@ -72,14 +42,15 @@ func execSessionTasksQueued(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 // the ledger to buy a display effect and notified every other session holding
 // the task. Touching writes one session_tasks row and nothing else.
 //
-// `revisited` is the weakest relation any emitter produces, so the ladder
-// leaves a stronger stored relation alone: touching a task this session
-// claimed, queued or filed reports the relation it already has rather than
-// demoting it. Touching a task at `referenced` (weaker) or `revisited` (equal)
-// upserts, which refreshes updated_at — the fact the verb is asked to record.
+// The write goes through upsertSessionTask, so the upgrade-only ladder governs
+// it exactly as it governs an automatic capture. Touching a task captured as
+// `filed`, `revisited` or `referenced` upgrades it; touching the session's own
+// claimed or bound task leaves it as it is, reported rather than raised,
+// because asking to have what you already own is redundant, not wrong.
+// Touching a task already `touched` upserts, which refreshes updated_at.
 func execSessionTasksTouched(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	touched, unchanged, prior, err := enrollSessionTasks(
-		db, evt, "session_tasks.touched", sessiontaskrelation.RelationRevisited,
+		db, evt, string(evt.Kind), sessiontaskrelation.RelationTouched,
 	)
 	if err != nil {
 		return nil, err
@@ -87,8 +58,7 @@ func execSessionTasksTouched(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	return &ExecuteResult{Markdown: renderTouched(touched, unchanged, prior)}, nil
 }
 
-// enrollSessionTasks is the shared body of the two scope-entry verbs: resolve
-// the request, refuse unknown ids, then offer `rel` to the ladder once per task.
+// enrollSessionTasks is the body of the scope-entry verb: resolve the request, refuse unknown ids, then offer `rel` to the ladder once per task.
 //
 // It returns the tasks the upsert ran for, the tasks whose stored relation
 // already outranked `rel` (so the ladder would have refused the downgrade and
@@ -137,9 +107,10 @@ func enrollSessionTasks(
 // execSessionTasksRemoved handles KindSessionTasksRemoved: drop each named
 // task's session_tasks row for the emitting session.
 //
-// Removing the session's own CLAIMED task is refused outright. That row is not
-// a false positive by construction — the session claimed that task — and the
-// next task event would recreate it anyway, so accepting the request would be a
+// Removing the session's own CLAIMED or BOUND task (an anchor relation) is
+// refused outright. That row is not a false positive by construction — the
+// session owns that task, and sessions.task_id stays set either way (E-2291) —
+// and the next task event would recreate it anyway, so accepting the request would be a
 // lie about what happened. Refusing the whole call (rather than skipping the id)
 // keeps `session task remove E-1 E-2` from half-succeeding. There is no escape
 // hatch and none to offer: ED-1560 makes sessions.task_id write-once and E-1968
@@ -163,14 +134,14 @@ func execSessionTasksRemoved(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		return nil, err
 	}
 
-	// Reject the whole call before mutating anything if any id is claimed.
+	// Reject the whole call before mutating anything if any id is owned.
 	var claimed []string
 	for _, taskID := range taskIDs {
 		rel, err := sessionTaskRelationOf(db, sessionID, taskID)
 		if err != nil {
 			return nil, err
 		}
-		if rel == sessiontaskrelation.RelationClaimed {
+		if rel.IsAnchor() {
 			claimed = append(claimed, fmt.Sprintf("E-%d", taskID))
 		}
 	}
@@ -181,12 +152,12 @@ func execSessionTasksRemoved(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		// user.
 		return nil, refusal.NoReport(
 			fmt.Sprintf(
-				"events: session_tasks.removed refuses this session's claimed task(s): %s "+
-					"(a claim cannot be dropped; `session hide --task` suppresses it "+
+				"events: session_tasks.removed refuses this session's own claimed or bound task(s): %s "+
+					"(a claim or bind cannot be dropped; `session hide --task` suppresses it "+
 					"from the listing)",
 				strings.Join(claimed, ", "),
 			),
-			"Drop the claimed id from the request, or use `endless session hide --task` instead, and retry")
+			"Drop the claimed or bound id from the request, or use `endless session hide --task` instead, and retry")
 	}
 
 	var removed, absent []int64
@@ -312,23 +283,11 @@ func sessionTaskRelationOf(db dbQuerier, sessionID, taskID int64) (sessiontaskre
 	return sessiontaskrelation.Relation(relID.Int64), nil
 }
 
-// renderQueued formats the `session task add` result for chat.
-func renderQueued(queued, alreadyClaimed []int64) string {
-	var b strings.Builder
-	if len(queued) > 0 {
-		fmt.Fprintf(&b, "Queued %s for this session.\n", taskList(queued))
-	}
-	if len(alreadyClaimed) > 0 {
-		fmt.Fprintf(&b, "%s already claimed by this session — left as is.\n", taskList(alreadyClaimed))
-	}
-	return b.String()
-}
-
 // renderTouched formats the `touch` result for chat.
 //
-// Unlike queued, THREE relations outrank `revisited`, so "left as is" has to
-// name which one a task already holds — "already in this session" alone would
-// leave the reader unable to tell a claim from an incidental capture. One line
+// Two relations outrank `touched` — claimed and bound — so "left as is" names
+// which one a task already holds: "already in this session" alone would leave
+// the reader unable to tell a claim from a bind. One line
 // per left-alone task rather than a grouped list: the set is one or two ids in
 // practice, and grouping would cost more to read than it saves.
 func renderTouched(

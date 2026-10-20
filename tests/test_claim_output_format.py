@@ -457,7 +457,7 @@ def test_bind_names_its_session_as_ES_N_and_claims_no_more_than_it_does(
         (proj,),
     )
     monkeypatch.setattr(
-        task_cmd, "_resolve_session_id_with_prompt", lambda **kw: 91,
+        task_cmd, "_resolve_bind_session", lambda *a, **kw: 91,
     )
     task_cmd.bind_item(tid)
     out = capsys.readouterr().out

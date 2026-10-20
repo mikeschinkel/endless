@@ -507,9 +507,10 @@ func scanSessionStatusRows(rows *sql.Rows) ([]SessionStatusRow, error) {
 	return out, nil
 }
 
-// SessionStatusRowsForSession returns the surfaced/revisited task rows recorded
-// in session_tasks for session `sessionID` — the tasks this session filed
-// (relation surfaced=2) or touched-but-did-not-claim (revisited=3). It is the
+// SessionStatusRowsForSession returns the non-anchor task rows recorded in
+// session_tasks for session `sessionID` — the tasks this session filed
+// (relation filed=2), edited without claiming (revisited=3) or touched
+// (touched=5). It is the
 // no-goal companion to SessionStatusRows: when a session has no claimed task
 // (task_id NULL) the focal-anchored projection surfaces nothing, so
 // `session status` would hide the session's own work entirely (E-1802). This
@@ -517,9 +518,10 @@ func scanSessionStatusRows(rows *sql.Rows) ([]SessionStatusRow, error) {
 // with the same decoration/count columns the focal view uses.
 //
 // The classification is authoritative and set-once by the capture executors
-// (E-1462); this only READS relation_id, never reclassifies. The goal relation
-// (1) is intentionally excluded here: a session with a goal takes the
-// focal-anchored path, so the goal row is surfaced there, not here.
+// (E-1462); this only READS relation_id, never reclassifies. The anchor
+// relations (claimed=1, bound=6) are intentionally excluded here: a session
+// that owns a task takes the focal-anchored path, so that row is shown there,
+// not here.
 //
 // is_focal/is_parent/is_from are always 0 in this view — there is no focal task
 // to anchor those decorations to. in_flight, landed, blocked_by_n, and blocks_n
@@ -544,12 +546,12 @@ func SessionStatusRowsForSession(sessionID int64, includeAll bool) ([]SessionSta
 		allFlag = 1
 	}
 
-	// Every relation EXCEPT claimed (1). It is excluded because a session that
-	// claimed a task resolves via SessionStatusRows, so a claimed row reaching
-	// here would mean the anchor already took the other path. queued (5) and
-	// referenced (4) are included on their merits: `session task add` promotes
-	// work the session has decided on but not touched, and that is precisely the
-	// case this unclaimed view exists to show. The set is built from the enum
+	// Every relation EXCEPT the anchors (claimed 1, bound 6). They are excluded
+	// because a session that owns a task resolves via SessionStatusRows, so an
+	// anchor row reaching here would mean the anchor already took the other
+	// path. touched (5) and referenced (4) are included on their merits: `touch`
+	// puts in scope work the session has decided on but not edited, and that is
+	// precisely the case this unclaimed view exists to show. The set is built from the enum
 	// rather than written as a literal so adding a relation cannot silently omit
 	// it here (E-1696).
 	q := `
@@ -557,7 +559,7 @@ WITH base AS (
   SELECT t.id, t.project_id, t.title, t.status, t.phase, t.type_id
     FROM session_tasks st JOIN live_tasks t ON t.id = st.task_id
    WHERE st.session_id = ?
-     AND st.relation_id IN (` + nonClaimedRelationIDs + `)
+     AND st.relation_id IN (` + nonAnchorRelationIDs + `)
 ),
 enr AS (
   SELECT b.id, b.project_id, b.title, b.status, b.phase,

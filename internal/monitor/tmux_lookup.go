@@ -327,11 +327,11 @@ func paneIsRunningShell(tmuxPane string) (isShell, known bool) {
 
 // ResolveSessionStatusSession returns the emitting session's integer id for the
 // given tmux pane, used by `session status` when NO goal is claimed so it can
-// list the session's own surfaced/revisited rows (E-1802). Resolution mirrors
+// list the session's own filed/revisited/touched rows (E-1802). Resolution mirrors
 // the focal path (GetTaskForPane): the pane's own live session first, then
 // any live session in the same tmux WINDOW (most-recent last_activity). Unlike
 // the focal path it does NOT require task_id — an unclaimed session still
-// has surfaced/revisited work to show. Returns 0 (no error) when not in tmux
+// has filed/revisited/touched work to show. Returns 0 (no error) when not in tmux
 // (pane == "") or no live session is found.
 func ResolveSessionStatusSession(pane string) (int64, error) {
 	if pane == "" {

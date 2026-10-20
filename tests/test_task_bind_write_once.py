@@ -46,7 +46,7 @@ def test_bind_fills_a_session_with_no_task(project_id):
     _insert_task(pk=2100, project_id=project_id)
     _insert_session(pk=80, session_id="s-80", project_id=project_id)
 
-    with patch("endless.task_cmd._resolve_session_id_with_prompt",
+    with patch("endless.task_cmd._resolve_bind_session",
                return_value=80):
         bind_item(2100)
 
@@ -63,7 +63,7 @@ def test_bind_refuses_to_repoint_a_bound_session(project_id, capsys):
     _insert_session(pk=81, session_id="s-81", project_id=project_id,
                     task_id=2200)
 
-    with patch("endless.task_cmd._resolve_session_id_with_prompt",
+    with patch("endless.task_cmd._resolve_bind_session",
                return_value=81):
         with pytest.raises(click.ClickException) as exc:
             bind_item(2201)
@@ -86,7 +86,7 @@ def test_rebinding_the_same_task_is_a_no_op(project_id, capsys):
     _insert_session(pk=82, session_id="s-82", project_id=project_id,
                     task_id=2300)
 
-    with patch("endless.task_cmd._resolve_session_id_with_prompt",
+    with patch("endless.task_cmd._resolve_bind_session",
                return_value=82), \
          patch("endless.event_bridge.emit_event") as emit:
         bind_item(2300)

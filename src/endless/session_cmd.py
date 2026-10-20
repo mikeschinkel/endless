@@ -84,7 +84,7 @@ def _format_tool_content(content: str, tool_name: str | None = None, mode: str =
 
 def _resolve_session(value: str) -> dict:
     """Resolve a session by ES-NNN / integer ID, short UUID prefix, or full UUID."""
-    # `ES-NNN` is the form `task show` prints under Created:/Touched by: and the
+    # `ES-NNN` is the form `task show` prints under Created:/Sessions: and the
     # form the guide tells sessions to prefer, so accept it wherever a session
     # reference is taken. The prefix is stripped, not looked up separately — it
     # decorates the same integer id.
@@ -3267,7 +3267,7 @@ def _resolve_goto_target(ref: str, live: list[dict]) -> tuple[str, str]:
     # `ES-NNNN` (E-1261) names a session unambiguously, so it goes straight to
     # the session resolver and never hits the bare-integer ambiguity check below
     # — stating the id space is the whole point of the prefix. It is what
-    # `task show`'s Created:/Touched by: block prints (E-1866). Resolution
+    # `task show`'s Created:/Sessions: block prints (E-1866). Resolution
     # continues on the bare digits so the not-live/--resume path downstream sees
     # the same ref shape a bare-integer goto produces.
     if raw.upper().startswith("ES-") and raw[3:].isdigit():

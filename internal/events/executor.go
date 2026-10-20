@@ -313,6 +313,8 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 		return execTaskReleased(db, evt)
 	case KindTaskClaimed:
 		return execTaskClaimed(db, evt)
+	case KindTaskBound:
+		return execTaskBound(db, evt)
 	case KindTaskLanded:
 		return execTaskLanded(db, evt)
 	case KindTaskQuestionsAsked:
@@ -331,8 +333,6 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 		return execTaskDepDeleted(db, evt)
 	case KindSessionStatusRecorded:
 		return execSessionStatusRecorded(db, evt)
-	case KindSessionTasksQueued:
-		return execSessionTasksQueued(db, evt)
 	case KindSessionTasksTouched:
 		return execSessionTasksTouched(db, evt)
 	case KindSessionTasksRemoved:
@@ -522,8 +522,8 @@ func execTaskCreated(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 	}
 
 	if shouldRecordSessionTouch(evt) {
-		// Created in-session → surfaced.
-		if err := upsertSessionTask(db, evt.Actor.SessionID, taskID, sessiontaskrelation.RelationSurfaced); err != nil {
+		// Created in-session → filed.
+		if err := upsertSessionTask(db, evt.Actor.SessionID, taskID, sessiontaskrelation.RelationFiled); err != nil {
 			return nil, fmt.Errorf("events: %w", err)
 		}
 	}
@@ -566,8 +566,8 @@ func execTaskImported(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRe
 	}
 
 	if shouldRecordSessionTouch(evt) {
-		// Imported into the project in-session → surfaced.
-		if err := upsertSessionTask(db, evt.Actor.SessionID, taskID, sessiontaskrelation.RelationSurfaced); err != nil {
+		// Imported into the project in-session → filed.
+		if err := upsertSessionTask(db, evt.Actor.SessionID, taskID, sessiontaskrelation.RelationFiled); err != nil {
 			return nil, fmt.Errorf("events: %w", err)
 		}
 	}
@@ -1026,9 +1026,29 @@ func execTaskDeleted(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteRes
 }
 
 func execTaskClaimed(db dbQuerier, evt *Event) (*ExecuteResult, error) {
+	return bindSessionTask(db, evt, sessiontaskrelation.RelationClaimed,
+		monitor.SessionLogClaimEvent, "events.execTaskClaimed")
+}
+
+// execTaskBound handles task.bound (E-2291): `task bind` records the session as
+// the task's owner exactly as a claim does — the same sessions UPDATE — but
+// records `bound` in session_tasks, so a bind is never read back as a claim. A
+// later claim by the same session upgrades the row through the ladder.
+func execTaskBound(db dbQuerier, evt *Event) (*ExecuteResult, error) {
+	return bindSessionTask(db, evt, sessiontaskrelation.RelationBound,
+		monitor.SessionLogBindEvent, "events.execTaskBound")
+}
+
+// bindSessionTask is the shared body of task.claimed and task.bound: point the
+// session's task_id at the event's task, then record rel in session_tasks. The
+// two kinds differ only in rel and in how the diagnostic log names them.
+func bindSessionTask(
+	db dbQuerier, evt *Event, rel sessiontaskrelation.Relation,
+	reason monitor.SessionLogReason, caller string,
+) (*ExecuteResult, error) {
 	var p TaskClaimedPayload
 	if err := json.Unmarshal(evt.Payload, &p); err != nil {
-		return nil, fmt.Errorf("events: unmarshal task.claimed payload: %w", err)
+		return nil, fmt.Errorf("events: unmarshal %s payload: %w", evt.Kind, err)
 	}
 	taskID := evt.Entity.ID
 	// Also resolve and store epic_id: the nearest type='epic' ancestor of
@@ -1071,12 +1091,11 @@ func execTaskClaimed(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		taskID, sessionstate.Ended, sessionstate.Idle, taskID, p.SessionID,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("events: claim task: %w", err)
+		return nil, fmt.Errorf("events: %s: %w", evt.Kind, err)
 	}
-	logSessionClaim(res, snap, taskID)
+	logSessionClaim(res, snap, taskID, reason, caller)
 	if shouldRecordSessionTouch(evt) {
-		// Claimed → the session's claimed task.
-		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID), sessiontaskrelation.RelationClaimed); err != nil {
+		if err := upsertSessionTask(db, evt.Actor.SessionID, mustParseInt64(evt.Entity.ID), rel); err != nil {
 			return nil, fmt.Errorf("events: %w", err)
 		}
 	}
@@ -1116,7 +1135,7 @@ func execTaskLanded(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	if shouldRecordSessionTouch(evt) {
 		// Landing is a touch; `claimed` is set only by the claim event, so a land
 		// that did not claim in-session counts as a revisit (set-once leaves a
-		// prior claimed/surfaced classification intact).
+		// prior claimed/filed classification intact).
 		if err := upsertSessionTask(db, evt.Actor.SessionID, taskID, sessiontaskrelation.RelationRevisited); err != nil {
 			return nil, fmt.Errorf("events: %w", err)
 		}
@@ -1170,7 +1189,10 @@ func execTaskReleased(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 // (E-1857). Skipped when the UPDATE matched no session row. new_state mirrors the
 // SQL's revive CASE: an 'ended' row becomes 'idle', any other state is left
 // as-is.
-func logSessionClaim(res sql.Result, snap monitor.SessionSnapshot, taskID string) {
+func logSessionClaim(
+	res sql.Result, snap monitor.SessionSnapshot, taskID string,
+	reason monitor.SessionLogReason, caller string,
+) {
 	if n, err := res.RowsAffected(); err != nil || n == 0 {
 		return
 	}
@@ -1185,8 +1207,8 @@ func logSessionClaim(res sql.Result, snap monitor.SessionSnapshot, taskID string
 		NewState:    newState,
 		OldTaskID:   snap.TaskID,
 		NewTaskID:   &newTaskID,
-		Reason:      monitor.SessionLogClaimEvent,
-		Caller:      "events.execTaskClaimed",
+		Reason:      reason,
+		Caller:      caller,
 	})
 }
 
@@ -1276,7 +1298,7 @@ func execTaskDepDeleted(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 
 // recordDepTouch enrolls both relation endpoints in session_tasks as
 // 'revisited' when the actor carries a session. session_tasks is set-once per
-// relation strength, so a task already enrolled as claimed/surfaced keeps its
+// relation strength, so a task already enrolled as claimed/filed keeps its
 // stronger classification (upsertSessionTask handles that).
 func recordDepTouch(db dbQuerier, evt *Event, sourceID, targetID int64) error {
 	if !shouldRecordSessionTouch(evt) {

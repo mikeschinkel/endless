@@ -161,6 +161,8 @@ type TaskReleasedPayload struct {
 	SessionID int64 `json:"session_id"`
 }
 
+// TaskClaimedPayload is task.claimed's payload, and task.bound's (E-2291): the
+// two differ in what they record, not in what they carry.
 type TaskClaimedPayload struct {
 	SessionID int64 `json:"session_id"`
 }
@@ -461,8 +463,8 @@ type SessionStatusRecordedPayload struct {
 }
 
 // SessionTaskMembershipPayload carries the task list for the two session-task
-// membership verbs (E-1696): `session_tasks.queued` (`session task add`) and
-// `session_tasks.removed` (`session task remove`). Process is the session
+// membership verbs (E-1696): `session_tasks.touched` (`touch` / `session task
+// add`) and `session_tasks.removed` (`session task remove`). Process is the session
 // identifier — the "__session_id=N" sentinel set by the Python command, or a raw
 // tmux pane id — resolved exactly as session_status.recorded's is. TaskIDs are
 // display form ("E-100"); the executors strip the prefix.

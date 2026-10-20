@@ -182,7 +182,7 @@ func taskClaimedEvent(t *testing.T, taskID int64, actor Actor) *Event {
 
 // TestSessionTasks_RelationClassification verifies that the relation_id column
 // is set from the triggering event kind at capture time (E-1462): task.created
-// → surfaced, task.claimed → claimed, an incidental task.fields_updated → revisited.
+// → filed, task.claimed → claimed, an incidental task.fields_updated → revisited.
 func TestSessionTasks_RelationClassification(t *testing.T) {
 	db := newSessionTasksTestDB(t)
 	actor := Actor{Kind: ActorSession, ID: "s1", SessionID: "42"}
@@ -190,8 +190,8 @@ func TestSessionTasks_RelationClassification(t *testing.T) {
 	if _, err := dispatch(db, taskCreatedEvent(t, 100, actor), nil); err != nil {
 		t.Fatalf("dispatch create: %v", err)
 	}
-	if got := sessionTaskRelation(t, db, 42, 100); got != "surfaced" {
-		t.Errorf("created task: relation = %q, want surfaced", got)
+	if got := sessionTaskRelation(t, db, 42, 100); got != "filed" {
+		t.Errorf("created task: relation = %q, want filed", got)
 	}
 
 	if _, err := dispatch(db, taskClaimedEvent(t, 101, actor), nil); err != nil {
@@ -211,8 +211,8 @@ func TestSessionTasks_RelationClassification(t *testing.T) {
 
 // TestSessionTasks_RelationNeverDowngrades is the half of E-1462's set-once rule
 // that E-1696's upgrade-only ladder preserves: a weaker later capture must not
-// weaken a stronger stored relation. A task surfaced (created) in-session that is
-// later edited stays surfaced; it does not downgrade to revisited.
+// weaken a stronger stored relation. A task filed (created) in-session that is
+// later edited stays filed; it does not downgrade to revisited.
 func TestSessionTasks_RelationNeverDowngrades(t *testing.T) {
 	db := newSessionTasksTestDB(t)
 	actor := Actor{Kind: ActorSession, ID: "s1", SessionID: "42"}
@@ -223,8 +223,8 @@ func TestSessionTasks_RelationNeverDowngrades(t *testing.T) {
 	if _, err := dispatch(db, taskFieldsUpdatedEvent(t, 100, actor), nil); err != nil {
 		t.Fatalf("dispatch update: %v", err)
 	}
-	if got := sessionTaskRelation(t, db, 42, 100); got != "surfaced" {
-		t.Errorf("downgraded: relation = %q after later edit, want surfaced", got)
+	if got := sessionTaskRelation(t, db, 42, 100); got != "filed" {
+		t.Errorf("downgraded: relation = %q after later edit, want filed", got)
 	}
 }
 
@@ -234,9 +234,9 @@ func TestSessionTasks_RelationNeverDowngrades(t *testing.T) {
 // The load-bearing case is referenced→claimed. `endless guide`'s happy path is
 // `task show <id>` THEN `task claim <id>`, so under set-once the read gate would
 // pin every session's own claimed task at `referenced` forever — the read arrives
-// first and the claim could never correct it. surfaced→claimed is the same defect
+// first and the claim could never correct it. filed→claimed is the same defect
 // set-once already shipped with: a task filed and then claimed in one session
-// read `surfaced`, not `claimed`.
+// read `filed`, not `claimed`.
 //
 // upsertSessionTask is called directly for the `referenced` rows because no
 // emitter produces that relation yet (the read gate ships with the machine-user
@@ -270,7 +270,7 @@ func TestSessionTasks_RelationUpgrades(t *testing.T) {
 		t.Errorf("read-then-edit: relation = %q, want revisited", got)
 	}
 
-	// surfaced → claimed (file it, then claim it).
+	// filed → claimed (file it, then claim it).
 	if _, err := dispatch(db, taskCreatedEvent(t, 102, actor), nil); err != nil {
 		t.Fatalf("dispatch create: %v", err)
 	}
@@ -304,7 +304,7 @@ func TestSessionTasks_RelationEqualCaptureIsNoOp(t *testing.T) {
 // TestSessionTasks_RelationFillsNullHistoricalRow covers the pre-E-1462 rows the
 // schema comment promises to heal: relation_id NULL ranks below every real
 // relation, so the next capture — even the weakest one — fills it in rather than
-// leaving it NULL forever. relationRankCase's ELSE arm is what makes this work,
+// leaving it NULL forever. sessiontaskrelation.RankCaseSQL's ELSE arm is what makes this work,
 // and a CASE that mishandled NULL would silently strand these rows.
 func TestSessionTasks_RelationFillsNullHistoricalRow(t *testing.T) {
 	db := newSessionTasksTestDB(t)

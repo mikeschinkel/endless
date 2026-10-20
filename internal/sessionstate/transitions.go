@@ -179,7 +179,7 @@ var transitions = []Transition{
 		// preconditions, not something this write gets to presume.
 		From:    Ended,
 		To:      Idle,
-		Trigger: "any hook event → monitor.TouchSession revive; `task.claimed` → events.execTaskClaimed revive",
+		Trigger: "any hook event → monitor.TouchSession revive; `task.claimed` / `task.bound` → events.bindSessionTask revive",
 	},
 }
 

@@ -254,7 +254,9 @@ func TestValidKinds_Count(t *testing.T) {
 	// + 1 (E-2173 session_tasks.touched)
 	// + 2 (E-2176 task.questions_asked, task_question.resolved)
 	// + 2 (E-2293 session_tasks.{hidden,unhidden})
-	// + 3 (E-2280 task.plan_items_changed, task.plan_baselined, task.reconciled) = 53.
+	// + 3 (E-2280 task.plan_items_changed, task.plan_baselined, task.reconciled)
+	// + 1 (E-2291 task.bound)
+	// - 1 (E-2291 session_tasks.queued, moved to RetiredKinds) = 53.
 	want := 53
 	got := len(events.ValidKinds)
 	if got != want {
@@ -271,6 +273,7 @@ func TestRetiredKinds(t *testing.T) {
 		events.KindTaskBulkCleared,
 		events.KindSessionTasksOrdered,
 		events.KindProjectNextRevised,
+		events.KindSessionTasksQueued,
 	}
 	if len(events.RetiredKinds) != len(want) {
 		t.Errorf("RetiredKinds has %d entries, want %d", len(events.RetiredKinds), len(want))
@@ -318,6 +321,7 @@ func TestValidate_RetiredKindsPassAndUndeclaredDoNot(t *testing.T) {
 		events.KindTaskBulkCleared:     events.EntityTask,
 		events.KindSessionTasksOrdered: events.EntitySessionTasks,
 		events.KindProjectNextRevised:  events.EntityProjectNext,
+		events.KindSessionTasksQueued:  events.EntitySessionTasks,
 	} {
 		evt := base
 		evt.Kind = kind

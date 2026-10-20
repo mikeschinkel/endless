@@ -184,7 +184,11 @@ const (
 	KindTaskDeleted       Kind = "task.deleted"
 	KindTaskReleased      Kind = "task.released"
 	KindTaskClaimed       Kind = "task.claimed"
-	KindTaskLanded        Kind = "task.landed"
+	// KindTaskBound is `task bind` (E-2291): the session owns the task without
+	// having claimed it. Its own kind so the ledger and session_tasks can tell a
+	// bind from a claim. Binds emitted before it rode task.claimed and stay so.
+	KindTaskBound  Kind = "task.bound"
+	KindTaskLanded Kind = "task.landed"
 )
 
 // Task question event kinds (E-2176).
@@ -274,28 +278,25 @@ const (
 	KindSessionStatusRecorded Kind = "session_status.recorded"
 )
 
-// Session task-membership event kinds (E-1696, E-2173). The verbs that add a
+// Session task-membership event kinds (E-1696, E-2173, E-2291). The verbs that add a
 // task to, and drop a task from, the emitting session's scope — the correction
 // path for the otherwise-automatic session_tasks capture.
 //
-//   - queued:  `session task add` promotes tasks to relation `queued` (decided
-//     session work). Goes through upsertSessionTask, so it obeys the same
-//     upgrade-only ladder as every automatic capture and cannot demote a goal.
-//   - touched: `touch` enrolls tasks at relation `revisited` (E-2173) — scope
-//     entry with no claim on the session's agenda and no edit to the task.
-//     Same ladder, same payload; only the relation differs from queued.
+//   - touched: `touch`, and its alias `session task add`, enroll tasks at
+//     relation `touched` (E-2173, E-2291) — scope entry with no edit to the
+//     task. Goes through upsertSessionTask, so it obeys the same upgrade-only
+//     ladder as every automatic capture and cannot demote a claim or a bind.
 //   - removed: `session task remove` DELETES the session_tasks row outright.
 //     Distinct from `session hide --task` (E-1914), which suppresses the row
 //     from one session's listing while keeping the association — hide is for a
 //     capture that is real but noisy, remove is for one that was simply wrong.
 //
-// All three are session-scoped live state, not replayed by rebuild-db, and all
+// All of these are session-scoped live state, not replayed by rebuild-db, and all
 // are deliberate low-volume acts — so they ride the committed ledger on
 // E-1683's `session_tasks.ordered` precedent rather than waiting on the
 // machine-user ledger split (E-1673). The high-volume automatic read capture is
 // what needs that split, and it is not these.
 const (
-	KindSessionTasksQueued  Kind = "session_tasks.queued"
 	KindSessionTasksTouched Kind = "session_tasks.touched"
 	KindSessionTasksRemoved Kind = "session_tasks.removed"
 	// Session task visibility (E-2293): `session hide --task` / `session
@@ -356,6 +357,11 @@ const (
 	KindTaskBulkCleared     Kind = "task.bulk_cleared"
 	KindSessionTasksOrdered Kind = "session_tasks.ordered"
 	KindProjectNextRevised  Kind = "project_next.revised"
+	// KindSessionTasksQueued was `session task add` (E-1696). E-2291 made that
+	// command an alias of `touch`, which emits session_tasks.touched, and the
+	// relation it wrote (id 5) is now `touched`. Retired rather than deleted for
+	// the same reason as the three above: an older ledger may hold one.
+	KindSessionTasksQueued Kind = "session_tasks.queued"
 )
 
 // RetiredKinds is the closed set of kinds a historical ledger may hold and no
@@ -385,6 +391,7 @@ var RetiredKinds = map[Kind]bool{
 	KindTaskBulkCleared:     true,
 	KindSessionTasksOrdered: true,
 	KindProjectNextRevised:  true,
+	KindSessionTasksQueued:  true,
 }
 
 // KnownKind reports whether a kind may appear in a well-formed event: a live
@@ -404,6 +411,7 @@ var ValidKinds = map[Kind]bool{
 	KindTaskDeleted:       true,
 	KindTaskReleased:      true,
 	KindTaskClaimed:       true,
+	KindTaskBound:         true,
 	KindTaskLanded:        true,
 	// Task questions (E-2176)
 	KindTaskQuestionsAsked:   true,
@@ -443,7 +451,6 @@ var ValidKinds = map[Kind]bool{
 	// Session status (E-1312)
 	KindSessionStatusRecorded: true,
 	// Session task membership (E-1696, E-2173)
-	KindSessionTasksQueued:  true,
 	KindSessionTasksTouched: true,
 	KindSessionTasksRemoved: true,
 	// Session task visibility (E-2293)

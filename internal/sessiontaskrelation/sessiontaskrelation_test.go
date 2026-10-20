@@ -13,10 +13,11 @@ import (
 func TestParse_AcceptsKnownSlugs(t *testing.T) {
 	cases := map[string]sessiontaskrelation.Relation{
 		"claimed":    sessiontaskrelation.RelationClaimed,
-		"surfaced":   sessiontaskrelation.RelationSurfaced,
+		"filed":      sessiontaskrelation.RelationFiled,
 		"revisited":  sessiontaskrelation.RelationRevisited,
 		"referenced": sessiontaskrelation.RelationReferenced,
-		"queued":     sessiontaskrelation.RelationQueued,
+		"touched":    sessiontaskrelation.RelationTouched,
+		"bound":      sessiontaskrelation.RelationBound,
 	}
 	for slug, want := range cases {
 		got, err := sessiontaskrelation.Parse(slug)
@@ -31,7 +32,9 @@ func TestParse_AcceptsKnownSlugs(t *testing.T) {
 }
 
 func TestParse_RejectsUnknown(t *testing.T) {
-	for _, slug := range []string{"", "goal", "Claimed", "CLAIMED", "Referenced", "QUEUED", "read"} {
+	// surfaced and queued are the pre-E-2291 slugs of ids 2 and 5: a rename
+	// retires the old slug rather than aliasing it.
+	for _, slug := range []string{"", "goal", "Claimed", "CLAIMED", "Referenced", "QUEUED", "read", "surfaced", "queued"} {
 		_, err := sessiontaskrelation.Parse(slug)
 		if err == nil {
 			t.Errorf("Parse(%q) accepted invalid value", slug)
@@ -58,8 +61,8 @@ func TestRelation_StringRoundTrip(t *testing.T) {
 }
 
 func TestAll_HasExpectedCount(t *testing.T) {
-	if all := sessiontaskrelation.All(); len(all) != 5 {
-		t.Errorf("All() returned %d, want 5", len(all))
+	if all := sessiontaskrelation.All(); len(all) != 6 {
+		t.Errorf("All() returned %d, want 6", len(all))
 	}
 }
 
@@ -79,8 +82,8 @@ func newSeededDB(t *testing.T) *sql.DB {
 func seedAll(t *testing.T, db *sql.DB) {
 	t.Helper()
 	if _, err := db.Exec(`INSERT INTO session_task_relations (id, slug, label) VALUES
-		(1, 'claimed', 'Claimed'), (2, 'surfaced', 'Surfaced'), (3, 'revisited', 'Revisited'),
-		(4, 'referenced', 'Referenced'), (5, 'queued', 'Queued')`); err != nil {
+		(1, 'claimed', 'Claimed'), (2, 'filed', 'Filed'), (3, 'revisited', 'Revisited'),
+		(4, 'referenced', 'Referenced'), (5, 'touched', 'Touched'), (6, 'bound', 'Bound')`); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 }
@@ -103,7 +106,7 @@ func TestVerifyIntegrity_MissingEnumRow(t *testing.T) {
 
 func TestVerifyIntegrity_SlugMismatch(t *testing.T) {
 	db := newSeededDB(t)
-	if _, err := db.Exec(`INSERT INTO session_task_relations VALUES (1, 'wrong', 'Claimed'), (2, 'surfaced', 'Surfaced'), (3, 'revisited', 'Revisited'), (4, 'referenced', 'Referenced'), (5, 'queued', 'Queued')`); err != nil {
+	if _, err := db.Exec(`INSERT INTO session_task_relations VALUES (1, 'wrong', 'Claimed'), (2, 'filed', 'Filed'), (3, 'revisited', 'Revisited'), (4, 'referenced', 'Referenced'), (5, 'touched', 'Touched'), (6, 'bound', 'Bound')`); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	err := sessiontaskrelation.VerifyIntegrity(db)
@@ -114,7 +117,7 @@ func TestVerifyIntegrity_SlugMismatch(t *testing.T) {
 
 func TestVerifyIntegrity_LabelMismatch(t *testing.T) {
 	db := newSeededDB(t)
-	if _, err := db.Exec(`INSERT INTO session_task_relations VALUES (1, 'claimed', 'Wrong'), (2, 'surfaced', 'Surfaced'), (3, 'revisited', 'Revisited'), (4, 'referenced', 'Referenced'), (5, 'queued', 'Queued')`); err != nil {
+	if _, err := db.Exec(`INSERT INTO session_task_relations VALUES (1, 'claimed', 'Wrong'), (2, 'filed', 'Filed'), (3, 'revisited', 'Revisited'), (4, 'referenced', 'Referenced'), (5, 'touched', 'Touched'), (6, 'bound', 'Bound')`); err != nil {
 		t.Fatalf("seed: %v", err)
 	}
 	err := sessiontaskrelation.VerifyIntegrity(db)
@@ -135,8 +138,10 @@ func TestVerifyIntegrity_UnknownTableRow(t *testing.T) {
 	}
 }
 
-// TestRank_IsStrictTotalOrder pins the ladder E-1696 introduced: claimed < queued <
-// surfaced < revisited < referenced, with no two relations sharing a rank.
+// TestRank_IsStrictTotalOrder pins the ladder E-1696 introduced and E-2291
+// extended: claimed < bound < touched < filed < revisited < referenced, with no
+// two relations sharing a rank. bound directly below claimed is what lets a
+// claim after a bind upgrade the row, and a bind after a touch upgrade it.
 //
 // Ties are the failure this guards. Rank drives BOTH the upsert's upgrade test
 // and the display tier, so two relations at the same rank would make captures
@@ -145,8 +150,9 @@ func TestVerifyIntegrity_UnknownTableRow(t *testing.T) {
 func TestRank_IsStrictTotalOrder(t *testing.T) {
 	want := []sessiontaskrelation.Relation{
 		sessiontaskrelation.RelationClaimed,
-		sessiontaskrelation.RelationQueued,
-		sessiontaskrelation.RelationSurfaced,
+		sessiontaskrelation.RelationBound,
+		sessiontaskrelation.RelationTouched,
+		sessiontaskrelation.RelationFiled,
 		sessiontaskrelation.RelationRevisited,
 		sessiontaskrelation.RelationReferenced,
 	}
@@ -180,7 +186,7 @@ func TestOutranks_IsStrict(t *testing.T) {
 }
 
 // TestRank_UnknownRanksLast covers the ELSE arm of the SQL CASE built from this
-// enum (events.relationRankCase): a NULL relation_id and an id from a newer
+// enum (sessiontaskrelation.RankCaseSQL): a NULL relation_id and an id from a newer
 // binary both land on Relation(0). It must rank BELOW every real relation, so a
 // NULL historical row gets filled in by the next capture and an unknown value
 // never outranks real work.
@@ -191,5 +197,42 @@ func TestRank_UnknownRanksLast(t *testing.T) {
 			t.Errorf("%s (rank %d) should outrank unknown (rank %d)",
 				rel, rel.Rank(), unknown.Rank())
 		}
+	}
+}
+
+// TestRename_KeepsIDs pins E-2291's renames: ids 2 and 5 keep their persisted
+// ids, so every existing session_tasks row reads under the new name with no
+// data migration, and bound takes the next free id rather than any earlier one.
+func TestRename_KeepsIDs(t *testing.T) {
+	for _, tc := range []struct {
+		rel         sessiontaskrelation.Relation
+		id          int
+		slug, label string
+	}{
+		{sessiontaskrelation.RelationFiled, 2, "filed", "Filed"},
+		{sessiontaskrelation.RelationTouched, 5, "touched", "Touched"},
+		{sessiontaskrelation.RelationBound, 6, "bound", "Bound"},
+	} {
+		if int(tc.rel) != tc.id || tc.rel.String() != tc.slug || tc.rel.Label() != tc.label {
+			t.Errorf("relation %d = (%d, %q, %q), want (%d, %q, %q)",
+				tc.id, int(tc.rel), tc.rel.String(), tc.rel.Label(), tc.id, tc.slug, tc.label)
+		}
+	}
+}
+
+// TestAnchors pins the anchor set every reader that separates "the session's
+// own task" from "its other tasks" uses: claimed and bound, nothing else.
+func TestAnchors(t *testing.T) {
+	want := map[sessiontaskrelation.Relation]bool{
+		sessiontaskrelation.RelationClaimed: true,
+		sessiontaskrelation.RelationBound:   true,
+	}
+	for _, rel := range sessiontaskrelation.All() {
+		if got := rel.IsAnchor(); got != want[rel] {
+			t.Errorf("%s.IsAnchor() = %v, want %v", rel, got, want[rel])
+		}
+	}
+	if len(sessiontaskrelation.Anchors()) != len(want) {
+		t.Errorf("Anchors() has %d entries, want %d", len(sessiontaskrelation.Anchors()), len(want))
 	}
 }

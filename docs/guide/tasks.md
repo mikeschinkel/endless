@@ -93,6 +93,16 @@ Status is not part of the gate: a `submitted` task with a plan and no open quest
 
 The refusal says how to proceed: write the plan, attach it (`task update <id> --plan-file <path>`, which moves the task to `submitted`); answer or close each open question. Or let a session do the first part: `task prime <id>` starts one that reads the task in, drafts the plan, asks its questions, and waits (see **Primed sessions** in `endless guide orchestration`). There is no grandfathering — an older task meets the gate exactly as a new one does, which is how it finds out it needs a plan.
 
+### Binding before a claim
+
+`task claim`'s no-plan refusal names one more route, and only claim's does: if you and your user are working out the plan together now, `endless task bind <id>`, and claim once the plan is attached. The gate is not loosened — bind is the step before a claim, not a way around it.
+
+Bind makes your session the task's owner (`sessions.task_id`) without moving its status, creating a worktree or passing the gate. `session status` anchors on the bound task, and `task show` lists your session under **Bound**. When the plan is attached, `task claim <id>` from the same session moves the task to `underway`, creates the worktree, and upgrades the row to **Claimed**. Until then, writes stay refused: there is no worktree, and edits in the main checkout are refused as they are for any session.
+
+Spawn's and prime's refusals do not offer bind. They hand the task to a new session, which has nobody to work the plan out with yet.
+
+Run from a shell pane, `task bind` binds the one live Claude session in the same tmux window. With none, or with more than one, it refuses and says to run it from the Claude session that should own the task — or, with several, to name it with `ENDLESS_SESSION_ID=<id>`.
+
 ### Plan items
 
 A **plan item** is one line stating something that will be true when the task is done. Items are numbered per task — `P3`, or `E-NNNN.P3` from outside it — and a number is never reused or renumbered. There are two kinds:
@@ -301,20 +311,20 @@ nothing to resolve. `endless tmux task` is an alias for it.
 `task show` traces a task back to the sessions that shaped it, so a task doubles as a navigational hub for jumping between them:
 
 - The **`Created:`** line names the session that filed the task and the task that session was active on — `Created:  2026-08-04 4:38 am by ES-101 (E-102)`. Absent when the task was filed outside any session.
-- The **`Touched by:`** block is the session-side peer of `This task:`, one row per session that ever touched the task, **most recent touch first**:
+- The **`Sessions:`** block is the session-side peer of `This task:`, one row per session that ever touched the task, **most recent touch first**:
 
   ```
-  Touched by:
+  Sessions:
   - Claimed:     ES-101 (E-102) [ended] tmux:unbound
   - Revisited:   ES-102 (E-103) [working] tmux:dead
-  - Surfaced:    ES-103 (E-104) [idle] tmux:live %414
+  - Filed:       ES-103 (E-104) [idle] tmux:live %414
   ```
 
-  The leading relation says how the task entered that session's scope — **Claimed** (the session claimed it), **Surfaced** (created it), **Revisited** (touched it without claiming), or **Touched** for a historical row recorded before the vocabulary existed. The parenthesized id is the task that session is bound to *now*; `[state]` is the session's state, or `gone` when the session row itself no longer exists.
+  The leading relation says how the task entered that session's scope — **Claimed** (the session claimed it), **Bound** (the session owns it but has not claimed it — see [Binding before a claim](#binding-before-a-claim)), **Touched** (put in scope with `touch`), **Filed** (created it), **Revisited** (edited it without claiming), or **Unclassified** for a historical row recorded before the vocabulary existed. The parenthesized id is the task that session is bound to *now*; `[state]` is the session's state, or `gone` when the session row itself no longer exists.
 
   `tmux:` is whether anything is actually running there, observed at read time: **live** (its pane was seen, and the pane follows), **dead** (its tmux server was reached and the pane was not there, or that server is provably gone because its recorded socket now answers as a different server or refuses connections — even when `[state]` still says `working`), **unknown** (its server could not be reached, so no opinion — including a session bound before servers' sockets were recorded, whose server has since gone), or **unbound** (no pane binding at all). The raw state, not a yes/no, because only `dead` frees anything: the claim guard and the status monitor both count `unknown` as present.
 
-  **Claimed** is read off `sessions.task_id`, the write-once ownership record, not off the touch — so a session that filed a task and later claimed it reads `Claimed`, not the `Surfaced` its touch row was stamped with, and a session that claimed the task without ever recording a touch is listed too. That is the same column `task spawn` refuses on, so this block and that refusal cannot disagree.
+  **Claimed** and **Bound** are read off `sessions.task_id`, the write-once ownership record, not off the touch — so a session that owns the task reads as its owner whatever its touch row says, and a session that owns the task without ever recording a touch is listed too. That is the same column `task spawn` refuses on, so this block and that refusal cannot disagree.
 
 Sessions render as **`ES-NNNN`** and tasks as `E-NNNN` — separate id spaces that would otherwise be indistinguishable side by side. Feed an `ES-NNNN` straight to `endless session goto ES-101` to jump there. `--json` reports the same facts as `created_by` / `touched_by`; `--agent` as `created_by=` / `touched_by=` lines.
 

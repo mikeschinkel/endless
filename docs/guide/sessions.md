@@ -225,32 +225,33 @@ Capture is automatic: Endless records a row for every task your session claims, 
 | Relation     | How the task got here                                     |
 |--------------|-----------------------------------------------------------|
 | `claimed`    | you claimed it                                            |
-| `queued`     | you added it with `session task add` — decided work       |
-| `surfaced`   | you filed it during this session                          |
-| `revisited`  | you edited it or ran `touch` on it, but didn't claim it   |
+| `bound`      | you own it but haven't claimed it — `task bind`, or a primed session's auto-bind |
+| `touched`    | your user put it on your list with `session touch`        |
+| `filed`      | you filed it during this session                          |
+| `revisited`  | you edited it, but didn't claim it                        |
 | `referenced` | you only read it (reserved; no capture emits it yet)      |
 
-Three verbs cover what automation can't reach:
+The ladder runs top to bottom: a later capture can strengthen a row's relation but never weaken it, so claiming a task you bound makes it `claimed`, and binding a task you touched makes it `bound`.
+
+Two commands cover what automation can't reach:
 
 ```bash
-endless touch E-101 E-102              # in scope; nothing about the task changes
-endless session task add E-101 E-102   # decided work you haven't touched yet
+endless session touch E-101 E-102      # your user's: on the list, nothing about the task changes
 endless session task remove E-101      # a capture that shouldn't have happened
 ```
 
-- **`touch`** enrolls a task as `revisited` — scope entry, and nothing else. No field is written and no other session holding the task is notified. Reach for it when you looked at a task, or want it on screen while you work, and editing it would be a lie: rewriting `phase` to get the same display effect records a re-prioritization that never happened, and a later reader cannot tell it from a real one. It is top-level, not under `session task`, because it is typed far more often than the corrections there.
-- **`add`** enrolls a task as `queued` — decided work. Nothing has happened to it, so no automatic capture would ever record it. Promotion is upgrade-only: a task you merely read or edited is strengthened, and your own claimed task stays `claimed` (reported, not an error). The same ladder runs the other way for `touch`: `revisited` is the weakest relation anything emits, so touching a task you claimed, queued or filed leaves the stronger relation alone.
-- **`remove`** deletes the association — the touch and its relation — so `task show`'s "Touched by:" stops reporting it, and any hide on the same pair is cleared with it. There is no undo beyond touching the task again. Refused on your own claimed task: a claim cannot be dropped.
+- **`session touch`** is the user's command, run from their own shell pane beside the session, for putting a task on this session's `session status` list without changing it. It records relation `touched` and nothing else: no field is written and no other session holding the task is notified. Nothing has happened to the task, so no automatic capture would ever record it. Enrollment is upgrade-only: a task the session filed, edited or read is strengthened to `touched`, and the session's own claimed or bound task stays as it is (reported, not an error). `endless touch` and `endless session task add` are aliases of it. When it is on your list, that is your user's doing — not something to repeat or undo.
+- **`remove`** deletes the association — the touch and its relation — so `task show`'s "Sessions:" stops reporting it, and any hide on the same pair is cleared with it. There is no undo beyond touching the task again. Refused on your own claimed or bound task: ownership cannot be dropped — use `session hide --task` to keep it off your listing.
 
 **`remove` is not the inverse of `hide --task`**, and the difference is the whole point: hide suppresses a row while *keeping* the association, so the touch that really happened stays on the record. Hide is for a capture that is real but noisy; remove is for one that was simply wrong.
 
-`session status` tiers rows by relation. Decided work (`claimed` / `queued`, marked ⊕) leads among equally actionable rows; `referenced` rows (marked ·) sink below everything and render dimmed, so reads can never crowd out work. Relation never outranks actionability, though — a `queued` task parked in `later` still sits below the task you're actually working.
+`session status` tiers rows by relation. Decided work (`claimed`, `bound`, and `touched` — the last marked ⊕) leads among equally actionable rows; `referenced` rows (marked ·) sink below everything and render dimmed, so reads can never crowd out work. Relation never outranks actionability, though — a `touched` task parked in `later` still sits below the task you're actually working. A `bound` task, like a claimed one, is your session's anchor: it shows once, as the task your view is built around, never as a second row.
 
 Two more kinds of row render dimmed because neither is actionable from your board: `⟳ doing` rows, which another live session is working, and the `↑ parent` row, in every phase — both even when they wear `◆`, since landing them is not this board's job. `☑ verify` rows stay bright — verifying is your user's action — and your claimed task never dims. A highlighted id (focus, duplicate, unblocked) keeps its full colour on a dimmed row.
 
 ### Focus, and a task's steward
 
-Your session's **focused** task is the one it last claimed, filed or updated (including `touch`) — what the conversation is on right now, which is often not the task you claimed. Queueing or reading a task does not move focus. `session status` / `session monitor` highlight it: the id in inverse video, and `◼︎` between the type letter and the id. Your claimed task never shows `◼︎` — when it has focus, the colour says so, and in plain text no `◼︎` anywhere means the same thing. `--json` carries `focus` on the frame and `focused` on each row. Focus keeps a task in your view when another session stewards it, but an explicit `session hide --task` outranks focus.
+Your session's **focused** task is the one it last claimed, bound, filed or updated — what the conversation is on right now, which is often not the task you claimed. A `session touch` or a read does not move focus. `session status` / `session monitor` highlight it: the id in inverse video, and `◼︎` between the type letter and the id. Your claimed task never shows `◼︎` — when it has focus, the colour says so, and in plain text no `◼︎` anywhere means the same thing. `--json` carries `focus` on the frame and `focused` on each row. Focus keeps a task in your view when another session stewards it, but an explicit `session hide --task` outranks focus.
 
 When the same task would show in several live sessions' status views, only its **steward** shows it — the session that keeps it in view so it gets spawned or rejected. The steward is not the task's **owner**: the owner is the session that claimed it, and a task normally has a steward long before it has an owner. Stewardship is decided each time the view is drawn, never stored, so it corrects itself when a session ends:
 

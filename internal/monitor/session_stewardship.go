@@ -30,7 +30,7 @@ package monitor
 //     by the session that claimed it is the expected case, not a duplicate, and
 //     it already shows as ⟳ doing everywhere else. So is that session's focus on
 //     its own claimed task.
-//   - The steward is the live session that surfaced (filed) the task; failing
+//   - The steward is the live session that filed the task; failing
 //     that, the ONLY live session that revisited (updated) it. Two or more
 //     candidates on the deciding rung is AMBIGUOUS: there is no steward, and it
 //     is marked on every board that shows it.
@@ -59,7 +59,7 @@ import (
 // taskStewardship is what the live sessions other than a task's claimer have
 // recorded against it.
 type taskStewardship struct {
-	surfacers  []int64
+	filers     []int64
 	revisiters []int64
 	focusers   []int64
 	// claimers counts present sessions whose sessions.task_id is the task. It
@@ -68,11 +68,11 @@ type taskStewardship struct {
 	claimers int
 }
 
-// steward applies the ladder: the single surfacer, else the single revisiter.
+// steward applies the ladder: the single filer, else the single revisiter.
 // ambiguous is true when the deciding rung has more than one session; steward is
 // then 0, as it is when no live session has any claim at all.
 func (o taskStewardship) steward() (steward int64, ambiguous bool) {
-	for _, rung := range [][]int64{o.surfacers, o.revisiters} {
+	for _, rung := range [][]int64{o.filers, o.revisiters} {
 		switch len(rung) {
 		case 0:
 			continue
@@ -149,7 +149,7 @@ func AnnotateSessionStatusStewardship(rows []SessionStatusRow, viewer, focal int
 			r.DuplicateWork = true
 		case steward == 0:
 			// Nobody live has a claim on it: it belongs to whichever board
-			// surfaced it (an epic child, a dependent, a blocker).
+			// shows it (an epic child, a dependent, a blocker).
 		case !board[steward]:
 			switch {
 			case r.Focused:
@@ -221,9 +221,9 @@ func boardSessions(db *sql.DB, viewer, focal int64) (map[int64]bool, error) {
 	return board, rows.Err()
 }
 
-// liveStewardship gathers, for each task id, the surfacers, revisiters and
+// liveStewardship gathers, for each task id, the filers, revisiters and
 // focusers among present sessions — excluding each task's own claiming session,
-// and excluding from surfacers and revisiters any session that hid the task —
+// and excluding from filers and revisiters any session that hid the task —
 // plus the number of present sessions that claimed it.
 // Tasks nobody live has touched are simply absent from the map.
 func liveStewardship(db *sql.DB, taskIDs []int64) (map[int64]taskStewardship, error) {
@@ -245,7 +245,7 @@ func liveStewardship(db *sql.DB, taskIDs []int64) (map[int64]taskStewardship, er
 		      SELECT 1 FROM session_hidden_tasks h
 		       WHERE h.session_id = st.session_id AND h.task_id = st.task_id)
 		  ORDER BY st.session_id`,
-		append(args, int(sessiontaskrelation.RelationSurfaced), int(sessiontaskrelation.RelationRevisited))...,
+		append(args, int(sessiontaskrelation.RelationFiled), int(sessiontaskrelation.RelationRevisited))...,
 	)
 	if err != nil {
 		return nil, err
@@ -257,8 +257,8 @@ func liveStewardship(db *sql.DB, taskIDs []int64) (map[int64]taskStewardship, er
 			return nil, err
 		}
 		o := out[taskID]
-		if sessiontaskrelation.Relation(rel) == sessiontaskrelation.RelationSurfaced {
-			o.surfacers = append(o.surfacers, sessionID)
+		if sessiontaskrelation.Relation(rel) == sessiontaskrelation.RelationFiled {
+			o.filers = append(o.filers, sessionID)
 		} else {
 			o.revisiters = append(o.revisiters, sessionID)
 		}

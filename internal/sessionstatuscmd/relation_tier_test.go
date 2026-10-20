@@ -18,7 +18,7 @@ import (
 // only, raggedizing exactly the frames the tier exists to make readable.
 func TestRelationGlyphWidths(t *testing.T) {
 	for name, g := range map[string]string{
-		"queuedGlyph":     queuedGlyph,
+		"touchedGlyph":    touchedGlyph,
 		"referencedGlyph": referencedGlyph,
 	} {
 		if w := runewidth.StringWidth(g); w != 1 {
@@ -37,7 +37,7 @@ func TestSortRows_ReferencedSinksBelowEverything(t *testing.T) {
 		{ID: 1, Title: "read", Status: "underway", Phase: "urgent", InFlight: true,
 			Relation: sessiontaskrelation.RelationReferenced},
 		{ID: 2, Title: "queued", Status: "ready", Phase: "later",
-			Relation: sessiontaskrelation.RelationQueued},
+			Relation: sessiontaskrelation.RelationTouched},
 		{ID: 3, Title: "revisited", Status: "ready", Phase: "maybe",
 			Relation: sessiontaskrelation.RelationRevisited},
 	}
@@ -58,7 +58,7 @@ func TestSortRows_ProminenceIsOnlyATiebreak(t *testing.T) {
 		{ID: 20, Title: "revisited", Status: "ready", Phase: "now",
 			Relation: sessiontaskrelation.RelationRevisited},
 		{ID: 21, Title: "queued", Status: "ready", Phase: "later",
-			Relation: sessiontaskrelation.RelationQueued},
+			Relation: sessiontaskrelation.RelationTouched},
 	}
 	sortRows(tie)
 	if tie[0].ID != 21 {
@@ -69,7 +69,7 @@ func TestSortRows_ProminenceIsOnlyATiebreak(t *testing.T) {
 	// Relation must not outrank the action classification.
 	mixed := []monitor.SessionStatusRow{
 		{ID: 30, Title: "queued", Status: "ready", Phase: "later",
-			Relation: sessiontaskrelation.RelationQueued},
+			Relation: sessiontaskrelation.RelationTouched},
 		{ID: 31, Title: "doing", Status: "underway", Phase: "now", InFlight: true,
 			Relation: sessiontaskrelation.RelationRevisited},
 	}
@@ -114,7 +114,7 @@ func TestRelationColumn_WidthOnDemand(t *testing.T) {
 	if got, want := render(plain), render(classified); got != want {
 		t.Errorf("unmarked relation changed the frame:\n got: %q\nwant: %q", got, want)
 	}
-	if strings.Contains(render(plain), queuedGlyph) {
+	if strings.Contains(render(plain), touchedGlyph) {
 		t.Error("unmarked frame carries the queued glyph")
 	}
 }
@@ -125,12 +125,12 @@ func TestRelationColumn_WidthOnDemand(t *testing.T) {
 func TestRelationColumn_MarksQueuedAndReferenced(t *testing.T) {
 	out := render([]monitor.SessionStatusRow{
 		{ID: 1, Title: "queued work", Status: "ready", Phase: "now", TypeSlug: "todo",
-			Relation: sessiontaskrelation.RelationQueued},
+			Relation: sessiontaskrelation.RelationTouched},
 		{ID: 2, Title: "just read", Status: "ready", Phase: "now", TypeSlug: "todo",
 			Relation: sessiontaskrelation.RelationReferenced},
 	})
 	for _, want := range []string{
-		queuedGlyph + " queued", referencedGlyph + " referenced",
+		touchedGlyph + " touched", referencedGlyph + " referenced",
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("legend missing %q:\n%s", want, out)
@@ -198,7 +198,7 @@ func TestRenderJSON_CarriesRelation(t *testing.T) {
 	annotateHidden = func(rows []monitor.SessionStatusRow, viewer int64) error { return nil }
 	annotateRelation = func(rows []monitor.SessionStatusRow, viewer int64) error {
 		rows[0].Relation = sessiontaskrelation.RelationReferenced
-		rows[1].Relation = sessiontaskrelation.RelationQueued
+		rows[1].Relation = sessiontaskrelation.RelationTouched
 		// rows[2] deliberately left unclassified — a read-time child.
 		return nil
 	}
@@ -232,7 +232,7 @@ func TestRenderJSON_CarriesRelation(t *testing.T) {
 	for _, r := range frame.Rows {
 		bySlug[r.ID] = r.Relation
 	}
-	for id, want := range map[int64]string{1: "referenced", 2: "queued", 3: ""} {
+	for id, want := range map[int64]string{1: "referenced", 2: "touched", 3: ""} {
 		if bySlug[id] != want {
 			t.Errorf("E-%d relation = %q, want %q", id, bySlug[id], want)
 		}

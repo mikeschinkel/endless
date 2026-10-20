@@ -1922,7 +1922,7 @@ def session_goto(target_ref, error_fix, background, target_session, prompt_file,
     <target_ref> is a task id (E-NNNN or NNNN) or a session id (ES-NNNN, a bare
     integer, or a Claude UUID prefix). A task id resolves to the
     most-recently-active live session working it. Prefer ES-NNNN — the form
-    `task show` prints under Created:/Touched by: — since a bare integer that
+    `task show` prints under Created:/Sessions: — since a bare integer that
     matches both a session and a task is rejected as ambiguous. The current pane
     is pushed onto a per-client back-stack so `endless session back` returns
     here. Requires tmux.
@@ -2286,15 +2286,39 @@ def session_snapshot_add(input_file, session_id_override):
     impl(input_file, session_id_override)
 
 
+_TOUCH_HELP = """Put tasks on this session's `session status` list without changing them.
+
+    A command for you, the user, at your own shell pane beside the session:
+    you want a task on screen while the session works, and it has no reason to
+    edit it. The task itself is untouched — no field is written, and no other
+    session holding it is notified. All that is recorded is a `session_tasks`
+    row at relation `touched`, so the task shows up in `session status` and
+    under `task show`'s "Sessions:".
+
+    Upgrade-only: a task this session filed, edited or read is strengthened to
+    `touched`, which ranks above those in `session status`; the task this
+    session claimed or bound stays as it is (reported, not an error). Unknown
+    ids fail the whole call.
+
+    `endless touch` and `endless session task add` are aliases.
+
+    Example:
+
+      \b
+      endless session touch E-100 E-101
+    """
+
+
 @session_cmd.group("task")
 def session_task_cmd():
     """Correct which tasks this session's list holds.
 
     `session_tasks` capture is otherwise automatic: the event executors record
     a row for every task a session claims, files or edits, classified by how it
-    entered scope (claimed / surfaced / revisited). These verbs cover the two
-    cases automation cannot reach — work you have decided on but not yet
-    touched, and a capture that should not have happened.
+    entered scope (claimed / bound / filed / revisited). `remove` covers what
+    automation gets wrong — a capture that should not have happened. `add` is
+    an alias of `session touch`, which puts a task on the list without
+    changing it.
 
     Note the group is `session task <verb>` (it acts on a TASK within the
     session), not `session <verb>`, which acts on sessions themselves.
@@ -2309,27 +2333,10 @@ _SESSION_ID_OPTION = click.option(
 )
 
 
-@session_task_cmd.command("add")
+@session_task_cmd.command("add", help=_TOUCH_HELP)
 @click.argument("task_refs", nargs=-1, metavar="TASK-ID...")
 @_SESSION_ID_OPTION
 def session_task_add(task_refs, session_id_override):
-    """Add tasks to this session as decided work (relation `queued`).
-
-    For work you have committed to but have not touched yet — nothing has
-    happened to those tasks, so no automatic capture would ever record them.
-    They appear in `session status` immediately, ranked above incidental
-    surfaced/revisited rows.
-
-    Promotion is upgrade-only: queuing a task this session merely read or
-    edited strengthens its relation, and queuing your own claimed task leaves
-    it as `claimed` (reported, not an error). Adding the same task twice is a
-    no-op.
-
-    Example:
-
-      \b
-      endless session task add E-100 E-101
-    """
     from endless.session_task_cmd import session_task_add as impl
     impl(task_refs, session_id_override)
 
@@ -2341,7 +2348,7 @@ def session_task_remove(task_refs, session_id_override):
     """Drop tasks from this session's list entirely.
 
     For a capture that should not have happened. This DELETES the association
-    — the touch and its relation — so `task show`'s "Touched by:" stops
+    — the touch and its relation — so `task show`'s "Sessions:" stops
     reporting it, and any hide on the same pair is cleared with it.
 
     Not the same as `session hide --task`, which suppresses a row from this
@@ -2349,7 +2356,8 @@ def session_task_remove(task_refs, session_id_override):
     real but noisy, remove is for one that was simply wrong. There is no undo
     beyond touching the task again.
 
-    Refused on this session's own claimed task: a claim cannot be dropped.
+    Refused on this session's own claimed or bound task: ownership cannot be
+    dropped. Use `session hide --task` to keep it off the listing instead.
     Naming a task this session never touched is a reported no-op, not an error.
 
     Example:
@@ -2391,36 +2399,21 @@ def session_turn(target, session_ref, paged):
     impl(target, session_ref, paged)
 
 
-# Top-level rather than `session touch` or `task touch` (E-2173): scope entry is
-# typed far more often than the corrections under `session task`, and many
-# subcommands are slated to move to top level anyway, so parking it under a
-# parent now would only schedule a rename.
-@main.command("touch")
+# `session touch` is the name (E-2291): it acts on a session's list, so it sits
+# under `session`. `touch` (E-2173's top-level name) and `session task add`
+# stay as aliases, because both are already in hands and scripts.
+@session_cmd.command("touch", help=_TOUCH_HELP)
+@click.argument("task_refs", nargs=-1, metavar="TASK-ID...")
+@_SESSION_ID_OPTION
+def session_touch(task_refs, session_id_override):
+    from endless.session_task_cmd import touch as impl
+    impl(task_refs, session_id_override)
+
+
+@main.command("touch", help=_TOUCH_HELP)
 @click.argument("task_refs", nargs=-1, metavar="TASK-ID...")
 @_SESSION_ID_OPTION
 def touch(task_refs, session_id_override):
-    """Put tasks in this session's scope without changing them.
-
-    The task itself is untouched — no field is written, no other session
-    holding it is notified. All that happens is a `session_tasks` row at
-    relation `revisited`, so the task shows up in `session status` and in
-    `task show`'s "Touched by:".
-
-    This is what to use when you looked at a task, or want it on screen while
-    you work, and editing it would be a lie. Rewriting `phase` to get the same
-    display effect records a re-prioritization that never happened.
-
-    Enrollment is upgrade-only, so touching a task you claimed, queued or filed
-    this session leaves its stronger relation alone (reported, not an error).
-    Use `session task add` instead for work you have decided to do — that is
-    `queued`, which ranks above `revisited` in `session status`. Unknown ids
-    fail the whole call.
-
-    Example:
-
-      \b
-      endless touch E-100 E-101
-    """
     from endless.session_task_cmd import touch as impl
     impl(task_refs, session_id_override)
 
@@ -3976,10 +3969,20 @@ def task_bind(item_id):
 
     Unlike `claim` it changes nothing else: not the task's status, not a
     worktree, and not the session's own state (binding to an idle or
-    waiting-on-you session leaves it as it was). Use it when the task's status
-    should not move — typically one already `assumed` / `confirmed` /
-    `unverified`. To resume WORKING such a task, reopen it and claim:
-    `task update <id> --status revisit`, then `task claim <id>`.
+    waiting-on-you session leaves it as it was).
+
+    Use it as the step before a claim: when you and your user are working out
+    a task's plan together now, so it cannot be claimed yet, bind it, attach
+    the plan, then claim it from the same session. Writes stay refused until
+    then — bind creates no worktree.
+
+    Or use it when the task's status should not move — typically one already
+    `assumed` / `confirmed` / `unverified`. To resume WORKING such a task,
+    reopen it and claim: `task update <id> --status revisit`, then
+    `task claim <id>`.
+
+    Run from a shell pane, it binds the one live Claude session in the same
+    tmux window, and refuses when there is not exactly one.
     """
     from endless.task_cmd import bind_item
     bind_item(item_id)
@@ -4351,8 +4354,8 @@ def task_relations(item_id, agent, as_json):
 def task_sessions(item_id, include_ended, agent, as_json):
     """List the sessions holding a task and whether each is live.
 
-    One row per session that claimed, surfaced, revisited, referenced or queued
-    the task: its relation, its state, the observed tmux liveness of its pane
+    One row per session that claimed, bound, touched, filed, revisited or
+    referenced the task: its relation, its state, the observed tmux liveness of its pane
     (live, dead, unknown or unbound — a row can read `working` while its pane is
     dead), the pane when live, and whether the task is the session's own or
     only its current focus. Ended sessions are omitted unless --all.

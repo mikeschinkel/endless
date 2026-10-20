@@ -1,7 +1,7 @@
 package monitor
 
 // Per-session task relation (E-1696). How a task entered ONE session's scope —
-// claimed, queued, surfaced, revisited or referenced — read off that session's own
+// claimed, bound, touched, filed, revisited or referenced — read off that session's own
 // session_tasks row and layered onto the viewer-agnostic row set, exactly as
 // E-1914's hides are.
 //
@@ -18,21 +18,23 @@ import (
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 )
 
-// nonClaimedRelationIDs is the SQL id list for every relation EXCEPT claimed, built
-// from the Go enum so a newly added relation is included automatically. Used by
-// SessionStatusRowsForSession, the no-goal view: claimed rows are excluded there
-// because a session that claimed a task resolves through the focal path instead.
+// nonAnchorRelationIDs is the SQL id list for every relation EXCEPT the anchor
+// relations (sessiontaskrelation.Anchors: claimed and bound), built from the Go
+// enum so a newly added relation is included automatically. Used by
+// SessionStatusRowsForSession, the no-goal view: anchor rows are excluded there
+// because a session that owns a task resolves through the focal path instead,
+// where its task is the anchor row and not a second one (E-2291).
 //
 // Derived rather than written as a literal because the previous literal — the
-// `IN (2, 3)` this replaced — silently meant "surfaced and revisited ONLY", so
-// adding `queued` would have left `session task add` promoting tasks into a view
-// that refused to show them.
-var nonClaimedRelationIDs = buildNonClaimedRelationIDs()
+// `IN (2, 3)` this replaced — silently meant "filed and revisited ONLY", so
+// adding `touched` would have left `session task add` promoting tasks into a
+// view that refused to show them.
+var nonAnchorRelationIDs = buildNonAnchorRelationIDs()
 
-func buildNonClaimedRelationIDs() string {
+func buildNonAnchorRelationIDs() string {
 	var ids []string
 	for _, rel := range sessiontaskrelation.All() {
-		if rel == sessiontaskrelation.RelationClaimed {
+		if rel.IsAnchor() {
 			continue
 		}
 		ids = append(ids, strconv.Itoa(int(rel)))

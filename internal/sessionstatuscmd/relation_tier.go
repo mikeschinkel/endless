@@ -4,8 +4,8 @@ package sessionstatuscmd
 // Extension). `session status` is a dashboard of tasks related to this session's
 // work, and not every relation earns the same prominence:
 //
-//	goal / queued          decided work — this session's business
-//	surfaced / revisited   incidental work — touched, but not the point
+//	claimed / bound / touched   decided work — this session's business
+//	filed / revisited           incidental work — edited, but not the point
 //	referenced             read-only relevance — looked at, nothing more
 //
 // Two mechanisms, deliberately different in strength:
@@ -19,9 +19,9 @@ package sessionstatuscmd
 //
 //  2. Everything else keeps today's ordering, with relation used ONLY to break
 //     ties between EQUALLY actionable rows. Relation deliberately does not
-//     outrank the action classification: a `queued` task parked in `later` must
+//     outrank the action classification: a `touched` task parked in `later` must
 //     not jump above the ⟳ row you are actually working, and promoting it would
-//     make `session task add` a way to derange the view rather than to fill it.
+//     make `touch` a way to derange the view rather than to fill it.
 //
 // The read gate that produces `referenced` at volume ships separately (it needs
 // the gitignored machine-user ledger E-1673 routes to), so today the tier holds
@@ -36,15 +36,15 @@ import (
 // Relation glyphs, both single-width (asserted in TestRelationGlyphWidths) so
 // the conditional column never breaks the fixed 13-col row prefix.
 //
-// Only the two relations that need explaining get a mark. goal, surfaced and
-// revisited are the ordinary majority and are already legible from the action
+// Only the two relations that need explaining get a mark. claimed, bound, filed
+// and revisited are the ordinary majority (or the anchor row itself) and are already legible from the action
 // glyph and the row's position; marking them would put a column on nearly every
 // frame to say nothing.
 const (
-	// queuedGlyph marks a row put here on purpose by `session task add` —
-	// ⊕ (U+2295 CIRCLED PLUS), "added". Same Mathematical Operators block as the
+	// touchedGlyph marks a row put here on purpose by `touch` (or its alias
+	// `session task add`) — ⊕ (U+2295 CIRCLED PLUS), "added". Same Mathematical Operators block as the
 	// existing ⊘ hidden and ⊗ blocked marks, so it sits with them visually.
-	queuedGlyph = "⊕"
+	touchedGlyph = "⊕"
 	// referencedGlyph marks read-only relevance — · (U+00B7 MIDDLE DOT). As quiet
 	// as a visible mark gets, which is the point: it says "this is here because
 	// you looked at it" without competing with work.
@@ -57,11 +57,11 @@ func isReferenced(r monitor.SessionStatusRow) bool {
 }
 
 // prominence ranks a row for the equal-action tiebreak: 0 for decided work
-// (claimed, queued), 1 for everything else.
+// (claimed, bound, touched), 1 for everything else.
 //
 // "Everything else" deliberately includes rows with NO relation at all — the
 // read-time children, dependents and upstream blockers, which have no
-// session_tasks row by design. They rank alongside surfaced/revisited rather
+// session_tasks row by design. They rank alongside filed/revisited rather
 // than below them, because they are real work on the focal task and only their
 // bookkeeping differs. Ranking them last would reorder the view for a reason
 // that has nothing to do with what a viewer should look at next.
@@ -69,7 +69,8 @@ func isReferenced(r monitor.SessionStatusRow) bool {
 // referenced never reaches this function: it is sunk by the primary sort key.
 func prominence(r monitor.SessionStatusRow) int {
 	switch r.Relation {
-	case sessiontaskrelation.RelationClaimed, sessiontaskrelation.RelationQueued:
+	case sessiontaskrelation.RelationClaimed, sessiontaskrelation.RelationBound,
+		sessiontaskrelation.RelationTouched:
 		return 0
 	default:
 		return 1
@@ -78,15 +79,15 @@ func prominence(r monitor.SessionStatusRow) int {
 
 // relationField renders the conditional relation column, on the same
 // width-on-demand rule as the hidden and block columns: the slot exists only
-// when a RENDERED row wears a mark, so a frame with no queued or referenced rows
+// when a RENDERED row wears a mark, so a frame with no touched or referenced rows
 // is byte-identical to before E-1696.
 func relationField(r monitor.SessionStatusRow, rw int) string {
 	if rw == 0 {
 		return ""
 	}
 	switch r.Relation {
-	case sessiontaskrelation.RelationQueued:
-		return queuedGlyph + " "
+	case sessiontaskrelation.RelationTouched:
+		return touchedGlyph + " "
 	case sessiontaskrelation.RelationReferenced:
 		return referencedGlyph + " "
 	default:
@@ -98,7 +99,7 @@ func relationField(r monitor.SessionStatusRow, rw int) string {
 func relationColWidth(rows []monitor.SessionStatusRow) int {
 	for _, r := range rows {
 		switch r.Relation {
-		case sessiontaskrelation.RelationQueued, sessiontaskrelation.RelationReferenced:
+		case sessiontaskrelation.RelationTouched, sessiontaskrelation.RelationReferenced:
 			return 2
 		}
 	}

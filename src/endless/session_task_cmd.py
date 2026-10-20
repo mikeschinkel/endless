@@ -1,35 +1,36 @@
-"""CLI implementation for `endless session task add|remove` (E-1696) and the
-top-level `endless touch` (E-2173).
+"""CLI implementation for `endless session touch` (E-2173, E-2291), its
+aliases `endless touch` and `endless session task add`, and `endless session
+task remove` (E-1696).
 
-Three verbs that say explicitly what a session's task list holds.
+Two verbs, and an alias, that say explicitly what a session's task list
+holds.
 `session_tasks` capture is otherwise automatic — the Go executors record a row
 for every task a session claims, files or edits — and these cover what
 automation cannot reach or gets wrong.
 
-    session task add <ids>     promote to relation `queued`: decided session
-                               work the session has not touched yet, so no
-                               automatic capture would ever record it.
-
-    touch <ids>                enroll at relation `revisited`: scope entry and
-                               nothing else. Top-level, because scope entry is
-                               not a correction and is typed far more often.
+    session touch <ids>        enroll at relation `touched`: the user's
+                               command for putting a task on the session's
+                               `session status` list without changing it, so
+                               no automatic capture would ever record it.
+                               `touch` and `session task add` are aliases
+                               (E-2291): same event, same relation.
 
     session task remove <ids>  drop the association entirely, for a capture
                                that should not have happened.
 
 `remove` is deliberately NOT the inverse of `session hide --task` (E-1914).
 Hide suppresses a row from one session's `session status` listing while
-KEEPING the association, so `task show`'s "Touched by:" still reports the
+KEEPING the association, so `task show`'s "Sessions:" still reports the
 touch that really happened — it is for a capture that is real but noisy.
 Remove deletes the row: the touch and its relation. It also clears any hide on
 the same pair, so a later re-capture does not come back silently suppressed.
 
 This module performs no DB access. All three verbs emit an event
-(`session_tasks.queued` / `session_tasks.touched` / `session_tasks.removed`)
+(`session_tasks.touched` / `session_tasks.removed`)
 via event_bridge -> endless-go event -> events.Execute, per the "DB access in
 Go" policy. The Go executors own validation: unknown task ids are rejected
-there, the upgrade-only relation ladder decides what `add` and `touch`
-actually store, and `remove` refuses the session's own claimed task.
+there, the upgrade-only relation ladder decides what `touch` actually stores,
+and `remove` refuses the session's own claimed or bound task.
 """
 
 import os
@@ -48,7 +49,6 @@ _TASK_ID_RE = re.compile(r"^[Ee]-(\d+)$")
 # verbs share one label: the group is what a reader recognizes, and the
 # complaint is about the ids, which both parse identically.
 _VERB_OF = {
-    "session_tasks.queued": "session task",
     "session_tasks.removed": "session task",
     "session_tasks.touched": "touch",
     "session_tasks.hidden": "session hide",
@@ -58,8 +58,9 @@ _VERB_OF = {
 
 def session_task_add(task_refs: tuple[str, ...],
                      session_id_override: int | None) -> None:
-    """Entry point bound by cli.py for `session task add`."""
-    emit_membership("session_tasks.queued", task_refs, session_id_override)
+    """Entry point bound by cli.py for `session task add` — an alias of
+    `session touch` since E-2291, emitting the same event."""
+    touch(task_refs, session_id_override)
 
 
 def session_task_remove(task_refs: tuple[str, ...],
@@ -70,10 +71,11 @@ def session_task_remove(task_refs: tuple[str, ...],
 
 def touch(task_refs: tuple[str, ...],
           session_id_override: int | None) -> None:
-    """Entry point bound by cli.py for the top-level `touch` (E-2173).
+    """Entry point bound by cli.py for `session touch` and its alias `touch`
+    (E-2173, E-2291).
 
-    Same emit path as `session task add`, one relation weaker: `revisited`
-    means the task is in this session's scope, not that it is on its agenda.
+    Records relation `touched`: the task is in this session's scope, put
+    there on purpose, with nothing about the task itself changed.
     """
     emit_membership("session_tasks.touched", task_refs, session_id_override)
 

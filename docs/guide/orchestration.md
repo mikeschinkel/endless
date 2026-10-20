@@ -721,8 +721,12 @@ Three consequences you will meet:
   its next hook event anyway.
 
   So bind is the verb for "this session is that task's owner, and its status
-  should not move". To resume *working* a settled task, reopen it and claim:
-  `task update <id> --status revisit`, then `task claim <id>`.
+  should not move" — the step before a claim while you and your user work out
+  the plan (see **Binding before a claim** in `endless guide tasks`), or a
+  settled task you only want to own. To resume *working* a settled task, reopen
+  it and claim: `task update <id> --status revisit`, then `task claim <id>`.
+  Bind records relation `bound`, not `claimed`; a later claim by the same
+  session upgrades it.
 - **`endless task reopen` leaves the binding alone.** It changes task state and
   nothing else, so the session that did the work stays reachable afterwards.
 

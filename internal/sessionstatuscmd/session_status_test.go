@@ -1011,7 +1011,7 @@ func TestLegendGlyphsAreUnique(t *testing.T) {
 		{notStartedGlyph, "not started"},
 		{undeterminedGlyph, "not yet determined"},
 		{hiddenGlyph, "hidden"},
-		{queuedGlyph, "queued"},
+		{touchedGlyph, "touched"},
 		{referencedGlyph, "referenced"},
 		{focusGlyph, "focus"},
 		{duplicateGlyph, "duplicate"},
@@ -1027,7 +1027,7 @@ func TestLegendGlyphsAreUnique(t *testing.T) {
 		{Status: "underway"},
 		{Status: "confirmed", UnsettledKnown: true, BlockedByN: 1, BlocksN: 1},
 		{Status: "ready", UnsettledKnown: true, Hidden: true},
-		{Status: "ready", UnsettledKnown: true, Relation: sessiontaskrelation.RelationQueued},
+		{Status: "ready", UnsettledKnown: true, Relation: sessiontaskrelation.RelationTouched},
 		{Status: "ready", UnsettledKnown: true, Relation: sessiontaskrelation.RelationReferenced},
 		{Status: "ready", UnsettledKnown: true, Focused: true},
 		{Status: "ready", UnsettledKnown: true, DuplicateWork: true},
@@ -1041,7 +1041,7 @@ func TestLegendGlyphsAreUnique(t *testing.T) {
 		notStartedGlyph + " not started",
 		undeterminedGlyph + " not yet determined",
 		hiddenGlyph + " hidden",
-		queuedGlyph + " queued",
+		touchedGlyph + " touched",
 		referencedGlyph + " referenced",
 	} {
 		if !strings.Contains(legend, want) {
