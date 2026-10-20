@@ -7721,3 +7721,7 @@ In E-2405, I offered Mike a script for the two direct-to-main ledger commits (P1
 ### [2026-10-20] Define guide-only terms like pin before using them in needs-plan questions
 While framing E-2414's needs-plan questions I used 'pin' (session unhide --task on an unhidden task) as if it were settled vocabulary. It exists in code and in docs/guide/sessions.md since E-2293, but it is in no accepted decision or glossary, and Mike had never adopted it, so he read it as a term I coined. needs-plan allows only terms from an accepted decision, the glossary, or Mike's own words; a term that is only in the guide or the code must be defined in the question, and flagged as not yet settled.
 - **Project**: endless
+
+### [2026-10-20] 'You' means this session or a prior one
+When Mike says 'you' did something (here: coined the term pin), he means Claude in this session or in any prior session. In E-2414's needs-plan I answered 'I didn't coin pin; E-2293 introduced it' — pedantic deflection, since a prior Claude session wrote E-2293. Own the prior session's work as mine and go straight to the substance.
+- **Project**: endless
