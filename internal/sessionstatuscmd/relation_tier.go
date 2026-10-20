@@ -4,7 +4,8 @@ package sessionstatuscmd
 // Extension). `session status` is a dashboard of tasks related to this session's
 // work, and not every relation earns the same prominence:
 //
-//	claimed / bound / touched   decided work — this session's business
+//	claimed / bound /           decided work — this session's business
+//	  spawned / touched
 //	filed / revisited           incidental work — edited, but not the point
 //	referenced             read-only relevance — looked at, nothing more
 //
@@ -36,7 +37,7 @@ import (
 // Relation glyphs, both single-width (asserted in TestRelationGlyphWidths) so
 // the conditional column never breaks the fixed 13-col row prefix.
 //
-// Only the two relations that need explaining get a mark. claimed, bound, filed
+// Only the relations that need explaining get a mark. claimed, bound, filed
 // and revisited are the ordinary majority (or the anchor row itself) and are already legible from the action
 // glyph and the row's position; marking them would put a column on nearly every
 // frame to say nothing.
@@ -45,6 +46,13 @@ const (
 	// `session task add`) — ⊕ (U+2295 CIRCLED PLUS), "added". Same Mathematical Operators block as the
 	// existing ⊘ hidden and ⊗ blocked marks, so it sits with them visually.
 	touchedGlyph = "⊕"
+	// spawnedGlyph marks a task this session handed to a session it spawned
+	// (E-2405) — ↗ (U+2197 NORTH EAST ARROW), "sent off". An arrow, like the ↑
+	// parent and ↩ from rows, because spawning is session lineage too: ↩ is the
+	// spawner seen from the spawned session, ↗ the spawned task seen from the
+	// spawner. It needs a mark because the spawner is NOT working the row — an
+	// unmarked spawned task would read as this session's own open work.
+	spawnedGlyph = "↗"
 	// referencedGlyph marks read-only relevance — · (U+00B7 MIDDLE DOT). As quiet
 	// as a visible mark gets, which is the point: it says "this is here because
 	// you looked at it" without competing with work.
@@ -57,7 +65,10 @@ func isReferenced(r monitor.SessionStatusRow) bool {
 }
 
 // prominence ranks a row for the equal-action tiebreak: 0 for decided work
-// (claimed, bound, touched), 1 for everything else.
+// (claimed, bound, spawned, touched), 1 for everything else. Spawned is decided
+// work (E-2405): the session chose to start a session on it, which is a firmer
+// decision than touching it, and the row stays in view until the task settles
+// precisely so the spawner can follow what it delegated.
 //
 // "Everything else" deliberately includes rows with NO relation at all — the
 // read-time children, dependents and upstream blockers, which have no
@@ -70,7 +81,7 @@ func isReferenced(r monitor.SessionStatusRow) bool {
 func prominence(r monitor.SessionStatusRow) int {
 	switch r.Relation {
 	case sessiontaskrelation.RelationClaimed, sessiontaskrelation.RelationBound,
-		sessiontaskrelation.RelationTouched:
+		sessiontaskrelation.RelationSpawned, sessiontaskrelation.RelationTouched:
 		return 0
 	default:
 		return 1
@@ -79,8 +90,8 @@ func prominence(r monitor.SessionStatusRow) int {
 
 // relationField renders the conditional relation column, on the same
 // width-on-demand rule as the hidden and block columns: the slot exists only
-// when a RENDERED row wears a mark, so a frame with no touched or referenced rows
-// is byte-identical to before E-1696.
+// when a RENDERED row wears a mark, so a frame with no touched, spawned or
+// referenced rows is byte-identical to before E-1696.
 func relationField(r monitor.SessionStatusRow, rw int) string {
 	if rw == 0 {
 		return ""
@@ -88,6 +99,8 @@ func relationField(r monitor.SessionStatusRow, rw int) string {
 	switch r.Relation {
 	case sessiontaskrelation.RelationTouched:
 		return touchedGlyph + " "
+	case sessiontaskrelation.RelationSpawned:
+		return spawnedGlyph + " "
 	case sessiontaskrelation.RelationReferenced:
 		return referencedGlyph + " "
 	default:
@@ -99,7 +112,8 @@ func relationField(r monitor.SessionStatusRow, rw int) string {
 func relationColWidth(rows []monitor.SessionStatusRow) int {
 	for _, r := range rows {
 		switch r.Relation {
-		case sessiontaskrelation.RelationTouched, sessiontaskrelation.RelationReferenced:
+		case sessiontaskrelation.RelationTouched, sessiontaskrelation.RelationSpawned,
+			sessiontaskrelation.RelationReferenced:
 			return 2
 		}
 	}

@@ -226,6 +226,7 @@ Capture is automatic: Endless records a row for every task your session claims, 
 |--------------|-----------------------------------------------------------|
 | `claimed`    | you claimed it                                            |
 | `bound`      | you own it but haven't claimed it — `task bind`, or a primed session's auto-bind |
+| `spawned`    | you spawned a session to work it (any project) — shown until it settles |
 | `touched`    | your user put it on your list with `session touch`        |
 | `filed`      | you filed it during this session                          |
 | `revisited`  | you edited it, but didn't claim it                        |
@@ -245,7 +246,7 @@ endless session task remove E-101      # a capture that shouldn't have happened
 
 **`remove` is not the inverse of `hide --task`**, and the difference is the whole point: hide suppresses a row while *keeping* the association, so the touch that really happened stays on the record. Hide is for a capture that is real but noisy; remove is for one that was simply wrong.
 
-`session status` tiers rows by relation. Decided work (`claimed`, `bound`, and `touched` — the last marked ⊕) leads among equally actionable rows; `referenced` rows (marked ·) sink below everything and render dimmed, so reads can never crowd out work. Relation never outranks actionability, though — a `touched` task parked in `later` still sits below the task you're actually working. A `bound` task, like a claimed one, is your session's anchor: it shows once, as the task your view is built around, never as a second row.
+`session status` tiers rows by relation. Decided work (`claimed`, `bound`, `spawned` marked ↗, and `touched` marked ⊕) leads among equally actionable rows; `referenced` rows (marked ·) sink below everything and render dimmed, so reads can never crowd out work. Relation never outranks actionability, though — a `touched` task parked in `later` still sits below the task you're actually working. A `bound` task, like a claimed one, is your session's anchor: it shows once, as the task your view is built around, never as a second row.
 
 Two more kinds of row render dimmed because neither is actionable from your board: `⟳ doing` rows, which another live session is working, and the `↑ parent` row, in every phase — both even when they wear `◆`, since landing them is not this board's job. `☑ verify` rows stay bright — verifying is your user's action — and your claimed task never dims. A highlighted id (focus, duplicate, unblocked) keeps its full colour on a dimmed row.
 

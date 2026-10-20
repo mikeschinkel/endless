@@ -1390,7 +1390,9 @@ INSERT INTO session_task_relations (id, slug, label) VALUES
     (5, 'touched',    'Touched'),
     -- E-2291: renamed 2 surfaced→filed and 5 queued→touched (a label change,
     -- upserted onto existing rows here), and appended 6.
-    (6, 'bound',      'Bound')
+    (6, 'bound',      'Bound'),
+    -- E-2405: a task this session spawned. Appended like E-1696's ids.
+    (7, 'spawned',    'Spawned')
 ON CONFLICT(id) DO UPDATE SET slug = excluded.slug, label = excluded.label;
 
 -- Which sessions touched which tasks (E-1322). Query-speed projection of the

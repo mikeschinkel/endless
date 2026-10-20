@@ -19,6 +19,7 @@ import (
 func TestRelationGlyphWidths(t *testing.T) {
 	for name, g := range map[string]string{
 		"touchedGlyph":    touchedGlyph,
+		"spawnedGlyph":    spawnedGlyph,
 		"referencedGlyph": referencedGlyph,
 	} {
 		if w := runewidth.StringWidth(g); w != 1 {
@@ -135,6 +136,38 @@ func TestRelationColumn_MarksQueuedAndReferenced(t *testing.T) {
 		if !strings.Contains(out, want) {
 			t.Errorf("legend missing %q:\n%s", want, out)
 		}
+	}
+}
+
+// TestRelationColumn_MarksSpawned covers E-2405's display half (P15): a task
+// this session spawned wears ↗ in the relation column and the legend names it
+// "spawned", so the row reads as delegated work rather than the session's own.
+func TestRelationColumn_MarksSpawned(t *testing.T) {
+	out := render([]monitor.SessionStatusRow{
+		{ID: 7, Title: "delegated", Status: "underway", Phase: "now", TypeSlug: "todo",
+			InFlight: true, Relation: sessiontaskrelation.RelationSpawned},
+	})
+	if !strings.Contains(out, spawnedGlyph+" spawned") {
+		t.Errorf("legend missing %q:\n%s", spawnedGlyph+" spawned", out)
+	}
+	if !strings.Contains(out, spawnedGlyph+" delegated") {
+		t.Errorf("spawned row does not wear %q:\n%s", spawnedGlyph, out)
+	}
+}
+
+// TestSortRows_SpawnedIsDecidedWork pins spawned in the decided-work tier
+// (E-2405): between equally actionable rows it leads incidental work, the same
+// tiebreak touched gets.
+func TestSortRows_SpawnedIsDecidedWork(t *testing.T) {
+	rows := []monitor.SessionStatusRow{
+		{ID: 50, Title: "filed", Status: "ready", Phase: "now",
+			Relation: sessiontaskrelation.RelationFiled},
+		{ID: 51, Title: "spawned", Status: "ready", Phase: "later",
+			Relation: sessiontaskrelation.RelationSpawned},
+	}
+	sortRows(rows)
+	if rows[0].ID != 51 {
+		t.Errorf("spawned should lead an equal-action tie: order = %v", ids(rows))
 	}
 }
 

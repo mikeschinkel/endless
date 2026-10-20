@@ -12,6 +12,7 @@ const (
 	stewRelSurfaced  = 2
 	stewRelRevisited = 3
 	stewRelQueued    = 5
+	stewRelSpawned   = 7 // E-2405
 )
 
 func stewSetFocus(t *testing.T, db *sql.DB, sessionID, taskID int64) {
@@ -487,5 +488,57 @@ func TestStewardship_PinOutranksSteward(t *testing.T) {
 	}
 	if r := stewBoard(t, 103, 4)[150]; r.StewardedElsewhere || r.Pinned {
 		t.Errorf("steward's board: %+v, want shown, unpinned (a pin is per-session)", r)
+	}
+}
+
+// TestStewardship_SpawnerStewardsLikeAFiler pins E-2405's "stewardship counts a
+// spawned session as it counts a filing one": A spawned E-150 and B merely
+// updated it. A keeps it, exactly as in TestStewardship_UpdateNeverTakesStewardship
+// with a filer — the update does not move it to B.
+func TestStewardship_SpawnerStewardsLikeAFiler(t *testing.T) {
+	db := stewFixture(t)
+	snSessionTaskRel(t, db, 1, 150, stewRelSpawned)
+	snSessionTaskRel(t, db, 2, 150, stewRelRevisited)
+
+	if r := stewBoard(t, 100, 1)[150]; r.StewardedElsewhere || r.DuplicateWork {
+		t.Errorf("spawner's board: %+v, want shown, unmarked", r)
+	}
+	if r := stewBoard(t, 101, 2)[150]; !r.StewardedElsewhere {
+		t.Errorf("updater's board: %+v, want stewarded elsewhere", r)
+	}
+}
+
+// TestStewardship_SpawnerAndFilerShareARung: a spawner and a filer sit on the
+// SAME rung of the ladder, so one of each is ambiguous, just as two filers are.
+// If spawned had a rung of its own (above or below surfaced) one of them would
+// win outright instead.
+func TestStewardship_SpawnerAndFilerShareARung(t *testing.T) {
+	db := stewFixture(t)
+	snSessionTaskRel(t, db, 1, 151, stewRelSurfaced)
+	snSessionTaskRel(t, db, 2, 151, stewRelSpawned)
+
+	for _, s := range []struct{ focal, viewer int64 }{{100, 1}, {101, 2}} {
+		r := stewBoard(t, s.focal, s.viewer)[151]
+		if r.StewardedElsewhere || !r.DuplicateWork {
+			t.Errorf("board %d: %+v, want shown with the duplicate mark", s.viewer, r)
+		}
+	}
+}
+
+// TestStewardship_SpawnedTaskClaimedBySpawnee is the spawn flow with the new
+// relation: A spawns E-153 and session 5 claims it. The claimer is the owner and
+// is left out of the count, so A stewards it — shown on A's board as ⟳ doing,
+// unmarked — mirroring TestStewardship_ClaimerIsNotADuplicate for a filer.
+func TestStewardship_SpawnedTaskClaimedBySpawnee(t *testing.T) {
+	db := stewFixture(t)
+	snSessionTaskRel(t, db, 1, 153, stewRelSpawned)
+	snSession(t, db, 5, 1, 153, "working")
+	snSessionTaskRel(t, db, 5, 153, stewRelClaimed)
+	stewSetFocus(t, db, 5, 153)
+	stewBindPane(t, db, 5, "")
+
+	a := stewBoard(t, 100, 1)[153]
+	if a.StewardedElsewhere || a.DuplicateWork || !a.InFlight {
+		t.Errorf("spawner's board: %+v, want the ⟳ row, shown, unmarked", a)
 	}
 }

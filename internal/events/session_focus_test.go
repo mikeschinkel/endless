@@ -115,6 +115,7 @@ func TestRelation_MovesFocus(t *testing.T) {
 		sessiontaskrelation.RelationRevisited:  true,
 		sessiontaskrelation.RelationTouched:    false,
 		sessiontaskrelation.RelationReferenced: false,
+		sessiontaskrelation.RelationSpawned:    false, // E-2405
 	}
 	for _, rel := range sessiontaskrelation.All() {
 		if got := rel.MovesFocus(); got != want[rel] {

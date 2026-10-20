@@ -36,6 +36,11 @@ package monitor
 //     is marked on every board that shows it.
 //   - An update never takes stewardship from a filer: adding a note to someone
 //     else's task is ordinary and must not move it.
+//   - A session that SPAWNED the task (relation spawned, E-2405) counts exactly
+//     as a filer does. Spawning is the same act of putting a task in motion
+//     from this board, and the spawner is the board that follows it until it
+//     settles. The spawned session claims the task, so it is the OWNER and is
+//     left out of the count like every claimer.
 //
 // A board shows a task unless another present session is its steward — and even
 // then it shows a task it has in focus, or one the viewer PINNED with `session
@@ -221,7 +226,8 @@ func boardSessions(db *sql.DB, viewer, focal int64) (map[int64]bool, error) {
 	return board, rows.Err()
 }
 
-// liveStewardship gathers, for each task id, the filers, revisiters and
+// liveStewardship gathers, for each task id, the filers (and, since E-2405,
+// spawners), revisiters and
 // focusers among present sessions — excluding each task's own claiming session,
 // and excluding from filers and revisiters any session that hid the task —
 // plus the number of present sessions that claimed it.
@@ -240,12 +246,15 @@ func liveStewardship(db *sql.DB, taskIDs []int64) (map[int64]taskStewardship, er
 		  WHERE st.task_id IN (`+ph+`)
 		    AND `+presentSession+`
 		    AND s.task_id IS NOT st.task_id
-		    AND st.relation_id IN (?, ?)
+		    AND st.relation_id IN (?, ?, ?)
 		    AND NOT EXISTS (
 		      SELECT 1 FROM session_hidden_tasks h
 		       WHERE h.session_id = st.session_id AND h.task_id = st.task_id)
 		  ORDER BY st.session_id`,
-		append(args, int(sessiontaskrelation.RelationFiled), int(sessiontaskrelation.RelationRevisited))...,
+		append(args,
+			int(sessiontaskrelation.RelationFiled),
+			int(sessiontaskrelation.RelationSpawned),
+			int(sessiontaskrelation.RelationRevisited))...,
 	)
 	if err != nil {
 		return nil, err
@@ -257,9 +266,12 @@ func liveStewardship(db *sql.DB, taskIDs []int64) (map[int64]taskStewardship, er
 			return nil, err
 		}
 		o := out[taskID]
-		if sessiontaskrelation.Relation(rel) == sessiontaskrelation.RelationFiled {
+		// E-2405: spawned lands on the filer rung, not a rung of its own —
+		// "stewardship counts a spawned session as it counts a filing one".
+		switch sessiontaskrelation.Relation(rel) {
+		case sessiontaskrelation.RelationFiled, sessiontaskrelation.RelationSpawned:
 			o.filers = append(o.filers, sessionID)
-		} else {
+		default:
 			o.revisiters = append(o.revisiters, sessionID)
 		}
 		out[taskID] = o

@@ -53,8 +53,8 @@ type jsonRow struct {
 	Hidden         bool   `json:"hidden"`
 	HiddenAt       string `json:"hidden_at,omitempty"`
 	// Relation is how this task entered the VIEWING session's scope (E-1696) —
-	// the machine slug ("claimed", "bound", "touched", "filed", "revisited",
-	// "referenced"). Omitted when the viewer has no session_tasks row for the
+	// the machine slug ("claimed", "bound", "spawned", "touched", "filed",
+	// "revisited", "referenced"). Omitted when the viewer has no session_tasks row for the
 	// task: the read-time children, dependents and upstream blockers, which
 	// legitimately entered scope no way at all. Attributed by the frame's
 	// `viewer_session`, exactly as `hidden` is — relation is a property of the

@@ -46,7 +46,10 @@ def stub_recovery(monkeypatch, tmp_path):
         }
 
     monkeypatch.setattr(worktree_cmd, "recreate_dropped_worktree", fake_recreate)
-    monkeypatch.setattr(worktree_cmd, "_project_root", lambda: tmp_path)
+    # E-2405: recovery takes the repository from the task's project, not cwd.
+    from endless import task_cmd
+    monkeypatch.setattr(task_cmd, "_task_project",
+                        lambda *a, **k: (1, "p", tmp_path))
     monkeypatch.setattr(
         worktree_cmd, "_branch_exists", lambda b, r: calls["branch_exists"]
     )

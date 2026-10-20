@@ -794,9 +794,9 @@ func renderFrame(ctx context.Context, w io.Writer, rows []monitor.SessionStatusR
 		}
 	}
 
-	// Relation-column width, same width-on-demand rule (E-1696): the ⊕/· slot
-	// exists only when a RENDERED row carries a mark, so a frame with no touched
-	// or referenced rows is byte-identical to before.
+	// Relation-column width, same width-on-demand rule (E-1696): the ⊕/↗/· slot
+	// exists only when a RENDERED row carries a mark, so a frame with no touched,
+	// spawned (E-2405) or referenced rows is byte-identical to before.
 	rw := relationColWidth(rows)
 
 	// Fixed prefix width = "I L NNNNNN P " = 13 cols (icon, type letter, the
@@ -1017,7 +1017,7 @@ func joinLegend(entries []legendEntry, sep, between string) string {
 // legendEntries is the ordered set of glyphs present in rows.
 func legendEntries(rows []monitor.SessionStatusRow) []legendEntry {
 	var present [taskrow.Count]bool
-	var done, blocked, blocks, unsettled, notStarted, undetermined, hidden, touched, referenced bool
+	var done, blocked, blocks, unsettled, notStarted, undetermined, hidden, touched, spawned, referenced bool
 	var focus, duplicate, spawnable, suppressed bool
 	for _, r := range rows {
 		present[classify(r)] = true
@@ -1033,6 +1033,8 @@ func legendEntries(rows []monitor.SessionStatusRow) []legendEntry {
 		switch r.Relation {
 		case sessiontaskrelation.RelationTouched:
 			touched = true
+		case sessiontaskrelation.RelationSpawned:
+			spawned = true
 		case sessiontaskrelation.RelationReferenced:
 			referenced = true
 		}
@@ -1120,7 +1122,11 @@ func legendEntries(rows []monitor.SessionStatusRow) []legendEntry {
 	}
 	// ⊕/· join ⊘ in the view-scoped tail: like hidden, they describe how the row
 	// entered THIS SESSION's scope rather than anything about the task (E-1696).
-	// ⊕ before ·, matching the order they sort in.
+	// ↗ before ⊕ before ·, matching the order they rank in (E-2405 put spawned
+	// above touched).
+	if spawned {
+		parts = append(parts, legendEntry{Icon: spawnedGlyph, Label: "spawned"})
+	}
 	if touched {
 		parts = append(parts, legendEntry{Icon: touchedGlyph, Label: "touched"})
 	}
@@ -1260,7 +1266,7 @@ func sortRows(rows []monitor.SessionStatusRow) {
 			return ai < aj
 		}
 		// E-1696, tiebreak only: between equally actionable rows, decided work
-		// (claimed/bound/touched) sorts above incidental work. Deliberately BELOW the action
+		// (claimed/bound/spawned/touched) sorts above incidental work. Deliberately BELOW the action
 		// key — a touched task parked in `later` must not jump the row you are
 		// actually working.
 		if pi, pj := prominence(rows[i]), prominence(rows[j]); pi != pj {

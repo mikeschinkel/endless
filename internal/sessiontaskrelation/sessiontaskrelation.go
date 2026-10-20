@@ -13,6 +13,10 @@
 //     step before a claim: the session is working out the plan with its user.
 //   - touched:    explicitly put in the session's scope (`touch`, and its alias
 //     `session task add`)
+//   - spawned:    a task this session handed to a new session it spawned
+//     (session_tasks.spawned, E-2405). Recorded on the SPAWNING session so
+//     its `session status` keeps the delegated task in view until it settles,
+//     even when the task lives in another project.
 //   - filed:      created during the session (task.created / task.imported)
 //   - revisited:  a pre-existing task the session edited but did not claim
 //   - referenced: read-only relevance — the session looked at the task without
@@ -56,6 +60,8 @@ const (
 	RelationReferenced Relation = 4
 	RelationTouched    Relation = 5
 	RelationBound      Relation = 6
+	// RelationSpawned is APPENDED by E-2405 under the same never-renumber rule.
+	RelationSpawned Relation = 7
 )
 
 // String returns the lowercase machine slug (matches session_task_relations.slug).
@@ -73,6 +79,8 @@ func (r Relation) String() string {
 		return "touched"
 	case RelationBound:
 		return "bound"
+	case RelationSpawned:
+		return "spawned"
 	default:
 		return fmt.Sprintf("Relation(%d)", int(r))
 	}
@@ -93,6 +101,8 @@ func (r Relation) Label() string {
 		return "Touched"
 	case RelationBound:
 		return "Bound"
+	case RelationSpawned:
+		return "Spawned"
 	default:
 		return ""
 	}
@@ -114,10 +124,12 @@ func Parse(s string) (Relation, error) {
 		return RelationTouched, nil
 	case "bound":
 		return RelationBound, nil
+	case "spawned":
+		return RelationSpawned, nil
 	default:
 		return 0, fmt.Errorf(
 			"sessiontaskrelation: invalid relation %q "+
-				"(valid: claimed, bound, touched, filed, revisited, referenced)", s,
+				"(valid: claimed, bound, spawned, touched, filed, revisited, referenced)", s,
 		)
 	}
 }
@@ -133,7 +145,7 @@ func Validate(s string) error {
 func All() []Relation {
 	return []Relation{
 		RelationClaimed, RelationFiled, RelationRevisited,
-		RelationReferenced, RelationTouched, RelationBound,
+		RelationReferenced, RelationTouched, RelationBound, RelationSpawned,
 	}
 }
 
@@ -157,7 +169,8 @@ func (r Relation) IsAnchor() bool {
 }
 
 // Rank orders the relations from strongest claim on the session to weakest:
-// claimed < bound < touched < filed < revisited < referenced. LOWER rank =
+// claimed < bound < spawned < touched < filed < revisited < referenced. LOWER
+// rank =
 // STRONGER.
 //
 // One ladder serves two jobs, deliberately, because they are the same judgment:
@@ -174,9 +187,16 @@ func (r Relation) IsAnchor() bool {
 //     binding a touched task upgrades it to `bound`.
 //
 //  2. DISPLAY TIER (E-1462's Extension). `session status` ranks equally
-//     actionable rows by this order, so decided work (claimed/bound/touched)
+//     actionable rows by this order, so decided work
+//     (claimed/bound/spawned/touched)
 //     sits above incidental work (filed/revisited) and read-only relevance
 //     (`referenced`) sinks to the bottom.
+//
+// E-2405 slots `spawned` directly below `bound`: spawning a task is a firmer
+// decision than touching it (the session did not just put it on the board, it
+// started a session to work it), so a task the session filed, edited or touched
+// and then spawned reads Spawned. It stays below `claimed` and `bound` because a
+// session that owns a task is working it itself, which is the stronger claim.
 //
 // An unknown value ranks last, so a relation from a newer binary degrades to
 // "least prominent, never upgrades over anything" rather than silently
@@ -187,16 +207,18 @@ func (r Relation) Rank() int {
 		return 0
 	case RelationBound:
 		return 1
-	case RelationTouched:
+	case RelationSpawned:
 		return 2
-	case RelationFiled:
+	case RelationTouched:
 		return 3
-	case RelationRevisited:
+	case RelationFiled:
 		return 4
-	case RelationReferenced:
+	case RelationRevisited:
 		return 5
-	default:
+	case RelationReferenced:
 		return 6
+	default:
+		return 7
 	}
 }
 
@@ -266,8 +288,10 @@ func VerifyIntegrity(db *sql.DB) error {
 // MovesFocus reports whether a capture of this relation repoints the session's
 // focused task (sessions.focus_task_id, E-2188): claimed, bound, filed and
 // revisited do — the session owns the task or wrote to it, so its conversation
-// is on it now. touched and referenced do not: adding a task to the board or
-// merely reading a neighbour must not steal focus from the task being worked.
+// is on it now. touched, spawned and referenced do not: adding a task to the
+// board, handing it to a spawned session (E-2405 — the spawned session works
+// it, not the spawner) or merely reading a neighbour must not steal focus from
+// the task being worked.
 //
 // A per-capture judgment, independent of Rank: focus follows the LATEST write,
 // while the stored relation keeps the STRONGEST one.

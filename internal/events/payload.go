@@ -462,9 +462,10 @@ type SessionStatusRecordedPayload struct {
 	Notes     string `json:"notes"`
 }
 
-// SessionTaskMembershipPayload carries the task list for the two session-task
+// SessionTaskMembershipPayload carries the task list for the session-task
 // membership verbs (E-1696): `session_tasks.touched` (`touch` / `session task
-// add`) and `session_tasks.removed` (`session task remove`). Process is the session
+// add`), `session_tasks.spawned` (`task spawn`, recorded on the spawner, E-2405)
+// and `session_tasks.removed` (`session task remove`). Process is the session
 // identifier — the "__session_id=N" sentinel set by the Python command, or a raw
 // tmux pane id — resolved exactly as session_status.recorded's is. TaskIDs are
 // display form ("E-100"); the executors strip the prefix.

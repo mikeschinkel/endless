@@ -50,7 +50,10 @@ def fg_env(monkeypatch):
     from endless import plan_items
     monkeypatch.setattr(plan_items, "require_deliverable", lambda *a, **k: None)
     monkeypatch.setattr(plan_items, "require_approved", lambda *a, **k: None)
-    monkeypatch.setattr(task_cmd, "_resolve_project", lambda *a, **k: (None, "p"))
+    # E-2405: spawn takes its project from the task, not cwd.
+    monkeypatch.setattr(task_cmd, "_task_project",
+                        lambda *a, **k: (None, "p", Path("/wt")))
+    monkeypatch.setattr(task_cmd, "_record_spawned", lambda *a, **k: None)
     monkeypatch.setattr(task_cmd, "_perform_claim_work",
                         lambda **k: (Path("/wt/e-1705"), True))
     monkeypatch.setattr(task_cmd, "render_handoff", lambda *a, **k: "HANDOFF")

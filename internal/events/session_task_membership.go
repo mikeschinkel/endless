@@ -58,7 +58,34 @@ func execSessionTasksTouched(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 	return &ExecuteResult{Markdown: renderTouched(touched, unchanged, prior)}, nil
 }
 
-// enrollSessionTasks is the body of the scope-entry verb: resolve the request, refuse unknown ids, then offer `rel` to the ladder once per task.
+// execSessionTasksSpawned handles KindSessionTasksSpawned (E-2405): record each
+// named task on the SPAWNING session at relation `spawned`. The emitting session
+// is the spawner, not the spawned session — the spawned session claims the task
+// through its own task.claimed, and that is a different session_tasks row.
+//
+// The point is the spawner's `session status`: a task it handed off would
+// otherwise vanish from its board the moment it was spawned (the spawner never
+// edits it again), so the user loses sight of delegated work until it lands.
+// The row keeps it in view, and the board's terminal-status filter drops it
+// once the task settles, so there is nothing to clean up. The task may live in
+// another project; session_tasks is keyed by session and task only, so nothing
+// here — or in the board's row query — filters on project.
+//
+// Same ladder as every other capture: spawning a task the session filed,
+// edited or touched upgrades it to `spawned`; spawning a task the session owns
+// (claimed or bound) leaves it as it is. `spawned` does not move focus
+// (MovesFocus) — the spawner is not working the task, the spawned session is.
+func execSessionTasksSpawned(db dbQuerier, evt *Event) (*ExecuteResult, error) {
+	spawned, unchanged, prior, err := enrollSessionTasks(
+		db, evt, string(evt.Kind), sessiontaskrelation.RelationSpawned,
+	)
+	if err != nil {
+		return nil, err
+	}
+	return &ExecuteResult{Markdown: renderSpawned(spawned, unchanged, prior)}, nil
+}
+
+// enrollSessionTasks is the body of the scope-entry verbs: resolve the request, refuse unknown ids, then offer `rel` to the ladder once per task.
 //
 // It returns the tasks the upsert ran for, the tasks whose stored relation
 // already outranked `rel` (so the ladder would have refused the downgrade and
@@ -296,6 +323,23 @@ func renderTouched(
 	var b strings.Builder
 	if len(touched) > 0 {
 		fmt.Fprintf(&b, "Touched %s — in this session's scope, unchanged.\n", taskList(touched))
+	}
+	for _, taskID := range unchanged {
+		fmt.Fprintf(&b, "E-%d already in this session as %s — left as is.\n",
+			taskID, prior[taskID].Label())
+	}
+	return b.String()
+}
+
+// renderSpawned formats the session_tasks.spawned result. As with touched, a
+// left-alone task names the relation that outranks `spawned` (claimed or
+// bound), so the reader can tell which one it already holds.
+func renderSpawned(
+	spawned, unchanged []int64, prior map[int64]sessiontaskrelation.Relation,
+) string {
+	var b strings.Builder
+	if len(spawned) > 0 {
+		fmt.Fprintf(&b, "Recorded %s as spawned by this session.\n", taskList(spawned))
 	}
 	for _, taskID := range unchanged {
 		fmt.Fprintf(&b, "E-%d already in this session as %s — left as is.\n",

@@ -289,6 +289,10 @@ const (
 //     relation `touched` (E-2173, E-2291) — scope entry with no edit to the
 //     task. Goes through upsertSessionTask, so it obeys the same upgrade-only
 //     ladder as every automatic capture and cannot demote a claim or a bind.
+//   - spawned: `task spawn` records the spawned task on the SPAWNING session at
+//     relation `spawned` (E-2405), so the spawner's `session status` follows
+//     the delegated task — in any project — until it settles. Same ladder,
+//     same payload as touched; spawned ranks just above it.
 //   - removed: `session task remove` DELETES the session_tasks row outright.
 //     Distinct from `session hide --task` (E-1914), which suppresses the row
 //     from one session's listing while keeping the association — hide is for a
@@ -301,6 +305,7 @@ const (
 // what needs that split, and it is not these.
 const (
 	KindSessionTasksTouched Kind = "session_tasks.touched"
+	KindSessionTasksSpawned Kind = "session_tasks.spawned"
 	KindSessionTasksRemoved Kind = "session_tasks.removed"
 	// Session task visibility (E-2293): `session hide --task` / `session
 	// unhide --task`.
@@ -457,6 +462,8 @@ var ValidKinds = map[Kind]bool{
 	// Session task membership (E-1696, E-2173)
 	KindSessionTasksTouched: true,
 	KindSessionTasksRemoved: true,
+	// E-2405
+	KindSessionTasksSpawned: true,
 	// Session task visibility (E-2293)
 	KindSessionTasksHidden:   true,
 	KindSessionTasksUnhidden: true,

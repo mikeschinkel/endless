@@ -775,14 +775,16 @@ def _recover_dropped_worktree(
     a working branch for `--reopen`), and applies `--reopen`'s per-status
     transition. Returns the worktree path.
     """
-    from endless.worktree_cmd import recreate_dropped_worktree, _project_root
+    from endless.task_cmd import _task_project
+    from endless.worktree_cmd import recreate_dropped_worktree
 
     task_id = int(target["task_id"])
     task_type = target.get("task_type") or ""
     task_status = target.get("task_status") or ""
     title = target.get("task_title") or "task"
     landed_sha = target.get("landed_sha") or ""
-    project_root = _project_root()
+    # E-2405: rebuilt in the task's own project's repository, not cwd's.
+    _, _, project_root = _task_project(task_id, "recover the worktree of")
 
     if task_type == "epic":
         raise agent_help.no_report(

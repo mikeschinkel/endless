@@ -312,6 +312,92 @@ func taskRowSnapshot(t *testing.T, db *sql.DB, taskID int64) string {
 	}, "|")
 }
 
+// TestSessionTasksSpawned_RecordsRelationSeven applies a session_tasks.spawned
+// event and reads session_tasks back (E-2405, P16): the SPAWNING session gets a
+// row for the spawned task at relation_id 7, written through the event
+// pipeline. The relation_id is asserted as the raw integer, not the slug,
+// because 7 is what is persisted — a seed row with the wrong id would still
+// join to the right slug on a fresh database and hide the drift.
+func TestSessionTasksSpawned_RecordsRelationSeven(t *testing.T) {
+	db := newSessionTasksTestDB(t)
+	seedSession(t, db, 42)
+	seedLiveTask(t, db, 100)
+
+	res, err := dispatch(db, membershipEvent(
+		t, KindSessionTasksSpawned, 42, []string{"E-100"}), nil,
+	)
+	if err != nil {
+		t.Fatalf("dispatch spawned: %v", err)
+	}
+	var relID int64
+	if err := db.QueryRow(
+		`SELECT relation_id FROM session_tasks WHERE session_id = 42 AND task_id = 100`,
+	).Scan(&relID); err != nil {
+		t.Fatalf("read session_tasks: %v", err)
+	}
+	if relID != 7 || sessiontaskrelation.Relation(relID) != sessiontaskrelation.RelationSpawned {
+		t.Errorf("relation_id = %d, want 7 (spawned)", relID)
+	}
+	if got := sessionTaskRelation(t, db, 42, 100); got != "spawned" {
+		t.Errorf("relation slug = %q, want spawned", got)
+	}
+	if !strings.Contains(markdownOf(res), "Recorded E-100 as spawned by this session.") {
+		t.Errorf("unexpected result markdown: %q", markdownOf(res))
+	}
+	// Spawning does not move the spawner's focus: the spawned session works it.
+	if got := sessionFocus(t, db, 42); got != 0 {
+		t.Errorf("spawner focus = %d, want unset", got)
+	}
+}
+
+// TestSessionTasksSpawned_UpgradesWeakerKeepsOwned pins P17 end to end through
+// the executor: a task the session filed, edited or touched and then spawned
+// reads Spawned, while spawning a task the session owns (claimed or bound)
+// leaves it as it was and says which it is.
+func TestSessionTasksSpawned_UpgradesWeakerKeepsOwned(t *testing.T) {
+	db := newSessionTasksTestDB(t)
+	seedSession(t, db, 42)
+	prior := map[int64]sessiontaskrelation.Relation{
+		100: sessiontaskrelation.RelationFiled,
+		101: sessiontaskrelation.RelationRevisited,
+		102: sessiontaskrelation.RelationTouched,
+		103: sessiontaskrelation.RelationClaimed,
+		104: sessiontaskrelation.RelationBound,
+	}
+	for id, rel := range prior {
+		seedLiveTask(t, db, id)
+		if err := upsertSessionTask(db, "42", id, rel); err != nil {
+			t.Fatalf("seed E-%d as %s: %v", id, rel, err)
+		}
+	}
+
+	res, err := dispatch(db, membershipEvent(
+		t, KindSessionTasksSpawned, 42, []string{"E-100", "E-101", "E-102", "E-103", "E-104"}), nil,
+	)
+	if err != nil {
+		t.Fatalf("dispatch spawned: %v", err)
+	}
+	for _, id := range []int64{100, 101, 102} {
+		if got := sessionTaskRelation(t, db, 42, id); got != "spawned" {
+			t.Errorf("E-%d (was %s): relation = %q, want spawned", id, prior[id], got)
+		}
+	}
+	if got := sessionTaskRelation(t, db, 42, 103); got != "claimed" {
+		t.Errorf("claim was demoted: relation = %q, want claimed", got)
+	}
+	if got := sessionTaskRelation(t, db, 42, 104); got != "bound" {
+		t.Errorf("bind was demoted: relation = %q, want bound", got)
+	}
+	for _, want := range []string{
+		"E-103 already in this session as Claimed — left as is.",
+		"E-104 already in this session as Bound — left as is.",
+	} {
+		if !strings.Contains(markdownOf(res), want) {
+			t.Errorf("expected %q in the result, got %q", want, markdownOf(res))
+		}
+	}
+}
+
 // TestSessionTasksMembership_RejectsEmptyList pins that a payload naming no
 // tasks fails rather than reporting a successful no-op, for every verb.
 func TestSessionTasksMembership_RejectsEmptyList(t *testing.T) {

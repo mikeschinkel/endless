@@ -2288,8 +2288,13 @@ def unsettled_item(item_id: int, agent: bool = False, as_json: bool = False):
         "FROM live_tasks t JOIN projects p ON t.project_id = p.id WHERE t.id = ?",
         (item_id,),
     )
-    from endless.worktree_cmd import _project_root
-    root = _project_root()
+    # E-2405: a task's worktree is in its own project's repository, wherever
+    # this is run from. Only a bare id with no task row falls back to cwd's.
+    if row:
+        _, _, root = _task_project(item_id, "inspect")
+    else:
+        from endless.worktree_cmd import _project_root
+        root = _project_root()
     path = _worktree_path_for_task(root, item_id)
 
     if row:
@@ -5000,6 +5005,7 @@ def _perform_claim_work(
     proj_name: str,
     project_root: Path | None = None,
     unattended: bool = False,
+    name_project: bool = False,
 ):
     """Emit claim events, print status/binding/worktree lines, create the worktree.
 
@@ -5032,7 +5038,9 @@ def _perform_claim_work(
     `project_root` defaults to cwd's project, which is right for every
     interactive claim. `session resume`'s task-less auto-claim (E-1918) passes
     it explicitly: there the project is a property of the RESUMED session, and
-    the resuming shell can be standing anywhere.
+    the resuming shell can be standing anywhere. So does `task spawn` (E-2405),
+    whose project is the task's, and `name_project` then prints it above the
+    worktree when it is not cwd's.
     """
     from endless.event_bridge import emit_event
     from endless.worktree_cmd import create_task_worktree, _project_root
@@ -5051,7 +5059,9 @@ def _perform_claim_work(
         project_root = _project_root()
     wt_path, created = create_task_worktree(item_id, project_root)
 
-    rows: list[tuple[str, str]] = []
+    rows: list[tuple[str, str]] = (
+        _foreign_project_rows(proj_name) if name_project else []
+    )
 
     if current_status != "underway":
         emit_event(
@@ -5517,6 +5527,32 @@ def claim_item(item_id: int, unattended: bool = False, force: bool = False,
         )
 
     _, proj_name = _resolve_project(None)
+    # E-2405: claim binds the CALLING session, and that session belongs to the
+    # project it runs in — its recorded project, its working directory and
+    # permissions, the config its hooks read. Claim cannot move any of those,
+    # so a task of another project is refused here, before anything changes,
+    # and handed to spawn, which starts a session where the task lives. The
+    # path check comes first: with no checkout to work in, spawn fails too.
+    _, task_proj_name, project_root = _task_project(item_id, "claim")
+    if task_proj_name != proj_name:
+        tid = task_id_display(item_id)
+        # REPORT: the route is a new session in a new window, which is the
+        # user's to start, not the claiming agent's.
+        raise agent_help.report(
+            f"Cannot claim {tid}: it belongs to project {task_proj_name}, and "
+            f"this claim is run in {proj_name}. A claim binds the session it "
+            f"is run from, which stays in {proj_name}; endless task spawn "
+            f"{tid} starts one in {task_proj_name}. {NOTHING_CHANGED}",
+            f"whether to start a session in {task_proj_name} for {tid}",
+            text=(
+                f"Cannot claim {tid}: it belongs to project {task_proj_name}, "
+                f"not {proj_name}, where this claim is run.\n"
+                f"  A claim binds the session it is run from, and that session "
+                f"stays in {proj_name}.\n"
+                f"  Start a session in {task_proj_name} instead:\n"
+                f"      endless task spawn {tid}"
+            ),
+        )
     # `--unattended` binds nothing, so it resolves nothing (E-2177). It used to
     # resolve and bind like any other claim, which from a Claude session's Bash
     # tool bound that session anyway — the one thing the flag exists to refuse.
@@ -5550,7 +5586,7 @@ def claim_item(item_id: int, unattended: bool = False, force: bool = False,
     if owns and current_status != "underway":
         owns = False
     if owns:
-        from endless.worktree_cmd import create_task_worktree, _project_root
+        from endless.worktree_cmd import create_task_worktree
         # A re-claim by the session that already claimed the task. Nothing to
         # change, so this reports rather than updates — but it reports in the
         # same aligned shape (E-1428), and without naming the session, which on
@@ -5559,10 +5595,6 @@ def claim_item(item_id: int, unattended: bool = False, force: bool = False,
         click.echo(
             f"{_task_label(item_id, title)} is already claimed by this session:"
         )
-        try:
-            project_root = _project_root()
-        except click.ClickException:
-            return
         wt_path, _ = create_task_worktree(item_id, project_root)
         click.echo("")
         _echo_labeled_rows([("Git worktree", config.tilde(wt_path))])
@@ -5593,6 +5625,7 @@ def claim_item(item_id: int, unattended: bool = False, force: bool = False,
         current_status=current_status,
         target_session=target_session,
         proj_name=proj_name,
+        project_root=project_root,
         # `target_session is None` reaches here only on E-2106's shell-in-tmux
         # path — the no-tmux case raised above, and every other caller resolved
         # something. At the moment this event is emitted that claim genuinely
@@ -6849,6 +6882,53 @@ def _project_repo_root(project_id: int) -> Path | None:
         return None
     from endless.project_path import resolved
     return resolved(row[0]["path"])
+
+
+def _task_project(item_id: int, verb: str) -> tuple[int, str, Path]:
+    """(project_id, name, repository root) of the project that OWNS the task.
+
+    E-2405. A command that creates or locates one task's worktree takes the
+    repository from the task, never from cwd: from cwd, a spawn of another
+    project's task made its worktree and branch in the wrong repository, ran
+    the wrong project's hook, and tagged its events for the wrong ledger.
+
+    A registered path that is missing, or is not a directory on this machine
+    (registered elsewhere, or the checkout moved), is refused rather than
+    falling back to cwd — falling back is the bug. REPORT: which directory is
+    the project is a statement only the machine's owner can make.
+    """
+    rows = db.query(
+        "SELECT p.id, p.name, p.path FROM live_tasks t "
+        "JOIN projects p ON p.id = t.project_id WHERE t.id = ?",
+        (item_id,),
+    )
+    if not rows:
+        raise agent_help.no_report(
+            f"No task found with id {item_id}", _NO_SUCH_ID_REMEDY
+        )
+    project_id, name = rows[0]["id"], rows[0]["name"]
+    root = _project_repo_root(project_id)
+    if root is None or not root.is_dir():
+        tid = task_id_display(item_id)
+        where = ("has no registered path" if root is None
+                 else f"is registered at {config.tilde(root)}, which is not a "
+                      f"directory here")
+        raise agent_help.report(
+            f"Cannot {verb} {tid}: its project {name} {where}. "
+            f"{NOTHING_CHANGED}",
+            f"where project {name}'s checkout is on this machine, so it can be "
+            f"registered there",
+        )
+    return project_id, name, root
+
+
+def _foreign_project_rows(proj_name: str) -> list[tuple[str, str]]:
+    """A `Project` row when the task's project is not cwd's (E-2405), so a
+    spawn or prime run from one project that worked in another says so."""
+    from endless.project_path import project_name_for_cwd
+    if project_name_for_cwd(config.resolution_cwd()) == proj_name:
+        return []
+    return [("Project", proj_name)]
 
 
 # The landing line's negative forms, and the budget they are written to.
@@ -8139,13 +8219,20 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     # Pre-claim: emit status_changed, create worktree. No session binding
     # yet — Claude hasn't started. SessionStart's @endless_spawned_by
     # path will record the binding once the new session is up.
-    _, proj_name = _resolve_project(None)
+    #
+    # E-2405: all of it in the TASK's project, not cwd's — the worktree, the
+    # post-worktree-create hook, and the project the events are tagged with
+    # (which picks the ledger they land in). The launch below already takes
+    # the project id from the task and the cwd from the worktree.
+    _, proj_name, project_root = _task_project(item_id, "spawn")
     wt_path, created = _perform_claim_work(
         item_id=item_id,
         title=title,
         current_status=current_status,
         target_session=None,
         proj_name=proj_name,
+        project_root=project_root,
+        name_project=True,
     )
 
     if cd_target is None:
@@ -8161,10 +8248,15 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     # session sharing the monitor's window — which did not ask for this spawn.
     # The marker is display-only (the "from" row), and a non-numeric value
     # renders no parent, which is the truth: no session spawned it (E-1815).
+    spawning_session = None if auto else _current_endless_session_id()
     if auto:
         spawner_id = "auto-spawn"
     else:
-        spawner_id = _current_endless_session_id() or f"pid-{os.getpid()}"
+        spawner_id = spawning_session or f"pid-{os.getpid()}"
+
+    # E-2405: the spawning session tracks what it spawned, in any project.
+    if spawning_session is not None:
+        _record_spawned(item_id, spawning_session, proj_name)
 
     window_name = tmux_window_name(item_id)
 
@@ -8240,6 +8332,38 @@ def spawn_plan(item_id: int, project_name: str | None = None,
     click.echo("  Switch to it:")
     reach = tmux_cmd.reach_window_line(window_name, tmux_session)
     click.echo(f"      {reach or f'tmux select-window -t {window_name}'}")
+
+
+def _record_spawned(item_id: int, session_id: int, proj_name: str) -> None:
+    """Record `item_id` on the spawning session as relation `spawned` (E-2405).
+
+    So the spawner's `session status` lists the task it handed off, whichever
+    project the task is in, until it settles. Only a spawn from a session
+    records it: a plain shell or the auto-spawn job has no session to record it
+    on. Tagged with the task's project, as every other event spawn emits is.
+
+    Best-effort: the status change and the worktree are already done, and
+    refusing now would strand an underway task with no session to work it.
+    """
+    from endless.event_bridge import emit_event
+    try:
+        emit_event(
+            kind="session_tasks.spawned",
+            project=proj_name,
+            entity_type="session_tasks",
+            entity_id="0",
+            payload={"process": f"__session_id={session_id}",
+                     "task_ids": [task_id_display(item_id)]},
+            session_id=str(session_id),
+        )
+    except click.ClickException as e:
+        agent_help.warn.no_report(
+            f"Could not record {task_id_display(item_id)} as spawned by "
+            f"{session_id_display(session_id)}; the spawn itself goes ahead.",
+            f"Track it by hand if you need it on this session: "
+            f"endless session task add {task_id_display(item_id)}",
+            text=f"note: could not record the spawned relation: {e.format_message()}",
+        )
 
 
 # Statuses a task may be primed from (E-1994): nobody has started it. A task
@@ -8324,8 +8448,10 @@ def prime_task(item_id: int, permission_mode: str = "auto",
         and not _has_sufficient_framing(item["type_slug"] or None, content)
     )
 
-    from endless.worktree_cmd import create_task_worktree, _project_root
-    wt_path, _created = create_task_worktree(item_id, _project_root())
+    # E-2405: in the task's project's repository, not cwd's.
+    from endless.worktree_cmd import create_task_worktree
+    _, proj_name, project_root = _task_project(item_id, "prime")
+    wt_path, _created = create_task_worktree(item_id, project_root)
 
     handoff_text = render_handoff(
         item_id, item["title"],
@@ -8372,6 +8498,7 @@ def prime_task(item_id: int, permission_mode: str = "auto",
     click.echo(f"Priming a session on {tid}{' (drafting its plan)' if drafting else ''}:")
     click.echo("")
     _echo_labeled_rows([
+        *_foreign_project_rows(proj_name),
         ("Window", window_name),
         ("Git worktree", config.tilde(wt_path)),
         ("Status", f"{item['status']} (unchanged until you resume it and it claims)"),
