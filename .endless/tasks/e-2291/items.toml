@@ -147,3 +147,8 @@ verify = "tests in tests/ for all three names"
 id = "P25"
 kind = "deliverable"
 statement = "task show labels a session_tasks row with no relation (pre-E-1462 history) Unclassified, since Touched now names a real relation"
+
+[[item]]
+id = "P26"
+kind = "deliverable"
+statement = "task show and task sessions render a session that owns the task as Bound when its row is bound, and Claimed otherwise"
