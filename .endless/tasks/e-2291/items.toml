@@ -136,3 +136,9 @@ kind = "deliverable"
 statement = "The help for touch and session task add, and the sessions guide, describe touch as the user's command for putting tasks on this session's session status list without changing them, and nothing in help or the guide tells agents to run it"
 verify = "read endless touch --help, endless session task add --help and docs/guide/sessions.md"
 detail = "No agent has ever run touch (searched every Claude transcript on this machine); all 23 ledger touches came from the user's shell pane"
+
+[[item]]
+id = "P24"
+kind = "deliverable"
+statement = "endless session touch puts tasks on this session's session status list, and endless touch and endless session task add are aliases of it"
+verify = "tests in tests/ for all three names"
