@@ -7725,3 +7725,7 @@ While framing E-2414's needs-plan questions I used 'pin' (session unhide --task 
 ### [2026-10-20] 'You' means this session or a prior one
 When Mike says 'you' did something (here: coined the term pin), he means Claude in this session or in any prior session. In E-2414's needs-plan I answered 'I didn't coin pin; E-2293 introduced it' — pedantic deflection, since a prior Claude session wrote E-2293. Own the prior session's work as mine and go straight to the substance.
 - **Project**: endless
+
+### [2026-10-20] Plan item wording from an earlier session is not the user's requirement
+E-2405's P15 said the spawned task is listed as a row 'labeled Spawned'. I implemented a ↗ relation-column mark instead and raised it as a discrepancy (EQ-90). Mike chose the mark and said he does not want the word 'Spawned' in the row; that wording was something an agent hallucinated in another session, not something he asked for. So when an approved plan item states a specific UI detail that looks like an agent's elaboration, it may not be his intent; raising the deviation, as was done here, is the right move.
+- **Project**: endless
