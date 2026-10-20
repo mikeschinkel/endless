@@ -122,3 +122,10 @@ statement = "Does not rewrite bind events already in the ledger: they stay task.
 id = "P21"
 kind = "exclusion"
 statement = "Does not edit plans or analyses already under .endless/tasks/"
+
+[[item]]
+id = "P22"
+kind = "deliverable"
+statement = "task bind run from a shell pane binds the one live Claude session in the same tmux window, and when no single session resolves it refuses, saying who must run it and from where"
+verify = "a test in tests/ with a shell pane beside one Claude pane, beside none, and beside two"
+detail = "Closes E-2362, which was superseded into E-2291"
