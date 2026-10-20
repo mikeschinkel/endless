@@ -7713,3 +7713,7 @@ While planning E-2405 (spawn a task in its own project's directory), Mike said e
 ### [2026-10-20] Ledger hand-edit rule is the normal case, not for repairing bug-caused corruption
 While working E-2405 (whose plan item P11 moves one misfiled E-2208 task.status_changed line from endless's db-ledger to go-cfgstore's), I stopped and asked because CLAUDE.md says 'Never hand-edit the db-ledger'. Mike: that rule is for the normal case. It does not apply to repairing corruption created by a bug or by a missing gate, especially a recent entry that has not propagated to many copies. He also said not to over-index on ledger completeness for now: the ledgers are known to be incomplete, and he plans a one-time rebuild of the ledgers from the DB once things are robust. So when an approved plan item calls for a targeted ledger repair of bug-caused corruption, do it as planned rather than re-asking.
 - **Project**: endless
+
+### [2026-10-20] Hand Mike scripts to run from a sibling pane, not with the ! prefix
+In E-2405, I offered Mike a script for the two direct-to-main ledger commits (P11) and said to run it with '! <command>'. Mike: he always runs things from a sibling pane unless there is a reason it has to be run from '!'. So when handing him a command to run himself, give it as something to run in a sibling pane, with an absolute path, and only suggest '!' when its output has to land in this conversation or the command needs this session's context.
+- **Project**: endless
