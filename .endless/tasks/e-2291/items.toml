@@ -129,3 +129,10 @@ kind = "deliverable"
 statement = "task bind run from a shell pane binds the one live Claude session in the same tmux window, and when no single session resolves it refuses, saying who must run it and from where"
 verify = "a test in tests/ with a shell pane beside one Claude pane, beside none, and beside two"
 detail = "Closes E-2362, which was superseded into E-2291"
+
+[[item]]
+id = "P23"
+kind = "deliverable"
+statement = "The help for touch and session task add, and the sessions guide, describe touch as the user's command for putting tasks on this session's session status list without changing them, and nothing in help or the guide tells agents to run it"
+verify = "read endless touch --help, endless session task add --help and docs/guide/sessions.md"
+detail = "No agent has ever run touch (searched every Claude transcript on this machine); all 23 ledger touches came from the user's shell pane"
