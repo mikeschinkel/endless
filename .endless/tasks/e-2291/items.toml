@@ -142,3 +142,8 @@ id = "P24"
 kind = "deliverable"
 statement = "endless session touch puts tasks on this session's session status list, and endless touch and endless session task add are aliases of it"
 verify = "tests in tests/ for all three names"
+
+[[item]]
+id = "P25"
+kind = "deliverable"
+statement = "task show labels a session_tasks row with no relation (pre-E-1462 history) Unclassified, since Touched now names a real relation"
