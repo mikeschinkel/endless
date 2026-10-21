@@ -99,5 +99,5 @@ statement = "A touch alone does not make a session the steward"
 [[item]]
 id = "P33"
 kind = "deliverable"
-statement = "endless task update E-N --steward refuses a session that claimed E-N, changes nothing, and says a claiming session cannot steward its own task"
+statement = "endless task update E-N --steward E-N refuses, changes nothing, and says a task's claiming session cannot steward it"
 verify = "a test in tests/"
