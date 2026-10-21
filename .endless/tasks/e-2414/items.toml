@@ -30,7 +30,7 @@ verify = "a test in tests/"
 id = "P21"
 kind = "deliverable"
 statement = "A chosen steward is the task's steward while its session is present, has not hidden the task and has not claimed it; otherwise the steward is worked out from filing and editing as before"
-verify = "Go tests in internal/monitor with the chosen session present, ended, and hiding the task"
+verify = "Go tests in internal/monitor with the chosen session present, ended, hiding the task, and having claimed it"
 
 [[item]]
 id = "P22"
