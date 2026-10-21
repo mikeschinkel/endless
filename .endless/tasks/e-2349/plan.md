@@ -42,19 +42,23 @@ fully up to date, and running it again changes nothing.
    either exists and neither mentions `endless guide`, append the same block,
    under a marker line, to `CLAUDE.md` if present, else `AGENTS.md`. A file
    that already mentions `endless guide` is left alone.
-7. **Commit** (new; whether to commit at all is EQ-83). Before step 2 runs,
-   record `git status --porcelain` for the candidate paths:
+7. **Commit** (new; rule per EQ-83). Before step 2 runs, record
+   `git status --porcelain` for the candidate paths:
    `.endless/config.json`, `.endless/tasks/CLAUDE.md`, the two harness files
    (Endless-owned), and `.gitignore`, `CLAUDE.md`, `AGENTS.md` (user-owned).
-   After step 6, the commit set is every candidate path that is now modified
-   or untracked, minus any path that was *modified or staged* before the run
-   (the user had work in it). An Endless-owned path that was *untracked* before
-   the run is committed — that is the legacy case of a `config.json` that was
-   never committed. A user-owned path that was untracked before the run is not
-   committed (it is the user's uncommitted file). If the checkout is not on its
-   default branch, the commit set is empty. Commit the set with one pathspec
-   commit (message `Endless: bring project up to Endless usage`), then print
-   every changed path left out and why. An empty set commits nothing.
+   After step 6, the commit set is:
+   - every Endless-owned candidate path that is now modified or untracked,
+     whatever its state before the run (this commits the legacy, never
+     committed `config.json`);
+   - every user-owned candidate path the run changed, but only if it had no
+     uncommitted change before the run: not modified, not staged, and not an
+     untracked file the user had already made. A file the run itself created
+     (e.g. a new `CLAUDE.md`) had no prior change, so it is committed.
+   If the checkout is not on its default branch, the commit set is empty.
+   Commit the set with one pathspec commit (`git commit -- <paths>`, so
+   nothing else the user staged is swept in; message
+   `Endless: bring project up to Endless usage`), then print every changed
+   path left out and why. An empty set commits nothing.
 
 Idempotence follows from each step writing only what is missing or different,
 and step 7 committing only what changed.
