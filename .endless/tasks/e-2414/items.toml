@@ -5,7 +5,7 @@
 [[item]]
 id = "P17"
 kind = "deliverable"
-statement = "endless task update E-N --steward ES-M stores ES-M as E-N's chosen steward through a task.steward_set event, and a rebuild from the ledger restores it"
+statement = "endless task update E-N --steward E-M stores task E-M as E-N's steward task through a task.steward_set event, whether or not a session holds E-M now, and a rebuild from the ledger restores it"
 verify = "a Go executor test and a replay test"
 
 [[item]]
