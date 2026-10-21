@@ -7733,3 +7733,7 @@ E-2405's P15 said the spawned task is listed as a row 'labeled Spawned'. I imple
 ### [2026-10-20] Don't put reconcile 'more' questions on items already in the plan
 While reconciling E-2291 I gave verdict 'more' (done beyond the approved plan; keep it?) to P23-P26. Those were plan items: P23/P24 were added to the plan mid-session, and P25/P26 were grown items that follow directly from the task's rename. Asking whether to keep them was pointless, because dropping them would run counter to the task's purpose. Mike asked why I needed to ask. A plan item, including a grown one, that I implemented as written is 'as_planned'. Use 'more' only for work outside every plan item, where dropping it is a real option.
 - **Project**: endless
+
+### [2026-10-20] Present reconcile 'keep it?' questions on grown plan items as non-choices
+Corrects the earlier E-2291 lesson, which wrongly said I set verdict 'more' on P23-P26. My reconcile file marked them as_planned; the reconcile tool itself filed 'done beyond the approved plan; keep it?' questions because those items were added to the plan after approval. My mistake was presenting each one to Mike as a real choice with a 'drop it' option, when dropping would have run counter to the task's purpose. Mike asked why I needed to ask. When the tool files such questions for plan items that follow from the task's purpose, say so and ask about them together, with keep as the evident answer.
+- **Project**: endless
