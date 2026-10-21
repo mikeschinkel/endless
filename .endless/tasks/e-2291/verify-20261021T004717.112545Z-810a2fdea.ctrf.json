@@ -1,0 +1,134 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 23,
+      "passed": 23,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test sessiontaskrelation, sessionstatuscmd (enum, ladder, anchors, touched glyph)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go test ./internal/events (task.bound, touched, retired queued kind)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go test ./internal/monitor (auto-bind relation, bound task is the anchor only)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go test ./internal/schema/... (migration 24 backfill, schema parity)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go test ./internal/hookcmd (a bound session's Write in main is refused)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go build ./cmd/endless-go (the Python tests drive this worktree's executor)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest (claim refusal, task.bound, shell-pane bind, touch alias, Sessions: header)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "task bind's help names the planning use",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "task bind's help says writes stay refused until the claim",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "task bind's help covers a shell pane",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the tasks guide has a Binding before a claim section",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the guide gives the refusal's wording",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the guide documents the Sessions: header",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "session touch --help: the user's command",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "session touch --help: names the aliases",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "touch --help: the user's command",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "touch --help: names the aliases",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "session task add --help: the user's command",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "session task add --help: names the aliases",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the sessions guide's relation table lists bound",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the sessions guide calls session touch the user's command",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no code, help or guide text prints a Touched by: header",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no reader or seed names surfaced or queued as a relation slug",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
