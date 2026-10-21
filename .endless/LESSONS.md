@@ -7741,3 +7741,7 @@ Corrects the earlier E-2291 lesson, which wrongly said I set verdict 'more' on P
 ### [2026-10-20] Keep decision titles short; detail goes in the description
 ED-1633's title was a full sentence of rules with a two-line description. Mike asked for titles of 60 characters or less, with the detail moved into the description.
 - **Project**: endless
+
+### [2026-10-20] Touch does not mean stewardship
+In E-2414's needs-plan I recommended making a touch outrank filing for stewardship, reasoning that a touch is a deliberate choice. Mike rejected it: he may touch a task only to see it in session monitor, without meaning that session to steward it. Choosing a steward is a separate, explicit act (E-2414 stores it).
+- **Project**: endless
