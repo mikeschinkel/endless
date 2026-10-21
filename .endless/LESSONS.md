@@ -7729,3 +7729,7 @@ When Mike says 'you' did something (here: coined the term pin), he means Claude 
 ### [2026-10-20] Plan item wording from an earlier session is not the user's requirement
 E-2405's P15 said the spawned task is listed as a row 'labeled Spawned'. I implemented a ↗ relation-column mark instead and raised it as a discrepancy (EQ-90). Mike chose the mark and said he does not want the word 'Spawned' in the row; that wording was something an agent hallucinated in another session, not something he asked for. So when an approved plan item states a specific UI detail that looks like an agent's elaboration, it may not be his intent; raising the deviation, as was done here, is the right move.
 - **Project**: endless
+
+### [2026-10-20] Don't put reconcile 'more' questions on items already in the plan
+While reconciling E-2291 I gave verdict 'more' (done beyond the approved plan; keep it?) to P23-P26. Those were plan items: P23/P24 were added to the plan mid-session, and P25/P26 were grown items that follow directly from the task's rename. Asking whether to keep them was pointless, because dropping them would run counter to the task's purpose. Mike asked why I needed to ask. A plan item, including a grown one, that I implemented as written is 'as_planned'. Use 'more' only for work outside every plan item, where dropping it is a real option.
+- **Project**: endless
