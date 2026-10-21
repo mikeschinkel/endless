@@ -11,7 +11,7 @@ verify = "a Go executor test and a replay test"
 [[item]]
 id = "P18"
 kind = "deliverable"
-statement = "endless task update E-N --steward E-M stores the present session that claimed E-M, and refuses, naming the sessions and the ES-N form, when E-M has no present session or more than one"
+statement = "--steward takes only a task id: an ES-N is refused, and the refusal names the session's claimed task to use instead, or says it holds none"
 verify = "tests in tests/"
 
 [[item]]
