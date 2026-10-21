@@ -1,23 +1,25 @@
 # Show and set a task's steward session, and retire pins
 
-## The stored steward
-- A table holding at most one row per task, (task_id, session_id, set_at), written only by a new event kind, `task.steward_set`, whose payload carries the task and either a session or none. Its executor upserts the row, or deletes it for none. Add it to `schema.sql` with a migration.
-- `endless task update E-N --steward <E-M|ES-N|none>`:
-  - `E-M` picks the present session that claimed E-M. With no present session, or more than one, it refuses and names the sessions, with the `ES-N` form to use.
-  - `ES-N` names the session directly.
-  - The chosen session is touched for E-N (upgrade-only, so a stronger relation stays), and its hide of E-N, if any, is cleared, so the task is on its board.
+## The steward task
+- Stewardship is stored as a TASK, not a session: E-N's steward task E-M. The steward session is resolved from it at read time, so stewardship travels with E-M if the session holding E-M changes (until session instances exist, a task's session can change, which would orphan a stored session).
+- A table holding at most one row per task, (task_id, steward_task_id, set_at), written only by a new event kind, `task.steward_set`, whose payload carries the task and either a steward task or none. Its executor upserts the row, or deletes it for none. Add it to `schema.sql` with a migration.
+- `endless task update E-N --steward <E-M|none>`:
+  - `E-M` is stored whether or not a session holds it now.
+  - An `ES-N` is refused, naming that session's claimed task to use instead, or saying it holds none.
+  - `E-N` itself is refused: a task's claiming session can never steward it (ED-1605).
+  - Setting E-M clears any hide of E-N by a session claiming E-M.
   - `none` deletes the row.
-- A session that claimed E-N is refused: a claiming session can never steward its own task (ED-1605).
+- The board of a session claiming E-M lists every task whose steward task is E-M, so the task appears there without a touch, and still does after E-M's session changes.
 
 ## Working out the steward
-- One Go function in `internal/monitor`, shared by the boards (`session_stewardship.go`) and the commands below: the stored steward when its session is present, has not hidden the task and has not claimed it; otherwise the existing rules (filer, else the only editor, claimer and hiders not counted, two at the deciding step is ambiguous).
+- One Go function in `internal/monitor`, shared by the boards (`session_stewardship.go`) and the commands below: with a steward task E-M, the most recently active present session that claimed E-M and has not hidden the task (the rule `session goto E-M` uses); with none, the existing rules (filer, else the only editor, claimer and hiders not counted, two at the deciding step is ambiguous).
 - It is the same answer whichever session is looking.
 - Exposed to Python through an `endless-go` subcommand, so Python reads no SQLite.
 
 ## Commands that show it
 - `endless task steward E-N`: prints `ES-N` alone on stdout. With no steward it prints nothing on stdout, says so on stderr, and exits non-zero; when ambiguous it does the same and names the candidates.
 - `endless session goto --steward E-N`: goes to that session, refusing as `task steward` does when there is none.
-- `endless task show E-N`: a `Steward:` line, for example `Steward: ES-1352 (E-2300)`, `Steward: ES-1352 (E-2300), chosen` for a stored steward, `Steward: ambiguous (ES-1, ES-2)` or `Steward: none`.
+- `endless task show E-N`: a `Steward:` line, for example `Steward: ES-1352 (E-2300)`, `Steward: ES-1352 (E-2300), chosen` from a steward task, a note when the steward task has no present session, `Steward: ambiguous (ES-1, ES-2)` or `Steward: none`.
 
 ## Retiring pins (ED-1633)
 - A row whose session touched the task is never marked stewarded-elsewhere.
