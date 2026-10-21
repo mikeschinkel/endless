@@ -47,7 +47,7 @@ verify = "tests/test_register.py"
 [[item]]
 id = "P21"
 kind = "deliverable"
-statement = "Project init commits the files it changed on a clean default branch, and otherwise lists them for the user and commits nothing"
+statement = "Project init always commits the Endless-owned files it changed, and commits its edits to .gitignore, CLAUDE.md or AGENTS.md only when that file had no uncommitted change before the run, listing what it left out"
 verify = "tests/test_register.py"
 
 [[item]]
