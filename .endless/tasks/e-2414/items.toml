@@ -59,7 +59,7 @@ verify = "a test in tests/"
 [[item]]
 id = "P26"
 kind = "deliverable"
-statement = "endless task show E-N prints a Steward: line naming the steward session and its task, marked chosen for a stored steward, or reading ambiguous with the candidates, or none"
+statement = "endless task show E-N prints a Steward: line naming the steward session and its task, marked chosen when it comes from a steward task, noting a steward task that no present session holds, or reading ambiguous with the candidates, or none"
 verify = "tests in tests/ for each form"
 
 [[item]]
