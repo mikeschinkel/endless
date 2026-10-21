@@ -7749,3 +7749,7 @@ In E-2414's needs-plan I recommended making a touch outrank filing for stewardsh
 ### [2026-10-20] A claiming session can never steward its own task
 In E-2414's plan I listed under 'Decided without asking' that the claiming session could be chosen as a task's steward, reasoning that an explicit choice should not be overridden. Mike: a claiming session can never be its own steward (ED-1605: the steward and the owner are different roles). So task update --steward refuses the task's claiming session, and a stored steward that later claims the task no longer counts.
 - **Project**: endless
+
+### [2026-10-20] Store a chosen steward as a task, not a session
+E-2414's plan stored the chosen steward as a session (ES-N). Mike: stewardship must travel with the task, because until session instances exist the session holding a task can change, and a stored session would orphan the stewardship. The steward is stored as a steward task E-M and resolved to its present session at read time.
+- **Project**: endless
