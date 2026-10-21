@@ -7745,3 +7745,7 @@ ED-1633's title was a full sentence of rules with a two-line description. Mike a
 ### [2026-10-20] Touch does not mean stewardship
 In E-2414's needs-plan I recommended making a touch outrank filing for stewardship, reasoning that a touch is a deliberate choice. Mike rejected it: he may touch a task only to see it in session monitor, without meaning that session to steward it. Choosing a steward is a separate, explicit act (E-2414 stores it).
 - **Project**: endless
+
+### [2026-10-20] A claiming session can never steward its own task
+In E-2414's plan I listed under 'Decided without asking' that the claiming session could be chosen as a task's steward, reasoning that an explicit choice should not be overridden. Mike: a claiming session can never be its own steward (ED-1605: the steward and the owner are different roles). So task update --steward refuses the task's claiming session, and a stored steward that later claims the task no longer counts.
+- **Project**: endless
