@@ -23,7 +23,7 @@ verify = "a Go test in internal/monitor and a test in tests/"
 [[item]]
 id = "P20"
 kind = "deliverable"
-statement = "endless task update E-N --steward none removes the chosen steward, and the steward is worked out again from filing and editing"
+statement = "endless task update E-N --steward none removes the steward task, and the steward is worked out again from filing and editing"
 verify = "a test in tests/"
 
 [[item]]
