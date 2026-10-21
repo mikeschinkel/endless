@@ -17,7 +17,7 @@ verify = "a test in tests/"
 [[item]]
 id = "P19"
 kind = "deliverable"
-statement = "Setting a steward touches the task in the chosen session and clears that session's hide of it, so the task is on that session's board"
+statement = "The session status board of a session claiming E-M lists every task whose steward task is E-M, and setting E-M clears any hide of E-N by a session claiming E-M"
 verify = "a test in tests/"
 
 [[item]]
