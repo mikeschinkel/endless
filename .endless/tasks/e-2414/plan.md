@@ -7,10 +7,10 @@
   - `ES-N` names the session directly.
   - The chosen session is touched for E-N (upgrade-only, so a stronger relation stays), and its hide of E-N, if any, is cleared, so the task is on its board.
   - `none` deletes the row.
-- The claiming session may be chosen.
+- A session that claimed E-N is refused: a claiming session can never steward its own task (ED-1605).
 
 ## Working out the steward
-- One Go function in `internal/monitor`, shared by the boards (`session_stewardship.go`) and the commands below: the stored steward when its session is present and has not hidden the task; otherwise the existing rules (filer, else the only editor, claimer and hiders not counted, two at the deciding step is ambiguous).
+- One Go function in `internal/monitor`, shared by the boards (`session_stewardship.go`) and the commands below: the stored steward when its session is present, has not hidden the task and has not claimed it; otherwise the existing rules (filer, else the only editor, claimer and hiders not counted, two at the deciding step is ambiguous).
 - It is the same answer whichever session is looking.
 - Exposed to Python through an `endless-go` subcommand, so Python reads no SQLite.
 
