@@ -7737,3 +7737,7 @@ While reconciling E-2291 I gave verdict 'more' (done beyond the approved plan; k
 ### [2026-10-20] Present reconcile 'keep it?' questions on grown plan items as non-choices
 Corrects the earlier E-2291 lesson, which wrongly said I set verdict 'more' on P23-P26. My reconcile file marked them as_planned; the reconcile tool itself filed 'done beyond the approved plan; keep it?' questions because those items were added to the plan after approval. My mistake was presenting each one to Mike as a real choice with a 'drop it' option, when dropping would have run counter to the task's purpose. Mike asked why I needed to ask. When the tool files such questions for plan items that follow from the task's purpose, say so and ask about them together, with keep as the evident answer.
 - **Project**: endless
+
+### [2026-10-20] Keep decision titles short; detail goes in the description
+ED-1633's title was a full sentence of rules with a two-line description. Mike asked for titles of 60 characters or less, with the detail moved into the description.
+- **Project**: endless
