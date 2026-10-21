@@ -110,10 +110,10 @@ made the default off. Correct it.
 
 The defaults above are recommendations, not decisions; each is asked:
 
-- EQ-81: where the work happens — this task belongs to `endless`, but its
+- EQ-81 (answered: an endless worktree): where the work happens — this task belongs to `endless`, but its
   worktree was cut in go-cfgstore.
-- EQ-82: `project init` re-run as the bring-up command, or a new verb.
-- EQ-83: whether init commits what it writes, and under the step 7 rule.
+- EQ-82 (answered): `project init` re-run; `doctor --fix` later calls the same steps.
+- EQ-83 (answered): Endless-owned files always; user-owned only when clean before the run.
 - EQ-84: replace a differing `_harness.sh`/`_guard.sh`, or leave and report.
 - EQ-85: append the guide pointer to an existing CLAUDE.md/AGENTS.md, or only
   create a missing file.
