@@ -47,7 +47,7 @@ verify = "E-2349 verify.sh end-to-end section"
 [[item]]
 id = "P23"
 kind = "deliverable"
-statement = "project forget marks a project's row forgotten, freeing its path, name, slug and identity for re-registration, without writing to its .endless/config.json or the ignore list; with tasks it refuses, naming the count and project ignore, unless --with-tasks removes them first through task.deleted events"
+statement = "project forget tombstones a project's row (status forgotten, name and path rewritten, identity and slug cleared, originals kept in projects.forgotten_from) so its path and name can be registered again, without writing to its .endless/config.json or the ignore list; with tasks it refuses, naming the count and project ignore, unless --with-tasks removes them first through task.deleted events"
 verify = "internal/monitor and internal/projectcmd Go tests; Python CLI test"
 
 [[item]]
