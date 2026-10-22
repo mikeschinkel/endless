@@ -42,3 +42,8 @@ statement = "The tests that covered the triggers' behaviour pass against the exe
 id = "P8"
 kind = "exclusion"
 statement = "Does not change the session_notices table, how notices are drained and delivered, or the ledger event format"
+
+[[item]]
+id = "P9"
+kind = "deliverable"
+statement = "tasks.changed_by_session and the stampTaskActor write are dropped: the executor derives the notice actor from the event envelope"
