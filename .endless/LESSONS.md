@@ -7769,3 +7769,7 @@ Arguing that E-2416 would not cover transcript retention, I cited that it was in
 ### [2026-10-22] Don't list spawned tasks in status summaries
 Summarizing what was pending, I listed E-2405 and E-2414 as unverified and waiting on Mike. Mike: once a task is spawned, don't mention it; that spends his attention for nothing, unless it blocks a task in session status that has not been spawned yet.
 - **Project**: endless
+
+### [2026-10-22] Config keys with two or more underscores want a parent object
+Planning E-2420 I proposed the Endless config key claude.transcript_retention_days. Mike: a key with two or more underscores is a code smell that suggests a parent object is needed; choose the grouping most likely to gain sibling properties (for example claude.transcripts.retention_days).
+- **Project**: endless
