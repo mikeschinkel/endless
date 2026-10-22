@@ -455,9 +455,11 @@ func TestStewardship_UnreachableClaimerClearsDuplicate(t *testing.T) {
 	}
 }
 
-// TestStewardship_TwoClaimersMarkDuplicate: two present sessions claiming one
-// task is the collision ◫ exists for, and it is raised whatever the ladder says.
-func TestStewardship_TwoClaimersMarkDuplicate(t *testing.T) {
+// TestStewardship_TwoClaimersRaiseNoDuplicate: two present sessions holding one
+// task used to raise the mark whatever the ladder said (E-2293). E-2418 made
+// that state unreachable — every route to a second holder refuses — so the case
+// is gone, and two claimants clear the mark exactly as one does.
+func TestStewardship_TwoClaimersRaiseNoDuplicate(t *testing.T) {
 	db := stewFixture(t)
 	snSessionTaskRel(t, db, 1, 153, stewRelSurfaced)
 	for _, s := range []int64{5, 6} {
@@ -465,8 +467,8 @@ func TestStewardship_TwoClaimersMarkDuplicate(t *testing.T) {
 		snSessionTaskRel(t, db, s, 153, stewRelClaimed)
 		stewBindPane(t, db, s, "")
 	}
-	if r := stewBoard(t, 100, 1)[153]; !r.DuplicateWork {
-		t.Errorf("filer's board: %+v, want the duplicate mark (two claimants)", r)
+	if r := stewBoard(t, 100, 1)[153]; r.DuplicateWork {
+		t.Errorf("filer's board: %+v, want no duplicate mark (E-153 has its own session)", r)
 	}
 }
 

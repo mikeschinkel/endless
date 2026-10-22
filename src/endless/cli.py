@@ -2142,8 +2142,9 @@ def session_end(ref, force, yes):
     REF resolves as `session resume` resolves it: E-NNNN, ES-NNNN, a bare
     integer, or a Claude UUID prefix.
 
-    A session whose tmux server cannot be reached reads `unknown` and keeps
-    blocking claims on its task. This ends it, so the task can be claimed.
+    A session whose tmux server cannot be reached reads `unknown`, so nothing
+    can relaunch it. This ends it, so `session goto E-NNNN --resume` can
+    reopen it in a new window. Its task is still continued only from it.
     Refuses a session that reads live, and one with activity in the last 10
     minutes unless --force. Shows the session's task, last activity and
     liveness and asks y/N; --yes skips the prompt.

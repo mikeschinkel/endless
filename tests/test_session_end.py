@@ -138,15 +138,16 @@ def test_prints_how_to_get_it_back(stubbed, capsys):
     out = capsys.readouterr().out
     assert "Ended ES-501 (E-77). Its transcript is kept." in out
     assert "endless session resume ES-501" in out
-    assert "E-77 can be claimed by another session" in out
+    assert "E-77 is continued only from it" in out
+    assert "endless session goto E-77 --resume" in out
 
 
-def test_taskless_session_omits_the_claim_line(stubbed, capsys):
+def test_taskless_session_omits_the_task_line(stubbed, capsys):
     stubbed["target"] = _target(task_id=None, task_title="")
     session_cmd.end_session("ES-501", yes=True)
     out = capsys.readouterr().out
     assert "Ended ES-501 (no task)." in out
-    assert "can be claimed" not in out
+    assert "continued only from it" not in out
 
 
 def test_cli_wires_flags(stubbed):

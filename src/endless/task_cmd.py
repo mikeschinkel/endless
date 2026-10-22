@@ -4754,8 +4754,8 @@ def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
             "that session",
             text=(
                 f"E-{item_id} is already active in session {eid} "
-                f"(tmux pane {pane}).\n"
-                "Switch to that session or have it release the task first."
+                f"(tmux pane {pane}). Switch to it:\n"
+                f"    endless session goto E-{item_id}"
             ),
         )
 
@@ -4770,7 +4770,9 @@ def _unreachable_owner_refusal(item_id: int, eid: int, comp: dict):
     to that session" names a pane nobody can reach. The routes are the ones that
     can work: bring its Endless server back when that is what is down, then
     resume the session to continue it — or, when it is not coming back, end it
-    with `session end` (E-2394), after which the claim guard no longer counts it.
+    with `session end` (E-2394). Ending it does not free the task (E-2418): a
+    task is continued only from its earlier session, and once that session is
+    ended `session goto E-N --resume` reopens it in a window of its own.
     """
     routes = []
     if comp.get("endless_server_down"):
@@ -4781,13 +4783,15 @@ def _unreachable_owner_refusal(item_id: int, eid: int, comp: dict):
         f"E-{item_id} is held by session ES-{eid}, whose tmux server cannot be "
         f"reached. {NOTHING_CHANGED}",
         "whether to bring that session back and continue the work in it, or "
-        "end it so the task can be claimed",
+        "end it and resume it in a new window",
         text=(
             f"E-{item_id} is held by session ES-{eid}, whose tmux server "
             f"cannot be reached.\n"
             f"To continue the work in that session:\n{listed}\n"
-            f"Or, if that session is gone for good, end it:\n"
-            f"    endless session end ES-{eid}"
+            f"Or, if its tmux server is gone for good, end it and resume it "
+            f"in a new window:\n"
+            f"    endless session end ES-{eid}\n"
+            f"    endless session goto E-{item_id} --resume"
         ),
     )
 
@@ -4919,6 +4923,92 @@ def _task_claimants(item_id: int) -> list[dict]:
     )
 
 
+def _resume_holder_lines(
+    item_id: int, current_status: str, claimants: list[dict], held: str,
+) -> list[str]:
+    """The route back to a task's earlier session, for a refusal to print.
+
+    `held` completes "E-N <held>. Pick the work back up there:". Shared by
+    spawn's `_check_prior_claim` and claim/bind's `_check_other_holder`, which
+    name the same session and the same command for the same reason.
+    """
+    task_ref = task_id_display(item_id)
+    # `--revisit` / `--no-revisit` are E-1968's flags on `session goto`, and they
+    # are accepted only when the task is settled. Rendering them unconditionally
+    # would teach a flag the very next command rejects. Reached with a settled
+    # status only via the deprecated `--force`, which skips the settled-status
+    # gate above but not this one, and by `task bind`, which binds settled work.
+    settled = current_status in _REOPENABLE_TERMINAL_STATUSES
+    revisit = " --revisit" if settled else ""
+
+    lines = [
+        f"{task_ref} {held}. Pick the work back up there:",
+        f"    endless session goto {task_ref} --resume{revisit}",
+    ]
+    if settled:
+        lines.append(
+            "  (--no-revisit instead, to read it back without reopening "
+            "the task.)"
+        )
+    if len(claimants) > 1:
+        others = ", ".join(
+            session_id_display(c["eid"]) for c in claimants[1:]
+        )
+        lines.append(f"  Earlier claimants: {others}")
+    return lines
+
+
+def _check_other_holder(
+    item_id: int, current_status: str, self_eid: int | None, verb: str,
+) -> None:
+    """Refuse a claim or bind of a task another session holds or held (E-2418).
+
+    A task is continued only from the session that held it before: its
+    transcript is where the reasoning is. `_check_prior_claim` enforces this for
+    spawn and prime; this is the same test for `task claim` and `task bind`,
+    with one difference — the caller's own session is not "another" one, so a
+    session claiming or binding its own task again (E-1994's primed session,
+    whose claim is what starts its task) passes.
+
+    Present or ended makes no difference. For a present holder `goto --resume`
+    is a plain goto, so the one command serves both.
+
+    A clean transcript is the user's explicit `--new-transcript`. It is the
+    human's remedy only, as in `_require_transcript`: an agent handed it takes
+    it, which spends the earlier session's reasoning on the user's behalf.
+    """
+    claimants = [c for c in _task_claimants(item_id) if c["eid"] != self_eid]
+    if not claimants:
+        return
+
+    most_recent = session_id_display(claimants[0]["eid"])
+    task_ref = task_id_display(item_id)
+    nothing = "Nothing was claimed." if verb == "claim" else "Nothing was bound."
+
+    lines = _resume_holder_lines(
+        item_id, current_status, claimants, f"is held by session {most_recent}",
+    )
+    lines.append("")
+    lines.append(
+        f"A task is continued only from its earlier session; {verb}ing it here "
+        f"would start over without {most_recent}'s reasoning."
+    )
+    # REPORT: the route out switches the user's tmux focus, and the alternative
+    # — giving up on that transcript — is theirs alone.
+    raise agent_help.report(
+        f"{task_ref} is held by session {most_recent}"
+        + (f" (and {len(claimants) - 1} earlier)" if len(claimants) > 1 else "")
+        + f"; a task is continued only from its earlier session. {nothing}",
+        f"whether to continue the work in {most_recent} with `endless session "
+        f"goto {task_ref} --resume`, which switches the user's tmux focus",
+        text="\n".join(lines),
+        human_remedy=(
+            f"\n  To start over with a fresh transcript instead:\n"
+            f"      endless session goto {task_ref} --resume --new-transcript"
+        ),
+    )
+
+
 def _check_prior_claim(item_id: int, current_status: str) -> None:
     """Refuse a spawn onto a task some session already claimed (E-1967).
 
@@ -4947,29 +5037,9 @@ def _check_prior_claim(item_id: int, current_status: str) -> None:
     most_recent = session_id_display(claimants[0]["eid"])
     task_ref = task_id_display(item_id)
 
-    # `--revisit` / `--no-revisit` are E-1968's flags on `session goto`, and they
-    # are accepted only when the task is settled. Rendering them unconditionally
-    # would teach a flag the very next command rejects. Reached with a settled
-    # status only via the deprecated `--force`, which skips the settled-status
-    # gate above but not this one.
-    settled = current_status in _REOPENABLE_TERMINAL_STATUSES
-    revisit = " --revisit" if settled else ""
-
-    lines = [
-        f"{task_ref} was claimed by session {most_recent}. "
-        f"Pick the work back up there:",
-        f"    endless session goto {task_ref} --resume{revisit}",
-    ]
-    if settled:
-        lines.append(
-            "  (--no-revisit instead, to read it back without reopening "
-            "the task.)"
-        )
-    if len(claimants) > 1:
-        others = ", ".join(
-            session_id_display(c["eid"]) for c in claimants[1:]
-        )
-        lines.append(f"  Earlier claimants: {others}")
+    lines = _resume_holder_lines(
+        item_id, current_status, claimants, f"was claimed by session {most_recent}",
+    )
     lines.append("")
     lines.append(
         f"Spawning a second session on it would start over without "
@@ -5615,6 +5685,11 @@ def claim_item(item_id: int, unattended: bool = False, force: bool = False,
         )
         return
 
+    # E-2418: a task another session holds or held is continued there. After
+    # the live check, whose refusal is the more specific one for a running
+    # holder (and names the routes for an unreachable one).
+    _check_other_holder(item_id, current_status, target_session, "claim")
+
     # E-1993: after the re-claim branch above, deliberately — the task's
     # owner picking its own task back up is not starting it.
     _require_spawnable(item_id, "claim", out_of_order=out_of_order)
@@ -5846,6 +5921,9 @@ def bind_item(item_id: int) -> None:
     here rather than only at the DB because E-1969's write-once trigger raises
     a SQLite abort, which is not an answer a user can act on.
 
+    And the task's side of the same rule (E-2418): a task another session holds
+    or held is refused, as claim refuses it — see `_check_other_holder`.
+
     Emits a `task.bound` event (E-2291; binds before it emitted
     `task.claimed`, which made a bind indistinguishable from a claim). The Go
     executor performs the sessions DB write and records relation `bound`.
@@ -5921,6 +5999,8 @@ def bind_item(item_id: int) -> None:
               f"(task status unchanged: {current_status})"
         )
         return
+
+    _check_other_holder(item_id, current_status, target_session, "bind")
 
     emit_event(
         kind="task.bound",

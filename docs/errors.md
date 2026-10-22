@@ -1060,3 +1060,21 @@ the status quo — a session holding the task keeps working from what it last
 read until it reads the task again.
 
 **What to do.** Run `endless errors show <n> --detail` for the database error and the task. The change itself is recorded; only the notice to the sessions holding the task was lost, so tell a session that is working from it to re-read the task. A count that keeps rising means the database is refusing writes — check `endless db` health. Dismiss with `endless errors clear <id>`.
+
+## WARN-0037 — task-held-elsewhere
+
+**Severity:** warning · **Raised by:** the SessionStart hook (E-2418)
+
+A Claude session started in a task's worktree while another session — still
+present, in a different tmux pane — held that task. A task is continued only
+from the session that holds it, so the new session was not bound to the task;
+it was told, and you were shown, which session holds it.
+
+Warning rather than error: the refusal already kept the two sessions from
+sharing the task. It is recorded at all because reaching it is a defect. `task
+claim` and `task spawn` refuse a second holder, and a session that starts in a
+worktree takes that worktree's lock, which keeps a second session out. What
+gets past both is a session that claimed the task from the main checkout and
+moved into the worktree afterwards, so it never took the lock.
+
+**What to do.** Close the session that was refused and go to the one holding the task: `endless session goto E-<n>`. The detail names both sessions and their panes; a repeat means some route still lets a session take a task's worktree without its lock, which is worth a task of its own. Dismiss with `endless errors clear <id>`.

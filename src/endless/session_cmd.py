@@ -239,6 +239,14 @@ def transcript_path(uuid: str) -> Path | None:
     return matches[0] if matches else None
 
 
+# E-2418: set on the `claude` a `--new-transcript` launch starts, to the id of
+# the task it starts on. The SessionStart auto-bind refuses a fresh `claude` in
+# the worktree of a task an ended session held — that is a clean-transcript start
+# by hand — and this is how it tells the one start that was asked for apart from
+# a plain `claude` typed in the same place. The two are otherwise identical.
+NEW_TRANSCRIPT_ENV = "ENDLESS_NEW_TRANSCRIPT_TASK"
+
+
 def _require_transcript(uuid: str, label: str, verb: str) -> None:
     """Refuse a resume whose Claude transcript is gone, and route the user.
 
@@ -1340,6 +1348,9 @@ def resume_session(
             err=True,
         )
         argv = ["claude"]
+        task = decision.get("task_id")
+        if task is not None:
+            os.environ[NEW_TRANSCRIPT_ENV] = str(int(task))
         # The old uuid is deliberately NOT republished as the window's
         # `@endless_session_uuid`: the pane is about to hold a DIFFERENT
         # session, and the new one's own hook publishes its uuid on its first
@@ -1354,6 +1365,8 @@ def resume_session(
         )
         argv = ["claude", "--resume", uuid]
         bind_uuid = uuid
+        # Not a fresh start, whatever this shell inherited.
+        os.environ.pop(NEW_TRANSCRIPT_ENV, None)
 
     # After `_require_claude`, so a resume that cannot launch leaves the pane's
     # identity as it found it.
@@ -3478,6 +3491,8 @@ def _resume_new_window_pane(
     task = decision.get("task_id")
     if task is not None:
         args += ["-n", tmux_window_name(int(task))]
+        if new_transcript:
+            args += ["-e", f"{NEW_TRANSCRIPT_ENV}={int(task)}"]
     args += ["-P", "-F", "#{pane_id}", cmd]
     res = _tmux_run(args)
     if not res or res.returncode != 0 or not res.stdout.strip():
@@ -3828,5 +3843,9 @@ def end_session(ref: str, *, force: bool = False, yes: bool = False) -> None:
     lines = [f"Ended ES-{eid} ({task_label}). Its transcript is kept.",
              f"To get it back, run `endless session resume ES-{eid}`."]
     if task_id:
-        lines.append(f"Until then, E-{task_id} can be claimed by another session.")
+        # E-2418: ending a session does not free its task. The task is
+        # continued only from it, and now that it is ended `goto --resume`
+        # reopens it in a window of its own.
+        lines.append(f"E-{task_id} is continued only from it: `endless session "
+                     f"goto E-{task_id} --resume`.")
     agent_help.info(" ".join(lines))

@@ -103,6 +103,14 @@ Spawn's and prime's refusals do not offer bind. They hand the task to a new sess
 
 Run from a shell pane, `task bind` binds the one live Claude session in the same tmux window. With none, or with more than one, it refuses and says to run it from the Claude session that should own the task — or, with several, to name it with `ENDLESS_SESSION_ID=<id>`.
 
+### A task is continued only from its earlier session
+
+A task some session holds or held — running or ended — is continued in that session, whose transcript is where the reasoning is. `task claim`, `task bind`, `task spawn` and `task prime` all refuse it, change nothing, and name the most recent holder and `endless session goto <id> --resume`, which focuses the session if it is running and reopens it in a new window if it has ended. A session claiming or binding its own task again is not refused.
+
+A Claude session started in the task's worktree is held to the same rule at SessionStart: it is not bound when another session in a different tmux pane holds the task, nor, on a fresh start, when an ended session held it. Both you and your user are told to run `endless session goto <id>` (`--resume` for an ended holder) and close the new session. A resume, `/clear` or `/compact`, or an earlier holder in the same pane, binds as before.
+
+Starting a task over with a fresh transcript is your user's decision, never yours: `endless session goto <id> --resume --new-transcript`. Report the refusal rather than looking for a way around it.
+
 ### Plan items
 
 A **plan item** is one line stating something that will be true when the task is done. Items are numbered per task — `P3`, or `E-NNNN.P3` from outside it — and a number is never reused or renumbered. There are two kinds:

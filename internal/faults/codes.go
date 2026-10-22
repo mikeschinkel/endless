@@ -847,6 +847,28 @@ var (
 			"rising means the database is refusing writes — check `endless " +
 			"db` health. Dismiss with `endless errors clear <id>`.",
 	}
+
+	// ErrCodeTaskHeldElsewhere covers a session starting in a task's worktree
+	// while another PRESENT session, in a different tmux pane, holds that task
+	// (E-2418). The SessionStart auto-bind refuses to bind it, so the two never
+	// share the task, but reaching this state at all is a defect: claim and spawn
+	// refuse a second holder, and the worktree lock keeps a second session out of
+	// a worktree a session started in. What gets past both is a session that
+	// claimed from the main checkout, so it never took the lock.
+	//
+	// Warning: the refusal has already prevented the collision, and the session
+	// that hit it was told how to reach the holder.
+	ErrCodeTaskHeldElsewhere = Code{
+		ID:       "WARN-0037",
+		Slug:     "task-held-elsewhere",
+		Severity: SeverityWarning,
+		Title:    "A session started in a task's worktree while another session held the task",
+		Remedy: "Close the session that was refused and go to the one holding " +
+			"the task: `endless session goto E-<n>`. The detail names both " +
+			"sessions and their panes; a repeat means some route still lets a " +
+			"session take a task's worktree without its lock, which is worth a " +
+			"task of its own. Dismiss with `endless errors clear <id>`.",
+	}
 )
 
 // catalog indexes every registered Code by ID. Built once at init from the
@@ -888,6 +910,7 @@ var catalog = buildCatalog(
 	ErrCodeMonitorHooksMissing,
 	ErrCodeMonitorHooksInstallFailed,
 	ErrCodeSessionNoticesUnwritten,
+	ErrCodeTaskHeldElsewhere,
 )
 
 // buildCatalog indexes codes by ID. It panics on a duplicate ID: a collision is

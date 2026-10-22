@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/mikeschinkel/endless/internal/docmirror"
+	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/sessionstate"
@@ -400,8 +401,12 @@ func runClaude(args []string) (err error) {
 		// Cwd-derived auto-bind (E-1291 / E-1700, now the only bind path —
 		// E-1983). Runs after worktree adoption so a refused session is never
 		// bound. See maybeCwdBind for the subagent / background-agent
-		// exclusions.
-		maybeCwdBind(projectID, payload)
+		// exclusions. A bind it declines because another session holds the
+		// task (E-2418) is said in place of the usual context, as the lock
+		// refusal above is: this session is to be closed, not worked in.
+		if refused := maybeCwdBind(projectID, payload); refused != nil {
+			return writeCwdBindRefusal(payload.EventName, refused)
+		}
 		return handleTaskContextInjection(projectID, isRegistered, payload)
 
 	case "UserPromptSubmit":
@@ -1855,11 +1860,11 @@ func logSessionBind(sessionID string, snap monitor.SessionSnapshot, taskID int64
 // Skipped for background agents (E-1568): their dispatch row already carries
 // task_id/epic_id, and the tmux-oriented bind is meaningless for a headless
 // agent. Bind only; task status is unchanged.
-func maybeCwdBind(projectID int64, payload claudePayload) {
+func maybeCwdBind(projectID int64, payload claudePayload) *cwdBindRefusal {
 	if payload.AgentID != "" || os.Getenv("CLAUDE_JOB_DIR") != "" {
-		return
+		return nil
 	}
-	autoBindFromCwd(projectID, payload)
+	return autoBindFromCwd(projectID, payload)
 }
 
 // autoBindFromCwd implements the E-1291 cwd-based SessionStart auto-bind.
@@ -1869,14 +1874,18 @@ func maybeCwdBind(projectID int64, payload claudePayload) {
 // task_id, DB write error) results in no binding — the user can still
 // run `endless task claim` to bind explicitly. Caller must already
 // have screened out subagents.
-func autoBindFromCwd(projectID int64, payload claudePayload) {
+//
+// Returns non-nil only when it declined to bind because another session holds
+// or held the task (E-2418) — see heldElsewhere. Every other way of not binding
+// is silent, as it always was.
+func autoBindFromCwd(projectID int64, payload claudePayload) *cwdBindRefusal {
 	projectRoot, err := monitor.ProjectPath(projectID)
 	if err != nil {
-		return
+		return nil
 	}
 	taskID := resolveCwdTaskID(projectRoot, payload.CWD)
 	if taskID <= 0 {
-		return
+		return nil
 	}
 	// E-1856: the auto-bind is a fallback to fill an UNBOUND session's
 	// task_id from its cwd worktree — never a re-pointer. A resume
@@ -1887,9 +1896,10 @@ func autoBindFromCwd(projectID int64, payload claudePayload) {
 	// unreachable via `session goto`/`session resume`. Only bind when the
 	// session has no active task yet (the E-1291/E-1700 fallback case) or
 	// already points at this worktree's task (idempotent).
-	if session, err := monitor.GetActiveSession(payload.SessionID); err == nil &&
-		session != nil && session.TaskID != nil && *session.TaskID != taskID {
-		return
+	session, err := monitor.GetActiveSession(payload.SessionID)
+	holdsIt := err == nil && session != nil && session.TaskID != nil
+	if holdsIt && *session.TaskID != taskID {
+		return nil
 	}
 	// E-1856: never bind into a worktree whose lock a LIVE sibling session holds.
 	// handleWorktreeAdoption refuses this case upstream and short-circuits
@@ -1898,14 +1908,193 @@ func autoBindFromCwd(projectID int64, payload claudePayload) {
 	// re-order) would silently make the incoming session a phantom second claimant
 	// of the task, stealing its task_id pointer.
 	if worktreeLockHeldByLiveOther(projectRoot, payload.CWD, payload.SessionID) {
-		return
+		return nil
+	}
+	// E-2418: a session that already holds this task is re-affirming its own
+	// binding; only one that would newly take the task is asked who else has it.
+	if !holdsIt {
+		if refused := heldElsewhere(payload, taskID); refused != nil {
+			releaseOwnWorktreeLock(projectRoot, payload)
+			return refused
+		}
 	}
 	snap := monitor.SnapshotSession(payload.SessionID)
 	if err := monitor.BindSessionToTask(payload.SessionID, projectID, taskID); err != nil {
-		return
+		return nil
 	}
 	logSessionBind(payload.SessionID, snap, taskID, monitor.SessionLogCwdBind, "hookcmd.autoBindFromCwd")
 	markAutoSpawned(payload.SessionID, taskID)
+	return nil
+}
+
+// newTranscriptEnv is set on the `claude` that `session resume --new-transcript`
+// and `session goto E-N --resume --new-transcript` launch, to the task's id
+// (session_cmd.NEW_TRANSCRIPT_ENV). It is how a fresh start the user asked for
+// is told apart from a plain `claude` typed in the same worktree.
+const newTranscriptEnv = "ENDLESS_NEW_TRANSCRIPT_TASK"
+
+// cwdBindRefusal is the auto-bind declining a task another session holds or
+// held (E-2418): what the agent is told, through additionalContext, and what the
+// user is shown, through systemMessage.
+//
+// Both channels, because each misses someone. Exit 2 on SessionStart would show
+// stderr to the user but never reach the agent, which would carry on unbound;
+// additionalContext alone reaches only the agent, and the move out of here —
+// closing this session, switching tmux focus — is the user's.
+type cwdBindRefusal struct {
+	agent string
+	user  string
+}
+
+// sessionStartRefusal is the SessionStart output carrying a cwdBindRefusal.
+type sessionStartRefusal struct {
+	HookSpecificOutput hookContextOutput `json:"hookSpecificOutput"`
+	SystemMessage      string            `json:"systemMessage"`
+}
+
+func writeCwdBindRefusal(event string, r *cwdBindRefusal) error {
+	return json.NewEncoder(os.Stdout).Encode(sessionStartRefusal{
+		HookSpecificOutput: hookContextOutput{HookEventName: event, AdditionalContext: r.agent},
+		SystemMessage:      r.user,
+	})
+}
+
+// heldElsewhere decides whether a session that does not hold taskID may take it
+// from its working directory (E-2418). A task is continued only from the session
+// that held it before: its transcript is where the reasoning is. `task claim`,
+// `task bind`, `task spawn` and `task prime` all refuse a task another session
+// holds or held; this is the same rule for the one bind that is not a command.
+//
+// A holder in THIS pane is passed over: two sessions in one pane are one
+// conversation line, never two at once. Then:
+//
+//   - A PRESENT holder in another pane: refused, whatever the source. Claim and
+//     spawn refuse this, and the worktree lock keeps a second session out of a
+//     worktree a session started in, so getting here is a defect — a session
+//     that claimed from the main checkout never took the lock. Recorded as a
+//     fault as well as said.
+//   - Only ENDED holders, on a fresh start (source `startup`): refused, unless
+//     the launch was `--new-transcript`'s. This is a user starting `claude` by
+//     hand where `session goto E-N --resume` would have continued the work — a
+//     choice, not a defect, so no fault. A resume, /clear or /compact continues
+//     a conversation line and binds as it always did.
+//
+// A present holder with no pane binding at all (liveness `unbound`) cannot be
+// shown to be in another pane, and cannot be shown gone either, so it is taken
+// as ended: refusing on it with a fault would refuse forever.
+//
+// Fails open, binding as before, when the holders cannot be read: refusing over
+// the hook's own ignorance would strand a session in its own worktree.
+func heldElsewhere(payload claudePayload, taskID int64) *cwdBindRefusal {
+	holders, err := monitor.OtherTaskHolders(taskID, payload.SessionID)
+	if err != nil {
+		log.Printf("session %s: reading E-%d's holders: %v", payload.SessionID, taskID, err)
+		return nil
+	}
+	var ended *monitor.TaskHolder
+	for i := range holders {
+		h := holders[i]
+		if h.SamePane {
+			continue
+		}
+		if h.Present && !h.Paneless {
+			recordTaskHeldElsewhere(payload, taskID, h)
+			return presentHolderRefusal(taskID, h)
+		}
+		if ended == nil {
+			ended = &holders[i]
+		}
+	}
+	if ended == nil || payload.Source != "startup" {
+		return nil
+	}
+	if os.Getenv(newTranscriptEnv) == strconv.FormatInt(taskID, 10) {
+		return nil
+	}
+	return endedHolderRefusal(taskID, *ended)
+}
+
+func presentHolderRefusal(taskID int64, h monitor.TaskHolder) *cwdBindRefusal {
+	if h.Pane == "" {
+		h.Pane = "? (its tmux server could not be reached)"
+	}
+	return &cwdBindRefusal{
+		agent: fmt.Sprintf(
+			"This session was NOT bound to E-%d. E-%d is held by session ES-%d, "+
+				"which is still running in tmux pane %s, and a task is worked only "+
+				"in the session that holds it. Do not work on E-%d here. Stop and "+
+				"tell the user to run `endless session goto E-%d` and close this "+
+				"session.",
+			taskID, taskID, h.ID, h.Pane, taskID, taskID),
+		user: fmt.Sprintf(
+			"Endless: E-%d is held by session ES-%d, still running in tmux pane "+
+				"%s, so this session was not bound to it. Run `endless session goto "+
+				"E-%d` and close this session.",
+			taskID, h.ID, h.Pane, taskID),
+	}
+}
+
+func endedHolderRefusal(taskID int64, h monitor.TaskHolder) *cwdBindRefusal {
+	return &cwdBindRefusal{
+		agent: fmt.Sprintf(
+			"This session was NOT bound to E-%d. E-%d was held by session ES-%d, "+
+				"which has ended, and a task is continued only from its earlier "+
+				"session, whose transcript has the reasoning. Do not work on E-%d "+
+				"here. Stop and tell the user to run `endless session goto E-%d "+
+				"--resume` and close this session.",
+			taskID, taskID, h.ID, taskID, taskID),
+		user: fmt.Sprintf(
+			"Endless: E-%d was held by session ES-%d, which has ended, so this "+
+				"fresh session was not bound to it. To continue E-%d, run `endless "+
+				"session goto E-%d --resume` and close this session.",
+			taskID, h.ID, taskID, taskID),
+	}
+}
+
+// recordTaskHeldElsewhere files the present-holder case as a fault. Fingerprinted
+// on the task, so a session restarted in the same worktree again is one incident
+// with a rising count.
+func recordTaskHeldElsewhere(payload claudePayload, taskID int64, h monitor.TaskHolder) {
+	if h.Pane == "" {
+		h.Pane = "?"
+	}
+	faults.Record(faults.Fault{
+		Code:        faults.ErrCodeTaskHeldElsewhere,
+		Source:      "hook:SessionStart",
+		Fingerprint: fmt.Sprintf("E-%d", taskID),
+		TaskID:      taskID,
+		Summary: fmt.Sprintf("E-%d: a session started in its worktree while ES-%d held it",
+			taskID, h.ID),
+		Detail: fmt.Sprintf("session %s started in %s; E-%d is held by ES-%d in pane %s",
+			payload.SessionID, payload.CWD, taskID, h.ID, h.Pane),
+		Fields: map[string]any{
+			"task":        fmt.Sprintf("E-%d", taskID),
+			"holder":      fmt.Sprintf("ES-%d", h.ID),
+			"holder_pane": h.Pane,
+			"session_id":  payload.SessionID,
+			"pane":        os.Getenv("TMUX_PANE"),
+			"source":      payload.Source,
+		},
+	})
+}
+
+// releaseOwnWorktreeLock gives back the worktree lock SessionStart's adoption
+// just took for a session the auto-bind then refused (E-2418). Kept, it would
+// refuse the very session the refusal sends the user to — `session goto E-N
+// --resume` starts that one in this worktree — for as long as this one stays
+// open. Best-effort, like the lock's own release at SessionEnd.
+func releaseOwnWorktreeLock(projectRoot string, payload claudePayload) {
+	worktreeRoot, err := monitor.FindWorktreeRoot(payload.CWD, projectRoot)
+	if err != nil || worktreeRoot == "" {
+		return
+	}
+	lock, err := monitor.ReadWorktreeLock(worktreeRoot)
+	if err != nil || lock == nil || lock.SessionID != payload.SessionID {
+		return
+	}
+	if err := monitor.ReleaseWorktreeLock(worktreeRoot); err != nil {
+		log.Printf("session %s: releasing the worktree lock at %s: %v", payload.SessionID, worktreeRoot, err)
+	}
 }
 
 // markAutoSpawned flags a just-bound session as auto-spawned when its window is

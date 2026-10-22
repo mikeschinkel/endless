@@ -49,8 +49,10 @@ package monitor
 // work on the task, and is set when the task is ambiguous, or is focused on one
 // board and stewarded by another (on both of those boards). Once exactly one
 // present session has CLAIMED the task the warning has done its job — the user
-// knows where the work lives — so the mark is cleared; two present claimants
-// are a genuine collision and always raise it (E-2293).
+// knows where the work lives — so the mark is cleared. Two present claimants
+// used to raise it (E-2293); E-2418 made that state unreachable — claim, bind,
+// spawn and the SessionStart auto-bind all refuse a second holder — so the case
+// is gone rather than kept for a collision nothing can produce.
 //
 // The claimed task's own row, its parent and its spawner are never hidden and
 // never marked: they are the board's frame, not entries on it.
@@ -69,7 +71,7 @@ type taskStewardship struct {
 	focusers   []int64
 	// claimers counts present sessions whose sessions.task_id is the task. It
 	// is not part of the ladder — a claimer is the OWNER, not a steward — and
-	// only decides the duplicate mark.
+	// only clears the duplicate mark.
 	claimers int
 }
 
@@ -170,10 +172,7 @@ func AnnotateSessionStatusStewardship(rows []SessionStatusRow, viewer, focal int
 				}
 			}
 		}
-		switch {
-		case o.claimers >= 2:
-			r.DuplicateWork = true
-		case o.claimers == 1:
+		if o.claimers > 0 {
 			r.DuplicateWork = false
 		}
 	}
