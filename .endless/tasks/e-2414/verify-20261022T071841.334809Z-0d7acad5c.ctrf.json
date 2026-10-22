@@ -1,0 +1,149 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 26,
+      "passed": 26,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test: monitor, events, schema, sessionquerycmd, sessionstatuscmd",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestTaskStewardSet_StoresWhetherOrNotHeld",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestTaskStewardSet_RefusesItself",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestTaskStewardSet_ClearsHideBySteward",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestTaskStewardSet_ReplayMatchesLive",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestSessionTasksUnhidden_RefusesNotHidden",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestChosenSteward_HeldByPresentSession",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestChosenSteward_HeldByNone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestChosenSteward_HolderHidTheTask",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestChosenSteward_SessionReplaced",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestTaskSteward_OnlyClaimerIsNone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestTaskSteward_SameForEveryViewer",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestStewardship_TouchOutranksSteward",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestMigrate_TaskStewardsRetirePins",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytest: task steward, --steward, goto --steward, Steward: line, unhide",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "before a choice, the filer ES-1 stewards E-150",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "ES-2's board does not list E-150",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "after --steward E-120, ES-2 stewards E-150",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and the answer says it was chosen",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "ES-2's board lists E-150, not suppressed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the filer's board suppresses it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the event reached the ledger",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "after --steward none, the filer stewards it again",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "session_pinned_tasks is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "--json carries no pinned field",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no code or guide text refers to pins",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
