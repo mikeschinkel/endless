@@ -75,3 +75,9 @@ statement = "Does not port Makefiles to justfiles; that is per-repo policy, not 
 id = "P28"
 kind = "exclusion"
 statement = "Does not add health checks or reporting; endless doctor owns those"
+
+[[item]]
+id = "P29"
+kind = "deliverable"
+statement = "go-cfgstore's .git/info/exclude no longer holds the two temporary Endless lines, and its .gitignore covers those paths"
+verify = "cat ~/Projects/go-pkgs/go-cfgstore/.git/info/exclude"
