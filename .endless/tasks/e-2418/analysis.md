@@ -1,0 +1,4 @@
+- `task bind` can refuse, with the same message and way forward `task claim` gives when another session holds the task.
+- The auto-bind runs at session start and cannot refuse anything. It has to leave the new session unbound and say why, somewhere the user sees. Where and how it says so is open.
+- Once both paths enforce one claimant, the "two present claimants" branch in `session_stewardship.go` (the `claimers >= 2` case) has nothing left to catch and can be removed.
+- Open: whether a session that is not present (ended, or on a dead tmux server) still blocks a bind, as `_check_prior_claim` blocks a spawn, or only a present one does, as `_check_task_ownership` does.
