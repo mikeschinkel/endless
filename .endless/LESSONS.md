@@ -7757,3 +7757,7 @@ E-2414's plan stored the chosen steward as a session (ES-N). Mike: stewardship m
 ### [2026-10-22] Only one session can claim a task; don't invent scenarios that break it
 Planning E-2414, I justified a 'most recently active' tie-break by claiming a resumed session in a second pane would mean two present sessions claimed the same task. That was invented: resume continues the same session, and _check_task_ownership and _check_prior_claim refuse a second claimant, so only one session can claim a task. Mike asked whether I was using 'claim' properly. Check the guards before describing how an invariant could break, and design on the invariant, not around an imagined violation.
 - **Project**: endless
+
+### [2026-10-22] A task's title is not a scope boundary
+Planning E-2418, I hesitated to fold claim into the fix because the title named only task bind and the auto-bind. Mike: a title is happenstance, not authoritative; do what needs to be done, not what an earlier title happened to name.
+- **Project**: endless
