@@ -81,3 +81,9 @@ id = "P29"
 kind = "deliverable"
 statement = "go-cfgstore's .git/info/exclude no longer holds the two temporary Endless lines, and its .gitignore covers those paths"
 verify = "cat ~/Projects/go-pkgs/go-cfgstore/.git/info/exclude"
+
+[[item]]
+id = "P30"
+kind = "deliverable"
+statement = "project scan and project list do not re-register a forgotten checkout whose .endless/config.json is still on disk; only an explicit project init registers it again"
+verify = "tests/test_project_forget.py"
