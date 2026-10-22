@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -74,7 +73,7 @@ func PreAllocateTaskID() (id int64, execAndCommit func(*Event, DerivedEmitter) (
 	}
 
 	doExecAndCommit := func(evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
-		result, err := dispatch(db, evt, emit)
+		result, notices, err := dispatchWithNotices(db, evt, emit)
 		if err != nil {
 			db.Exec("ROLLBACK")
 			return nil, err
@@ -82,6 +81,7 @@ func PreAllocateTaskID() (id int64, execAndCommit func(*Event, DerivedEmitter) (
 		if _, err := db.Exec("COMMIT"); err != nil {
 			return nil, fmt.Errorf("events: commit: %w", err)
 		}
+		notices.deliver(db)
 		return result, nil
 	}
 
@@ -114,7 +114,7 @@ func PreAllocateDecisionID() (id int64, execAndCommit func(*Event, DerivedEmitte
 	}
 
 	doExecAndCommit := func(evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
-		result, err := dispatch(db, evt, emit)
+		result, notices, err := dispatchWithNotices(db, evt, emit)
 		if err != nil {
 			db.Exec("ROLLBACK")
 			return nil, err
@@ -122,6 +122,7 @@ func PreAllocateDecisionID() (id int64, execAndCommit func(*Event, DerivedEmitte
 		if _, err := db.Exec("COMMIT"); err != nil {
 			return nil, fmt.Errorf("events: commit: %w", err)
 		}
+		notices.deliver(db)
 		return result, nil
 	}
 
@@ -155,7 +156,7 @@ func BeginImmediate() (execAndCommit func(*Event, DerivedEmitter) (*ExecuteResul
 	}
 
 	doExecAndCommit := func(evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
-		result, err := dispatch(db, evt, emit)
+		result, notices, err := dispatchWithNotices(db, evt, emit)
 		if err != nil {
 			db.Exec("ROLLBACK")
 			return nil, err
@@ -163,6 +164,7 @@ func BeginImmediate() (execAndCommit func(*Event, DerivedEmitter) (*ExecuteResul
 		if _, err := db.Exec("COMMIT"); err != nil {
 			return nil, fmt.Errorf("events: commit: %w", err)
 		}
+		notices.deliver(db)
 		return result, nil
 	}
 
@@ -185,7 +187,7 @@ func Execute(evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
 	}
 	defer tx.Rollback()
 
-	result, err := dispatch(tx, evt, emit)
+	result, notices, err := dispatchWithNotices(tx, evt, emit)
 	if err != nil {
 		return nil, err
 	}
@@ -193,109 +195,14 @@ func Execute(evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
 	if err := tx.Commit(); err != nil {
 		return nil, fmt.Errorf("events: commit: %w", err)
 	}
+	notices.deliver(db)
 	return result, nil
-}
-
-// stampTaskActor records WHO is about to change a task, so the
-// tasks_notify_sessions trigger can skip notifying the session that made the
-// change (E-1917). A session being told about its own edit is noise, and noise
-// is what trains an agent to skim the line that matters.
-//
-// Done once here rather than in each of the eight UPDATE tasks statements
-// downstream: a mutation site that forgot would silently inherit the PREVIOUS
-// actor and suppress the wrong session. dispatch is the single choke point every
-// task mutation passes through, and it already runs inside the caller's
-// transaction, so the stamp and the field update land together or not at all.
-//
-// Writing the actor as a column rather than having the trigger discover it is
-// deliberate: a trigger runs inside SQLite and cannot read the process
-// environment, and the alternatives (a per-connection temp table, a registered
-// SQL function) both add a cross-language connection contract whose only
-// consumer is this suppression — and whose failure mode is every UPDATE tasks
-// hard-failing.
-//
-// An empty Actor.SessionID stamps NULL, which suppresses nobody. That is
-// correct, not a fallback: a NULL actor is the user editing from a bare
-// terminal, which is the case this whole feature exists for.
-//
-// Non-task events and task events whose entity id is not a single task id
-// (bulk operations) no-op here; a bulk clear's notices carry whatever actor was
-// stamped last, which is imprecise but harmless — it can only over-notify.
-//
-// The AGENT-vs-PERSON question, and where its answer comes from.
-//
-// This distinction is the whole correctness of self-suppression, and the first
-// implementation got it wrong by assuming evt.Actor.SessionID answered it.
-// It does not. That value answers "which session should this command be
-// CREDITED to", and _current_endless_session_id resolves it through four layers,
-// three of which fire for a human:
-//
-//   - ENDLESS_SESSION_ID, exported into the USER'S OWN SHELL by `esu` /
-//     `endless shell-init` — which `endless guide` instructs the user to run, so
-//     following the documented workflow was enough to trigger the bug;
-//   - a TMUX_PANE match;
-//   - the sibling-pane inference (E-1294), which deliberately credits a shell
-//     pane's command to the lone Claude session sharing its tmux window.
-//
-// The answer is evt.Actor.Harness: non-empty means an agent harness was running
-// the process that EMITTED this event, "" means a person at a shell (E-2005).
-//
-// E-1917's fix read os.Getenv("CLAUDECODE") here instead — correct in practice,
-// but a SECOND answer to a question the envelope had begun recording, and the
-// two could disagree in both directions (CLAUDECODE=1 with no entrypoint said
-// "agent" where agentenv says none; the reverse said "person" where agentenv
-// says claude_cli). E-2006 deleted it. Reading the envelope rather than
-// re-sniffing the environment matters for two reasons beyond having one answer:
-// the deciding value is now DURABLE — a notice that was dropped can be
-// explained afterward from the ledger line, where ambient process state left
-// nothing behind — and a hand-rolled or replayed event carries its own answer
-// instead of inheriting whichever process happens to be executing it.
-//
-// This gate is SUBTRACTIVE: it can only turn an attribution into NULL, never
-// create one. So no change that is notified today can become suppressed by it,
-// and the only movement possible is suppressed -> notified — the direction of
-// the bug. A missed detection therefore over-notifies (one redundant line)
-// rather than silencing the one session that needed to hear. That is also the
-// failure direction of the residual risk: an emit path that hand-builds an
-// Actor instead of using events.EmittingActor carries no harness and so stamps
-// NULL.
-//
-// epic.status_derived is the one event whose Actor is built literally with no
-// harness (E-2005: nobody typed it). It cannot reach here — dispatch's switch
-// has no case for it, so Execute rejects it and it is appended to the ledger
-// only — so it needs no exception.
-func stampTaskActor(db dbQuerier, evt *Event) error {
-	if evt.Entity.Type != EntityTask {
-		return nil
-	}
-	taskID, err := strconv.ParseInt(evt.Entity.ID, 10, 64)
-	if err != nil || taskID <= 0 {
-		return nil
-	}
-	var actor any
-	if evt.Actor.Harness != "" && evt.Actor.SessionID != "" {
-		if sid, err := strconv.ParseInt(evt.Actor.SessionID, 10, 64); err == nil {
-			actor = sid
-		}
-	}
-	// Touches no watched field, so this UPDATE cannot itself fire the notice
-	// trigger. Affects zero rows for a task.created event (the INSERT has not
-	// happened yet), which is right: an INSERT fires no AFTER UPDATE trigger.
-	if _, err := db.Exec(
-		"UPDATE tasks SET changed_by_session = ? WHERE id = ?", actor, taskID,
-	); err != nil {
-		return fmt.Errorf("events: stamp task actor: %w", err)
-	}
-	return nil
 }
 
 // dispatch routes an event to its executor. emit (E-1541) is threaded to the
 // six task mutations that can change an epic's derived status; the remaining
 // executors ignore derivation.
 func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
-	if err := stampTaskActor(db, evt); err != nil {
-		return nil, err
-	}
 	switch evt.Kind {
 	case KindTaskCreated:
 		return execTaskCreated(db, evt, emit)
@@ -889,11 +796,10 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 		return nil, err
 	}
 
-	// The row first, then its content, and the order is load-bearing: the
-	// task_content notice triggers merge into the notice tasks_notify_sessions
-	// has just written for this same edit, so one `task update --status X
-	// --plan-file F` still renders as one line (E-1531). A content-only update
-	// has no row change to make.
+	// The row first, then its content. The order no longer matters to the
+	// notices (E-2422): one `task update --status X --plan-file F` renders as
+	// one line because dispatchWithNotices diffs the whole event, not each
+	// write. A content-only update has no row change to make.
 	if len(setClauses) > 0 {
 		args = append(args, taskID)
 		query := fmt.Sprintf("UPDATE tasks SET %s WHERE id = ?",

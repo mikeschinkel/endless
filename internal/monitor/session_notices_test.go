@@ -2,15 +2,13 @@ package monitor
 
 import (
 	"database/sql"
-	"encoding/json"
-	"strings"
 	"testing"
 )
 
 // snNotices returns every notice row, oldest first, as (session_id, changes,
 // changed_by_session) triples. Reads the table directly rather than through
-// PendingNotices so the trigger's behaviour is observable independently of the
-// delivery layer built on top of it.
+// PendingNotices so the stored rows are observable independently of the
+// delivery layer built on top of them.
 func snNotices(t *testing.T, db *sql.DB) [][3]any {
 	t.Helper()
 	rows, err := db.Query(
@@ -36,6 +34,21 @@ func snNotices(t *testing.T, db *sql.DB) [][3]any {
 	return out
 }
 
+// snNotifyHolders queues a status notice for every session holding the task, as
+// the executor's fan-out would. Seeded directly: these tests are about the
+// delivery and reaping built on the table, and the fan-out that writes it lives
+// in internal/events (E-2422), which this package cannot import.
+func snNotifyHolders(t *testing.T, db *sql.DB, taskID int64) {
+	t.Helper()
+	if _, err := db.Exec(
+		`INSERT INTO session_notices (session_id, task_id, changes)
+		 SELECT session_id, task_id, '{"status":{"before":"ready","after":"revisit"}}'
+		   FROM session_tasks WHERE task_id = ?`, taskID,
+	); err != nil {
+		t.Fatalf("seed notices: %v", err)
+	}
+}
+
 // snNoticeFixture seeds a project, one task and two sessions that both hold it.
 func snNoticeFixture(t *testing.T, db *sql.DB) {
 	t.Helper()
@@ -47,198 +60,6 @@ func snNoticeFixture(t *testing.T, db *sql.DB) {
 	snSessionTask(t, db, 9002, 500)
 }
 
-// TestNoticeTrigger_NullActorNotifiesEveryHolder is the case the whole feature
-// exists for: the user changes a task from a bare terminal, where there is no
-// session to attribute the change to. A NULL actor must suppress nobody.
-func TestNoticeTrigger_NullActorNotifiesEveryHolder(t *testing.T) {
-	db := withTestDB(t)
-	snNoticeFixture(t, db)
-
-	if _, err := db.Exec("UPDATE tasks SET status='revisit' WHERE id=500"); err != nil {
-		t.Fatalf("update: %v", err)
-	}
-
-	got := snNotices(t, db)
-	if len(got) != 2 {
-		t.Fatalf("want a notice for each of the 2 holders, got %d: %v", len(got), got)
-	}
-	for _, row := range got {
-		if row[2] != nil {
-			t.Errorf("changed_by_session should be NULL, got %v", row[2])
-		}
-		if !strings.Contains(row[1].(string), `"status"`) {
-			t.Errorf("changes should name status, got %s", row[1])
-		}
-	}
-}
-
-// TestNoticeTrigger_SuppressesActorsOwnChange pins the rule that decides whether
-// this feature helps or becomes noise: a session is never told about a change it
-// made itself. Without it, the line would be redundant on most turns, and noise
-// is what trains an agent to skim the line that matters.
-func TestNoticeTrigger_SuppressesActorsOwnChange(t *testing.T) {
-	db := withTestDB(t)
-	snNoticeFixture(t, db)
-
-	if _, err := db.Exec(
-		"UPDATE tasks SET status='underway', changed_by_session=9001 WHERE id=500",
-	); err != nil {
-		t.Fatalf("update: %v", err)
-	}
-
-	got := snNotices(t, db)
-	if len(got) != 1 {
-		t.Fatalf("want 1 notice (the non-acting session), got %d: %v", len(got), got)
-	}
-	if got[0][0].(int64) != 9002 {
-		t.Errorf("notice should go to 9002, not the acting session; got %v", got[0][0])
-	}
-}
-
-// TestNoticeTrigger_NoRowWhenNothingChanged is the "changed → notify; unchanged
-// → don't" contract. Setting a field to the value it already holds is not an
-// edit, and a trigger that fired anyway would manufacture notices out of every
-// idempotent write in the codebase.
-func TestNoticeTrigger_NoRowWhenNothingChanged(t *testing.T) {
-	db := withTestDB(t)
-	snNoticeFixture(t, db)
-
-	if _, err := db.Exec("UPDATE tasks SET status='ready' WHERE id=500"); err != nil {
-		t.Fatalf("update: %v", err)
-	}
-	if got := snNotices(t, db); len(got) != 0 {
-		t.Errorf("a no-op update must write no notices, got %v", got)
-	}
-
-	// An unwatched field moving is also not a notice-worthy change.
-	if _, err := db.Exec("UPDATE tasks SET title='renamed' WHERE id=500"); err != nil {
-		t.Fatalf("update title: %v", err)
-	}
-	if got := snNotices(t, db); len(got) != 0 {
-		t.Errorf("an unwatched field must write no notices, got %v", got)
-	}
-}
-
-// TestNoticeTrigger_OneRowPerUpdateEvent pins the row granularity: a single
-// `task update` that moves three fields is ONE edit, and must render as one
-// line and flip `notified` once — not fan out into three rows the agent reads
-// as three separate events.
-func TestNoticeTrigger_OneRowPerUpdateEvent(t *testing.T) {
-	db := withTestDB(t)
-	snNoticeFixture(t, db)
-
-	if _, err := db.Exec(
-		"UPDATE tasks SET status='underway', complexity_id=3, phase='next' WHERE id=500",
-	); err != nil {
-		t.Fatalf("update: %v", err)
-	}
-
-	got := snNotices(t, db)
-	if len(got) != 2 {
-		t.Fatalf("want 1 row per holder, got %d", len(got))
-	}
-	var changes map[string]any
-	if err := json.Unmarshal([]byte(got[0][1].(string)), &changes); err != nil {
-		t.Fatalf("changes is not JSON: %v", err)
-	}
-	for _, field := range []string{"status", "complexity", "phase"} {
-		if _, ok := changes[field]; !ok {
-			t.Errorf("changes should carry %q, got %v", field, changes)
-		}
-	}
-	if len(changes) != 3 {
-		t.Errorf("want exactly 3 changed fields, got %v", changes)
-	}
-}
-
-// TestNoticeTrigger_FreeformNeverLeaksContent is the privacy/bloat guarantee:
-// the notice says a freeform field CHANGED without reproducing it. A regression
-// here would quietly start pasting whole descriptions and plans into every
-// agent's context.
-func TestNoticeTrigger_FreeformNeverLeaksContent(t *testing.T) {
-	db := withTestDB(t)
-	snNoticeFixture(t, db)
-
-	const secret = "the-actual-description-body"
-	if _, err := db.Exec("UPDATE tasks SET description=? WHERE id=500", secret); err != nil {
-		t.Fatalf("update: %v", err)
-	}
-	// plan, analysis and notes left the row (E-1531); their notices come from
-	// the task_content triggers, under the same guarantee.
-	for _, name := range []string{"plan", "analysis", "notes"} {
-		setTaskContent(t, db, 500, name, secret)
-	}
-
-	got := snNotices(t, db)
-	if len(got) == 0 {
-		t.Fatal("expected notices")
-	}
-	for _, row := range got {
-		if strings.Contains(row[1].(string), secret) {
-			t.Errorf("notice leaked freeform content: %s", row[1])
-		}
-	}
-}
-
-// TestNoticeTrigger_FreeformTransitions pins the transitions the elision
-// sentinel preserves, on the plan — the freeform field a session works from
-// (E-1994). Content is never carried, but whether it arrived, left, or merely
-// changed still is — which is the whole reason a bare "changed" flag was not
-// enough. Each step's notice is delivered before the next, so the content
-// triggers' same-second merge does not fold two steps into one row.
-func TestNoticeTrigger_FreeformTransitions(t *testing.T) {
-	db := withTestDB(t)
-	snNoticeFixture(t, db)
-
-	steps := []struct {
-		apply func()
-		want  string
-	}{
-		{func() { setTaskContent(t, db, 500, "plan", "content") }, "added"},
-		{func() { setTaskContent(t, db, 500, "plan", "different") }, "edited"},
-		{func() {
-			if _, err := db.Exec("DELETE FROM task_content WHERE task_id=500 AND name='plan'"); err != nil {
-				t.Fatalf("delete plan: %v", err)
-			}
-		}, "cleared"},
-		{func() { setTaskContent(t, db, 500, "plan", "content") }, "added"},
-	}
-	for i, step := range steps {
-		if _, err := db.Exec("UPDATE session_notices SET notified = 1"); err != nil {
-			t.Fatalf("deliver: %v", err)
-		}
-		before := len(snNotices(t, db))
-		step.apply()
-		rows := snNotices(t, db)
-		if len(rows) == before {
-			t.Fatalf("step %d (%s): expected a notice", i, step.want)
-		}
-		var changes map[string]noticeChange
-		if err := json.Unmarshal([]byte(rows[before][1].(string)), &changes); err != nil {
-			t.Fatalf("changes not JSON: %v", err)
-		}
-		if got := freeformVerb(changes["plan"]); got != step.want {
-			t.Errorf("step %d: want %q, got %q (%v)", i, step.want, got, changes["plan"])
-		}
-	}
-}
-
-// TestNoticeTrigger_DescriptionIsNotWatched pins E-1994's retargeting. The plan
-// is the spec (E-1993); the description only says what the task is, so editing
-// it changes nothing a session holding the task works from, and telling it
-// anyway is the noise that trains an agent to skim the line that matters.
-func TestNoticeTrigger_DescriptionIsNotWatched(t *testing.T) {
-	db := withTestDB(t)
-	snNoticeFixture(t, db)
-
-	if _, err := db.Exec("UPDATE tasks SET description='rewritten' WHERE id=500"); err != nil {
-		t.Fatalf("update: %v", err)
-	}
-	if got := snNotices(t, db); len(got) != 0 {
-		t.Errorf("a description edit wrote notices: %v", got)
-	}
-}
-
 // TestPendingNoticesDeliverOnce pins one-shot delivery. Re-showing a notice on
 // every turn is the per-turn bloat this design exists to avoid, and it is also
 // what would train an agent to skim the line.
@@ -246,9 +67,7 @@ func TestPendingNoticesDeliverOnce(t *testing.T) {
 	db := withTestDB(t)
 	snNoticeFixture(t, db)
 
-	if _, err := db.Exec("UPDATE tasks SET status='revisit' WHERE id=500"); err != nil {
-		t.Fatalf("update: %v", err)
-	}
+	snNotifyHolders(t, db, 500)
 
 	first, err := PendingNotices(9001)
 	if err != nil {
@@ -345,7 +164,7 @@ func TestRenderNotice(t *testing.T) {
 }
 
 // TestRenderNoticeLanded covers the synthetic `landed` key the
-// task_landings_notify_sessions trigger writes (E-2005). It is not a task
+// executor writes for a landing (E-2005). It is not a task
 // field, so it renders as a sentence rather than a "before → after" pair, and
 // it is answered before noticeFieldOrder is consulted.
 func TestRenderNoticeLanded(t *testing.T) {
@@ -441,56 +260,6 @@ func TestGetTaskHeadlineReadsCurrentValues(t *testing.T) {
 	}
 }
 
-// TestNoticeTrigger_SkipsEndedSessions pins the write-side half of the E-1917
-// fix. An ended session never takes another turn, so a notice written for it is
-// undeliverable the moment it is created — 82% of the table was stranded this
-// way before the fan-out filtered on state.
-func TestNoticeTrigger_SkipsEndedSessions(t *testing.T) {
-	db := withTestDB(t)
-	seedProject(t, db, 1, "p1", "/p1")
-	snTask(t, db, 500, 1, "ready", "now", "")
-	snSession(t, db, 9001, 1, 500, "working")
-	snSession(t, db, 9002, 1, 500, "ended")
-	snSessionTask(t, db, 9001, 500)
-	snSessionTask(t, db, 9002, 500)
-
-	if _, err := db.Exec("UPDATE tasks SET status='revisit' WHERE id=500"); err != nil {
-		t.Fatalf("update: %v", err)
-	}
-
-	got := snNotices(t, db)
-	if len(got) != 1 {
-		t.Fatalf("only the live session should get a notice, got %d: %v", len(got), got)
-	}
-	if got[0][0].(int64) != 9001 {
-		t.Errorf("notice should go to the live session 9001, got %v", got[0][0])
-	}
-}
-
-// TestNoticeTrigger_KeepsIdleAndNeedsInputSessions guards the other side of that
-// filter. Only `ended` is excluded: an idle or waiting session can still come
-// back, and a notice surviving until it does is the entire point of one-shot
-// delivery. Widening the filter to "not working" would silently drop the
-// notices most worth keeping.
-func TestNoticeTrigger_KeepsIdleAndNeedsInputSessions(t *testing.T) {
-	db := withTestDB(t)
-	seedProject(t, db, 1, "p1", "/p1")
-	snTask(t, db, 500, 1, "ready", "now", "")
-	snSession(t, db, 9001, 1, 500, "idle")
-	snSession(t, db, 9002, 1, 500, "needs_input")
-	snSessionTask(t, db, 9001, 500)
-	snSessionTask(t, db, 9002, 500)
-
-	if _, err := db.Exec("UPDATE tasks SET status='revisit' WHERE id=500"); err != nil {
-		t.Fatalf("update: %v", err)
-	}
-
-	if got := snNotices(t, db); len(got) != 2 {
-		t.Errorf("idle and needs_input sessions must still be notified, got %d: %v",
-			len(got), got)
-	}
-}
-
 // TestReapNoticesForEndedSessions covers the case the write-side filter cannot:
 // a session that ends AFTER its notice was written. Those rows are undeliverable
 // forever, and without the reaper they accumulate without bound.
@@ -503,9 +272,7 @@ func TestReapNoticesForEndedSessions(t *testing.T) {
 	snSessionTask(t, db, 9001, 500)
 	snSessionTask(t, db, 9002, 500)
 
-	if _, err := db.Exec("UPDATE tasks SET status='revisit' WHERE id=500"); err != nil {
-		t.Fatalf("update: %v", err)
-	}
+	snNotifyHolders(t, db, 500)
 	if got := snNotices(t, db); len(got) != 2 {
 		t.Fatalf("setup: want 2 notices, got %d", len(got))
 	}
@@ -538,9 +305,7 @@ func TestReapNoticesLeavesDeliveredRows(t *testing.T) {
 	snSession(t, db, 9001, 1, 500, "working")
 	snSessionTask(t, db, 9001, 500)
 
-	if _, err := db.Exec("UPDATE tasks SET status='revisit' WHERE id=500"); err != nil {
-		t.Fatalf("update: %v", err)
-	}
+	snNotifyHolders(t, db, 500)
 	notices, err := PendingNotices(9001)
 	if err != nil || len(notices) != 1 {
 		t.Fatalf("setup: PendingNotices got %d, err %v", len(notices), err)

@@ -607,6 +607,7 @@ func TestCatalog_NumbersAreNeverReused(t *testing.T) {
 		"0033": "monitor-visibility-unreadable",
 		"0034": "monitor-hooks-missing",
 		"0035": "monitor-hooks-install-failed",
+		"0036": "session-notices-unwritten",
 	}
 
 	for _, code := range faults.Codes() {

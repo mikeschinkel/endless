@@ -1,6 +1,7 @@
 // Regression tests for E-1917's self-suppression rule.
 //
-// The shipped implementation stamped tasks.changed_by_session from
+// The shipped implementation stamped tasks.changed_by_session (a column E-2422
+// dropped, once the executor read the actor off the event) from
 // evt.Actor.SessionID unconditionally, on the assumption that a user editing
 // from a terminal would produce an empty actor. That assumption was never
 // tested against the real resolver and is false: `esu` exports
@@ -16,6 +17,10 @@
 // moved from t.Setenv onto the event, and every assertion and failure message
 // below is byte-for-byte what E-1917 shipped.
 //
+// E-2422 moved the fan-out from a trigger into the executor, so the actor these
+// tests read is the one recorded on the notice, not on the task row. Those
+// reads, and their messages, are the only lines E-2422 changed.
+//
 // The suite that shipped alongside that bug seeded changed_by_session directly
 // with SQL. It proved the trigger did what it was told and never asked whether
 // the value arriving there meant what the design assumed. These tests drive the
@@ -24,6 +29,7 @@ package events_test
 
 import (
 	"database/sql"
+	"strconv"
 	"testing"
 
 	"github.com/mikeschinkel/endless/internal/events"
@@ -55,6 +61,40 @@ func seedHeldTask(t *testing.T, db *sql.DB, taskID, sessionID int64) {
 	}
 }
 
+// holdTask makes one more session, in the given state, hold the task — so an
+// agent's own suppressed change still leaves a notice whose actor can be read,
+// and so fan-out can be checked against each session state.
+func holdTask(t *testing.T, db *sql.DB, taskID, sessionID int64, state string) {
+	t.Helper()
+	if _, err := db.Exec(
+		`INSERT INTO sessions (id, session_id, project_id, platform, state, task_id, started_at, last_activity)
+		 VALUES (?, ?, 1, 'claude', ?, ?, '2026-08-20T00:00:00', '2026-08-20T00:00:00')`,
+		sessionID, "sess-holder-"+strconv.FormatInt(sessionID, 10), state, taskID,
+	); err != nil {
+		t.Fatalf("seed holder session: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO session_tasks (session_id, task_id, created_at, updated_at)
+		 VALUES (?, ?, '2026-08-20T00:00:00', '2026-08-20T00:00:00')`,
+		sessionID, taskID,
+	); err != nil {
+		t.Fatalf("seed holder session_task: %v", err)
+	}
+}
+
+// noticeActorFor reads changed_by_session off the one notice sent to a session:
+// the actor the executor attributed the change to.
+func noticeActorFor(t *testing.T, db *sql.DB, sessionID int64) sql.NullInt64 {
+	t.Helper()
+	var actor sql.NullInt64
+	if err := db.QueryRow(
+		"SELECT changed_by_session FROM session_notices WHERE session_id = ?", sessionID,
+	).Scan(&actor); err != nil {
+		t.Fatalf("reading notice actor: %v", err)
+	}
+	return actor
+}
+
 func noticeCountFor(t *testing.T, db *sql.DB, sessionID int64) int {
 	t.Helper()
 	var n int
@@ -66,7 +106,7 @@ func noticeCountFor(t *testing.T, db *sql.DB, sessionID int64) int {
 	return n
 }
 
-// TestStampTaskActor_HumanEditNotifiesTheHoldingSession is THE regression test.
+// TestNoticeActor_HumanEditNotifiesTheHoldingSession is THE regression test.
 //
 // It reproduces the shipped failure exactly: the event carries the holding
 // session's id in Actor.SessionID — which is what the resolver produces for a
@@ -76,7 +116,7 @@ func noticeCountFor(t *testing.T, db *sql.DB, sessionID int64) int {
 //
 // Before the fix this asserted 0 notices and the session went on working from a
 // status the user had already changed.
-func TestStampTaskActor_HumanEditNotifiesTheHoldingSession(t *testing.T) {
+func TestNoticeActor_HumanEditNotifiesTheHoldingSession(t *testing.T) {
 	db := withExecutorDB(t)
 	seedHeldTask(t, db, 700, 9100)
 
@@ -92,22 +132,18 @@ func TestStampTaskActor_HumanEditNotifiesTheHoldingSession(t *testing.T) {
 	if got := noticeCountFor(t, db, 9100); got != 1 {
 		t.Errorf("a human's edit must notify the session holding the task, got %d notices", got)
 	}
-	var actor sql.NullInt64
-	if err := db.QueryRow(
-		"SELECT changed_by_session FROM tasks WHERE id = 700").Scan(&actor); err != nil {
-		t.Fatalf("reading actor: %v", err)
-	}
-	if actor.Valid {
-		t.Errorf("a non-agent process must stamp a NULL actor, got %d", actor.Int64)
+	if actor := noticeActorFor(t, db, 9100); actor.Valid {
+		t.Errorf("a non-agent process must record a NULL actor, got %d", actor.Int64)
 	}
 }
 
-// TestStampTaskActor_AgentEditSuppressesItsOwnNotice keeps the original intent
+// TestNoticeActor_AgentEditSuppressesItsOwnNotice keeps the original intent
 // intact: when the agent itself makes the change, telling it about its own edit
 // is noise, and noise is what trains an agent to skim the line that matters.
-func TestStampTaskActor_AgentEditSuppressesItsOwnNotice(t *testing.T) {
+func TestNoticeActor_AgentEditSuppressesItsOwnNotice(t *testing.T) {
 	db := withExecutorDB(t)
 	seedHeldTask(t, db, 701, 9101)
+	holdTask(t, db, 701, 9111, "working")
 
 	evt := newStatusChangedEvent(t, 701, "ready", "revisit")
 	// The agent's own tool call: EmittingActor observed a harness and recorded
@@ -121,20 +157,15 @@ func TestStampTaskActor_AgentEditSuppressesItsOwnNotice(t *testing.T) {
 	if got := noticeCountFor(t, db, 9101); got != 0 {
 		t.Errorf("an agent must not be notified of its own change, got %d notices", got)
 	}
-	var actor sql.NullInt64
-	if err := db.QueryRow(
-		"SELECT changed_by_session FROM tasks WHERE id = 701").Scan(&actor); err != nil {
-		t.Fatalf("reading actor: %v", err)
-	}
-	if !actor.Valid || actor.Int64 != 9101 {
-		t.Errorf("an agent's change should stamp its session, got %v", actor)
+	if actor := noticeActorFor(t, db, 9111); !actor.Valid || actor.Int64 != 9101 {
+		t.Errorf("an agent's change should record its session, got %v", actor)
 	}
 }
 
-// TestStampTaskActor_AgentEditStillNotifiesOtherHolders pins that suppression is
+// TestNoticeActor_AgentEditStillNotifiesOtherHolders pins that suppression is
 // scoped to the acting session alone. A second session on the same task has no
 // idea the first one moved it and must still hear.
-func TestStampTaskActor_AgentEditStillNotifiesOtherHolders(t *testing.T) {
+func TestNoticeActor_AgentEditStillNotifiesOtherHolders(t *testing.T) {
 	db := withExecutorDB(t)
 	seedHeldTask(t, db, 702, 9102)
 	if _, err := db.Exec(
@@ -165,10 +196,10 @@ func TestStampTaskActor_AgentEditStillNotifiesOtherHolders(t *testing.T) {
 	}
 }
 
-// TestStampTaskActor_NoSessionStampsNull covers the plainly-attributable case —
+// TestNoticeActor_NoSessionStampsNull covers the plainly-attributable case —
 // a background job or a bare invocation with no session at all. It was already
 // correct before the fix; it is here so the harness gate cannot regress it.
-func TestStampTaskActor_NoSessionStampsNull(t *testing.T) {
+func TestNoticeActor_NoSessionStampsNull(t *testing.T) {
 	db := withExecutorDB(t)
 	seedHeldTask(t, db, 703, 9104)
 
@@ -184,7 +215,7 @@ func TestStampTaskActor_NoSessionStampsNull(t *testing.T) {
 	}
 }
 
-// TestStampTaskActor_TheEnvelopeDecidesNotTheProcess is E-2006 itself.
+// TestNoticeActor_TheEnvelopeDecidesNotTheProcess is E-2006 itself.
 //
 // Before it, the executor answered "was this an agent?" by reading
 // os.Getenv("CLAUDECODE") in whatever process happened to be executing the
@@ -198,7 +229,7 @@ func TestStampTaskActor_NoSessionStampsNull(t *testing.T) {
 // is the recorded one, so a notice that was dropped can be explained afterward
 // from the ledger line, and a replayed or hand-rolled event carries its own
 // answer instead of inheriting the executing process's.
-func TestStampTaskActor_TheEnvelopeDecidesNotTheProcess(t *testing.T) {
+func TestNoticeActor_TheEnvelopeDecidesNotTheProcess(t *testing.T) {
 	t.Run("a human's event executed inside an agent's process", func(t *testing.T) {
 		db := withExecutorDB(t)
 		seedHeldTask(t, db, 704, 9105)
@@ -216,13 +247,8 @@ func TestStampTaskActor_TheEnvelopeDecidesNotTheProcess(t *testing.T) {
 			t.Fatalf("Execute: %v", err)
 		}
 
-		var actor sql.NullInt64
-		if err := db.QueryRow(
-			"SELECT changed_by_session FROM tasks WHERE id = 704").Scan(&actor); err != nil {
-			t.Fatalf("reading actor: %v", err)
-		}
-		if actor.Valid {
-			t.Errorf("stamped %d from the process environment; the envelope said no "+
+		if actor := noticeActorFor(t, db, 9105); actor.Valid {
+			t.Errorf("recorded %d from the process environment; the envelope said no "+
 				"harness, so a person made this change", actor.Int64)
 		}
 		if got := noticeCountFor(t, db, 9105); got != 1 {
@@ -233,6 +259,7 @@ func TestStampTaskActor_TheEnvelopeDecidesNotTheProcess(t *testing.T) {
 	t.Run("an agent's event executed outside an agent's process", func(t *testing.T) {
 		db := withExecutorDB(t)
 		seedHeldTask(t, db, 705, 9106)
+		holdTask(t, db, 705, 9116, "working")
 
 		// The inverse: nothing in the environment says agent — a replay, a
 		// daemon, a person's shell draining a queue — but the envelope recorded
@@ -248,12 +275,7 @@ func TestStampTaskActor_TheEnvelopeDecidesNotTheProcess(t *testing.T) {
 			t.Fatalf("Execute: %v", err)
 		}
 
-		var actor sql.NullInt64
-		if err := db.QueryRow(
-			"SELECT changed_by_session FROM tasks WHERE id = 705").Scan(&actor); err != nil {
-			t.Fatalf("reading actor: %v", err)
-		}
-		if !actor.Valid || actor.Int64 != 9106 {
+		if actor := noticeActorFor(t, db, 9116); !actor.Valid || actor.Int64 != 9106 {
 			t.Errorf("changed_by_session = %v, want 9106; the envelope recorded the "+
 				"harness that emitted this, whatever process replayed it", actor)
 		}

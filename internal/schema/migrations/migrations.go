@@ -57,5 +57,6 @@ func Go() []*goose.Migration {
 		addProjectIdentity(),
 		forgottenProjects(),
 		postLandItems(),
+		noticesLeaveTriggers(),
 	}
 }

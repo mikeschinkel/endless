@@ -3,9 +3,10 @@
 // Landing changes no field tasks_notify_sessions watches, so before this the
 // notice a user most wants after landing from another terminal simply did not
 // exist. These tests drive the real executor against the real schema, so the
-// insert, the trigger, and the suppression rule are exercised together — the
-// trigger is where the rule actually lives, and a test that seeded
-// session_notices directly would prove nothing about it.
+// insert, the fan-out, and the suppression rule are exercised together — the
+// executor's fan-out (dispatchWithNotices, E-2422; a trigger before it) is where
+// the rule actually lives, and a test that seeded session_notices directly would
+// prove nothing about it.
 //
 // The rule, stated once: an AGENT is not told about a land it performed; a
 // PERSON's land is announced to every holder, including the session the land
@@ -83,17 +84,26 @@ func landedEventWith(t *testing.T, sessionID, harness, baseBranch, sha string) *
 	return evt
 }
 
+// landAndNotify applies a landing the way every commit path does: dispatch
+// between notice snapshots, then deliver the batch the event owes.
+func landAndNotify(t *testing.T, db *sql.DB, evt *Event) {
+	t.Helper()
+	_, notices, err := dispatchWithNotices(db, evt, nil)
+	if err != nil {
+		t.Fatalf("dispatchWithNotices: %v", err)
+	}
+	notices.deliver(db)
+}
+
 // TestExecTaskLanded_RecordsBaseBranchAndHarness pins the two new columns
 // against the two new inputs: the payload's base_branch and the envelope's
-// actor.harness. Without both reaching the row, the trigger below has nothing
+// actor.harness. Without both reaching the row, the notice below has nothing
 // to decide on and nothing to render.
 func TestExecTaskLanded_RecordsBaseBranchAndHarness(t *testing.T) {
 	db := newLandingTestDB(t)
 	evt := landedEventWith(t, "", "claude_cli", "main", "1dd00061234")
 
-	if _, err := execTaskLanded(db, evt); err != nil {
-		t.Fatalf("execTaskLanded: %v", err)
-	}
+	landAndNotify(t, db, evt)
 
 	var baseBranch, harness sql.NullString
 	if err := db.QueryRow(
@@ -117,9 +127,7 @@ func TestExecTaskLanded_NoHarnessRecordsNull(t *testing.T) {
 	db := newLandingTestDB(t)
 	evt := landedEventWith(t, "", "", "", "1dd00061234")
 
-	if _, err := execTaskLanded(db, evt); err != nil {
-		t.Fatalf("execTaskLanded: %v", err)
-	}
+	landAndNotify(t, db, evt)
 
 	var baseBranch, harness sql.NullString
 	if err := db.QueryRow(
@@ -143,9 +151,7 @@ func TestLandingNotice_AgentIsNotToldAboutItsOwnLand(t *testing.T) {
 	seedLandingSession(t, db, 9201, "working")
 
 	evt := landedEventWith(t, "9200", "claude_cli", "main", "1dd00061234")
-	if _, err := execTaskLanded(db, evt); err != nil {
-		t.Fatalf("execTaskLanded: %v", err)
-	}
+	landAndNotify(t, db, evt)
 
 	if got := len(landingNoticesFor(t, db, 9200)); got != 0 {
 		t.Errorf("the landing agent must not be notified, got %d notices", got)
@@ -169,9 +175,7 @@ func TestLandingNotice_HumanLandNotifiesEveryHolder(t *testing.T) {
 	seedLandingSession(t, db, 9201, "idle")
 
 	evt := landedEventWith(t, "9200", "", "main", "1dd00061234")
-	if _, err := execTaskLanded(db, evt); err != nil {
-		t.Fatalf("execTaskLanded: %v", err)
-	}
+	landAndNotify(t, db, evt)
 
 	if got := len(landingNoticesFor(t, db, 9200)); got != 1 {
 		t.Errorf("the session the land was attributed to must hear about it, got %d notices", got)
@@ -191,16 +195,14 @@ func TestLandingNotice_EndedSessionsAreNotNotified(t *testing.T) {
 	seedLandingSession(t, db, 9202, "ended")
 
 	evt := landedEventWith(t, "", "", "main", "1dd00061234")
-	if _, err := execTaskLanded(db, evt); err != nil {
-		t.Fatalf("execTaskLanded: %v", err)
-	}
+	landAndNotify(t, db, evt)
 
 	if got := len(landingNoticesFor(t, db, 9202)); got != 0 {
 		t.Errorf("an ended session must not be queued a notice, got %d", got)
 	}
 }
 
-// TestLandingNotice_PayloadShape pins the JSON the trigger writes, because the
+// TestLandingNotice_PayloadShape pins the JSON the fan-out writes, because the
 // renderer parses it and the two are only correct together. The `landed` key is
 // synthetic — no task field is named that — and the sha is abbreviated to 7 in
 // SQL rather than at render time so the notice log records what was shown.
@@ -209,9 +211,7 @@ func TestLandingNotice_PayloadShape(t *testing.T) {
 	seedLandingSession(t, db, 9203, "working")
 
 	evt := landedEventWith(t, "", "", "main", "1dd00061234")
-	if _, err := execTaskLanded(db, evt); err != nil {
-		t.Fatalf("execTaskLanded: %v", err)
-	}
+	landAndNotify(t, db, evt)
 
 	notices := landingNoticesFor(t, db, 9203)
 	if len(notices) != 1 {
@@ -245,9 +245,7 @@ func TestLandingNotice_NoBaseBranchRecordsShaAlone(t *testing.T) {
 	seedLandingSession(t, db, 9204, "working")
 
 	evt := landedEventWith(t, "", "", "", "6671bca9abc")
-	if _, err := execTaskLanded(db, evt); err != nil {
-		t.Fatalf("execTaskLanded: %v", err)
-	}
+	landAndNotify(t, db, evt)
 
 	notices := landingNoticesFor(t, db, 9204)
 	if len(notices) != 1 {
@@ -259,7 +257,7 @@ func TestLandingNotice_NoBaseBranchRecordsShaAlone(t *testing.T) {
 }
 
 // TestLandingNotice_ChangedBySessionOnlyWhenAnAgentLanded keeps the column
-// meaning what it means for the sibling trigger: it names the session that MADE
+// meaning what it means for a task-change notice: it names the session that MADE
 // the change, and a human's land was not made by the session it is attributed
 // to.
 func TestLandingNotice_ChangedBySessionOnlyWhenAnAgentLanded(t *testing.T) {
@@ -279,9 +277,7 @@ func TestLandingNotice_ChangedBySessionOnlyWhenAnAgentLanded(t *testing.T) {
 			seedLandingSession(t, db, 9206, "working")
 
 			evt := landedEventWith(t, "9206", tc.harness, "main", "1dd00061234")
-			if _, err := execTaskLanded(db, evt); err != nil {
-				t.Fatalf("execTaskLanded: %v", err)
-			}
+			landAndNotify(t, db, evt)
 			var actor sql.NullInt64
 			if err := db.QueryRow(
 				"SELECT changed_by_session FROM session_notices WHERE session_id = 9205",

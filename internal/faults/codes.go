@@ -827,6 +827,26 @@ var (
 			"also retries on its next poll. Dismiss with `endless errors " +
 			"clear <id>`.",
 	}
+
+	// ErrCodeSessionNoticesUnwritten covers the executor failing to write the
+	// session_notices rows a task change owes, after that change committed
+	// (E-2422).
+	//
+	// Warning: the change itself is recorded, and a missed notice costs only the
+	// status quo — the session holding the task works from what it last read
+	// until it reads the task again.
+	ErrCodeSessionNoticesUnwritten = Code{
+		ID:       "WARN-0036",
+		Slug:     "session-notices-unwritten",
+		Severity: SeverityWarning,
+		Title:    "A task change was recorded but its sessions were not notified",
+		Remedy: "Run `endless errors show <n> --detail` for the database error " +
+			"and the task. The change itself is recorded; only the notice to " +
+			"the sessions holding the task was lost, so tell a session that " +
+			"is working from it to re-read the task. A count that keeps " +
+			"rising means the database is refusing writes — check `endless " +
+			"db` health. Dismiss with `endless errors clear <id>`.",
+	}
 )
 
 // catalog indexes every registered Code by ID. Built once at init from the
@@ -867,6 +887,7 @@ var catalog = buildCatalog(
 	ErrCodeMonitorVisibilityUnreadable,
 	ErrCodeMonitorHooksMissing,
 	ErrCodeMonitorHooksInstallFailed,
+	ErrCodeSessionNoticesUnwritten,
 )
 
 // buildCatalog indexes codes by ID. It panics on a duplicate ID: a collision is

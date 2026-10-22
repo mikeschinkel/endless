@@ -15,11 +15,12 @@ import (
 )
 
 // Notice is one undelivered change notice for a session (E-1917): a snapshot,
-// taken at change time by the tasks_notify_sessions trigger, of what moved on a
+// taken at change time by the executor's fan-out (events.dispatchWithNotices,
+// E-2422; the tasks_notify_sessions trigger before it), of what moved on a
 // task this session holds.
 //
-// Changes is the raw JSON from the trigger, kept as text rather than decoded at
-// query time so the log can record exactly what the trigger wrote.
+// Changes is the raw JSON the fan-out wrote, kept as text rather than decoded at
+// query time so the log can record exactly what was written.
 type Notice struct {
 	ID        int64
 	TaskID    int64
@@ -37,13 +38,12 @@ type noticeChange struct {
 }
 
 // elisionSentinel marks freeform content the notice deliberately does not
-// reproduce. Mirrors the '…' written by the tasks_notify_sessions trigger in
-// internal/schema/schema.sql — change it in both places or the renderer stops
+// reproduce. Mirrors noticeElision in internal/events/session_notices.go, the
+// writer's copy — change it in both places or the renderer stops
 // recognising elided content. It is one character (U+2026), not three dots.
 const elisionSentinel = "…"
 
-// noticeLandedKey is the synthetic key the task_landings_notify_sessions trigger
-// writes (E-2005). It is deliberately NOT in noticeFieldOrder below: a landing
+// noticeLandedKey is the synthetic key a landing's notice carries (E-2005). It is deliberately NOT in noticeFieldOrder below: a landing
 // is not a field that moved from one value to another, so it renders as its own
 // sentence rather than as a "before → after" pair.
 const noticeLandedKey = "landed"
@@ -61,13 +61,13 @@ var noticeFieldOrder = []string{
 	"tier",
 }
 
-// noticeLegacyPlanKey is the pre-E-1000 key the trigger wrote for the plan
+// noticeLegacyPlanKey is the pre-E-1000 key the notice trigger wrote for the plan
 // field. Undelivered notices written before the rename still carry it, so
 // RenderNotice folds it onto "plan" rather than dropping the field — a notice
 // that rendered nothing would be held back forever as unrenderable.
 const noticeLegacyPlanKey = "text"
 
-// noticeFreeform is the set of fields whose content the trigger elides. They
+// noticeFreeform is the set of fields whose content a notice elides. They
 // render as a verb ("description edited") rather than a before → after pair,
 // because their values are sentinels, not content.
 var noticeFreeform = map[string]bool{
@@ -151,7 +151,7 @@ func RenderNotice(n Notice) (string, bool) {
 	if err := json.Unmarshal([]byte(n.Changes), &changes); err != nil {
 		return "", false
 	}
-	// A landing arrives alone, from its own trigger on its own table, so it is
+	// A landing arrives alone, as its own notice from its own event, so it is
 	// answered before the field loop rather than merged into it.
 	if landed, ok := changes[noticeLandedKey]; ok {
 		return fmt.Sprintf("FYI — E-%d %s", n.TaskID, landedPhrase(landed.After)), true
@@ -184,7 +184,7 @@ func RenderNotice(n Notice) (string, bool) {
 	return fmt.Sprintf("FYI — E-%d %s", n.TaskID, strings.Join(parts, "; ")), true
 }
 
-// landedPhrase renders the `landed` notice's after-value, which the trigger
+// landedPhrase renders the `landed` notice's after-value, which the fan-out
 // encodes as "<base_branch>@<sha7>" — or as a bare sha7 when the landing
 // recorded no base branch (a record-only backfill, E-1719, which has none to
 // record).
@@ -203,7 +203,7 @@ func landedPhrase(after any) string {
 }
 
 // freeformVerb names what happened to an elided field. The four cases are
-// exactly the transitions the trigger's sentinel encoding preserves: content is
+// exactly the transitions the sentinel encoding preserves: content is
 // never reproduced, but whether it arrived, left, or merely changed still is.
 func freeformVerb(c noticeChange) string {
 	hadContent := c.Before == elisionSentinel
@@ -397,7 +397,7 @@ func noticeLogFailed(stage string, err error) {
 // ReapNoticesForEndedSessions deletes undelivered notices belonging to sessions
 // that have ended (E-1917 fix).
 //
-// The trigger's fan-out already skips ended sessions, but that is not enough on
+// The fan-out already skips ended sessions, but that is not enough on
 // its own: a session can end AFTER its notice is written, and that row is then
 // undeliverable forever because an ended session never takes another turn. Left
 // alone the table grows without bound — 553 of 679 rows (82%) were stranded this

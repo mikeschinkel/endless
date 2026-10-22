@@ -160,6 +160,10 @@ func ratingsReplaceTierUp(ctx context.Context, tx *sql.Tx) error {
 		}
 	}
 
+	// E-2422: not on a database whose tasks table is already past 00028.
+	if canFire, err := noticeTriggerCanFire(ctx, tx); err != nil || !canFire {
+		return err
+	}
 	if _, err = tx.ExecContext(ctx, tasksNotifySessionsAt8); err != nil {
 		return fmt.Errorf("recreating tasks_notify_sessions: %w", err)
 	}

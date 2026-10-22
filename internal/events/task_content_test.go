@@ -176,8 +176,9 @@ func TestTaskContent_UnknownFieldStillRefused(t *testing.T) {
 }
 
 // TestTaskContent_OneEditOneNotice pins the merge the task_content triggers
-// exist for: one update that moves a watched tasks column AND a content field
-// is one edit, and must reach a holding session as ONE notice naming both.
+// existed for, and the executor's fan-out does by construction since E-2422:
+// one update that moves a watched tasks column AND a content field is one
+// edit, and must reach a holding session as ONE notice naming both.
 func TestTaskContent_OneEditOneNotice(t *testing.T) {
 	db := withExecutorDB(t)
 	if _, err := events.Execute(newTaskCreatedEvent(t, 720, "held"), nil); err != nil {

@@ -88,6 +88,10 @@ func addPrimeUp(ctx context.Context, tx *sql.Tx) error {
 	if _, err = tx.ExecContext(ctx, `DROP TRIGGER IF EXISTS tasks_notify_sessions`); err != nil {
 		return fmt.Errorf("dropping tasks_notify_sessions: %w", err)
 	}
+	// E-2422: not on a database whose tasks table is already past 00028.
+	if canFire, err := noticeTriggerCanFire(ctx, tx); err != nil || !canFire {
+		return err
+	}
 	if _, err = tx.ExecContext(ctx, tasksNotifySessionsAt14); err != nil {
 		return fmt.Errorf("recreating tasks_notify_sessions: %w", err)
 	}

@@ -446,13 +446,14 @@ func TestMigrate_LiftsTaskContent(t *testing.T) {
 		t.Errorf("the lift wrote %d session notices; it must write none", notices)
 	}
 
-	// The triggers came back: a real edit after the migration still notifies.
+	// The content triggers 00007 set aside and restored are gone by the latest
+	// step (E-2422): the executor writes notices now, so a raw edit writes none.
 	mustExec(t, db, `UPDATE task_content SET content = 'revised' WHERE task_id = 10 AND name = 'plan'`)
 	if err = db.QueryRow(`SELECT count(*) FROM session_notices`).Scan(&notices); err != nil {
 		t.Fatalf("count notices: %v", err)
 	}
-	if notices != 1 {
-		t.Errorf("a plan edit after the lift wrote %d notices, want 1", notices)
+	if notices != 0 {
+		t.Errorf("a raw plan edit after migrating wrote %d notices; no trigger should remain", notices)
 	}
 }
 
@@ -501,13 +502,57 @@ func TestMigrate_RatingsReplaceTier(t *testing.T) {
 		t.Errorf("the migration wrote %d session notices; it must write none", notices)
 	}
 
+	// 00008 rebuilt the notice trigger; 00028 (E-2422) dropped it, so a raw
+	// rating edit after migrating to the latest version writes nothing.
 	mustExec(t, db, `UPDATE tasks SET complexity_id = 1 WHERE id = 10`)
-	var changes string
-	if err := db.QueryRow(`SELECT changes FROM session_notices WHERE task_id = 10`).Scan(&changes); err != nil {
-		t.Fatalf("read notice: %v", err)
+	if err := db.QueryRow(`SELECT count(*) FROM session_notices`).Scan(&notices); err != nil {
+		t.Fatalf("count notices: %v", err)
 	}
-	if want := `{"complexity":{"before":null,"after":"low"}}`; changes != want {
-		t.Errorf("rating notice = %s, want %s", changes, want)
+	if notices != 0 {
+		t.Errorf("a raw rating edit after migrating wrote %d notices; no trigger should remain", notices)
+	}
+}
+
+// TestMigrate_DropsNoticeTriggers drives 00028 (E-2422) over a database at
+// version 27, which still carries the five notice triggers and
+// tasks.changed_by_session. After the step all five are gone and so is the
+// column: the executor writes session_notices now, and reads the actor off the
+// event rather than the row.
+func TestMigrate_DropsNoticeTriggers(t *testing.T) {
+	db := buildDB(t, func(db *sql.DB) error { return schema.MigrateUpTo(db, 27) })
+
+	countTriggers := func() int {
+		t.Helper()
+		var n int
+		if err := db.QueryRow(
+			`SELECT count(*) FROM sqlite_master WHERE type = 'trigger' AND name IN (
+			     'tasks_notify_sessions', 'task_content_notify_insert',
+			     'task_content_notify_update', 'task_content_notify_delete',
+			     'task_landings_notify_sessions')`,
+		).Scan(&n); err != nil {
+			t.Fatalf("count triggers: %v", err)
+		}
+		return n
+	}
+	if got := countTriggers(); got != 5 {
+		t.Fatalf("setup: version 27 carries %d of the 5 notice triggers", got)
+	}
+
+	if err := schema.Migrate(db); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+
+	if got := countTriggers(); got != 0 {
+		t.Errorf("%d notice triggers survived the migration", got)
+	}
+	var n int
+	if err := db.QueryRow(
+		`SELECT count(*) FROM pragma_table_info('tasks') WHERE name = 'changed_by_session'`,
+	).Scan(&n); err != nil {
+		t.Fatalf("probe column: %v", err)
+	}
+	if n != 0 {
+		t.Error("tasks.changed_by_session survived the migration")
 	}
 }
 

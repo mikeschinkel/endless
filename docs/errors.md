@@ -1044,3 +1044,19 @@ promptness — a monitor may take up to about 20 seconds to repaint after you
 switch to it.
 
 **What to do.** Run `endless errors show <n> --detail` for tmux's error. Until the hooks install, monitors still notice a window switch at their next safety-net poll, about 20 seconds later, so nothing is lost but promptness. Re-run `endless tmux apply` from inside the tmux session once the cause is fixed; every monitor also retries on its next poll. Dismiss with `endless errors clear <id>`.
+
+## WARN-0036 — session-notices-unwritten
+
+**Severity:** warning · **Raised by:** the event executor, on any task change
+(E-2422)
+
+A task change committed, but writing the session notices it owed failed, so the
+sessions holding that task were not told it moved. The notices are written
+after the change commits, never in the same transaction, so the change itself
+is recorded either way.
+
+Warning rather than error: nothing is blocked, and a missed notice costs only
+the status quo — a session holding the task keeps working from what it last
+read until it reads the task again.
+
+**What to do.** Run `endless errors show <n> --detail` for the database error and the task. The change itself is recorded; only the notice to the sessions holding the task was lost, so tell a session that is working from it to re-read the task. A count that keeps rising means the database is refusing writes — check `endless db` health. Dismiss with `endless errors clear <id>`.
