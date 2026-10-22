@@ -29,7 +29,7 @@ verify = "a test in tests/"
 [[item]]
 id = "P21"
 kind = "deliverable"
-statement = "A task with a steward task E-M is stewarded by the most recently active present session that claimed E-M and has not hidden the task; with no such session, the steward is worked out from filing and editing as before"
+statement = "A task with a steward task E-M is stewarded by the present session that claimed E-M, unless that session has hidden the task; with no such session, the steward is worked out from filing and editing as before"
 verify = "Go tests in internal/monitor with E-M held by a present session, by none, by a session that hid the task, and with E-M's session replaced by a new session"
 
 [[item]]
