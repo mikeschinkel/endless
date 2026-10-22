@@ -44,7 +44,9 @@ fully up to date, and running it again changes nothing.
    that already mentions `endless guide` is left alone.
 7. **Commit** (new; rule per EQ-83). Before step 2 runs, record
    `git status --porcelain` for the candidate paths:
-   `.endless/config.json` and `.endless/tasks/CLAUDE.md` (Endless-owned), and `.gitignore`, `CLAUDE.md`, `AGENTS.md` (user-owned).
+   `.endless/config.json`, `.endless/tasks/CLAUDE.md` and
+   `.claude/output-styles/Endless.md`, the unactivated output style init
+   already writes (Endless-owned), and `.gitignore`, `CLAUDE.md`, `AGENTS.md` (user-owned).
    After step 6, the commit set is:
    - every Endless-owned candidate path that is now modified or untracked,
      whatever its state before the run (this commits the legacy, never
