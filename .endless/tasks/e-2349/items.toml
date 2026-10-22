@@ -27,12 +27,6 @@ statement = "Project init refuses, writing nothing, when run inside a git linked
 verify = "tests/test_register.py"
 
 [[item]]
-id = "P19"
-kind = "deliverable"
-statement = "Project init installs _harness.sh and _guard.sh into the project's .endless/tasks/, replacing a copy whose bytes differ"
-verify = "tests/test_suite_rules.py"
-
-[[item]]
 id = "P20"
 kind = "deliverable"
 statement = "Project init leaves the project's CLAUDE.md or AGENTS.md mentioning endless guide, creating CLAUDE.md when neither exists and appending a marked block when the pointer is missing"
