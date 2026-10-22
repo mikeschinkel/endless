@@ -832,6 +832,19 @@ def purge(name):
     purge_project(name)
 
 
+@project_cmd.command("forget")
+@click.argument("project")
+@click.option("--with-tasks", is_flag=True,
+              help="Also remove the project's tasks (refused while any has a "
+                   "relation; unlink those first)")
+def forget(project, with_tasks):
+    """Forget a mistaken registration: Endless stops knowing PROJECT (a name
+    or path), writing nothing to its files. Its path and name can be
+    registered again. Refused if it has tasks, unless --with-tasks."""
+    from endless.unregister import forget_project
+    forget_project(project, with_tasks)
+
+
 @project_cmd.command("ignore")
 @click.argument("path", required=False, type=click.Path(exists=True, file_okay=False))
 @click.option("--marker", is_flag=True,

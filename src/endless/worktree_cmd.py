@@ -1106,11 +1106,30 @@ def _is_auto_file(rel_path: str) -> bool:
     return _is_auto_commit_path(rel_path) or rel_path.startswith(DB_LEDGER_DIR + "/")
 
 
+def _is_runtime_path(rel_path: str) -> bool:
+    """True if rel_path is one of Endless's runtime paths (E-2349).
+
+    The paths `project init` gitignores: Endless writes them, never commits
+    them, and they are nobody's work. A repo whose .gitignore predates one shows
+    it as untracked, which must not make land refuse.
+    """
+    from endless.register import GITIGNORE_ENTRIES
+
+    for entry in GITIGNORE_ENTRIES:
+        if entry.endswith("/"):
+            if rel_path == entry or rel_path.startswith(entry):
+                return True
+        elif rel_path == entry:
+            return True
+    return False
+
+
 def _git_status_partition(repo_root: Path) -> tuple[list[str], list[str]]:
     """Run `git status --porcelain -z` from repo_root and partition file paths.
 
     Returns (auto_commit_files, user_work_files) — both lists of repo-relative
-    paths. Untracked files included.
+    paths. Untracked files included. Endless's runtime paths are in neither:
+    land must neither commit them nor count them as user work.
     """
     out = subprocess.run(
         ["git", "status", "--porcelain", "-z"],
@@ -1137,6 +1156,8 @@ def _git_status_partition(repo_root: Path) -> tuple[list[str], list[str]]:
             i += 2
         else:
             i += 1
+        if _is_runtime_path(path):
+            continue
         if _is_auto_commit_path(path):
             auto.append(path)
         else:

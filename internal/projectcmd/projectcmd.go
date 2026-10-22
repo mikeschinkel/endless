@@ -1,7 +1,7 @@
 // Package projectcmd implements `endless-go project`: the Go owner of the
 // projects registry's "not a project" state (E-2251). The Python CLI's
-// register, discover, reconcile, unregister, purge and ignore commands all come
-// through here, so there is one answer to "is this directory ignored?" and one
+// register, discover, reconcile, unregister, purge, ignore and forget commands
+// all come through here, so there is one answer to "is this directory ignored?" and one
 // writer of the ignored status.
 //
 // These writes go straight to the database rather than through `event emit`:
@@ -41,6 +41,8 @@ func Run(args []string) {
 		err = runClear(rest)
 	case "list-ignored":
 		err = runListIgnored(rest)
+	case "forget":
+		err = runForget(rest)
 	case "-h", "--help", "help":
 		refusal.Info(usageText()).Print()
 		return
@@ -66,6 +68,7 @@ func usageText() string {
 	fmt.Fprintln(&b, "  activate <dir>     re-activate <dir>'s existing ignored row")
 	fmt.Fprintln(&b, "  clear <dir>        delete <dir>'s ignored row (refused if it holds tasks)")
 	fmt.Fprintln(&b, "  list-ignored       JSON list of ignored rows")
+	fmt.Fprintln(&b, "  forget <dir>       tombstone <dir>'s registration (refused if it holds tasks)")
 	return b.String()
 }
 
@@ -166,6 +169,30 @@ func runClear(args []string) error {
 		return err
 	}
 	return dbprovenance.Encode(os.Stdout, writeResult{Path: stored, Existed: true})
+}
+
+func runForget(args []string) error {
+	dir, err := oneDir("forget", args)
+	if err != nil {
+		return err
+	}
+	db, err := monitor.DB()
+	if err != nil {
+		return err
+	}
+	result, err := monitor.ForgetProject(db, dir)
+	switch {
+	case errors.Is(err, monitor.ErrForgetHasTasks):
+		return refusal.Report(err.Error(),
+			"whether to remove the project's tasks with `endless project forget --with-tasks`, "+
+				"or keep them and hide the project with `endless project ignore`")
+	case errors.Is(err, monitor.ErrNoProject):
+		return refusal.NoReport(err.Error(),
+			"Check the path with `endless project list` and retry")
+	case err != nil:
+		return err
+	}
+	return dbprovenance.Encode(os.Stdout, result)
 }
 
 type ignoredRow struct {

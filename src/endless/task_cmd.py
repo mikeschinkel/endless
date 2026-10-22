@@ -7755,11 +7755,9 @@ def _report_gate_on() -> bool:
     wind-down nudge (E-1966). Anything that tells a session the channel is live
     asks here first.
 
-    Defaults to True when no project root can be resolved, matching the Go
-    side: the channel ships on, and an unresolvable root is ignorance rather
-    than an opt-out. An emitter that silently dropped the instructions because
-    a path lookup failed would leave sessions ungoverned in a project that
-    wanted the gate — the failure direction that actually costs something.
+    Defaults to False — when no project root can be resolved, and when the
+    project's config declares no minimizer block — matching the Go side: the
+    channel ships off since E-2373, and a project switches it on explicitly.
 
     Resolved from CWD, nearest-config-wins, because that is what the Stop hook
     does (E-2030). This used to read `enclosing_project_root`, which maps a

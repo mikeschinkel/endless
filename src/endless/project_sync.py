@@ -1,5 +1,6 @@
 """Reconcile DB state with filesystem truth."""
 
+import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -28,7 +29,21 @@ def sync_projects():
         _scan_dir_for_projects(root, found_on_disk)
 
     # Get all projects in DB
-    db_rows = db.query("SELECT id, name, path, status FROM projects")
+    # A forgotten row (E-2349) is a tombstone whose path never exists; it is
+    # not reconciled against disk, or the sweep below would delete it.
+    db_rows = db.query(
+        "SELECT id, name, path, status FROM projects WHERE status != 'forgotten'"
+    )
+    # And a forgotten checkout is not re-registered by this automatic sweep:
+    # forget writes nothing into the project, so its config is still on disk.
+    # Only an explicit `project register` brings it back.
+    forgotten_paths = {
+        str(resolved(json.loads(row["forgotten_from"])["path"]))
+        for row in db.query(
+            "SELECT forgotten_from FROM projects "
+            "WHERE status = 'forgotten' AND forgotten_from IS NOT NULL"
+        )
+    }
     db_by_name: dict[str, dict] = {
         row["name"]: dict(row) for row in db_rows
     }
@@ -92,6 +107,7 @@ def sync_projects():
             # ignored (E-2251): the sync is an automatic path, and only an
             # explicit `project register` may register under an ignored tree.
             if (cfg.get("status") != "unregistered"
+                    and resolved_str not in forgotten_paths
                     and not config.is_ignored(disk_path)):
                 _insert_from_config(disk_path, cfg, now)
 

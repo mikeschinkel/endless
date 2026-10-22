@@ -59,22 +59,32 @@ def commit_path(
     but the content is still on disk, which is the right trade for an
     append-only record — a lost commit can be redone, a lost lesson cannot.
     """
+    commit_paths(main_root, [rel_path], subject, body)
+
+
+def commit_paths(
+    main_root: Path, rel_paths: list[str], subject: str,
+    body: str | None = None,
+) -> None:
+    """Commit just `rel_paths` in `main_root` as one commit; see commit_path."""
     env = sanitized_git_env()
+    named = ", ".join(rel_paths)
     add_res = subprocess.run(
-        ["git", "-C", str(main_root), "add", "--", rel_path],
+        ["git", "-C", str(main_root), "add", "--", *rel_paths],
         capture_output=True, text=True, env=env,
     )
     if add_res.returncode != 0:
         raise RuntimeError(
-            f"git add failed for {rel_path}: "
+            f"git add failed for {named}: "
             f"{(add_res.stderr or add_res.stdout or '').strip()}"
         )
-    cmd = ["git", "-C", str(main_root), "commit", "-o", rel_path, "-m", subject]
+    cmd = ["git", "-C", str(main_root), "commit", "-m", subject]
     if body and body.strip():
         cmd += ["-m", body.strip()]
+    cmd += ["-o", "--", *rel_paths]
     res = subprocess.run(cmd, capture_output=True, text=True, env=env)
     if res.returncode != 0:
         raise RuntimeError(
-            f"git commit failed for {rel_path}: "
+            f"git commit failed for {named}: "
             f"{(res.stderr or res.stdout or '').strip()}"
         )

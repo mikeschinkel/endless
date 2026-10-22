@@ -28,7 +28,7 @@ CREATE TABLE IF NOT EXISTS projects (
     language TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     updated_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
-    , identity TEXT, slug TEXT);
+    , identity TEXT, slug TEXT, forgotten_from TEXT);
 
 -- E-2217: a project's identity and its machine-local slug, two of the three
 -- jobs `name` used to do alone.
@@ -46,8 +46,16 @@ CREATE TABLE IF NOT EXISTS projects (
 -- defaults to `name` and keeps its value across a rename, so the file it names
 -- does not move. Every writer of a projects row sets it.
 --
--- Both are added by migration 22, which is why they sit after updated_at on
--- a line of their own: ALTER TABLE splices added columns in just before the
+-- forgotten_from (E-2349) is NULL on every row but one `endless project forget`
+-- tombstoned: status 'forgotten', name and path rewritten to forgotten-<id>
+-- values no lookup can match, identity and slug cleared so their indexes admit
+-- a new registration of the same repo. It keeps the row's original name, path,
+-- slug and identity, and when it was forgotten, as JSON, for debugging and
+-- posterity; nothing reads it. The row is kept, not deleted, so rows that name
+-- a project id without a foreign key never point at a re-minted one.
+--
+-- identity and slug are added by migration 22, forgotten_from by 25, which is
+-- why they sit after updated_at on a line of their own: ALTER TABLE splices added columns in just before the
 -- closing parenthesis, and TestMigrate_MatchesSchemaSQL compares the two
 -- spellings.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_projects_identity ON projects(identity);
@@ -454,14 +462,15 @@ CREATE TABLE IF NOT EXISTS tasks (
 CREATE VIEW IF NOT EXISTS live_tasks AS
     SELECT * FROM tasks WHERE removed = 0;
 
--- live_projects (E-2251) is every row that IS a project. A row with status
+-- live_projects (E-2251) is every row that IS a project. A 'forgotten' row
+-- (E-2349) is a tombstone and no project at all. A row with status
 -- 'ignored' marks a directory, and its subtree, as not a project: the walk that
 -- resolves a directory to its project stops there and never auto-registers it.
 -- Readers that list or look up projects read this view; the resolvers that walk
 -- a directory up to its project read projects, because the ignored row is what
 -- stops them.
 CREATE VIEW IF NOT EXISTS live_projects AS
-    SELECT * FROM projects WHERE status != 'ignored';
+    SELECT * FROM projects WHERE status NOT IN ('ignored', 'forgotten');
 
 -- task_tree (E-2161) is live_tasks plus one derived column: effective_parent_id,
 -- the nearest ancestor that is not removed.

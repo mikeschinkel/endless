@@ -99,3 +99,96 @@ def purge_project(name: str):
         + f" Purged {click.style(name, bold=True)}"
         + " (directory now ignored)"
     )
+
+
+def forget_project(name_or_path: str, with_tasks: bool = False):
+    """Make Endless stop knowing a mistaken registration (E-2349).
+
+    Unlike unregister, nothing is written to the project's own files and no
+    ignored row is left: the row is tombstoned by `endless-go project forget`,
+    which frees its path and name for a later registration and keeps what it
+    held in projects.forgotten_from. An ignored row can be forgotten too, which
+    is how an earlier unregister of a mistake is cleaned up.
+
+    A project with tasks is refused unless `with_tasks`, which first removes
+    them through task.deleted events tagged with this project, so the removal
+    lands in its own ledger beside the tasks it removes. Relations block that,
+    as they block `task remove` (E-1915): they are unlinked first, never cut.
+    """
+    from endless.event_bridge import emit_event
+    from endless.task_cmd import _orphan_refusal, _relations_referencing
+
+    rows = db.query(
+        "SELECT id, name, path FROM projects WHERE status != 'forgotten' "
+        "AND (name = ? OR path = ?)",
+        (name_or_path, _stored_or_none(name_or_path)),
+    )
+    if not rows:
+        raise agent_help.no_report(
+            f"No registered or ignored project is named or located at "
+            f"'{name_or_path}'. Nothing was forgotten.",
+            "Find it with `endless project list` or `endless project ignore` "
+            "and retry",
+            text=f"No project found for '{name_or_path}'",
+        )
+    row = rows[0]
+    project_path = resolved(row["path"])
+    tasks = db.query(
+        "SELECT id, COALESCE(title, description) AS title FROM live_tasks "
+        "WHERE project_id = ? ORDER BY id",
+        (row["id"],),
+    )
+    task_ids = [t["id"] for t in tasks]
+    if task_ids and not with_tasks:
+        raise agent_help.report(
+            f"'{row['name']}' has {len(task_ids)} task(s), and forgetting it "
+            "would leave them belonging to nothing. Nothing was forgotten.",
+            "whether to remove its tasks with `endless project forget "
+            f"{row['name']} --with-tasks`, or keep them and hide the project "
+            f"with `endless project ignore {project_path}`",
+            text=(f"'{row['name']}' has {len(task_ids)} task(s). Remove them "
+                  f"too with `endless project forget {row['name']} "
+                  "--with-tasks`, or keep them and hide the project with "
+                  f"`endless project ignore {project_path}`."),
+        )
+    if task_ids:
+        found = _relations_referencing(task_ids)
+        if found:
+            raise _orphan_refusal(
+                f"'{row['name']}''s tasks have {len(found)} relation(s).",
+                found,
+                group_by_task=True,
+            )
+        for task in tasks:
+            emit_event(
+                kind="task.deleted",
+                project=row["name"],
+                entity_type="task",
+                entity_id=str(task["id"]),
+                payload={"cascade": False, "title": task["title"]},
+                project_root=str(project_path),
+            )
+        click.echo(
+            click.style("•", fg="cyan")
+            + f" Removed {len(task_ids)} task(s) of "
+            + click.style(row["name"], bold=True)
+        )
+
+    result = project_registry("forget", str(project_path))
+    held = result.get("forgotten_from", {})
+    click.echo(
+        click.style("•", fg="cyan")
+        + f" Forgot {click.style(row['name'], bold=True)}"
+        + " — its path and name can be registered again. It held: "
+        + click.style(
+            ", ".join(f"{k}={v}" for k, v in held.items() if v), dim=True,
+        )
+    )
+
+
+def _stored_or_none(text: str) -> str | None:
+    """The stored path form of `text` when it looks like a path, else None."""
+    if "/" not in text and text != "~":
+        return None
+    from endless.project_path import stored
+    return stored(text)

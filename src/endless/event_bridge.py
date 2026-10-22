@@ -312,7 +312,8 @@ def project_registry(verb: str, *args: str):
 
     The Go owner of the projects registry's "not a project" state (E-2251):
     `resolve` answers whether directories are projects, ignored or neither;
-    `ignore`, `activate` and `clear` write the status; `list-ignored` lists it.
+    `ignore`, `activate` and `clear` write the status; `list-ignored` lists it;
+    `forget` tombstones a mistaken registration (E-2349).
     Machine-local registry writes, so no event and no ledger line.
 
     A list payload comes back unwrapped (provenance.rows_of), an object as-is.

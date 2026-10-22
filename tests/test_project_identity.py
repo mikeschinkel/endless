@@ -39,8 +39,11 @@ def _head(path: Path) -> str:
 
 
 def _commit_config(path: Path) -> None:
-    _git(path, "add", ".endless/config.json")
-    _git(path, "commit", "-q", "-m", "register")
+    """Commit the config, unless register's own bring-up commit already did
+    (E-2349), so the checkout is clean either way."""
+    _git(path, "add", "-A")
+    if _git(path, "status", "--porcelain"):
+        _git(path, "commit", "-q", "-m", "register")
 
 
 def _row(name: str):

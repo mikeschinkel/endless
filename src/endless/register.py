@@ -38,10 +38,16 @@ LANGUAGE_EXTENSIONS = {
 # (write-once identity) and `worktree.lock` (its per-session lock holder) are per-
 # worktree state that must never be committed — kept per ED-1530. NOT
 # `.endless/sessions/`: that companion-file path was pruned, so new projects must
-# never scaffold it.
+# never scaffold it. `.endless/logs/` holds the session-notice log the hook
+# appends to (internal/monitor AppendNoticeLog), per-machine and never shared.
+# worktree land reads this same list to tell Endless's runtime files from user
+# work (E-2349), so a path added here is excluded there too.
+# tests/test_register.py classifies every `.endless/` path the source names, so
+# a new runtime path cannot be written without landing here.
 GITIGNORE_ENTRIES = [
     ".endless/worktrees/",
     ".endless/tmp/",
+    ".endless/logs/",
     ".endless/worktree.json",
     ".endless/worktree.lock",
 ]
@@ -119,6 +125,15 @@ def register_project(
             f"Delete {marker} if this directory should be a project, then retry",
             text=f"Ignored by marker: {marker}",
         )
+
+    # A task worktree is a checkout of a project, never a project of its own
+    # (E-2349). Refused before anything is read or written, and without
+    # relying on the identity check below, which a row with no stored identity
+    # cannot make.
+    _refuse_worktree(project_path)
+
+    # Snapshot the files this run may commit, before it touches any of them.
+    before = _commit_candidates_status(project_path)
 
     # Check if already registered
     existing = db.query(
@@ -336,9 +351,213 @@ def register_project(
             + click.style(".endless/tasks/CLAUDE.md", dim=True)
         )
 
+    pointer_file = scaffold_guide_pointer(project_path)
+    if pointer_file:
+        click.echo(
+            click.style("•", fg="cyan")
+            + " Pointer to `endless guide` written to "
+            + click.style(pointer_file, dim=True)
+        )
+
     _scaffold_output_style(project_path)
 
+    _commit_bring_up(project_path, before)
+
     return name
+
+
+# --- Bringing a project up to date (E-2349) ---------------------------------
+
+GUIDE_POINTER_MARKER = "<!-- endless (managed by `endless project init`) -->"
+GUIDE_POINTER_BLOCK = (
+    GUIDE_POINTER_MARKER + "\n"
+    "## Endless\n"
+    "\n"
+    "This project's work is tracked with Endless. Run `endless guide` before\n"
+    "starting work.\n"
+)
+INSTRUCTION_FILES = ("CLAUDE.md", "AGENTS.md")
+
+
+def scaffold_guide_pointer(project_path: Path) -> str | None:
+    """Idempotently point the project's agent instructions at `endless guide`.
+
+    The SessionStart hook injects the same pointer, but only into sessions that
+    run Endless's hooks; the file reaches every agent. With neither CLAUDE.md
+    nor AGENTS.md, CLAUDE.md is created holding the block. With either, and
+    neither mentioning `endless guide`, the block is appended under its marker
+    to CLAUDE.md if present, else AGENTS.md. A file that already mentions it is
+    left alone. Returns the file written, or None.
+    """
+    present = [n for n in INSTRUCTION_FILES if (project_path / n).is_file()]
+    if any("endless guide" in (project_path / n).read_text() for n in present):
+        return None
+    target = project_path / (present[0] if present else INSTRUCTION_FILES[0])
+    existing = target.read_text() if target.is_file() else ""
+    if existing and not existing.endswith("\n"):
+        existing += "\n"
+    separator = "\n" if existing else ""
+    target.write_text(existing + separator + GUIDE_POINTER_BLOCK)
+    return target.name
+
+
+# Files a bring-up may commit. Endless's own are committed whatever their state;
+# the user's only when the run changed them and they had no change of their own
+# beforehand, so an Endless commit never carries the user's work (EQ-83).
+# The output style's path mirrors internal/outputstylecmd (StyleName "Endless"):
+# init writes it there, unactivated, and it is Endless's file like the rest.
+ENDLESS_OWNED = (
+    ".endless/config.json",
+    ".endless/tasks/CLAUDE.md",
+    ".claude/output-styles/Endless.md",
+)
+USER_OWNED = (".gitignore",) + INSTRUCTION_FILES
+BRING_UP_COMMIT_SUBJECT = "Endless: bring project up to Endless usage"
+
+
+def _git(project_path: Path, *args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        ["git", "-C", str(project_path), *args],
+        capture_output=True, text=True, env=main_commit.sanitized_git_env(),
+    )
+
+
+def _refuse_worktree(project_path: Path) -> None:
+    """Refuse a git linked worktree, or a directory under a `.endless/worktrees/`.
+
+    The owner is the checkout the worktree belongs to: the directory above
+    `.endless/worktrees/`, else the repository whose common git dir this one
+    shares. It is named by its registered project when there is one.
+    """
+    owner = None
+    parts = project_path.parts
+    for i in range(len(parts) - 1):
+        if parts[i] == ".endless" and parts[i + 1] == "worktrees":
+            owner = Path(*parts[:i])
+            break
+    if owner is None:
+        res = _git(project_path, "rev-parse", "--path-format=absolute",
+                   "--git-dir", "--git-common-dir")
+        lines = res.stdout.split()
+        if res.returncode != 0 or len(lines) != 2 or lines[0] == lines[1]:
+            return
+        common = Path(lines[1])
+        owner = common.parent if common.name == ".git" else common
+    rows = db.query("SELECT name FROM projects WHERE path = ?", (stored(owner),))
+    named = f"project '{rows[0]['name']}' at {owner}" if rows else str(owner)
+    raise agent_help.no_report(
+        f"{project_path} is a worktree of {named}, not a project of its own. "
+        "Nothing was registered.",
+        f"Run endless project init in {owner} instead",
+        text=(f"Worktree, not a project: {project_path}\n"
+              f"It is a worktree of {named}. Run `endless project init` "
+              "there instead."),
+    )
+
+
+def _status(project_path: Path, paths) -> dict[str, str]:
+    """`git status --porcelain` codes for `paths` that have any change."""
+    res = _git(project_path, "status", "--porcelain", "-z",
+               "--untracked-files=all", "--", *paths)
+    if res.returncode != 0:
+        return {}
+    codes: dict[str, str] = {}
+    entries = res.stdout.split("\0")
+    i = 0
+    while i < len(entries):
+        entry = entries[i]
+        i += 1
+        if len(entry) < 4:
+            continue
+        codes[entry[3:]] = entry[:2]
+        if entry[0] in "RC":
+            i += 1  # a rename carries its source path as the next entry
+    return codes
+
+
+def _commit_candidates_status(project_path: Path) -> dict:
+    """What the candidate files hold, and what git says of them, before a run."""
+    candidates = ENDLESS_OWNED + USER_OWNED
+    return {
+        "status": _status(project_path, candidates),
+        "content": {
+            p: (project_path / p).read_bytes() if (project_path / p).is_file()
+            else None
+            for p in candidates
+        },
+    }
+
+
+def _commit_bring_up(project_path: Path, before: dict) -> None:
+    """Commit what this run changed, by the rule in ENDLESS_OWNED's comment.
+
+    Only on the project's default branch. Every changed file left out is
+    listed with why, so the user knows what is theirs to commit.
+    """
+    after = _status(project_path, ENDLESS_OWNED + USER_OWNED)
+    if not after:
+        return
+    top = _git(project_path, "rev-parse", "--show-toplevel")
+    if top.returncode != 0 or resolved(Path(top.stdout.strip())) != project_path:
+        # git reports paths from the repository's root, so a project in a
+        # subdirectory would match none of them; say so rather than guess.
+        click.echo(
+            click.style("•", fg="yellow")
+            + " Not committed: the project is not at its repository's root; "
+            "commit Endless's files yourself"
+        )
+        return
+    commit: list[str] = []
+    left: list[tuple[str, str]] = []
+    for path in after:
+        if path in ENDLESS_OWNED:
+            commit.append(path)
+        elif path in before["status"]:
+            left.append((path, "it had uncommitted changes of yours"))
+        elif before["content"].get(path) != (
+            (project_path / path).read_bytes()
+            if (project_path / path).is_file() else None
+        ):
+            commit.append(path)
+    if commit:
+        reason = _not_committable_reason(project_path)
+        if reason:
+            left.extend((p, reason) for p in commit)
+            commit = []
+    if commit:
+        try:
+            main_commit.commit_paths(project_path, commit,
+                                     BRING_UP_COMMIT_SUBJECT)
+            click.echo(
+                click.style("•", fg="cyan")
+                + " Committed "
+                + click.style(", ".join(commit), dim=True)
+            )
+        except RuntimeError as e:
+            left.extend((p, f"the commit failed: {e}") for p in commit)
+    for path, why in left:
+        click.echo(
+            click.style("•", fg="yellow")
+            + f" Not committed: {path} ("
+            + why + "); commit it yourself"
+        )
+
+
+def _not_committable_reason(project_path: Path) -> str | None:
+    """Why this checkout takes no Endless commit now, or None when it does."""
+    from endless.worktree_cmd import _default_base_branch
+
+    head = _git(project_path, "symbolic-ref", "--short", "-q", "HEAD")
+    if head.returncode != 0:
+        return "the checkout is not on a branch"
+    try:
+        default = _default_base_branch(project_path)
+    except click.ClickException:
+        return "the project's default branch could not be resolved"
+    current = head.stdout.strip()
+    if current != default:
+        return f"the checkout is on {current}, not the default branch {default}"
+    return None
 
 
 def _identity_or_refuse(project_path: Path) -> str:
@@ -492,7 +711,10 @@ def backfill_identities(dry_run: bool = False) -> list[tuple[str, str]]:
             + f" {click.style(name, bold=True)}: {outcome}"
         )
 
-    rows = db.query("SELECT id, name, path, identity FROM projects ORDER BY id")
+    rows = db.query(
+        "SELECT id, name, path, identity FROM projects "
+        "WHERE status != 'forgotten' ORDER BY id"
+    )
     for row in rows:
         name = row["name"]
         path = resolved(row["path"])
