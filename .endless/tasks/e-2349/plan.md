@@ -81,12 +81,11 @@ project's `.endless/config.json` and adds nothing to the ignore list, unlike
 `project unregister`, which does both. A row that has tasks (EQ-87): by default `forget` refuses, naming the task
 count and pointing at `project ignore`, which hides the project and keeps its
 history without writing to its `config.json` (unlike `unregister`).
-`--with-tasks` removes the project's tasks first, each through the existing
+`--with-tasks` removes the project's tasks first, through the existing
 `task.deleted` event that `task remove --cascade` emits, so a rebuild from the
-ledger does not bring them back, and then deletes the row. Those events land in
-that project's own ledger, as any task removal does. A task in another project
-that links to one of them keeps nothing dangling: the deletion removes the
-link, as `task remove` already does.
+ledger does not bring them back. Removal marks a task row removed and never
+deletes it (ED-1547), so those rows still reference the project; what happens to
+the project row then is an open question (EQ-89).
 
 ## Apply it to go-cfgstore
 
