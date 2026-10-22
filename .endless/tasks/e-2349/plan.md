@@ -73,19 +73,28 @@ gets a third class, Endless runtime paths, taken from `GITIGNORE_ENTRIES`
 
 ## A clean way to drop a mistaken registration
 
-`internal/monitor` gains `DeleteProjectRow`, which deletes a project's row by
-path; `internal/projectcmd` gains a `delete` verb that calls it; Python reaches
-it through `event_bridge.project_registry("delete", path)`. A new `project`
-verb in `cli.py`, `project forget` (EQ-86), calls it. It writes nothing to the
-project's `.endless/config.json` and adds nothing to the ignore list, unlike
-`project unregister`, which does both. A row that has tasks (EQ-87): by default `forget` refuses, naming the task
-count and pointing at `project ignore`, which hides the project and keeps its
-history without writing to its `config.json` (unlike `unregister`).
-`--with-tasks` removes the project's tasks first, through the existing
-`task.deleted` event that `task remove --cascade` emits, so a rebuild from the
-ledger does not bring them back. Removal marks a task row removed and never
-deletes it (ED-1547), so those rows still reference the project; what happens to
-the project row then is an open question (EQ-98).
+`endless project forget` (EQ-86) makes Endless stop knowing a project. It writes
+nothing to the project's `.endless/config.json` and adds nothing to the ignore
+list, unlike `project unregister`, which does both.
+
+It never DELETEs the row (EQ-98). Following ED-1547's rule for tasks, it marks
+the row forgotten: a new `projects.status` value, `forgotten`, which every
+project read already filters as it filters `ignored`, and which frees the row's
+path, name, slug and identity for a new registration. The unique indexes on
+those columns (E-2217's migration made identity and slug unique) become partial
+indexes that skip forgotten rows, in a new migration. Marking rather than
+deleting holds for a project with no tasks too, so there is one path: rows that
+reference a project without a foreign key (sessions, notices) never point at a
+re-minted id.
+
+The write is a new event, `project.forgotten`, emitted through
+`endless-go event emit` and executed in Go (`internal/events`), and the Python
+verb in `cli.py` calls it through `event_bridge`. A project with tasks
+(EQ-87): by default `forget` refuses, naming the task count and pointing at
+`project ignore`, which hides the project and keeps its history without
+writing to its `config.json`. `--with-tasks` first removes every task through
+the existing `task.deleted` event (as `task remove --cascade` does, so a ledger
+rebuild does not bring them back), then forgets the row.
 
 ## Apply it to go-cfgstore
 
@@ -115,11 +124,11 @@ The defaults above are recommendations, not decisions; each is asked:
 - EQ-82 (answered): `project init` re-run; `doctor --fix` later calls the same steps.
 - EQ-83 (answered): Endless-owned files always; user-owned only when clean before the run.
 - EQ-84 (answered): the harness is not installed in other projects; `verify.toml` is the PRODUCT suite form.
-- EQ-85: append the guide pointer to an existing CLAUDE.md/AGENTS.md, or only
-  create a missing file.
-- EQ-86: the drop verb's name.
-- EQ-87: what the drop verb does with a row that has tasks, and what it points
-  at instead of `project unregister`.
+- EQ-85 (answered): create, or append to an existing file lacking the pointer.
+- EQ-86 (answered): `project forget`.
+- EQ-87 (answered): refuse a row with tasks, naming `project ignore`; `--with-tasks`
+  removes the tasks first.
+- EQ-98 (answered): forget marks the row forgotten rather than deleting it.
 - EQ-88: who removes the two temporary lines in go-cfgstore's
   `.git/info/exclude`.
 
@@ -132,7 +141,8 @@ The defaults above are recommendations, not decisions; each is asked:
   dirty or non-default reports); a project registered the old way brought up
   to date, then a second run changing no file and creating no commit.
 - A worktree-land test for the runtime-path class.
-- `internal/monitor` Go test for `DeleteProjectRow`, `internal/projectcmd` test
-  for the verb, and a Python CLI test for `project forget`.
+- Go tests in `internal/events` for `project.forgotten` (row hidden; path, name,
+  slug and identity re-registrable) and the migration's partial indexes, and
+  Python CLI tests for `project forget` with and without `--with-tasks`.
 - The task's `verify.sh` runs these plus one end-to-end bring-up of a fixture
   repo registered the old way, run twice.
