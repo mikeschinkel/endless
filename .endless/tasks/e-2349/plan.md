@@ -32,10 +32,11 @@ fully up to date, and running it again changes nothing.
    `.endless/logs/`, where `internal/monitor/session_notices.go`
    `AppendNoticeLog` writes `session-notices.jsonl`.
 4. **Suite rules** (`scaffold_suite_rules`): unchanged.
-5. **Harness** (new, `suite_rules.scaffold_harness`): write `_harness.sh` and
-   `_guard.sh` into `<project>/.endless/tasks/`, writing a file only when it is
-   missing or its bytes differ from the shipped copy (they are Endless's files,
-   not the project's, so a stale copy is replaced; EQ-84).
+5. (Withdrawn per EQ-84: `_harness.sh` and `_guard.sh` are not installed in other
+   projects; `verify.toml` is the suite form for PRODUCT, and E-2419 moves the
+   advice to it. Updating an existing project's `.endless/tasks/CLAUDE.md` is
+   handed to the task E-2257 files, because where its hashes live depends on
+   the machine/project database split.)
 6. **Agent-instructions pointer** (new, `register.scaffold_guide_pointer`): if
    the project root has neither `CLAUDE.md` nor `AGENTS.md`, create `CLAUDE.md`
    holding a short block that tells an agent to run `endless guide` first. If
@@ -44,8 +45,7 @@ fully up to date, and running it again changes nothing.
    that already mentions `endless guide` is left alone.
 7. **Commit** (new; rule per EQ-83). Before step 2 runs, record
    `git status --porcelain` for the candidate paths:
-   `.endless/config.json`, `.endless/tasks/CLAUDE.md`, the two harness files
-   (Endless-owned), and `.gitignore`, `CLAUDE.md`, `AGENTS.md` (user-owned).
+   `.endless/config.json` and `.endless/tasks/CLAUDE.md` (Endless-owned), and `.gitignore`, `CLAUDE.md`, `AGENTS.md` (user-owned).
    After step 6, the commit set is:
    - every Endless-owned candidate path that is now modified or untracked,
      whatever its state before the run (this commits the legacy, never
@@ -63,14 +63,6 @@ fully up to date, and running it again changes nothing.
 Idempotence follows from each step writing only what is missing or different,
 and step 7 committing only what changed.
 
-## Harness source of truth
-
-`_harness.sh` and `_guard.sh` move into the Python package as package data
-(`src/endless/data/tasks/`), read with `importlib.resources`. The endless repo's
-own `.endless/tasks/` copies are produced by running step 5 on the endless repo
-itself, like any other project, and a test asserts the committed copies are
-byte-identical to the package data, so editing one without the other fails the
-suite.
 
 ## Land does not mistake Endless's runtime files for user work
 
@@ -94,7 +86,7 @@ deleting would orphan task history (EQ-87).
 ## Apply it to go-cfgstore
 
 After it lands, run `endless project init` in go-cfgstore's main checkout so it
-gains `.endless/logs/` in `.gitignore`, the harness, and the commit.
+gains `.endless/logs/` in `.gitignore`, and the commit.
 
 ## Fold-in
 
@@ -118,7 +110,7 @@ The defaults above are recommendations, not decisions; each is asked:
   worktree was cut in go-cfgstore.
 - EQ-82 (answered): `project init` re-run; `doctor --fix` later calls the same steps.
 - EQ-83 (answered): Endless-owned files always; user-owned only when clean before the run.
-- EQ-84: replace a differing `_harness.sh`/`_guard.sh`, or leave and report.
+- EQ-84 (answered): the harness is not installed in other projects; `verify.toml` is the PRODUCT suite form.
 - EQ-85: append the guide pointer to an existing CLAUDE.md/AGENTS.md, or only
   create a missing file.
 - EQ-86: the drop verb's name.
@@ -135,8 +127,6 @@ The defaults above are recommendations, not decisions; each is asked:
   in each of its three cases; the commit rule (clean default branch commits,
   dirty or non-default reports); a project registered the old way brought up
   to date, then a second run changing no file and creating no commit.
-- `tests/test_suite_rules.py`: harness install, replace-when-different, and the
-  package-data/committed-copy identity check.
 - A worktree-land test for the runtime-path class.
 - `internal/monitor` Go test for `DeleteProjectRow`, `internal/projectcmd` test
   for the verb, and a Python CLI test for `project forget`.
