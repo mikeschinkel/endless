@@ -4,7 +4,9 @@ E-2215 child 2, shaped by E-2257's findings.
 
 ## Shape
 
-- A mirror of tasks in the machine database. It is the canonical task-id
+- A mirror of tasks in the machine database, named `_tasks` (EQ-99: no table
+  name may exist in both the machine and project schemas; a test enforces it).
+  It is the canonical task-id
   allocator (decided under E-2215), replacing `SELECT COALESCE(MAX(id),0)+1 FROM tasks`.
 - Fields: `id`, `project_id`, `removed`, `title`, `status`, `phase`,
   `type_id`, `complexity_id`, `risk_id`, `parent_id`, `prime_requested`,
