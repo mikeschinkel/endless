@@ -35,7 +35,7 @@ verify = "tests/test_register.py"
 [[item]]
 id = "P21"
 kind = "deliverable"
-statement = "Project init always commits the Endless-owned files it changed (.endless/config.json, .endless/tasks/CLAUDE.md), and commits its edits to .gitignore, CLAUDE.md or AGENTS.md only when that file had no uncommitted change before the run, listing what it left out"
+statement = "Project init always commits the Endless-owned files it changed (.endless/config.json, .endless/tasks/CLAUDE.md, .claude/output-styles/Endless.md), and commits its edits to .gitignore, CLAUDE.md or AGENTS.md only when that file had no uncommitted change before the run, listing what it left out"
 verify = "tests/test_register.py"
 
 [[item]]
