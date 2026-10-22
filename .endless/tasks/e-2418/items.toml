@@ -77,3 +77,8 @@ statement = "Does not change task spawn's or task prime's checks"
 id = "P13"
 kind = "exclusion"
 statement = "Does not change resume's refusal when a transcript is gone, or what --new-transcript does beyond marking its launch"
+
+[[item]]
+id = "P14"
+kind = "deliverable"
+statement = "The live-owner refusal names endless session goto E-N instead of telling the user to have the holder release the task, which is disabled"
