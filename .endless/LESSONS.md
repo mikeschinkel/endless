@@ -7773,3 +7773,7 @@ Summarizing what was pending, I listed E-2405 and E-2414 as unverified and waiti
 ### [2026-10-22] Config keys with two or more underscores want a parent object
 Planning E-2420 I proposed the Endless config key claude.transcript_retention_days. Mike: a key with two or more underscores is a code smell that suggests a parent object is needed; choose the grouping most likely to gain sibling properties (for example claude.transcripts.retention_days).
 - **Project**: endless
+
+### [2026-10-22] A warning that shows only while a problem exists costs no attention otherwise
+Planning E-2420 I argued against a SessionStart warning for a low Claude cleanupPeriodDays because it would repeat every session. Mike: it only costs attention while the value is still too low, and transcripts being auto-deleted can be catastrophic, so the warning is worth it. Judge a warning's cost by when it fires, not by where it runs.
+- **Project**: endless
