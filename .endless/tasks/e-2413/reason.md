@@ -1,0 +1,1 @@
+Folded into E-2419, which moves all suite advice (handoff, suite rules, guide, CLI text) to verify.toml.
