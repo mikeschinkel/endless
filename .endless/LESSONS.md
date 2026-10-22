@@ -7753,3 +7753,7 @@ In E-2414's plan I listed under 'Decided without asking' that the claiming sessi
 ### [2026-10-20] Store a chosen steward as a task, not a session
 E-2414's plan stored the chosen steward as a session (ES-N). Mike: stewardship must travel with the task, because until session instances exist the session holding a task can change, and a stored session would orphan the stewardship. The steward is stored as a steward task E-M and resolved to its present session at read time.
 - **Project**: endless
+
+### [2026-10-22] Only one session can claim a task; don't invent scenarios that break it
+Planning E-2414, I justified a 'most recently active' tie-break by claiming a resumed session in a second pane would mean two present sessions claimed the same task. That was invented: resume continues the same session, and _check_task_ownership and _check_prior_claim refuse a second claimant, so only one session can claim a task. Mike asked whether I was using 'claim' properly. Check the guards before describing how an invariant could break, and design on the invariant, not around an imagined violation.
+- **Project**: endless
