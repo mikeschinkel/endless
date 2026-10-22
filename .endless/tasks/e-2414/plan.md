@@ -12,7 +12,7 @@
 - The board of a session claiming E-M lists every task whose steward task is E-M, so the task appears there without a touch, and still does after E-M's session changes.
 
 ## Working out the steward
-- One Go function in `internal/monitor`, shared by the boards (`session_stewardship.go`) and the commands below: with a steward task E-M, the most recently active present session that claimed E-M and has not hidden the task (the rule `session goto E-M` uses); with none, the existing rules (filer, else the only editor, claimer and hiders not counted, two at the deciding step is ambiguous).
+- One Go function in `internal/monitor`, shared by the boards (`session_stewardship.go`) and the commands below: with a steward task E-M, the present session that claimed E-M (only one session can claim a task), unless it has hidden the task; with none, the existing rules (filer, else the only editor, claimer and hiders not counted, two at the deciding step is ambiguous).
 - It is the same answer whichever session is looking.
 - Exposed to Python through an `endless-go` subcommand, so Python reads no SQLite.
 
