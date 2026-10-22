@@ -7765,3 +7765,7 @@ Planning E-2418, I hesitated to fold claim into the fix because the title named 
 ### [2026-10-22] Phase maybe and a task's stated purpose are not reasons against using it
 Arguing that E-2416 would not cover transcript retention, I cited that it was in phase maybe and was written for reading, not resuming. Mike: a task sits in maybe only because no need had appeared, and a new requirement can move it; and what a task was written for does not limit what it could also do (captured transcripts could be restored into Claude's projects directory). Also: Endless exists to enhance Claude, so changing a documented Claude Code setting is on the table, not a cost.
 - **Project**: endless
+
+### [2026-10-22] Don't list spawned tasks in status summaries
+Summarizing what was pending, I listed E-2405 and E-2414 as unverified and waiting on Mike. Mike: once a task is spawned, don't mention it; that spends his attention for nothing, unless it blocks a task in session status that has not been spawned yet.
+- **Project**: endless
