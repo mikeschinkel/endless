@@ -53,7 +53,7 @@ verify = "internal/monitor and internal/projectcmd Go tests; Python CLI test"
 [[item]]
 id = "P24"
 kind = "deliverable"
-statement = "go-cfgstore's .gitignore lists .endless/logs/ and its .endless/tasks/ holds _harness.sh and _guard.sh, committed on its main"
+statement = "go-cfgstore's .gitignore lists .endless/logs/, committed on its main"
 verify = "git -C ~/Projects/go-pkgs/go-cfgstore show main:.gitignore"
 
 [[item]]
