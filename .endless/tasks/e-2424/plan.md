@@ -1,6 +1,9 @@
 # Give each project its own database file
 
-E-2215 child 3, shaped by E-2257's findings.
+E-2215 children 3, 5 and 6 as one cutover, shaped by E-2257's findings.
+E-2425 (migrations) and E-2427 (moving the data) were folded in on Mike's
+decision, 2026-10-22, applying ED-1550: none of the three can go live without
+the others.
 
 ## Shape
 
@@ -27,8 +30,44 @@ E-2215 child 3, shaped by E-2257's findings.
 
 ## Watch for
 
-- SQLite resolves an unqualified table name in the main schema before any
-  attached one. A connection with the machine file as main and the project
-  file attached would read the machine mirror for every unqualified `tasks`.
-  Pick one convention (the project file as main for project commands, or
-  schema-qualified names) and enforce it in a test.
+- The machine file is main, and project files attach to it: one connection
+  can hold several project files at once, within SQLite's attach limit.
+- The mirror is named `_tasks` (EQ-99 on E-2423), so no table name exists in
+  both the machine and project schemas. Reads that touch project tables name
+  the attached database they read, because every project file has a `tasks`
+  and SQLite silently picks the first attached one.
+
+## Migrations across files (was E-2425)
+
+### Work
+
+- Split the goose migration set into machine migrations and project
+  migrations. Each file keeps its own `goose_db_version`.
+- Apply project migrations to every project file under ConfigDir() and its
+  self_dev sandbox counterpart. Apply machine migrations to the machine file.
+- Split `schema.sql` along the same line, or generate it per file if E-2021
+  lands first. Keep `TestMigrate_MatchesSchemaSQL` passing for each file.
+- Coordinate with E-2034 (versioned migrations instead of apply-on-connect)
+  and E-2021 (schema.sql generated from goose).
+
+## Move today's data (was E-2427)
+
+### Work
+
+- One-time migration: create each registered project's file, copy its project
+  tables into it, fill the machine task mirror from them, and drop the project
+  tables from the machine file.
+- Afterwards, check each project file against a replay of that project's
+  ledger and report any differences before dropping anything.
+- Take a backup first (`endless-go event backup`).
+
+### Don't carry over (E-2257's findings)
+
+- `project_deps`: 0 rows, no writer.
+- `session_statuses`: dead since May; E-2062 notes it is being retired.
+- `adhoc_e2191_backlog` and `adhoc_e2191_backlog_v`: made by hand during
+  E-2191, not in any schema file.
+
+Ask Mike before dropping any of them. Also ask him whether to retire the stale
+or empty tables: `report_labels` (0 rows), `session_gates` and
+`report_judgments` (no writes since Aug 23), and `notes` (since Aug 22).
