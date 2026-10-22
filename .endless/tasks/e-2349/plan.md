@@ -77,20 +77,23 @@ gets a third class, Endless runtime paths, taken from `GITIGNORE_ENTRIES`
 nothing to the project's `.endless/config.json` and adds nothing to the ignore
 list, unlike `project unregister`, which does both.
 
-It never DELETEs the row (EQ-98). Following ED-1547's rule for tasks, it marks
-the row forgotten: a new `projects.status` value, `forgotten`, which every
-project read already filters as it filters `ignored`, and which frees the row's
-path, name, slug and identity for a new registration. The unique indexes on
-those columns (E-2217's migration made identity and slug unique) become partial
-indexes that skip forgotten rows, in a new migration. Marking rather than
-deleting holds for a project with no tasks too, so there is one path: rows that
-reference a project without a foreign key (sessions, notices) never point at a
-re-minted id.
+It never DELETEs the row (EQ-98). It tombstones it: `status` becomes
+`forgotten`, `name` and `path` are rewritten to `forgotten-<id>` values nothing
+can collide with, and `identity` and `slug` become NULL (their unique indexes
+admit any number of NULLs). The original name, path, slug and identity, with
+the time, are kept as JSON in a new nullable column, `projects.forgotten_from`,
+for debugging and posterity; `forget` also prints them. No unique constraint
+changes and no table rebuild: `name` and `path` are table-level UNIQUE
+constraints, and no lookup by path or name can match a tombstoned row, so the
+42 direct `projects` reads need no change. The one schema change beyond the
+column is that `live_projects` also excludes `forgotten`. Migration 25 adds the
+column and redefines the view.
 
-The write is a new event, `project.forgotten`, emitted through
-`endless-go event emit` and executed in Go (`internal/events`), and the Python
-verb in `cli.py` calls it through `event_bridge`. A project with tasks
-(EQ-87): by default `forget` refuses, naming the task count and pointing at
+The write is a Go verb, `endless-go project forget`, in `internal/projectcmd`
+over a `monitor` function, writing directly as `project ignore` does; there is
+no `project.forgotten` event (project rows are not written through events or
+rebuilt from the ledger). The Python verb in `cli.py` calls it through
+`event_bridge.project_registry`. A project with tasks (EQ-87): by default `forget` refuses, naming the task count and pointing at
 `project ignore`, which hides the project and keeps its history without
 writing to its `config.json`. `--with-tasks` first removes every task through
 the existing `task.deleted` event (as `task remove --cascade` does, so a ledger
@@ -142,8 +145,8 @@ The defaults above are recommendations, not decisions; each is asked:
   dirty or non-default reports); a project registered the old way brought up
   to date, then a second run changing no file and creating no commit.
 - A worktree-land test for the runtime-path class.
-- Go tests in `internal/events` for `project.forgotten` (row hidden; path, name,
-  slug and identity re-registrable) and the migration's partial indexes, and
+- Go tests in `internal/monitor` and `internal/projectcmd` for forget (row
+  tombstoned, originals kept, path and name re-registrable), the migration, and
   Python CLI tests for `project forget` with and without `--with-tasks`.
 - The task's `verify.sh` runs these plus one end-to-end bring-up of a fixture
   repo registered the old way, run twice.
