@@ -47,3 +47,8 @@ statement = "Does not change the session_notices table, how notices are drained 
 id = "P9"
 kind = "deliverable"
 statement = "tasks.changed_by_session and the stampTaskActor write are dropped: the executor derives the notice actor from the event envelope"
+
+[[item]]
+id = "P10"
+kind = "deliverable"
+statement = "A notice write that fails after the task change committed records fault WARN-0036 (session-notices-unwritten) rather than failing the command"
