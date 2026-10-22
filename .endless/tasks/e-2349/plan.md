@@ -97,7 +97,12 @@ rebuilt from the ledger). The Python verb in `cli.py` calls it through
 `project ignore`, which hides the project and keeps its history without
 writing to its `config.json`. `--with-tasks` first removes every task through
 the existing `task.deleted` event (as `task remove --cascade` does, so a ledger
-rebuild does not bring them back), then forgets the row.
+rebuild does not bring them back), then forgets the row. The events are
+tagged with the forgotten project, so they land in its own ledger: if the repo
+is kept and registered again, its tasks stay removed; if it is deleted, the
+records go with the tasks they describe. `--with-tasks` refuses while any of
+the project's tasks has a relation, listing them, as `task remove` does
+(E-1915): links are unlinked first, never cut silently.
 
 ## Apply it to go-cfgstore
 
