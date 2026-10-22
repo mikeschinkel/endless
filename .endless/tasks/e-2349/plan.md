@@ -85,7 +85,7 @@ history without writing to its `config.json` (unlike `unregister`).
 `task.deleted` event that `task remove --cascade` emits, so a rebuild from the
 ledger does not bring them back. Removal marks a task row removed and never
 deletes it (ED-1547), so those rows still reference the project; what happens to
-the project row then is an open question (EQ-89).
+the project row then is an open question (EQ-98).
 
 ## Apply it to go-cfgstore
 
@@ -106,7 +106,7 @@ made the default off. Correct it.
   repo (go-cfgstore's was done in E-2206).
 - Health checks and reporting: `endless doctor` (E-2287) owns those.
 
-## Open questions (asked on the task as EQ-81..EQ-88)
+## Open questions (asked on the task as EQ-81..EQ-88 and EQ-98)
 
 The defaults above are recommendations, not decisions; each is asked:
 
