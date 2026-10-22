@@ -7777,3 +7777,7 @@ Planning E-2420 I proposed the Endless config key claude.transcript_retention_da
 ### [2026-10-22] A warning that shows only while a problem exists costs no attention otherwise
 Planning E-2420 I argued against a SessionStart warning for a low Claude cleanupPeriodDays because it would repeat every session. Mike: it only costs attention while the value is still too low, and transcripts being auto-deleted can be catastrophic, so the warning is worth it. Judge a warning's cost by when it fires, not by where it runs.
 - **Project**: endless
+
+### [2026-10-22] Don't recommend closing a session that holds unspawned tasks
+After E-2257 was completed, I recommended closing its session because a session owns one task. Mike said he uses sessions to track unspawned tasks in 'session status'. That session held 8, and closing it would mean moving them elsewhere and losing the knowledge of why they were in that session. In that case, closing was the wrong recommendation.
+- **Project**: endless
