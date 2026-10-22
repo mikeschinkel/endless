@@ -35,8 +35,7 @@ fully up to date, and running it again changes nothing.
 5. (Withdrawn per EQ-84: `_harness.sh` and `_guard.sh` are not installed in other
    projects; `verify.toml` is the suite form for PRODUCT, and E-2419 moves the
    advice to it. Updating an existing project's `.endless/tasks/CLAUDE.md` is
-   handed to the task E-2257 files, because where its hashes live depends on
-   the machine/project database split.)
+   E-2421's (Update an unedited suite-rules copy on project init).)
 6. **Agent-instructions pointer** (new, `register.scaffold_guide_pointer`): if
    the project root has neither `CLAUDE.md` nor `AGENTS.md`, create `CLAUDE.md`
    holding a short block that tells an agent to run `endless guide` first. If
