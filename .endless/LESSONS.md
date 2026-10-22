@@ -7761,3 +7761,7 @@ Planning E-2414, I justified a 'most recently active' tie-break by claiming a re
 ### [2026-10-22] A task's title is not a scope boundary
 Planning E-2418, I hesitated to fold claim into the fix because the title named only task bind and the auto-bind. Mike: a title is happenstance, not authoritative; do what needs to be done, not what an earlier title happened to name.
 - **Project**: endless
+
+### [2026-10-22] Phase maybe and a task's stated purpose are not reasons against using it
+Arguing that E-2416 would not cover transcript retention, I cited that it was in phase maybe and was written for reading, not resuming. Mike: a task sits in maybe only because no need had appeared, and a new requirement can move it; and what a task was written for does not limit what it could also do (captured transcripts could be restored into Claude's projects directory). Also: Endless exists to enhance Claude, so changing a documented Claude Code setting is on the table, not a cost.
+- **Project**: endless
