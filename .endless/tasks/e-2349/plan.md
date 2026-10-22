@@ -99,7 +99,9 @@ rebuild does not bring them back), then forgets the row.
 ## Apply it to go-cfgstore
 
 After it lands, run `endless project init` in go-cfgstore's main checkout so it
-gains `.endless/logs/` in `.gitignore`, and the commit.
+gains `.endless/logs/` in `.gitignore`, and the commit. Then remove the two
+temporary lines from go-cfgstore's `.git/info/exclude` (EQ-88), after
+confirming `.gitignore` covers the same paths and showing the lines first.
 
 ## Fold-in
 
@@ -129,9 +131,8 @@ The defaults above are recommendations, not decisions; each is asked:
 - EQ-87 (answered): refuse a row with tasks, naming `project ignore`; `--with-tasks`
   removes the tasks first.
 - EQ-98 (answered): forget marks the row forgotten rather than deleting it.
-- EQ-88: who removes the two temporary lines in go-cfgstore's
-  `.git/info/exclude`.
-
+- EQ-88 (answered): this session removes them, after confirming `.gitignore`
+  covers them and showing the lines first.
 ## Tests
 
 - `tests/test_register.py`: gitignore entries; the guard that every
