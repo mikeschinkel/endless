@@ -47,7 +47,7 @@ verify = "E-2349 verify.sh end-to-end section"
 [[item]]
 id = "P23"
 kind = "deliverable"
-statement = "project forget deletes a mistakenly registered project's row without writing to its .endless/config.json or the ignore list, and refuses a row that has tasks"
+statement = "project forget deletes a mistakenly registered project's row without writing to its .endless/config.json or the ignore list; for a row with tasks it refuses, naming the count and project ignore, unless --with-tasks, which removes the tasks through task.deleted events first"
 verify = "internal/monitor and internal/projectcmd Go tests; Python CLI test"
 
 [[item]]
