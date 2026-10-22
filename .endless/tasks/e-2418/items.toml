@@ -82,3 +82,8 @@ statement = "Does not change resume's refusal when a transcript is gone, or what
 id = "P14"
 kind = "deliverable"
 statement = "The live-owner refusal names endless session goto E-N instead of telling the user to have the holder release the task, which is disabled"
+
+[[item]]
+id = "P15"
+kind = "deliverable"
+statement = "session end, its help and the unreachable-owner refusal no longer say ending a session frees its task to be claimed; they name endless session goto E-N --resume"
