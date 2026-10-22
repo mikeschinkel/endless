@@ -1,0 +1,1 @@
+Folded into E-2424 on Mike's decision (2026-10-22, applying ED-1550): the per-project files, the migrations that give them a schema, and the move of today's data can't go live separately, so they are one cutover task.
