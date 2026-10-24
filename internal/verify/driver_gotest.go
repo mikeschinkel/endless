@@ -31,7 +31,7 @@ func (gotestDriver) SupportsVariant(variant string) (ok bool) {
 func (gotestDriver) Run(check Check, root dt.DirPath, env []string, reportPath dt.Filepath) (result RunResult, err error) {
 	var argv []string
 
-	argv = []string{"sh", "-c", goTestCmd(true, check.Tests, check.Paths)}
+	argv = []string{"sh", "-c", goTestCmd(check.Tests, check.Paths)}
 	if check.Command != "" {
 		argv = []string{"sh", "-c", check.Command}
 	}
@@ -39,18 +39,14 @@ func (gotestDriver) Run(check Check, root dt.DirPath, env []string, reportPath d
 	return result, err
 }
 
-// goTestCmd builds a `go test` invocation from a structured selection, with -json
-// added when jsonStream is set (the driver's capture form) and omitted for the
-// bare-clone form. Test names are anchored exactly (^(A|B)$) so a name never
+// goTestCmd builds a `go test -json` invocation from a structured selection; the
+// test2json stream on stdout is what the driver captures. Test names are anchored exactly (^(A|B)$) so a name never
 // matches a longer one (a bare TestFoo would otherwise also select TestFooBar).
 // Paths scope the packages searched and default to the whole module (./...).
-func goTestCmd(jsonStream bool, tests, paths []string) (cmd string) {
+func goTestCmd(tests, paths []string) (cmd string) {
 	var b strings.Builder
 
-	b.WriteString("go test")
-	if jsonStream {
-		b.WriteString(" -json")
-	}
+	b.WriteString("go test -json")
 	if len(tests) > 0 {
 		b.WriteString(" -run '^(")
 		b.WriteString(strings.Join(tests, "|"))

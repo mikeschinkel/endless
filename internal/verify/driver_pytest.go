@@ -147,22 +147,3 @@ func pytestTried(variant string) (tried string) {
 	tried = strings.Join(chain, " -> ")
 	return tried
 }
-
-// pytestCmd builds the bare-clone `pytest` command from a structured selection.
-// Pytest accepts both file/dir paths and path::test nodeids as positional
-// arguments, so Paths and Tests both become positional selectors (paths first).
-// With neither, it collects the whole suite. This is used only by the bare-clone
-// bridge (bareCloneCommand); the execution path resolves a launcher instead.
-func pytestCmd(tests, paths []string) (cmd string) {
-	var args []string
-
-	args = make([]string, 0, len(paths)+len(tests))
-	args = append(args, paths...)
-	args = append(args, tests...)
-
-	cmd = "pytest"
-	if len(args) > 0 {
-		cmd += " " + strings.Join(args, " ")
-	}
-	return cmd
-}

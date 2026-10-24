@@ -60,11 +60,9 @@ func (f Format) Valid() (valid bool) {
 	return valid
 }
 
-// Manifest is a parsed verify.toml. It holds the list of checks a bare clone
-// runs (each contributing to the proof), plus optional execution hints (setup,
-// teardown, tiers, seed fixtures, isolation needs). Every check's resolved
-// command must exit 0 on all-pass and non-zero on any failure with no Endless
-// present (see RenderRunScript for the bare-clone emission).
+// Manifest is a parsed verify.toml: what the driver runs. It holds the list of
+// checks (each contributing to the proof), plus optional execution hints (setup,
+// teardown, tiers, seed fixtures, isolation needs).
 //
 // A Manifest may be a per-task file (under .endless/tasks/<id>/) or the
 // effective manifest produced by merging a project-level ProjectConfig beneath a
@@ -91,8 +89,8 @@ type Manifest struct {
 // ParseManifest decodes a complete verify.toml document, rejects unknown keys,
 // and validates the result. It returns a fully validated Manifest or an error
 // that wraps ErrInvalidManifest. Use this for a standalone, self-sufficient
-// manifest (the bare-clone case); the layered discovery path decodes per-task
-// files leniently and validates the merged effective manifest instead.
+// manifest; the layered discovery path decodes per-task files leniently and
+// validates the merged effective manifest instead.
 func ParseManifest(data []byte) (m *Manifest, err error) {
 	m, err = decodeManifest(data)
 	if err != nil {

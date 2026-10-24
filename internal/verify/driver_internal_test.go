@@ -118,3 +118,25 @@ func writeExecutable(t *testing.T, dir, rel string) (path string) {
 	}
 	return path
 }
+
+// goTestCmd always emits -json: the test2json stream is what the gotest driver
+// captures, and no caller wants plain `go test` output.
+func TestGoTestCmd_AlwaysJSON(t *testing.T) {
+	cases := []struct {
+		name  string
+		tests []string
+		paths []string
+		want  string
+	}{
+		{"whole module", nil, nil, "go test -json ./..."},
+		{"anchored tests", []string{"TestA", "TestB"}, nil, "go test -json -run '^(TestA|TestB)$' ./..."},
+		{"scoped paths", []string{"TestA"}, []string{"./internal/x/...", "./cmd/y"}, "go test -json -run '^(TestA)$' ./internal/x/... ./cmd/y"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := goTestCmd(tc.tests, tc.paths); got != tc.want {
+				t.Errorf("goTestCmd() = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

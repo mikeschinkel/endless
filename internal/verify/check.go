@@ -66,42 +66,6 @@ func (c Check) ResolvedFormat() (format Format) {
 	return format
 }
 
-// ResolvedCommand returns the literal shell command this check runs with no
-// Endless present: the translated native filter for a structured check, or the
-// raw Command otherwise. It is the bare-clone (exit-code-only) form, kept solely
-// as the bridge that keeps RenderRunScript green; the driver execution path does
-// not use it.
-//
-// E-1792-removable: RenderRunScript's pure-sh emission (and therefore this
-// method) is retired by E-1792. It assumes the check has passed validation.
-func (c Check) ResolvedCommand() (cmd string) {
-	return bareCloneCommand(c)
-}
-
-// bareCloneCommand derives the exit-code-only command a bare clone runs for a
-// check: the family's native filter for a structured selection, else the literal
-// Command. It dispatches on the parsed family rather than a driver method so the
-// E-1792-removable bare-clone bridge stays isolated from the execution interface.
-func bareCloneCommand(c Check) (cmd string) {
-	var family string
-
-	if c.Command != "" {
-		cmd = c.Command
-		goto end
-	}
-	family, _, _ = parseRunner(c.Runner)
-	switch family {
-	case "gotest":
-		cmd = goTestCmd(false, c.Tests, c.Paths)
-	case "pytest":
-		cmd = pytestCmd(c.Tests, c.Paths)
-	default:
-		cmd = c.Command
-	}
-end:
-	return cmd
-}
-
 // validateCheck enforces the two-form rules for a single check against the driver
 // its runner resolves to. Errors wrap ErrInvalidManifest. The index is attached
 // as metadata so a failing check in a list is identifiable.

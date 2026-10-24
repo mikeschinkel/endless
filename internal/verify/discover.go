@@ -62,32 +62,6 @@ func NormalizeTaskID(id string) string {
 // resolves and runs the entries.
 const ScriptsDir = ".endless/verify"
 
-// LoadManifest reads, decodes, and validates a single, self-sufficient
-// verify.toml at fp. It enforces every required field; use it for a standalone
-// manifest (the bare-clone case). The layered discovery path (Discover) instead
-// decodes per-task files leniently and validates the merged effective manifest,
-// so a field the project config supplies need not appear in every task file.
-func LoadManifest(fp dt.Filepath) (m *Manifest, err error) {
-	var data []byte
-
-	data, err = fp.ReadFile()
-	if err != nil {
-		err = doterr.NewErr(ErrInvalidManifest, ErrReadingManifest, err)
-		goto end
-	}
-
-	m, err = ParseManifest(data)
-	if err != nil {
-		goto end
-	}
-
-end:
-	if err != nil {
-		err = doterr.WithErr(err, "filepath", fp)
-	}
-	return m, err
-}
-
 // Discover walks <root>/.endless/tasks/*/verify.toml, merges each per-task
 // manifest beneath the optional project-level <root>/.endless/verify.toml, and
 // returns the effective manifests keyed by task id (normalized — see
