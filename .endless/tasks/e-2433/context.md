@@ -26,4 +26,5 @@ Questions to settle:
   from duplicating each other's work.
 
 Gomion is the likely tool Endless would call for the mechanical parts. Its brainstorm on
-the CLI comes after this one and takes this one's outcome as its input.
+the CLI, E-2434 (Gomion: decide the gomion CLI that Endless calls for Go releases), comes
+after this one and takes this one's outcome as its requirements.
