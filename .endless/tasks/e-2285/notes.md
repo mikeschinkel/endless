@@ -65,3 +65,15 @@ dispatch switch refreshes `last_activity` on every invocation. E-2304 carries
 the fix; E-2305 decides the rest of the catalog, including whether the expected
 set is a list of names or a structure with matchers, which is the part that
 affects what this task builds.
+
+
+
+## Scope added by E-2375 (Mike's decision, 2026-10-24)
+
+A project-scope check: the project's .gitignore covers every entry in `GITIGNORE_ENTRIES` (src/endless/register.py). Mike: `.endless/worktrees/` belongs in ALL Endless projects; init should ensure it and doctor should find it missing.
+
+Evidence: go-dt was registered without the block, so every task worktree showed `.endless/worktree.json` as untracked, and `endless task verify` refused to run until the entries were added by hand.
+
+`scaffold_gitignore` already adds the block on `project init`, but nothing checks a project registered before that, or one whose block was removed. The fix tier is auto: it calls `scaffold_gitignore`.
+
+Init side, same matching code: `scaffold_gitignore`'s docstring says entries present "in any form" are left as-is, but it compares exact stripped lines. An anchored `/.endless/worktrees/`, which is what go-dt's .gitignore now uses (Mike's style), counts as missing, so re-running init appends a duplicate unanchored block. The check and init should share one matcher that treats `/x` and `x` as the same entry.
