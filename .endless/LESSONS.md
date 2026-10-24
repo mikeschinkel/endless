@@ -7781,3 +7781,7 @@ Planning E-2420 I argued against a SessionStart warning for a low Claude cleanup
 ### [2026-10-22] Don't recommend closing a session that holds unspawned tasks
 After E-2257 was completed, I recommended closing its session because a session owns one task. Mike said he uses sessions to track unspawned tasks in 'session status'. That session held 8, and closing it would mean moving them elsewhere and losing the knowledge of why they were in that session. In that case, closing was the wrong recommendation.
 - **Project**: endless
+
+### [2026-10-24] Check a case occurs before asking how to handle it
+While planning E-2398 (sandbox tmux isolation), I asked where task spawn / session goto should send windows under --db sandbox. Mike asked whether that was the right question: unless we are testing those commands they should always go to main, and he wanted to know whether I had seen any evidence of them being run with --db sandbox or whether it was hypothetical. Before posing a design question about a use case, search for evidence (transcripts, ledger, faults) that the case actually happens, and report it with the question; if there is none, say so and offer refusing the case as an option.
+- **Project**: endless
