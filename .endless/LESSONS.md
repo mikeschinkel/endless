@@ -7785,3 +7785,7 @@ After E-2257 was completed, I recommended closing its session because a session 
 ### [2026-10-24] Check a case occurs before asking how to handle it
 While planning E-2398 (sandbox tmux isolation), I asked where task spawn / session goto should send windows under --db sandbox. Mike asked whether that was the right question: unless we are testing those commands they should always go to main, and he wanted to know whether I had seen any evidence of them being run with --db sandbox or whether it was hypothetical. Before posing a design question about a use case, search for evidence (transcripts, ledger, faults) that the case actually happens, and report it with the question; if there is none, say so and offer refusing the case as an option.
 - **Project**: endless
+
+### [2026-10-24] Reopen landed work when what shipped is wrong, per ED-1550
+After E-2349 landed, its follow-up step in go-cfgstore showed that scaffold_gitignore wrote a duplicate block header, so the shipped behavior was wrong. I offered to file a cleanup task. Mike pointed to ED-1550: shipped work is reopened when what shipped is wrong, and work still live in the session that landed it is exempt from the file-a-new-task rule. Check ED-1550 before offering to file a follow-up for a defect in work this session just landed.
+- **Project**: endless
