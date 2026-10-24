@@ -1,0 +1,34 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 3,
+      "passed": 3,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "internal/monitor ForgetProject; internal/schema migrations",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "tests/test_project_bring_up.py, tests/test_project_forget.py",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a legacy project is brought up to date; a second run is a no-op",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
