@@ -64,3 +64,8 @@ statement = "Does not build or plan a way to run a suite without Endless; that i
 id = "P11"
 kind = "exclusion"
 statement = "Does not edit landed task suites or document mirrors that name the removed symbols, or research under docs/private/"
+
+[[item]]
+id = "P12"
+kind = "deliverable"
+statement = "The refusal-inventory row for the manifest-read error is re-anchored from LoadManifest to loadManifestForMerge"
