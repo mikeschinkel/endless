@@ -53,12 +53,18 @@ def test_gitignore_entries_include_logs():
 def test_rerun_on_an_older_gitignore_adds_only_the_missing_lines(tmp_path):
     older = [e for e in GITIGNORE_ENTRIES if e != ".endless/logs/"]
     (tmp_path / ".gitignore").write_text(
-        "*.out\n\n" + GITIGNORE_BLOCK_HEADER + "\n" + "\n".join(older) + "\n"
+        "*.out\n\n" + GITIGNORE_BLOCK_HEADER + "\n" + "\n".join(older)
+        + "\n\n# mine\n*.tmp\n"
     )
     assert scaffold_gitignore(tmp_path) == [".endless/logs/"]
     text = (tmp_path / ".gitignore").read_text()
     for entry in GITIGNORE_ENTRIES:
         assert text.count(entry + "\n") == 1, entry
+    # Added inside the existing block, not under a second header (P31).
+    assert text.count(GITIGNORE_BLOCK_HEADER) == 1
+    assert text == ("*.out\n\n" + GITIGNORE_BLOCK_HEADER + "\n"
+                    + "\n".join([*older, ".endless/logs/"])
+                    + "\n\n# mine\n*.tmp\n")
     assert scaffold_gitignore(tmp_path) == []
 
 

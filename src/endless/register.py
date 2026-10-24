@@ -58,14 +58,25 @@ def scaffold_gitignore(project_path: Path) -> list[str]:
     """Idempotently ensure the project's .gitignore ignores the canonical
     endless paths. Appends only the missing entries under a marked block and
     creates .gitignore if absent; entries already present anywhere in the file
-    (in any form) are left as-is. Returns the entries newly added — empty when
-    the file already covered them all, so re-running never duplicates a line."""
+    (in any form) are left as-is. A file that already has the marked block gets
+    the missing entries at the end of that block, not a second header. Returns
+    the entries newly added — empty when the file already covered them all, so
+    re-running never duplicates a line."""
     gitignore = project_path / ".gitignore"
     existing = gitignore.read_text() if gitignore.exists() else ""
     present = {line.strip() for line in existing.splitlines()}
     missing = [entry for entry in GITIGNORE_ENTRIES if entry not in present]
     if not missing:
         return []
+    lines = existing.splitlines()
+    if GITIGNORE_BLOCK_HEADER in lines:
+        # The block runs from its header to the first blank line or EOF.
+        end = lines.index(GITIGNORE_BLOCK_HEADER) + 1
+        while end < len(lines) and lines[end].strip():
+            end += 1
+        lines[end:end] = missing
+        gitignore.write_text("\n".join(lines) + "\n")
+        return missing
     block = GITIGNORE_BLOCK_HEADER + "\n" + "\n".join(missing) + "\n"
     if existing and not existing.endswith("\n"):
         existing += "\n"
