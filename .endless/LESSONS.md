@@ -7789,3 +7789,7 @@ While planning E-2398 (sandbox tmux isolation), I asked where task spawn / sessi
 ### [2026-10-24] Reopen landed work when what shipped is wrong, per ED-1550
 After E-2349 landed, its follow-up step in go-cfgstore showed that scaffold_gitignore wrote a duplicate block header, so the shipped behavior was wrong. I offered to file a cleanup task. Mike pointed to ED-1550: shipped work is reopened when what shipped is wrong, and work still live in the session that landed it is exempt from the file-a-new-task rule. Check ED-1550 before offering to file a follow-up for a defect in work this session just landed.
 - **Project**: endless
+
+### [2026-10-24] A session spawned into the wrong project is repaired by moving its sessions.project_id, then re-claiming
+Situation (E-1792): an endless-project task was spawned from go-cfgstore, so its session row carried project_id=17 and its worktree landed in go-cfgstore's repo. task release is disabled, sessions.task_id is write-once, and spawn from the right project refuses because the session already holds the task. What worked, at Mike's suggestion: endless sql --write "UPDATE sessions SET project_id=<right> WHERE id=<session>", then endless task claim from the right project's checkout, which creates the worktree there; Mike then /cd's into it. Setting the task to revisit first was unnecessary. E-2405 is the root-cause fix.
+- **Project**: endless
