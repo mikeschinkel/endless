@@ -87,3 +87,10 @@ id = "P30"
 kind = "deliverable"
 statement = "project scan and project list do not re-register a forgotten checkout whose .endless/config.json is still on disk; only an explicit project init registers it again"
 verify = "tests/test_project_forget.py"
+
+[[item]]
+id = "P31"
+kind = "deliverable"
+statement = "Re-running project init on a .gitignore that already has the endless block adds the missing lines inside that block, never a second header"
+verify = "test_rerun_on_an_older_gitignore_adds_only_the_missing_lines asserts one header and the new line inside the block"
+detail = "Found by P24 in go-cfgstore: scaffold_gitignore appended a second '# endless (managed by …)' header."
