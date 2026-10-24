@@ -1,0 +1,89 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 14,
+      "passed": 14,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "events: notice fan-out, actor, landing and one-edit-one-notice tests",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "schema: migrations, including 00025 dropping the triggers and the column",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "monitor: notice delivery, reaping and rendering",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "faults: WARN-0036 is catalogued, documented and its number spent",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the migrated database carries none of the five notice triggers",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and tasks.changed_by_session is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a person's edit reaches the session it was credited to, as one notice",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and the idle holder",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "but never the ended one",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the plan's text is never reproduced",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "an agent is not told about its own edit",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the other holder is, attributed to the agent",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a description edit writes no notice",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a person's land reaches the session it was credited to",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
