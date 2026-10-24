@@ -1,0 +1,94 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 15,
+      "passed": 15,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go vet and go test ./internal/verify/",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "runscript.go is removed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "runscript_test.go is removed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "RenderRunScript is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "Check.ResolvedCommand is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "bareCloneCommand is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "pytestCmd is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "LoadManifest is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestCheck_ResolvedCommand is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "goTestCmd takes no jsonStream parameter",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "goTestCmd takes only the selection",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "ParseManifest remains",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no mention of a bare clone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no mention of E-1792",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "Manifest is described as what the driver runs",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
