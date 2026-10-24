@@ -147,6 +147,11 @@ The `runner` string alone must exit 0 on all-pass and non-zero on any failure, w
 present. CTRF normalization and seeding are Endless-only enhancements unavailable in bare mode;
 the runner string must be self-sufficient.
 
+**Note (E-1792):** no emitted script runs a suite from a bare clone any more. E-1792 retired
+`RenderRunScript`'s shell emission and the bare-clone command derivation it needed; the Go
+driver is the only execution path. Running a suite from a bare clone without Endless belongs to
+E-1793's standalone binary.
+
 ## Lessons from ad-hoc prototypes
 
 `tests/tasks/e-1577-verify.sh` and `tests/tasks/e-1570-verify.sh` are reference-only prototypes
