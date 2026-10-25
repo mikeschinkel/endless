@@ -65,3 +65,9 @@ statement = "Does not rewrite processes.server_uuid in existing rows"
 id = "P11"
 kind = "exclusion"
 statement = "Does not reuse an earlier ID when stamping"
+
+[[item]]
+id = "P12"
+kind = "deliverable"
+statement = "runInit's doc comment names its callers (endless tmux start, when it starts a server and when it reuses the tasks server, and a manual run), not a session-created hook in ~/.tmux.conf"
+verify = "read internal/tmuxcmd/init.go"
