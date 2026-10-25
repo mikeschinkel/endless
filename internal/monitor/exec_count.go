@@ -30,8 +30,12 @@ func TmuxCommand(args ...string) *exec.Cmd {
 	return tmuxCommand(args...)
 }
 
+// tmuxExec is the seam tests swap to answer tmux calls without a tmux server.
+// Production always uses exec.Command.
+var tmuxExec = exec.Command
+
 // tmuxCommand builds `tmux <args...>` and counts it.
 func tmuxCommand(args ...string) *exec.Cmd {
 	tmuxExecs.Add(1)
-	return exec.Command("tmux", args...)
+	return tmuxExec("tmux", args...)
 }

@@ -87,37 +87,40 @@ func ListLiveSessions(projectID int64) ([]LiveSession, error) {
 	if err = livenessReady(); err != nil {
 		return nil, err
 	}
+	// An unidentifiable server (no tmux, or none reachable) yields "", which
+	// no binding matches: an unscoped pane id is exactly what must not leak.
+	here, _ := TmuxServerUUID()
+
+	// Numbered placeholders: SameTmuxServerSQL spells ?2 twice.
 	rows, err := db.Query(
 		`SELECT s.session_id, s.id, COALESCE(s.project_id, 0), s.platform, s.state,
 		        s.task_id, COALESCE(p.address, ''),
 		        COALESCE(s.started_at, ''), COALESCE(s.last_activity, ''),
-		        sl.liveness, COALESCE(p.server_uuid, ''), COALESCE(ts.socket_path, '')
+		        sl.liveness, COALESCE(ts.socket_path, ''),
+		        ?2 != '' AND `+SameTmuxServerSQL("p.server_uuid", "?2")+`
 		 FROM sessions s
 		 LEFT JOIN processes p ON p.id = s.process_id
-		 LEFT JOIN tmux_servers ts ON ts.server_uuid = p.server_uuid
+		 LEFT JOIN tmux_servers ts ON ts.server_uuid = `+tmuxServerSQL("p.server_uuid")+`
 		 JOIN session_liveness sl ON sl.session_id = s.id
-		 WHERE `+presentSession+` AND s.project_id = ?
+		 WHERE `+presentSession+` AND s.project_id = ?1
 		 ORDER BY s.last_activity DESC`,
-		projectID,
+		projectID, here,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("query live sessions: %w", err)
 	}
 	defer rows.Close()
 
-	// An unidentifiable server (no tmux, or none reachable) yields "", which
-	// no binding matches: an unscoped pane id is exactly what must not leak.
-	here, _ := TmuxServerUUID()
-
 	out := []LiveSession{}
 	down := map[string]bool{}
 	for rows.Next() {
 		var s LiveSession
-		var server, socket string
+		var socket string
+		var onHere bool
 		if err := rows.Scan(
 			&s.SessionID, &s.EndlessSessionID, &s.ProjectID, &s.Platform, &s.State,
 			&s.TaskID, &s.Process, &s.StartedAt, &s.LastActivity,
-			&s.Liveness, &server, &socket,
+			&s.Liveness, &socket, &onHere,
 		); err != nil {
 			return nil, fmt.Errorf("scan live session: %w", err)
 		}
@@ -129,7 +132,7 @@ func ListLiveSessions(projectID int64) ([]LiveSession, error) {
 			}
 			s.EndlessServerDown = d
 		}
-		if strings.HasPrefix(s.Process, "%") && here != "" && server == here {
+		if strings.HasPrefix(s.Process, "%") && onHere {
 			p := s.Process
 			s.PaneID = &p
 		}

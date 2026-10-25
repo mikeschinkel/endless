@@ -184,41 +184,40 @@ const (
 	// The same row-multiplication guard as observed_servers_identity.
 	createGoneServersIdentity = `CREATE UNIQUE INDEX IF NOT EXISTS gone_servers_identity
 		ON gone_servers (kind_id, server_uuid)`
-
-	// createLivenessView is the single definition of liveness. Consumers SELECT
-	// from it; none re-derive the CASE. ifnull() on both sides of the server
-	// comparison because SQL equality with NULL is never true, and a NULL
-	// server_uuid is legitimate for kind=pid and for E-1898's migration backfill.
-	createLivenessView = `CREATE TEMP VIEW IF NOT EXISTS session_liveness AS
-		SELECT
-			s.id           AS session_id,
-			s.process_id   AS process_id,
-			p.kind_id      AS kind_id,
-			p.server_uuid  AS server_uuid,
-			p.address      AS address,
-			l.command      AS command,
-			CASE
-				WHEN p.id IS NULL          THEN 'unbound'
-				WHEN o.kind_id IS NOT NULL
-				 AND l.address IS NULL     THEN 'dead'
-				WHEN o.kind_id IS NOT NULL THEN 'live'
-				WHEN g.kind_id IS NOT NULL THEN 'dead'
-				ELSE                            'unknown'
-			END AS liveness
-		FROM sessions s
-		LEFT JOIN processes p
-			   ON p.id = s.process_id
-		LEFT JOIN observed_servers o
-			   ON o.kind_id = p.kind_id
-			  AND ifnull(o.server_uuid, '') = ifnull(p.server_uuid, '')
-		LEFT JOIN gone_servers g
-			   ON g.kind_id = p.kind_id
-			  AND g.server_uuid = p.server_uuid
-		LEFT JOIN live_processes l
-			   ON l.kind_id = p.kind_id
-			  AND ifnull(l.server_uuid, '') = ifnull(p.server_uuid, '')
-			  AND l.address = p.address`
 )
+
+// createLivenessView is the single definition of liveness. Consumers SELECT
+// from it; none re-derive the CASE. Its server comparisons go through
+// SameTmuxServerSQL, which also carries the NULL handling.
+var createLivenessView = `CREATE TEMP VIEW IF NOT EXISTS session_liveness AS
+	SELECT
+		s.id           AS session_id,
+		s.process_id   AS process_id,
+		p.kind_id      AS kind_id,
+		p.server_uuid  AS server_uuid,
+		p.address      AS address,
+		l.command      AS command,
+		CASE
+			WHEN p.id IS NULL          THEN 'unbound'
+			WHEN o.kind_id IS NOT NULL
+			 AND l.address IS NULL     THEN 'dead'
+			WHEN o.kind_id IS NOT NULL THEN 'live'
+			WHEN g.kind_id IS NOT NULL THEN 'dead'
+			ELSE                            'unknown'
+		END AS liveness
+	FROM sessions s
+	LEFT JOIN processes p
+		   ON p.id = s.process_id
+	LEFT JOIN observed_servers o
+		   ON o.kind_id = p.kind_id
+		  AND ` + SameTmuxServerSQL("o.server_uuid", "p.server_uuid") + `
+	LEFT JOIN gone_servers g
+		   ON g.kind_id = p.kind_id
+		  AND ` + SameTmuxServerSQL("g.server_uuid", "p.server_uuid") + `
+	LEFT JOIN live_processes l
+		   ON l.kind_id = p.kind_id
+		  AND ` + SameTmuxServerSQL("l.server_uuid", "p.server_uuid") + `
+		  AND l.address = p.address`
 
 var (
 	// livenessOnce gives a short-lived process (a CLI invocation, a hook) one
@@ -275,11 +274,13 @@ func SetTestTmuxObservation(serverUUID string, panes map[string]string) (restore
 func setTestTmux(serverUUID string, panes map[string]string, reachable bool) (restore func()) {
 	prevObserve, prevUUID, prevOnce := observeServers, tmuxServerUUIDFn, livenessOnce
 	prevSocket, prevProbe, prevDown := tmuxSocketPathFn, probeSocket, endlessServerDown
+	prevStart := tmuxStartTimeFn
 
 	tmuxServerUUIDFn = func() (string, error) { return serverUUID, nil }
 	// No socket is recorded and none is probed: a fixture server has no socket,
 	// and a probe of a real path would judge real servers from a test.
 	tmuxSocketPathFn = func() string { return "" }
+	tmuxStartTimeFn = func() time.Time { return time.Time{} }
 	probeSocket = func(string) socketProbe { return socketProbe{} }
 	endlessServerDown = func(string) bool { return false }
 	observeServers = func() []observedServer {
@@ -300,6 +301,7 @@ func setTestTmux(serverUUID string, panes map[string]string, reachable bool) (re
 	return func() {
 		observeServers, tmuxServerUUIDFn, livenessOnce = prevObserve, prevUUID, prevOnce
 		tmuxSocketPathFn, probeSocket, endlessServerDown = prevSocket, prevProbe, prevDown
+		tmuxStartTimeFn = prevStart
 		livenessErr = nil
 	}
 }
@@ -410,10 +412,12 @@ func goneTmuxServers(tx *sql.Tx) ([]string, error) {
 		`SELECT ts.server_uuid, ts.socket_path
 		   FROM tmux_servers ts
 		  WHERE EXISTS (SELECT 1 FROM processes p
-		                 WHERE p.kind_id = ? AND p.server_uuid = ts.server_uuid)
+		                 WHERE p.kind_id = ?1
+		                   AND `+SameTmuxServerSQL("p.server_uuid", "ts.server_uuid")+`)
 		    AND NOT EXISTS (SELECT 1 FROM observed_servers o
-		                     WHERE o.kind_id = ? AND o.server_uuid = ts.server_uuid)`,
-		int(processkind.ProcessKindTmux), int(processkind.ProcessKindTmux),
+		                     WHERE o.kind_id = ?1
+		                       AND `+SameTmuxServerSQL("o.server_uuid", "ts.server_uuid")+`)`,
+		int(processkind.ProcessKindTmux),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("liveness: read recorded servers: %w", err)
@@ -441,7 +445,11 @@ func goneTmuxServers(tx *sql.Tx) ([]string, error) {
 			probe = probeSocket(c.socket)
 			probes[c.socket] = probe
 		}
-		if probe.proves(c.uuid) {
+		proved, perr := probe.proves(tx, c.uuid)
+		if perr != nil {
+			return nil, perr
+		}
+		if proved {
 			gone = append(gone, c.uuid)
 		}
 	}
@@ -691,9 +699,24 @@ type socketProbe struct {
 
 // proves reports whether this probe proves the server named uuid gone. A server
 // that answered with no uuid is a different one: the recorded server had an id
-// in memory, and a running server does not lose an option.
-func (p socketProbe) proves(uuid string) bool {
-	return p.refused || (p.answered && p.uuid != uuid)
+// in memory, and a running server does not lose an option. One that answered
+// with uuid, or with an id uuid is an alias of (E-2428), is the same server and
+// proves nothing; any other id still proves it gone.
+func (p socketProbe) proves(q rowQuerier, uuid string) (bool, error) {
+	if p.refused {
+		return true, nil
+	}
+	if !p.answered {
+		return false, nil
+	}
+	if p.uuid == "" {
+		return true, nil
+	}
+	same, err := SameTmuxServer(q, p.uuid, uuid)
+	if err != nil {
+		return false, fmt.Errorf("liveness: %w", err)
+	}
+	return !same, nil
 }
 
 // tmuxProbeServerUUIDArgs builds `tmux -S <socket> show-options -gqv

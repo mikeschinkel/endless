@@ -63,9 +63,18 @@ func (fx realEffects) session(id int64) (s sessionInfo, err error) {
 	s.unobservable = liveness == monitor.LivenessUnknown
 	s.live = state != string(sessionstate.Ended) && !liveness.IsGone() && !s.unobservable
 
-	// A pane id means something only on the server that issued it.
+	// A pane id means something only on the server that issued it, under its
+	// id or an alias of it.
 	here, _ := monitor.TmuxServerUUID()
-	if !strings.HasPrefix(s.pane, "%") || here == "" || server != here {
+	if !strings.HasPrefix(s.pane, "%") || here == "" {
+		s.pane = ""
+		return s, nil
+	}
+	same, err := monitor.SameTmuxServer(fx.db, server, here)
+	if err != nil {
+		return s, fmt.Errorf("reading ES-%d: %w", id, err)
+	}
+	if !same {
 		s.pane = ""
 	}
 	return s, nil

@@ -166,6 +166,24 @@ CREATE TABLE IF NOT EXISTS tmux_servers (
     first_seen_at TEXT NOT NULL
 );
 
+-- Earlier @server_uuid values of a running tmux server (E-2428). A server keeps
+-- its uuid for its lifetime, except when one is stamped over it: a re-stamp on a
+-- live server gives it a second uuid, and every session bound under the first
+-- would read dead. alias_uuid is that earlier uuid; server_uuid is the one the
+-- server answers with now. Every server-id comparison accepts either
+-- (internal/monitor/server_aliases.go).
+--
+-- Written where a uuid is first recorded (recordTmuxServer): another uuid on the
+-- same socket first seen at or after the running server's start time can only
+-- have been stamped on this same server process. One first seen before it
+-- belonged to an earlier server, and gets no row. Machine-local, like
+-- tmux_servers, and never written through the event ledger.
+CREATE TABLE IF NOT EXISTS tmux_server_aliases (
+    alias_uuid TEXT PRIMARY KEY,
+    server_uuid TEXT NOT NULL,
+    recorded_at TEXT NOT NULL
+);
+
 -- AI coding sessions
 --
 -- task_id (E-1571 as active_task_id, renamed E-1969): the ONE task this session

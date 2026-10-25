@@ -174,7 +174,8 @@ func noLiveSessionForProcess(process string, err error) error {
 // sqlite connection while the first is still locked.
 //
 // Resolves the pane through `processes` rather than matching a bare string, so
-// the answer is scoped to the tmux server this process is talking to (E-1898).
+// the answer is scoped to the tmux server this process is talking to (E-1898),
+// under its id or any alias of it (E-2428).
 // The server lookup shells out to tmux, not to the database, so it is safe
 // inside the caller's open transaction.
 func liveSessionByProcessTx(db dbQuerier, process string) (int64, error) {
@@ -192,7 +193,8 @@ func liveSessionByProcessTx(db dbQuerier, process string) (int64, error) {
 	err = db.QueryRow(
 		`SELECT s.id FROM sessions s
 		 JOIN processes p ON p.id = s.process_id
-		 WHERE p.kind_id = ? AND p.server_uuid = ? AND p.address = ?
+		 WHERE p.kind_id = ?1 AND `+monitor.SameTmuxServerSQL("p.server_uuid", "?2")+`
+		   AND p.address = ?3
 		   AND s.state IN (`+liveSessionStates+`)
 		 ORDER BY s.last_activity DESC LIMIT 1`,
 		int(processkind.ProcessKindTmux), serverUUID, process,

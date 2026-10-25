@@ -10,21 +10,21 @@ import (
 	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
-// runInit is the target for `set-hook -g session-created "run-shell
-// 'endless tmux init'"` in ~/.tmux.conf. Self-gates via the tmux
-// server-level user option @server_uuid: on a fresh server (no
-// @server_uuid) it runs reset+apply and stamps a fresh UUID; on a
-// subsequent session-created in the same server (which fires for every
-// new tmux session, not just the first) it no-ops.
+// runInit initializes the tmux server this process is inside: the Endless
+// status line and menus, and the @server_uuid that session liveness identifies
+// the server by. Its callers are `endless tmux start` — when it starts a server,
+// and when it reuses the tasks server — and a manual `endless tmux init`.
 //
-// Why the gate is the verb's responsibility: tmux's `if-shell`
-// alternative would force users to write the gate inline in their
-// .tmux.conf, where it would diverge from the verb's logic. Owning the
-// gate here means the user's config is one stable line.
+// Self-gates via the tmux server-level user option @server_uuid: on a server
+// with none it runs apply and stamps a fresh UUID; on a server that has one it
+// no-ops, so any caller may run it on a server it did not start.
 //
-// Manual `endless tmux init` after `tmux kill-server`+`tmux new` works
-// the same way (idempotent: first call does work, subsequent calls
-// no-op until the next server restart).
+// The gate stamps only when the read SUCCEEDS with no value. A read that fails
+// stamps nothing and refuses (E-2428): on 2026-10-19 a failed read on a live
+// server re-stamped it, and every session bound under the old id read dead.
+//
+// Why the gate is the verb's responsibility: a caller-side check would diverge
+// from the verb's logic. Owning the gate here keeps every caller one call.
 func runInit(args []string) {
 	fs := refusal.NewFlags("init")
 	binary := fs.String("binary", "", "Override path to endless binary passed to `apply` (default: argv[0])")
@@ -34,28 +34,36 @@ func runInit(args []string) {
 		// -h asked a question and got an answer; it is not a refusal.
 		fs.ExitOnHelp(err)
 		// NewFlags is ContinueOnError, so the exit flag.ExitOnError used to take
-		// from inside Parse is ours to take here. Both callers — the
-		// session-created hook and a manual run — pass flags this verb defines,
-		// so a flag that misses was typed.
+		// from inside Parse is ours to take here. `endless tmux start` passes no
+		// flags, so a flag that misses was typed in a manual run.
 		refusal.NoReport(err.Error(), "Correct the flag and retry").
 			Command("tmux init").Text(fs.Output()).Exit(2)
 	}
 
 	if os.Getenv("TMUX") == "" {
 		// Only the user can start or attach to their own tmux, so there is no
-		// retry an agent can make. Never fires from the session-created hook,
-		// where $TMUX is set by definition: this is the manual path.
+		// retry an agent can make. Never fires from `endless tmux start`, which
+		// points $TMUX at the server it initializes: this is the manual path.
 		refusal.Report(
 			"endless-go tmux init: not inside a tmux session ($TMUX is empty)",
 			"running `endless tmux init` from inside their own tmux session",
 		).Command("tmux init").Exit(1)
 	}
 
-	existing := strings.TrimSpace(readServerOption("@server_uuid"))
+	existing, err := readServerOption("@server_uuid")
+	if err != nil {
+		// A failed read is not an unset option: the server may well carry an id
+		// its sessions are bound under, and stamping over it would make every
+		// one of them read dead. Re-running init once the server answers is
+		// safe; why it did not answer is the user's to look into.
+		refusal.Report(
+			fmt.Sprintf("endless-go tmux init: read @server_uuid: %v", err),
+			"why their tmux server did not answer a show-options read",
+		).Command("tmux init").Cause(err).Exit(1)
+	}
 	if existing != "" {
-		// Server already initialized this lifetime. Quiet no-op so the
-		// session-created hook firing for every subsequent session
-		// doesn't spam stderr.
+		// Server already initialized this lifetime. Quiet no-op so a caller
+		// reusing an initialized server doesn't spam stderr.
 		//
 		// Nothing is broken and nothing is left to do — the gate did its job —
 		// so an agent that reads it carries straight on.
@@ -75,8 +83,8 @@ func runInit(args []string) {
 	}
 
 	// This used to call runReset(nil) first, and that call was the trigger for
-	// the 2026-08-05 incident: a freshly started tmux server fires
-	// session-created -> `endless tmux init`, so the reaper ran against a
+	// the 2026-08-05 incident: a freshly started tmux server fired a
+	// session-created hook -> `endless tmux init`, so the reaper ran against a
 	// ONE-PANE view of a brand-new server and concluded every session in the
 	// project was dead — 37 rows in a single batch. E-1898 removed the reaper
 	// outright; liveness is now derived per read and never swept.
@@ -109,20 +117,32 @@ func runInit(args []string) {
 	fmt.Printf("endless-go tmux init: server initialized (@server_uuid=%s)\n", uuid)
 }
 
-// readServerOption returns the value of a tmux server-level user option,
-// or "" if unset (including when tmux is unavailable). Stderr is swallowed
-// because `tmux show-options -gv <unset>` exits non-zero with a message
-// the caller doesn't need.
-func readServerOption(name string) string {
-	out, err := exec.Command("tmux", "show-options", "-gv", name).Output()
+// readServerOption returns the value of a tmux server-level user option, ""
+// when the option is unset, and an error when the read itself failed.
+//
+// The -q is load-bearing: without it an unset option exits non-zero exactly as
+// a failed read does, and the two could not be told apart. tmux's stderr is
+// kept for the error, since it says why the read failed.
+func readServerOption(name string) (string, error) {
+	var stderr strings.Builder
+	cmd := tmuxExec("tmux", "show-options", "-gqv", name)
+	cmd.Stderr = &stderr
+	out, err := cmd.Output()
 	if err != nil {
-		return ""
+		if msg := strings.TrimSpace(stderr.String()); msg != "" {
+			return "", fmt.Errorf("%w: %s", err, msg)
+		}
+		return "", err
 	}
-	return strings.TrimSpace(string(out))
+	return strings.TrimSpace(string(out)), nil
 }
 
+// tmuxExec is the seam tests swap to answer init's tmux calls without a tmux
+// server. Production always uses exec.Command.
+var tmuxExec = exec.Command
+
 func setServerOption(name, value string) error {
-	cmd := exec.Command("tmux", "set-option", "-g", name, value)
+	cmd := tmuxExec("tmux", "set-option", "-g", name, value)
 	// tmux's own diagnostic, verbatim: it names the option and the version
 	// constraint that the caller's refusal cannot.
 	cmd.Stderr = refusal.Passthrough()

@@ -107,6 +107,9 @@ func EnsureTmuxPaneProcess(pane string) (int64, error) {
 // judged gone, which is how every binding from before E-2300 reads. Failing the
 // binding over it would trade a session's whole identity for a refinement.
 //
+// The first time an id is recorded is also when its socket's earlier ids from
+// the same running server become its aliases (E-2428, recordTmuxServerAliases).
+//
 // The exists check comes first so the common case — a hook on a server already
 // recorded — costs one indexed read rather than a tmux exec.
 func recordTmuxServer(uuid string) {
@@ -125,11 +128,17 @@ func recordTmuxServer(uuid string) {
 	if !filepath.IsAbs(socket) {
 		return
 	}
-	_, _ = db.Exec(
+	res, err := db.Exec(
 		`INSERT OR IGNORE INTO tmux_servers (server_uuid, socket_path, first_seen_at)
 		 VALUES (?, ?, strftime('%Y-%m-%dT%H:%M:%S', 'now'))`,
 		uuid, socket,
 	)
+	if err != nil {
+		return
+	}
+	if n, _ := res.RowsAffected(); n == 1 {
+		recordTmuxServerAliases(db, uuid, socket, tmuxStartTimeFn())
+	}
 }
 
 // currentPaneProcessID resolves this process's own TMUX_PANE to a processes.id
@@ -153,7 +162,7 @@ func paneProcessID(pane string) any {
 }
 
 // ProcessIDsForPanes maps tmux pane ids to EXISTING processes.id values on the
-// server this call can currently reach. It never creates rows: it backs read
+// server this call can currently reach, under its id or any alias of it. It never creates rows: it backs read
 // paths ("which session is running in this pane?"), and a lookup that minted identities
 // would write on every status-line repaint.
 //
@@ -175,16 +184,19 @@ func ProcessIDsForPanes(panes []string) ([]int64, error) {
 		return nil, err
 	}
 
-	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(panes)), ",")
+	// Numbered placeholders throughout: SameTmuxServerSQL spells ?2 twice.
+	nums := make([]string, len(panes))
 	args := make([]any, 0, len(panes)+2)
 	args = append(args, int(processkind.ProcessKindTmux), uuid)
-	for _, p := range panes {
+	for i, p := range panes {
+		nums[i] = fmt.Sprintf("?%d", i+3)
 		args = append(args, p)
 	}
 
 	rows, err := db.Query(
-		`SELECT id FROM processes
-		 WHERE kind_id = ? AND server_uuid = ? AND address IN (`+placeholders+`)`,
+		`SELECT p.id FROM processes p
+		 WHERE p.kind_id = ?1 AND `+SameTmuxServerSQL("p.server_uuid", "?2")+`
+		   AND p.address IN (`+strings.Join(nums, ",")+`)`,
 		args...,
 	)
 	if err != nil {
@@ -235,10 +247,13 @@ func ProcessAddress(processID int64) (kind processkind.ProcessKind, serverUUID, 
 
 // ── tmux server identity ────────────────────────────────────────────────────
 
-// tmuxShowServerUUIDArgs builds `tmux show-options -gv @server_uuid` against the
-// ambient server.
+// tmuxShowServerUUIDArgs builds `tmux show-options -gqv @server_uuid` against
+// the ambient server. The -q is load-bearing, as in tmuxProbeServerUUIDArgs:
+// without it an unset option exits non-zero exactly as a failed read does, and
+// a failed read on a live server would be taken for "unset" and re-stamped
+// (E-2428).
 func tmuxShowServerUUIDArgs() []string {
-	return []string{"show-options", "-gv", "@server_uuid"}
+	return []string{"show-options", "-gqv", "@server_uuid"}
 }
 
 // tmuxSetServerUUIDArgs builds `tmux set-option -g @server_uuid <uuid>`.
@@ -281,8 +296,12 @@ func liveTmuxSocketPath() string {
 // restart mints a new uuid, which is precisely what makes a reissued pane id a
 // different identity.
 //
-// Returns "" with no error when tmux is unreachable; callers treat that as
-// ErrNoProcessIdentity rather than a failure.
+// It stamps only when the read SUCCEEDS with no value. A read that fails stamps
+// nothing (E-2428): on 2026-10-19 a failed read re-stamped a live server, and
+// every session bound under its old id read dead.
+//
+// Returns "" with no error when tmux is unreachable or the read fails; callers
+// treat that as ErrNoProcessIdentity rather than a failure.
 func TmuxServerUUID() (string, error) {
 	return tmuxServerUUIDFn()
 }
@@ -290,17 +309,15 @@ func TmuxServerUUID() (string, error) {
 // liveTmuxServerUUID is TmuxServerUUID's real implementation; see that doc.
 func liveTmuxServerUUID() (string, error) {
 	out, err := tmuxCommand(tmuxShowServerUUIDArgs()...).Output()
-	if err == nil {
-		if uuid := strings.TrimSpace(string(out)); uuid != "" {
-			return uuid, nil
-		}
+	if err != nil {
+		return "", nil // no reachable tmux server, or one that did not answer
 	}
-	// `show-options -gv` on an unset user option exits non-zero, so a failure
-	// here is indistinguishable from "unset" — try to stamp, and let THAT tell
-	// us whether a server is reachable at all.
+	if uuid := strings.TrimSpace(string(out)); uuid != "" {
+		return uuid, nil
+	}
 	uuid := generateUUID()
 	if err = tmuxCommand(tmuxSetServerUUIDArgs(uuid)...).Run(); err != nil {
-		return "", nil // no reachable tmux server
+		return "", nil
 	}
 	return uuid, nil
 }
