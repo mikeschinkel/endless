@@ -90,3 +90,8 @@ statement = "Does not move the guide out of docs/guide/"
 id = "P17"
 kind = "exclusion"
 statement = "Does not list subsections in the guide index"
+
+[[item]]
+id = "P18"
+kind = "deliverable"
+statement = "just guide-check fails when docs/guide/ breaks a section/subsection layout rule (the checks P9-P12 test), via guide_map.structure_problems()"
