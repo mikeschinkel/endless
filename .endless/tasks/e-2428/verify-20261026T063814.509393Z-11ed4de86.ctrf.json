@@ -1,0 +1,69 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 10,
+      "passed": 10,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "tmux init tells a failed read from an unset option",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "monitor: no stamp on a failed read; aliases recorded and accepted; E-2300 still proves gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "events and triage resolve a pane bound under an alias",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "migration 00026 matches schema.sql",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a failed read refuses",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the refusal names the failed read",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a failed read stamps nothing",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "an unset option is stamped",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a set option is kept",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the id is unchanged",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
