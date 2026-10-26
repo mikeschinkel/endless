@@ -1,0 +1,99 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 16,
+      "passed": 16,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "guide subsection, map, conditionals and banner tests",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "docs/guide/help/ is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "docs/guide/_help/_topics.md exists",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no 'guide/help' in src, tests, justfile, .claude/commands",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "guide-check passes",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "--list shows the tasks section",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "--list shows no _help entry",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "--list shows no _topics entry",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "--list shows no index entry",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "guide _help is refused",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "guide _help is refused as unknown",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "guide tasks/nope is refused",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the refusal names the section's subsections",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "guide index/x is refused",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "guide tasks still prints",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "guide tasks prints the tasks section",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
