@@ -7805,3 +7805,7 @@ Worktrees build through a generated go.work, which hides a go.mod that no longer
 ### [2026-10-26] Land is not merge, and post-land is not post-deploy
 Brainstorming E-2439 (post-land plan items), I equated Endless's 'land' with git merge and generalized 'post-land' to 'post-deploy' on a remote server Endless never sees. Mike corrected both: land is Endless's own term, meaning bring a worktree's code into the root's primary branch AND run the project's migrations; merge is only git merge. Endless has no concept of deploy (push to a remote server) yet, and deploy is not land. Most projects have a local implementation the user tests or uses after landing, so post-land work usually happens on the user's own machine. Reason: framing PRODUCT behavior around deploy misdescribes what Endless does for other users.
 - **Project**: endless
+
+### [2026-10-26] Guide content goes in an existing section, not a new one
+In E-2439 I proposed adding a short new section to the endless guide for post-land items. Mike pointed out this breaks his wish to keep the guide to seven or fewer top-level sections, so the content has to go into an existing section. If sections get too long, he accepts subsections stored as files in a subdirectory named after the section's markdown file and addressed by relative path without .md, e.g. 'endless guide foo/bar'. Reason: a small, fixed set of top-level sections keeps the guide navigable.
+- **Project**: endless
