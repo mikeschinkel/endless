@@ -71,3 +71,8 @@ id = "P12"
 kind = "deliverable"
 statement = "runInit's doc comment names its callers (endless tmux start, when it starts a server and when it reuses the tasks server, and a manual run), not a session-created hook in ~/.tmux.conf"
 verify = "read internal/tmuxcmd/init.go"
+
+[[item]]
+id = "P13"
+kind = "deliverable"
+statement = "go.mod requires go-dt v0.6.1, so the main checkout builds after go-dt's E-2431 raised dtx and appinfo to it"
