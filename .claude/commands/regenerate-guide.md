@@ -19,8 +19,8 @@ scaffold.
 
 ## How the map works
 
-- Map files live in `docs/guide/help/<command-path>.md`, where the command path is
-  hyphenated: `endless task spawn` → `docs/guide/help/task-spawn.md`.
+- Map files live in `docs/guide/_help/<command-path>.md`, where the command path is
+  hyphenated: `endless task spawn` → `docs/guide/_help/task-spawn.md`.
 - **Inheritance:** a command resolves to the nearest file walking up its path
   (`task clear risk` → `task-clear` → `task`). So one `task.md` covers every task
   subcommand. Add a leaf file (e.g. `task-spawn.md`) **only** when a subcommand
@@ -40,7 +40,7 @@ scaffold.
   gap: one sentence on why no current section fits (drives guide improvement).
   ```
 
-- Topics that aren't commands live in `docs/guide/help/_topics.md`, one record per
+- Topics that aren't commands live in `docs/guide/_help/_topics.md`, one record per
   blank-line-separated block:
 
   ```
@@ -48,6 +48,19 @@ scaffold.
   section: sessions
   covers: Discovering your session id and the task it's bound to.
   ```
+
+## Sections and subsections
+
+- A **section** is `docs/guide/<name>.md`; there are at most seven.
+- A **subsection** is `docs/guide/<name>/<sub>.md`, in a directory with the same
+  base name as its section's file, read with `endless guide <name>/<sub>`. One
+  level only, at most seven per section, and the parent section must name each
+  one as `endless guide <name>/<sub>` where it applies. The index does not list
+  subsections.
+- A `docs/guide/` entry whose name starts with `_` (such as `_help/`) is not guide
+  content: never a section or a subsection.
+- `section:` in a map file or a `_topics.md` record may name a subsection address
+  (`section: tasks/<sub>`). `just guide-check` fails on any layout rule broken.
 
 Principle: the map file **points**; the guide section **explains**. Never copy
 guide prose into a map file — keep `covers:` to a short phrase so nothing drifts.
@@ -60,7 +73,7 @@ guide prose into a map file — keep `covers:` to a short phrase so nothing drif
    know what it actually covers before mapping commands to it.
 3. **Map / fix.** For each `MISSING` command, and for any existing mapping that no
    longer fits (wrong section, stale `covers:`, a gap a new section now covers),
-   write or edit the appropriate `docs/guide/help/*.md` file. Prefer mapping at the
+   write or edit the appropriate `docs/guide/_help/*.md` file. Prefer mapping at the
    group level; add leaf overrides only for genuine exceptions. Use a `gap:` file
    when no section honestly fits — do not force a bad mapping.
 4. **Rebuild the table.** Run `just guide-index` (rewrites only the generated block

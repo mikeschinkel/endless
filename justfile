@@ -591,7 +591,7 @@ guide-scaffold:
     uv run python -m endless.guide_map scaffold
 
 # Rebuild the generated cross-reference block in docs/guide/index.md from the
-# docs/guide/help/*.md map files. Idempotent.
+# docs/guide/_help/*.md map files. Idempotent.
 guide-index:
     uv run python -m endless.guide_map index
 

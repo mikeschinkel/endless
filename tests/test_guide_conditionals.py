@@ -19,10 +19,16 @@ from pathlib import Path
 
 import pytest
 
-from endless import cli
+from endless import cli, guide_map
 
 GUIDE_DIR = Path(__file__).resolve().parent.parent / "docs" / "guide"
-GUIDE_FILES = sorted(GUIDE_DIR.glob("*.md"))
+# The index, every section and every subsection: each is rendered on its own,
+# so each must hold to the rules below on its own.
+GUIDE_FILES = sorted([GUIDE_DIR / "index.md"] + [
+    GUIDE_DIR / f"{address}.md"
+    for slug, subs in guide_map.guide_addresses().items()
+    for address in (slug, *subs)
+])
 
 # Every `{{...}}` action the guide is allowed to contain. Conditions are checked
 # against the live registry; this covers the non-condition halves of a branch.

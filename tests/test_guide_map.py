@@ -14,9 +14,9 @@ from endless import guide_map
 
 @pytest.fixture
 def guide_tree(tmp_path, monkeypatch):
-    """Redirect guide_map at a temp guide/ + help/ tree."""
+    """Redirect guide_map at a temp guide/ + _help/ tree."""
     gdir = tmp_path / "guide"
-    hdir = gdir / "help"
+    hdir = gdir / "_help"
     hdir.mkdir(parents=True)
     (gdir / "tasks.md").write_text("# Tasks\n\n## Adding tasks\n\n## Viewing tasks\n")
     (gdir / "orchestration.md").write_text("# Orchestration\n\n## Worktrees\n")
@@ -63,6 +63,107 @@ def test_guide_sections_headers(guide_tree):
     secs = guide_map.guide_sections()
     assert set(secs) == {"tasks", "orchestration"}  # index excluded
     assert secs["tasks"] == ["Adding tasks", "Viewing tasks"]
+
+
+# --------------------------------------------------------------------------- #
+# subsections
+# --------------------------------------------------------------------------- #
+
+def _sub(gdir, address, text="# Sub\n\n## Sub header\n"):
+    path = gdir / f"{address}.md"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+
+
+def test_guide_addresses_reads_one_level_and_skips_underscore(guide_tree):
+    gdir = guide_tree.parent
+    _sub(gdir, "tasks/post-land")
+    _sub(gdir, "tasks/_draft")              # '_' prefix: not content
+    _sub(gdir, "tasks/deep/nested")         # below one level: not read
+    _sub(gdir, "loose/orphan")              # no sibling loose.md: not a section
+    (gdir / "_notes.md").write_text("x\n")  # '_' prefix: not a section
+    assert guide_map.guide_addresses() == {
+        "orchestration": [],
+        "tasks": ["tasks/post-land"],
+    }
+
+
+def test_guide_sections_includes_subsection_headers(guide_tree):
+    _sub(guide_tree.parent, "tasks/post-land")
+    secs = guide_map.guide_sections()
+    assert secs["tasks/post-land"] == ["Sub header"]
+    assert "_help" not in secs
+
+
+def test_map_and_topic_may_name_a_subsection(guide_tree, monkeypatch):
+    gdir = guide_tree.parent
+    _sub(gdir, "tasks/post-land")
+    (gdir / "tasks.md").write_text("# Tasks\n\nSee `endless guide tasks/post-land`.\n")
+    monkeypatch.setattr(guide_map, "walk_commands", lambda: ["task"])
+    _write(guide_tree, "task", "section: tasks/post-land\ncovers: after landing\n")
+    guide_map.TOPICS_FILE.write_text(
+        "topic: after a land\nsection: tasks/post-land\ncovers: cleanup\n")
+    guide_map.update_index_block()
+    rep = guide_map.validate()
+    assert rep.ok(), rep.render()
+    block = guide_map.assemble_index_block()
+    assert "| `task` | tasks/post-land | after landing |" in block
+    assert "| after a land | tasks/post-land | cleanup |" in block
+
+
+def test_unknown_subsection_in_map_is_a_bad_section(guide_tree, monkeypatch):
+    monkeypatch.setattr(guide_map, "walk_commands", lambda: ["task"])
+    _write(guide_tree, "task", "section: tasks/nope\ncovers: x\n")
+    rep = guide_map.validate()
+    assert any("tasks/nope" in b for b in rep.bad_section)
+
+
+def test_structure_clean(guide_tree):
+    gdir = guide_tree.parent
+    _sub(gdir, "tasks/post-land")
+    (gdir / "tasks.md").write_text("# Tasks\n\nRun `endless guide tasks/post-land`.\n")
+    assert guide_map.structure_problems() == []
+
+
+def test_structure_more_than_seven_sections(guide_tree):
+    gdir = guide_tree.parent
+    for i in range(6):
+        (gdir / f"extra{i}.md").write_text("# X\n")
+    assert any("8 sections" in p for p in guide_map.structure_problems())
+
+
+def test_structure_more_than_seven_subsections(guide_tree):
+    gdir = guide_tree.parent
+    names = [f"s{i}" for i in range(8)]
+    for n in names:
+        _sub(gdir, f"tasks/{n}")
+    (gdir / "tasks.md").write_text(
+        "".join(f"`endless guide tasks/{n}`\n" for n in names))
+    assert any("8 subsections" in p for p in guide_map.structure_problems())
+
+
+def test_structure_directory_without_section(guide_tree):
+    _sub(guide_tree.parent, "loose/orphan")
+    assert any("'loose/'" in p for p in guide_map.structure_problems())
+
+
+def test_structure_nested_subsection_directory(guide_tree):
+    gdir = guide_tree.parent
+    _sub(gdir, "tasks/deep/nested")
+    assert any("tasks/deep/" in p for p in guide_map.structure_problems())
+
+
+def test_structure_subsection_not_named_by_parent(guide_tree):
+    _sub(guide_tree.parent, "tasks/post-land")
+    problems = guide_map.structure_problems()
+    assert any("endless guide tasks/post-land" in p for p in problems)
+    rep = guide_map.validate()
+    assert not rep.ok() and rep.structure
+
+
+def test_live_guide_structure():
+    """The real docs/guide/ holds to the section/subsection rules."""
+    assert guide_map.structure_problems() == []
 
 
 # --------------------------------------------------------------------------- #
@@ -172,7 +273,7 @@ def test_topics_feed_index(guide_tree, monkeypatch):
 def test_live_mapping_is_complete():
     """The committed map must cover every real command (the pre-land gate).
 
-    Fails when a command is added without a docs/guide/help/ file, or a map
+    Fails when a command is added without a docs/guide/_help/ file, or a map
     file points at a renamed/removed section. Acknowledged gaps are allowed.
     """
     rep = guide_map.validate()

@@ -29,7 +29,7 @@ from pathlib import Path
 # (src/endless/guide_map.py -> src/endless -> src -> repo root).
 _REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 GUIDE_DIR = _REPO_ROOT / "docs" / "guide"
-HELP_DIR = GUIDE_DIR / "help"
+HELP_DIR = GUIDE_DIR / "_help"
 INDEX_FILE = GUIDE_DIR / "index.md"
 TOPICS_FILE = HELP_DIR / "_topics.md"
 
@@ -78,26 +78,100 @@ def command_path_to_filename(command_path: str) -> str:
 
 _HEADER_RE = re.compile(r"^#{2,3}\s+(.*?)\s*$")
 
+# At most this many sections, and this many subsections per section, so an
+# agent reading the guide is never handed a menu too long to choose from.
+MAX_SECTIONS = 7
+MAX_SUBSECTIONS = 7
 
-def guide_sections() -> dict[str, list[str]]:
-    """Map each guide section slug to its list of `##`/`###` header titles.
 
-    Slugs are the section filenames (sans .md), excluding 'index'. The header
-    titles feed the scaffold so the LLM can see what each section covers.
+def _is_content(path: Path) -> bool:
+    """A leading '_' marks a `docs/guide/` entry as special, not guide content."""
+    return not path.name.startswith("_")
+
+
+def guide_addresses() -> dict[str, list[str]]:
+    """Map each section slug to its subsection addresses, both sorted.
+
+    The single source of what `endless guide <address>` accepts. A section is
+    `docs/guide/<name>.md` (index excluded); a subsection is
+    `docs/guide/<name>/<sub>.md`, addressed `<name>/<sub>`, and exists only when
+    its parent section file does — so a directory without a sibling section
+    file is never read as guide content. One level deep; entries starting with
+    '_' are never sections or subsections.
     """
     out: dict[str, list[str]] = {}
     if not GUIDE_DIR.is_dir():
         return out
     for path in sorted(GUIDE_DIR.glob("*.md")):
-        if path.stem == "index":
+        if path.stem == "index" or not _is_content(path):
             continue
-        headers: list[str] = []
-        for line in path.read_text().splitlines():
-            m = _HEADER_RE.match(line)
-            if m:
-                headers.append(m.group(1))
-        out[path.stem] = headers
+        sub_dir = GUIDE_DIR / path.stem
+        subs = sorted(sub_dir.glob("*.md")) if sub_dir.is_dir() else []
+        out[path.stem] = [f"{path.stem}/{p.stem}" for p in subs if _is_content(p)]
     return out
+
+
+def address_path(address: str) -> Path:
+    """The file an address names. Call only with an address `guide_addresses` yields."""
+    return GUIDE_DIR / f"{address}.md"
+
+
+def structure_problems() -> list[str]:
+    """Every way `docs/guide/` breaks the section/subsection rules.
+
+    The resolver ignores what it cannot read as guide content; this says so,
+    so a misplaced file is caught by `guide-check` rather than silently
+    never served.
+    """
+    problems: list[str] = []
+    if not GUIDE_DIR.is_dir():
+        return problems
+    addresses = guide_addresses()
+    if len(addresses) > MAX_SECTIONS:
+        problems.append(f"{len(addresses)} sections; at most {MAX_SECTIONS} are allowed")
+    for slug, subs in addresses.items():
+        if len(subs) > MAX_SUBSECTIONS:
+            problems.append(f"section '{slug}' has {len(subs)} subsections; "
+                            f"at most {MAX_SUBSECTIONS} are allowed")
+        body = address_path(slug).read_text()
+        for sub in subs:
+            if f"endless guide {sub}" not in body:
+                problems.append(f"section '{slug}' never names `endless guide {sub}`")
+    for entry in sorted(GUIDE_DIR.iterdir()):
+        if not entry.is_dir() or not _is_content(entry):
+            continue
+        if entry.name not in addresses:
+            problems.append(f"directory '{entry.name}/' has no sibling "
+                            f"'{entry.name}.md' section")
+            continue
+        for nested in sorted(entry.iterdir()):
+            if nested.is_dir():
+                problems.append(f"'{entry.name}/{nested.name}/' nests below one "
+                                "subsection level")
+    return problems
+
+
+def guide_sections() -> dict[str, list[str]]:
+    """Map each guide address to its list of `##`/`###` header titles.
+
+    Addresses are section slugs and `section/sub` subsection addresses, from
+    `guide_addresses`. The header titles feed the scaffold so the LLM can see
+    what each section covers.
+    """
+    out: dict[str, list[str]] = {}
+    for slug, subs in guide_addresses().items():
+        for address in (slug, *subs):
+            out[address] = _headers(address_path(address))
+    return out
+
+
+def _headers(path: Path) -> list[str]:
+    headers: list[str] = []
+    for line in path.read_text().splitlines():
+        m = _HEADER_RE.match(line)
+        if m:
+            headers.append(m.group(1))
+    return headers
 
 
 # ---------------------------------------------------------------------------
@@ -106,7 +180,7 @@ def guide_sections() -> dict[str, list[str]]:
 
 @dataclass
 class MapEntry:
-    """A parsed `docs/guide/help/<command>.md` file (or a _topics record)."""
+    """A parsed `docs/guide/_help/<command>.md` file (or a _topics record)."""
     key: str                       # command path ('task spawn') or topic name
     sections: list[str] = field(default_factory=list)
     covers: str = ""
@@ -208,6 +282,7 @@ class Report:
     orphan_files: list[str] = field(default_factory=list)    # map file with no matching command
     collisions: list[str] = field(default_factory=list)      # two paths -> same filename
     stale_topics: list[str] = field(default_factory=list)    # topic -> bad section slug
+    structure: list[str] = field(default_factory=list)       # docs/guide/ layout rule broken
     gaps: list[str] = field(default_factory=list)            # acknowledged gaps (informational)
     index_stale: bool = False                                # index block out of sync
 
@@ -216,7 +291,7 @@ class Report:
         # that drives guide improvement, not a blocker.
         return not (self.missing or self.missing_fields or self.bad_section
                     or self.orphan_files or self.collisions or self.stale_topics
-                    or self.index_stale)
+                    or self.structure or self.index_stale)
 
     def render(self) -> str:
         lines: list[str] = []
@@ -234,10 +309,13 @@ class Report:
             lines += [f"  - {c}" for c in self.bad_section]
         if self.orphan_files:
             lines.append("FAIL Map files with no matching command (renamed/removed command?):")
-            lines += [f"  - docs/guide/help/{c}.md" for c in self.orphan_files]
+            lines += [f"  - docs/guide/_help/{c}.md" for c in self.orphan_files]
         if self.stale_topics:
             lines.append("FAIL Topics pointing at a non-existent guide section:")
             lines += [f"  - {c}" for c in self.stale_topics]
+        if self.structure:
+            lines.append("FAIL docs/guide/ breaks the section/subsection layout:")
+            lines += [f"  - {c}" for c in self.structure]
         if self.index_stale:
             lines.append("FAIL index.md cross-reference block is stale (run 'just guide-index').")
         if self.gaps:
@@ -293,6 +371,7 @@ def validate() -> Report:
             if slug not in valid_slugs:
                 rep.stale_topics.append(f"{topic.key} -> '{slug}'")
 
+    rep.structure = structure_problems()
     rep.index_stale = not _index_in_sync()
     return rep
 

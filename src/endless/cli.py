@@ -12,6 +12,7 @@ import click
 
 from endless import __version__
 from endless import agent_help
+from endless import guide_map
 from endless import help_settings
 from endless import project_status_cmd
 from endless import ratings
@@ -1164,30 +1165,30 @@ def _refuse_unsupported_agent(ctx) -> None:
 @main.command("guide")
 @click.argument("section", required=False)
 @click.option("--list", "list_sections", is_flag=True,
-              help="List available section slugs and exit.")
+              help="List available section slugs and subsection addresses, "
+                   "and exit.")
 def guide(section, list_sections):
-    """Output the session guide (or a specific section).
+    """Output the session guide (or a specific section or subsection).
 
     With no argument, prints the top-level index. Pass a section slug
-    (e.g. 'spawn', 'worktree') to print just that section. Use --list
-    to enumerate available sections.
+    (e.g. 'tasks', 'orchestration') to print just that section, or a
+    subsection address (e.g. 'tasks/<sub>') to print one of its
+    subsections. Use --list to enumerate both.
     """
-    guide_dir = (
-        Path(__file__).resolve().parent.parent.parent / "docs" / "guide"
-    )
+    guide_dir = guide_map.GUIDE_DIR
     if not guide_dir.is_dir():
         raise agent_help.report(
             f"Guide directory not found at {guide_dir}. Nothing was printed.",
             "how to repair an Endless install whose bundled guide is missing",
             text=f"Guide directory not found at {guide_dir}")
 
-    available = sorted(
-        p.stem for p in guide_dir.glob("*.md") if p.stem != "index"
-    )
+    available = guide_map.guide_addresses()
 
     if list_sections:
-        for slug in available:
+        for slug, subs in available.items():
             click.echo(slug)
+            for address in subs:
+                click.echo(address)
         return
 
     if section is None:
@@ -1198,13 +1199,24 @@ def guide(section, list_sections):
                 "how to repair an Endless install whose bundled guide is missing",
                 text=f"Guide index not found at {target}")
     else:
-        if section == "index" or section not in available:
+        parent, _, _ = section.partition("/")
+        if parent in available and section != parent:
+            subs = available[parent]
+            if section not in subs:
+                named = (f"Subsections of '{parent}': " + ", ".join(subs)
+                         if subs else f"Section '{parent}' has no subsections")
+                raise agent_help.no_report(
+                    f"Unknown guide subsection '{section}'. {named}. "
+                    "Nothing was printed.",
+                    "Re-run with a listed address, or `endless guide --list`",
+                    text=f"Unknown subsection '{section}'. {named}.")
+        elif section not in available:
             raise agent_help.no_report(
                 f"Unknown guide section '{section}'. Nothing was printed.",
                 "Re-run with a listed slug, or `endless guide --list`",
                 text=(f"Unknown section '{section}'. Available: "
                       + ", ".join(available)))
-        target = guide_dir / f"{section}.md"
+        target = guide_map.address_path(section)
 
     click.echo(render_guide_file(target), nl=False)
 

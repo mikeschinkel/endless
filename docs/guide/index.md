@@ -260,7 +260,9 @@ For details, run `endless guide <section>`:
 - **reference** — projects, SQL, snapshots, tmux integration, file layout.
 - **appendix-a** — _(user-facing appendix, deprioritize)_ commands a human runs interactively; an agent reads it only to point a user at one.
 
-Run `endless guide --list` to print just the section slugs.
+A section may have **subsections**, read with `endless guide <section>/<sub>`. They go one level deep, a section has at most seven, and each is named in its parent section at the point where it applies — this index does not list them.
+
+Run `endless guide --list` to print the section slugs, each followed by its subsection addresses.
 
 <!-- BEGIN generated: command/topic cross-reference (regenerate via /regenerate-guide) -->
 ## Where to look (command / topic → section)
