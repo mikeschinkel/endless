@@ -7,7 +7,7 @@ require (
 	github.com/mattn/go-runewidth v0.0.16
 	github.com/mikeschinkel/go-cfgstore v0.3.0
 	github.com/mikeschinkel/go-doterr v0.2.0
-	github.com/mikeschinkel/go-dt v0.6.0
+	github.com/mikeschinkel/go-dt v0.6.1
 	github.com/rogpeppe/go-internal v1.14.1
 	github.com/yuin/goldmark v1.8.2
 	golang.org/x/sys v0.47.0
