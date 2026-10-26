@@ -1,0 +1,1 @@
+Choosing the tool needs hands-on comparison (install, start-up time, resource use while idle, Go toolchain and module cache handling) before the guide can recommend one; that is findings, not a code change.
