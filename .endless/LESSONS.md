@@ -7801,3 +7801,7 @@ Planning E-2419 (make verify.toml the suite form in all advice), I listed 'adds 
 ### [2026-10-26] A worktree build can pass while main's fails on go.mod drift
 Worktrees build through a generated go.work, which hides a go.mod that no longer matches the ../go-pkgs modules endless replaces locally. E-2428's land failed on 'updates to go.mod needed' after a go-pkgs change raised go-dt's dtx and appinfo to go-dt v0.6.1. Before handing off a land, check main's module graph from the main checkout without writing to it: GOWORK=off go build -modfile=<scratch copy of go.mod> ./cmd/... and go mod tidy -diff -modfile=<same>.
 - **Project**: endless
+
+### [2026-10-26] Land is not merge, and post-land is not post-deploy
+Brainstorming E-2439 (post-land plan items), I equated Endless's 'land' with git merge and generalized 'post-land' to 'post-deploy' on a remote server Endless never sees. Mike corrected both: land is Endless's own term, meaning bring a worktree's code into the root's primary branch AND run the project's migrations; merge is only git merge. Endless has no concept of deploy (push to a remote server) yet, and deploy is not land. Most projects have a local implementation the user tests or uses after landing, so post-land work usually happens on the user's own machine. Reason: framing PRODUCT behavior around deploy misdescribes what Endless does for other users.
+- **Project**: endless
