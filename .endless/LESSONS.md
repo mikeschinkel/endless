@@ -7813,3 +7813,7 @@ In E-2439 I proposed adding a short new section to the endless guide for post-la
 ### [2026-10-26] An existing term's meaning is not a reason to keep it
 Planning E-2444, I found the status group Shipped ('reached the verification gate or passed it') and listed as cons of redefining 'shipped' to mean landed that research/brainstorm outcomes could no longer be called shipped and some labels would need rewording. Mike said the original use looked like an earlier agent freelancing, that changing the existing meaning was the appropriate fix, and that I was being pedantic: a term can simply be widened (here to cover finalized research and brainstorm tasks). Reason: wording an earlier session coined is not authority, and a con that a definition could cover with one more clause is not a real cost.
 - **Project**: endless
+
+### [2026-10-26] Coined terms are filed as decisions until a glossary exists
+Planning E-2444 we coined 'shipped' (landed at least once, or for research/brainstorm, completed), and I said that since Endless has no glossary the definition would live in the task plan and a guide subsection. Mike said that until a glossary exists, coined terms are filed as decisions. Reason: a decision is durable, reviewable and citable, while a plan is one task's working text.
+- **Project**: endless
