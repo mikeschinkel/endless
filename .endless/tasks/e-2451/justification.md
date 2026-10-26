@@ -1,0 +1,1 @@
+Windows needs a full VM rather than a container, with choices across local hypervisors, remote servers and hosted CI, each with licensing, CPU-architecture and remote-control trade-offs to compare hands-on before the guide can recommend any; that is findings, not a code change.
