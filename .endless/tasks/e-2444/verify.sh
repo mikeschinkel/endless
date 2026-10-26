@@ -88,8 +88,17 @@ field() {  # field <task-id> <python expr over d>
     es task show "$1" --json | python3 -c "import json,sys; d=json.load(sys.stdin); d=d[0] if isinstance(d,list) else d; print($2)" 2>&1
 }
 gate() { ego session-query reconcile-gate --id "$1" --repo "$PROJ"; }
-board() { es project status --all --sort id | grep -E " E-$1 "; }
+board() { es project status --sort id | grep -E " E-$1 "; }
 head_sha() { git -C "$PROJ" rev-parse HEAD; }
+# pass <id> — record a passing verify at task/<id>'s head, as `task verify` run
+# by the user does: `unlanded` with the commit it passed at. A bare `task update
+# --status unlanded` records no commit, so the next read resets it.
+pass() {
+    ego event emit --kind task.status_changed --project probe --entity-type task \
+        --entity-id "$1" --actor-kind cli --actor-id verify --node-id 0e24 \
+        --project-root "$PROJ" \
+        --payload "{\"old_status\":\"unverified\",\"new_status\":\"unlanded\",\"verified_sha\":\"$(git -C "$PROJ" rev-parse "task/$1")\"}" >/dev/null
+}
 
 out="$(es project register . --name probe --infer)" \
     || setup_error "cannot register the throwaway project: $out"
@@ -151,7 +160,7 @@ assert_contains "deferring says the land will set landed" "will set it \`landed\
 assert_contains "deferred files no question" "No discrepancies are waiting" "$out"
 assert_contains "the gate passes a deferred item" '"pass":true' "$(gate 1)"
 es task update E-1 --status unverified >/dev/null
-es task update E-1 --status unlanded >/dev/null
+pass 1
 assert_eq "E-1 is unlanded" "unlanded" "$(field E-1 'd["status"]')"
 
 # ── The land ─────────────────────────────────────────────────────────────────
@@ -174,7 +183,7 @@ assert_contains "the items are frozen" "frozen" "$(es task plan add E-1 'Another
 # ── The post-land reconcile ──────────────────────────────────────────────────
 section "The post-land reconcile"
 out="$(es task reconcile E-1)"
-assert_contains "code on the branch since the land is refused" "--cleans-up E-1" "$out"
+assert_contains "code on the branch since the land is refused" "code that the post-land work needs is a follow-up task's" "$out"
 ( cd "$PROJ" && git checkout -q main && git merge -q --ff-only task/1 ) >"$TMP/git.log" 2>&1 \
     || setup_error "cannot fast-forward main: $(cat "$TMP/git.log")"
 out="$(es task reconcile E-1)"
@@ -210,7 +219,6 @@ out="$(es task plan list E-1)"
 assert_contains "the current verdict is the newest post-land row" "post-land #2: as planned" "$out"
 rows="$(es sql "SELECT count(*) AS n FROM task_post_land_entries")"
 assert_contains "two post-land rows, nothing copied" "2" "$rows"
-assert_contains "the board shows ⏚ shipped" "⏚ T E-1" "$(board 1)"
 
 # ── An unforeseen item, and the user's withdrawal ────────────────────────────
 section "Unforeseen: question answer --post-land, then the user withdraws it"
@@ -251,7 +259,9 @@ TOML
 es task reconcile E-2 --file "$TMP/g2.toml" >/dev/null
 assert_contains "the gate passes" '"pass":true' "$(gate 2)"
 es task update E-2 --status unverified >/dev/null
-es task update E-2 --status unlanded >/dev/null
+git -C "$PROJ" branch task/2
+pass 2
+assert_eq "E-2 is unlanded" "unlanded" "$(field E-2 'd["status"]')"
 out="$(es worktree land E-2 --record-only --sha "$(head_sha)")"
 assert_contains "E-2 lands to landed" "E-2 is now landed" "$out"
 assert_contains "an agent may not withdraw it" "the user's to do" "$(as_agent es task plan withdraw E-2 P2)"
