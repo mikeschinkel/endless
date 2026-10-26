@@ -7797,3 +7797,7 @@ Situation (E-1792): an endless-project task was spawned from go-cfgstore, so its
 ### [2026-10-24] A task's framing is not a cost of an option
 Planning E-2419 (make verify.toml the suite form in all advice), I listed 'adds a Go change to a task that was framed as advice' as a con of adding an exit-code check format. Mike called that process theatre: what a task was framed as says nothing about what the option costs. In the same answer I listed 'the check must be written as a native test even when a shell one-liner would prove it' as a con, which Mike questioned because putting the check in the durable test suite is the benefit, not a cost. Before listing a con, name the cost to the product or its users; drop it if it is only about the task's scope or about doing the work the option exists to do.
 - **Project**: endless
+
+### [2026-10-26] A worktree build can pass while main's fails on go.mod drift
+Worktrees build through a generated go.work, which hides a go.mod that no longer matches the ../go-pkgs modules endless replaces locally. E-2428's land failed on 'updates to go.mod needed' after a go-pkgs change raised go-dt's dtx and appinfo to go-dt v0.6.1. Before handing off a land, check main's module graph from the main checkout without writing to it: GOWORK=off go build -modfile=<scratch copy of go.mod> ./cmd/... and go mod tidy -diff -modfile=<same>.
+- **Project**: endless
