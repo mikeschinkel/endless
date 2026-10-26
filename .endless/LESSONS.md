@@ -7809,3 +7809,7 @@ Brainstorming E-2439 (post-land plan items), I equated Endless's 'land' with git
 ### [2026-10-26] Guide content goes in an existing section, not a new one
 In E-2439 I proposed adding a short new section to the endless guide for post-land items. Mike pointed out this breaks his wish to keep the guide to seven or fewer top-level sections, so the content has to go into an existing section. If sections get too long, he accepts subsections stored as files in a subdirectory named after the section's markdown file and addressed by relative path without .md, e.g. 'endless guide foo/bar'. Reason: a small, fixed set of top-level sections keeps the guide navigable.
 - **Project**: endless
+
+### [2026-10-26] An existing term's meaning is not a reason to keep it
+Planning E-2444, I found the status group Shipped ('reached the verification gate or passed it') and listed as cons of redefining 'shipped' to mean landed that research/brainstorm outcomes could no longer be called shipped and some labels would need rewording. Mike said the original use looked like an earlier agent freelancing, that changing the existing meaning was the appropriate fix, and that I was being pedantic: a term can simply be widened (here to cover finalized research and brainstorm tasks). Reason: wording an earlier session coined is not authority, and a con that a definition could cover with one more clause is not a real cost.
+- **Project**: endless
