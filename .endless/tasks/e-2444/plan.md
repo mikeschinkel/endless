@@ -3,7 +3,7 @@
 Terms:
 - **post-land item** (ED-1636): a plan item whose work needs the landed, migrated, locally installed result and produces no code.
 - **open post-land item**: an active post-land item with no post-land verdict yet, or whose latest post-land verdict is a discrepancy with an open question.
-- **shipped**: a task's work has landed at least once or, for a research or brainstorm task, its outcome has been accepted (`completed`).
+- **shipped** (ED-1638): a task's work has landed at least once or, for a research or brainstorm task, its outcome has been accepted (`completed`).
 
 ## Approach
 
@@ -31,6 +31,7 @@ Terms:
    - Relabel the ⏚ action from "landed" to "shipped", keeping the glyph. It applies to a task that has landed at least once, and to a `completed` research or brainstorm task.
    - Give the `landed` status its own action and glyph, ranked above ⏚ in `taskrow.Classify`.
    - Text that uses "shipped" for task state follows the definition above.
+   - Delegate the audit of the roughly 160 uses of "shipped" to a subagent. It classifies each as task state (rewrite to fit ED-1638) or ordinary English (leave it), and returns the list for the implementing session to apply.
 10. **Surfaces.**
     - Reconcile output when a `deferred` verdict is recorded: says the land will set `landed`, and names the post-land reconcile to run then.
     - A post-land discrepancy says the task stays `landed` until the item settles.
