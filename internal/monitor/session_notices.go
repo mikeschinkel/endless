@@ -4,6 +4,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/mikeschinkel/endless/internal/planitem"
 	"os"
 	"path/filepath"
 	"strings"
@@ -248,6 +249,9 @@ type TaskHeadline struct {
 	Title  string
 	Status string
 	Phase  string
+	// OpenPostLand labels a `landed` task's open post-land items (E-2444), so
+	// the line says what is still owed after the land.
+	OpenPostLand []string
 }
 
 // GetTaskHeadline loads the fields the per-prompt active-task line re-asserts.
@@ -280,6 +284,17 @@ func GetTaskHeadline(taskID int64) (TaskHeadline, error) {
 	h.Title = title.String
 	h.Status = status.String
 	h.Phase = phase.String
+	if h.Status == planitem.LandedStatus {
+		items, err := planItems(db, taskID, false)
+		if err != nil {
+			return h, err
+		}
+		for _, it := range items {
+			if IsOpenPostLand(it) {
+				h.OpenPostLand = append(h.OpenPostLand, it.Label)
+			}
+		}
+	}
 	return h, nil
 }
 
@@ -298,11 +313,16 @@ func (h TaskHeadline) Render(taskID int64) string {
 	if h.Phase != "" {
 		facts = append(facts, h.Phase)
 	}
-	if len(facts) == 0 {
-		return fmt.Sprintf("Active task: E-%d — %s.", taskID, h.Title)
+	tail := ""
+	if len(h.OpenPostLand) > 0 {
+		tail = fmt.Sprintf(" Open post-land items: %s — do them and record them with `endless task reconcile E-%d`.",
+			strings.Join(h.OpenPostLand, ", "), taskID)
 	}
-	return fmt.Sprintf("Active task: E-%d (%s) — %s.",
-		taskID, strings.Join(facts, " · "), h.Title)
+	if len(facts) == 0 {
+		return fmt.Sprintf("Active task: E-%d — %s.%s", taskID, h.Title, tail)
+	}
+	return fmt.Sprintf("Active task: E-%d (%s) — %s.%s",
+		taskID, strings.Join(facts, " · "), h.Title, tail)
 }
 
 // noticeLogRelPath is where delivery is recorded, relative to the project root.

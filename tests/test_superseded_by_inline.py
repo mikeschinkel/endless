@@ -8,7 +8,7 @@ as "never happened", and nothing on a status display said otherwise:
    `session status` side is covered by the Go tests). E-2064 later pulled it
    back out of the human TABLES — see tests/test_status_column_width.py — so
    `task list`'s human assertion here is now the negative one.
-2. `obsolete` is refused on work that already shipped, pointing at
+2. `obsolete` is refused on work already reported, pointing at
    `task supersede`, which records the relation and keeps the earned status.
 3. The task-status vocabulary lives in ONE list (`endless.statuses`), which is
    what stopped `task update --help` from advertising 11 of 13 statuses while
@@ -198,19 +198,19 @@ def test_task_list_json_emits_the_relation_ungated(seeded_project_at_cwd, capsys
 #
 # `obsolete` means "no longer needed, and nothing replaced it" — the same line
 # Endless already draws for decisions. It is keyed on whether anything took the
-# work over, NEVER on whether the work shipped. The gate that refused it on
-# shipped work is gone: code being DELETED rather than superseded has no
+# work over, NEVER on whether the work was reported. The gate that refused it on
+# reported work is gone: code being DELETED rather than superseded has no
 # successor for `task supersede` to name, and `declined` (an active decision not
 # to DO the work) is false of work that was built and landed.
 
 
 @pytest.mark.parametrize(
-    "shipped", ["unverified", "confirmed", "assumed", "completed"]
+    "reported", ["unverified", "confirmed", "assumed", "completed"]
 )
-def test_update_to_obsolete_is_allowed_on_shipped_work(
-    seeded_project_at_cwd, shipped
+def test_update_to_obsolete_is_allowed_on_reported_work(
+    seeded_project_at_cwd, reported
 ):
-    tid = _add_task("Add a shipped thing", status=shipped)
+    tid = _add_task("Add a reported thing", status=reported)
     task_cmd.update_plan(tid, status="obsolete",
                          outcome="deleted, not replaced")  # must not raise
     assert _status(tid) == "obsolete"
@@ -220,44 +220,44 @@ def test_update_to_obsolete_is_allowed_on_shipped_work(
     "open_status",
     ["unplanned", "submitted", "ready", "underway", "revisit"],
 )
-def test_update_to_obsolete_is_allowed_on_unshipped_work(
+def test_update_to_obsolete_is_allowed_on_unreported_work(
     seeded_project_at_cwd, open_status
 ):
-    # `revisit` is in this list deliberately: work that shipped and was then
+    # `revisit` is in this list deliberately: work that was reported and then
     # reopened is genuinely back in play, and re-closing it is a real call.
-    tid = _add_task("Add an unshipped thing", status=open_status)
+    tid = _add_task("Add an unreported thing", status=open_status)
     task_cmd.update_plan(tid, status="obsolete",
                          outcome="dropped from the roadmap")  # must not raise
 
 
-def test_other_transitions_on_shipped_work_are_untouched(seeded_project_at_cwd):
-    tid = _add_task("Add a shipped thing", status="assumed")
+def test_other_transitions_on_reported_work_are_untouched(seeded_project_at_cwd):
+    tid = _add_task("Add a reported thing", status="assumed")
     task_cmd.update_plan(tid, status="declined", outcome="not worth keeping")
     assert _status(tid) == "declined"
 
 
-def test_supersede_allows_an_explicit_obsolete_on_shipped_work(
+def test_supersede_allows_an_explicit_obsolete_on_reported_work(
     seeded_project_at_cwd
 ):
-    # The DEFAULT still holds a shipped status (next test) — that is about not
+    # The DEFAULT still holds a reported status (next test) — that is about not
     # overwriting which terminal the work reached. An explicit --status is the
     # caller overriding that, and it is no longer refused.
-    old = _add_task("Add a shipped thing", status="assumed")
+    old = _add_task("Add a reported thing", status="assumed")
     new = _add_task("Add the replacement", status="underway")
     task_cmd.supersede_task(old, new, status="obsolete", outcome="deleted outright")
     assert _status(old) == "obsolete"
     assert task_cmd.superseded_by_map([old]) == {old: [new]}
 
 
-def test_supersede_holds_a_shipped_status_by_default(seeded_project_at_cwd):
-    old = _add_task("Add a shipped thing", status="assumed")
+def test_supersede_holds_a_reported_status_by_default(seeded_project_at_cwd):
+    old = _add_task("Add a reported thing", status="assumed")
     new = _add_task("Add the replacement", status="underway")
     task_cmd.supersede_task(old, new)
     assert _status(old) == "assumed"
     assert task_cmd.superseded_by_map([old]) == {old: [new]}
 
 
-def test_supersede_defaults_to_superseded_on_unshipped_work(
+def test_supersede_defaults_to_superseded_on_unreported_work(
     seeded_project_at_cwd
 ):
     old = _add_task("Add a stale idea", status="unplanned")
@@ -297,12 +297,12 @@ def test_supersede_persists_an_outcome_when_the_status_is_held(
 ):
     # The held path skips task.status_changed (it would record a no-op
     # transition), so the outcome has to reach the row some other way.
-    old = _add_task("Add a shipped thing", status="confirmed")
+    old = _add_task("Add a reported thing", status="confirmed")
     new = _add_task("Add the replacement", status="underway")
     task_cmd.supersede_task(old, new, outcome="superseded by the rebuild")
     row = db.query("SELECT status, (SELECT content FROM task_content WHERE task_id = tasks.id AND name = 'outcome') AS outcome FROM tasks WHERE id = ?", (old,))[0]
     assert row["status"] == "confirmed"
-    # Shipped work keeping the status it earned was not abandoned, so its
+    # Reported work keeping the status it earned was not abandoned, so its
     # --outcome stays an outcome rather than becoming a reason (E-1531).
     assert row["outcome"] == "superseded by the rebuild"
 
@@ -323,7 +323,7 @@ def test_supersede_emits_no_status_event_when_the_status_is_held(
     seeded_project_at_cwd, monkeypatch
 ):
     kinds = _recorded_event_kinds(monkeypatch)
-    old = _add_task("Add a shipped thing", status="assumed")
+    old = _add_task("Add a reported thing", status="assumed")
     new = _add_task("Add the replacement", status="underway")
     task_cmd.supersede_task(old, new)
     # A status_changed whose old and new are the same value would write a no-op
@@ -335,7 +335,7 @@ def test_supersede_routes_a_held_outcome_through_fields_updated(
     seeded_project_at_cwd, monkeypatch
 ):
     kinds = _recorded_event_kinds(monkeypatch)
-    old = _add_task("Add a shipped thing", status="assumed")
+    old = _add_task("Add a reported thing", status="assumed")
     new = _add_task("Add the replacement", status="underway")
     task_cmd.supersede_task(old, new, outcome="superseded by the rebuild")
     assert "task.status_changed" not in kinds

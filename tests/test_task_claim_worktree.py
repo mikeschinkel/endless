@@ -50,8 +50,8 @@ def test_claim_refuses_settled_status_and_names_the_reopen_route(project_with_ta
 
     No flag clears this gate any more. The refusal has to name a command that
     works FROM THE STATUS THAT PRODUCED IT, and that is two different commands:
-    shipped work reopens to `revisit`, while `declined`/`obsolete` never
-    shipped and the lifecycle reverses those to `unplanned` instead — it has no
+    reported work reopens to `revisit`, while `declined`/`obsolete` were never
+    reported and the lifecycle reverses those to `unplanned` instead — it has no
     edge from either to `revisit` at all.
     """
     from endless.task_cmd import claim_item

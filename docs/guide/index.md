@@ -97,6 +97,10 @@ stateDiagram-v2
     unlanded --> assumed: user lands the work (todo/bugfix)
     unlanded --> unverified: system resets when the branch moves past the passed commit (todo/bugfix)
 
+    %% Post-land — a land with post-land items open holds the task until they settle
+    unlanded --> landed: user lands the work with post-land items open (todo/bugfix)
+    landed --> assumed: system settles when no post-land item is open (todo/bugfix)
+
     %% Findings lane — work whose deliverable IS the outcome text
     underway --> unreviewed: agent delivers the findings as an outcome (research/brainstorm)
     ready --> unreviewed: agent delivers the findings as an outcome (research/brainstorm)
@@ -111,10 +115,11 @@ stateDiagram-v2
     underway --> revisit: session hands the task back
     unverified --> revisit: user reopens — verification failed
     unlanded --> revisit: user reopens — the verified work is wrong after all
+    landed --> revisit: user reopens — landed work found wrong
     unreviewed --> revisit: user reopens — the outcome needs more work
-    confirmed --> revisit: user reopens — shipped work found wrong
-    assumed --> revisit: user reopens — shipped work found wrong
-    completed --> revisit: user reopens — shipped work found wrong
+    confirmed --> revisit: user reopens — finished work found wrong
+    assumed --> revisit: user reopens — finished work found wrong
+    completed --> revisit: user reopens — finished work found wrong
 
     %% Declining — an active decision not to do (or not to keep) the work
     unplanned --> declined: user declines
@@ -122,12 +127,13 @@ stateDiagram-v2
     ready --> declined: user declines
     underway --> declined: user declines
     revisit --> declined: user declines
-    unverified --> declined: user declines — the shipped work is not being kept
-    unlanded --> declined: user declines — the shipped work is not being kept
-    unreviewed --> declined: user declines — the shipped work is not being kept
-    confirmed --> declined: user declines — the shipped work is not being kept
-    assumed --> declined: user declines — the shipped work is not being kept
-    completed --> declined: user declines — the shipped work is not being kept
+    unverified --> declined: user declines — the reported work is not being kept
+    unlanded --> declined: user declines — the reported work is not being kept
+    landed --> declined: user declines — the reported work is not being kept
+    unreviewed --> declined: user declines — the reported work is not being kept
+    confirmed --> declined: user declines — the reported work is not being kept
+    assumed --> declined: user declines — the reported work is not being kept
+    completed --> declined: user declines — the reported work is not being kept
 
     %% Obsoleting — no longer needed, and nothing replaced it
     unplanned --> obsolete: user retires — it no longer needs doing
@@ -135,12 +141,13 @@ stateDiagram-v2
     ready --> obsolete: user retires — it no longer needs doing
     underway --> obsolete: user retires — it no longer needs doing
     revisit --> obsolete: user retires — it no longer needs doing
-    unverified --> obsolete: user retires — the shipped work is no longer in use
-    unlanded --> obsolete: user retires — the shipped work is no longer in use
-    unreviewed --> obsolete: user retires — the shipped work is no longer in use
-    confirmed --> obsolete: user retires — the shipped work is no longer in use
-    assumed --> obsolete: user retires — the shipped work is no longer in use
-    completed --> obsolete: user retires — the shipped work is no longer in use
+    unverified --> obsolete: user retires — the reported work is no longer in use
+    unlanded --> obsolete: user retires — the reported work is no longer in use
+    landed --> obsolete: user retires — the reported work is no longer in use
+    unreviewed --> obsolete: user retires — the reported work is no longer in use
+    confirmed --> obsolete: user retires — the reported work is no longer in use
+    assumed --> obsolete: user retires — the reported work is no longer in use
+    completed --> obsolete: user retires — the reported work is no longer in use
 
     %% Superseding — something else took the work over
     unplanned --> superseded: user supersedes — another task took it over
@@ -148,6 +155,7 @@ stateDiagram-v2
     ready --> superseded: user supersedes — another task took it over
     underway --> superseded: user supersedes — another task took it over
     revisit --> superseded: user supersedes — another task took it over
+    landed --> superseded: user supersedes — another task took it over
 
     %% Reversal — reconsidering an abandonment decision
     declined --> unplanned: user reconsiders
@@ -176,13 +184,14 @@ stateDiagram-v2
 | `underway` | A session has claimed the task and is working on it. Set automatically by `task claim`.                        |
 | `unverified`      | Implementation done, awaiting verification. **Still blocks dependents.**                                       |
 | `unlanded`    | The user's own `endless task verify` passed at a recorded commit; only the land is left. Set only by that command, run by the user — never by an agent, and never by an agent's own verify run. `worktree land` lands a `todo`/`bugfix` task only from here, and settles it as `assumed`. Any commit to the branch after the pass (other than Endless's own ledger files) returns it to `unverified`. **Still blocks dependents** — the work is not merged yet. |
+| `landed`      | The work landed with **post-land** plan items still open — work that needs the landed, installed result and produces no code. Set only by `worktree land`, in place of `assumed`. Frozen apart from those items: a post-land reconcile (`endless task reconcile <id>` on the landed task) records their verdicts, and the one that leaves none open moves it to `assumed` by itself — never by hand, and never to `confirmed`. **Still blocks dependents** — the work is not finished. See `endless guide tasks/post-land`. |
 | `unreviewed`  | Research/brainstorm outcome written, awaiting the user's read — the review lane's counterpart to `unverified`. Those two types reach `completed` only through it, so a session cannot declare its own findings finished. **Still blocks dependents**, and more sharply than `unverified`: the deliverable is information other tasks consume. Refused on `todo`/`bugfix`, which are gated by `unverified` instead. |
 | `confirmed`   | Verified and done. **Unblocks dependents.** Only the user confirms.                                            |
 | `assumed`     | Believed complete, will verify when used naturally. **Unblocks dependents.**                                   |
 | `completed`   | Findings work is done and accepted — the terminal of the review lane, as `confirmed`/`assumed` are of the verification lane. **Unblocks dependents.** Research and brainstorm reach it only through `unreviewed`, and only with an outcome. Epics reach it directly, self-completing from their children. `todo`/`bugfix` never reach it at all: completed-eligibility is a rule about task TYPE, not about the title's verb, and implementation work terminates via `confirmed`/`assumed`. |
 | `revisit`     | Needs re-evaluation before it can proceed — either a partial plan that no longer holds, or work that shipped and turned out wrong. Reopening your own landed work lands here. |
 | `declined`    | Active decision not to do this. Requires `--reason`.                                                           |
-| `superseded`  | Another task took the work over. Set by `task supersede <old> --by <new>`, which records the `superseded_by` relation and this status in one step — and refused without that relation, because `superseded` names a successor and needs one to name. Also requires a reason (`--outcome` on `task supersede`, stored as the reason): the relation says WHAT took the work over, not WHY it was handed on, and a later reader needs both. An unshipped task only: work that already shipped keeps the terminal it earned, and the relation rides alongside it (`assumed (superseded by E-101)`). |
+| `superseded`  | Another task took the work over. Set by `task supersede <old> --by <new>`, which records the `superseded_by` relation and this status in one step — and refused without that relation, because `superseded` names a successor and needs one to name. Also requires a reason (`--outcome` on `task supersede`, stored as the reason): the relation says WHAT took the work over, not WHY it was handed on, and a later reader needs both. An unreported task only: work already reported keeps the status it earned, and the relation rides alongside it (`assumed (superseded by E-101)`). |
 | `obsolete`    | No longer needs doing — out of date, or superseded by something newer. Requires a reason (`--reason`), as every abandonment does. It covers work that was worth doing when it was filed and has since been overtaken, not only work that was never worth doing; the active decision *not* to do work that would still be worth doing is `declined`, a different fact. The axis is **whether anything replaced it**, not whether it shipped — shipped code being *deleted* is obsolete in the plainest sense, and the landing record keeps the fact that it shipped. When something DID take over, record that instead: `task supersede <old> --by <new>`, which holds the status and adds a `superseded_by` relation. |
 
 The agent sets `submitted` (via `task submit`, or by attaching a plan); a human sets `ready` (via `task approve`) to record that they reviewed the plan. **Approval is optional and gates nothing:** spawn and claim check only the plan and open questions (below), so a `submitted` task can be spawned without approving it first. What approving changes is the board — `session status` shows `submitted` as ⚑ approve and `ready` as ▶ do, or, while a question is still waiting on the user, as ⚐ act and ¿ answer. Submitting also proposes the task's two ratings — **complexity** and **risk**, each `low`/`medium`/`high` — and approving ratifies them: `task submit` and `task approve` are both refused while either is unrated, and take `--complexity`/`--risk` to set them. An agent attaching a plan must rate in the same call, or the promotion to `submitted` is refused; a task a person files with a plan is rated by the `rater` background job. Ratings never move status. See **Ratings** in `endless guide tasks`.
@@ -191,11 +200,11 @@ The agent sets `submitted` (via `task submit`, or by attaching a plan); a human 
 
 **A description edit never changes status.** The description says what the task is; the plan is the spec. **A material plan edit on a `ready` task returns it to `submitted`**, because what was approved changed. An identical or whitespace-only rewrite is a no-op, and `--keep-status` suppresses the reset for a typo- or formatting-only edit. From `underway` on, a plan edit records what the work became and infers nothing.
 
-**`--keep-status` holds the status across every auto-transition.** `task update` infers a status change from what you edited in two places — attaching a plan promotes an `unplanned` task to `submitted`, and a material plan edit returns a `ready` task to `submitted`. A complexity/risk rating edit infers nothing. `--keep-status` suppresses both: the status you see is the status you keep. Use it when the edit is not a re-spec — a typo fix, or appending to a plan on a task deliberately parked at an unapproved status. It cannot be combined with `--status` (the call is refused): naming a status is already the explicit way to say what it should be, and it beats every inference on its own. Editing the plan text of a task that already shipped infers nothing at all: recording what shipped is not reopening it, and reopening stays the explicit `--status revisit`. See `endless guide tasks`.
+**`--keep-status` holds the status across every auto-transition.** `task update` infers a status change from what you edited in two places — attaching a plan promotes an `unplanned` task to `submitted`, and a material plan edit returns a `ready` task to `submitted`. A complexity/risk rating edit infers nothing. `--keep-status` suppresses both: the status you see is the status you keep. Use it when the edit is not a re-spec — a typo fix, or appending to a plan on a task deliberately parked at an unapproved status. It cannot be combined with `--status` (the call is refused): naming a status is already the explicit way to say what it should be, and it beats every inference on its own. Editing the plan text of a task that is already finished infers nothing at all: recording what shipped is not reopening it, and reopening stays the explicit `--status revisit`. See `endless guide tasks`.
 
 Use `assumed` (not `unverified`) when the only way to test the work is by using it in a downstream task — set `--outcome` explaining what was done and how confidence was established.
 
-**`task update --status` enforces the lifecycle above.** A status change that is not an edge of the diagram is refused, and the refusal lists the statuses that ARE reachable from the current one — so the next move is in the message. Three further rules apply to an agent (a person at a terminal is exempt from all three): a session may not set `underway` or `unverified` on a task it does not hold; `unverified` requires that some session claimed the task, because "implementation done" about work nobody picked up is not a status, it is a mistake; and no agent may set `unlanded`, which records the user's own passing verify. There is no `--force`: the fix is to correct the call.
+**`task update --status` enforces the lifecycle above.** A status change that is not an edge of the diagram is refused, and the refusal lists the statuses that ARE reachable from the current one — so the next move is in the message. Three further rules apply to an agent (a person at a terminal is exempt from all three): a session may not set `underway` or `unverified` on a task it does not hold; `unverified` requires that some session claimed the task, because "implementation done" about work nobody picked up is not a status, it is a mistake; no agent may set `unlanded`, which records the user's own passing verify; and no agent may set `landed`, which only the land sets. There is no `--force`: the fix is to correct the call.
 
 ## Task phases
 
@@ -215,6 +224,7 @@ When task A is blocked by task B (`endless task block A --by B`):
 
 - B in `unverified` → A is **still blocked**. Unverified means "not yet trusted."
 - B in `unlanded` → A is **still blocked**. Verified, but not merged yet.
+- B in `landed` → A is **still blocked**. Merged, but its post-land items are still open.
 - B in `unreviewed` → A is **still blocked**, and this is the sharper case: B's deliverable is information A would consume, and nobody has read it yet.
 - B in `confirmed`, `assumed` or `completed` → A is **unblocked**.
 - B in `declined` or `obsolete` → A is **unblocked**.
@@ -226,7 +236,7 @@ In `task show`, blocking relations appear in the **This task:** section, where e
 ```bash
 # Find work
 endless task next                                # actionable tasks, ranked
-endless task active                              # underway + unverified + unlanded + unreviewed
+endless task active                              # underway + unverified + unlanded + landed + unreviewed
 endless task recent                              # recently updated
 
 # Record a new task discovered during work — use the literal ID printed

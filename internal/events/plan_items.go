@@ -89,6 +89,12 @@ type PlanItemOp struct {
 	Detail    *string `json:"detail,omitempty"`
 	Origin    string  `json:"origin,omitempty"`
 	SortOrder int64   `json:"sort_order,omitempty"`
+
+	// PostLand sets or clears the post-land mark (E-2444) on an add or edit.
+	// ApprovePostLand, on an edit, also records the mark as the user approved
+	// it — `question answer --post-land`, the user's answer to a blocked item.
+	PostLand        *bool `json:"post_land,omitempty"`
+	ApprovePostLand bool  `json:"approve_post_land,omitempty"`
 }
 
 // TaskPlanBaselinedPayload copies every active item's statement and kind into
@@ -167,11 +173,12 @@ type itemRow struct {
 	Origin     string
 	State      string
 	ApprovedAt sql.NullString
+	PostLand   bool
 }
 
 func readItems(db dbQuerier, taskID int64) (map[int64]*itemRow, []int64, error) {
 	rows, err := db.Query(
-		`SELECT seq, kind, statement, origin, state, approved_at
+		`SELECT seq, kind, statement, origin, state, approved_at, post_land
 		   FROM task_plan_items WHERE task_id = ? ORDER BY sort_order, seq`, taskID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("read plan items of E-%d: %w", taskID, err)
@@ -181,7 +188,7 @@ func readItems(db dbQuerier, taskID int64) (map[int64]*itemRow, []int64, error) 
 	var order []int64
 	for rows.Next() {
 		r := &itemRow{}
-		if err := rows.Scan(&r.Seq, &r.Kind, &r.Statement, &r.Origin, &r.State, &r.ApprovedAt); err != nil {
+		if err := rows.Scan(&r.Seq, &r.Kind, &r.Statement, &r.Origin, &r.State, &r.ApprovedAt, &r.PostLand); err != nil {
 			return nil, nil, err
 		}
 		m[r.Seq] = r
@@ -229,7 +236,16 @@ func oneLine(field, s string) error {
 // Editing or withdrawing an approved item while the task is underway is NOT
 // refused (Mike's choice on E-2280, item 7): the change leaves the item set
 // differing from the baseline, and the gate holds until the user re-approves.
+//
+// A `landed` task's items are frozen apart from one thing (E-2444): the user,
+// and no agent, may withdraw a post-land item. byAgent says whether an agent
+// harness is emitting the batch.
 func PreparePlanItemsChanged(db dbQuerier, taskID int64, p *TaskPlanItemsChangedPayload) error {
+	return PreparePlanItemsChangedBy(db, taskID, p, false)
+}
+
+// PreparePlanItemsChangedBy is PreparePlanItemsChanged with the emitter named.
+func PreparePlanItemsChangedBy(db dbQuerier, taskID int64, p *TaskPlanItemsChangedPayload, byAgent bool) error {
 	if len(p.Ops) == 0 {
 		return errors.New("no plan item operations")
 	}
@@ -237,12 +253,15 @@ func PreparePlanItemsChanged(db dbQuerier, taskID int64, p *TaskPlanItemsChanged
 	if err != nil {
 		return err
 	}
-	if planitem.IsFrozen(facts.Status) {
-		return fmt.Errorf("E-%d is %s, so its plan items are frozen; reopen it with --status revisit to change them", taskID, facts.Status)
-	}
 	items, _, err := readItems(db, taskID)
 	if err != nil {
 		return err
+	}
+	if facts.Status == planitem.LandedStatus {
+		return prepareLandedWithdrawal(taskID, p, items, byAgent)
+	}
+	if planitem.IsFrozen(facts.Status) {
+		return fmt.Errorf("E-%d is %s, so its plan items are frozen; reopen it with --status revisit to change them", taskID, facts.Status)
 	}
 	var nextSeq, nextSort int64
 	if err := db.QueryRow(
@@ -268,6 +287,12 @@ func PreparePlanItemsChanged(db dbQuerier, taskID int64, p *TaskPlanItemsChanged
 			if err := oneLine("statement", *op.Statement); err != nil {
 				return err
 			}
+			if err := postLandFits(*op.Kind, op.PostLand); err != nil {
+				return err
+			}
+			if op.ApprovePostLand {
+				return errors.New("an added item's post-land mark is approved with the item, not on its own")
+			}
 			op.Seq = nextSeq
 			nextSeq++
 			if op.SortOrder == 0 {
@@ -278,7 +303,8 @@ func PreparePlanItemsChanged(db dbQuerier, taskID int64, p *TaskPlanItemsChanged
 			if hadItems && planitem.GrowsItems(facts.Status) {
 				op.Origin = planitem.OriginGrown
 			}
-			items[op.Seq] = &itemRow{Seq: op.Seq, Kind: *op.Kind, State: planitem.StateActive}
+			items[op.Seq] = &itemRow{Seq: op.Seq, Kind: *op.Kind, State: planitem.StateActive,
+				PostLand: op.PostLand != nil && *op.PostLand}
 		case PlanOpEdit, PlanOpWithdraw, PlanOpMove:
 			it, ok := items[op.Seq]
 			if !ok {
@@ -292,13 +318,23 @@ func PreparePlanItemsChanged(db dbQuerier, taskID int64, p *TaskPlanItemsChanged
 			}
 			switch op.Op {
 			case PlanOpEdit:
-				if op.Kind == nil && op.Statement == nil && op.Verify == nil && op.Detail == nil {
+				if op.Kind == nil && op.Statement == nil && op.Verify == nil && op.Detail == nil && op.PostLand == nil {
 					return fmt.Errorf("edit of %s changes nothing", planitem.Label(op.Seq))
 				}
 				if op.Kind != nil {
 					if err := planitem.ValidateKind(*op.Kind); err != nil {
 						return err
 					}
+					it.Kind = *op.Kind
+				}
+				if op.PostLand != nil {
+					it.PostLand = *op.PostLand
+				}
+				if err := postLandFits(it.Kind, &it.PostLand); err != nil {
+					return fmt.Errorf("%s: %w", planitem.Label(op.Seq), err)
+				}
+				if op.ApprovePostLand && op.PostLand == nil {
+					return fmt.Errorf("approving %s's post-land mark needs the mark in the same edit", planitem.Label(op.Seq))
 				}
 				if op.Statement != nil {
 					if err := oneLine("statement", *op.Statement); err != nil {
@@ -307,13 +343,50 @@ func PreparePlanItemsChanged(db dbQuerier, taskID int64, p *TaskPlanItemsChanged
 				}
 			case PlanOpWithdraw:
 				it.State = planitem.StateWithdrawn
-			case PlanOpMove:
-				if op.SortOrder <= 0 {
-					return fmt.Errorf("move of %s needs a positive sort order", planitem.Label(op.Seq))
-				}
+			}
+			if op.Op != PlanOpEdit && (op.PostLand != nil || op.ApprovePostLand) {
+				return fmt.Errorf("%s of %s cannot change the post-land mark; edit the item", op.Op, planitem.Label(op.Seq))
+			}
+			if op.Op == PlanOpMove && op.SortOrder <= 0 {
+				return fmt.Errorf("move of %s needs a positive sort order", planitem.Label(op.Seq))
 			}
 		default:
 			return fmt.Errorf("unknown plan item operation %q", op.Op)
+		}
+	}
+	return nil
+}
+
+// postLandFits refuses the post-land mark on anything but a deliverable: an
+// exclusion is kept or not, never done after the land (E-2444).
+func postLandFits(kind string, postLand *bool) error {
+	if postLand != nil && *postLand && kind != planitem.KindDeliverable {
+		return errors.New("only a deliverable item can be post-land")
+	}
+	return nil
+}
+
+// prepareLandedWithdrawal is the one change a `landed` task's items accept: the
+// user withdrawing post-land items (E-2444). An agent may not — the item was
+// part of what the user approved and landed, and dropping it is their call.
+func prepareLandedWithdrawal(taskID int64, p *TaskPlanItemsChangedPayload, items map[int64]*itemRow, byAgent bool) error {
+	for _, op := range p.Ops {
+		if op.Op != PlanOpWithdraw {
+			return fmt.Errorf("E-%d is landed, so its plan items are frozen apart from withdrawing a post-land item; "+
+				"work that changes the plan needs a follow-up task (`endless task add ... --cleans-up E-%d`)", taskID, taskID)
+		}
+		it, ok := items[op.Seq]
+		if !ok {
+			return fmt.Errorf("E-%d has no plan item %s", taskID, planitem.Label(op.Seq))
+		}
+		if it.State != planitem.StateActive {
+			return fmt.Errorf("%s is withdrawn", planitem.Label(op.Seq))
+		}
+		if !it.PostLand {
+			return fmt.Errorf("E-%d is landed, and %s is not a post-land item; only post-land items can be withdrawn now", taskID, planitem.Label(op.Seq))
+		}
+		if byAgent {
+			return fmt.Errorf("withdrawing post-land item %s of landed E-%d is the user's to do, not an agent's", planitem.Label(op.Seq), taskID)
 		}
 	}
 	return nil
@@ -354,11 +427,11 @@ func applyTaskPlanItemsChanged(db dbQuerier, evt *Event) error {
 			res, err = db.Exec(
 				`INSERT INTO task_plan_items
 				     (task_id, seq, sort_order, kind, statement, verify, detail, origin,
-				      state, created_by_session, created_at, updated_at)
-				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+				      state, created_by_session, created_at, updated_at, post_land)
+				 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
 				taskID, op.Seq, op.SortOrder, *op.Kind, *op.Statement,
 				ptrNullIfEmpty(op.Verify), ptrNullIfEmpty(op.Detail), op.Origin,
-				planitem.StateActive, actorSession(evt), ts, ts)
+				planitem.StateActive, actorSession(evt), ts, ts, boolPtrInt(op.PostLand))
 		case PlanOpEdit:
 			sets, args := []string{}, []any{}
 			if op.Kind != nil {
@@ -372,6 +445,12 @@ func applyTaskPlanItemsChanged(db dbQuerier, evt *Event) error {
 			}
 			if op.Detail != nil {
 				sets, args = append(sets, "detail = ?"), append(args, ptrNullIfEmpty(op.Detail))
+			}
+			if op.PostLand != nil {
+				sets, args = append(sets, "post_land = ?"), append(args, boolPtrInt(op.PostLand))
+				if op.ApprovePostLand {
+					sets, args = append(sets, "approved_post_land = ?"), append(args, boolPtrInt(op.PostLand))
+				}
 			}
 			if len(sets) == 0 {
 				return fmt.Errorf("events: %s: edit of %s changes nothing", evt.Kind, label)
@@ -402,6 +481,13 @@ func applyTaskPlanItemsChanged(db dbQuerier, evt *Event) error {
 		}
 	}
 	return nil
+}
+
+func boolPtrInt(b *bool) int {
+	if b != nil && *b {
+		return 1
+	}
+	return 0
 }
 
 func ptrNullIfEmpty(s *string) any {
@@ -493,14 +579,16 @@ func applyTaskPlanBaselined(db dbQuerier, evt *Event) error {
 	ts := kairosToISO(evt.TS)
 	if _, err := db.Exec(
 		`UPDATE task_plan_items
-		    SET approved_statement = statement, approved_kind = kind, approved_at = ?
+		    SET approved_statement = statement, approved_kind = kind, approved_at = ?,
+		        approved_post_land = post_land
 		  WHERE task_id = ? AND state = ?`+only,
 		append([]any{ts, taskID, planitem.StateActive}, args...)...); err != nil {
 		return fmt.Errorf("events: baseline E-%d: %w", taskID, err)
 	}
 	if _, err := db.Exec(
 		`UPDATE task_plan_items
-		    SET approved_statement = NULL, approved_kind = NULL, approved_at = NULL
+		    SET approved_statement = NULL, approved_kind = NULL, approved_at = NULL,
+		        approved_post_land = NULL
 		  WHERE task_id = ? AND state = ?`+only,
 		append([]any{taskID, planitem.StateWithdrawn}, args...)...); err != nil {
 		return fmt.Errorf("events: baseline E-%d: %w", taskID, err)
@@ -632,7 +720,7 @@ func PrepareReconciled(db dbQuerier, taskID int64, p *TaskReconciledPayload) err
 			return fmt.Errorf("%s has more than one entry", planitem.Label(e.ItemSeq))
 		}
 		seen[e.ItemSeq] = true
-		if err := planitem.ValidateVerdict(it.Kind, e.Verdict); err != nil {
+		if err := planitem.ValidateItemVerdict(it.Kind, it.PostLand, e.Verdict); err != nil {
 			return fmt.Errorf("%s: %w", planitem.Label(e.ItemSeq), err)
 		}
 	}
@@ -653,64 +741,18 @@ func PrepareReconciled(db dbQuerier, taskID int64, p *TaskReconciledPayload) err
 	for i := range p.Entries {
 		e := &p.Entries[i]
 		it := items[e.ItemSeq]
-		label := planitem.Label(e.ItemSeq)
 		qkind := planitem.QuestionKind(e.Verdict)
 		if qkind == "" && it.Origin == planitem.OriginGrown && !it.ApprovedAt.Valid {
 			qkind = planitem.QuestionMore
 		}
-		if qkind == "" {
-			if e.AnswerHolds || e.Reask {
-				return fmt.Errorf("%s is not a discrepancy, so answer_holds and reask do not apply", label)
-			}
-			e.Reason = ""
-			continue
-		}
-		if planitem.IsDiscrepancy(e.Verdict) && strings.TrimSpace(e.Note) == "" {
-			return fmt.Errorf("%s is %s; its note must say how", label, e.Verdict)
-		}
-		if e.AnswerHolds && e.Reask {
-			return fmt.Errorf("%s: say answer_holds or reask, not both", label)
-		}
 		prev, hasPrev := earlier[e.ItemSeq]
-		sameOpen := hasPrev && prev.Verdict == e.Verdict && prev.QuestionID != 0 && prev.QuestionStatus == questionstatus.Open
-		sameSettled := hasPrev && prev.Verdict == e.Verdict && prev.QuestionID != 0 && prev.QuestionStatus != questionstatus.Open
-		reaskNote := ""
-		switch {
-		case sameOpen:
-			if e.AnswerHolds || e.Reask {
-				return fmt.Errorf("%s: EQ-%d is still open, so there is no earlier answer to keep or re-ask", label, prev.QuestionID)
-			}
-			e.QuestionID = prev.QuestionID
-			e.AnswerHolds, e.Reason = false, ""
-			continue
-		case sameSettled:
-			if !e.AnswerHolds && !e.Reask {
-				return fmt.Errorf("%s has an earlier answer (EQ-%d); say answer_holds = true with why it still holds, or reask = true with what changed", label, prev.QuestionID)
-			}
-			if strings.TrimSpace(e.Reason) == "" || strings.ContainsAny(e.Reason, "\n\r") {
-				return fmt.Errorf("%s: give a one-line reason with answer_holds or reask", label)
-			}
-			if e.AnswerHolds {
-				e.QuestionID = prev.QuestionID
-				e.HoldsReason = e.Reason
-				e.AnswerHolds, e.Reason = false, ""
-				continue
-			}
-			reaskNote = fmt.Sprintf(" Asking again: %s. Earlier answer (EQ-%d): %s", e.Reason, prev.QuestionID, prev.Answer)
-		default:
-			if e.AnswerHolds || e.Reask {
-				return fmt.Errorf("%s has no earlier answer with the same verdict, so answer_holds and reask do not apply", label)
-			}
+		q, err := settleEntry(e, it, qkind, prev, hasPrev, &nextQ)
+		if err != nil {
+			return err
 		}
-		text := fmt.Sprintf("%s (%s) %s: %s", label, qkind, it.Statement, verdictPhrase(e.Verdict, it.Origin))
-		if strings.TrimSpace(e.Note) != "" {
-			text += " — " + strings.TrimSpace(e.Note)
+		if q != nil {
+			p.Questions = append(p.Questions, *q)
 		}
-		text += reaskNote
-		e.QuestionID = nextQ
-		p.Questions = append(p.Questions, ReconcileQuestion{ID: nextQ, Question: text, Kind: qkind})
-		nextQ++
-		e.AnswerHolds, e.Reask, e.Reason = false, false, ""
 	}
 
 	if p.PlanDigest, err = monitor.PlanDigest(db, taskID); err != nil {
@@ -729,6 +771,68 @@ func PrepareReconciled(db dbQuerier, taskID int64, p *TaskReconciledPayload) err
 		}
 	}
 	return nil
+}
+
+// settleEntry decides, for one entry, which question settles it — the rules
+// PrepareReconciled documents — and returns the question to file, or nil when
+// none is filed. qkind is the discrepancy kind, "" for none; prev is the item's
+// earlier entry, which a post-land reconcile takes from the item's previous
+// post-land row (E-2444). The entry's input-only fields are cleared.
+func settleEntry(e *ReconciliationEntry, it *itemRow, qkind string, prev earlierEntry, hasPrev bool, nextQ *int64) (*ReconcileQuestion, error) {
+	label := planitem.Label(e.ItemSeq)
+	if qkind == "" {
+		if e.AnswerHolds || e.Reask {
+			return nil, fmt.Errorf("%s is not a discrepancy, so answer_holds and reask do not apply", label)
+		}
+		e.Reason = ""
+		return nil, nil
+	}
+	if planitem.IsDiscrepancy(e.Verdict) && strings.TrimSpace(e.Note) == "" {
+		return nil, fmt.Errorf("%s is %s; its note must say how", label, e.Verdict)
+	}
+	if e.AnswerHolds && e.Reask {
+		return nil, fmt.Errorf("%s: say answer_holds or reask, not both", label)
+	}
+	sameOpen := hasPrev && prev.Verdict == e.Verdict && prev.QuestionID != 0 && prev.QuestionStatus == questionstatus.Open
+	sameSettled := hasPrev && prev.Verdict == e.Verdict && prev.QuestionID != 0 && prev.QuestionStatus != questionstatus.Open
+	reaskNote := ""
+	switch {
+	case sameOpen:
+		if e.AnswerHolds || e.Reask {
+			return nil, fmt.Errorf("%s: EQ-%d is still open, so there is no earlier answer to keep or re-ask", label, prev.QuestionID)
+		}
+		e.QuestionID = prev.QuestionID
+		e.AnswerHolds, e.Reason = false, ""
+		return nil, nil
+	case sameSettled:
+		if !e.AnswerHolds && !e.Reask {
+			return nil, fmt.Errorf("%s has an earlier answer (EQ-%d); say answer_holds = true with why it still holds, or reask = true with what changed", label, prev.QuestionID)
+		}
+		if strings.TrimSpace(e.Reason) == "" || strings.ContainsAny(e.Reason, "\n\r") {
+			return nil, fmt.Errorf("%s: give a one-line reason with answer_holds or reask", label)
+		}
+		if e.AnswerHolds {
+			e.QuestionID = prev.QuestionID
+			e.HoldsReason = e.Reason
+			e.AnswerHolds, e.Reason = false, ""
+			return nil, nil
+		}
+		reaskNote = fmt.Sprintf(" Asking again: %s. Earlier answer (EQ-%d): %s", e.Reason, prev.QuestionID, prev.Answer)
+	default:
+		if e.AnswerHolds || e.Reask {
+			return nil, fmt.Errorf("%s has no earlier answer with the same verdict, so answer_holds and reask do not apply", label)
+		}
+	}
+	text := fmt.Sprintf("%s (%s) %s: %s", label, qkind, it.Statement, verdictPhrase(e.Verdict, it.Origin))
+	if strings.TrimSpace(e.Note) != "" {
+		text += " — " + strings.TrimSpace(e.Note)
+	}
+	text += reaskNote
+	e.QuestionID = *nextQ
+	q := &ReconcileQuestion{ID: *nextQ, Question: text, Kind: qkind}
+	*nextQ++
+	e.AnswerHolds, e.Reask, e.Reason = false, false, ""
+	return q, nil
 }
 
 func verdictPhrase(verdict, origin string) string {

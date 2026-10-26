@@ -46,12 +46,31 @@ const (
 	VerdictBlocked     = "blocked"
 	VerdictKept        = "kept"
 	VerdictNotKept     = "not_kept"
+
+	// VerdictDeferred (E-2444) says a post-land item's work waits for the land.
+	// Only a post-land item may carry it, and it is not a discrepancy: it files
+	// no question and the gate passes it. The land then sets `landed` rather
+	// than `assumed`, and a post-land reconcile records the real verdict.
+	VerdictDeferred = "deferred"
 )
 
 // verdictsByKind is which verdicts fit which item kind.
 var verdictsByKind = map[string][]string{
-	KindDeliverable: {VerdictAsPlanned, VerdictDifferently, VerdictNotDone, VerdictBlocked},
+	KindDeliverable: {VerdictAsPlanned, VerdictDifferently, VerdictNotDone, VerdictBlocked, VerdictDeferred},
 	KindExclusion:   {VerdictKept, VerdictNotKept},
+}
+
+// ValidateItemVerdict is ValidateVerdict plus the post-land rule: `deferred`
+// fits only an item marked post-land (E-2444).
+func ValidateItemVerdict(kind string, postLand bool, verdict string) error {
+	if err := ValidateVerdict(kind, verdict); err != nil {
+		return err
+	}
+	if verdict == VerdictDeferred && !postLand {
+		return fmt.Errorf("verdict %q fits only a post-land item (one marked with --post-land); "+
+			"an item that cannot be done before the land is %q, or is marked post-land first", verdict, VerdictBlocked)
+	}
+	return nil
 }
 
 // Question kinds, ranked most to least concerning. A discrepancy is filed as an
@@ -80,14 +99,22 @@ func MustItemize(slug string) bool { return slices.Contains(ItemizedTypes, slug)
 // ReportedStatuses are the statuses that report the work done. A task reaches
 // them only through `unverified` or `assumed`, the moves the reconciliation
 // gate guards, so a task that must be itemized cannot be created at one.
-var ReportedStatuses = []string{"unverified", "unlanded", "assumed", "confirmed", "completed"}
+var ReportedStatuses = []string{"unverified", "unlanded", "landed", "assumed", "confirmed", "completed"}
 
 // FrozenStatuses are the task statuses in which items and reconciliations can
 // no longer change: from `unverified` on. `revisit` unfreezes them.
+//
+// `landed` is frozen apart from its post-land items (E-2444): a post-land
+// reconcile records their verdicts, and the user may withdraw one. Nothing
+// else about the items or the reconciliation in force at the land changes.
 var FrozenStatuses = []string{
-	"unverified", "unlanded", "confirmed", "assumed", "completed",
+	"unverified", "unlanded", "landed", "confirmed", "assumed", "completed",
 	"declined", "obsolete", "superseded",
 }
+
+// LandedStatus is the status a land sets when post-land items are still open.
+const LandedStatus = "landed"
+
 
 // IsFrozen reports whether a task in this status has frozen items.
 func IsFrozen(status string) bool { return slices.Contains(FrozenStatuses, status) }
@@ -115,9 +142,9 @@ func ValidateVerdict(kind, verdict string) error {
 }
 
 // IsDiscrepancy reports whether a verdict is a discrepancy: anything other than
-// as planned or kept.
+// as planned, kept, or deferred (which only a post-land item can carry).
 func IsDiscrepancy(verdict string) bool {
-	return verdict != VerdictAsPlanned && verdict != VerdictKept
+	return verdict != VerdictAsPlanned && verdict != VerdictKept && verdict != VerdictDeferred
 }
 
 // QuestionKind returns the question kind a discrepancy verdict is filed under,

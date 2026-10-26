@@ -1,6 +1,7 @@
 package taskstatus_test
 
 import (
+	"github.com/mattn/go-runewidth"
 	"reflect"
 	"sort"
 	"strings"
@@ -119,6 +120,7 @@ func TestSessionDispositionsPartitionAll(t *testing.T) {
 		taskstatus.Get(taskstatus.Terminal),
 		[]string{taskstatus.Unverified},
 		[]string{taskstatus.Unlanded},
+		[]string{taskstatus.Landed},
 		[]string{taskstatus.Unreviewed},
 		taskstatus.Get(taskstatus.SessionPending),
 	)
@@ -130,7 +132,7 @@ func TestSessionDispositionsPartitionAll(t *testing.T) {
 // what was "plus unverified" is now "plus both gates".
 func TestSettledIsTerminalPlusTheGates(t *testing.T) {
 	want := append(taskstatus.Get(taskstatus.Terminal),
-		taskstatus.Unverified, taskstatus.Unlanded, taskstatus.Unreviewed)
+		taskstatus.Unverified, taskstatus.Unlanded, taskstatus.Landed, taskstatus.Unreviewed)
 	got := taskstatus.Get(taskstatus.Settled)
 	sort.Strings(want)
 	sort.Strings(got)
@@ -139,11 +141,11 @@ func TestSettledIsTerminalPlusTheGates(t *testing.T) {
 	}
 }
 
-// TestShippedIsSettledMinusTheAbandonments pins the other side of the same
-// coin. `unreviewed` is Shipped — the work HAPPENED, which is what makes
+// TestReportedIsSettledMinusTheAbandonments pins the other side of the same
+// coin. `unreviewed` is Reported — the work HAPPENED, which is what makes
 // `obsolete` ("it no longer needs doing") a lie about it, exactly as E-1956
 // reasoned for `unverified`.
-func TestShippedIsSettledMinusTheAbandonments(t *testing.T) {
+func TestReportedIsSettledMinusTheAbandonments(t *testing.T) {
 	abandoned := map[string]bool{
 		taskstatus.Declined:   true,
 		taskstatus.Obsolete:   true,
@@ -155,11 +157,11 @@ func TestShippedIsSettledMinusTheAbandonments(t *testing.T) {
 			want = append(want, s)
 		}
 	}
-	got := taskstatus.Get(taskstatus.Shipped)
+	got := taskstatus.Get(taskstatus.Reported)
 	sort.Strings(want)
 	sort.Strings(got)
 	if !reflect.DeepEqual(got, want) {
-		t.Errorf("Shipped = %v, want Settled minus declined/obsolete = %v", got, want)
+		t.Errorf("Reported = %v, want Settled minus declined/obsolete = %v", got, want)
 	}
 }
 
@@ -179,7 +181,7 @@ func TestTheTwoLanesAreDisjoint(t *testing.T) {
 // definitional relationship between groups: the verification track is the two
 // ways user-testable work finishes, plus the gate they pass through.
 func TestVerificationTrackIsItsTerminalsPlusUnverified(t *testing.T) {
-	want := append(taskstatus.Get(taskstatus.VerificationTerminal), taskstatus.Unverified, taskstatus.Unlanded)
+	want := append(taskstatus.Get(taskstatus.VerificationTerminal), taskstatus.Unverified, taskstatus.Unlanded, taskstatus.Landed)
 	got := taskstatus.Get(taskstatus.VerificationTrack)
 	sort.Strings(want)
 	sort.Strings(got)
@@ -197,6 +199,17 @@ func TestEveryStatusHasLabelAndGlyph(t *testing.T) {
 		}
 		if taskstatus.Glyph(s) == "" {
 			t.Errorf("status %q has no glyph", s)
+		}
+	}
+}
+
+// TestStatusGlyphsAreSingleWidth pins every status glyph at one column, the
+// guarantee the action glyphs carry (taskrow), so a row prefix stays aligned
+// (E-2444 added ⇣ landed).
+func TestStatusGlyphsAreSingleWidth(t *testing.T) {
+	for _, s := range taskstatus.Get(taskstatus.All) {
+		if w := runewidth.StringWidth(taskstatus.Glyph(s)); w != 1 {
+			t.Errorf("status %q glyph %q measures %d columns, want 1", s, taskstatus.Glyph(s), w)
 		}
 	}
 }
@@ -262,7 +275,7 @@ func TestHas(t *testing.T) {
 		{taskstatus.SubmittableFrom, taskstatus.Unplanned, true},
 		{taskstatus.SubmittableFrom, taskstatus.Ready, false},
 		{taskstatus.Terminal, taskstatus.Unverified, false},
-		{taskstatus.Shipped, taskstatus.Unverified, true},
+		{taskstatus.Reported, taskstatus.Unverified, true},
 		{taskstatus.All, "nonsense", false},
 		{taskstatus.Group(9999), taskstatus.Ready, false},
 	}
@@ -376,14 +389,14 @@ func TestParseGroupRejectsUnknown(t *testing.T) {
 func TestGroupMembershipIsPinned(t *testing.T) {
 	want := map[string][]string{
 		"abandoned":              {"declined", "obsolete", "superseded"},
-		"all":                    {"unplanned", "submitted", "ready", "underway", "unverified", "unlanded", "unreviewed", "confirmed", "assumed", "completed", "revisit", "declined", "obsolete", "superseded"},
+		"all":                    {"unplanned", "submitted", "ready", "underway", "unverified", "unlanded", "landed", "unreviewed", "confirmed", "assumed", "completed", "revisit", "declined", "obsolete", "superseded"},
 		"actionable":             {"unplanned", "ready", "revisit"},
-		"not-actionable":         {"submitted", "underway", "unverified", "unlanded", "unreviewed", "confirmed", "assumed", "completed", "declined", "obsolete", "superseded"},
-		"active":                 {"underway", "unverified", "unlanded", "unreviewed"},
+		"not-actionable":         {"submitted", "underway", "unverified", "unlanded", "landed", "unreviewed", "confirmed", "assumed", "completed", "declined", "obsolete", "superseded"},
+		"active":                 {"underway", "unverified", "unlanded", "landed", "unreviewed"},
 		"awaits-user":            {"unverified", "unlanded", "unreviewed", "submitted"},
 		"claim-promotes":         {"unplanned", "submitted", "ready", "revisit"},
 		"open":                   {"unplanned", "submitted", "ready", "underway"},
-		"children-state-order":   {"unplanned", "submitted", "ready", "underway", "revisit", "unverified", "unlanded", "unreviewed"},
+		"children-state-order":   {"unplanned", "submitted", "ready", "underway", "revisit", "unverified", "unlanded", "landed", "unreviewed"},
 		"derivation-precedence":  {"underway", "ready", "submitted", "unplanned"},
 		"description-reset-from": {}, // retired by E-1993; empty on purpose
 		"pre-judgment":           {"unplanned"},
@@ -392,14 +405,14 @@ func TestGroupMembershipIsPinned(t *testing.T) {
 		"review-track":           {"unreviewed"},
 		"session-pending":        {"unplanned", "submitted", "ready", "underway", "revisit"},
 		"sets-completed-at":      {"confirmed", "completed"},
-		"settled":                {"unverified", "unlanded", "unreviewed", "confirmed", "assumed", "completed", "declined", "obsolete", "superseded"},
-		"shipped":                {"unverified", "unlanded", "unreviewed", "confirmed", "assumed", "completed"},
-		"shipped-terminal":       {"confirmed", "assumed", "completed"},
+		"settled":                {"unverified", "unlanded", "landed", "unreviewed", "confirmed", "assumed", "completed", "declined", "obsolete", "superseded"},
+		"reported":               {"unverified", "unlanded", "landed", "unreviewed", "confirmed", "assumed", "completed"},
+		"reported-terminal":      {"confirmed", "assumed", "completed"},
 		"sticky-override":        {"revisit", "declined", "obsolete", "superseded"},
 		"submittable-from":       {"unplanned", "revisit"},
 		"terminal":               {"confirmed", "assumed", "completed", "declined", "obsolete", "superseded"},
 		"verification-terminal":  {"confirmed", "assumed"},
-		"verification-track":     {"unverified", "unlanded", "confirmed", "assumed"},
+		"verification-track":     {"unverified", "unlanded", "landed", "confirmed", "assumed"},
 	}
 	for _, g := range taskstatus.AllGroups() {
 		slug := taskstatus.GroupSlug(g)

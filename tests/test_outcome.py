@@ -106,7 +106,7 @@ def test_task_assume_with_outcome(seeded_project_at_cwd):
 
 
 def test_task_supersede_default_superseded(seeded_project_at_cwd):
-    # E-2144: the unshipped default is `superseded`, not `obsolete` — the whole
+    # E-2144: the unreported default is `superseded`, not `obsolete` — the whole
     # point of this call is recording that something replaced it, and
     # `obsolete` means nothing did.
     old = _add_task("Old")
@@ -173,7 +173,7 @@ def test_outcome_without_a_transition_stays_an_outcome(seeded_project_at_cwd):
 
 # ─── abandonment requires a reason (E-2175) ───────────────────────────────────
 #
-# A task can end three ways without having shipped, and until E-2175 only
+# A task can be abandoned three ways, and until E-2175 only
 # `declined` was refused without a reason (ED-1022). `obsolete` recorded
 # nothing at all; `superseded` recorded a successor, which says WHAT took the
 # work over and not WHY it was handed on. These assert the widened guard on
@@ -279,16 +279,16 @@ def test_task_supersede_with_status_obsolete_and_outcome(seeded_project_at_cwd):
     assert _status_reason(old) == ("obsolete", "deleted outright")
 
 
-@pytest.mark.parametrize("shipped", ["unverified", "confirmed", "assumed", "completed"])
-def test_task_supersede_on_shipped_work_needs_no_outcome(seeded_project_at_cwd, shipped):
+@pytest.mark.parametrize("reported", ["unverified", "confirmed", "assumed", "completed"])
+def test_task_supersede_on_reported_work_needs_no_outcome(seeded_project_at_cwd, reported):
     """The one exemption, and it is structural rather than a carve-out: work
-    that shipped keeps the terminal it earned, was never abandoned, and so
+    already reported keeps the status it earned, was never abandoned, and so
     reaches none of the three statuses the guard covers."""
-    old = _add_task("Old", status=shipped)
+    old = _add_task("Old", status=reported)
     new = _add_task("New")
     task_cmd.supersede_task(old, new)
     status, outcome = _status_outcome(old)
-    assert status == shipped
+    assert status == reported
     assert outcome is None
 
 
@@ -356,8 +356,8 @@ def test_existing_reasonless_obsolete_rows_still_read(seeded_project_at_cwd):
     assert not payload.get("outcome")
 
 
-def test_the_guard_fires_for_exactly_the_unshipped_terminals():
-    """The rule is "every status that ends a task without it having shipped",
+def test_the_guard_fires_for_exactly_the_abandonment_terminals():
+    """The rule is "every status that abandons a task",
     and these three are that set. A status added to the vocabulary without a
     decision about which side of that line it falls on fails here."""
     from endless.statuses import TASK_STATUSES

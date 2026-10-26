@@ -92,7 +92,7 @@ def test_a_live_or_finished_task_carries_no_caveat(status):
 
 
 def test_a_replaced_task_triggers_whatever_its_status():
-    """`task supersede` deliberately holds shipped work at the status it earned,
+    """`task supersede` deliberately holds reported work at the status it earned,
     so a replaced task can read `confirmed` and still not be the record to
     quote. Keying the banner on status alone would miss all 84 of them."""
     caveat = authority.for_task("confirmed", ["E-456"], [])

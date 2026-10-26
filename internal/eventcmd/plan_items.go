@@ -21,7 +21,8 @@ import (
 // before the ledger append (E-2280).
 func isPreparedKind(k events.Kind) bool {
 	switch k {
-	case events.KindTaskPlanItemsChanged, events.KindTaskPlanBaselined, events.KindTaskReconciled:
+	case events.KindTaskPlanItemsChanged, events.KindTaskPlanBaselined, events.KindTaskReconciled,
+		events.KindTaskPostLandReconciled:
 		return true
 	}
 	return false
@@ -60,7 +61,7 @@ func emitPrepared(evtKind events.Kind, ts kairos.Timestamp, project,
 	case events.KindTaskPlanItemsChanged:
 		var p events.TaskPlanItemsChangedPayload
 		if err = json.Unmarshal([]byte(payloadStr), &p); err == nil {
-			err = events.PreparePlanItemsChanged(lock.DB, taskID, &p)
+			err = events.PreparePlanItemsChangedBy(lock.DB, taskID, &p, events.DetectedHarness() != "")
 		}
 		var seqs []string
 		for _, op := range p.Ops {
@@ -88,6 +89,17 @@ func emitPrepared(evtKind events.Kind, ts kairos.Timestamp, project,
 			ids = append(ids, fmt.Sprintf("EQ-%d", q.ID))
 		}
 		payload, summary = p, map[string]any{"seq": p.Seq, "series": p.Series, "ids": ids}
+	case events.KindTaskPostLandReconciled:
+		var p events.TaskPostLandReconciledPayload
+		if err = json.Unmarshal([]byte(payloadStr), &p); err == nil {
+			err = events.PreparePostLandReconciled(lock.DB, taskID, &p)
+		}
+		var ids []string
+		for _, q := range p.Questions {
+			ids = append(ids, fmt.Sprintf("EQ-%d", q.ID))
+		}
+		payload, summary = p, map[string]any{"seq": p.ReconciliationSeq, "attempt": p.Attempt,
+			"series": p.Series, "ids": ids}
 	}
 	if err != nil {
 		lock.Rollback()

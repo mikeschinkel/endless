@@ -34,32 +34,38 @@ func TestGlyphsAreDistinct(t *testing.T) {
 func TestClassify(t *testing.T) {
 	cases := []struct {
 		status     string
+		typ        string
 		landed     bool
 		unanswered bool
 		want       Action
 	}{
-		{"ready", false, false, Do},
-		{"submitted", false, false, Review},
+		{"ready", "", false, false, Do},
+		{"submitted", "", false, false, Review},
 		// E-2280: a question waiting on the user splits the reviewed and the
 		// unreviewed task each in two, and gives way to landed.
-		{"ready", false, true, Answer},
-		{"submitted", false, true, Act},
-		{"unplanned", false, true, Plan},
-		{"ready", true, true, Landed},
-		{"unplanned", false, false, Plan},
-		{"revisit", false, false, Plan},
-		{"unverified", false, false, Verify},
+		{"ready", "", false, true, Answer},
+		{"submitted", "", false, true, Act},
+		{"unplanned", "", false, true, Plan},
+		{"ready", "", true, true, Shipped},
+		{"unplanned", "", false, false, Plan},
+		{"revisit", "", false, false, Plan},
+		{"unverified", "", false, false, Verify},
 		// E-2156: `unreviewed` wore ⁇ in `session status`, the should-never-happen
 		// glyph, until the two views shared this rule.
-		{"unreviewed", false, false, Read},
-		{"underway", false, false, Orphan},
-		{"confirmed", false, false, Done},
-		{"confirmed", true, false, Landed},
-		{"underway", true, false, Landed},
-		{"no-such-status", false, false, Unknown},
+		{"unreviewed", "", false, false, Read},
+		{"underway", "", false, false, Orphan},
+		{"confirmed", "", false, false, Done},
+		{"confirmed", "", true, false, Shipped},
+		{"underway", "", true, false, Shipped},
+		{"no-such-status", "", false, false, Unknown},
+		// E-2444 / ED-1638.
+		{"completed", "research", false, false, Shipped},
+		{"completed", "brainstorm", false, false, Shipped},
+		{"completed", "todo", false, false, Done},
+		{"landed", "todo", true, false, PostLand},
 	}
 	for _, c := range cases {
-		if got := Classify(c.status, c.landed, c.unanswered); got != c.want {
+		if got := Classify(c.status, c.typ, c.landed, c.unanswered); got != c.want {
 			t.Errorf("Classify(%q, landed=%v, unanswered=%v) = %s, want %s", c.status, c.landed, c.unanswered, got.Label(), c.want.Label())
 		}
 	}

@@ -3575,13 +3575,13 @@ def task_add(title, description, description_file, plan_text, plan_file, items_f
               help="Bypass title validation")
 @click.option("--outcome", default=None,
               help="Outcome — the deliverable (inline). Given with a status that "
-                   "ends the task unshipped (declined, obsolete, superseded), it "
+                   "abandons the task (declined, obsolete, superseded), it "
                    "is that status's reason and is stored as --reason.")
 @click.option("--outcome-file", default=None,
               help="Load the outcome from a file")
 @click.option("--reason", default=None,
-              help="Why the task ended (inline; required by any status that ends "
-                   "the task unshipped: declined, obsolete, superseded)")
+              help="Why the task ended (inline; required by any status that "
+                   "abandons the task: declined, obsolete, superseded)")
 @click.option("--reason-file", default=None,
               help="Load the reason from a file")
 @click.option("--notes", "notes_text", default=None,
@@ -4304,14 +4304,14 @@ def task_block(item_id, blocker_id):
 @click.option("--status", "new_status", default=None,
               type=click.Choice(statuses.get("terminal")),
               help="Status to set on the superseded task. Default: 'superseded' "
-                   "— the successor is the point — except on work that "
-                   "already shipped "
-                   f"({'/'.join(statuses.get('shipped'))}), which keeps the "
+                   "— the successor is the point — except on work "
+                   "already reported "
+                   f"({'/'.join(statuses.get('reported'))}), which keeps the "
                    "status it earned — "
                    "the supersession is the relation, not a status that reads "
                    "as 'never happened'.")
 @click.option("--outcome", default=None,
-              help="Outcome — why this was superseded (inline). Required: the relation names the successor, not the reason. Exempt only when the superseded task already shipped and keeps the status it earned.")
+              help="Outcome — why this was superseded (inline). Required: the relation names the successor, not the reason. Exempt only when the superseded task was already reported and keeps the status it earned.")
 @click.option("--outcome-file", default=None,
               help="Load the outcome from a file")
 @click.option("--allow-path", "allow_paths", multiple=True,
@@ -4320,8 +4320,8 @@ def task_block(item_id, blocker_id):
 def task_supersede(item_id, successor_id, new_status, outcome, outcome_file, allow_paths):
     """Mark a task as superseded by another task, recording a superseded_by relation.
 
-    The superseded task's status defaults to 'superseded', but work that already
-    shipped keeps the status it earned — see --status.
+    The superseded task's status defaults to 'superseded', but work already
+    reported keeps the status it earned — see --status.
 
     --outcome is required whenever the superseded task is being abandoned, which
     is every case but that one: the relation records WHAT took the work over,
@@ -4407,10 +4407,15 @@ def task_plan_group():
               default="deliverable", help="deliverable (default) or exclusion")
 @click.option("--verify", default=None, help="How to tell the item is true")
 @click.option("--detail", default=None, help="A short note on the item")
-def task_plan_add(item_id, statement, kind, verify, detail):
+@click.option("--post-land", "post_land", is_flag=True,
+              help="The item's work needs the landed, installed result and "
+                   "produces no code (endless guide tasks/post-land)")
+def task_plan_add(item_id, statement, kind, verify, detail, post_land):
     """Add one plan item. While the task is underway it is a grown item."""
     from endless import plan_items
     op = {"op": "add", "kind": kind, "statement": statement.strip()}
+    if post_land:
+        op["post_land"] = True
     if verify:
         op["verify"] = verify
     if detail:
@@ -4425,7 +4430,10 @@ def task_plan_add(item_id, statement, kind, verify, detail):
 @click.option("--kind", type=click.Choice(["deliverable", "exclusion"]), default=None)
 @click.option("--verify", default=None, help="New verify text ('' clears)")
 @click.option("--detail", default=None, help="New detail text ('' clears)")
-def task_plan_edit(item_id, item, statement, kind, verify, detail):
+@click.option("--post-land/--no-post-land", "post_land", default=None,
+              help="Mark (or unmark) the item post-land: its work needs the "
+                   "landed, installed result and produces no code")
+def task_plan_edit(item_id, item, statement, kind, verify, detail, post_land):
     """Edit one plan item, named P<n>.
 
     Editing an approved item is allowed at any status before `unverified`, but
@@ -4436,6 +4444,8 @@ def task_plan_edit(item_id, item, statement, kind, verify, detail):
     for k, v in (("statement", statement), ("kind", kind), ("verify", verify), ("detail", detail)):
         if v is not None:
             op[k] = v.strip()
+    if post_land is not None:
+        op["post_land"] = post_land
     plan_items.emit_ops(item_id, [op])
 
 
@@ -4445,8 +4455,7 @@ def task_plan_edit(item_id, item, statement, kind, verify, detail):
 def task_plan_withdraw(item_id, items):
     """Withdraw plan items, named P<n>. Their numbers are never reused."""
     from endless import plan_items
-    plan_items.emit_ops(item_id, [{"op": "withdraw", "seq": plan_items.parse_label(i)}
-                                  for i in items])
+    plan_items.withdraw(item_id, [plan_items.parse_label(i) for i in items])
 
 
 @task_plan_group.command("approve")
@@ -4502,6 +4511,10 @@ def task_reconcile(item_id, file_path):
     changed since the last reconciliation, and a file to fill in. With --file:
     record it, file a kind-tagged question for each discrepancy, and list them.
     Run after implementing and before setting the task to `unverified`.
+
+    On a `landed` task it is the post-land reconcile: it takes entries for
+    post-land items only, and the one that leaves none open moves the task to
+    `assumed` (endless guide tasks/post-land).
     """
     from endless import plan_items
     if file_path is None:
@@ -4915,7 +4928,7 @@ def epic_show(item_ids, no_description, show_context, show_analysis, show_plan_f
 @click.option("--force", is_flag=True,
               help="Bypass title validation")
 @click.option("--outcome", default=None,
-              help="Outcome / reason for status (inline; required by any status that ends the task unshipped: declined, obsolete, superseded)")
+              help="Outcome / reason for status (inline; required by any status that abandons the task: declined, obsolete, superseded)")
 @click.option("--outcome-file", default=None,
               help="Load the outcome from a file")
 @click.option("--reason", default=None,
@@ -5050,14 +5063,16 @@ worktree_sandbox.stdout_is_captured = True
               help="Landing timestamp (RFC3339) for --record-only; default: the --sha commit date.")
 @click.option("--keep-status", is_flag=True,
               help="Leave the task's status as it is after landing, rather "
-                   "than settling it as assumed.")
+                   "than settling it as assumed (or landed).")
 def worktree_land(task_id, dry_run, record_only, sha, at, keep_status):
     """Auto-commit endless-managed modifications, rebase, ff-merge, settle the task.
 
     A todo or bugfix task lands only from `unlanded` — after a passing
     `endless task verify` you ran yourself, at the branch's current code — and
-    a successful land sets it to `assumed` unless --keep-status. A research or
-    brainstorm task never lands: its deliverable is the outcome text.
+    a successful land sets it to `assumed` unless --keep-status — or to
+    `landed` while post-land plan items are still open, listing them
+    (endless guide tasks/post-land). --record-only follows the same rule. A
+    research or brainstorm task never lands: its deliverable is the outcome text.
     """
     from endless.worktree_cmd import land_worktree
     land_worktree(task_id, dry_run, record_only=record_only, sha=sha, at=at,
@@ -5622,10 +5637,14 @@ def question_ask(task_id, questions):
 @click.option("--by", "by", default=None,
               help="Who answered: 'user', or a peer session's ES-<n>. Defaults "
                    "to 'user' from a plain shell; required when an agent runs it.")
-def question_answer(question_id, answer, by):
+@click.option("--post-land", "post_land", is_flag=True,
+              help="On a `blocked` question a reconciliation filed for a plan "
+                   "item: mark that item post-land, approved by the user, so it "
+                   "may be reconciled `deferred` (endless guide tasks/post-land).")
+def question_answer(question_id, answer, by, post_land):
     """Answer an open question."""
     from endless.question_cmd import answer_question
-    answer_question(question_id, answer, by)
+    answer_question(question_id, answer, by, post_land=post_land)
 
 
 @question_cmd.command("withdraw")

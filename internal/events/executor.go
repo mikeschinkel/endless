@@ -327,6 +327,8 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 		return execTaskPlanBaselined(db, evt)
 	case KindTaskReconciled:
 		return execTaskReconciled(db, evt)
+	case KindTaskPostLandReconciled:
+		return execTaskPostLandReconciled(db, evt)
 	case KindTaskDepCreated:
 		return execTaskDepCreated(db, evt)
 	case KindTaskDepDeleted:
@@ -849,6 +851,9 @@ func execTaskFieldsUpdated(db dbQuerier, evt *Event, emit DerivedEmitter) (*Exec
 			}
 		}
 		if err := ValidateStatusTransition(currentStatus, newStatus, effectiveType); err != nil {
+			return nil, err
+		}
+		if err := ValidateLandedSettle(currentStatus, newStatus, mustParseInt64(taskID)); err != nil {
 			return nil, err
 		}
 		if err := ValidateStatusActor(db, mustParseInt64(taskID), newStatus, evt.Actor); err != nil {

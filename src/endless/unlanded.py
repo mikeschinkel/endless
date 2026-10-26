@@ -33,6 +33,7 @@ from endless.event_bridge import _resolve_endless_go, emit_event
 UNLANDED = "unlanded"
 UNVERIFIED = "unverified"
 ASSUMED = "assumed"
+LANDED = "landed"
 
 # The two files a task's verify suite can be (internal/verify ManifestFile and
 # ScriptFile). A suite lives in the task's own worktree, at
@@ -235,15 +236,60 @@ def require_landable(task_num: int, worktree: Path) -> dict:
     )
 
 
+def open_post_land(task_num: int,
+                   endless_go_bin: str | None = None) -> list[dict]:
+    """The task's open post-land items (E-2444), asked of the same endless-go
+    the land runs, which knows the schema the land just migrated to."""
+    binary = _resolve_endless_go(override=endless_go_bin)
+    res = subprocess.run(
+        [binary, *config.go_db_context_args(), "session-query",
+         "post-land-state", "--id", str(task_num)],
+        capture_output=True, text=True)
+    if res.returncode != 0:
+        raise agent_help.relay(res.stderr or res.stdout, exit_code=res.returncode)
+    return json.loads(res.stdout or "{}").get("open") or []
+
+
 def settle(state: dict, keep_status: bool,
            endless_go_bin: str | None = None) -> None:
-    """After a recorded land: set `assumed` when the type settles on land.
+    """After a recorded land: set `assumed` when the type settles on land — or
+    `landed` when post-land items are still open (E-2444), listing them.
 
     The land has happened, so a failure here never unwinds it; it is said
     loudly with the one command that finishes the job.
     """
     task_id = f"E-{state['task_id']}"
     if keep_status or not state["settles_on_land"]:
+        return
+    try:
+        still_open = open_post_land(state["task_id"], endless_go_bin)
+    except (click.ClickException, OSError, ValueError) as e:
+        detail = e.message if isinstance(e, click.ClickException) else str(e)
+        agent_help.warn.report(
+            f"{task_id} landed, but its post-land items could not be read, so "
+            f"it was left {state['status']}: {detail.strip()}",
+            f"whether {task_id} has post-land items still to do; if not, "
+            f"`endless task update {task_id} --status assumed` settles it",
+        )
+        return
+    if still_open:
+        try:
+            _emit_status(state, LANDED, endless_go_bin=endless_go_bin)
+        except (click.ClickException, OSError) as e:
+            detail = e.message if isinstance(e, click.ClickException) else str(e)
+            agent_help.warn.no_report(
+                f"{task_id} landed with post-land items open, but could not be "
+                f"set to landed: {detail.strip()}",
+                f"Run `endless task update {task_id} --status landed`",
+            )
+            return
+        click.echo(click.style("•", fg="yellow")
+                   + f" {task_id} is now landed: post-land items still open —")
+        for it in still_open:
+            click.echo(f"    {it['label']} {it['statement']}")
+        click.echo(f"  Do them on the landed, installed result and record them "
+                   f"with `endless task reconcile {task_id}`; the last one "
+                   f"settles it as assumed (`endless guide tasks/post-land`).")
         return
     try:
         _emit_status(state, ASSUMED, endless_go_bin=endless_go_bin)

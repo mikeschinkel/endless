@@ -185,6 +185,10 @@ stateDiagram-v2
     unlanded --> assumed: user lands the work (todo/bugfix)
     unlanded --> unverified: system resets when the branch moves past the passed commit (todo/bugfix)
 
+    %% Post-land — a land with post-land items open holds the task until they settle
+    unlanded --> landed: user lands the work with post-land items open (todo/bugfix)
+    landed --> assumed: system settles when no post-land item is open (todo/bugfix)
+
     %% Findings lane — work whose deliverable IS the outcome text
     underway --> unreviewed: agent delivers the findings as an outcome (research/brainstorm)
     ready --> unreviewed: agent delivers the findings as an outcome (research/brainstorm)
@@ -199,10 +203,11 @@ stateDiagram-v2
     underway --> revisit: session hands the task back
     unverified --> revisit: user reopens — verification failed
     unlanded --> revisit: user reopens — the verified work is wrong after all
+    landed --> revisit: user reopens — landed work found wrong
     unreviewed --> revisit: user reopens — the outcome needs more work
-    confirmed --> revisit: user reopens — shipped work found wrong
-    assumed --> revisit: user reopens — shipped work found wrong
-    completed --> revisit: user reopens — shipped work found wrong
+    confirmed --> revisit: user reopens — finished work found wrong
+    assumed --> revisit: user reopens — finished work found wrong
+    completed --> revisit: user reopens — finished work found wrong
 
     %% Declining — an active decision not to do (or not to keep) the work
     unplanned --> declined: user declines
@@ -210,12 +215,13 @@ stateDiagram-v2
     ready --> declined: user declines
     underway --> declined: user declines
     revisit --> declined: user declines
-    unverified --> declined: user declines — the shipped work is not being kept
-    unlanded --> declined: user declines — the shipped work is not being kept
-    unreviewed --> declined: user declines — the shipped work is not being kept
-    confirmed --> declined: user declines — the shipped work is not being kept
-    assumed --> declined: user declines — the shipped work is not being kept
-    completed --> declined: user declines — the shipped work is not being kept
+    unverified --> declined: user declines — the reported work is not being kept
+    unlanded --> declined: user declines — the reported work is not being kept
+    landed --> declined: user declines — the reported work is not being kept
+    unreviewed --> declined: user declines — the reported work is not being kept
+    confirmed --> declined: user declines — the reported work is not being kept
+    assumed --> declined: user declines — the reported work is not being kept
+    completed --> declined: user declines — the reported work is not being kept
 
     %% Obsoleting — no longer needed, and nothing replaced it
     unplanned --> obsolete: user retires — it no longer needs doing
@@ -223,12 +229,13 @@ stateDiagram-v2
     ready --> obsolete: user retires — it no longer needs doing
     underway --> obsolete: user retires — it no longer needs doing
     revisit --> obsolete: user retires — it no longer needs doing
-    unverified --> obsolete: user retires — the shipped work is no longer in use
-    unlanded --> obsolete: user retires — the shipped work is no longer in use
-    unreviewed --> obsolete: user retires — the shipped work is no longer in use
-    confirmed --> obsolete: user retires — the shipped work is no longer in use
-    assumed --> obsolete: user retires — the shipped work is no longer in use
-    completed --> obsolete: user retires — the shipped work is no longer in use
+    unverified --> obsolete: user retires — the reported work is no longer in use
+    unlanded --> obsolete: user retires — the reported work is no longer in use
+    landed --> obsolete: user retires — the reported work is no longer in use
+    unreviewed --> obsolete: user retires — the reported work is no longer in use
+    confirmed --> obsolete: user retires — the reported work is no longer in use
+    assumed --> obsolete: user retires — the reported work is no longer in use
+    completed --> obsolete: user retires — the reported work is no longer in use
 
     %% Superseding — something else took the work over
     unplanned --> superseded: user supersedes — another task took it over
@@ -236,6 +243,7 @@ stateDiagram-v2
     ready --> superseded: user supersedes — another task took it over
     underway --> superseded: user supersedes — another task took it over
     revisit --> superseded: user supersedes — another task took it over
+    landed --> superseded: user supersedes — another task took it over
 
     %% Reversal — reconsidering an abandonment decision
     declined --> unplanned: user reconsiders

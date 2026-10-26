@@ -78,6 +78,21 @@ func ValidateStatusTransition(from, to taskstatus.Status, tt tasktype.TaskType) 
 	)
 }
 
+// ValidateLandedSettle refuses `landed → assumed` through `task update`, from
+// anyone (E-2444). The edge is Endless's: it is taken when a post-land reconcile
+// or withdrawal leaves no post-land item open, and naming the status by hand
+// would settle the task with those items still owed.
+func ValidateLandedSettle(from, to taskstatus.Status, taskID int64) error {
+	if from != taskstatus.Landed || to != taskstatus.Assumed {
+		return nil
+	}
+	return refusal.NoReport(
+		fmt.Sprintf(
+			"events: task %d is landed with post-land items open, and moves to %q by itself when the last of them settles — it is not set by hand",
+			taskID, to),
+		fmt.Sprintf("Record the post-land verdicts with `endless task reconcile E-%d` (see `endless guide tasks/post-land`)", taskID))
+}
+
 // ValidateStatusActor refuses a work-progress status the acting agent has no
 // standing to set.
 //
@@ -91,6 +106,7 @@ func ValidateStatusTransition(from, to taskstatus.Status, tt tasktype.TaskType) 
 //     is the reported defect stated exactly.
 //   - No agent may set `unlanded` at all (E-2262): it records a verify the
 //     user ran in their own context, and it is what unlocks the land.
+//   - No agent may set `landed` (E-2444): only the land sets it.
 //
 // # Who is exempt
 //
@@ -108,6 +124,16 @@ func ValidateStatusTransition(from, to taskstatus.Status, tt tasktype.TaskType) 
 func ValidateStatusActor(db dbQuerier, taskID int64, to taskstatus.Status, actor Actor) error {
 	if actor.Harness == "" {
 		return nil
+	}
+	if to == taskstatus.Landed {
+		// E-2444: `landed` is set by the land itself, when it lands work whose
+		// post-land items are still open. Never by an agent.
+		return refusal.Report(
+			fmt.Sprintf(
+				"events: an agent may not set task %d to %q — only `endless worktree land E-%d`, run by the user, sets it, when it lands work with post-land plan items still open",
+				taskID, to, taskID),
+			fmt.Sprintf("landing E-%d is the user's to do", taskID),
+		)
 	}
 	if to == taskstatus.Unlanded {
 		// E-2262: `unlanded` says the USER's verify passed — it is what unlocks

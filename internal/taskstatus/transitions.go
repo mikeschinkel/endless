@@ -44,7 +44,7 @@ package taskstatus
 // # Authoring rule
 //
 // Be honest, not aspirational. An edge the CLI takes today belongs here even
-// when it reads oddly (declining work that already shipped, for instance, is
+// when it reads oddly (declining work already reported, for instance, is
 // something `task update --status declined` does and E-1956 deliberately left
 // alone). The failure mode this accepts is a legal-but-unwritten edge stranding
 // a caller; the mitigation is that the diagram is rendered FROM here, so a
@@ -247,6 +247,19 @@ var transitionGroups = []transitionGroup{
 		},
 	},
 	{
+		// E-2444 (ED-1636). A land with post-land items still open — plan
+		// items whose work needs the landed, migrated, installed result and
+		// produces no code — sets `landed` instead of `assumed`. The post-land
+		// reconcile (or the user's withdrawal) that leaves none open moves it on.
+		// There is no edge to `confirmed`, and none an agent takes: the move to
+		// `assumed` is Endless's, made when the items settle.
+		Name: "Post-land — a land with post-land items open holds the task until they settle",
+		Transitions: []Transition{
+			{From: Unlanded, To: Landed, Actor: ActorUser, Types: implementation, Label: "lands the work with post-land items open"},
+			{From: Landed, To: Assumed, Actor: ActorSystem, Types: implementation, Label: "settles when no post-land item is open"},
+		},
+	},
+	{
 		// Reachable from `ready` as well as `underway` because findings work
 		// needs no worktree to produce.
 		//
@@ -273,15 +286,16 @@ var transitionGroups = []transitionGroup{
 			{From: Underway, To: Revisit, Actor: ActorSession, Label: "hands the task back"},
 			{From: Unverified, To: Revisit, Actor: ActorUser, Label: "reopens — verification failed"},
 			{From: Unlanded, To: Revisit, Actor: ActorUser, Label: "reopens — the verified work is wrong after all"},
+			{From: Landed, To: Revisit, Actor: ActorUser, Label: "reopens — landed work found wrong"},
 			{From: Unreviewed, To: Revisit, Actor: ActorUser, Label: "reopens — the outcome needs more work"},
-			{From: Confirmed, To: Revisit, Actor: ActorUser, Label: "reopens — shipped work found wrong"},
-			{From: Assumed, To: Revisit, Actor: ActorUser, Label: "reopens — shipped work found wrong"},
-			{From: Completed, To: Revisit, Actor: ActorUser, Label: "reopens — shipped work found wrong"},
+			{From: Confirmed, To: Revisit, Actor: ActorUser, Label: "reopens — finished work found wrong"},
+			{From: Assumed, To: Revisit, Actor: ActorUser, Label: "reopens — finished work found wrong"},
+			{From: Completed, To: Revisit, Actor: ActorUser, Label: "reopens — finished work found wrong"},
 		},
 	},
 	{
-		// Declining shipped work reads oddly and is nonetheless real: E-1956
-		// refused `obsolete` on shipped work and deliberately left `declined`
+		// Declining reported work reads oddly and is nonetheless real: E-1956
+		// refused `obsolete` on reported work and deliberately left `declined`
 		// alone, because backing out work that ran is a decision someone can
 		// legitimately make. Honesty over tidiness — see the authoring rule.
 		Name: "Declining — an active decision not to do (or not to keep) the work",
@@ -291,12 +305,13 @@ var transitionGroups = []transitionGroup{
 			{From: Ready, To: Declined, Actor: ActorUser, Label: "declines"},
 			{From: Underway, To: Declined, Actor: ActorUser, Label: "declines"},
 			{From: Revisit, To: Declined, Actor: ActorUser, Label: "declines"},
-			{From: Unverified, To: Declined, Actor: ActorUser, Label: "declines — the shipped work is not being kept"},
-			{From: Unlanded, To: Declined, Actor: ActorUser, Label: "declines — the shipped work is not being kept"},
-			{From: Unreviewed, To: Declined, Actor: ActorUser, Label: "declines — the shipped work is not being kept"},
-			{From: Confirmed, To: Declined, Actor: ActorUser, Label: "declines — the shipped work is not being kept"},
-			{From: Assumed, To: Declined, Actor: ActorUser, Label: "declines — the shipped work is not being kept"},
-			{From: Completed, To: Declined, Actor: ActorUser, Label: "declines — the shipped work is not being kept"},
+			{From: Unverified, To: Declined, Actor: ActorUser, Label: "declines — the reported work is not being kept"},
+			{From: Unlanded, To: Declined, Actor: ActorUser, Label: "declines — the reported work is not being kept"},
+			{From: Landed, To: Declined, Actor: ActorUser, Label: "declines — the reported work is not being kept"},
+			{From: Unreviewed, To: Declined, Actor: ActorUser, Label: "declines — the reported work is not being kept"},
+			{From: Confirmed, To: Declined, Actor: ActorUser, Label: "declines — the reported work is not being kept"},
+			{From: Assumed, To: Declined, Actor: ActorUser, Label: "declines — the reported work is not being kept"},
+			{From: Completed, To: Declined, Actor: ActorUser, Label: "declines — the reported work is not being kept"},
 		},
 	},
 	{
@@ -308,7 +323,7 @@ var transitionGroups = []transitionGroup{
 		// toward `declined` — a different fact: an active decision not to do
 		// work that would still be worth doing (E-2144).
 		//
-		// The axis is WHETHER ANYTHING REPLACED IT, never whether it shipped.
+		// The axis is WHETHER ANYTHING REPLACED IT, never whether it was reported.
 		// Endless already draws exactly that line for decisions, and the two
 		// record kinds now agree: `decision supersede --by` when there IS a
 		// successor, `decision obsolete --reason` when "it stopped applying
@@ -317,9 +332,9 @@ var transitionGroups = []transitionGroup{
 		// `obsolete` is the no-replacement terminal.
 		//
 		// E-1956 keyed this on the wrong column: it refused `obsolete` from
-		// every Shipped status, reasoning that the word "reads as never
+		// every Reported status, reasoning that the word "reads as never
 		// happened". That reading was an artifact of the gloss above, and it
-		// is gone with it. Shipped work that is being REMOVED — not replaced
+		// is gone with it. Reported work that is being REMOVED — not replaced
 		// — is obsolete in the plainest sense of the word: no longer in use.
 		// The rule also never held. Epic status is derived in Go and never
 		// passed the Python gate, so E-1421 has been a shipped-and-obsolete
@@ -333,12 +348,13 @@ var transitionGroups = []transitionGroup{
 			{From: Ready, To: Obsolete, Actor: ActorUser, Label: "retires — it no longer needs doing"},
 			{From: Underway, To: Obsolete, Actor: ActorUser, Label: "retires — it no longer needs doing"},
 			{From: Revisit, To: Obsolete, Actor: ActorUser, Label: "retires — it no longer needs doing"},
-			{From: Unverified, To: Obsolete, Actor: ActorUser, Label: "retires — the shipped work is no longer in use"},
-			{From: Unlanded, To: Obsolete, Actor: ActorUser, Label: "retires — the shipped work is no longer in use"},
-			{From: Unreviewed, To: Obsolete, Actor: ActorUser, Label: "retires — the shipped work is no longer in use"},
-			{From: Confirmed, To: Obsolete, Actor: ActorUser, Label: "retires — the shipped work is no longer in use"},
-			{From: Assumed, To: Obsolete, Actor: ActorUser, Label: "retires — the shipped work is no longer in use"},
-			{From: Completed, To: Obsolete, Actor: ActorUser, Label: "retires — the shipped work is no longer in use"},
+			{From: Unverified, To: Obsolete, Actor: ActorUser, Label: "retires — the reported work is no longer in use"},
+			{From: Unlanded, To: Obsolete, Actor: ActorUser, Label: "retires — the reported work is no longer in use"},
+			{From: Landed, To: Obsolete, Actor: ActorUser, Label: "retires — the reported work is no longer in use"},
+			{From: Unreviewed, To: Obsolete, Actor: ActorUser, Label: "retires — the reported work is no longer in use"},
+			{From: Confirmed, To: Obsolete, Actor: ActorUser, Label: "retires — the reported work is no longer in use"},
+			{From: Assumed, To: Obsolete, Actor: ActorUser, Label: "retires — the reported work is no longer in use"},
+			{From: Completed, To: Obsolete, Actor: ActorUser, Label: "retires — the reported work is no longer in use"},
 		},
 	},
 	{
@@ -349,20 +365,24 @@ var transitionGroups = []transitionGroup{
 		// supersede --by` against `decision obsolete --reason` — and tasks
 		// had only the second, which is why `task supersede` (then `task
 		// replace`) used to close an
-		// unshipped task as `obsolete` while recording a replacement: a row
+		// unreported task as `obsolete` while recording a replacement: a row
 		// asserting in one column that nothing replaced it and in another
 		// that something did.
 		//
-		// Pre-ship statuses only, and that is not an oversight. A task that
-		// SHIPPED earned a terminal — `confirmed`, `assumed`, `completed` —
+		// Pre-report statuses only, and that is not an oversight. A task that
+		// was REPORTED earned its status — `confirmed`, `assumed`, `completed` —
 		// and that terminal is still true after something supersedes it, so
 		// `task supersede` holds it and the relation rides alongside
 		// ("assumed (superseded by E-101)"). There is no earned terminal to
-		// protect before the work ships, which is where this one goes.
+		// protect before the work is reported, which is where this one goes.
 		//
 		// The STATUS and the RELATION share one vocabulary, and it is the one
 		// decisions use: `superseded` / `superseded_by`, set by `task
 		// supersede` as by `decision supersede` (E-2189).
+		//
+		// `landed` is the one exception (E-2444): its work shipped, but it has
+		// not earned a terminal yet — its post-land items are still open — so
+		// there is no earned status for the relation to ride alongside.
 		Name: "Superseding — something else took the work over",
 		Transitions: []Transition{
 			{From: Unplanned, To: Superseded, Actor: ActorUser, Label: "supersedes — another task took it over"},
@@ -370,6 +390,7 @@ var transitionGroups = []transitionGroup{
 			{From: Ready, To: Superseded, Actor: ActorUser, Label: "supersedes — another task took it over"},
 			{From: Underway, To: Superseded, Actor: ActorUser, Label: "supersedes — another task took it over"},
 			{From: Revisit, To: Superseded, Actor: ActorUser, Label: "supersedes — another task took it over"},
+			{From: Landed, To: Superseded, Actor: ActorUser, Label: "supersedes — another task took it over"},
 		},
 	},
 	{

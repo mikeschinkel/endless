@@ -50,21 +50,21 @@ func epicRow(id int64, status string) SessionStatusRow {
 // TestEpicWorkProductRollsUpFromChildren is E-2198's reproduction. E-1991 had
 // five children with landed code, three of them terminal, and still wore
 // ⊙ not started, because the mark was decided by the epic's own status — which
-// never reaches Shipped by the epic's own work.
+// never reaches Reported by the epic's own work.
 func TestEpicWorkProductRollsUpFromChildren(t *testing.T) {
 	cases := []struct {
 		name          string
 		children      map[int64]string
 		verdicts      map[int64]UnsettledDetail
-		wantShipped   bool
+		wantReported  bool
 		wantUnsettled bool
 		wantKnown     bool
 	}{
-		{"a shipped child and nothing outstanding",
+		{"a reported child and nothing outstanding",
 			map[int64]string{11: "assumed", 12: "unplanned"}, nil, true, false, true},
-		{"every child still unshipped",
+		{"every child still unreported",
 			map[int64]string{11: "unplanned", 12: "ready"}, nil, false, false, true},
-		{"an abandoned child is not shipped work",
+		{"an abandoned child is not reported work",
 			map[int64]string{11: "declined", 12: "obsolete"}, nil, false, false, true},
 		{"an unsettled child",
 			map[int64]string{11: "confirmed", 12: "underway"},
@@ -93,13 +93,13 @@ func TestEpicWorkProductRollsUpFromChildren(t *testing.T) {
 			installVerdictStub(t, c.verdicts)
 
 			got := annotateOne(t, epicRow(10, "submitted"))
-			if got.DescendantShipped != c.wantShipped || got.Unsettled != c.wantUnsettled || got.UnsettledKnown != c.wantKnown {
-				t.Errorf("shipped=%v unsettled=%v known=%v, want shipped=%v unsettled=%v known=%v",
-					got.DescendantShipped, got.Unsettled, got.UnsettledKnown,
-					c.wantShipped, c.wantUnsettled, c.wantKnown)
+			if got.DescendantReported != c.wantReported || got.Unsettled != c.wantUnsettled || got.UnsettledKnown != c.wantKnown {
+				t.Errorf("reported=%v unsettled=%v known=%v, want reported=%v unsettled=%v known=%v",
+					got.DescendantReported, got.Unsettled, got.UnsettledKnown,
+					c.wantReported, c.wantUnsettled, c.wantKnown)
 			}
-			if got.HasWorkProduct() != c.wantShipped {
-				t.Errorf("HasWorkProduct() = %v, want %v", got.HasWorkProduct(), c.wantShipped)
+			if got.HasWorkProduct() != c.wantReported {
+				t.Errorf("HasWorkProduct() = %v, want %v", got.HasWorkProduct(), c.wantReported)
 			}
 		})
 	}
@@ -108,7 +108,7 @@ func TestEpicWorkProductRollsUpFromChildren(t *testing.T) {
 // TestEpicWorkProductReadsDescendants pins the walk below one level. A child
 // epic's work product is its own children's, so a parent of epics must see its
 // grandchildren — and a sub-epic's derived `completed` (here from declined
-// children only) must not count as shipped work by itself.
+// children only) must not count as reported work by itself.
 func TestEpicWorkProductReadsDescendants(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "p1", "/p1")
@@ -117,13 +117,13 @@ func TestEpicWorkProductReadsDescendants(t *testing.T) {
 	insertTaskFull(t, db, 12, 1, 11, typeTask, "declined")
 	installVerdictStub(t, nil)
 
-	if got := annotateOne(t, epicRow(10, "underway")); got.DescendantShipped {
-		t.Error("a sub-epic's derived completed status counted as shipped work")
+	if got := annotateOne(t, epicRow(10, "underway")); got.DescendantReported {
+		t.Error("a sub-epic's derived completed status counted as reported work")
 	}
 
 	insertTaskFull(t, db, 13, 1, 11, typeTask, "assumed")
-	if got := annotateOne(t, epicRow(10, "underway")); !got.DescendantShipped {
-		t.Error("a shipped grandchild under a sub-epic did not reach the top epic")
+	if got := annotateOne(t, epicRow(10, "underway")); !got.DescendantReported {
+		t.Error("a reported grandchild under a sub-epic did not reach the top epic")
 	}
 
 	installVerdictStub(t, map[int64]UnsettledDetail{13: verdictUnsettled})
@@ -146,13 +146,13 @@ func TestEpicWorkProductFollowsEffectiveParent(t *testing.T) {
 	}
 	installVerdictStub(t, nil)
 
-	if got := annotateOne(t, epicRow(10, "submitted")); !got.DescendantShipped {
-		t.Error("a shipped child behind a removed intermediate did not count")
+	if got := annotateOne(t, epicRow(10, "submitted")); !got.DescendantReported {
+		t.Error("a reported child behind a removed intermediate did not count")
 	}
 }
 
 // TestEpicWorkProductLeavesOrdinaryRowsAlone is the E-2107 constraint: the
-// descendant read joins the hot path for epic rows only. A todo with a shipped
+// descendant read joins the hot path for epic rows only. A todo with a reported
 // child keeps its own status's answer, and nothing is probed on its behalf.
 func TestEpicWorkProductLeavesOrdinaryRowsAlone(t *testing.T) {
 	db := withTestDB(t)
@@ -162,7 +162,7 @@ func TestEpicWorkProductLeavesOrdinaryRowsAlone(t *testing.T) {
 	stub := installVerdictStub(t, map[int64]UnsettledDetail{11: verdictUnsettled})
 
 	got := annotateOne(t, SessionStatusRow{ID: 10, ProjectID: 1, Status: "underway", TypeSlug: "todo"})
-	if got.DescendantShipped || got.Unsettled || got.HasWorkProduct() {
+	if got.DescendantReported || got.Unsettled || got.HasWorkProduct() {
 		t.Errorf("a todo row rolled up its child: %+v", got)
 	}
 	if stub.calls[11] != 0 {

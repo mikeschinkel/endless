@@ -215,10 +215,13 @@ const (
 //   - task.plan_baselined: `task approve` copying the item set into its baseline.
 //   - task.reconciled: one reconciliation, its entries, and the discrepancy
 //     questions it files.
+//   - task.post_land_reconciled: a `landed` task's post-land verdicts (E-2444),
+//     one row per item named, keyed to the reconciliation in force at the land.
 const (
-	KindTaskPlanItemsChanged Kind = "task.plan_items_changed"
-	KindTaskPlanBaselined    Kind = "task.plan_baselined"
-	KindTaskReconciled       Kind = "task.reconciled"
+	KindTaskPlanItemsChanged   Kind = "task.plan_items_changed"
+	KindTaskPlanBaselined      Kind = "task.plan_baselined"
+	KindTaskReconciled         Kind = "task.reconciled"
+	KindTaskPostLandReconciled Kind = "task.post_land_reconciled"
 )
 
 // Task dependency event kinds.
@@ -417,9 +420,10 @@ var ValidKinds = map[Kind]bool{
 	KindTaskQuestionsAsked:   true,
 	KindTaskQuestionResolved: true,
 	// Plan items and reconciliation (E-2280)
-	KindTaskPlanItemsChanged: true,
-	KindTaskPlanBaselined:    true,
-	KindTaskReconciled:       true,
+	KindTaskPlanItemsChanged:   true,
+	KindTaskPlanBaselined:      true,
+	KindTaskReconciled:         true,
+	KindTaskPostLandReconciled: true,
 	// Task dependency
 	KindTaskDepCreated: true,
 	KindTaskDepDeleted: true,

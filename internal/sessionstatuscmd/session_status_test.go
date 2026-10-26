@@ -32,11 +32,11 @@ func TestClassify(t *testing.T) {
 		{"unverified is verify", monitor.SessionStatusRow{Status: "unverified"}, actVerify},
 		{"underway is orphan", monitor.SessionStatusRow{Status: "underway"}, actOrphan},
 		{"unrecognized status is unknown", monitor.SessionStatusRow{Status: "blocked"}, actUnknown},
-		// E-1693/E-1750: a landed task routes to actLanded regardless of its
+		// E-1693/E-1750: a landed task routes to actShipped regardless of its
 		// non-terminal status, so merged work is never offered as a fresh verb.
-		{"landed ready is landed", monitor.SessionStatusRow{Status: "ready", Landed: true}, actLanded},
-		{"landed unverified is landed", monitor.SessionStatusRow{Status: "unverified", Landed: true}, actLanded},
-		{"landed unplanned is landed", monitor.SessionStatusRow{Status: "unplanned", Landed: true}, actLanded},
+		{"landed ready is landed", monitor.SessionStatusRow{Status: "ready", Landed: true}, actShipped},
+		{"landed unverified is landed", monitor.SessionStatusRow{Status: "unverified", Landed: true}, actShipped},
+		{"landed unplanned is landed", monitor.SessionStatusRow{Status: "unplanned", Landed: true}, actShipped},
 		{"non-landed ready still do", monitor.SessionStatusRow{Status: "ready"}, actDo},
 		{"non-landed underway still orphan", monitor.SessionStatusRow{Status: "underway"}, actOrphan},
 		// Decoration still wins: a landed task a live session is on reads ⟳ doing.
@@ -51,8 +51,15 @@ func TestClassify(t *testing.T) {
 		// Precedence pin: ⏚ landed outranks ⇥ closed, so ⇥ marks only closed work
 		// that never merged. A refactor that moves the isTerminal check above the
 		// r.Landed check breaks these.
-		{"landed confirmed is landed not closed", monitor.SessionStatusRow{Status: "confirmed", Landed: true}, actLanded},
-		{"landed completed is landed not closed", monitor.SessionStatusRow{Status: "completed", Landed: true}, actLanded},
+		{"landed confirmed is landed not closed", monitor.SessionStatusRow{Status: "confirmed", Landed: true}, actShipped},
+		{"landed completed is landed not closed", monitor.SessionStatusRow{Status: "completed", Landed: true}, actShipped},
+		// E-2444 / ED-1638: a completed research or brainstorm task has shipped
+		// though it never lands; a completed todo with no landing has not.
+		{"completed research is shipped", monitor.SessionStatusRow{Status: "completed", TypeSlug: "research"}, actShipped},
+		{"completed brainstorm is shipped", monitor.SessionStatusRow{Status: "completed", TypeSlug: "brainstorm"}, actShipped},
+		{"assumed todo with no landing is closed", monitor.SessionStatusRow{Status: "assumed", TypeSlug: "todo"}, actDone},
+		// E-2444: the landed status outranks shipped, though it has a landing.
+		{"landed status is post-land", monitor.SessionStatusRow{Status: "landed", Landed: true}, actPostLand},
 		// Decorations still outrank both.
 		{"focal confirmed is this", monitor.SessionStatusRow{Status: "confirmed", IsFocal: true}, actThis},
 		{"parent obsolete is parent", monitor.SessionStatusRow{Status: "obsolete", IsParent: true}, actParent},
@@ -94,11 +101,12 @@ func TestTerminalStatusNeverUnknown(t *testing.T) {
 // (submitted, a plan awaiting review — spawnable, but not yet reviewed).
 func TestActionIcons(t *testing.T) {
 	cases := map[action]string{
-		actReview:  "⚑",
-		actOrphan:  "◷",
-		actLanded:  "⏚",
-		actUnknown: "⁇",
-		actDone:    "⇥",
+		actReview:   "⚑",
+		actOrphan:   "◷",
+		actShipped:  "⏚",
+		actPostLand: "⊡",
+		actUnknown:  "⁇",
+		actDone:     "⇥",
 	}
 	for a, want := range cases {
 		if got := a.Icon(); got != want {
@@ -284,26 +292,26 @@ func TestUnsettledMark(t *testing.T) {
 }
 
 // TestUnsettledMarkOnEpicRows pins E-2198: an epic's ⊙/space split is read from
-// its descendants (DescendantShipped, filled by the data layer), never from its
+// its descendants (DescendantReported, filled by the data layer), never from its
 // own derived status — which is why E-1991 wore ⊙ with five children landed.
 // The legend is derived by calling unsettledMark, so it must follow the column.
 func TestUnsettledMarkOnEpicRows(t *testing.T) {
-	epic := func(status string, shipped, unsettled, known bool) monitor.SessionStatusRow {
+	epic := func(status string, reported, unsettled, known bool) monitor.SessionStatusRow {
 		return monitor.SessionStatusRow{Status: status, TypeSlug: "epic",
-			DescendantShipped: shipped, Unsettled: unsettled, UnsettledKnown: known}
+			DescendantReported: reported, Unsettled: unsettled, UnsettledKnown: known}
 	}
 	cases := []struct {
 		name string
 		row  monitor.SessionStatusRow
 		want string
 	}{
-		{"children shipped, nothing outstanding", epic("submitted", true, false, true), " "},
+		{"children reported, nothing outstanding", epic("submitted", true, false, true), " "},
 		{"any child unsettled", epic("underway", true, true, true), "◆"},
-		{"no child shipped", epic("underway", false, false, true), "⊙"},
+		{"no child reported", epic("underway", false, false, true), "⊙"},
 		{"children's verdicts not yet known", epic("underway", true, false, false), "~"},
-		{"an epic's own completed status is not shipped work", epic("completed", false, false, true), "⊙"},
+		{"an epic's own completed status is not reported work", epic("completed", false, false, true), "⊙"},
 		{"a todo reads its own landing, not descendants", monitor.SessionStatusRow{Status: "confirmed", TypeSlug: "todo",
-			DescendantShipped: true, UnsettledKnown: true}, "⊙"},
+			DescendantReported: true, UnsettledKnown: true}, "⊙"},
 		{"an epic's own landing row is not its children's work", monitor.SessionStatusRow{Status: "underway", TypeSlug: "epic",
 			Landed: true, UnsettledKnown: true}, "⊙"},
 	}
@@ -561,11 +569,13 @@ func TestBuildLegend(t *testing.T) {
 		// redundant: ✓ is what a DECORATED terminal row shows instead, where column 1
 		// is ●/↑/⏚.
 		{
-			name: "undecorated unlanded terminal row surfaces ⇥ closed and ✓ done, never ⁇",
+			name: "undecorated completed research row surfaces ⏚ shipped and ✓ done, never ⁇",
 			rows: []monitor.SessionStatusRow{{Status: "completed", TypeSlug: "research", UnsettledKnown: true}},
-			want: "⇥ closed  ✓ done",
+			// E-2444 / ED-1638: a completed research task has shipped though it
+			// never lands, so it reads ⏚ rather than ⇥ closed.
+			want: "⏚ shipped  ✓ done",
 			// No ⊙: a findings task is judged by status, and `completed` is
-			// Shipped, so the row's column is a blank — "produced work, nothing
+			// Reported, so the row's column is a blank — "produced work, nothing
 			// outstanding" — with no landing row, which is correct for research
 			// (E-2199). A code-bearing task in the same state would read ⊙. Contrast
 			// the declined/obsolete case below, which is terminal but never shipped
@@ -583,9 +593,9 @@ func TestBuildLegend(t *testing.T) {
 		// ⏚ wins over ⇥: a terminal task whose work merged is landed, so ⇥ is the
 		// glyph for closed work that never merged — the informative case.
 		{
-			name:        "landed terminal row surfaces ⏚ landed and ✓ done, not ⇥ closed",
+			name:        "landed terminal row surfaces ⏚ shipped and ✓ done, not ⇥ closed",
 			rows:        []monitor.SessionStatusRow{{Status: "confirmed", Landed: true, UnsettledKnown: true}},
-			want:        "⏚ landed  ✓ done",
+			want:        "⏚ shipped  ✓ done",
 			mustNotHave: []string{"⇥ closed", "⁇ unknown"},
 		},
 		{
@@ -612,9 +622,14 @@ func TestBuildLegend(t *testing.T) {
 			want: "▶ do  ⚑ approve  ⊙ not started",
 		},
 		{
-			name:     "landed row surfaces ⏚ landed",
+			name:     "landed row surfaces ⏚ shipped",
 			rows:     []monitor.SessionStatusRow{{Status: "ready", Landed: true}},
-			mustHave: []string{"⏚ landed"},
+			mustHave: []string{"⏚ shipped"},
+		},
+		{
+			name:     "landed-status row surfaces ⊡ post-land (E-2444)",
+			rows:     []monitor.SessionStatusRow{{Status: "landed", Landed: true}},
+			mustHave: []string{"⊡ post-land"},
 		},
 		{
 			name:     "unrecognized status surfaces ⁇ unknown",

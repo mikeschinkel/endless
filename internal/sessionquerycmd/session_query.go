@@ -122,6 +122,10 @@ func Run(args []string) {
 		if err := runPlanReadiness(args[1:]); err != nil {
 			fail("plan-readiness", err)
 		}
+	case "post-land-state":
+		if err := runPostLandState(args[1:]); err != nil {
+			fail("post-land-state", err)
+		}
 	case "moot-questions":
 		if err := runMootQuestions(args[1:]); err != nil {
 			fail("moot-questions", err)
@@ -230,6 +234,7 @@ func usageText() string {
 		"  plan-items-toml --id <task-id>    JSON {path, content} of a task's items.toml mirror",
 		"  plan-readiness --id <task-id>     JSON {type, status, gated, items, deliverables, unapproved}",
 		"  moot-questions --id <task-id>     JSON array [{id, item_seq}] of open discrepancy questions on withdrawn items",
+		"  post-land-state --id <task-id>    JSON {task_id, status, items, open}: post-land items (E-2444) and the open ones",
 		"  fingerprint --repo <path>         JSON {fingerprint, head} of the branch's own changes",
 		"  reconcile-gate --id <task-id> --repo <path> [--mode handover|backstop]",
 		"                                    JSON {task_id, skipped, problems[], pass} — the reconciliation gate",

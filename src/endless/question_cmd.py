@@ -114,8 +114,15 @@ def resolve_answerer(by: str | None) -> str:
     return USER
 
 
-def answer_question(question_id: int, answer: str, by: str | None) -> None:
-    """Record an answer to one open question."""
+def answer_question(question_id: int, answer: str, by: str | None,
+                    post_land: bool = False) -> None:
+    """Record an answer to one open question.
+
+    With post_land (E-2444), the question must be an open `blocked` question a
+    reconciliation filed for a plan item: the answer marks that item post-land
+    and records the mark as the user's approval, so the agent's next
+    reconciliation may give it `deferred`.
+    """
     if not answer or not answer.strip():
         # No TSV row (post-audit command). NO-REPORT, and checked before the
         # emit: the answer is an argument the caller supplies, and a blank one
@@ -125,6 +132,9 @@ def answer_question(question_id: int, answer: str, by: str | None) -> None:
             "Retry with the answer text as the argument")
     answerer = resolve_answerer(by)
     tgt = _target(question_id=question_id)
+    if post_land:
+        from endless import plan_items
+        plan_items.mark_post_land_from_answer(tgt["task_id"], question_id, answerer)
     emit_event(
         kind="task_question.resolved",
         project=tgt["project"],

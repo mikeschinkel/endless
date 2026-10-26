@@ -311,6 +311,7 @@ func renderTasksGrouped(b *strings.Builder, body string) {
 		"Pending":    nil,
 		"Unverified": nil,
 		"Unlanded":   nil,
+		"Landed":     nil,
 		"Unreviewed": nil,
 	}
 	if body != "" {
@@ -321,7 +322,7 @@ func renderTasksGrouped(b *strings.Builder, body string) {
 			)
 		}
 	}
-	for _, heading := range []string{"Resolved", "Pending", "Unverified", "Unlanded", "Unreviewed"} {
+	for _, heading := range []string{"Resolved", "Pending", "Unverified", "Unlanded", "Landed", "Unreviewed"} {
 		b.WriteString("## ")
 		b.WriteString(heading)
 		b.WriteString("\n")
@@ -363,6 +364,8 @@ func statusToDisposition(status string) string {
 		return "Unverified"
 	case status == taskstatus.Unlanded:
 		return "Unlanded"
+	case status == taskstatus.Landed:
+		return "Landed"
 	case status == taskstatus.Unreviewed:
 		return "Unreviewed"
 	default:

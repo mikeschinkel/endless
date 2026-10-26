@@ -50,10 +50,21 @@ statement = "Does not touch the ledger"
     got = plan_items.parse_items_file(path)
     assert got == [
         {"seq": None, "kind": "deliverable", "statement": "The widget renders",
-         "verify": "go test ./widget", "detail": ""},
+         "verify": "go test ./widget", "detail": "", "post_land": False},
         {"seq": 4, "kind": "exclusion", "statement": "Does not touch the ledger",
-         "verify": "", "detail": ""},
+         "verify": "", "detail": "", "post_land": False},
     ]
+
+
+def test_items_file_reads_the_post_land_mark(tmp_path):
+    """E-2444: post_land = true marks an item; it must be a TOML boolean."""
+    path = _write(tmp_path, "i.toml",
+                  '[[item]]\nstatement = "P9 recorded after install"\npost_land = true\n')
+    assert plan_items.parse_items_file(path)[0]["post_land"] is True
+    bad = _write(tmp_path, "b.toml",
+                 '[[item]]\nstatement = "x"\npost_land = "yes"\n')
+    with pytest.raises(ClickException):
+        plan_items.parse_items_file(bad)
 
 
 @pytest.mark.parametrize("body", [

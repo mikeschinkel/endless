@@ -1078,6 +1078,9 @@ def show_plan(
     _ids = [row["id"] for row in rows]
     superseded = superseded_by_map(_ids) if (as_json or agent) else {}
     duplicated = duplicates_map(_ids) if (as_json or agent) else {}
+    # E-2444: a `landed` row names its open post-land items in every format.
+    post_land = {row["id"]: _open_post_land(row) for row in rows
+                 if row["status"] == "landed"}
 
     if as_json:
         import json
@@ -1104,6 +1107,10 @@ def show_plan(
                 "parent": f"E-{row['parent_id']}" if row["parent_id"] else None,
                 "created": row["created_at"],
                 "confirmed": row["completed_at"] or None,
+                "open_post_land": (
+                    [it["label"] for it in post_land[row["id"]]]
+                    if row["id"] in post_land else None
+                ),
             }
             for row in rows
         ]
@@ -1135,9 +1142,12 @@ def show_plan(
                     f"E-{i}" for i in duplicated[row["id"]]
                 )
             ) if duplicates_note(row["status"], duplicated.get(row["id"])) else ""
+            pl_str = (
+                " post_land_open=" + ",".join(it["label"] for it in post_land[row["id"]])
+            ) if post_land.get(row["id"]) else ""
             click.echo(
                 f"E-{row['id']} {row['phase']} "
-                f"{row['status']}{rating_str}{rb_str}{dup_str} {row['title']}"
+                f"{row['status']}{rating_str}{rb_str}{dup_str}{pl_str} {row['title']}"
             )
         rowcap.echo_footer(hidden, agent=True)
         return
@@ -1154,6 +1164,10 @@ def show_plan(
 
     _render_flat_table(rows)
     rowcap.echo_footer(hidden)
+    for tid, open_items in post_land.items():
+        if open_items:
+            click.echo(f"{task_id_display(tid)} is landed; open post-land items: "
+                       + ", ".join(it["label"] for it in open_items))
 
     click.echo()
     # The tally counts the WHOLE result set, not the rendered page — with the
@@ -1786,7 +1800,7 @@ def _unlanded_rows(project_id: int) -> tuple[list[dict], str]:
         f"(SELECT COUNT(*) FROM task_landings l WHERE l.task_id = t.id) AS lands "
         f"FROM live_tasks t "
         f"WHERE t.project_id = ? "
-        f"  AND t.status IN ({statuses.sql_list('shipped-terminal')}) "
+        f"  AND t.status IN ({statuses.sql_list('reported-terminal')}) "
         f"ORDER BY t.id DESC",
         (project_id,),
     )
@@ -3108,9 +3122,9 @@ def _next_sort_order(project_id: int, phase: str) -> int:
     return (val or 0) + 10
 
 
-# E-2175: every status that ends a task WITHOUT it having shipped, each mapped
+# E-2175: every status that abandons a task, each mapped
 # to the gerund and the remedy its refusal names. These three are the whole set:
-# work that shipped keeps the terminal it earned and is not abandoned, so it
+# reported work keeps the status it earned and is not abandoned, so it
 # never appears here.
 #
 # `superseded` is in the set even though it is separately refused without a
@@ -3169,7 +3183,7 @@ def _require_reason_for_abandonment(status: str | None, reason: str | None):
     accumulated 74 of them.
 
     E-2175 widened the requirement from `declined` alone to every status that
-    ends an unshipped task. Existing reasonless rows are deliberately left
+    abandons a task. Existing reasonless rows are deliberately left
     alone — inventing reasons nobody remembers would produce
     authoritative-looking fiction, and the guard is on the transition, not on
     the row.
@@ -3182,13 +3196,13 @@ def _require_reason_for_abandonment(status: str | None, reason: str | None):
         gerund, remedy = _ABANDONMENT_STATUSES[status]
         # CONDITIONAL on where the reason would come from, which this command
         # cannot see. When the user said why, writing it down is a retry; when
-        # it would have to be invented, the invention is the harm — ending a
-        # task unshipped is the user's call and so is its reason.
+        # it would have to be invented, the invention is the harm — abandoning a
+        # task is the user's call and so is its reason.
         raise agent_help.report_if(
             f"A reason is required when {gerund} a task. {remedy}",
             "the reason would have to be invented",
             "pass the reason the user gave and retry",
-            "ending a task unshipped is the user's decision, and so is why",
+            "abandoning a task is the user's decision, and so is why",
         )
 
 
@@ -3413,22 +3427,22 @@ def _require_status_allowed_for_type(status: str | None, task_type: str | None):
     )
 
 
-# The statuses that mean the task's work SHIPPED — it reached the verification
+# The statuses that mean the task's work was REPORTED — it reached the verification
 # gate or passed it.
 #
 # Deliberately NOT the terminal set (_TERMINAL_STATUSES): `declined`
-# and `obsolete` are terminal but never shipped, and 'unverified' ships without
+# and `obsolete` are terminal but never reported, and 'unverified' is reported without
 # being terminal.
 #
-# E-1956 used this to REFUSE `obsolete` on shipped work. E-2144 removed that
+# E-1956 used this to REFUSE `obsolete` on reported work. E-2144 removed that
 # gate: the axis for `obsolete` is whether anything REPLACED the work, not
-# whether it shipped — the same line Endless already drew for decisions, where
-# `obsolete` means "it stopped applying and nothing replaced it". Shipped code
+# whether it was reported — the same line Endless already drew for decisions, where
+# `obsolete` means "it stopped applying and nothing replaced it". Reported code
 # that is being deleted rather than superseded is obsolete in the plainest
 # sense, and `task supersede` had no id to name for it. What survives here is the
-# one use that was always about shipped-ness: `_apply_replacement` holds a
+# one use that was always about reported-ness: `_apply_replacement` holds a
 # replaced task at the status it EARNED instead of overwriting it.
-_SHIPPED_STATUSES = statuses.get("shipped")
+_REPORTED_STATUSES = statuses.get("reported")
 
 
 
@@ -3442,7 +3456,7 @@ def _require_a_replacement_for_superseded(item_id: int, status: str | None):
     nothing replaced it", and it is one word away.
 
     This is the mirror of the gate E-2144 removed, keyed on the thing that
-    actually licenses the status instead of on whether the work shipped.
+    actually licenses the status instead of on whether the work was reported.
     Decisions have enforced the same shape since E-1920: `decision supersede`
     REQUIRES `--by`, because a supersession without a successor is not one.
 
@@ -3580,6 +3594,20 @@ def _maybe_emit_report_reminder(
     click.echo("  command's output verbatim as your entire message.")
 
 
+def _refuse_settling_landed(item_id: int, status: str, target: str) -> None:
+    """A `landed` task is never confirmed or assumed by hand (E-2444): it moves
+    to `assumed` by itself when the post-land reconcile or withdrawal leaves no
+    post-land item open, and it has no route to `confirmed` at all."""
+    if status != "landed":
+        return
+    raise agent_help.no_report(
+        f"E-{item_id} is landed with post-land plan items open, so it is not "
+        f"set to {target} by hand: it becomes assumed by itself when the last "
+        "of them settles. Nothing changed.",
+        f"Do the post-land work and record it with `endless task reconcile "
+        f"E-{item_id}` (see `endless guide tasks/post-land`)")
+
+
 def complete_item(item_id: int, cascade: bool = False, outcome: str | None = None):
     """Mark a task as confirmed."""
     from endless.event_bridge import emit_event
@@ -3598,6 +3626,7 @@ def complete_item(item_id: int, cascade: bool = False, outcome: str | None = Non
         )
 
     _require_status_allowed_for_type("confirmed", row[0]["type"])
+    _refuse_settling_landed(item_id, row[0]["status"], "confirmed")
     if cascade:
         _refuse_cascade_across_typed_descendants(item_id, "confirmed")
 
@@ -3667,6 +3696,7 @@ def assume_item(item_id: int, cascade: bool = False, outcome: str | None = None)
         )
 
     _require_status_allowed_for_type("assumed", row[0]["type"])
+    _refuse_settling_landed(item_id, row[0]["status"], "assumed")
     if cascade:
         _refuse_cascade_across_typed_descendants(item_id, "assumed")
     if row[0]["status"] != "assumed":
@@ -4757,7 +4787,7 @@ def _unreachable_owner_refusal(item_id: int, eid: int, comp: dict):
     )
 
 
-# E-1891: `settled` — the work is over one way or another, shipped or
+# E-1891: `settled` — the work is over one way or another, reported or
 # abandoned.
 #
 # E-2093 renamed this from `_CLAIM_REQUIRES_FORCE`. It no longer names a flag,
@@ -4777,17 +4807,17 @@ def _settled_reopen_route(item_id: int, current_status: str) -> str:
 
     The status has to be one the task can actually REACH, because a refusal
     that names a command the next call rejects is the defect this task exists
-    to remove. Two routes, split on the `shipped` group:
+    to remove. Two routes, split on the `reported` group:
 
-      - shipped work (`unverified`/`unreviewed`/`confirmed`/`assumed`/
+      - reported work (`unverified`/`unlanded`/`landed`/`unreviewed`/`confirmed`/`assumed`/
         `completed`) reopens to `revisit` — "needs re-evaluation before it can
         proceed", which is exactly what reopening means.
-      - `declined`/`obsolete` never shipped; the lifecycle reverses them to
+      - `declined`/`obsolete` were never reported; the lifecycle reverses them to
         `unplanned` ("user reconsiders"), and has no edge to `revisit` at all.
 
     Both land in `claim-promotes`, so the ordinary claim that follows works.
     """
-    target = "revisit" if statuses.has("shipped", current_status) else "unplanned"
+    target = "revisit" if statuses.has("reported", current_status) else "unplanned"
     return f"endless task update E-{item_id} --status {target}"
 
 
@@ -5414,7 +5444,7 @@ def claim_item(item_id: int, unattended: bool = False, force: bool = False,
         _warn_force_deprecated("claim", item_id, current_status)
     if not force and current_status in _CLAIM_REFUSED_STATUSES:
         # REPORT: every reopen route out of a settled status
-        # (shipped -> revisit, declined/obsolete/superseded -> unplanned) is a
+        # (reported -> revisit, declined/obsolete/superseded -> unplanned) is a
         # user-owned transition. The refusal names them so the user can be asked
         # a specific question, not so the agent can take one.
         raise agent_help.report(
@@ -6276,6 +6306,8 @@ def update_plan(
         # E-2280: `unverified` and `assumed` are gated on a current, settled
         # reconciliation. `worktree land`'s own move to `assumed` does not come
         # through here, and needs no gate: the verify it requires already ran it.
+        if status in ("assumed", "confirmed"):
+            _refuse_settling_landed(item_id, row[0]["status"], status)
         if status in ("unverified", "assumed") and status != row[0]["status"]:
             from endless import plan_items
             plan_items.require_gate(item_id, f"move to {status}", to=status)
@@ -6329,7 +6361,7 @@ def update_plan(
     # became wrong more often than right.
     #
     # It also fired a user-owned edge. `{From: Assumed, To: Revisit, Actor:
-    # ActorUser, "reopens — shipped work found wrong"}` in
+    # ActorUser, "reopens — finished work found wrong"}` in
     # internal/taskstatus/transitions.go (with twins from Confirmed and
     # Completed) is the transition it drove, and `revisit` cannot reach a
     # terminal status again — so documenting what shipped destroyed the
@@ -6790,10 +6822,25 @@ LANDING_LINE_BUDGET = 60
 #
 # From the Go registry (E-1891), not typed out here. Neither parent group answers
 # the question alone, and the two exclusions are for opposite reasons —
-# `unverified`/`unreviewed` shipped but are not finished, so their work is
+# `unverified`/`unreviewed` are reported but not finished, so their work is
 # SUPPOSED to be sitting on a branch; `declined`/`obsolete` are finished but
-# never shipped, so "never" is the expected answer and says nothing.
-_SHIPPED_TERMINAL_STATUSES = frozenset(statuses.get("shipped-terminal"))
+# abandoned, so "never" is the usual answer and says nothing.
+_REPORTED_TERMINAL_STATUSES = frozenset(statuses.get("reported-terminal"))
+
+
+def _open_post_land(item) -> list[dict]:
+    """A `landed` task's open post-land items (E-2444); [] for any other."""
+    if item["status"] != "landed":
+        return []
+    from endless import plan_items
+    return plan_items.post_land_state(item["id"])["open"]
+
+
+def _post_land_lines(item) -> list[str]:
+    """One line per open post-land item of a `landed` task, for `task show`."""
+    return [f"{it['label']} {it['statement']} — open; record it with "
+            f"`endless task reconcile E-{item['id']}`"
+            for it in _open_post_land(item)]
 
 
 def _landing_line(landings: list, probe: dict | None) -> str:
@@ -7070,7 +7117,7 @@ def detail_item(
     # something the status has not claimed. `None` means "not asked", which
     # `_landing_line` never sees, because the line is not rendered then either.
     landedness = None
-    if not landings and item["status"] in _SHIPPED_TERMINAL_STATUSES:
+    if not landings and item["status"] in _REPORTED_TERMINAL_STATUSES:
         landedness = _landedness_for(
             [item_id], _project_repo_root(item["project_id"])).get(item_id)
     # Authority (E-2095), resolved once for all three output modes: is this
@@ -7144,6 +7191,12 @@ def detail_item(
                     **landedness,
                 }
                 if landedness is not None else None
+            ),
+            # E-2444: a `landed` task's open post-land items; null otherwise.
+            "open_post_land": (
+                [{"label": it["label"], "statement": it["statement"],
+                  "verdict": it.get("verdict")} for it in _open_post_land(item)]
+                if item["status"] == "landed" else None
             ),
             "complexity": item["complexity"],
             "risk": item["risk"],
@@ -7261,6 +7314,8 @@ def detail_item(
         click.echo(f"updated={item['updated_at']}")
         if item["completed_at"]:
             click.echo(f"confirmed={item['completed_at']}")
+        for line in _post_land_lines(item):
+            click.echo(f"post_land_open={line}")
         if landings:
             click.echo(f"landed={_format_landed_line(landings)}")
         elif landedness is not None:
@@ -7469,6 +7524,8 @@ def _render_detail_human(
     # absence doing work it cannot do.
     if landings or landedness is not None:
         click.echo(f"{label('Landed:')} {val(_landing_line(landings, landedness))}")
+    for line in _post_land_lines(item):
+        click.echo(f"{label('Post-land:')} {val(line)}")
     # A hidden large field collapses to a single-line `Name: N chars` placeholder
     # grouped here with the other Label: value fields; its full body (when the
     # matching flag is set) renders as a multi-line section after Description
@@ -7970,12 +8027,12 @@ def spawn_plan(item_id: int, project_name: str | None = None,
             # work is to pick up the session that did it, not to start a second
             # one that cannot see its reasoning.
             # REPORT: the route out resumes the prior session, which switches
-            # the user's tmux focus, and `--revisit` reopens shipped work.
+            # the user's tmux focus, and `--revisit` reopens finished work.
             # Both edges are the user's.
             raise agent_help.report(
                 f"E-{item_id} is '{current_status}' — settled work. Nothing "
                 f"was spawned.",
-                "whether to reopen shipped work and resume the session that "
+                "whether to reopen finished work and resume the session that "
                 "did it, which switches the user's tmux focus",
                 text=(
                     f"E-{item_id} is '{current_status}' — settled work. Pick it "
@@ -8759,12 +8816,12 @@ def supersede_task(
     """Mark old_id as superseded by new_id: record the relation, set the status.
 
     `status` is what the REPLACED task becomes. None means "derive it from what
-    the task is now": work that already SHIPPED keeps the status it earned — the
+    the task is now": work already REPORTED keeps the status it earned — the
     supersession is carried by the `superseded_by` relation, and overwriting a
     true terminal would throw away which terminal it reached — while everything
     else takes the 'obsolete' default. An explicit status still wins.
 
-    The unshipped default is `superseded`, not `obsolete`: `obsolete` means "no
+    The unreported default is `superseded`, not `obsolete`: `obsolete` means "no
     longer needed, and nothing replaced it", and this function's whole job is
     recording that something did. Closing it as `obsolete` made the row assert
     both at once.
@@ -8791,9 +8848,9 @@ def supersede_task(
     old_status = old_row["status"]
 
     if status is None:
-        status = old_status if old_status in _SHIPPED_STATUSES else "superseded"
+        status = old_status if old_status in _REPORTED_STATUSES else "superseded"
     # E-1531: text given while abandoning the task is WHY — its reason, not a
-    # deliverable. Shipped work that keeps its status has no reason to give,
+    # deliverable. Reported work that keeps its status has no reason to give,
     # so its --outcome stays an outcome.
     name = "reason" if status in _ABANDONMENT_STATUSES else "outcome"
     _require_reason_for_abandonment(status, outcome)
@@ -8860,7 +8917,7 @@ def supersede_task(
         # The header alone would read as "nothing happened". Say what was kept
         # and why, so the held status is visibly a decision rather than a miss.
         click.echo(click.style(
-            f"  status held at {old_status!r} — shipped work keeps what it "
+            f"  status held at {old_status!r} — reported work keeps what it "
             f"earned; the supersession is the relation.", dim=True))
 
 

@@ -3951,6 +3951,7 @@ def _record_only_landing(
     sha: str | None,
     at: str | None,
     dry_run: bool,
+    keep_status: bool = False,
 ) -> None:
     """Record a landing that already happened, without touching git (E-1719).
 
@@ -4030,6 +4031,12 @@ def _record_only_landing(
         click.style("•", fg="green")
         + f" Recorded landing for {canonical} at {sha[:8]} ({landed_at})"
     )
+    # E-2444: the same settle rule as a live land — an `unlanded` task becomes
+    # `assumed`, or `landed` while post-land items are open. A task at any other
+    # status is a backfill of history, and its status is left as it is.
+    states = unlanded.verify_states(item_id)
+    if states and states[0]["status"] == unlanded.UNLANDED:
+        unlanded.settle(states[0], keep_status)
 
 
 def _record_landing(
@@ -4444,7 +4451,8 @@ def land_worktree(
       6. Emit task.landed event. Worktree dir and branch stay; a
          separate reaper sweep removes them after worktree_ttl.
       6.1 Settle the task as `assumed` when its type settles on land, unless
-         --keep-status (E-2262).
+         --keep-status (E-2262) — or as `landed` while post-land plan items
+         are open (E-2444).
 
     Step 4.2 is why there is no behind-base refusal: rather than gating on a
     proxy for staleness, the land removes the staleness (E-1941).
@@ -4469,7 +4477,7 @@ def land_worktree(
     # happened; there is no live worktree/branch to rebase or ff-merge, so it
     # dispatches before all of that.
     if record_only:
-        _record_only_landing(canonical, sha, at, dry_run)
+        _record_only_landing(canonical, sha, at, dry_run, keep_status)
         return
 
     main_root = _project_root()

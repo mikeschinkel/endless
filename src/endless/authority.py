@@ -79,7 +79,7 @@ def for_task(status: str | None, superseded_by: list[str] | None,
     """The caveat on a task row, or None when it is straightforwardly current.
 
     The two relations trigger regardless of status, because that is the point of
-    them: `task supersede` deliberately holds shipped work at the status it earned,
+    them: `task supersede` deliberately holds reported work at the status it earned,
     so a REPLACED task can read `confirmed` and still not be the record to quote.
     """
     if superseded_by:

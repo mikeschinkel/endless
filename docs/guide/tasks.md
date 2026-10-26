@@ -359,7 +359,7 @@ endless task update E-9 --supersedes E-5             # relation only — see bel
 
 Both record the relation and **nothing else**. `endless task supersede <old> --by
 <new>` remains the surface that also closes the superseded task (and knows to hold
-a shipped status); `--supersedes` deliberately does not, so it never closes
+a reported status); `--supersedes` deliberately does not, so it never closes
 something you only meant to link.
 
 To record a decision prompted by a task, use `endless decision add "..." --about <id>` — but only if it passes the three tests in **Is it a decision?** in `endless guide decisions` (real alternative, outlives the task, the user made it); zero is normal. (There is no `--decision` flag on `task add` or `task update`.)
@@ -566,10 +566,12 @@ A task with plan items — every `todo` and `bugfix` must have them — can be s
 
 | Item kind | Verdicts |
 |---|---|
-| deliverable | `as_planned`, `differently`, `not_done`, `blocked` |
+| deliverable | `as_planned`, `differently`, `not_done`, `blocked`, `deferred` (post-land items only) |
 | exclusion | `kept`, `not_kept` (the work did what it rules out) |
 
-`endless task reconcile <id> --file <path>` records it. Every **discrepancy** — any verdict other than `as_planned` or `kept`, and any grown item the user has not approved — is filed as an open question tagged with its **kind**, ranked most to least concerning: `excluded`, `less` (not done), `blocked`, `different`, `more` (grown). `question list` sorts by that rank. "No discrepancies" is recorded affirmatively, by giving every item a verdict; it is never inferred from silence.
+**Work that can only happen after the land** — it needs the landed, migrated, installed result and produces no code — is a **post-land item**: marked on the item, reconciled `deferred`, landed to the `landed` status, and settled by a post-land reconcile on the landed task. The rules, including the code-means-follow-up-task rule: `endless guide tasks/post-land`.
+
+`endless task reconcile <id> --file <path>` records it. Every **discrepancy** — any verdict other than `as_planned`, `kept` or `deferred`, and any grown item the user has not approved — is filed as an open question tagged with its **kind**, ranked most to least concerning: `excluded`, `less` (not done), `blocked`, `different`, `more` (grown). `question list` sorts by that rank. "No discrepancies" is recorded affirmatively, by giving every item a verdict; it is never inferred from silence.
 
 If it files questions, put them to your user **one at a time**, in the order it prints them: what differs from the plan and why, the options with their pros and cons and your recommendation, then stop, so they can ask about it before answering. Record each answer with `endless question answer EQ-<n> "<answer>" --by user` before presenting the next. `endless question list <id>` shows them all at once, in the same order, for a user who wants the whole list. When all are answered, make any changes and reconcile again. An item whose earlier question was answered and whose verdict is unchanged needs `answer_holds = true` with a one-line reason, or `reask = true` with what changed: judge the earlier answer against the whole task as it is now, not the item alone — a redesign can make an answer wrong that was right before. A changed verdict always files a new question. Re-approving after a redesign closes, as moot, the open questions on withdrawn items.
 
@@ -606,8 +608,8 @@ Set by hand on a task nothing replaced, it would send every reader looking for a
 task that does not exist. Decisions have enforced the same shape for as long as
 they have had the status — `decision supersede` requires `--by`.
 
-`task supersede` keeps a shipped task's status exactly as it stands (an unshipped
-one becomes `superseded`) and records `superseded_by`. Holding the shipped
+`task supersede` keeps a reported task's status exactly as it stands (an unreported
+one becomes `superseded`) and records `superseded_by`. Holding the reported
 status is about not overwriting which terminal the work actually reached — the
 supersession rides on the relation either way. A **terminal**
 status then shows the supersession alongside it — `assumed (superseded by E-101)`
@@ -622,8 +624,7 @@ bare status. They share one Status column across every row, so annotating a
 handful of cells sized the column for all of them and took the difference out of
 every title — a real cost for a fact one `task show` away.
 
-**Every abandonment requires a reason.** A task can end three ways without
-having shipped — `declined`, `obsolete`, `superseded` — and all three are
+**Every abandonment requires a reason.** A task can be abandoned three ways — `declined`, `obsolete`, `superseded` — and all three are
 refused without a reason: `--reason`, or `--outcome` given with the status,
 which is stored as the reason. It must come with the command that closes the
 task: a reason already stored does not satisfy it. The requirement is on the STATUS, not on a verb, so it holds whichever
@@ -636,7 +637,7 @@ plainest form of the commonest abandonment — `task supersede <old> --by <new>`
 recording no reason at all.
 
 The one exemption is structural rather than a carve-out: `task supersede` on work
-that ALREADY SHIPPED keeps the terminal it earned, was never abandoned, and so
+that was ALREADY REPORTED keeps the status it earned, was never abandoned, and so
 reaches none of the three statuses.
 
 Rows written before this guard are left as they are — a reason invented after
@@ -1028,7 +1029,7 @@ endless task unlink <a> --to <b> --type implements
 | `implements`    | A is the implementation of a plan, idea, or decision recorded in B. Common pattern: B is type=`plan` or type=`decision`, A is the work. |
 | `cleans_up` / `cleaned_up_by` | A handles a loose end discovered while working on B. **This is the canonical "follow-up" link** — use it for follow-up tasks filed mid-stream. (We considered `follows_up` and rejected it in favor of `cleans_up` to keep the vocabulary tight.) |
 | `documents`    | A is a decision that explains B. Auto-created when you pass `--about <task>` to `endless decision add`.              |
-| `supersedes`    | A supersedes B. Record it with `task supersede B --by A`, which sets B to `superseded` — or holds B's status if B's work already shipped, since the terminal it earned is still true. |
+| `supersedes`    | A supersedes B. Record it with `task supersede B --by A`, which sets B to `superseded` — or holds B's status if B's work was already reported, since the status it earned is still true. |
 | `duplicates` / `duplicated_by` | A and B were filed for the **same concern** — two descriptions of one piece of work, not two pieces. A is the redundant filing; B is the one kept. |
 
 **Quick decision tree:**
@@ -1059,7 +1060,7 @@ trying to record:
 
 Recorded, not enforced: linking `duplicates` changes no status. Close the
 redundant task separately — `obsolete` when nothing replaced it, and for work that
-already shipped the relation *is* the record, exactly as with `supersedes` (see
+was already reported the relation *is* the record, exactly as with `supersedes` (see
 the `obsolete` row in [Task statuses](index.md#task-statuses)).
 
 ```bash

@@ -466,7 +466,7 @@ type epicDescendant struct {
 //
 //   - any descendant (or the epic's own worktree) unsettled → ◆
 //   - else any verdict not yet determined → ~
-//   - else any non-epic descendant Shipped → blank
+//   - else any non-epic descendant Reported → blank
 //   - else → ⊙
 //
 // ◆ outranks ~ here though ~ outranks it on a single row. On a single row an
@@ -477,7 +477,7 @@ type epicDescendant struct {
 // Descendants, not just children: a child epic's own work product is its
 // children's too, so stopping one level down would leave a parent of epics
 // wearing ⊙ for the reason this exists to fix. Child epics count toward ◆/~
-// through their own worktrees but never toward Shipped — `completed` on an epic
+// through their own worktrees but never toward Reported — `completed` on an epic
 // is derived, and a sub-epic of declined children derives it too.
 //
 // The walk climbs task_tree.effective_parent_id, the same edge epic status
@@ -503,8 +503,8 @@ func annotateEpicWorkProduct(ctx context.Context, r *SessionStatusRow, verdicts 
 		}
 		unsettled = unsettled || d.Unsettled()
 		known = known && d.UnsettledKnown()
-		if !c.isEpic && taskstatus.Has(taskstatus.Shipped, c.status) {
-			r.DescendantShipped = true
+		if !c.isEpic && taskstatus.Has(taskstatus.Reported, c.status) {
+			r.DescendantReported = true
 		}
 	}
 	r.Unsettled = unsettled

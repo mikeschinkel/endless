@@ -103,6 +103,8 @@ func replayEvent(db *sql.DB, evt *Event, result *ProjectResult) error {
 		return replayTaskPlanBaselined(db, evt, result)
 	case KindTaskReconciled:
 		return replayTaskReconciled(db, evt, result)
+	case KindTaskPostLandReconciled:
+		return replayTaskPostLandReconciled(db, evt, result)
 	case KindTaskDepCreated:
 		return replayTaskDepCreated(db, evt, result)
 	case KindTaskDepDeleted:

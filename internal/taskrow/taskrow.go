@@ -87,9 +87,17 @@ const (
 	// Orphan: an `underway` task with no live session on it — claimed work that
 	// has stalled.
 	Orphan
-	// Landed: the task's work has merged (E-1693). ⏚ is U+23DA EARTH GROUND,
-	// "landed/grounded". E-1750 split it out of the old ⁇ catch-all.
-	Landed
+	// PostLand: a `landed` task (E-2444) — merged, with post-land plan items
+	// still open: work that needs the landed, installed result. It outranks
+	// Shipped because something is still owed. ⊡ is U+22A1 SQUARED DOT
+	// OPERATOR, one column.
+	PostLand
+	// Shipped: the task's work has shipped (ED-1638) — it has landed at least
+	// once (E-1693), or it is a `completed` research or brainstorm task, whose
+	// deliverable is outcome text that never lands. ⏚ is U+23DA EARTH GROUND,
+	// "landed/grounded". E-1750 split it out of the old ⁇ catch-all; E-2444
+	// relabeled it from "landed", which is now a status of its own.
+	Shipped
 	// Unknown: a status Classify does not recognize — a should-never-happen
 	// net (every real status is handled), so ⁇ (U+2047) in a legend flags an
 	// unhandled status slipping through.
@@ -99,8 +107,8 @@ const (
 	// through to Unknown, so the most ordinary rows in the database wore ⁇ and
 	// drowned out its diagnostic value. ⇥ is U+21E5 RIGHTWARDS ARROW TO BAR.
 	//
-	// ⏚ landed WINS over ⇥ (see Classify), so ⇥ marks only closed work that
-	// never merged — the informative case. Last in rank: an unhandled status
+	// ⏚ shipped WINS over ⇥ (see Classify), so ⇥ marks only closed work that
+	// never shipped — the informative case. Last in rank: an unhandled status
 	// deserves more prominence than a finished task.
 	Done
 )
@@ -109,23 +117,24 @@ const (
 // column (asserted in TestGlyphsAreSingleWidth), which is what keeps the fixed
 // row prefix aligned.
 var meta = [...]struct{ icon, label string }{
-	This:    {"●", "this"},
-	Parent:  {"↑", "parent"},
-	From:    {"↩", "from"},
-	Waiting: {"⚠", "waiting"},
-	Doing:   {"⟳", "doing"},
-	Primed:  {"◇", "primed"},
-	Do:      {"▶", "do"},
-	Answer:  {"¿", "answer"},
-	Review:  {"⚑", "approve"},
-	Act:     {"⚐", "act"},
-	Plan:    {"✎", "plan"},
-	Verify:  {"☑", "verify"},
-	Read:    {"»", "review"},
-	Orphan:  {"◷", "orphan"},
-	Landed:  {"⏚", "landed"},
-	Unknown: {"⁇", "unknown"},
-	Done:    {"⇥", "closed"},
+	This:     {"●", "this"},
+	Parent:   {"↑", "parent"},
+	From:     {"↩", "from"},
+	Waiting:  {"⚠", "waiting"},
+	Doing:    {"⟳", "doing"},
+	Primed:   {"◇", "primed"},
+	Do:       {"▶", "do"},
+	Answer:   {"¿", "answer"},
+	Review:   {"⚑", "approve"},
+	Act:      {"⚐", "act"},
+	Plan:     {"✎", "plan"},
+	Verify:   {"☑", "verify"},
+	Read:     {"»", "review"},
+	Orphan:   {"◷", "orphan"},
+	PostLand: {"⊡", "post-land"},
+	Shipped:  {"⏚", "shipped"},
+	Unknown:  {"⁇", "unknown"},
+	Done:     {"⇥", "closed"},
 }
 
 // Count is the number of actions, for callers that keep a per-action array.
@@ -144,14 +153,18 @@ func Actions() []Action {
 }
 
 // Classify maps a task's own facts to its action, below whatever decorations a
-// view applies first. Landed outranks a terminal status (⏚ over ⇥, so ⇥ marks
-// only closed work that never merged), and a terminal status outranks the
-// status switch. unanswered (a question waiting on the user, E-2280) splits a
-// reviewed task between ▶ do and ¿ answer, and one awaiting review between
-// ⚑ approve and ⚐ act.
-func Classify(status string, landed, unanswered bool) Action {
-	if landed {
-		return Landed
+// view applies first. A `landed` status outranks everything (⊡: work is still
+// owed after the land), shipped outranks a terminal status (⏚ over ⇥, so ⇥
+// marks only closed work that never shipped), and a terminal status outranks
+// the status switch. landed says the task has a landing record. unanswered (a
+// question waiting on the user, E-2280) splits a reviewed task between ▶ do and
+// ¿ answer, and one awaiting review between ⚑ approve and ⚐ act.
+func Classify(status, typeSlug string, landed, unanswered bool) Action {
+	if status == taskstatus.Landed {
+		return PostLand
+	}
+	if IsShipped(status, typeSlug, landed) {
+		return Shipped
 	}
 	if IsTerminal(status) {
 		return Done
@@ -178,6 +191,15 @@ func Classify(status string, landed, unanswered bool) Action {
 	default:
 		return Unknown
 	}
+}
+
+// IsShipped is ED-1638's definition: a task's work has landed at least once, or
+// it is a research or brainstorm task whose outcome was accepted (`completed`).
+func IsShipped(status, typeSlug string, landed bool) bool {
+	if landed {
+		return true
+	}
+	return status == taskstatus.Completed && (typeSlug == "research" || typeSlug == "brainstorm")
 }
 
 // IsTerminal reports whether a status is a terminus rather than a verb.

@@ -50,21 +50,22 @@ const fallbackCols = 90
 type action = taskrow.Action
 
 const (
-	actThis    = taskrow.This
-	actParent  = taskrow.Parent
-	actFrom    = taskrow.From
-	actDoing   = taskrow.Doing
-	actDo      = taskrow.Do
-	actAnswer  = taskrow.Answer
-	actReview  = taskrow.Review
-	actAct     = taskrow.Act
-	actPlan    = taskrow.Plan
-	actVerify  = taskrow.Verify
-	actRead    = taskrow.Read
-	actOrphan  = taskrow.Orphan
-	actLanded  = taskrow.Landed
-	actUnknown = taskrow.Unknown
-	actDone    = taskrow.Done
+	actThis     = taskrow.This
+	actParent   = taskrow.Parent
+	actFrom     = taskrow.From
+	actDoing    = taskrow.Doing
+	actDo       = taskrow.Do
+	actAnswer   = taskrow.Answer
+	actReview   = taskrow.Review
+	actAct      = taskrow.Act
+	actPlan     = taskrow.Plan
+	actVerify   = taskrow.Verify
+	actRead     = taskrow.Read
+	actOrphan   = taskrow.Orphan
+	actPostLand = taskrow.PostLand
+	actShipped  = taskrow.Shipped
+	actUnknown  = taskrow.Unknown
+	actDone     = taskrow.Done
 )
 
 // hiddenMode selects how the VIEWING session's hidden task rows (E-1914) are
@@ -1237,10 +1238,11 @@ func classify(r monitor.SessionStatusRow) action {
 		return actDoing
 	}
 	// Below the decorations, the task's own facts decide, by the rule `project
-	// status` shares (taskrow.Classify): ⏚ landed (E-1693) outranks ⇥ closed
-	// (E-1871), which outranks the status switch. A landed task a live session is
-	// on still reads ⟳, because the decorations above win.
-	return taskrow.Classify(r.Status, r.Landed, r.Unanswered)
+	// status` shares (taskrow.Classify): ⊡ post-land (E-2444) outranks ⏚ shipped
+	// (E-1693, ED-1638), which outranks ⇥ closed (E-1871), which outranks the
+	// status switch. A shipped task a live session is on still reads ⟳, because
+	// the decorations above win.
+	return taskrow.Classify(r.Status, r.TypeSlug, r.Landed, r.Unanswered)
 }
 
 func sortRows(rows []monitor.SessionStatusRow) {
@@ -1365,7 +1367,7 @@ const (
 //     task_landings row. Unsettled is evidence too, but ◆ is tested first, so
 //     by the time this split is reached it is already false.
 //   - A findings task (research, brainstorm) is decided by status —
-//     taskstatus.Shipped. It delivers outcome text, not code, so no landing row
+//     taskstatus.Reported. It delivers outcome text, not code, so no landing row
 //     is the CORRECT state for it, not a gap.
 //   - An epic is decided by its descendants, not by its own status (E-2198).
 //     Its status is derived from its children and its own branch is normally
@@ -1393,7 +1395,7 @@ const (
 // Accepted consequences:
 //
 //   - The ~90 finished code-bearing tasks from April 2026 and earlier that have
-//     no landing row now read ⊙, though their status says they shipped.
+//     no landing row now read ⊙, though their status says they are finished.
 //     Backfilling their landing records from git history is a much larger job
 //     with its own task (E-1715); this rule deliberately does not paper over it
 //     by falling back to status.

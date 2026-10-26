@@ -29,9 +29,14 @@ type PlanItem struct {
 	ApprovedAt        *string `json:"approved_at"`
 	CreatedAt         string  `json:"created_at"`
 	UpdatedAt         string  `json:"updated_at"`
+	PostLand          bool    `json:"post_land"`
+	ApprovedPostLand  *bool   `json:"approved_post_land"`
 
-	// From the latest reconciliation's entry for this item, when there is one.
-	Verdict        *string `json:"verdict"`
+	// The item's current verdict (E-2444): its newest post-land row when it has
+	// one — PostLandAttempt then names that row's attempt — otherwise the latest
+	// reconciliation's entry for it, when there is one.
+	PostLandAttempt *int64  `json:"post_land_attempt"`
+	Verdict         *string `json:"verdict"`
 	Note           *string `json:"note"`
 	HoldsReason    *string `json:"holds_reason"`
 	QuestionID     *int64  `json:"question_id"`
@@ -71,19 +76,33 @@ func planItems(db *sql.DB, taskID int64, all bool) ([]PlanItem, error) {
 	if rec != nil {
 		recID = rec.ID
 	}
+	// v is the item's current verdict: its newest post-land row (E-2444), else
+	// its entry in the latest reconciliation. One source per row, so a post-land
+	// row's note never mixes with the reconciliation's question.
 	query := `SELECT i.seq, i.sort_order, i.kind, i.statement, i.verify, i.detail,
 	                 i.origin, i.state, i.approved_statement, i.approved_kind, i.approved_at,
-	                 i.created_at, i.updated_at,
-	                 e.verdict, e.note, e.holds_reason, e.question_id,
+	                 i.created_at, i.updated_at, i.post_land, i.approved_post_land,
+	                 v.attempt, v.verdict, v.note, v.holds_reason, v.question_id,
 	                 q.status, q.kind, q.answer, q.answered_by, q.reason
 	            FROM task_plan_items i
-	            LEFT JOIN task_reconciliation_entries e
-	                   ON e.reconciliation_id = ? AND e.item_seq = i.seq
-	            LEFT JOIN task_questions q ON q.id = e.question_id
-	           WHERE i.task_id = ?`
+	            LEFT JOIN (
+	                SELECT e.item_seq, NULL AS attempt, e.verdict, e.note, e.holds_reason, e.question_id
+	                  FROM task_reconciliation_entries e
+	                 WHERE e.reconciliation_id = ?1
+	                   AND NOT EXISTS (SELECT 1 FROM task_post_land_entries x
+	                                    WHERE x.reconciliation_id = ?1 AND x.item_seq = e.item_seq)
+	                UNION ALL
+	                SELECT p.item_seq, p.attempt, p.verdict, p.note, p.holds_reason, p.question_id
+	                  FROM task_post_land_entries p
+	                 WHERE p.reconciliation_id = ?1
+	                   AND p.attempt = (SELECT MAX(x.attempt) FROM task_post_land_entries x
+	                                     WHERE x.reconciliation_id = ?1 AND x.item_seq = p.item_seq)
+	            ) v ON v.item_seq = i.seq
+	            LEFT JOIN task_questions q ON q.id = v.question_id
+	           WHERE i.task_id = ?2`
 	args := []any{recID, taskID}
 	if !all {
-		query += " AND i.state = ?"
+		query += " AND i.state = ?3"
 		args = append(args, planitem.StateActive)
 	}
 	query += " ORDER BY i.sort_order, i.seq"
@@ -97,8 +116,8 @@ func planItems(db *sql.DB, taskID int64, all bool) ([]PlanItem, error) {
 		var it PlanItem
 		if err := rows.Scan(&it.Seq, &it.SortOrder, &it.Kind, &it.Statement, &it.Verify,
 			&it.Detail, &it.Origin, &it.State, &it.ApprovedStatement, &it.ApprovedKind,
-			&it.ApprovedAt, &it.CreatedAt, &it.UpdatedAt,
-			&it.Verdict, &it.Note, &it.HoldsReason, &it.QuestionID,
+			&it.ApprovedAt, &it.CreatedAt, &it.UpdatedAt, &it.PostLand, &it.ApprovedPostLand,
+			&it.PostLandAttempt, &it.Verdict, &it.Note, &it.HoldsReason, &it.QuestionID,
 			&it.QuestionStatus, &it.QuestionKind, &it.Answer, &it.AnsweredBy, &it.CloseReason); err != nil {
 			return nil, fmt.Errorf("scan plan item: %w", err)
 		}
@@ -148,10 +167,15 @@ func MootQuestions(taskID int64) ([]MootQuestion, error) {
 	if err != nil {
 		return nil, err
 	}
+	// A post-land row's question counts too (E-2444): withdrawing a landed
+	// task's post-land item moots what its post-land reconcile asked.
 	rows, err := db.Query(
 		`SELECT DISTINCT q.id, e.item_seq
 		   FROM task_questions q
-		   JOIN task_reconciliation_entries e ON e.question_id = q.id
+		   JOIN (SELECT reconciliation_id, item_seq, question_id FROM task_reconciliation_entries
+		         UNION ALL
+		         SELECT reconciliation_id, item_seq, question_id FROM task_post_land_entries) e
+		     ON e.question_id = q.id
 		   JOIN task_reconciliations r ON r.id = e.reconciliation_id AND r.task_id = q.task_id
 		   JOIN task_plan_items i ON i.task_id = q.task_id AND i.seq = e.item_seq
 		  WHERE q.task_id = ? AND q.status = ? AND q.kind IS NOT NULL AND i.state = ?
@@ -187,7 +211,7 @@ func PlanDigest(db Querier, taskID int64) (string, error) {
 	rows, err := db.Query(
 		`SELECT seq, kind, statement, origin, state,
 		        COALESCE(approved_statement, ''), COALESCE(approved_kind, ''),
-		        approved_at IS NOT NULL
+		        approved_at IS NOT NULL, post_land, COALESCE(approved_post_land, 0)
 		   FROM task_plan_items WHERE task_id = ? ORDER BY seq`, taskID)
 	if err != nil {
 		return "", fmt.Errorf("read plan items of E-%d: %w", taskID, err)
@@ -197,12 +221,20 @@ func PlanDigest(db Querier, taskID int64) (string, error) {
 	for rows.Next() {
 		var seq int64
 		var kind, statement, origin, state, aStatement, aKind string
-		var approved bool
-		if err := rows.Scan(&seq, &kind, &statement, &origin, &state, &aStatement, &aKind, &approved); err != nil {
+		var approved, postLand, aPostLand bool
+		if err := rows.Scan(&seq, &kind, &statement, &origin, &state, &aStatement, &aKind, &approved,
+			&postLand, &aPostLand); err != nil {
 			return "", err
 		}
-		fmt.Fprintf(h, "%d\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s\x00%t\n",
-			seq, kind, statement, origin, state, aStatement, aKind, approved)
+		// The post-land mark and its approval (E-2444) join the line only when
+		// either is set, so every reconciliation recorded before them stays
+		// current: an unmarked item hashes exactly as it always did.
+		mark := ""
+		if postLand || aPostLand {
+			mark = fmt.Sprintf("\x00post_land=%t/%t", postLand, aPostLand)
+		}
+		fmt.Fprintf(h, "%d\x00%s\x00%s\x00%s\x00%s\x00%s\x00%s\x00%t%s\n",
+			seq, kind, statement, origin, state, aStatement, aKind, approved, mark)
 	}
 	if err := rows.Err(); err != nil {
 		return "", err
@@ -242,6 +274,9 @@ func renderItemsTOML(taskID int64, items []PlanItem) string {
 		}
 		if it.Detail != nil && *it.Detail != "" {
 			fmt.Fprintf(&b, "detail = %s\n", tomlString(*it.Detail))
+		}
+		if it.PostLand {
+			b.WriteString("post_land = true\n")
 		}
 	}
 	return b.String()
@@ -340,7 +375,8 @@ func ReadPlanReadiness(taskID int64) (PlanReadiness, error) {
 		        COALESCE(SUM(state = ? AND kind = ?), 0),
 		        COALESCE(SUM(CASE
 		            WHEN state = ? AND (approved_at IS NULL OR statement != approved_statement
-		                                OR kind != approved_kind) THEN 1
+		                                OR kind != approved_kind
+		                                OR post_land != COALESCE(approved_post_land, 0)) THEN 1
 		            WHEN state = ? AND approved_at IS NOT NULL THEN 1
 		            ELSE 0 END), 0)
 		   FROM task_plan_items WHERE task_id = ?`,
@@ -349,4 +385,62 @@ func ReadPlanReadiness(taskID int64) (PlanReadiness, error) {
 	).Scan(&r.Items, &r.Active, &r.Deliverables, &unapproved)
 	r.Unapproved = unapproved > 0
 	return r, err
+}
+
+// IsOpenPostLand reports whether an item is an open post-land item (E-2444): an
+// active post-land deliverable whose current verdict is missing or `deferred`,
+// or is a discrepancy whose question is still open. A `landed` task holds while
+// any is open; the post-land reconcile or withdrawal that leaves none moves it
+// to `assumed`.
+func IsOpenPostLand(it PlanItem) bool {
+	if it.State != planitem.StateActive || !it.PostLand || it.Kind != planitem.KindDeliverable {
+		return false
+	}
+	if it.Verdict == nil || *it.Verdict == planitem.VerdictDeferred {
+		return true
+	}
+	if !planitem.IsDiscrepancy(*it.Verdict) {
+		return false
+	}
+	return it.QuestionID == nil || it.QuestionStatus == nil || *it.QuestionStatus == questionstatus.Open
+}
+
+// PostLandState is what the land, the post-land reconcile and the task surfaces
+// need about a task's post-land items: the task's status, every active
+// post-land item with its current verdict, and the open ones.
+type PostLandState struct {
+	TaskID int64      `json:"task_id"`
+	Status string     `json:"status"`
+	Items  []PlanItem `json:"items"`
+	Open   []PlanItem `json:"open"`
+}
+
+// ReadPostLandState reads one task's PostLandState.
+func ReadPostLandState(taskID int64) (PostLandState, error) {
+	st := PostLandState{TaskID: taskID, Items: []PlanItem{}, Open: []PlanItem{}}
+	db, err := DB()
+	if err != nil {
+		return st, err
+	}
+	err = db.QueryRow(`SELECT status FROM live_tasks WHERE id = ?`, taskID).Scan(&st.Status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return st, fmt.Errorf("no task E-%d", taskID)
+	}
+	if err != nil {
+		return st, err
+	}
+	items, err := planItems(db, taskID, false)
+	if err != nil {
+		return st, err
+	}
+	for _, it := range items {
+		if !it.PostLand {
+			continue
+		}
+		st.Items = append(st.Items, it)
+		if IsOpenPostLand(it) {
+			st.Open = append(st.Open, it)
+		}
+	}
+	return st, nil
 }

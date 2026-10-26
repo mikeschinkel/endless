@@ -188,3 +188,21 @@ func runPlanReadiness(args []string) error {
 	}
 	return dbprovenance.Encode(os.Stdout, r)
 }
+
+// runPostLandState prints a task's PostLandState (E-2444): its post-land items
+// with their current verdicts, and the open ones.
+func runPostLandState(args []string) error {
+	fs := refusal.NewFlags("post-land-state")
+	id := fs.Int64("id", 0, "task id")
+	if err := parseFlags(fs, "post-land-state", args); err != nil {
+		return err
+	}
+	if *id <= 0 {
+		return refusal.NoReport("--id is required", "Pass --id <task-id> and retry")
+	}
+	st, err := monitor.ReadPostLandState(*id)
+	if err != nil {
+		return err
+	}
+	return dbprovenance.Encode(os.Stdout, st)
+}

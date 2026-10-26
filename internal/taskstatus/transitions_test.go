@@ -357,8 +357,8 @@ func TestEveryTypeFinishesViaExactlyOneLane(t *testing.T) {
 func TestReachableFromIsInVocabularyOrder(t *testing.T) {
 	got := taskstatus.ReachableFrom(taskstatus.Unverified, tasktype.TaskTypeTask)
 	// `obsolete` is here because E-2144 removed the gate that refused it on
-	// shipped work: the axis is whether anything REPLACED the work, not whether
-	// it shipped. It sorts last, which is what this test is actually about.
+	// reported work: the axis is whether anything REPLACED the work, not whether
+	// it was reported. It sorts last, which is what this test is actually about.
 	want := []string{"unlanded", "confirmed", "assumed", "revisit", "declined", "obsolete"}
 	if strings.Join(got, ",") != strings.Join(want, ",") {
 		t.Errorf("ReachableFrom(unverified, todo) = %v, want %v", got, want)
@@ -483,5 +483,37 @@ func TestTransitionsReturnsDefensiveCopy(t *testing.T) {
 	first[0].To = "CLOBBERED"
 	if taskstatus.Transitions()[0].To == "CLOBBERED" {
 		t.Error("Transitions returned a live slice: mutating it corrupted the table")
+	}
+}
+
+// TestLandedEdges pins the post-land status's lifecycle (E-2444, ED-1636): the
+// land enters it from `unlanded`, Endless alone moves it to `assumed`, the user
+// may reopen or abandon it, and nothing reaches `confirmed` from it.
+func TestLandedEdges(t *testing.T) {
+	todo := tasktype.TaskTypeTask
+	for _, to := range []string{taskstatus.Assumed, taskstatus.Revisit, taskstatus.Declined,
+		taskstatus.Obsolete, taskstatus.Superseded} {
+		if !taskstatus.TransitionAllowed(taskstatus.Landed, to, todo) {
+			t.Errorf("landed → %s should be allowed", to)
+		}
+	}
+	if !taskstatus.TransitionAllowed(taskstatus.Unlanded, taskstatus.Landed, todo) {
+		t.Error("unlanded → landed should be allowed")
+	}
+	for _, to := range []string{taskstatus.Confirmed, taskstatus.Unverified, taskstatus.Underway, taskstatus.Unlanded} {
+		if taskstatus.TransitionAllowed(taskstatus.Landed, to, todo) {
+			t.Errorf("landed → %s should be refused", to)
+		}
+	}
+	if taskstatus.TransitionAllowed(taskstatus.Landed, taskstatus.Assumed, tasktype.TaskTypeResearch) {
+		t.Error("a research task never lands, so it has no landed → assumed edge")
+	}
+	for _, tr := range taskstatus.Transitions() {
+		if tr.From == taskstatus.Landed && tr.To == taskstatus.Assumed && tr.Actor != taskstatus.ActorSystem {
+			t.Errorf("landed → assumed is taken by %s; it must be the system's", tr.Actor)
+		}
+		if tr.To == taskstatus.Landed && tr.Actor == taskstatus.ActorAgent {
+			t.Errorf("%s → landed is an agent's edge; only the land sets landed", tr.From)
+		}
 	}
 }

@@ -1037,6 +1037,10 @@ CREATE INDEX IF NOT EXISTS idx_task_questions_status
 -- approve` copied; the item set "differs from the baseline" when an active item
 -- has none, or its statement or kind no longer match, or a withdrawn item still
 -- carries one. All values are validated in application code.
+--
+-- post_land (E-2444, ED-1636) marks a deliverable whose work needs the landed,
+-- migrated, locally installed result and produces no code; approved_post_land is
+-- the mark as the user approved it, part of the same baseline (NULL with none).
 CREATE TABLE IF NOT EXISTS task_plan_items (
     id INTEGER PRIMARY KEY,
     task_id INTEGER NOT NULL,
@@ -1054,6 +1058,8 @@ CREATE TABLE IF NOT EXISTS task_plan_items (
     created_by_session INTEGER,
     created_at TEXT NOT NULL,
     updated_at TEXT NOT NULL,
+    post_land INTEGER NOT NULL DEFAULT 0,
+    approved_post_land INTEGER,
     UNIQUE (task_id, seq),
     FOREIGN KEY (task_id) REFERENCES tasks(id) ON DELETE CASCADE
 );
@@ -1091,6 +1097,28 @@ CREATE TABLE IF NOT EXISTS task_reconciliation_entries (
     question_id INTEGER,
     holds_reason TEXT,
     PRIMARY KEY (reconciliation_id, item_seq),
+    FOREIGN KEY (reconciliation_id) REFERENCES task_reconciliations(id) ON DELETE CASCADE
+);
+
+-- task_post_land_entries (E-2444): the verdicts a post-land reconcile records on
+-- a `landed` task's post-land items. One row per item per attempt; attempt is
+-- per reconciliation_id, which is the reconciliation in force at the land. A
+-- post-land reconcile writes rows only for the items it names, so earlier
+-- reconciliations and every other item's verdict stay as they were. An item's
+-- current verdict is its newest row here, else its entry in the reconciliation.
+CREATE TABLE IF NOT EXISTS task_post_land_entries (
+    id INTEGER PRIMARY KEY,
+    reconciliation_id INTEGER NOT NULL,
+    attempt INTEGER NOT NULL,
+    item_seq INTEGER NOT NULL,
+    verdict TEXT NOT NULL,
+    note TEXT,
+    question_id INTEGER,
+    holds_reason TEXT,
+    head TEXT,
+    session_id INTEGER,
+    created_at TEXT NOT NULL,
+    UNIQUE (reconciliation_id, attempt, item_seq),
     FOREIGN KEY (reconciliation_id) REFERENCES task_reconciliations(id) ON DELETE CASCADE
 );
 

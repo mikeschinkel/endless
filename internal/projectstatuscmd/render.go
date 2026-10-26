@@ -155,7 +155,7 @@ func classify(r monitor.ProjectStatusRow) taskrow.Action {
 		}
 		return taskrow.Doing
 	}
-	return taskrow.Classify(r.Status, r.Landed, r.Unanswered)
+	return taskrow.Classify(r.Status, r.TypeSlug, r.Landed, r.Unanswered)
 }
 
 // minTitleBudget is the floor on the columns left for a title. Below this the

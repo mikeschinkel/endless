@@ -114,7 +114,7 @@ def test_finished_work_always_states_landedness(stub_probe, status):
 def test_unfinished_and_abandoned_work_is_not_asked(stub_probe, status):
     """Two exclusions, for opposite reasons. `unverified`/`unreviewed` work is
     SUPPOSED to be sitting on a branch — reporting it would flag the normal
-    state of every task awaiting its user. `declined`/`obsolete` never shipped,
+    state of every task awaiting its user. `declined`/`obsolete` were abandoned,
     so "never" carries no information."""
     task_id = _add_task("Fix the thing", status)
     assert _landed_line(_show(task_id)) is None

@@ -39,7 +39,7 @@ type SessionStatusRow struct {
 	IsFrom    bool
 	InFlight  bool
 	// Landed is true when the task has >=1 task_landings row (its work has
-	// merged). classify() routes a landed task to actLanded (⏚) so merged work is
+	// merged). classify() routes a landed task to actShipped (⏚) so merged work is
 	// never offered as a fresh actionable verb (E-1693; the ⁇ catch-all this
 	// comment used to name was split into ⏚ landed + ⁇ unknown by E-1750). The
 	// focal/parent/from/in-flight decorations still win over it, and ⏚ in turn
@@ -68,12 +68,12 @@ type SessionStatusRow struct {
 	// worktree has nothing to land, and a DIRTY worktree is known to be unsettled
 	// from `git status` alone, which stays live. See UnsettledDetail.UnsettledKnown.
 	UnsettledKnown bool
-	// DescendantShipped is true when an EPIC row has at least one non-epic
-	// descendant in taskstatus.Shipped (E-2198). An epic's status is derived from
+	// DescendantReported is true when an EPIC row has at least one non-epic
+	// descendant in taskstatus.Reported (E-2198). An epic's status is derived from
 	// its children and its own branch is normally empty, so neither says whether
 	// the epic has produced work — its descendants do. Filled with Unsettled by
 	// AnnotateSessionStatusUnsettled, and only for epic rows; see HasWorkProduct.
-	DescendantShipped bool
+	DescendantReported bool
 	// Hidden / HiddenAt are the VIEWING session's per-session suppression of this
 	// task (E-1914): a session_hidden_tasks row for (viewer, task). Like Unsettled
 	// they are NOT part of the row query — the row set is viewer-agnostic, and
@@ -155,9 +155,9 @@ type SessionStatusRow struct {
 func (r SessionStatusRow) HasWorkProduct() bool {
 	switch r.TypeSlug {
 	case tasktype.TaskTypeEpic.String():
-		return r.DescendantShipped
+		return r.DescendantReported
 	case tasktype.TaskTypeResearch.String(), tasktype.TaskTypeBrainstorm.String():
-		return taskstatus.Has(taskstatus.Shipped, r.Status)
+		return taskstatus.Has(taskstatus.Reported, r.Status)
 	default:
 		return r.Landed
 	}

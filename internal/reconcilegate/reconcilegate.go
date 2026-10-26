@@ -135,6 +135,8 @@ type gateItem struct {
 	approvedStatement sql.NullString
 	approvedKind      sql.NullString
 	approvedAt        sql.NullString
+	postLand          bool
+	approvedPostLand  bool
 }
 
 func check(db *sql.DB, taskID int64, fingerprint string, mode Mode, to string) (Result, error) {
@@ -198,7 +200,8 @@ func check(db *sql.DB, taskID int64, fingerprint string, mode Mode, to string) (
 			case it.state == planitem.StateWithdrawn && it.approvedAt.Valid:
 				differ = append(differ, label+" withdrawn")
 			case it.state != planitem.StateActive:
-			case it.approvedAt.Valid && (it.statement != it.approvedStatement.String || it.kind != it.approvedKind.String):
+			case it.approvedAt.Valid && (it.statement != it.approvedStatement.String || it.kind != it.approvedKind.String ||
+				it.postLand != it.approvedPostLand):
 				differ = append(differ, label+" changed")
 			case !it.approvedAt.Valid && it.origin == planitem.OriginPlanned:
 				differ = append(differ, label+" added")
@@ -242,11 +245,21 @@ func check(db *sql.DB, taskID int64, fingerprint string, mode Mode, to string) (
 		qstatus sql.NullString
 	}
 	entries := map[int64]entry{}
+	// An item's newest post-land row, when it has one, is its current verdict
+	// (E-2444), so it overrides the reconciliation's entry: post-land rows sort
+	// after it and the map keeps the last.
 	rows, err := db.Query(
-		`SELECT e.item_seq, e.verdict, e.question_id, q.status
-		   FROM task_reconciliation_entries e
-		   LEFT JOIN task_questions q ON q.id = e.question_id
-		  WHERE e.reconciliation_id = ?`, recID)
+		`SELECT item_seq, verdict, question_id, status FROM (
+		     SELECT e.item_seq, e.verdict, e.question_id, q.status, 0 AS attempt
+		       FROM task_reconciliation_entries e
+		       LEFT JOIN task_questions q ON q.id = e.question_id
+		      WHERE e.reconciliation_id = ?1
+		     UNION ALL
+		     SELECT p.item_seq, p.verdict, p.question_id, q.status, p.attempt
+		       FROM task_post_land_entries p
+		       LEFT JOIN task_questions q ON q.id = p.question_id
+		      WHERE p.reconciliation_id = ?1)
+		  ORDER BY attempt`, recID)
 	if err != nil {
 		return res, fmt.Errorf("read reconciliation entries: %w", err)
 	}
@@ -298,7 +311,7 @@ func check(db *sql.DB, taskID int64, fingerprint string, mode Mode, to string) (
 func readGateItems(db *sql.DB, taskID int64) ([]gateItem, error) {
 	rows, err := db.Query(
 		`SELECT seq, kind, origin, state, statement, approved_statement, approved_kind,
-		        approved_at
+		        approved_at, post_land, COALESCE(approved_post_land, 0)
 		   FROM task_plan_items WHERE task_id = ? ORDER BY sort_order, seq`, taskID)
 	if err != nil {
 		return nil, fmt.Errorf("read plan items of E-%d: %w", taskID, err)
@@ -308,7 +321,7 @@ func readGateItems(db *sql.DB, taskID int64) ([]gateItem, error) {
 	for rows.Next() {
 		var it gateItem
 		if err := rows.Scan(&it.seq, &it.kind, &it.origin, &it.state, &it.statement,
-			&it.approvedStatement, &it.approvedKind, &it.approvedAt); err != nil {
+			&it.approvedStatement, &it.approvedKind, &it.approvedAt, &it.postLand, &it.approvedPostLand); err != nil {
 			return nil, err
 		}
 		out = append(out, it)

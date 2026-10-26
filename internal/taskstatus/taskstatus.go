@@ -55,6 +55,26 @@ type Status = string
 // verification already happened — so it joins every group `unverified` is in.
 // A commit to the branch after the pass returns it to `unverified`.
 //
+// `landed` sits between the land and `assumed` (E-2444, ED-1636): the work is
+// merged, but plan items marked post-land — work that needs the landed,
+// migrated, installed result and produces no code — still owe a verdict. A
+// post-land reconcile that settles the last of them moves it to `assumed`. It
+// still blocks its dependents, since the work is not finished, and its items
+// and earlier reconciliations are frozen apart from those post-land items.
+//
+// Its group memberships, each decided rather than inherited: IN NotActionable
+// (nothing for `task next` to offer), Active (`task active` lists it),
+// ChildrenStateOrder (it is not terminal), Settled (claiming it is a reopen),
+// Reported (the work was reported, and landed), and VerificationTrack (only
+// implementation work lands). OUT of AwaitsUser — after the land the next act
+// is the agent's post-land work, and a discrepancy it raises surfaces as an
+// open question like any other — and of ClaimPromotes, Open, PreJudgment,
+// DerivationPrecedence, Reopenable (it reopens through `task update --status
+// revisit`, as `unlanded` does), ReportedTerminal (it has landed by definition),
+// Terminal and VerificationTerminal (it is not finished), SetsCompletedAt,
+// StickyOverride, SubmittableFrom, ReviewTrack, ReopenRefused and Abandoned.
+// The session-status rollup gives it a bucket of its own.
+//
 // `blocked` is NOT here (E-2018). It was a status once, and a handful of rows
 // still carried it, but blockedness is the `blocked_by` relation and always
 // has been: `endless task block` writes a relation and never touches status,
@@ -71,6 +91,7 @@ const (
 	Underway   Status = "underway"
 	Unverified Status = "unverified"
 	Unlanded   Status = "unlanded"
+	Landed     Status = "landed"
 	Unreviewed Status = "unreviewed"
 	Confirmed  Status = "confirmed"
 	Assumed    Status = "assumed"
@@ -166,30 +187,36 @@ const (
 	// `tasks.completed_at`; every other status clears it.
 	SetsCompletedAt
 
-	// Settled means the work is over one way or another — shipped or
+	// Settled means the work is over one way or another — reported or
 	// abandoned. Claiming one needs --force.
 	Settled
 
-	// Shipped means the work reached the verification gate or passed it.
-	// Deliberately NOT Terminal: `declined`/`obsolete` are terminal but never
-	// shipped, and `unverified` shipped without being terminal. `obsolete` is
-	// refused on these.
-	Shipped
+	// Reported means the work reached the verification gate or passed it: the
+	// session reported it done. Deliberately NOT Terminal: `declined`/`obsolete`
+	// are terminal but never reported, and `unverified` is reported without
+	// being terminal.
+	//
+	// It was named Shipped until E-2444. ED-1638 gives "shipped" one meaning —
+	// a task's work has landed at least once, or a research or brainstorm
+	// task's outcome is accepted — and most of this group's members have not
+	// landed, so the group took planitem's word for a near-identical set.
+	Reported
 
-	// ShippedTerminal is Shipped intersected with Terminal: work that both
+	// ReportedTerminal is Reported intersected with Terminal: work that both
 	// happened and is finished. It is the population for which "has this
 	// task's code reached the base branch?" is a real question, which is what
 	// `task unlanded` surveys and what makes `task show` state landedness
 	// rather than imply it by omission (E-2095).
 	//
 	// Neither parent group answers that on its own, and the two exclusions are
-	// for opposite reasons. `unverified`/`unreviewed` are Shipped but not
+	// for opposite reasons. `unverified`/`unreviewed` are Reported but not
 	// finished — their work is SUPPOSED to be sitting on a branch, so reporting
 	// it as unlanded would flag the normal state of every task awaiting its
-	// user. `declined`/`obsolete` are Terminal but never shipped — there is no
+	// user. `declined`/`obsolete` are Terminal but never reported — there is no
 	// code to have landed, so "never" is the expected answer and carries no
-	// information.
-	ShippedTerminal
+	// information. `landed` is out for a third reason: it has landed by
+	// definition, so the question has its answer already.
+	ReportedTerminal
 
 	// StickyOverride block epic status derivation: while an epic sits in one,
 	// derivation reads its state and does nothing.
@@ -238,7 +265,7 @@ const (
 	// the strength of its title's lead verb rather than its type.
 	ReviewTrack
 
-	// Abandoned are the statuses that end an unshipped task by decision. The
+	// Abandoned are the statuses that abandon a task by decision. The
 	// text written on arriving at one is a closing REASON — why the work
 	// ended — and is stored under the `reason` content name, never `outcome`,
 	// which on findings work is the deliverable itself (E-1531). Same members
@@ -256,17 +283,17 @@ const (
 var groups = map[Group][]Status{
 	All: {
 		Unplanned, Submitted, Ready, Underway,
-		Unverified, Unlanded, Unreviewed, Confirmed, Assumed, Completed,
+		Unverified, Unlanded, Landed, Unreviewed, Confirmed, Assumed, Completed,
 		Revisit, Declined, Obsolete, Superseded,
 	},
 	Actionable:    {Unplanned, Ready, Revisit},
-	NotActionable: {Submitted, Underway, Unverified, Unlanded, Unreviewed, Confirmed, Assumed, Completed, Declined, Obsolete, Superseded},
-	Active:        {Underway, Unverified, Unlanded, Unreviewed},
+	NotActionable: {Submitted, Underway, Unverified, Unlanded, Landed, Unreviewed, Confirmed, Assumed, Completed, Declined, Obsolete, Superseded},
+	Active:        {Underway, Unverified, Unlanded, Landed, Unreviewed},
 	AwaitsUser:    {Unverified, Unlanded, Unreviewed, Submitted},
 	ClaimPromotes: {Unplanned, Submitted, Ready, Revisit},
 	Open:          {Unplanned, Submitted, Ready, Underway},
 	ChildrenStateOrder: {
-		Unplanned, Submitted, Ready, Underway, Revisit, Unverified, Unlanded, Unreviewed,
+		Unplanned, Submitted, Ready, Underway, Revisit, Unverified, Unlanded, Landed, Unreviewed,
 	},
 	DerivationPrecedence: {Underway, Ready, Submitted, Unplanned},
 	DescriptionResetFrom: {},
@@ -276,14 +303,14 @@ var groups = map[Group][]Status{
 	ReviewTrack:          {Unreviewed},
 	SessionPending:       {Unplanned, Submitted, Ready, Underway, Revisit},
 	SetsCompletedAt:      {Confirmed, Completed},
-	Settled:              {Unverified, Unlanded, Unreviewed, Confirmed, Assumed, Completed, Declined, Obsolete, Superseded},
-	Shipped:              {Unverified, Unlanded, Unreviewed, Confirmed, Assumed, Completed},
-	ShippedTerminal:      {Confirmed, Assumed, Completed},
+	Settled:              {Unverified, Unlanded, Landed, Unreviewed, Confirmed, Assumed, Completed, Declined, Obsolete, Superseded},
+	Reported:             {Unverified, Unlanded, Landed, Unreviewed, Confirmed, Assumed, Completed},
+	ReportedTerminal:     {Confirmed, Assumed, Completed},
 	StickyOverride:       {Revisit, Declined, Obsolete, Superseded},
 	SubmittableFrom:      {Unplanned, Revisit},
 	Terminal:             {Confirmed, Assumed, Completed, Declined, Obsolete, Superseded},
 	VerificationTerminal: {Confirmed, Assumed},
-	VerificationTrack:    {Unverified, Unlanded, Confirmed, Assumed},
+	VerificationTrack:    {Unverified, Unlanded, Landed, Confirmed, Assumed},
 	Abandoned:            {Declined, Obsolete, Superseded},
 }
 
@@ -308,8 +335,8 @@ var groupSlugs = map[Group]string{
 	SessionPending:       "session-pending",
 	SetsCompletedAt:      "sets-completed-at",
 	Settled:              "settled",
-	Shipped:              "shipped",
-	ShippedTerminal:      "shipped-terminal",
+	Reported:             "reported",
+	ReportedTerminal:     "reported-terminal",
 	StickyOverride:       "sticky-override",
 	SubmittableFrom:      "submittable-from",
 	Terminal:             "terminal",
@@ -326,6 +353,7 @@ var labels = map[Status]string{
 	Underway:   "Underway",
 	Unverified: "Unverified",
 	Unlanded:   "Unlanded",
+	Landed:     "Landed",
 	Unreviewed: "Unreviewed",
 	Confirmed:  "Confirmed",
 	Assumed:    "Assumed",
@@ -350,6 +378,8 @@ var labels = map[Status]string{
 // else now stands in its place.
 //
 // ⇥ (unlanded) is "ready to move across": verified, waiting only for the land.
+// ⇣ (landed) is its pair: across, with more to do on the far side — the
+// post-land items (E-2444).
 //
 // ☐ (unreviewed) is the deliberate pair to ☑ (unverified): the same box, not
 // yet ticked. The two gates are siblings — one asks "does it work", the other
@@ -361,6 +391,7 @@ var glyphs = map[Status]string{
 	Underway:   "◉",
 	Unverified: "☑",
 	Unlanded:   "⇥",
+	Landed:     "⇣",
 	Unreviewed: "☐",
 	Confirmed:  "✔",
 	Assumed:    "✓",
@@ -455,6 +486,15 @@ func GroupSlug(g Group) string {
 	return groupSlugs[g]
 }
 
+// retiredGroupSlugs resolves group names that were renamed, for the reason
+// DescriptionResetFrom stays resolvable: a client older than the rename reads
+// them at import time, the global install asks a worktree's newer endless-go,
+// and an unknown group is fatal there. Not listed by AllGroupSlugs.
+var retiredGroupSlugs = map[string]Group{
+	"shipped":          Reported,         // E-2444
+	"shipped-terminal": ReportedTerminal, // E-2444
+}
+
 // ParseGroup resolves a CLI-facing group name. The error names every valid
 // group so an agent that guessed wrong is told the whole set in one round trip.
 func ParseGroup(slug string) (Group, error) {
@@ -462,6 +502,9 @@ func ParseGroup(slug string) (Group, error) {
 		if s == slug {
 			return g, nil
 		}
+	}
+	if g, ok := retiredGroupSlugs[slug]; ok {
+		return g, nil
 	}
 	return 0, fmt.Errorf("taskstatus: unknown group %q (valid: %s)",
 		slug, strings.Join(AllGroupSlugs(), ", "))

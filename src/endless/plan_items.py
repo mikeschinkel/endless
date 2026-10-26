@@ -27,12 +27,15 @@ from endless import agent_help, config, doc_mirror, provenance
 from endless.event_bridge import emit_event
 
 KINDS = ("deliverable", "exclusion")
-DELIVERABLE_VERDICTS = ("as_planned", "differently", "not_done", "blocked")
+DELIVERABLE_VERDICTS = ("as_planned", "differently", "not_done", "blocked", "deferred")
 EXCLUSION_VERDICTS = ("kept", "not_kept")
+
+# The status a land sets while post-land items are open (E-2444).
+LANDED = "landed"
 
 # Keys an `--items-file` [[item]] table may carry. Anything else is refused:
 # a format that silently drops an unknown key turns a typo into lost scope.
-ITEM_KEYS = {"id", "kind", "statement", "verify", "detail"}
+ITEM_KEYS = {"id", "kind", "statement", "verify", "detail", "post_land"}
 # Keys a reconciliation file [[entry]] table may carry.
 ENTRY_KEYS = {"item", "verdict", "note", "answer_holds", "reask", "reason"}
 
@@ -151,15 +154,23 @@ def baseline(task_id: int, seqs: list[int] | None = None) -> None:
             f"moot: {label(m['item_seq'])} was withdrawn and the plan re-approved")
 
 
+def _changed_since_approval(it: dict) -> bool:
+    """An approved item whose statement, kind or post-land mark differs from
+    what was approved."""
+    return (it["statement"] != it.get("approved_statement")
+            or it["kind"] != it.get("approved_kind")
+            or bool(it.get("post_land")) != bool(it.get("approved_post_land")))
+
+
 def unapproved(task_id: int) -> list[dict]:
     """The items not approved as they stand: an active item never approved or
-    changed since (statement or kind), and a withdrawn one whose withdrawal is
-    not yet accepted. The same rule as the readiness count, item by item."""
+    changed since (statement, kind or post-land mark), and a withdrawn one whose
+    withdrawal is not yet accepted. The same rule as the readiness count, item
+    by item."""
     out = []
     for it in items(task_id, all_items=True):
         if it["state"] == "active":
-            if (not it.get("approved_at") or it["statement"] != it.get("approved_statement")
-                    or it["kind"] != it.get("approved_kind")):
+            if not it.get("approved_at") or _changed_since_approval(it):
                 out.append(it)
         elif it.get("approved_at"):
             out.append(it)
@@ -263,6 +274,8 @@ def parse_items_file(path: str) -> list[dict]:
         statement = "One line: what will be true when the task is done."
         verify = "How to tell it is true."      # optional
         detail = "A short note."                # optional
+        post_land = true       # optional: work that needs the landed, installed
+                               # result and produces no code (E-2444)
 
     Refuses any key the format does not define.
     """
@@ -287,8 +300,12 @@ def parse_items_file(path: str) -> list[dict]:
                 f"{path}: item {n} has unknown key(s) {', '.join(sorted(unknown))} "
                 f"(allowed: {', '.join(sorted(ITEM_KEYS))}).",
                 "Fix the key names and retry; nothing was recorded")
+        if "post_land" in it and not isinstance(it["post_land"], bool):
+            raise agent_help.no_report(
+                f"{path}: item {n} key 'post_land' must be true or false.",
+                "Write post_land = true (unquoted) and retry")
         for k, v in it.items():
-            if not isinstance(v, str):
+            if k != "post_land" and not isinstance(v, str):
                 raise agent_help.no_report(
                     f"{path}: item {n} key {k!r} must be a string.",
                     "Quote the value and retry")
@@ -310,7 +327,8 @@ def parse_items_file(path: str) -> list[dict]:
             seen.add(seq)
         out.append({"seq": seq, "kind": kind, "statement": stmt,
                     "verify": it.get("verify", "").strip(),
-                    "detail": it.get("detail", "").strip()})
+                    "detail": it.get("detail", "").strip(),
+                    "post_land": it.get("post_land", False)})
     return out
 
 
@@ -349,6 +367,8 @@ def ops_for_items_file(task_id: int, wanted: list[dict]) -> list[dict]:
                 op["verify"] = w["verify"]
             if w["detail"]:
                 op["detail"] = w["detail"]
+            if w.get("post_land"):
+                op["post_land"] = True
             ops.append(op)
             continue
         cur = current[w["seq"]]
@@ -361,6 +381,8 @@ def ops_for_items_file(task_id: int, wanted: list[dict]) -> list[dict]:
             edit["verify"] = w["verify"]
         if w["detail"] != (cur.get("detail") or ""):
             edit["detail"] = w["detail"]
+        if bool(w.get("post_land")) != bool(cur.get("post_land")):
+            edit["post_land"] = bool(w.get("post_land"))
         if len(edit) > 2:
             ops.append(edit)
         ops.append({"op": "move", "seq": w["seq"], "sort_order": base + pos})
@@ -383,6 +405,7 @@ _VERDICT_WORDS = {
     "as_planned": "as planned", "differently": "done differently",
     "not_done": "not done", "blocked": "blocked",
     "kept": "kept", "not_kept": "NOT KEPT",
+    "deferred": "deferred to after the land",
 }
 
 
@@ -394,14 +417,15 @@ def render_items(rows: list[dict], *, verdicts: bool = True) -> str:
     for it in rows:
         tag = "excl" if it["kind"] == "exclusion" else "    "
         flags = []
+        if it.get("post_land"):
+            flags.append("post-land")
         if it["origin"] == "grown":
             flags.append("grown")
         if it["state"] == "withdrawn":
             flags.append("withdrawn")
         elif it.get("approved_at") is None:
             flags.append("unapproved")
-        elif (it["statement"] != it.get("approved_statement")
-              or it["kind"] != it.get("approved_kind")):
+        elif _changed_since_approval(it):
             flags.append("changed since approval")
         flag = f" [{', '.join(flags)}]" if flags else ""
         lines.append(f"{it['label']:>4} {tag} {it['statement']}{flag}")
@@ -412,6 +436,8 @@ def render_items(rows: list[dict], *, verdicts: bool = True) -> str:
         if verdicts and it.get("verdict"):
             v = _VERDICT_WORDS.get(it["verdict"], it["verdict"])
             line = f"{'':>9} ⟶ {v}"
+            if it.get("post_land_attempt"):
+                line = f"{'':>9} ⟶ post-land #{it['post_land_attempt']}: {v}"
             if it.get("note"):
                 line += f": {it['note']}"
             lines.append(line)
@@ -500,6 +526,9 @@ def show_reconcile_context(task_id: int) -> None:
     """What the agent reads before it reconciles: every item, its earlier verdict
     and answer, what changed since across the whole task, and a file to fill in.
     """
+    if readiness(task_id)["status"] == LANDED:
+        show_post_land_context(task_id)
+        return
     repo = task_repo(task_id)
     ctx = _go(["reconcile-context", "--id", str(task_id), "--repo", str(repo)])
     active = [it for it in ctx["items"] if it["state"] == "active"]
@@ -541,13 +570,18 @@ def show_reconcile_context(task_id: int) -> None:
     click.echo()
     for it in active:
         verdict = "as_planned" if it["kind"] == "deliverable" else "kept"
+        hint = ("   # post-land: `deferred` if it waits for the land"
+                if it.get("post_land") else "")
         click.echo(f'[[entry]]\nitem = "{it["label"]}"   # {it["statement"]}\n'
-                   f'verdict = "{verdict}"\nnote = ""\n')
+                   f'verdict = "{verdict}"{hint}\nnote = ""\n')
 
 
 def reconcile(task_id: int, path: str) -> None:
     """Record a reconciliation, then report what it filed in kind order."""
     entries = parse_reconcile_file(path)
+    if readiness(task_id)["status"] == LANDED:
+        reconcile_post_land(task_id, entries)
+        return
     repo = task_repo(task_id)
     fp = _go(["fingerprint", "--repo", str(repo)])
     out = emit_event(
@@ -561,13 +595,34 @@ def reconcile(task_id: int, path: str) -> None:
     ids = out.get("ids") or []
     click.echo(click.style("•", fg="cyan")
                + f" Recorded reconciliation R{out.get('seq', '?')} of E-{task_id}")
+    deferred = [label(e["item_seq"]) for e in entries if e["verdict"] == "deferred"]
+    if deferred:
+        click.echo(
+            f"Deferred {', '.join(deferred)} to after the land: landing E-{task_id} "
+            f"will set it `landed`, not `assumed`. Once it is landed and "
+            f"installed, do that work and record it with `endless task "
+            f"reconcile E-{task_id}` — the post-land reconcile "
+            f"(`endless guide tasks/post-land`).")
+    _report_open_questions(task_id, ids)
+
+
+def _report_open_questions(task_id: int, ids: list[str], *,
+                           post_land: bool = False) -> None:
+    """List the discrepancies waiting for the user, and how to put them."""
     open_qs = [q for q in provenance.rows_of(_go(["task-questions", "--id", str(task_id)]))
                if q.get("kind")]
-    if not open_qs:
+    if post_land:
+        if ids:
+            click.echo(f"Filed {', '.join(ids)}. E-{task_id} stays `landed` "
+                       "until the item settles: answer the question, then "
+                       "reconcile it again (`endless guide tasks/post-land`).")
+        if not open_qs:
+            return
+    elif not open_qs:
         click.echo("No discrepancies are waiting. The gate checks the rest when "
                    "you set the status.")
         return
-    if ids:
+    if ids and not post_land:
         click.echo(f"Filed {', '.join(ids)}.")
     click.echo()
     click.echo(click.style("Discrepancies waiting for the user, most concerning first:",
@@ -582,8 +637,154 @@ def reconcile(task_id: int, path: str) -> None:
         "before answering. Record the answer with `endless question answer "
         f"EQ-<n> \"<answer>\" --by user`, then present the next. `endless "
         f"question list E-{task_id}` shows them all at once, in the same order. "
-        "When all are answered, make any changes, reconcile again, and only "
-        "then set the task to `unverified`.")
+        + ("When all are answered, reconcile the post-land items again."
+           if post_land else
+           "When all are answered, make any changes, reconcile again, and only "
+           "then set the task to `unverified`."))
+
+
+# Post-land items (E-2444) --------------------------------------------------
+#
+# A post-land item is a deliverable whose work needs the landed, migrated,
+# locally installed result and produces no code (ED-1636). Before the land it is
+# reconciled `deferred`; the land then sets `landed` rather than `assumed`; and
+# `task reconcile` on the `landed` task records its real verdict as a post-land
+# row. The reconcile or withdrawal that leaves no post-land item open moves the
+# task to `assumed`. Rules: `endless guide tasks/post-land`.
+
+def post_land_state(task_id: int) -> dict:
+    """{status, items, open}: the task's active post-land items with their
+    current verdicts, and the open ones (internal/monitor.IsOpenPostLand)."""
+    return _go(["post-land-state", "--id", str(task_id)])
+
+
+def open_labels(state: dict) -> str:
+    return ", ".join(f"{it['label']} ({it['statement']})" for it in state["open"])
+
+
+def mark_post_land_from_answer(task_id: int, question_id: int, answerer: str) -> None:
+    """`question answer EQ-n --post-land`: mark the item the blocked question
+    was filed for as post-land, approved by the user. Refused unless the
+    question is open, of kind `blocked`, and is its item's current question."""
+    if answerer != "user":
+        raise agent_help.no_report(
+            "--post-land records the user's approval of the mark, so the answer "
+            "must be the user's.",
+            "Retry with --by user once the user has given that answer")
+    match = [it for it in items(task_id) if it.get("question_id") == question_id]
+    if (not match or match[0].get("question_kind") != "blocked"
+            or match[0].get("question_status") != "open"):
+        raise agent_help.no_report(
+            f"EQ-{question_id} is not an open `blocked` question a reconciliation "
+            f"filed for a plan item of E-{task_id}, so --post-land has no item to mark.",
+            "Answer it without --post-land, or mark an item with "
+            f"`endless task plan edit E-{task_id} P<n> --post-land`")
+    it = match[0]
+    emit_ops(task_id, [{"op": "edit", "seq": it["seq"], "post_land": True,
+                        "approve_post_land": True}], quiet=True)
+    click.echo(click.style("•", fg="cyan")
+               + f" {it['label']} of E-{task_id} is post-land, approved by the "
+                 f"user: reconcile it `deferred`, and it is done after the land.")
+
+
+def withdraw(task_id: int, seqs: list[int]) -> None:
+    """Withdraw items. On a `landed` task only the user may, and only post-land
+    items; their open post-land questions are closed as moot and the task moves
+    to `assumed` if that leaves no post-land item open."""
+    landed = readiness(task_id)["status"] == LANDED
+    emit_ops(task_id, [{"op": "withdraw", "seq": seq} for seq in seqs])
+    if not landed:
+        return
+    from endless.question_cmd import resolve_questions
+    for m in provenance.rows_of(_go(["moot-questions", "--id", str(task_id)])):
+        if m["item_seq"] in seqs:
+            resolve_questions(
+                "withdraw", (m["id"],),
+                f"moot: {label(m['item_seq'])} was withdrawn by the user after the land")
+    settle_if_clear(task_id)
+
+
+def settle_if_clear(task_id: int, announce_open: bool = True) -> bool:
+    """Move a `landed` task to `assumed` when no post-land item is open; say
+    what is still open otherwise. The actor is the system: the items settling
+    moved it, not anyone's choice of status."""
+    st = post_land_state(task_id)
+    if st["status"] != LANDED:
+        return False
+    if st["open"]:
+        if announce_open:
+            click.echo(f"E-{task_id} stays `landed`: post-land items still open — "
+                       f"{open_labels(st)}.")
+        return False
+    emit_event(
+        kind="task.status_changed",
+        project=_project(task_id),
+        entity_type="task",
+        entity_id=str(task_id),
+        payload={"old_status": LANDED, "new_status": "assumed"},
+        actor_kind="system",
+    )
+    click.echo(click.style("•", fg="green")
+               + f" E-{task_id} is now assumed: no post-land item is open.")
+    return True
+
+
+def show_post_land_context(task_id: int) -> None:
+    """What the agent reads before a post-land reconcile: the post-land items,
+    their current verdicts and answers, and a file for the open ones."""
+    require_post_land_fingerprint(task_id)
+    st = post_land_state(task_id)
+    if not st["items"]:
+        raise agent_help.no_report(
+            f"E-{task_id} is landed but has no active post-land item to reconcile.",
+            "Nothing to record; tell the user it is landed with no post-land items")
+    click.echo(click.style(f"Post-land reconcile of E-{task_id}", bold=True))
+    click.echo("Entries for post-land items only. An item you leave out keeps the "
+               "verdict it has; the reconcile that leaves none open moves the task "
+               "to `assumed`. `deferred` again means the work still waits.")
+    click.echo()
+    click.echo(render_items(st["items"]))
+    click.echo()
+    click.echo("Fill in and record with "
+               f"`endless task reconcile E-{task_id} --file <file>`:")
+    click.echo()
+    for it in st["open"] or st["items"]:
+        click.echo(f'[[entry]]\nitem = "{it["label"]}"   # {it["statement"]}\n'
+                   f'verdict = "as_planned"\nnote = ""\n')
+
+
+def require_post_land_fingerprint(task_id: int) -> dict:
+    """Refuse a post-land reconcile on a branch with code of its own since the
+    land: a post-land item produces no code, so code is a follow-up task's."""
+    fp = _go(["fingerprint", "--repo", str(task_repo(task_id))])
+    if fp["fingerprint"] != "empty":
+        raise agent_help.no_report(
+            f"E-{task_id} is landed, but its branch has changes outside .endless/ "
+            "since the land. A post-land item produces no code, so nothing was "
+            "recorded: code that the post-land work needs is a follow-up task's.",
+            f"File it with `endless task add \"<title>\" --cleans-up E-{task_id} "
+            f"--description \"...\"`, move the change there, and reconcile again "
+            "(`endless guide tasks/post-land`)")
+    return fp
+
+
+def reconcile_post_land(task_id: int, entries: list[dict]) -> None:
+    """Record a post-land reconcile, then settle the task or say what is open."""
+    fp = require_post_land_fingerprint(task_id)
+    out = emit_event(
+        kind="task.post_land_reconciled",
+        project=_project(task_id),
+        entity_type="task",
+        entity_id=str(task_id),
+        payload={"fingerprint": fp["fingerprint"], "head": fp["head"],
+                 "entries": entries},
+    ) or {}
+    click.echo(click.style("•", fg="cyan")
+               + f" Recorded post-land verdicts #{out.get('attempt', '?')} of "
+                 f"E-{task_id} against R{out.get('seq', '?')}")
+    ids = out.get("ids") or []
+    _report_open_questions(task_id, ids, post_land=True)
+    settle_if_clear(task_id, announce_open=not ids)
 
 
 # The gate ------------------------------------------------------------------
