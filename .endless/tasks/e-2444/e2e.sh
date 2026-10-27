@@ -4,18 +4,17 @@
 # landed. Edit it only if you ARE E-2444. If your change breaks an
 # assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
-# E-2444: post-land plan items, the `deferred` verdict, the `landed` status and
-# the post-land reconcile that settles it.
+# E-2444's end-to-end check, run by verify.toml (its Go and pytest checks run
+# there first). The harness writes TAP to $ENDLESS_VERIFY_TAP, which the
+# manifest points at the check's stdout.
 #
-# The rules live in Go (internal/events/post_land.go, plan_items.go,
-# internal/taskstatus, internal/monitor, internal/taskrow) and are pinned by
-# their unit tests, folded in first. Then the real CLI — this branch's Python
-# entry point and this branch's endless-go — drives a throwaway project on its
-# own database through the whole loop: a post-land item reconciled `deferred`,
-# a record-only land setting `landed`, the surfaces naming the open item, the
-# code-on-the-branch refusal, a failed post-land attempt, and the one that
-# settles it; then an unforeseen item marked by `question answer --post-land`,
-# and the user's withdrawal settling a landed task.
+# The real CLI — this branch's Python entry point and this branch's endless-go —
+# drives a throwaway project on its own database through the whole loop: a
+# post-land item reconciled `deferred`, a record-only land setting `landed`, the
+# surfaces naming the open item, the code-on-the-branch refusal, a failed
+# post-land attempt, and the one that settles it; then an unforeseen item marked
+# by `question answer --post-land`, and the user's withdrawal settling a landed
+# task.
 #
 # ISOLATION: a temp HOME/XDG_CONFIG_HOME, its own git repo, and a COPY of this
 # branch's endless-go outside the worktree (a binary run from inside a task
@@ -31,25 +30,7 @@ cd "$WT" || setup_error "cannot cd to $WT"
 TMP="$(mktemp -d)" || setup_error "cannot make a temp dir"
 trap 'rm -rf "$TMP"' EXIT
 
-# ── Fail fast: this task's own tests ─────────────────────────────────────────
-section "This task's own tests (fail fast)"
-
-if go test -count=1 ./internal/planitem/ ./internal/reconcilegate/ ./internal/schema/... \
-        ./internal/taskstatus/ ./internal/taskrow/ ./internal/sessionstatuscmd/ \
-        ./internal/projectstatuscmd/ >"$TMP/go.log" 2>&1 \
-   && go test -count=1 ./internal/events/ -run 'PostLand|PlanItems|PlanBaselined|Reconcile|ValidKinds' >>"$TMP/go.log" 2>&1 \
-   && go test -count=1 ./internal/monitor/ -run 'PostLand|SessionStatus|EpicWorkProduct' >>"$TMP/go.log" 2>&1; then
-    report_pass "go: post-land events and replay, the landed status and its edges, readers, actions, migration"
-else
-    report_fail "go tests pass" "ok" "$(tail -40 "$TMP/go.log")"
-    summary
-fi
-if uv run pytest -q tests/test_plan_items.py tests/test_status_lifecycle_sync.py >"$TMP/py.log" 2>&1; then
-    report_pass "pytest: the items file's post_land key, the lifecycle diagram's copies"
-else
-    report_fail "pytest" "exit 0" "$(tail -40 "$TMP/py.log")"
-    summary
-fi
+section "Generated docs"
 if out="$(uv run python -m endless.lifecycle_map check 2>&1)"; then
     report_pass "the status-lifecycle diagram is generated from the transition table"
 else

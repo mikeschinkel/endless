@@ -1,0 +1,43 @@
+# Verification suite for E-2444: post-land plan items, the `deferred` verdict,
+# the `landed` status and the post-land reconcile that settles it.
+#
+# DO NOT EDIT unless you ARE E-2444 — see .endless/tasks/CLAUDE.md.
+#
+# The rules live in Go and are pinned by their unit tests, which run first; the
+# last check drives the real CLI end to end (e2e.sh, beside this file).
+
+schema = 1
+task   = "E-2444"
+
+# The plan-item rules, the gate, the migration, the landed status and its
+# edges, and the board's actions.
+[[check]]
+runner = "gotest"
+paths  = ["./internal/planitem/", "./internal/reconcilegate/", "./internal/schema/...",
+          "./internal/taskstatus/", "./internal/taskrow/", "./internal/sessionstatuscmd/",
+          "./internal/projectstatuscmd/"]
+
+# The post-land event and its replay, and the plan-item events it sits beside.
+[[check]]
+runner = "gotest"
+tests  = ["Test.*(PostLand|PlanItems|PlanBaselined|Reconcile|ValidKinds).*"]
+paths  = ["./internal/events/"]
+
+# The readers: post-land overlay, open-item state, session status.
+[[check]]
+runner = "gotest"
+tests  = ["Test.*(PostLand|SessionStatus|EpicWorkProduct).*"]
+paths  = ["./internal/monitor/"]
+
+# The items file's post_land key, and the lifecycle diagram's copies.
+[[check]]
+runner = "pytest/uv"
+paths  = ["tests/test_plan_items.py", "tests/test_status_lifecycle_sync.py"]
+
+# End to end through the real CLI. e2e.sh uses the shared harness, which writes
+# TAP to $ENDLESS_VERIFY_TAP: point that at stdout (fd 3) and send the harness's
+# human-readable lines to stderr.
+[[check]]
+runner  = "sh"
+command = "ENDLESS_VERIFY_TAP=/dev/fd/3 bash \"$ENDLESS_VERIFY_DIR\"/e2e.sh 3>&1 1>&2"
+format  = "tap"
