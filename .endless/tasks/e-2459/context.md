@@ -1,0 +1,9 @@
+Endless has no way to move a task to another project, and it keeps coming up.
+
+- go-dt E-2431 (2026-10-26): E-2441 was filed in go-dt but belonged to endless. With no move, the session filed E-2445 in endless and superseded E-2441, which cost an extra task and a closed one. Mike then said: "We would want 'endless task move <task_id> --to <project>' (which may already be filed?) but in the interim we can just use `endless sql`." The session found that `endless sql` is not a real interim: a direct UPDATE of tasks.project_id never reaches the ledger, so a rebuild from the ledger puts the task back. That point was added as a note on E-2436.
+- go-diffutils E-2449 (2026-10-27): E-2458 ("Keep the root release marked latest after nested releases") was filed in go-diffutils but belongs to gomion, which owns the go-pkgs release-workflow model (E-2454). With no move, it is being marked obsolete and its content folded into gomion's E-2454 by hand.
+- E-2216 removed `task move --project` because, once a task decides its own project, that flag did nothing (it set the caller's project, not the task's). The same task made Endless refuse a parent in another project, so a move has to deal with the task's parent and children: move the subtree with it, or refuse while either stays behind.
+
+What a move has to carry, from those discussions: the task's project and its ledger entry (in the new project's ledger, and recorded as a move so a rebuild replays it), its .endless/tasks/e-<id>/ mirror files (from one repo to the other), its parent and children (per E-2216's rule), and its relations (cross-project links stay allowed). A task with a live worktree or claim is the hard case. E-2417 and E-2348 cover moving a worktree; this task is about moving the task itself.
+
+Mike asked that this not block the gomion and go-diffutils work that prompted it.
