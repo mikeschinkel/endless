@@ -7817,3 +7817,7 @@ Planning E-2444, I found the status group Shipped ('reached the verification gat
 ### [2026-10-26] Coined terms are filed as decisions until a glossary exists
 Planning E-2444 we coined 'shipped' (landed at least once, or for research/brainstorm, completed), and I said that since Endless has no glossary the definition would live in the task plan and a guide subsection. Mike said that until a glossary exists, coined terms are filed as decisions. Reason: a decision is durable, reviewable and citable, while a plan is one task's working text.
 - **Project**: endless
+
+### [2026-10-27] verify.sh is deprecated; new and unlanded tasks use verify.toml
+While handing off E-2444, I explained its verify.sh suite by saying the user had asked for that form and that most suites in .endless/tasks are scripts. Mike corrected both: a prior agent session, not Mike, chose verify.sh, and verify.sh is deprecated. Every task not yet landed should use verify.toml unless there is a reason it cannot. The count of existing verify.sh files reflects landed history, so it is no argument for the script form. Also, don't attribute an instruction that came from an earlier agent session's launch text to the user.
+- **Project**: endless
