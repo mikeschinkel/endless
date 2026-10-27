@@ -1,0 +1,38 @@
+# Verification suite for E-2405: spawn, prime and claim a task in its own
+# project's directory, and the spawning session tracks what it spawned.
+#
+# DO NOT EDIT unless you ARE E-2405 — see .endless/tasks/CLAUDE.md.
+#
+# The Python tests run against real git repositories (two registered projects,
+# run from the first) and an endless-go built from this tree, so the worktree,
+# the hook and the events are real.
+
+schema = 1
+task   = "E-2405"
+
+# The spawned relation, its event, its row and its stewardship, and the schema
+# carrying its seed row.
+[[check]]
+runner = "gotest"
+paths  = ["./internal/sessiontaskrelation/", "./internal/events/", "./internal/monitor/",
+          "./internal/sessionstatuscmd/", "./internal/schema/..."]
+
+# P1-P5, P7-P10, P16: the commands, run from one project on another's task.
+[[check]]
+runner = "pytest/uv"
+paths  = ["tests/test_task_project_dir.py", "tests/test_spawn_foreground.py",
+          "tests/test_session_resume_recover.py", "tests/test_task_claim_worktree.py",
+          "tests/test_prime.py"]
+
+# P15-P17 by name: the spawned relation's rank, its row and its stewardship.
+[[check]]
+runner = "gotest"
+tests  = ["TestRank_SpawnedSitsBetweenClaimedAndQueued", "TestSpawned_IdSlugLabel",
+          "TestSessionTasksSpawned_RecordsRelationSix",
+          "TestSessionTasksSpawned_UpgradesWeakerKeepsClaimed",
+          "TestSessionStatusRows_SpawnedTaskInAnotherProject",
+          "TestSessionStatusRowsForSession_SpawnedTaskInAnotherProject",
+          "TestStewardship_SpawnerStewardsLikeAFiler", "TestRelationColumn_MarksSpawned",
+          "TestMigrate_MatchesSchemaSQL"]
+paths  = ["./internal/sessiontaskrelation/", "./internal/events/", "./internal/monitor/",
+          "./internal/sessionstatuscmd/", "./internal/schema/..."]
