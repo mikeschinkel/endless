@@ -23,11 +23,21 @@ Questions to settle:
 - Version decisions under the pre-1.0 rule 0.X.Y, where X is breaking and Y is not:
   deterministic checks (gorelease, apidiff, Gomion's AST tools) plus AI judgment for behavior
   changes the tools can't see.
+- Pinned tool versions across repos, starting with golangci-lint. On 2026-10-27, main of
+  go-cliutil turned red with no code change because CI ran golangci-lint "latest" (2.15.0)
+  while the Makefile pinned v2.6.2. go-cliutil now pins v2.15.0 in both places (E-2374).
+  Mike wants to notice when a newer release appears, without failing the build, in every
+  repo rather than one. Candidate mechanisms: a CI step that prints a GitHub warning
+  annotation when the pinned version is behind the latest release, and the same check in
+  a frequently used just recipe. Decide where it lives (Gomion, Endless, or a shared
+  workflow every repo calls).
 - Auto-filing per-repo release tasks with blocking links, and keeping parallel sessions
   from duplicating each other's work.
 
 Gomion is the likely tool Endless would call for the mechanical parts. Its brainstorm on
 the CLI, E-2434 (Gomion: decide the gomion CLI that Endless calls for Go releases), comes
 after this one and takes this one's outcome as its requirements.
+
+
 
 
