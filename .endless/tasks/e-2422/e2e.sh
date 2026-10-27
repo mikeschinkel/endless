@@ -7,12 +7,9 @@
 # E-2422: the session-notice fan-out moves from five SQLite triggers into the
 # Go executor, so notices survive tasks moving to a per-project database.
 #
-# What is verified here:
-#   A. Fail-fast: this task's Go tests — the executor-path notice suite, the
-#      actor and landing suites it ported, the migration that drops the
-#      triggers, the delivery tests in internal/monitor, and the fault catalog.
-#   B. End to end: an endless-go built from this tree, against a scratch
-#      database, emitting real events as a person and as an agent.
+# The end-to-end half of verify.toml: an endless-go built from this tree,
+# against a scratch database, emitting real events as a person and as an agent.
+# The Go tests run as verify.toml's own checks.
 source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
@@ -25,30 +22,7 @@ E2E="$(mktemp -d)" || setup_error "cannot create a scratch directory"
 trap 'rm -rf "${E2E}"' EXIT
 
 # ---------------------------------------------------------------------------
-section "A. This task's own tests (fail-fast)"
-# ---------------------------------------------------------------------------
-
-go_tests() {
-    local label="$1"; shift
-    local out
-    if out=$(go test "$@" 2>&1); then
-        report_pass "${label}"
-    else
-        report_fail "${label}" "pass" "$(printf '%s' "${out}" | tail -40)"
-        summary
-    fi
-}
-go_tests "events: notice fan-out, actor, landing and one-edit-one-notice tests" \
-    ./internal/events/ -run 'Notice|TaskContent_OneEditOneNotice|ExecTaskLanded' -count=1
-go_tests "schema: migrations, including 00025 dropping the triggers and the column" \
-    ./internal/schema/... -count=1
-go_tests "monitor: notice delivery, reaping and rendering" \
-    ./internal/monitor/ -run 'Notice' -count=1
-go_tests "faults: WARN-0036 is catalogued, documented and its number spent" \
-    ./internal/faults/ -count=1
-
-# ---------------------------------------------------------------------------
-section "B. End to end: endless-go against a scratch database"
+section "End to end: endless-go against a scratch database"
 # ---------------------------------------------------------------------------
 
 mkdir -p "${E2E}/home/.config/endless" "${E2E}/proj" "${E2E}/bin"

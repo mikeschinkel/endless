@@ -1,0 +1,42 @@
+# Verification suite for E-2422: the session-notice fan-out moves from five
+# SQLite triggers into the Go executor, so notices survive tasks moving to a
+# per-project database.
+#
+# DO NOT EDIT unless you ARE E-2422 — see .endless/tasks/CLAUDE.md.
+#
+# The Go tests run first; the last check drives an endless-go built from this
+# tree end to end (e2e.sh, beside this file).
+
+schema = 1
+task   = "E-2422"
+
+# The executor-path notice suite, the actor and landing suites it ported, and
+# one edit making one notice.
+[[check]]
+runner = "gotest"
+tests  = ["Test.*(Notice|TaskContent_OneEditOneNotice|ExecTaskLanded).*"]
+paths  = ["./internal/events/"]
+
+# Migrations, including 00025 dropping the triggers and tasks.changed_by_session.
+[[check]]
+runner = "gotest"
+paths  = ["./internal/schema/..."]
+
+# Notice delivery, reaping and rendering.
+[[check]]
+runner = "gotest"
+tests  = ["Test.*Notice.*"]
+paths  = ["./internal/monitor/"]
+
+# WARN-0036 is catalogued, documented and its number spent.
+[[check]]
+runner = "gotest"
+paths  = ["./internal/faults/"]
+
+# End to end. e2e.sh uses the shared harness, which writes TAP to
+# $ENDLESS_VERIFY_TAP: point that at stdout (fd 3) and send the harness's
+# human-readable lines to stderr.
+[[check]]
+runner  = "sh"
+command = "ENDLESS_VERIFY_TAP=/dev/fd/3 bash \"$ENDLESS_VERIFY_DIR\"/e2e.sh 3>&1 1>&2"
+format  = "tap"
