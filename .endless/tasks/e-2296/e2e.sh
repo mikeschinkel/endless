@@ -4,37 +4,23 @@
 # landed. Edit it only if you ARE E-2296. If your change breaks an
 # assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
-# E-2296 verification — a task with a live blocker refuses its claim, spawn
-# and prime, naming every blocker and pointing at task unblock; --out-of-order
-# does not cover it; unblocking releases it.
-#
-#   endless task verify E-2296
-#
-# Exit 0 on all-passed, 1 on any failure, 2 on setup error.
+# E-2296's end-to-end check, run by verify.toml (its pytest check runs there
+# first). A task with a live blocker refuses its claim, naming the blocker and
+# pointing at task unblock; --out-of-order does not cover it; unblocking
+# releases it. The harness writes TAP to $ENDLESS_VERIFY_TAP, which the
+# manifest points at the check's stdout.
 source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 
 set -u
 
-WT="$(git rev-parse --show-toplevel)" || setup_error "not in a git repo"
+WT="$(git -C "$ENDLESS_VERIFY_DIR" rev-parse --show-toplevel)" || setup_error "not in a git repo"
 cd "${WT}" || setup_error "cannot cd to ${WT}"
 TMP="$(mktemp -d)" || setup_error "could not create a temp dir"
 TMP="$(cd "${TMP}" && pwd -P)"
 trap 'rm -rf "${TMP}"' EXIT
 
-# ── 1. fail-fast unit gate ──────────────────────────────────────────────────
-section "1. Unit gate (fail fast)"
-
-if uv run pytest -q tests/test_blocks_gate.py tests/test_precedes_gate.py \
-        tests/test_prime.py tests/test_spawn_gate.py \
-        >"${TMP}/py.log" 2>&1; then
-    report_pass "pytest: the blocks refusal and the gates beside it"
-else
-    report_fail "pytest blocks gate / precedes gate / prime / spawn gate" "exit 0" "$(tail -25 "${TMP}/py.log")"
-    summary
-fi
-
-# ── 2. end to end, through the candidate CLI in a throwaway project ─────────
-section "2. claim refuses a blocked task, names the blocker, and changes nothing"
+# ── end to end, through the candidate CLI in a throwaway project ─────────
+section "1. claim refuses a blocked task, names the blocker, and changes nothing"
 
 ENDLESS="${WT}/.venv/bin/endless"
 [[ -x "${ENDLESS}" ]] || ( uv sync --quiet ) >/dev/null 2>&1
@@ -78,14 +64,14 @@ assert_contains "it points at task unblock" "endless task unblock ${B} --by ${A}
 assert_not_contains "it offers no override" "--out-of-order" "${OUT}"
 assert_eq "the blocked task's status did not move" "submitted" "$(status_of "${B}")"
 
-section "3. --out-of-order does not get past a block"
+section "2. --out-of-order does not get past a block"
 
 OUT="$("${ENDLESS}" task claim "${B}" --unattended --out-of-order 2>&1)"
 assert_eq "claim --out-of-order still exits 1" "1" "$?"
 assert_contains "it still names the blocker" "${A}  submitted" "${OUT}"
 assert_eq "the blocked task's status still did not move" "submitted" "$(status_of "${B}")"
 
-section "4. Unblocking releases the task"
+section "3. Unblocking releases the task"
 
 "${ENDLESS}" task unblock "${B}" --by "${A}" --no-session >"${TMP}/unblock.log" 2>&1 \
     || setup_error "task unblock failed: $(tail -8 "${TMP}/unblock.log")"
