@@ -7825,3 +7825,7 @@ While handing off E-2444, I explained its verify.sh suite by saying the user had
 ### [2026-10-27] User-level Claude settings hooks belong to endless setup and doctor
 While tracing why the tmux alert did not fire after a Stop (E-2455 session), I said ~/.claude/settings.json 'isn't tracked anywhere' because it is not in ~/.init or git. Mike corrected: it should be tracked in Endless's setup subcommands and doctor command — endless setup already writes and repairs Endless's own hook entries there (src/endless/setup.py, _repair_missing_hook_events), and doctor is meant to check them. So when proposing a hook change in that file, name setup/doctor as the owner rather than treating it as untracked machine config; a hand-added entry there (like claude-tmux-alert) is something setup and doctor do not yet know about.
 - **Project**: endless
+
+### [2026-10-27] Check task types before calling two similar-titled tasks duplicates
+While checking for a duplicate of E-719 (E-2455 session), I flagged E-2287 'Build endless doctor' as a likely duplicate of E-2285 'Build the endless doctor command and check registry' from titles and dates alone. Mike corrected me: look at their task types. E-2287 is an epic and E-2285 a todo — an epic and a todo of the same subject are a container and its work, not duplicates. Before suggesting a duplicate, compare type (and parent/children), not just title and creation date.
+- **Project**: endless
