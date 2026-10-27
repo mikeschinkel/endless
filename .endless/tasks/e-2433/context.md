@@ -14,7 +14,8 @@ himself when the sessions tell him a module is ready.
 
 Questions to settle:
 - Computing release order from the module graph, including cycles that exist only at the
-  version level (go-cliutil and go-testutil each requiring a v0.3.0 of the other).
+  version level (go-testutil's next release requires go-cliutil's next release, while
+  go-cliutil's test/ module requires go-testutil's next release).
 - Removing replaces before publishing and restoring them after; which replaces are in-repo
   (kept) versus cross-project (removed).
 - How a release is made: GitHub Actions Release workflows (go-cliutil's and go-dt's reject
@@ -28,3 +29,5 @@ Questions to settle:
 Gomion is the likely tool Endless would call for the mechanical parts. Its brainstorm on
 the CLI, E-2434 (Gomion: decide the gomion CLI that Endless calls for Go releases), comes
 after this one and takes this one's outcome as its requirements.
+
+
