@@ -1,0 +1,7 @@
+In SessionGraphData (internal/monitor/session_graph.go), the recursive node query's predecessor step adds the source of every non-terminal task_deps row whose target is already a node and whose dep_type is blocks or precedes (it now matches blocks only). The walk stays transitive, so a soft predecessor's own blockers and soft predecessors come in as well. Soft and hard order use the same walk; they differ only in the arrow drawn (`=>` blocks, `->` precedes), since the user may override a soft order with --out-of-order but not a hard one. buildOrderGraph is unchanged: it already draws precedes edges among nodes and lets blocks win between the same pair.
+
+The starting set (graphSeeds) is unchanged. A predecessor stewarded by another session is not a seed but enters through the walk, so its id appears at the head of the chain and the user can find its session from the table row or task show.
+
+Update the comments on SessionGraphData and graphSeeds, the paragraph on which tasks appear in docs/guide/sessions.md, and the CLI help wording if it names blockers only, to say blockers and tasks that should precede.
+
+Tests in internal/monitor/session_graph_test.go: a precedes predecessor stewarded by another session enters the node set with its edge; a blocker of that precedes predecessor enters too; a terminal precedes predecessor does not. A test in internal/sessionstatuscmd draws the '->' line for the stewarded-elsewhere case.
