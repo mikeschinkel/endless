@@ -1,0 +1,1 @@
+A direction decision across projects about tooling, not code to write; the outcome decides whether h2 recipes are maintained, archived, or reimplemented in Endless
