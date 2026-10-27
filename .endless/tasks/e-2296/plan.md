@@ -93,3 +93,16 @@ folded in; this one applies to every task type.
   terminal set comes from `internal/taskstatus` through `statuses.get`, so this
   is the display's rule, not a third copy. `GetActiveBlockers` is not called:
   its `LIMIT 3` would cut short the blockers the refusal must name.
+
+
+
+## Folded in
+
+- `internal/refusal/logging.go` opens the Go log file on first write instead
+  of at handler construction. Every endless-go subcommand installs the cfgstore
+  handler, so an empty `log/` landed in every config dir a run touched. Under
+  the verify runner that made the harness guard refuse any `sh` check that
+  followed a pytest or gotest check, which blocked this task's own
+  `verify.toml`. Pinned by `TestSlogHandlerCreatesNothingUntilItLogs`.
+- The suite is a `verify.toml` (pytest, gotest, then `e2e.sh` on the harness),
+  per the direction that unlanded tasks move off `verify.sh`.
