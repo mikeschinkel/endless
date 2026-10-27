@@ -1,0 +1,591 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 97,
+      "passed": 97,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 1793095357873,
+      "stop": 1793095385916
+    },
+    "tests": [
+      {
+        "name": "tests/test_blocks_gate.py::test_a_live_blocker_is_listed",
+        "status": "passed",
+        "duration": 398,
+        "suite": "tests/test_blocks_gate.py"
+      },
+      {
+        "name": "tests/test_blocks_gate.py::test_the_blocker_side_is_not_blocked",
+        "status": "passed",
+        "duration": 368,
+        "suite": "tests/test_blocks_gate.py"
+      },
+      {
+        "name": "tests/test_blocks_gate.py::test_a_terminal_blocker_does_not_refuse[confirmed]",
+        "status": "passed",
+        "duration": 383,
+        "suite": "tests/test_blocks_gate.py"
+      },
+      {
+        "name": "tests/test_blocks_gate.py::test_a_terminal_blocker_does_not_refuse[assumed]",
+        "status": "passed",
+        "duration": 392,
+        "suite": "tests/test_blocks_gate.py"
+      },
+      {
+        "name": "tests/test_blocks_gate.py::test_a_terminal_blocker_does_not_refuse[superseded]",
+        "status": "passed",
+        "duration": 528,
+        "suite": "tests/test_blocks_gate.py"
+      },
+      {
+        "name": "tests/test_blocks_gate.py::test_every_live_blocker_is_named",
+        "status": "passed",
+        "duration": 937,
+        "suite": "tests/test_blocks_gate.py"
+      },
+      {
+        "name": "tests/test_blocks_gate.py::test_each_verb_refuses_naming_the_blocker[claim]",
+        "status": "passed",
+        "duration": 365,
+        "suite": "tests/test_blocks_gate.py"
+      },
+      {
+        "name": "tests/test_blocks_gate.py::test_each_verb_refuses_naming_the_blocker[spawn]",
+        "status": "passed",
+        "duration": 365,
+        "suite": "tests/test_blocks_gate.py"
+      },
+      {
+        "name": "tests/test_blocks_gate.py::test_each_verb_refuses_naming_the_blocker[prime]",
+        "status": "passed",
+        "duration": 369,
+        "suite": "tests/test_blocks_gate.py"
+      },
+      {
+        "name": "tests/test_blocks_gate.py::test_out_of_order_does_not_override_a_block[claim]",
+        "status": "passed",
+        "duration": 1165,
+        "suite": "tests/test_blocks_gate.py"
+      },
+      {
+        "name": "tests/test_blocks_gate.py::test_out_of_order_does_not_override_a_block[spawn]",
+        "status": "passed",
+        "duration": 1093,
+        "suite": "tests/test_blocks_gate.py"
+      },
+      {
+        "name": "tests/test_blocks_gate.py::test_out_of_order_does_not_override_a_block[prime]",
+        "status": "passed",
+        "duration": 602,
+        "suite": "tests/test_blocks_gate.py"
+      },
+      {
+        "name": "tests/test_blocks_gate.py::test_unblocking_releases_the_task",
+        "status": "passed",
+        "duration": 546,
+        "suite": "tests/test_blocks_gate.py"
+      },
+      {
+        "name": "tests/test_blocks_gate.py::test_claim_refuses_and_changes_nothing",
+        "status": "passed",
+        "duration": 534,
+        "suite": "tests/test_blocks_gate.py"
+      },
+      {
+        "name": "tests/test_blocks_gate.py::test_spawn_refuses_and_changes_nothing",
+        "status": "passed",
+        "duration": 386,
+        "suite": "tests/test_blocks_gate.py"
+      },
+      {
+        "name": "tests/test_blocks_gate.py::test_prime_refuses_and_changes_nothing",
+        "status": "passed",
+        "duration": 368,
+        "suite": "tests/test_blocks_gate.py"
+      },
+      {
+        "name": "tests/test_precedes_gate.py::test_an_unfinished_predecessor_is_listed",
+        "status": "passed",
+        "duration": 364,
+        "suite": "tests/test_precedes_gate.py"
+      },
+      {
+        "name": "tests/test_precedes_gate.py::test_the_predecessor_side_has_no_predecessors",
+        "status": "passed",
+        "duration": 372,
+        "suite": "tests/test_precedes_gate.py"
+      },
+      {
+        "name": "tests/test_precedes_gate.py::test_a_finished_predecessor_does_not_refuse[confirmed]",
+        "status": "passed",
+        "duration": 385,
+        "suite": "tests/test_precedes_gate.py"
+      },
+      {
+        "name": "tests/test_precedes_gate.py::test_a_finished_predecessor_does_not_refuse[assumed]",
+        "status": "passed",
+        "duration": 376,
+        "suite": "tests/test_precedes_gate.py"
+      },
+      {
+        "name": "tests/test_precedes_gate.py::test_a_finished_predecessor_does_not_refuse[superseded]",
+        "status": "passed",
+        "duration": 384,
+        "suite": "tests/test_precedes_gate.py"
+      },
+      {
+        "name": "tests/test_precedes_gate.py::test_a_task_with_no_predecessors_is_unaffected",
+        "status": "passed",
+        "duration": 213,
+        "suite": "tests/test_precedes_gate.py"
+      },
+      {
+        "name": "tests/test_precedes_gate.py::test_each_verb_refuses_naming_the_predecessor[claim]",
+        "status": "passed",
+        "duration": 379,
+        "suite": "tests/test_precedes_gate.py"
+      },
+      {
+        "name": "tests/test_precedes_gate.py::test_each_verb_refuses_naming_the_predecessor[spawn]",
+        "status": "passed",
+        "duration": 368,
+        "suite": "tests/test_precedes_gate.py"
+      },
+      {
+        "name": "tests/test_precedes_gate.py::test_each_verb_refuses_naming_the_predecessor[prime]",
+        "status": "passed",
+        "duration": 402,
+        "suite": "tests/test_precedes_gate.py"
+      },
+      {
+        "name": "tests/test_precedes_gate.py::test_out_of_order_proceeds_and_lists_the_predecessor[claim]",
+        "status": "passed",
+        "duration": 359,
+        "suite": "tests/test_precedes_gate.py"
+      },
+      {
+        "name": "tests/test_precedes_gate.py::test_out_of_order_proceeds_and_lists_the_predecessor[spawn]",
+        "status": "passed",
+        "duration": 366,
+        "suite": "tests/test_precedes_gate.py"
+      },
+      {
+        "name": "tests/test_precedes_gate.py::test_out_of_order_proceeds_and_lists_the_predecessor[prime]",
+        "status": "passed",
+        "duration": 358,
+        "suite": "tests/test_precedes_gate.py"
+      },
+      {
+        "name": "tests/test_precedes_gate.py::test_out_of_order_does_not_override_the_plan_refusal",
+        "status": "passed",
+        "duration": 325,
+        "suite": "tests/test_precedes_gate.py"
+      },
+      {
+        "name": "tests/test_precedes_gate.py::test_out_of_order_does_not_override_the_question_refusal",
+        "status": "passed",
+        "duration": 457,
+        "suite": "tests/test_precedes_gate.py"
+      },
+      {
+        "name": "tests/test_precedes_gate.py::test_claim_refuses_and_changes_nothing",
+        "status": "passed",
+        "duration": 362,
+        "suite": "tests/test_precedes_gate.py"
+      },
+      {
+        "name": "tests/test_precedes_gate.py::test_claim_out_of_order_claims",
+        "status": "passed",
+        "duration": 563,
+        "suite": "tests/test_precedes_gate.py"
+      },
+      {
+        "name": "tests/test_precedes_gate.py::test_spawn_refuses_and_changes_nothing",
+        "status": "passed",
+        "duration": 394,
+        "suite": "tests/test_precedes_gate.py"
+      },
+      {
+        "name": "tests/test_precedes_gate.py::test_prime_refuses_and_changes_nothing",
+        "status": "passed",
+        "duration": 376,
+        "suite": "tests/test_precedes_gate.py"
+      },
+      {
+        "name": "tests/test_precedes_gate.py::test_each_command_takes_the_flag[claim]",
+        "status": "passed",
+        "duration": 49,
+        "suite": "tests/test_precedes_gate.py"
+      },
+      {
+        "name": "tests/test_precedes_gate.py::test_each_command_takes_the_flag[spawn]",
+        "status": "passed",
+        "duration": 49,
+        "suite": "tests/test_precedes_gate.py"
+      },
+      {
+        "name": "tests/test_precedes_gate.py::test_each_command_takes_the_flag[prime]",
+        "status": "passed",
+        "duration": 48,
+        "suite": "tests/test_precedes_gate.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_a_framed_brainstorm_is_not_refused_as_planless",
+        "status": "passed",
+        "duration": 192,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_framed_research_passes_too",
+        "status": "passed",
+        "duration": 254,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_an_unframed_brainstorm_is_still_planless",
+        "status": "passed",
+        "duration": 151,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_a_framed_todo_still_needs_a_plan",
+        "status": "passed",
+        "duration": 205,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_a_framed_epic_is_not_refused_as_planless",
+        "status": "passed",
+        "duration": 210,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_an_unframed_epic_is_refused_naming_context",
+        "status": "passed",
+        "duration": 185,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_an_unframed_brainstorm_is_refused_naming_context",
+        "status": "passed",
+        "duration": 159,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_a_framed_bugfix_still_needs_a_plan",
+        "status": "passed",
+        "duration": 196,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_claim_starts_a_framed_epic",
+        "status": "passed",
+        "duration": 405,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_the_no_plan_refusal_offers_prime",
+        "status": "passed",
+        "duration": 145,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_prime_relaxes_the_plan_gate_but_not_questions",
+        "status": "passed",
+        "duration": 242,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_parse_reply_fails_closed[PASS-True-None]",
+        "status": "passed",
+        "duration": 46,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_parse_reply_fails_closed[pass\\n-True-None]",
+        "status": "passed",
+        "duration": 47,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_parse_reply_fails_closed[FAIL\\n- it skips the migration\\n- step 3 is vague-False-it skips the migration]",
+        "status": "passed",
+        "duration": 46,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_parse_reply_fails_closed[FAIL-False-without saying why]",
+        "status": "passed",
+        "duration": 46,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_parse_reply_fails_closed[-False-empty reply]",
+        "status": "passed",
+        "duration": 47,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_parse_reply_fails_closed[Looks fine to me!-False-could not be read]",
+        "status": "passed",
+        "duration": 47,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_challenge_fails_closed_without_claude",
+        "status": "passed",
+        "duration": 48,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_build_prompt_carries_the_task_and_plan",
+        "status": "passed",
+        "duration": 49,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_a_drafted_plan_that_fails_is_not_attached",
+        "status": "passed",
+        "duration": 137,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_a_drafted_plan_that_passes_reaches_submitted",
+        "status": "passed",
+        "duration": 250,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_a_plan_attached_by_anyone_else_is_not_challenged",
+        "status": "passed",
+        "duration": 258,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_editing_an_existing_plan_is_not_challenged",
+        "status": "passed",
+        "duration": 500,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_plan_attach_requests_a_prime",
+        "status": "passed",
+        "duration": 512,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_primed_handoff_opens_with_the_wait_clause",
+        "status": "passed",
+        "duration": 300,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_drafting_handoff_asks_for_a_plan",
+        "status": "passed",
+        "duration": 239,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_a_user_started_session_gets_no_wait_clause",
+        "status": "passed",
+        "duration": 235,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_prime_launches_detached_and_claims_nothing",
+        "status": "passed",
+        "duration": 187,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_prime_out_of_order_launches_past_a_predecessor",
+        "status": "passed",
+        "duration": 645,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_prime_drafts_for_a_planless_task",
+        "status": "passed",
+        "duration": 154,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_prime_does_not_draft_for_a_framed_brainstorm",
+        "status": "passed",
+        "duration": 222,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_prime_does_not_draft_for_a_framed_epic",
+        "status": "passed",
+        "duration": 181,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_a_primed_epic_handoff_starts_from_its_framing",
+        "status": "passed",
+        "duration": 313,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_prime_refuses_started_work",
+        "status": "passed",
+        "duration": 211,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_claim_by_the_holding_session_starts_a_pre_work_task",
+        "status": "passed",
+        "duration": 309,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_a_bound_session_without_the_draft_marker_is_not_the_drafter",
+        "status": "passed",
+        "duration": 165,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_prime.py::test_submit_after_a_held_attach_requests_a_prime",
+        "status": "passed",
+        "duration": 387,
+        "suite": "tests/test_prime.py"
+      },
+      {
+        "name": "tests/test_spawn_gate.py::test_no_plan_is_refused_with_the_route_forward",
+        "status": "passed",
+        "duration": 145,
+        "suite": "tests/test_spawn_gate.py"
+      },
+      {
+        "name": "tests/test_spawn_gate.py::test_a_planned_task_with_no_questions_passes",
+        "status": "passed",
+        "duration": 207,
+        "suite": "tests/test_spawn_gate.py"
+      },
+      {
+        "name": "tests/test_spawn_gate.py::test_an_open_question_parks_a_planned_task",
+        "status": "passed",
+        "duration": 300,
+        "suite": "tests/test_spawn_gate.py"
+      },
+      {
+        "name": "tests/test_spawn_gate.py::test_an_answered_question_releases_the_task",
+        "status": "passed",
+        "duration": 367,
+        "suite": "tests/test_spawn_gate.py"
+      },
+      {
+        "name": "tests/test_spawn_gate.py::test_both_problems_are_reported_together",
+        "status": "passed",
+        "duration": 226,
+        "suite": "tests/test_spawn_gate.py"
+      },
+      {
+        "name": "tests/test_spawn_gate.py::test_claim_applies_the_gate",
+        "status": "passed",
+        "duration": 160,
+        "suite": "tests/test_spawn_gate.py"
+      },
+      {
+        "name": "tests/test_spawn_gate.py::test_spawn_applies_the_gate",
+        "status": "passed",
+        "duration": 147,
+        "suite": "tests/test_spawn_gate.py"
+      },
+      {
+        "name": "tests/test_spawn_gate.py::test_show_marks_a_parked_task_in_every_format",
+        "status": "passed",
+        "duration": 459,
+        "suite": "tests/test_spawn_gate.py"
+      },
+      {
+        "name": "tests/test_spawn_gate.py::test_show_of_an_unparked_task_says_nothing_about_questions",
+        "status": "passed",
+        "duration": 337,
+        "suite": "tests/test_spawn_gate.py"
+      },
+      {
+        "name": "tests/test_spawn_gate.py::test_allow_open_questions_starts_it_and_names_them",
+        "status": "passed",
+        "duration": 282,
+        "suite": "tests/test_spawn_gate.py"
+      },
+      {
+        "name": "tests/test_spawn_gate.py::test_the_spawn_refusal_names_the_flag",
+        "status": "passed",
+        "duration": 299,
+        "suite": "tests/test_spawn_gate.py"
+      },
+      {
+        "name": "tests/test_spawn_gate.py::test_allow_open_questions_does_not_excuse_a_missing_plan",
+        "status": "passed",
+        "duration": 242,
+        "suite": "tests/test_spawn_gate.py"
+      },
+      {
+        "name": "TestSlogHandlerCreatesNothingUntilItLogs",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/refusal"
+      },
+      {
+        "name": "claim of the blocked task exits 1",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it names the blocker and its status",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it points at task unblock",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it offers no override",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the blocked task's status did not move",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "claim --out-of-order still exits 1",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it still names the blocker",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the blocked task's status still did not move",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "claim after unblock exits 0",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the task is underway",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
