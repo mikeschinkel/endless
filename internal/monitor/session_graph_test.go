@@ -232,3 +232,42 @@ func TestSessionGraphData_BlocksCycleTerminates(t *testing.T) {
 		t.Fatalf("edges = %+v, want the three cycle edges", got.Edges)
 	}
 }
+
+// E-2455: a task that should precede a graph node is walked exactly as a
+// blocker is. The E-2444 -> E-2445 shape: the predecessor is another live
+// session's task, so it is not a seed, yet it enters with its `precedes` edge;
+// its own blocker and soft predecessor follow it in. A terminal predecessor
+// imposes no order and is not walked.
+func TestSessionGraphData_WalksPrecedesPredecessors(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "p1", "/p1")
+	const seed, pred, predBlocker, predPred, donePred = 2445, 2444, 30, 31, 40
+	for _, id := range []int64{seed, predBlocker, predPred} {
+		snTask(t, db, id, 1, "ready", "now", "p")
+	}
+	snTask(t, db, pred, 1, "underway", "now", "p")
+	snTask(t, db, donePred, 1, "confirmed", "now", "p")
+	snSession(t, db, 8, 1, pred, "working")
+	sgDep(t, db, pred, seed, DepPrecedes)
+	snBlocks(t, db, predBlocker, pred)
+	sgDep(t, db, predPred, pred, DepPrecedes)
+	sgDep(t, db, donePred, seed, DepPrecedes)
+
+	got, err := SessionGraphData([]int64{seed}, 0)
+	if err != nil {
+		t.Fatalf("SessionGraphData: %v", err)
+	}
+	sgHas(t, got, []int64{seed, pred, predBlocker, predPred}, []int64{donePred})
+	if !got.Nodes[pred].InFlight {
+		t.Errorf("E-%d is another live session's task: want in flight", pred)
+	}
+	want := []GraphEdge{{predBlocker, pred, DepBlocks}, {predPred, pred, DepPrecedes}, {pred, seed, DepPrecedes}}
+	if len(got.Edges) != len(want) {
+		t.Fatalf("edges = %+v, want %+v", got.Edges, want)
+	}
+	for i := range want {
+		if got.Edges[i] != want[i] {
+			t.Errorf("edge %d = %+v, want %+v", i, got.Edges[i], want[i])
+		}
+	}
+}

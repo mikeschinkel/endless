@@ -56,17 +56,20 @@ type GraphData struct {
 //
 // The node set is seeds, plus every OPEN task that own (the session's own
 // task, or 0 for none) directly blocks or should precede, plus every OPEN task
-// that blocks any of those, walked transitively (E-2345). A downstream task is
-// what finishing the own task releases; one step only, so its own downstream
-// tasks are not added, but its blockers are, since they decide when it can
-// start. A blocker is the task you most need to see, and one hidden behind a
-// `later` phase, another session's claim or another project is still the
-// reason its dependent is not available. Terminal blockers are not walked —
-// they impose no order, exactly as the row query's upchain treats them.
+// that blocks or should precede any of those, walked transitively (E-2345,
+// E-2455). A downstream task is what finishing the own task releases; one step
+// only, so its own downstream tasks are not added, but its predecessors are,
+// since they decide when it can start. A predecessor is the task you most need
+// to see, and one hidden behind a `later` phase, another session's claim or
+// another project is still the reason its dependent is not available. Blocks
+// and precedes predecessors are walked by the same rule — spawn refuses a task
+// while either is open — and differ only in the arrow drawn, since a soft
+// order can be overridden with --out-of-order. Terminal predecessors are not
+// walked — they impose no order, exactly as the row query's upchain treats them.
 //
 // Seeds are taken at any status: the caller alone decides the starting set, and
 // it keeps the own task in it at a terminal status until the task lands.
-// The walk's UNION never adds a task twice, so a blocks cycle ends it.
+// The walk's UNION never adds a task twice, so a cycle ends it.
 func SessionGraphData(seeds []int64, own int64) (GraphData, error) {
 	out := GraphData{Nodes: map[int64]GraphNode{}}
 	if len(seeds) == 0 {
@@ -100,7 +103,7 @@ WITH RECURSIVE nodes(id) AS (
     JOIN nodes n ON d.target_id = n.id
     JOIN live_tasks blk ON blk.id = d.source_id
    WHERE d.source_type = 'task' AND d.target_type = 'task'
-     AND d.dep_type = 'blocks'
+     AND d.dep_type IN ('` + DepBlocks + `', '` + DepPrecedes + `')
      AND blk.status NOT IN (` + terminalStatusSet + `)
 )
 SELECT t.id, t.project_id, t.status, t.phase,

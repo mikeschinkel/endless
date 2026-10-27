@@ -322,6 +322,37 @@ func TestGatherGraph_OwnTaskSeedsAndIsPassedAsOwn(t *testing.T) {
 	}
 }
 
+// The E-2444 -> E-2445 shape (E-2455): the predecessor's row is stewarded by
+// another session, so it does not seed the graph, but the walk brings it in
+// and the soft edge is drawn as `->` with the predecessor at the head.
+func TestGatherGraph_StewardedElsewherePrecedesPredecessorDrawn(t *testing.T) {
+	rows := []monitor.SessionStatusRow{
+		{ID: 2444, Status: "underway", Phase: "now", StewardedElsewhere: true},
+		{ID: 2445, Status: "ready", Phase: "now"},
+	}
+	var gotSeeds []int64
+	prev := graphData
+	t.Cleanup(func() { graphData = prev })
+	graphData = func(seeds []int64, own int64) (monitor.GraphData, error) {
+		gotSeeds = seeds
+		return monitor.GraphData{
+			Nodes: map[int64]monitor.GraphNode{2444: gNode(2444, true), 2445: gNode(2445, false)},
+			Edges: []monitor.GraphEdge{{From: 2444, To: 2445, Type: monitor.DepPrecedes}},
+		}, nil
+	}
+	g, err := gatherGraph(rows)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(gotSeeds, []int64{2445}) {
+		t.Fatalf("seeds = %v, want [2445]: a stewarded row does not seed the graph", gotSeeds)
+	}
+	assertLines(t, g, "E-2444 -> E-2445")
+	if g.nodes[2444].OnList {
+		t.Errorf("E-2444 entered through the walk: want off-list")
+	}
+}
+
 // stubGraph installs database and cache answers for one test.
 func stubGraph(t *testing.T, data monitor.GraphData, changed map[int64][]string) {
 	t.Helper()

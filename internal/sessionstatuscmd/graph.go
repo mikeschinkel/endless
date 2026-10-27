@@ -66,7 +66,7 @@ type graphNode struct {
 	Phase    string
 	InFlight bool
 	// OnList is true for a task seeded from the session's own rows, false for
-	// a blocker or downstream task the graph pulled in from outside them.
+	// a predecessor or downstream task the graph pulled in from outside them.
 	OnList bool
 }
 
@@ -133,7 +133,9 @@ func (g orderGraph) empty() bool { return len(g.lines) == 0 }
 // rows the table dims moves the graph's starting set with it. The own task is
 // in at any status because the chain blocking it is what the viewer most needs
 // to see. Stewardship is tested on its own because suppression is not an
-// intensity: under --show-suppressed a stewarded row draws bright.
+// intensity: under --show-suppressed a stewarded row draws bright. A row left
+// out here still enters the graph when it blocks or should precede a seed:
+// monitor.SessionGraphData walks predecessors of both kinds (E-2455).
 func graphSeeds(rows []monitor.SessionStatusRow) []int64 {
 	var ids []int64
 	for _, r := range rows {
@@ -853,7 +855,7 @@ type jsonGraphNode struct {
 	Status   string `json:"status"`
 	Phase    string `json:"phase"`
 	InFlight bool   `json:"in_flight"`
-	// OnList is false for a blocker pulled in from outside the session's rows.
+	// OnList is false for a predecessor pulled in from outside the session's rows.
 	OnList bool `json:"on_list"`
 }
 
