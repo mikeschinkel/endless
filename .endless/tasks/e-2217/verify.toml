@@ -1,0 +1,31 @@
+# Verification suite for E-2217: a project's committed identity (the repo's
+# root commit) separated from the machine-local slug.
+#
+# DO NOT EDIT unless you ARE E-2217 — see .endless/tasks/CLAUDE.md.
+#
+# The unit tests run first; the last check drives the real CLI end to end
+# (e2e.sh, beside this file) on a throwaway machine.
+
+schema = 1
+task   = "E-2217"
+
+# Migration 22 (identity and slug columns, unique indexes) and schema.sql parity.
+[[check]]
+runner = "gotest"
+paths  = ["./internal/schema/..."]
+
+# Identity derivation, the register refusals, project sync, ignored projects,
+# and the CLI around them.
+[[check]]
+runner = "pytest/uv"
+paths  = ["tests/test_project_identity.py", "tests/test_register.py",
+          "tests/test_project_sync.py", "tests/test_ignored_projects.py",
+          "tests/test_cli.py"]
+
+# End to end through the real CLI. e2e.sh uses the shared harness, which writes
+# TAP to $ENDLESS_VERIFY_TAP: point that at stdout (fd 3) and send the harness's
+# human-readable lines to stderr.
+[[check]]
+runner  = "sh"
+command = "ENDLESS_VERIFY_TAP=/dev/fd/3 bash \"$ENDLESS_VERIFY_DIR\"/e2e.sh 3>&1 1>&2"
+format  = "tap"

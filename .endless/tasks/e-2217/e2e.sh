@@ -5,6 +5,7 @@
 # assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-2217 — separate a project's committed identity from the machine-local slug.
+# The end-to-end check of verify.toml: the unit tests run there, before this.
 #
 # What shipped:
 #   - identity = the repo's root commit (oldest of several), stored in
@@ -34,26 +35,12 @@ WORK_TMP="$(mktemp -d)" || setup_error "cannot make a temp dir"
 trap 'rm -rf "${WORK_TMP}"' EXIT
 WORK_TMP="$(cd "${WORK_TMP}" && pwd -P)"
 
-# ── 1. this task's own tests, fail fast ──────────────────────────────────────
-section "1. This task's own tests (fail fast)"
-if go test -count=1 ./internal/schema/... >"${WORK_TMP}/go.log" 2>&1; then
-    report_pass "go: migration 22 and schema.sql parity"
-else
-    report_fail "go test ./internal/schema/..." "ok" "$(tail -30 "${WORK_TMP}/go.log")"
-    summary
-fi
+# ── 1. build the binary the throwaway machine runs ───────────────────────────
+section "1. Build"
 if just build >"${WORK_TMP}/build.log" 2>&1; then
     report_pass "just build"
 else
     report_fail "just build" "exit 0" "$(tail -20 "${WORK_TMP}/build.log")"
-    summary
-fi
-if uv run pytest -q -p no:cacheprovider tests/test_project_identity.py \
-        tests/test_register.py tests/test_project_sync.py \
-        tests/test_ignored_projects.py tests/test_cli.py >"${WORK_TMP}/py.log" 2>&1; then
-    report_pass "pytest: identity, register, project sync, ignored projects, cli"
-else
-    report_fail "pytest" "exit 0" "$(tail -30 "${WORK_TMP}/py.log")"
     summary
 fi
 
