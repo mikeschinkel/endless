@@ -1,0 +1,43 @@
+# Verification suite for E-2418: a task is continued only from its earlier
+# session. task claim, task bind and the SessionStart cwd auto-bind refuse a
+# task another session holds or held, unless the user asks for a fresh
+# transcript.
+#
+# DO NOT EDIT unless you ARE E-2418 — see .endless/tasks/CLAUDE.md.
+
+schema = 1
+task   = "E-2418"
+
+# claim and bind refuse a present or ended holder, name it and
+# `session goto E-N --resume`, change nothing, pass your own task, and offer
+# --new-transcript to a person only; --new-transcript marks its launch.
+[[check]]
+runner = "pytest/uv"
+paths  = ["tests/test_continue_from_earlier_session.py"]
+
+# The SessionStart auto-bind: a present holder in another pane is refused with
+# a fault, an ended holder on a fresh start is refused unless marked, and
+# resume/clear/compact, a same-pane holder and a spawned session bind.
+[[check]]
+runner = "gotest"
+tests  = ["TestCwdBind_.*"]
+paths  = ["./internal/hookcmd/"]
+
+# The board no longer raises the duplicate mark for two holders.
+[[check]]
+runner = "gotest"
+tests  = ["TestStewardship_.*"]
+paths  = ["./internal/monitor/"]
+
+# The new fault code WARN-0036 is numbered and documented.
+[[check]]
+runner = "gotest"
+paths  = ["./internal/faults/"]
+
+# The neighbours whose messages changed: spawn's prior-claim guard, the
+# live/unreachable owner refusals, `session end`, and bind's write-once rule.
+[[check]]
+runner = "pytest/uv"
+paths  = ["tests/test_prior_claim_guard.py", "tests/test_check_task_ownership.py",
+          "tests/test_session_end.py", "tests/test_task_bind_write_once.py",
+          "tests/test_task_bind_planning.py", "tests/test_transcript_gone.py"]
