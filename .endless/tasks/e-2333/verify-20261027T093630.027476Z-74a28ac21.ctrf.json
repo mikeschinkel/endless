@@ -1,0 +1,645 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 105,
+      "passed": 105,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 1793093777333,
+      "stop": 1793093801860
+    },
+    "tests": [
+      {
+        "name": "the worktree root holds a project config",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "outside a project, tasks-target names the user's server",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "inside a project, tasks-target still names the user's server",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "inside this worktree, too",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestDefaultsAreFullSocketPaths",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/tmuxservers"
+      },
+      {
+        "name": "TestConfiguredValuesWin",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/tmuxservers"
+      },
+      {
+        "name": "TestResolveRefusesAMalformedValue",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/tmuxservers"
+      },
+      {
+        "name": "TestResolveAcceptsWellShapedValues",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/tmuxservers"
+      },
+      {
+        "name": "TestResolveRefusesASocketPathTooLong",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/tmuxservers"
+      },
+      {
+        "name": "TestSettingsDefaultsMatchResolve",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/tmuxservers"
+      },
+      {
+        "name": "TestEnsureDirCreatesPrivate",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/tmuxservers"
+      },
+      {
+        "name": "TestEnsureDirRefusesUnsafe",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/tmuxservers"
+      },
+      {
+        "name": "TestCheckDirRefusesAnotherOwner",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/tmuxservers"
+      },
+      {
+        "name": "TestConfSourcesTheUserFirst",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/tmuxservers"
+      },
+      {
+        "name": "TestShellQuoteGuardsZshEquals",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/tmuxservers"
+      },
+      {
+        "name": "TestTemplateLauncherSubstitutesTheCommand",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/tmuxservers"
+      },
+      {
+        "name": "TestDetectLauncher",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/tmuxservers"
+      },
+      {
+        "name": "TestTaskIDOfWindow",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/tmuxservers"
+      },
+      {
+        "name": "TestStateWritesOnlyOnChange",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/tmuxservers"
+      },
+      {
+        "name": "TestParseWindowsIsTabOrder",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/tmuxservers"
+      },
+      {
+        "name": "TestRecordHooksIncludeReorders",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/tmuxservers"
+      },
+      {
+        "name": "TestDefaultLauncher",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/tmuxservers"
+      },
+      {
+        "name": "TestResolveReadsTheUserConfigInsideAProject",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/tmuxservers"
+      },
+      {
+        "name": "TestMerge_AutoSpawnEnabledIsNeverInherited",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/config"
+      },
+      {
+        "name": "TestMerge_AutoSpawnCadenceInherits",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/config"
+      },
+      {
+        "name": "TestLoadProject",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/config"
+      },
+      {
+        "name": "TestMerge_FaultTriageEnabledIsNeverInherited",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/config"
+      },
+      {
+        "name": "TestMerge_MainSyncEnabledIsNeverInherited",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/config"
+      },
+      {
+        "name": "TestMerge_ChecksGlobalOnly",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/config"
+      },
+      {
+        "name": "TestMerge_ChecksProjectOverridesCLI",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/config"
+      },
+      {
+        "name": "TestMerge_ChecksUnsetInherits",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/config"
+      },
+      {
+        "name": "TestMerge_ChecksKeysFromBothLayers",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/config"
+      },
+      {
+        "name": "TestMerge_TrackingProjectInheritsCLI",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/config"
+      },
+      {
+        "name": "TestMerge_TrackingProjectOverrides",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/config"
+      },
+      {
+        "name": "TestMerge_GlobalOnlyFieldsFlowThrough",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/config"
+      },
+      {
+        "name": "TestMerge_ProjectOnlyFieldsPreserved",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/config"
+      },
+      {
+        "name": "TestTmuxIsCLIOnly",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/config"
+      },
+      {
+        "name": "TestNormalize_AcceptsTheThreeSpellings",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/config"
+      },
+      {
+        "name": "TestNormalize_RefusesALegacyBoolean",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/config"
+      },
+      {
+        "name": "TestNormalize_RefusesAnUnknownSpelling",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/config"
+      },
+      {
+        "name": "TestOptIns",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/config"
+      },
+      {
+        "name": "TestLeafKeys",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/config"
+      },
+      {
+        "name": "tests/test_tmux_test_isolation.py::test_every_isolated_config_names_the_private_socket_dir",
+        "status": "passed",
+        "duration": 86,
+        "suite": "tests/test_tmux_test_isolation.py"
+      },
+      {
+        "name": "tests/test_tmux_test_isolation.py::test_private_socket_dir_fits_a_unix_socket_path",
+        "status": "passed",
+        "duration": 97,
+        "suite": "tests/test_tmux_test_isolation.py"
+      },
+      {
+        "name": "tests/test_tmux_test_isolation.py::test_real_tasks_server_lookup_finds_nothing_outside_the_test",
+        "status": "passed",
+        "duration": 126,
+        "suite": "tests/test_tmux_test_isolation.py"
+      },
+      {
+        "name": "tests/test_tmux_test_isolation.py::test_real_tasks_server_lookup_finds_the_private_server",
+        "status": "passed",
+        "duration": 120,
+        "suite": "tests/test_tmux_test_isolation.py"
+      },
+      {
+        "name": "tests/test_tmux_test_isolation.py::test_spawn_opens_its_window_only_on_the_private_server",
+        "status": "passed",
+        "duration": 955,
+        "suite": "tests/test_tmux_test_isolation.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_reopen_lands_revisit_from_every_reopenable_status[assumed]",
+        "status": "passed",
+        "duration": 224,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_reopen_lands_revisit_from_every_reopenable_status[confirmed]",
+        "status": "passed",
+        "duration": 177,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_reopen_lands_revisit_from_every_reopenable_status[completed]",
+        "status": "passed",
+        "duration": 167,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_reopen_without_plan_still_lands_revisit",
+        "status": "passed",
+        "duration": 167,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_reopen_with_plan_reports_the_plan_in_the_suffix",
+        "status": "passed",
+        "duration": 176,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_reopen_completed_epic_does_not_cascade",
+        "status": "passed",
+        "duration": 188,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_reopen_refuses_non_terminal_status[ready]",
+        "status": "passed",
+        "duration": 130,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_reopen_refuses_non_terminal_status[unplanned]",
+        "status": "passed",
+        "duration": 103,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_reopen_refuses_non_terminal_status[underway]",
+        "status": "passed",
+        "duration": 106,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_reopen_refuses_non_terminal_status[unverified]",
+        "status": "passed",
+        "duration": 185,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_reopen_refuses_non_terminal_status[submitted]",
+        "status": "passed",
+        "duration": 456,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_reopen_refuses_non_terminal_status[revisit]",
+        "status": "passed",
+        "duration": 732,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_reopen_refuses_declined_obsolete_with_pointer[declined]",
+        "status": "passed",
+        "duration": 731,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_reopen_refuses_declined_obsolete_with_pointer[obsolete]",
+        "status": "passed",
+        "duration": 302,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_reopen_unknown_id_errors",
+        "status": "passed",
+        "duration": 634,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_reopen_keeps_the_session_binding",
+        "status": "passed",
+        "duration": 403,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_reopen_does_not_create_worktree",
+        "status": "passed",
+        "duration": 603,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_spawn_reopen_flags_are_retired_and_point_at_the_route[reopen]",
+        "status": "passed",
+        "duration": 87,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_spawn_reopen_flags_are_retired_and_point_at_the_route[new_session]",
+        "status": "passed",
+        "duration": 66,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_spawn_reopen_flags_are_retired_and_point_at_the_route[print_decision]",
+        "status": "passed",
+        "duration": 84,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_spawn_plan_no_longer_accepts_reopen_kwargs",
+        "status": "passed",
+        "duration": 90,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_spawn_no_flag_terminal_target_routes_to_the_session",
+        "status": "passed",
+        "duration": 128,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_any_session_can_claim_a_reopened_task",
+        "status": "passed",
+        "duration": 531,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_spawn_no_flag_unverified_names_the_reopen_route",
+        "status": "passed",
+        "duration": 137,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_task_reopen.py::test_spawn_force_still_demotes_but_warns",
+        "status": "passed",
+        "duration": 392,
+        "suite": "tests/test_task_reopen.py"
+      },
+      {
+        "name": "tests/test_tmux_start.py::test_start_is_the_same_command_as_tmux_start",
+        "status": "passed",
+        "duration": 61,
+        "suite": "tests/test_tmux_start.py"
+      },
+      {
+        "name": "tests/test_tmux_start.py::test_start_shells_to_endless_go",
+        "status": "passed",
+        "duration": 72,
+        "suite": "tests/test_tmux_start.py"
+      },
+      {
+        "name": "tests/test_tmux_start.py::test_project_monitor_tmux_requires_a_name",
+        "status": "passed",
+        "duration": 54,
+        "suite": "tests/test_tmux_start.py"
+      },
+      {
+        "name": "tests/test_tmux_start.py::test_tasks_server_parses_the_target",
+        "status": "passed",
+        "duration": 111,
+        "suite": "tests/test_tmux_start.py"
+      },
+      {
+        "name": "tests/test_tmux_start.py::test_tasks_server_not_running",
+        "status": "passed",
+        "duration": 87,
+        "suite": "tests/test_tmux_start.py"
+      },
+      {
+        "name": "tests/test_tmux_start.py::test_reach_line_attaches_from_outside_and_quotes_for_zsh",
+        "status": "passed",
+        "duration": 61,
+        "suite": "tests/test_tmux_start.py"
+      },
+      {
+        "name": "tests/test_tmux_start.py::test_reach_line_is_none_without_the_server",
+        "status": "passed",
+        "duration": 60,
+        "suite": "tests/test_tmux_start.py"
+      },
+      {
+        "name": "tests/test_tmux_start.py::test_claim_from_a_plain_shell_needs_no_tmux_while_the_server_runs",
+        "status": "passed",
+        "duration": 64,
+        "suite": "tests/test_tmux_start.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_foreground_spawn_single_launcher_call",
+        "status": "passed",
+        "duration": 62,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_foreground_spawn_no_send_keys_or_plan",
+        "status": "passed",
+        "duration": 66,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_foreground_spawn_threads_model_and_permission_mode",
+        "status": "passed",
+        "duration": 76,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_spawn_has_no_no_plan_flag",
+        "status": "passed",
+        "duration": 68,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_foreground_spawn_window_named_for_the_task_alone",
+        "status": "passed",
+        "duration": 105,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_manual_spawn_passes_no_auto_flags",
+        "status": "passed",
+        "duration": 56,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_auto_spawn_threads_auto_and_target_session",
+        "status": "passed",
+        "duration": 70,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_spawn_refuses_while_endless_is_not_running[kwargs0]",
+        "status": "passed",
+        "duration": 58,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_spawn_refuses_while_endless_is_not_running[kwargs1]",
+        "status": "passed",
+        "duration": 54,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_spawn_refuses_while_endless_is_not_running[kwargs2]",
+        "status": "passed",
+        "duration": 83,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_auto_flags_are_hidden",
+        "status": "passed",
+        "duration": 61,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_foreground_spawn_session_named_for_the_task_by_default",
+        "status": "passed",
+        "duration": 71,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_foreground_spawn_explicit_name_wins",
+        "status": "passed",
+        "duration": 66,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_manual_spawn_defaults_to_first_and_refocus",
+        "status": "passed",
+        "duration": 68,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_spawn_threads_placement_no_refocus_and_tmux_session",
+        "status": "passed",
+        "duration": 65,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_missing_tmux_session_refuses_before_pre_claim",
+        "status": "passed",
+        "duration": 58,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_cli_maps_to_flags_to_placement[flag0-first]",
+        "status": "passed",
+        "duration": 107,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_cli_maps_to_flags_to_placement[flag1-first]",
+        "status": "passed",
+        "duration": 75,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_cli_maps_to_flags_to_placement[flag2-last]",
+        "status": "passed",
+        "duration": 78,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_cli_maps_to_flags_to_placement[flag3-left]",
+        "status": "passed",
+        "duration": 58,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_cli_maps_to_flags_to_placement[flag4-right]",
+        "status": "passed",
+        "duration": 71,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_cli_to_flags_are_mutually_exclusive",
+        "status": "passed",
+        "duration": 85,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_cli_threads_no_refocus_and_tmux_session",
+        "status": "passed",
+        "duration": 60,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_spawn_outside_tmux_while_the_tasks_server_runs",
+        "status": "passed",
+        "duration": 62,
+        "suite": "tests/test_spawn_foreground.py"
+      },
+      {
+        "name": "tests/test_spawn_foreground.py::test_spawn_into_a_named_session_says_how_to_reach_it",
+        "status": "passed",
+        "duration": 81,
+        "suite": "tests/test_spawn_foreground.py"
+      }
+    ]
+  }
+}
