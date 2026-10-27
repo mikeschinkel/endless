@@ -27,9 +27,10 @@ paths  = ["tests/test_task_project_dir.py", "tests/test_spawn_foreground.py",
 # P15-P17 by name: the spawned relation's rank, its row and its stewardship.
 [[check]]
 runner = "gotest"
-tests  = ["TestRank_SpawnedSitsBetweenClaimedAndQueued", "TestSpawned_IdSlugLabel",
-          "TestSessionTasksSpawned_RecordsRelationSix",
-          "TestSessionTasksSpawned_UpgradesWeakerKeepsClaimed",
+tests  = ["TestRank_SpawnedSitsBetweenBoundAndTouched", "TestSpawned_IdSlugLabel",
+          "TestSpawned_IsNotAnAnchor",
+          "TestSessionTasksSpawned_RecordsRelationSeven",
+          "TestSessionTasksSpawned_UpgradesWeakerKeepsOwned",
           "TestSessionStatusRows_SpawnedTaskInAnotherProject",
           "TestSessionStatusRowsForSession_SpawnedTaskInAnotherProject",
           "TestStewardship_SpawnerStewardsLikeAFiler", "TestRelationColumn_MarksSpawned",
