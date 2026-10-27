@@ -5,7 +5,7 @@
 # assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #
 # E-2217 — separate a project's committed identity from the machine-local slug.
-# The end-to-end check of verify.toml: the unit tests run there, before this.
+# The end-to-end check of verify.toml; the unit tests run there, after this.
 #
 # What shipped:
 #   - identity = the repo's root commit (oldest of several), stored in
