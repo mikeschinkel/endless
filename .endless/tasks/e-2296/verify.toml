@@ -15,6 +15,14 @@ runner = "pytest/uv"
 paths  = ["tests/test_blocks_gate.py", "tests/test_precedes_gate.py",
           "tests/test_prime.py", "tests/test_spawn_gate.py"]
 
+# A log handler that logs nothing leaves the config dir untouched, so a check
+# above cannot make the runner's own config dir look real to the harness guard
+# of the check below.
+[[check]]
+runner = "gotest"
+tests  = ["TestSlogHandlerCreatesNothingUntilItLogs"]
+paths  = ["./internal/refusal/"]
+
 # End to end through the real CLI. e2e.sh uses the shared harness, which writes
 # TAP to $ENDLESS_VERIFY_TAP: point that at stdout (fd 3) and send the harness's
 # human-readable lines to stderr.

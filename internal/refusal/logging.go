@@ -57,17 +57,40 @@ func SlogHandler(configDir, file string, level slog.Level) slog.Handler {
 	})
 }
 
-// logWriter opens configDir/log/file for append, or returns io.Discard.
+// logWriter returns a writer that opens configDir/log/file for append on its
+// first write, or discards if it cannot.
+//
+// Lazily, because SlogHandler is installed by every endless-go subcommand and
+// most of them never log. Opening at construction left an empty log/ in every
+// config dir a run touched, and the verify runner's config dir must hold only
+// the config it wrote: the guard reads anything more as a real config and
+// refuses the next harness check (E-2296).
 func logWriter(configDir, file string) io.Writer {
-	dir := filepath.Join(configDir, LogDirName)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	return &lazyLogFile{path: filepath.Join(configDir, LogDirName, file)}
+}
+
+// lazyLogFile is logWriter's writer. Not safe for concurrent first writes from
+// separate goroutines; slog's handlers and the standard logger both serialize
+// their writes, which is all that uses it.
+type lazyLogFile struct {
+	path string
+	w    io.Writer
+}
+
+func (l *lazyLogFile) Write(p []byte) (int, error) {
+	if l.w == nil {
+		l.w = openLogFile(l.path)
+	}
+	return l.w.Write(p)
+}
+
+// openLogFile opens path for append, creating its directory, or returns
+// io.Discard.
+func openLogFile(path string) io.Writer {
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
 		return io.Discard
 	}
-	f, err := os.OpenFile(
-		filepath.Join(dir, file),
-		os.O_CREATE|os.O_WRONLY|os.O_APPEND,
-		0644,
-	)
+	f, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
 	if err != nil {
 		return io.Discard
 	}

@@ -119,6 +119,8 @@ def in_tmux(monkeypatch):
     monkeypatch.setattr(shutil, "which",
                         lambda name: "/usr/bin/tmux" if name == "tmux" else real_which(name))
     monkeypatch.setenv("TMUX", "/tmp/tmux-sock,1,0")
+    # E-2385: a spawn needs Endless's task-session server, not just tmux.
+    monkeypatch.setattr("endless.tmux_cmd.tasks_server", lambda: ("/s/endless-tasks", "tasks"))
     monkeypatch.setattr(task_cmd, "_check_task_ownership", lambda *a, **k: None)
 
 
