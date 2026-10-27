@@ -3,11 +3,21 @@
 #
 # DO NOT EDIT unless you ARE E-2444 — see .endless/tasks/CLAUDE.md.
 #
-# The rules live in Go and are pinned by their unit tests, which run first; the
-# last check drives the real CLI end to end (e2e.sh, beside this file).
+# The rules live in Go and are pinned by their unit tests; the first check drives
+# the real CLI end to end (e2e.sh, beside this file).
 
 schema = 1
 task   = "E-2444"
+
+# End to end through the real CLI, FIRST: the later Go and pytest checks write
+# logs into the run's config dir, and _guard.sh then takes the run for a direct
+# one and refuses the harness. e2e.sh uses the shared harness, which writes
+# TAP to $ENDLESS_VERIFY_TAP: point that at stdout (fd 3) and send the harness's
+# human-readable lines to stderr.
+[[check]]
+runner  = "sh"
+command = "ENDLESS_VERIFY_TAP=/dev/fd/3 bash \"$ENDLESS_VERIFY_DIR\"/e2e.sh 3>&1 1>&2"
+format  = "tap"
 
 # The plan-item rules, the gate, the migration, the landed status and its
 # edges, and the board's actions.
@@ -33,11 +43,3 @@ paths  = ["./internal/monitor/"]
 [[check]]
 runner = "pytest/uv"
 paths  = ["tests/test_plan_items.py", "tests/test_status_lifecycle_sync.py"]
-
-# End to end through the real CLI. e2e.sh uses the shared harness, which writes
-# TAP to $ENDLESS_VERIFY_TAP: point that at stdout (fd 3) and send the harness's
-# human-readable lines to stderr.
-[[check]]
-runner  = "sh"
-command = "ENDLESS_VERIFY_TAP=/dev/fd/3 bash \"$ENDLESS_VERIFY_DIR\"/e2e.sh 3>&1 1>&2"
-format  = "tap"
