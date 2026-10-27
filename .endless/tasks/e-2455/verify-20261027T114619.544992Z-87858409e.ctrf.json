@@ -1,0 +1,64 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 9,
+      "passed": 9,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test: monitor, sessionstatuscmd",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestSessionGraphData_WalksPrecedesPredecessors",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "contract test runs and passes: TestGatherGraph_StewardedElsewherePrecedesPredecessorDrawn",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the dependent is a row in session 1's table",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "another session's soft predecessor draws at the head of -\u003e",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "its blocker draws",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "its own soft predecessor draws",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a finished soft predecessor does not draw",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "--graph renders the same lines",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
