@@ -1,0 +1,5505 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 916,
+      "passed": 916,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 1793093808240,
+      "stop": 1793093956713
+    },
+    "tests": [
+      {
+        "name": "task move --help still lists --children-of",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "task move --help no longer lists --project",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the report finds the one misplaced line",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the report names its owner",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "alpha's ledger no longer holds task 7's event",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "alpha's own event stays put",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "beta's ledger holds the moved event",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the moved event is stamped beta",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the moved event keeps its ts",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a second report finds nothing",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestEventEmit_ExistingEntityTakesItsOwnProject/task_update",
+        "status": "passed",
+        "duration": 2710,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventEmit_ExistingEntityTakesItsOwnProject/decision_update",
+        "status": "passed",
+        "duration": 1680,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventEmit_ExistingEntityTakesItsOwnProject",
+        "status": "passed",
+        "duration": 4390,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventEmit_QuestionEventsTakeTheirTasksProject",
+        "status": "passed",
+        "duration": 980,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventEmit_MissingEntityIsRefused",
+        "status": "passed",
+        "duration": 630,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventEmit_CreateKeepsCallersProject",
+        "status": "passed",
+        "duration": 790,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEpicDerivation_EmitWritesLedgerAndUpdatesEpic",
+        "status": "passed",
+        "duration": 630,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEpicDerivation_ProjectionReplaysDerivedEvent",
+        "status": "passed",
+        "duration": 350,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventEmit_MissingKindExitsNonZero",
+        "status": "passed",
+        "duration": 450,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventEmit_UnknownKindExitsNonZero",
+        "status": "passed",
+        "duration": 530,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventValidateDB_HappyPathReportsMatch",
+        "status": "passed",
+        "duration": 1160,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventValidateDB_MissingProjectRootExitsNonZero",
+        "status": "passed",
+        "duration": 510,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventRebuildDB_DryRunReportsProjectedCounts",
+        "status": "passed",
+        "duration": 1220,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventRebuildDB_ConfirmRefusesAndDestroysNothing",
+        "status": "passed",
+        "duration": 500,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventRebuildDB_ConfirmRefusesWithNoBoundSession",
+        "status": "passed",
+        "duration": 450,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventRebuildDB_ConfirmRefusesBeforeReadingTheLedger",
+        "status": "passed",
+        "duration": 680,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventBackup_WritesBackupFileUnderConfigDir",
+        "status": "passed",
+        "duration": 400,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventBackup_ReportsTheDestinationPath",
+        "status": "passed",
+        "duration": 520,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventBackup_SkippedReportsTheExistingBackup",
+        "status": "passed",
+        "duration": 960,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventBackup_NoDatabaseFailsLoudly",
+        "status": "passed",
+        "duration": 20,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventBackup_EnforcesTieredRetention",
+        "status": "passed",
+        "duration": 860,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEvent_UnknownSubcommandExitsNonZero",
+        "status": "passed",
+        "duration": 970,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventEmit_QuestionsAskedAllocatesSeriesAndIDs",
+        "status": "passed",
+        "duration": 2100,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventEmit_QuestionsAskedRefusesCallerNumbers/series",
+        "status": "passed",
+        "duration": 530,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventEmit_QuestionsAskedRefusesCallerNumbers/id",
+        "status": "passed",
+        "duration": 270,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventEmit_QuestionsAskedRefusesCallerNumbers",
+        "status": "passed",
+        "duration": 790,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestEventEmit_QuestionResolvedRefusalWritesNoLedger",
+        "status": "passed",
+        "duration": 1520,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestLedgerRoot/sandbox_context_routes_to_the_sandbox_config_dir",
+        "status": "passed",
+        "duration": 10,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestLedgerRoot/main_context_returns_the_project_root_unchanged",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestLedgerRoot",
+        "status": "passed",
+        "duration": 10,
+        "suite": "github.com/mikeschinkel/endless/internal/eventcmd"
+      },
+      {
+        "name": "TestExecute_Created_RejectsCrossProjectParent",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/events"
+      },
+      {
+        "name": "TestExecute_Moved_RejectsCrossProjectParent",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/events"
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_RejectsCrossProjectParent",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/events"
+      },
+      {
+        "name": "TestExecute_SameProjectParentAllowed",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/events"
+      },
+      {
+        "name": "TestActiveSecondsSince_SumsOnlyNonIdleGaps",
+        "status": "passed",
+        "duration": 1040,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestActiveSecondsSince_IgnoresRowsBeforeTheCutoff",
+        "status": "passed",
+        "duration": 500,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestActiveSecondsSince_IsZeroWhenTheMachineWasUnattended",
+        "status": "passed",
+        "duration": 390,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestActiveSecondsSince_CountsTheOpenSegmentUpToNow",
+        "status": "passed",
+        "duration": 300,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestActiveSecondsSince_CrossesProjects",
+        "status": "passed",
+        "duration": 430,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRecordActivity_InsertsRow",
+        "status": "passed",
+        "duration": 280,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRecordActivity_NilContextStoresNull",
+        "status": "passed",
+        "duration": 490,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestShouldThrottle_NoPreviousRunFalse",
+        "status": "passed",
+        "duration": 400,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestShouldThrottle_WithinIntervalTrue",
+        "status": "passed",
+        "duration": 430,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestShouldThrottle_OutsideIntervalFalse",
+        "status": "passed",
+        "duration": 620,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestShouldThrottle_ScopedBySource",
+        "status": "passed",
+        "duration": 340,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseBackupName/a_backup",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseBackupName/wrong_prefix",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseBackupName/wrong_suffix",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseBackupName/a_sidecar",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseBackupName/unparsable_stamp",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseBackupName/no_stamp_at_all",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseBackupName/trailing_junk",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseBackupName",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRetentionTiers/just_written",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRetentionTiers/an_hour_old",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRetentionTiers/at_the_hourly_edge",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRetentionTiers/just_past_it",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRetentionTiers/a_week_old",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRetentionTiers/at_the_daily_edge",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRetentionTiers/just_past_it#01",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRetentionTiers/at_the_weekly_edge",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRetentionTiers/past_every_tier",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRetentionTiers/stamped_in_the_future",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRetentionTiers",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBackupsToPruneKeepsNewestPerBucket",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBackupsToPruneNeverEmptiesTheShelf",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBackupsToPruneEmptyAndSingle",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRetentionSteadyState",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPruneBackupsLeavesForeignFilesAlone",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPruneBackupsMissingDirIsNotAnError",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestNewestBackup",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestListBackupsSkipsNonBackups",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSchemaFreshDB_CreatesAllTables",
+        "status": "passed",
+        "duration": 750,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSchemaReexecIdempotent",
+        "status": "passed",
+        "duration": 550,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestChildDBRoute/main:_no_flag,_neutral_directory",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestChildDBRoute/main_via_PinMainDB_is_still_main",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestChildDBRoute/sandbox:_--db_sandbox_from_the_worktree_root",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestChildDBRoute/sandbox_is_recognised_even_when_cwd_is_elsewhere",
+        "status": "passed",
+        "duration": 40,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestChildDBRoute/any_other_directory_is_refused,_not_routed_to_main",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestChildDBRoute",
+        "status": "passed",
+        "duration": 130,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestConnectActionFor/behind_applies_forward",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestConnectActionFor/a_fresh_file_is_behind",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestConnectActionFor/equal_is_current",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestConnectActionFor/ahead_halts",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestConnectActionFor",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRefusesMainDB",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDB_WorktreeBuildRefusesMainAtEveryVersion",
+        "status": "passed",
+        "duration": 570,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDB_WorktreeBuildMigratesItsOwnBehindDatabase",
+        "status": "passed",
+        "duration": 450,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDB_BehindIsBackedUpThenMigrated",
+        "status": "passed",
+        "duration": 450,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDB_CurrentAppliesNothing",
+        "status": "passed",
+        "duration": 240,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDB_AheadHalts",
+        "status": "passed",
+        "duration": 670,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDB_SeedAndGatesRunOnEveryConnect/a_drifted_mirror_row_is_reseeded_on_a_current_database",
+        "status": "passed",
+        "duration": 250,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDB_SeedAndGatesRunOnEveryConnect/a_drifted_gate_kinds_row_is_reseeded_too",
+        "status": "passed",
+        "duration": 510,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDB_SeedAndGatesRunOnEveryConnect/a_rogue_mirror_row_fail-closes",
+        "status": "passed",
+        "duration": 590,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDB_SeedAndGatesRunOnEveryConnect/the_hook's_pin_no_longer_opens_schema-passive",
+        "status": "passed",
+        "duration": 340,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDB_SeedAndGatesRunOnEveryConnect",
+        "status": "passed",
+        "duration": 1700,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDatabaseAheadFingerprint_MatchesTheRecordedRefusal",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSelfDevProjectRoot/worktree_root",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSelfDevProjectRoot/subdir_of_worktree",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSelfDevProjectRoot/named-alternate_dir_not_recognized_(ED-1515)",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSelfDevProjectRoot/main_checkout_(no_worktrees_segment)",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSelfDevProjectRoot/unrelated_dir",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSelfDevProjectRoot/marker_present_but_not_an_e-NNN_worktree",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSelfDevProjectRoot",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectIsSelfDev/flag_true",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectIsSelfDev/flag_false",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectIsSelfDev/flag_absent",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectIsSelfDev/config_missing",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectIsSelfDev",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestConsumeDBFlags/space_form_before_subcommand",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestConsumeDBFlags/equals_form",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestConsumeDBFlags/flag_after_subcommand_still_stripped",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestConsumeDBFlags/absent_leaves_args_and_dir_untouched",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestConsumeDBFlags",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPinMainDB",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGuardWorktreeDBContext/gated_worktree,_no_context_-\u003e_refuse",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGuardWorktreeDBContext/gated_worktree,_--db-dir_context_-\u003e_allow",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGuardWorktreeDBContext/gated_worktree,_PinMainDB_context_-\u003e_allow",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGuardWorktreeDBContext/non-sandbox_worktree_-\u003e_allow_(downstream_projects)",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGuardWorktreeDBContext/not_in_a_worktree_-\u003e_allow",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGuardWorktreeDBContext",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeDirName/plain_worktree_root",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeDirName/subdir_of_worktree",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeDirName/named-alternate_dir_not_recognized_(ED-1515)",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeDirName/main_checkout_(no_marker)",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeDirName/marker_present_but_not_an_e-NNN_worktree",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeDirName",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestConsumeDBFlags_Choices/--db_main_follows_$HOME_when_XDG_CONFIG_HOME_is_unset",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestConsumeDBFlags_Choices/--db_main_follows_a_user-set_XDG_CONFIG_HOME_(E-2186)",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestConsumeDBFlags_Choices/--db_sandbox_resolves_this_worktree's_sandbox_from_cwd",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestConsumeDBFlags_Choices/--db_sandbox_outside_a_self-dev_worktree_is_refused",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestConsumeDBFlags_Choices/--db_sandbox_in_a_NON-self-dev_worktree_is_refused",
+        "status": "passed",
+        "duration": 10,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestConsumeDBFlags_Choices/unknown_--db_value_is_refused,_naming_the_two",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestConsumeDBFlags_Choices/--db_with_no_value_is_refused,_not_silently_skipped",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestConsumeDBFlags_Choices/--db-dir_with_no_value_is_refused",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestConsumeDBFlags_Choices/--db_and_--db-dir_together_are_refused",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestConsumeDBFlags_Choices",
+        "status": "passed",
+        "duration": 20,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGateRefusesWithoutAFlag/sandbox_on_disk,_cwd_inside_it,_no_flag_-\u003e_still_refuse",
+        "status": "passed",
+        "duration": 10,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGateRefusesWithoutAFlag/the_same_cwd_WITH_--db_sandbox_-\u003e_allowed",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGateRefusesWithoutAFlag/the_same_cwd_WITH_--db_main_-\u003e_allowed,_and_points_at_main",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGateRefusesWithoutAFlag",
+        "status": "passed",
+        "duration": 20,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMainPinRoutingSurvivesTheDeletion/dev_session_(no_flag):_DB-\u003emain",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMainPinRoutingSurvivesTheDeletion/test_harness_(explicit_--db-dir):_DB-\u003ethat_dir",
+        "status": "passed",
+        "duration": 10,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMainPinRoutingSurvivesTheDeletion",
+        "status": "passed",
+        "duration": 10,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDBProvenance/no_database_opened_-\u003e_silent",
+        "status": "passed",
+        "duration": 10,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDBProvenance/pinned_in_code_-\u003e_silent",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDBProvenance/not_a_self-dev_project_-\u003e_silent",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDBProvenance/--db_main_-\u003e_names_main",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDBProvenance/--db_sandbox_-\u003e_names_WHICH_sandbox",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDBProvenance/--db-dir_-\u003e_names_the_directory_itself",
+        "status": "passed",
+        "duration": 10,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDBProvenance",
+        "status": "passed",
+        "duration": 200,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDefaultBranchPropagatesInterrupt",
+        "status": "passed",
+        "duration": 590,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestInterruptedResolveIsNotMemoized",
+        "status": "passed",
+        "duration": 980,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestInterruptedConfiguredBranchIsNotCalledATypo",
+        "status": "passed",
+        "duration": 2050,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestInterruptedDefaultBranchRecordsNoFault",
+        "status": "passed",
+        "duration": 1430,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestInterruptedReapDefaultBranchRecordsNoFault",
+        "status": "passed",
+        "duration": 1440,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestOrdinaryUnresolvableStillRecords",
+        "status": "passed",
+        "duration": 200,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestOrdinaryFailureStillFallsThrough",
+        "status": "passed",
+        "duration": 200,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDefaultBranchFallsBackToMaster",
+        "status": "passed",
+        "duration": 120,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDefaultBranchIgnoresInitDefaultBranchThatDoesNotExist",
+        "status": "passed",
+        "duration": 160,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDefaultBranchUsesInitDefaultBranchWhenItExists",
+        "status": "passed",
+        "duration": 130,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDefaultBranchConfigWins",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDefaultBranchConfigTypoDoesNotFallThrough",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDefaultBranchErrorsRatherThanGuessingMain",
+        "status": "passed",
+        "duration": 150,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDefaultBranchMemoizes",
+        "status": "passed",
+        "duration": 160,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestEpicWorkProductRollsUpFromChildren/a_shipped_child_and_nothing_outstanding",
+        "status": "passed",
+        "duration": 160,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestEpicWorkProductRollsUpFromChildren/every_child_still_unshipped",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestEpicWorkProductRollsUpFromChildren/an_abandoned_child_is_not_shipped_work",
+        "status": "passed",
+        "duration": 380,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestEpicWorkProductRollsUpFromChildren/an_unsettled_child",
+        "status": "passed",
+        "duration": 190,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestEpicWorkProductRollsUpFromChildren/a_child_whose_verdict_is_not_yet_known",
+        "status": "passed",
+        "duration": 240,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestEpicWorkProductRollsUpFromChildren/a_known_unsettled_child_outranks_an_unknown_sibling",
+        "status": "passed",
+        "duration": 200,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestEpicWorkProductRollsUpFromChildren/the_epic's_own_unsettled_worktree_still_counts",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestEpicWorkProductRollsUpFromChildren/the_epic's_own_unknown_verdict_still_counts",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestEpicWorkProductRollsUpFromChildren",
+        "status": "passed",
+        "duration": 1460,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestEpicWorkProductReadsDescendants",
+        "status": "passed",
+        "duration": 170,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestEpicWorkProductFollowsEffectiveParent",
+        "status": "passed",
+        "duration": 120,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestEpicWorkProductLeavesOrdinaryRowsAlone",
+        "status": "passed",
+        "duration": 120,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestEpicWorkProductReusesRenderedVerdicts",
+        "status": "passed",
+        "duration": 240,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolveFaultRaiser/an_agent-run_fault_records_the_session_and_its_task",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolveFaultRaiser/a_hook's_payload_session_counts_without_a_detected_harness",
+        "status": "passed",
+        "duration": 200,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolveFaultRaiser/a_person-run_fault_records_no_session,_even_with_esu's_variable_set",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolveFaultRaiser/an_agent_whose_Claude_session_is_unknown_falls_back_to_ENDLESS_SESSION_ID",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolveFaultRaiser/an_explicit_task_overrides_the_session's",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolveFaultRaiser/an_explicit_session_supplies_its_own_task",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolveFaultRaiser/the_worktree_fills_the_task_when_there_is_no_session",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolveFaultRaiser/the_worktree_fills_the_task_of_a_session_bound_to_none",
+        "status": "passed",
+        "duration": 120,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolveFaultRaiser/nothing_known_is_the_zero_raiser",
+        "status": "passed",
+        "duration": 140,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolveFaultRaiser",
+        "status": "passed",
+        "duration": 1010,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetTaskTitle_ReturnsTitle",
+        "status": "passed",
+        "duration": 210,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetTaskTitle_MissingRowReturnsEmpty",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestKilledBySIGINT/SIGINT",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestKilledBySIGINT/SIGTERM",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestKilledBySIGINT/SIGKILL",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestKilledBySIGINT/SIGHUP",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestKilledBySIGINT/ordinary_non-zero_exit",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestKilledBySIGINT/nil",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestKilledBySIGINT/not_an_ExitError",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestKilledBySIGINT",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRunGitClassifiesAtTheSource",
+        "status": "passed",
+        "duration": 140,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRunGitLeavesOrdinaryFailuresAlone",
+        "status": "passed",
+        "duration": 220,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestInterruptClassificationSurvivesGitProbeError",
+        "status": "passed",
+        "duration": 130,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestInterruptedProbeRecordsNoFault",
+        "status": "passed",
+        "duration": 220,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestInterruptedUnlandedProbeRecordsNoFault",
+        "status": "passed",
+        "duration": 200,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestOrdinaryProbeFailureStillRecords",
+        "status": "passed",
+        "duration": 40,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUndeterminedReasonSaysInterrupted/status_interrupted",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUndeterminedReasonSaysInterrupted/status_failed",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUndeterminedReasonSaysInterrupted/unlanded_interrupted",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUndeterminedReasonSaysInterrupted/unlanded_failed",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUndeterminedReasonSaysInterrupted/base_interrupted",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUndeterminedReasonSaysInterrupted/base_failed",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUndeterminedReasonSaysInterrupted/lookup_is_never_a_subprocess",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUndeterminedReasonSaysInterrupted/every_probe_ran",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUndeterminedReasonSaysInterrupted",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGitArgv_ReadsWithoutOptionalLocks",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestFrameMemo_OneStatusPerWorktreePerFrame",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestFrameMemo_AbsentMeansEveryCallRuns",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSocketAccepts_ListeningServer",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSocketAccepts_DeadSocketFile",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestListLiveSessions_OmitsObservablyDead",
+        "status": "passed",
+        "duration": 440,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestListLiveSessions_KeepsUnknownOwners",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestListLiveSessions_KeepsPanelessSessions",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestListLiveSessions_PaneIDScopedToThisServer",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_GoneServerTruthTable/another_server_answers_the_recorded_socket",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_GoneServerTruthTable/a_server_with_no_uuid_answers",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_GoneServerTruthTable/socket_file_exists,_connection_refused",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_GoneServerTruthTable/socket_file_missing,_or_the_probe_failed",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_GoneServerTruthTable/our_own_server_answers,_though_not_observed",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_GoneServerTruthTable/no_recorded_socket_(bound_before_E-2300)",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_GoneServerTruthTable",
+        "status": "passed",
+        "duration": 460,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_ObservedServerIsNeverProbed",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_ProbesEachSocketOnce",
+        "status": "passed",
+        "duration": 120,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_GoneVerdictWritesNothing",
+        "status": "passed",
+        "duration": 140,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProbeTmuxSocket_FileVerdicts",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestEnsureTmuxPaneProcess_RecordsSocketPath",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestEnsureTmuxPaneProcess_SkipsRelativeSocket",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeInUse_IgnoresSessionOnGoneServer/gone_server",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeInUse_IgnoresSessionOnGoneServer/unreachable_server",
+        "status": "passed",
+        "duration": 200,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeInUse_IgnoresSessionOnGoneServer",
+        "status": "passed",
+        "duration": 270,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionStatusRows_InFlightIgnoresSessionOnGoneServer/gone_server",
+        "status": "passed",
+        "duration": 140,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionStatusRows_InFlightIgnoresSessionOnGoneServer/unreachable_server",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionStatusRows_InFlightIgnoresSessionOnGoneServer",
+        "status": "passed",
+        "duration": 220,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionGraphData_InFlightIgnoresSessionOnGoneServer/gone_server",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionGraphData_InFlightIgnoresSessionOnGoneServer/unreachable_server",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionGraphData_InFlightIgnoresSessionOnGoneServer",
+        "status": "passed",
+        "duration": 180,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestListLiveSessions_OmitsSessionOnGoneServer",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestListLiveSessions_ReportsEndlessServerDown",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSameSocketPath",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_TruthTable/unbound_session_has_no_binding_to_judge",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_TruthTable/observed_server,_address_present",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_TruthTable/observed_server,_address_absent",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_TruthTable/unreached_server",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_TruthTable/unreached_server,_address_absent_there_too",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_TruthTable",
+        "status": "passed",
+        "duration": 400,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_PanelessSessionIsUnboundNotDead",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_ShellPaneStaysLive",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_UnreachableTmuxCondemnsNothing",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_PoolIsSingleConn",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIsShellCommand",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParsePaneList",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestEnsureProcess_IdentityIsServerScoped",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestEnsureProcess_RefusesTmuxBindingWithoutServer",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_NoTmuxBinaryIsUnknownNotDead",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_DuplicatePaneYieldsOneRow",
+        "status": "passed",
+        "duration": 270,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_DuplicateServerYieldsOneRow",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionsLiveness_ReportsRawStateAndLivePaneOnly",
+        "status": "passed",
+        "duration": 190,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerEnabled_DefaultsOff/no_config_file",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerEnabled_DefaultsOff/config_without_the_key",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerEnabled_DefaultsOff/explicitly_enabled",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerEnabled_DefaultsOff/explicitly_disabled",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerEnabled_DefaultsOff/object_naming_only_the_optimizer",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerEnabled_DefaultsOff/bare_false_is_shorthand_for_both_off",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerEnabled_DefaultsOff/bare_true_is_shorthand_for_both_on",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerEnabled_DefaultsOff/legacy_report_gate_true",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerEnabled_DefaultsOff/malformed_json",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerEnabled_DefaultsOff",
+        "status": "passed",
+        "duration": 10,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerOptimizer_DefaultsOn/no_config_file",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerOptimizer_DefaultsOn/config_without_the_key",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerOptimizer_DefaultsOn/malformed_json",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerOptimizer_DefaultsOn/object_naming_only_enabled",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerOptimizer_DefaultsOn",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerEnabled_LegacyReportGate/old_key_off_still_means_off",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerEnabled_LegacyReportGate/old_key_on_still_means_on",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerEnabled_LegacyReportGate/new_key_beats_old",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerEnabled_LegacyReportGate",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerOptimizer_IndependentOfEnabled",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerConfigForCwd_NearestWins",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerConfigForCwd_SilenceInherits",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMinimizerConfigForCwd_FallsBackToProjectRoot",
+        "status": "passed",
+        "duration": 20,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestReportCheckpoint_PairKeepsOneOpenRow",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPendingReportCheckpoint_AcceptsAnyOfN",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPendingReportCheckpoint_SingleTurnIsUnchanged",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRecordReportLabels_WritesRowsAndMirrorsLegacy",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRecordReportLabels_NoPriorReport",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRecordPick_MarksTheChosenSide",
+        "status": "passed",
+        "duration": 120,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRecordPick_UnpairedTurn",
+        "status": "passed",
+        "duration": 150,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestNudgeABRate_LaddersBothWays",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestForgetProject_TombstonesAndKeepsWhatItHeld",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestForgetProject_FreesPathNameSlugAndIdentity",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestForgetProject_RefusesWithLiveTasks",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestForgetProject_NoRow",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectIDForPath_IgnoredSubtreeIsNeverAutoRegistered",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectIDForPath_NearestRowWins",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolveDirectory_MarkerFileIgnores",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolveDirectory_None",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSetDirectoryIgnored_KeepsAFormerProjectsRow",
+        "status": "passed",
+        "duration": 130,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSetDirectoryIgnored_NamesANewRowByPath",
+        "status": "passed",
+        "duration": 170,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestClearIgnoredDirectory_RefusesARegisteredProject",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSanitizeTmuxName",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectStatusRowsAreTasksOnly",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectStatusRowsSelectsNonTerminalInPhases",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectStatusRowsLiveSessionFlags",
+        "status": "passed",
+        "duration": 380,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectStatusRowsIgnoresDeadSessions",
+        "status": "passed",
+        "duration": 460,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectStatusRowsScopesToOneProject",
+        "status": "passed",
+        "duration": 430,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectStatusRowsOmitsRemovedTasks",
+        "status": "passed",
+        "duration": 610,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectByNameIsReadOnly",
+        "status": "passed",
+        "duration": 240,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectPath_CanonicalPassesThrough",
+        "status": "passed",
+        "duration": 130,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectPath_ResolvesSymlinkedRow",
+        "status": "passed",
+        "duration": 160,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectPath_TildeExpandsToHome",
+        "status": "passed",
+        "duration": 270,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectPath_MissingRowReturnsError",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectIDForPath_ExactMatch",
+        "status": "passed",
+        "duration": 160,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectIDForPath_ParentWalkMatch",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectIDForPath_UnknownAutoRegisters",
+        "status": "passed",
+        "duration": 180,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectIDForPath_SymlinkedCwdMatchesRegisteredRow",
+        "status": "passed",
+        "duration": 150,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectIDForPath_SymlinkedSubdirWalksToRegisteredRoot",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectIDForPath_UnresolvedRowStillMatches",
+        "status": "passed",
+        "duration": 120,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectIDForPath_UnresolvedRowsPickNearestProject",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectIDForPath_DuplicateRowsPreferTheOlder",
+        "status": "passed",
+        "duration": 130,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolvedProjectPath_MissingLeafResolvesExistingPrefix",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolvedProjectPath_ExpandsTilde",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStoredProjectPath_IsHomeRelative",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStoredProjectPath_HomeItselfIsBareTilde",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStoredProjectPath_OutsideHomeStaysAbsolute",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStoredProjectPath_DoesNotSwallowASiblingOfHome",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStoredProjectPath_ResolvesSymlinksBeforeRelativizing",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStoredProjectPath_RoundTripsThroughResolved",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectPathsFailLoudlyWithoutHome",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectIDForPath_MatchesAHomeRelativeRow",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectIDForPath_AutoRegistersInStoredForm",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectPath_HomeRelativeRowComesBackResolved",
+        "status": "passed",
+        "duration": 130,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMatchProjectPath_FindsBothSpellings",
+        "status": "passed",
+        "duration": 140,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectLookupNeverNormalizesWithAbsAlone",
+        "status": "passed",
+        "duration": 10,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestEveryProjectsPathReaderResolves",
+        "status": "passed",
+        "duration": 580,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestClaimRater_SecondClaimantLoses",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestClaimRater_LapsedClaimIsReclaimable",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestReleaseRater_FreesTheTask",
+        "status": "passed",
+        "duration": 280,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestReleaseRater_DoesNotStealAnotherOwnersClaim",
+        "status": "passed",
+        "duration": 150,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRaterClaimOwner_IsStableWithinAProcess",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnratedSubmittedTasks_OldestFirstAndCapped",
+        "status": "passed",
+        "duration": 190,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnratedSubmittedTasks_TieBrokenByID",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnratedSubmittedTasks_ProjectFilter",
+        "status": "passed",
+        "duration": 150,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnratedSubmittedTasks_EmptyQueueIsEmptySlice",
+        "status": "passed",
+        "duration": 160,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRaterContext_RootTaskHasNoParentOrSiblings",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRaterContext_ProjectRootIsResolved",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRaterContext_ParentAndSiblings",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRaterContext_DecisionsFromBothRelationTables",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRaterContext_MissingTaskIsAnError",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRaterContext_CarriesPlanAndContext",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRaterContext_CarriesCurrentRatings",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestReapBoundSandboxInvokesSeam",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestReapBoundSandboxNilSeamIsNoop",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestReapBoundSandboxSwallowsError",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDisplayPath/descendant_of_cwd",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDisplayPath/descendant_of_HOME_but_not_cwd",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDisplayPath/outside_cwd_and_HOME",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDisplayPath",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseWorktreeTTL",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestReadWorktreeTTLConfig_Missing",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestReadWorktreeTTLConfig_PresentField",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMaybeReapWorktree_NoLandingRow",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMaybeReapWorktree_LandingTooRecent",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMaybeReapWorktree_ReapsCleanAbandoned",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMaybeReapWorktree_DetachedHeadSkipsBranchDelete",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMaybeReapWorktree_SessionTaskActivityProtects",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMaybeReapWorktree_OldSessionTaskActivityReaps",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMaybeReapWorktree_UnmergedCommitsProtect",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMaybeReapWorktree_ActiveSessionProtects",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMaybeReapWorktree_EndedSessionDoesNotProtect",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMaybeReapWorktree_ModifiedTreeProtects",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMaybeReapWorktree_GitStatusErrorProtects",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMaybeReapWorktree_GitRevListErrorProtects",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMaybeReapWorktree_StrandedLeftover_Reaped",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMaybeReapWorktree_StrandedLeftover_NonEmptyDirReaped",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRemoveStrandedWorktreeDir_RefusesOutsideRoot",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRemoveStrandedWorktreeDir_RefusesNonMatchingBasename",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRemoveStrandedWorktreeDir_RefusesSymlink",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMaybeReapWorktree_GitWorktreeRemoveOtherErrorSurfaces",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestReapStaleWorktrees_NoWorktreesDir",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestReapStaleWorktrees_SkipsNonMatchingDirNames",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMaybeReapWorktree_SkipsWhenDefaultBranchUnresolved",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMaybeReapWorktree_UnrecordedRebaseLandingIsReaped",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMaybeReapWorktree_ComputesConditionFourOnACacheMiss",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMaybeReapWorktree_SettledWithNoLandingIsReapable",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMaybeReapWorktree_NoLandingStillProtectsUnlandedWork",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMaybeReapWorktree_NoRecordedActivityIsSkipped",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResumeTarget_RecoveryFields",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResumeTarget_EpicTypeSurfaced",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolveResumeTarget_TaskFirstPicksMostRecent",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolveResumeTarget_TaskWithoutUUIDNotResumable",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolveResumeTarget_BareIntFallsBackToSessionID",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolveResumeTarget_ESPrefixIsSessionExplicit",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolveResumeTarget_ESPrefixNeverFallsBackToTask",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolveResumeTarget_CarriesProjectOnTaskLessSession",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolveResumeTarget_MissingProjectLeavesPathEmpty",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolveResumeTarget_AmbiguousUUIDPrefix",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeSandboxDir/in-tree_by_default",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeSandboxDir/resolves_from_a_path_deeper_inside_the_worktree",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeSandboxDir/project_override_moves_it_out_of_tree",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeSandboxDir/outside_a_worktree_there_is_no_sandbox",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeSandboxDir/a_named-alternate_dir_is_not_a_task_worktree_(ED-1515)",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeSandboxDir",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIsSandboxActive/no_explicit_context,_default_main",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIsSandboxActive/config_IS_a_worktree's_in-tree_sandbox",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIsSandboxActive/config_is_some_other_dir_inside_a_worktree",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIsSandboxActive/config_outside_any_worktree",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIsSandboxActive/out-of-tree_override,_answered_from_cwd",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIsSandboxActive/override_root,_but_cwd_is_a_DIFFERENT_worktree",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIsSandboxActive",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGuardRefusesMissingSandbox/missing_sandbox_names_the_worktree_and_the_remedy",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGuardRefusesMissingSandbox/present_sandbox_falls_through_to_the_ordinary_--db_refusal",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGuardRefusesMissingSandbox/an_explicit_context_still_wins_over_a_missing_sandbox",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGuardRefusesMissingSandbox",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestInSelfDevWorktree_TrueInsideASelfDevProjectsWorktree",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestInSelfDevWorktree_FalseWhenTheProjectIsNotSelfDev",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestInSelfDevWorktree_FalseOutsideAnyWorktree",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestInSelfDevWorktree_FalseForANonTaskWorktreeDirectory",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRecordTmuxServer_AliasesIDsOfTheRunningServer",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRecordTmuxServer_NoStartTimeNoAliases",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_SessionBoundUnderAliasReadsLive/no_alias",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_SessionBoundUnderAliasReadsLive/alias",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_SessionBoundUnderAliasReadsLive",
+        "status": "passed",
+        "duration": 170,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProcessIDsForPanes_AcceptsAlias",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_AliasOnProbedSocket/answers_with_the_id_it_is_an_alias_of",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_AliasOnProbedSocket/answers_with_neither_id",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveness_AliasOnProbedSocket",
+        "status": "passed",
+        "duration": 150,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSameTmuxServer",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionsOnPanes",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveTmuxServerUUID_FailedReadStampsNothing",
+        "status": "passed",
+        "duration": 10,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveTmuxServerUUID_UnsetStamps",
+        "status": "passed",
+        "duration": 10,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLiveTmuxServerUUID_SetReturnsIt",
+        "status": "passed",
+        "duration": 10,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBindSessionToTask_RecordsOwnershipRelation/underway",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBindSessionToTask_RecordsOwnershipRelation/unplanned",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBindSessionToTask_RecordsOwnershipRelation/submitted",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBindSessionToTask_RecordsOwnershipRelation/ready",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBindSessionToTask_RecordsOwnershipRelation/revisit",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBindSessionToTask_RecordsOwnershipRelation",
+        "status": "passed",
+        "duration": 410,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBindSessionToTask_LeavesStrongerRowAlone",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionStatus_BoundTaskIsAnchorOnly",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBindSessionToTask_EndsStalePanelessRowsSameTask",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBindSessionToTask_RepeatedLaunchesStayAtOneLiveRow",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBindSessionToTask_EndsEveryPanelessRowSameTask",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBindSessionToTask_DoesNotEndPanedRowSameTask",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBindSessionToTask_DoesNotEndOtherTasksRows",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestNearestRevisitEpicAncestor_NoEpicAncestor",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestNearestRevisitEpicAncestor_EpicNotInRevisit",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestNearestRevisitEpicAncestor_SingleRevisitEpic",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestNearestRevisitEpicAncestor_NearestWins",
+        "status": "passed",
+        "duration": 120,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestNearestRevisitEpicAncestor_CycleTerminates",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRevisitGate_SetPendingClearRoundTrip",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRevisitGate_SetSupersedesPriorOpen",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestClearRevisitGate_NoOpenRowReturnsZero",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionGraphData_AddsOpenBlockersTransitively",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionGraphData_CarriesPrecedesAndConflictsAmongNodes",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionGraphData_NoSeedsNoDatabase",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionGraphData_TerminalOwnTaskBlockersDrawn",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionGraphData_CrossProjectChainToOwnTask",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionGraphData_DownstreamOneStepWithBlockerChains",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionGraphData_BlocksCycleTerminates",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionHiddenTasks_PerSessionPair",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestHideUnhideAreIdempotent",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestAnnotateSessionStatusHidden_ViewerScoped",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestHideSurvivesStatusTransition",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBindSessionToTask_InsertCreatesWorking",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBindSessionToTask_UpsertOverridesPriorState",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBindSessionToTask_RefusesRepoint",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBindSessionToTask_EmptyPaneDoesNotStompProcess",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestInitSession_InsertCreatesIdle",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestInitSession_UpsertPreservesState",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetActiveSession_ReturnsRow",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetActiveSession_MissingReturnsError",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIdleSession_FlipsState",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestEndSession_FlipsState",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetTrackingMode_AnonymousReturnsOff",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetTrackingMode_MissingProjectReturnsOff",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetTrackingMode_DefaultsToEnforce",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetTrackingMode_ConfigTrackPassesThrough",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetTrackingMode_ConfigOffPassesThrough",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWakeSession_WakesIdleSessionHoldingATask",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWakeSession_DoesNotWakeSessionHoldingNoTask",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPromptSession_WritesPromptedFromEveryState/working",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPromptSession_WritesPromptedFromEveryState/prompted",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPromptSession_WritesPromptedFromEveryState/idle",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPromptSession_WritesPromptedFromEveryState/needs_input",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPromptSession_WritesPromptedFromEveryState/primed",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPromptSession_WritesPromptedFromEveryState/ended",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPromptSession_WritesPromptedFromEveryState",
+        "status": "passed",
+        "duration": 500,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResumeFromPrompt_ClearsOnlyPrompted/working",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResumeFromPrompt_ClearsOnlyPrompted/prompted",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResumeFromPrompt_ClearsOnlyPrompted/idle",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResumeFromPrompt_ClearsOnlyPrompted/needs_input",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResumeFromPrompt_ClearsOnlyPrompted/primed",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResumeFromPrompt_ClearsOnlyPrompted/ended",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResumeFromPrompt_ClearsOnlyPrompted",
+        "status": "passed",
+        "duration": 470,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResumeFromPrompt_IsIdempotent",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResumeFromPrompt_NeedsNoTask",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWakeSession_LeavesEveryOtherState/working",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWakeSession_LeavesEveryOtherState/prompted",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWakeSession_LeavesEveryOtherState/needs_input",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWakeSession_LeavesEveryOtherState/primed",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWakeSession_LeavesEveryOtherState/ended",
+        "status": "passed",
+        "duration": 140,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWakeSession_LeavesEveryOtherState",
+        "status": "passed",
+        "duration": 530,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWakeSession_IsIdempotent",
+        "status": "passed",
+        "duration": 140,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWakeSession_UnknownSessionIsNotAnError",
+        "status": "passed",
+        "duration": 180,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTouchSession_DoesNotWakeIdle",
+        "status": "passed",
+        "duration": 240,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTouchSession_EndedRevivalStillLandsNeutral",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWakeSession_StopStillEndsIdle",
+        "status": "passed",
+        "duration": 120,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestNoticeTrigger_NullActorNotifiesEveryHolder",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestNoticeTrigger_SuppressesActorsOwnChange",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestNoticeTrigger_NoRowWhenNothingChanged",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestNoticeTrigger_OneRowPerUpdateEvent",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestNoticeTrigger_FreeformNeverLeaksContent",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestNoticeTrigger_FreeformTransitions",
+        "status": "passed",
+        "duration": 120,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestNoticeTrigger_DescriptionIsNotWatched",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPendingNoticesDeliverOnce",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRenderNotice/enumerated_before_and_after",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRenderNotice/absent_value_renders_as_a_dash",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRenderNotice/freeform_renders_a_verb,_never_content",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRenderNotice/multi-field_keeps_a_stable_order",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRenderNotice/a_pre-E-1813_tier_notice_still_renders",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRenderNotice/a_pre-rename_notice's_`text`_key_renders_as_the_plan",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRenderNotice/a_pre-rename_key_alongside_its_successor_does_not_double_up",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRenderNotice",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRenderNoticeLanded/the_ordinary_land_names_the_branch_and_the_commit",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRenderNoticeLanded/a_base_branch_containing_@_splits_on_the_last_one",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRenderNoticeLanded/a_record-only_backfill_has_no_base_branch_to_name",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRenderNoticeLanded",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRenderNoticeRejectsUnrenderable",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTaskHeadlineRender/all_facts_present",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTaskHeadlineRender/nothing_known_degrades_to_the_old_line",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTaskHeadlineRender",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetTaskHeadlineReadsCurrentValues",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestNoticeTrigger_SkipsEndedSessions",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestNoticeTrigger_KeepsIdleAndNeedsInputSessions",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestReapNoticesForEndedSessions",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestReapNoticesLeavesDeliveredRows",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPrimeSession_OnlyFromWorking/working",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPrimeSession_OnlyFromWorking/prompted",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPrimeSession_OnlyFromWorking/idle",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPrimeSession_OnlyFromWorking/needs_input",
+        "status": "passed",
+        "duration": 290,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPrimeSession_OnlyFromWorking/primed",
+        "status": "passed",
+        "duration": 270,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPrimeSession_OnlyFromWorking/ended",
+        "status": "passed",
+        "duration": 320,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPrimeSession_OnlyFromWorking",
+        "status": "passed",
+        "duration": 1170,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPrimeSession_RequiresATask",
+        "status": "passed",
+        "duration": 130,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIdleSession_KeepsPrimed",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIdleSession_StillIdlesEverythingElse/working",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIdleSession_StillIdlesEverythingElse/prompted",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIdleSession_StillIdlesEverythingElse/idle",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIdleSession_StillIdlesEverythingElse/needs_input",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIdleSession_StillIdlesEverythingElse/ended",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIdleSession_StillIdlesEverythingElse",
+        "status": "passed",
+        "duration": 470,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResumeFromPrimed_ClearsOnlyPrimedOnce/working",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResumeFromPrimed_ClearsOnlyPrimedOnce/prompted",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResumeFromPrimed_ClearsOnlyPrimedOnce/idle",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResumeFromPrimed_ClearsOnlyPrimedOnce/needs_input",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResumeFromPrimed_ClearsOnlyPrimedOnce/primed",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResumeFromPrimed_ClearsOnlyPrimedOnce/ended",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResumeFromPrimed_ClearsOnlyPrimedOnce",
+        "status": "passed",
+        "duration": 400,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSpawnable_OnlyBlockerResolves",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSpawnable_ClearsOnceClaimed",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSpawnable_AnotherBlockerStillOpen",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSpawnable_NeverBlocked",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSpawnable_UnclaimedSessionView",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionStatusRows_Duplicates",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionStatusRows_DuplicatesIsNotSupersededBy",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionStatusRows_DuplicatesMultipleAndRemoved",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionStatusRowsForSession_Duplicates",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionStatusRows_SupersededBy",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionStatusRows_SupersededByMultiple",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionStatusRows_SupersededByIgnoresRemoved",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionStatusRowsForSession_SupersededBy",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseSupersededBy/empty",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseSupersededBy/single",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseSupersededBy/multiple",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseSupersededBy/spaced",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseSupersededBy/skips_garbage",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseSupersededBy/all_garbage",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseSupersededBy",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionStatusRows_RowSetAndDecorations",
+        "status": "passed",
+        "duration": 130,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionStatusRows_AllIncludesDoneWork",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionStatusRows_FocalDependents",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionStatusRows_UpstreamBlockerChain",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionStatusRows_LandedColumn",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionStatusRowsForSession_NoGoalSurfacesWork",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionStatusRowsForSession_ZeroSession",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRepro_E1698_UnrelatedFocalFallback",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolveSessionStatusFocal_ActivePaneResolves",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResolveSessionStatusFocal_SessionNoTaskResolvesNoTaskKind",
+        "status": "passed",
+        "duration": 120,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionStatusRows_ZeroFocal",
+        "status": "passed",
+        "duration": 200,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionStatusRows_Unanswered",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProjectStatusRows_Unanswered",
+        "status": "passed",
+        "duration": 200,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_WorkedCase",
+        "status": "passed",
+        "duration": 230,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_UpdateNeverTakesStewardship",
+        "status": "passed",
+        "duration": 130,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_SoleUpdaterStewards",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_Ambiguous",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_EndedSessionReleases",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_ClaimerIsNotADuplicate",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_FrameRowsNeverHidden",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_FocusFollowsViewer",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_NoViewerAnnotatesNothing",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_HiddenRevisiterExcluded",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_HiddenSurfacerExcluded",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_HiddenNonFocuserExcluded",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_HiddenButFocusedCounts",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_GoneServerSessionDoesNotSteward",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_UnreachableSessionStewards",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_DeadPaneDoesNotSteward",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_IdlePresentSessionStillStewards",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_OneClaimerClearsDuplicate",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_GoneClaimerKeepsDuplicate",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_UnreachableClaimerClearsDuplicate",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_TwoClaimersMarkDuplicate",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_PinOutranksSteward",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTouchSession_InsertCreatesIdle",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTouchSession_E1408_EmptyProcessDoesNotStomp",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTouchSession_StatePreservedAcrossUpdate",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTouchSession_RevivesEndedRow",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTouchSession_RevivesOnlyEndedNotLiveStates",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTouchSession_ReusedPaneDoesNotReviveOther",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTouchSession_PaneReattachOverwritesProcess",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTouchSession_EmptyProcessDoesNotInvalidate",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTouchSession_RejectsEmptySessionID",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTouchSession_RejectsEmptyPlatform",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetActiveSession_RoundTripsEpic",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestListLiveSessions_FiltersEndedAndScopesToProject",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionsHasNoneOfTheE2074Columns",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetTaskClaim",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLandednessReportsUnlandedSource",
+        "status": "passed",
+        "duration": 240,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLandednessSeesRebasedLandingAsLanded",
+        "status": "passed",
+        "duration": 280,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLandednessIgnoresBookkeepingOnlyBranch",
+        "status": "passed",
+        "duration": 310,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLandednessReportsOnlyTheSourceCommitOnAMixedBranch",
+        "status": "passed",
+        "duration": 290,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLandednessCountsAMixedCommitAsSource",
+        "status": "passed",
+        "duration": 260,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLandednessMissingBranchIsNotLanded",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLandednessPreservesRequestOrder",
+        "status": "passed",
+        "duration": 190,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLandednessUnresolvedBaseIsUndetermined",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLandednessCarriesTheInterruptClassification",
+        "status": "passed",
+        "duration": 150,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIsBookkeepingPath",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTaskQuestions_FiltersAndOrder",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTaskReportFacts_StatusAndClean",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTaskReportFacts_Successors",
+        "status": "passed",
+        "duration": 40,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTaskReportFacts_Type",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTaskReportFacts_NoChildrenOnTheWire",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTaskReportFacts_Landed",
+        "status": "passed",
+        "duration": 40,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTaskReportFacts_MissingTask",
+        "status": "passed",
+        "duration": 40,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTaskPlan_ReturnsPlan",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTaskPlan_EmptyPlanReturnsEmpty",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTaskPlan_MissingRowReturnsEmpty",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestFormatTasks_EmptyListInstructsFiling",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestFormatTasks_GroupsInProgressAndAvailable",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestFormatTasks_TruncatesAvailableAtFive",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestFormatTasks_FiveAvailableNoTruncationLine",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetActiveTasks_ReturnsInProgressNeedsPlanReady",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetActiveTasks_NullDescriptionNotDropped",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetActiveTasks_InProgressOrderedFirst",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetActiveTasks_ScopedToProject",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestHasInjectedContext_FalseWhenNoRow",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMarkContextInjected_FlipsHasInjectedContext",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestHasInjectedContext_ScopedToSessionID",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetProjectName_ReturnsName",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetProjectName_MissingRowReturnsError",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetTaskForPane_SkipsEndedRows",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetTaskForPane_GhostOnlyReturnsNoTask",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetTaskForPane_ReusedPaneOnNewServerIsDifferentIdentity",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestEndSession_PreservesBinding",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTouchSession_SameServerCollisionLeavesPriorRowAlone",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetTaskForPane_DirectMatch",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetTaskForPane_EmptyPaneReturnsErrNoTask",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetTaskForPane_NoMatchReturnsErrNoTask",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetTaskForPane_SkipsNullTaskID",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetPaneStatus_EmptyPaneReturnsNone",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetPaneStatus_TaskReturnsActiveKind",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetPaneStatus_SessionWithoutTaskReturnsNoTaskKind",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetLiveSessionByProcess_ReturnsLiveID",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetLiveSessionByProcess_FiltersEnded",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetLiveSessionByProcess_PicksMostRecent",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetLiveSessionByProcess_EmptyInputReturnsErrNoRows",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetActiveBlockers_EmptyWhenNone",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetActiveBlockers_FiltersTerminalStatuses",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetActiveBlockers_KeepsActiveDropsTerminal",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetActiveBlockers_CapsAtThree",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetActiveBlockers_ZeroTaskIDReturnsNil",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGetActiveBlockers_OnlyTaskSourcedRows",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPaneWindowHeightArgs",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResizePaneHeightArgs",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPaneWindowHeight_NoPane",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestResizePaneHeight_NoPane",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestInTmux_DetectsByEnvVar/unset",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestInTmux_DetectsByEnvVar/non_empty_socket_path",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestInTmux_DetectsByEnvVar/explicit_empty_string",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestInTmux_DetectsByEnvVar",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseTranscript_EmptyFileNoRows",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseTranscript_MissingFileNoError",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseTranscript_EmptyPathNoOp",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseTranscript_UserAndAssistantInserted",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseTranscript_ToolUseInserted",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseTranscript_MalformedLineSkipped",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseTranscript_IncrementalOffsetSkipsAlreadyRead",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseTranscriptFull_ResetsOffsetAndReparses",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseTranscriptFull_EmptyPathNoOp",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSessionsHasNoTranscriptPathColumn",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseTranscript_HidesErrorGreetingSession/login_error",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseTranscript_HidesErrorGreetingSession/generic_error",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseTranscript_HidesErrorGreetingSession/leading_blank_lines",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseTranscript_HidesErrorGreetingSession/ordinary_work",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseTranscript_HidesErrorGreetingSession/mentions_an_error_mid-sentence",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseTranscript_HidesErrorGreetingSession",
+        "status": "passed",
+        "duration": 340,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDisplayPathNeverRunsTheComparison",
+        "status": "passed",
+        "duration": 390,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSettledVerdictSurvivesBaseAppend",
+        "status": "passed",
+        "duration": 510,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledVerdictInvalidatesOnBaseAppend",
+        "status": "passed",
+        "duration": 510,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBaseHistoryRewriteFlushesEverySettledEntry",
+        "status": "passed",
+        "duration": 450,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBranchAmendInvalidatesOnlyItsOwnEntry",
+        "status": "passed",
+        "duration": 600,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestChangingTheConfiguredBaseNameInvalidatesEverything",
+        "status": "passed",
+        "duration": 1260,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMissingWatermarkIsACompleteMiss",
+        "status": "passed",
+        "duration": 1770,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestAmbiguousWatermarkIsACompleteMiss",
+        "status": "passed",
+        "duration": 660,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestCachedCountIsExactBeyondTheDisplayCap",
+        "status": "passed",
+        "duration": 340,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTruncatedUnsettledEntryReadsAsAMiss",
+        "status": "passed",
+        "duration": 610,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSettledMarkerIsEmpty",
+        "status": "passed",
+        "duration": 270,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPruneDropsMarkersForVanishedWorktrees",
+        "status": "passed",
+        "duration": 320,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBaseNameEscapingRoundTrips",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnusableCacheDirIsAPermanentMissAndOneFault",
+        "status": "passed",
+        "duration": 470,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPostLandWarmIsVisibleWithoutWaitingForTheJob",
+        "status": "passed",
+        "duration": 480,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestFreshWorktreeIsSettledWithoutAComparison",
+        "status": "passed",
+        "duration": 480,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreesAtOneTipShareOneAnswer",
+        "status": "passed",
+        "duration": 350,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestComputeOnMissReadsTheCacheFirst",
+        "status": "passed",
+        "duration": 340,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRefreshSkipsADirectoryThatIsNotARepository",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRefreshRecordsAnUnresolvableBaseWithoutFailingTheSweep",
+        "status": "passed",
+        "duration": 200,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRefreshSkipsAProjectWithNoTaskWorktrees/empty_repository_with_no_commits",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRefreshSkipsAProjectWithNoTaskWorktrees/healthy_repository_that_simply_has_no_task_worktrees",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRefreshSkipsAProjectWithNoTaskWorktrees/a_project_WITH_task_worktrees_is_still_swept",
+        "status": "passed",
+        "duration": 260,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRefreshSkipsAProjectWithNoTaskWorktrees",
+        "status": "passed",
+        "duration": 420,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPoolBoundsConcurrencyOverAColdBatch",
+        "status": "passed",
+        "duration": 10,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPoolSizeIsBoundedAndPositive",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestCancelledProbeIsInterruptedAndRecordsNoFault",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestCancellingAPassStopsItWithoutFaults",
+        "status": "passed",
+        "duration": 410,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestJustLandedWorktreeReadsSettledOnDemand",
+        "status": "passed",
+        "duration": 390,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestComputeOnMissDropsAStaleUnsettledHitForAnAncestor",
+        "status": "passed",
+        "duration": 410,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledHitForANonAncestorIsStillTrusted",
+        "status": "passed",
+        "duration": 310,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestLogSessionTxn_WritesJSONLine",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSnapshotSession_CapturesOldState",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSnapshotSession_MissingRow",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIdleSession_LogsTransition",
+        "status": "passed",
+        "duration": 220,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestEndSession_LogsTransition",
+        "status": "passed",
+        "duration": 830,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBindSessionToTask_LogsDedup",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSuiteVerifyScopeDB_OpensReadOnly",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestReadOnlyDSN",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSuiteVerifyScopeDB_NeverCreatesTheDatabase",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeAnomaliesAt/clean_worktree_→_no_anomalies",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeAnomaliesAt/auto-managed_modifications_alone_→_still_clean",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeAnomaliesAt/untracked_user_file_→_uncommitted",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeAnomaliesAt/detached_HEAD_→_detached",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeAnomaliesAt/wrong_branch_→_branch-mismatch",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeAnomaliesAt/locked_worktree_→_prunable",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeAnomaliesAt/prunable_worktree_→_prunable",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeAnomaliesAt",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUserStatusPaths",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIsAutoManagedPath",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeAnomalyLine",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeInUse_ActiveSessionIsInUse",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeInUse_ActiveSessionWithNoProcessInDir",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeInUse_EndedSessionIsNotInUse",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeInUse_LiveProcessIsInUse",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeInUse_IdleWorktreeIsNotInUse",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeInUse_ZeroTaskSkipsSessionProbe",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeInUse_SessionQueryErrorFailsClosed",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeInUse_LiveProbeErrorFailsClosed",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRealHasLiveProcessInDir_SeesAProcessStandingInIt",
+        "status": "passed",
+        "duration": 170,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRealHasLiveProcessInDir_EmptyDirIsNotLive",
+        "status": "passed",
+        "duration": 190,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMasterProjectMarksUnlandedWorkAndClearsAfterLanding",
+        "status": "passed",
+        "duration": 800,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestMasterProjectReaperCanReapALandedWorktree",
+        "status": "passed",
+        "duration": 500,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestClaimWorktreeLock_RoundTrip",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestClaimWorktreeLock_RefusesWhenLocked",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestReadWorktreeLock_MissingReturnsErrNotExist",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestReleaseWorktreeLock_Idempotent",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIsWorktreeLockStale_InvalidPID",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIsWorktreeLockStale_LiveProcess",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIsWorktreeLockStale_DeadProcess",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestReadWorktreeCompanion_RoundTrip",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestReadWorktreeCompanion_Missing",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestFindWorktreeRoot_FindsNestedCompanion",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestFindWorktreeRoot_ReturnsEmptyAtProjectRoot",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestFindWorktreeRoot_DoesNotWalkAboveProjectRoot",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestFindWorktreeRoot_IgnoresCompanionAtProjectRoot",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestFindWorktreeRoot_PrefersRealWorktreeOverStrayAtProjectRoot",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseEndlessTaskID_AcceptsForms",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTaskIDFromWorktreePath_BasicMatch",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestTaskIDFromWorktreePath_IgnoresCompanionField",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestFindLockBySessionID_FindsMatchingLock",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestFindLockBySessionID_NoMatchReturnsEmpty",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestFindLockBySessionID_MissingWorktreesDirReturnsEmpty",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestFindLockBySessionID_EmptySessionIDReturnsEmpty",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestFindWorktreeRoot_ResolvesSymlinkedCwd",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestFindWorktreeRoot_FindsWorktreeThroughSymlinkedCwd",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeChangedPaths_EmptyCacheIsAMissWithoutGit",
+        "status": "passed",
+        "duration": 160,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeChangedPaths_CommittedAndUncommittedPaths",
+        "status": "passed",
+        "duration": 330,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeChangedPaths_MovedHeadIsStale",
+        "status": "passed",
+        "duration": 270,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRefreshWorktreePathsCache_PrunesFinishedTasks",
+        "status": "passed",
+        "duration": 230,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestPorcelainZPaths_RenameCountsBothEnds",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestIsExcludedChangedPath",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreePathForTask_FindsBareDir",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreePathForTask_IgnoresSluggedDir",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreePathForTask_NoMatchReturnsEmpty",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreePathForTask_ZeroTaskIDReturnsEmpty",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRebasedLandingReadsAsLanded",
+        "status": "passed",
+        "duration": 360,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestConflictResolvedLandingReadsAsLanded",
+        "status": "passed",
+        "duration": 240,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestGenuinelyUnlandedCommitIsReported",
+        "status": "passed",
+        "duration": 450,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnlandedIsNewestFirst",
+        "status": "passed",
+        "duration": 1300,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBaseUnmovedSinceForkReportsEveryCommit",
+        "status": "passed",
+        "duration": 340,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBranchContainedInBaseIsEmpty",
+        "status": "passed",
+        "duration": 140,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnresolvableBaseIsAnError",
+        "status": "passed",
+        "duration": 150,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeUnsettledAtSeesARebasedLanding",
+        "status": "passed",
+        "duration": 540,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestParseUnlandedRowsIgnoresPairedCommits",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestProbeFailureRecordsOneIncidentPerProbe",
+        "status": "passed",
+        "duration": 110,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestDistinctProbesRaiseDistinctIncidents",
+        "status": "passed",
+        "duration": 120,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnresolvedDefaultBranchRecordsItsOwnCode",
+        "status": "passed",
+        "duration": 90,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestSettledWorktreeRecordsNothing",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledDivergesFromLegacyOnlyWhereIntended/clean/zero_ahead",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledDivergesFromLegacyOnlyWhereIntended/clean/three_ahead",
+        "status": "passed",
+        "duration": 10,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledDivergesFromLegacyOnlyWhereIntended/clean/rev-list_fails",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledDivergesFromLegacyOnlyWhereIntended/clean/unparsable",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledDivergesFromLegacyOnlyWhereIntended/user_file_modified/zero_ahead",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledDivergesFromLegacyOnlyWhereIntended/user_file_modified/three_ahead",
+        "status": "passed",
+        "duration": 10,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledDivergesFromLegacyOnlyWhereIntended/user_file_modified/rev-list_fails",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledDivergesFromLegacyOnlyWhereIntended/user_file_modified/unparsable",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledDivergesFromLegacyOnlyWhereIntended/auto-managed_only/zero_ahead",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledDivergesFromLegacyOnlyWhereIntended/auto-managed_only/three_ahead",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledDivergesFromLegacyOnlyWhereIntended/auto-managed_only/rev-list_fails",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledDivergesFromLegacyOnlyWhereIntended/auto-managed_only/unparsable",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledDivergesFromLegacyOnlyWhereIntended/status_fails/zero_ahead",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledDivergesFromLegacyOnlyWhereIntended/status_fails/three_ahead",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledDivergesFromLegacyOnlyWhereIntended/status_fails/rev-list_fails",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledDivergesFromLegacyOnlyWhereIntended/status_fails/unparsable",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledDivergesFromLegacyOnlyWhereIntended",
+        "status": "passed",
+        "duration": 40,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUndeterminedIsNotUnlanded",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnresolvedDefaultBranchIsUndetermined",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRebasedCommitsAreNotUnlanded",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnlandedComparesTheForkPointRanges",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestBaseUnmovedSkipsTheComparison",
+        "status": "passed",
+        "duration": 10,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnlandedProbeFailureIsUndetermined",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnmovedBaseLogFailureIsUndetermined",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestVerdictPathReadsTheCacheAndNeverComputes",
+        "status": "passed",
+        "duration": 10,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnlandedLogIsCappedButTheCountIsNot",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledPartitionsModified",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledAutoManagedOnlyReason",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledUnlandedOnly",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledBothSubStates",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledSettledAndNoWorktree",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestUnsettledDisplayFailuresDoNotChangeVerdict",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStatusPathsParsing",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeCheckScripts/clean",
+        "status": "passed",
+        "duration": 1160,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeCheckScripts/branch-mismatch",
+        "status": "passed",
+        "duration": 1160,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeCheckScripts/uncommitted",
+        "status": "passed",
+        "duration": 1160,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeCheckScripts/base-rewritten",
+        "status": "passed",
+        "duration": 1340,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestWorktreeCheckScripts",
+        "status": "passed",
+        "duration": 5000,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "tests/test_entity_project.py::test_update_from_outside_any_project_still_emits",
+        "status": "passed",
+        "duration": 281,
+        "suite": "tests/test_entity_project.py"
+      },
+      {
+        "name": "tests/test_entity_project.py::test_children_of_moves_each_child_by_event",
+        "status": "passed",
+        "duration": 302,
+        "suite": "tests/test_entity_project.py"
+      },
+      {
+        "name": "tests/test_entity_project.py::test_children_of_refuses_a_maybe_child_before_moving_any",
+        "status": "passed",
+        "duration": 118,
+        "suite": "tests/test_entity_project.py"
+      },
+      {
+        "name": "tests/test_entity_project.py::test_register_refuses_the_home_directory",
+        "status": "passed",
+        "duration": 66,
+        "suite": "tests/test_entity_project.py"
+      },
+      {
+        "name": "tests/test_maybe_parent_gate.py::test_reject_fires_on_maybe_with_parent",
+        "status": "passed",
+        "duration": 65,
+        "suite": "tests/test_maybe_parent_gate.py"
+      },
+      {
+        "name": "tests/test_maybe_parent_gate.py::test_reject_inert_on_maybe_root",
+        "status": "passed",
+        "duration": 64,
+        "suite": "tests/test_maybe_parent_gate.py"
+      },
+      {
+        "name": "tests/test_maybe_parent_gate.py::test_reject_inert_on_committed_phase_with_parent",
+        "status": "passed",
+        "duration": 61,
+        "suite": "tests/test_maybe_parent_gate.py"
+      },
+      {
+        "name": "tests/test_maybe_parent_gate.py::test_reject_inert_on_none_phase",
+        "status": "passed",
+        "duration": 64,
+        "suite": "tests/test_maybe_parent_gate.py"
+      },
+      {
+        "name": "tests/test_maybe_parent_gate.py::test_add_maybe_with_parent_refused",
+        "status": "passed",
+        "duration": 112,
+        "suite": "tests/test_maybe_parent_gate.py"
+      },
+      {
+        "name": "tests/test_maybe_parent_gate.py::test_add_maybe_root_allowed",
+        "status": "passed",
+        "duration": 194,
+        "suite": "tests/test_maybe_parent_gate.py"
+      },
+      {
+        "name": "tests/test_maybe_parent_gate.py::test_add_parented_default_phase_allowed",
+        "status": "passed",
+        "duration": 172,
+        "suite": "tests/test_maybe_parent_gate.py"
+      },
+      {
+        "name": "tests/test_maybe_parent_gate.py::test_update_reparent_maybe_refused",
+        "status": "passed",
+        "duration": 145,
+        "suite": "tests/test_maybe_parent_gate.py"
+      },
+      {
+        "name": "tests/test_maybe_parent_gate.py::test_update_phase_maybe_on_child_refused",
+        "status": "passed",
+        "duration": 121,
+        "suite": "tests/test_maybe_parent_gate.py"
+      },
+      {
+        "name": "tests/test_maybe_parent_gate.py::test_update_atomic_promote_and_parent_allowed",
+        "status": "passed",
+        "duration": 201,
+        "suite": "tests/test_maybe_parent_gate.py"
+      },
+      {
+        "name": "tests/test_maybe_parent_gate.py::test_update_set_phase_maybe_on_root_allowed",
+        "status": "passed",
+        "duration": 197,
+        "suite": "tests/test_maybe_parent_gate.py"
+      },
+      {
+        "name": "tests/test_maybe_parent_gate.py::test_update_unrelated_edit_on_violating_row_allowed",
+        "status": "passed",
+        "duration": 181,
+        "suite": "tests/test_maybe_parent_gate.py"
+      },
+      {
+        "name": "tests/test_maybe_parent_gate.py::test_move_maybe_under_parent_refused",
+        "status": "passed",
+        "duration": 114,
+        "suite": "tests/test_maybe_parent_gate.py"
+      },
+      {
+        "name": "tests/test_maybe_parent_gate.py::test_move_committed_under_parent_allowed",
+        "status": "passed",
+        "duration": 174,
+        "suite": "tests/test_maybe_parent_gate.py"
+      },
+      {
+        "name": "tests/test_maybe_parent_gate.py::test_move_maybe_to_root_allowed",
+        "status": "passed",
+        "duration": 175,
+        "suite": "tests/test_maybe_parent_gate.py"
+      },
+      {
+        "name": "tests/test_worktree_land_record_landing.py::test_record_landing_success",
+        "status": "passed",
+        "duration": 53,
+        "suite": "tests/test_worktree_land_record_landing.py"
+      },
+      {
+        "name": "tests/test_worktree_land_record_landing.py::test_record_landing_payload_carries_the_base_branch",
+        "status": "passed",
+        "duration": 60,
+        "suite": "tests/test_worktree_land_record_landing.py"
+      },
+      {
+        "name": "tests/test_worktree_land_record_landing.py::test_record_landing_clickexception_is_recoverable",
+        "status": "passed",
+        "duration": 61,
+        "suite": "tests/test_worktree_land_record_landing.py"
+      },
+      {
+        "name": "tests/test_worktree_land_record_landing.py::test_record_landing_generic_exception_is_recoverable",
+        "status": "passed",
+        "duration": 66,
+        "suite": "tests/test_worktree_land_record_landing.py"
+      },
+      {
+        "name": "tests/test_worktree_land_post_land_script.py::test_absent_script_is_a_silent_noop",
+        "status": "passed",
+        "duration": 60,
+        "suite": "tests/test_worktree_land_post_land_script.py"
+      },
+      {
+        "name": "tests/test_worktree_land_post_land_script.py::test_lowercase_id_discovery",
+        "status": "passed",
+        "duration": 191,
+        "suite": "tests/test_worktree_land_post_land_script.py"
+      },
+      {
+        "name": "tests/test_worktree_land_post_land_script.py::test_runs_with_main_root_as_cwd_and_argv1",
+        "status": "passed",
+        "duration": 620,
+        "suite": "tests/test_worktree_land_post_land_script.py"
+      },
+      {
+        "name": "tests/test_worktree_land_post_land_script.py::test_runs_with_endless_env_vars",
+        "status": "passed",
+        "duration": 713,
+        "suite": "tests/test_worktree_land_post_land_script.py"
+      },
+      {
+        "name": "tests/test_worktree_land_post_land_script.py::test_nonzero_exit_is_non_fatal_and_loud",
+        "status": "passed",
+        "duration": 242,
+        "suite": "tests/test_worktree_land_post_land_script.py"
+      },
+      {
+        "name": "tests/test_worktree_land_post_land_script.py::test_non_executable_warns_and_does_not_run",
+        "status": "passed",
+        "duration": 136,
+        "suite": "tests/test_worktree_land_post_land_script.py"
+      },
+      {
+        "name": "tests/test_worktree_land_post_land_script.py::test_non_executable_reaches_the_errors_channel",
+        "status": "passed",
+        "duration": 113,
+        "suite": "tests/test_worktree_land_post_land_script.py"
+      },
+      {
+        "name": "tests/test_worktree_land_post_land_script.py::test_call_site_is_after_record_landing_and_before_reap",
+        "status": "passed",
+        "duration": 91,
+        "suite": "tests/test_worktree_land_post_land_script.py"
+      },
+      {
+        "name": "tests/test_worktree_land_post_land_script.py::test_record_only_does_not_run_post_land_script",
+        "status": "passed",
+        "duration": 74,
+        "suite": "tests/test_worktree_land_post_land_script.py"
+      },
+      {
+        "name": "tests/test_worktree_land_post_land_script.py::test_e2e_land_runs_script_with_cwd_env_and_merge_sha",
+        "status": "passed",
+        "duration": 544,
+        "suite": "tests/test_worktree_land_post_land_script.py"
+      },
+      {
+        "name": "tests/test_worktree_land_post_land_script.py::test_e2e_land_absent_script_is_clean_noop",
+        "status": "passed",
+        "duration": 357,
+        "suite": "tests/test_worktree_land_post_land_script.py"
+      },
+      {
+        "name": "tests/test_worktree_land_post_land_script.py::test_e2e_land_nonexecutable_script_warns_but_lands",
+        "status": "passed",
+        "duration": 537,
+        "suite": "tests/test_worktree_land_post_land_script.py"
+      },
+      {
+        "name": "tests/test_worktree_land_post_land_script.py::test_e2e_land_script_exit1_lands_and_reports_loudly",
+        "status": "passed",
+        "duration": 561,
+        "suite": "tests/test_worktree_land_post_land_script.py"
+      },
+      {
+        "name": "tests/test_worktree_land_schema_apply.py::test_rebuild_runs_just_go_in_the_worktree",
+        "status": "passed",
+        "duration": 575,
+        "suite": "tests/test_worktree_land_schema_apply.py"
+      },
+      {
+        "name": "tests/test_worktree_land_schema_apply.py::test_rebuild_failure_raises_before_anything_advances",
+        "status": "passed",
+        "duration": 561,
+        "suite": "tests/test_worktree_land_schema_apply.py"
+      },
+      {
+        "name": "tests/test_worktree_land_schema_apply.py::test_rebuild_skipped_for_non_self_dev",
+        "status": "passed",
+        "duration": 175,
+        "suite": "tests/test_worktree_land_schema_apply.py"
+      },
+      {
+        "name": "tests/test_worktree_land_schema_apply.py::test_no_behind_base_refusal_exists",
+        "status": "passed",
+        "duration": 181,
+        "suite": "tests/test_worktree_land_schema_apply.py"
+      },
+      {
+        "name": "tests/test_worktree_land_schema_apply.py::test_up_runs_after_merge_and_before_record",
+        "status": "passed",
+        "duration": 397,
+        "suite": "tests/test_worktree_land_schema_apply.py"
+      },
+      {
+        "name": "tests/test_worktree_land_schema_apply.py::test_a_branch_without_a_migration_still_backs_up_and_migrates_up",
+        "status": "passed",
+        "duration": 496,
+        "suite": "tests/test_worktree_land_schema_apply.py"
+      },
+      {
+        "name": "tests/test_worktree_land_schema_apply.py::test_non_self_dev_land_never_migrates",
+        "status": "passed",
+        "duration": 374,
+        "suite": "tests/test_worktree_land_schema_apply.py"
+      },
+      {
+        "name": "tests/test_worktree_land_schema_apply.py::test_up_failure_reports_main_advanced_and_keeps_the_merge",
+        "status": "passed",
+        "duration": 231,
+        "suite": "tests/test_worktree_land_schema_apply.py"
+      },
+      {
+        "name": "tests/test_worktree_land_schema_apply.py::test_backup_failure_is_also_surfaced_as_post_merge",
+        "status": "passed",
+        "duration": 223,
+        "suite": "tests/test_worktree_land_schema_apply.py"
+      }
+    ]
+  }
+}
