@@ -63,3 +63,8 @@ statement = "Does not check blockers at endless task verify"
 id = "P11"
 kind = "exclusion"
 statement = "Does not apply to precedes links"
+
+[[item]]
+id = "P12"
+kind = "deliverable"
+statement = "The guide's blocks row in docs/guide/tasks.md names worktree land among the commands that refuse a blocked task, with its two exceptions"
