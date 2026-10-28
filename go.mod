@@ -32,8 +32,8 @@ require (
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
 	github.com/mikeschinkel/go-cliutil v0.3.0 // indirect
-	github.com/mikeschinkel/go-dt/appinfo v0.2.1 // indirect
-	github.com/mikeschinkel/go-dt/dtx v0.2.1 // indirect
+	github.com/mikeschinkel/go-dt/appinfo v0.3.0 // indirect
+	github.com/mikeschinkel/go-dt/dtx v0.2.2 // indirect
 	github.com/mikeschinkel/go-logutil v0.2.1 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
 	github.com/pressly/goose/v3 v3.28.0
