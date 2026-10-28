@@ -1,0 +1,1 @@
+Claim, spawn and prime refuse a task with a live blocker (E-2296's _require_unblocked in task_cmd.py), but land runs no such check. On 2026-10-28 E-2405 landed while E-2412 (go-cfgstore, submitted) still blocked it; the user expected land to refuse. A blocks link is the hard dependency, so landing past one defeats it.
