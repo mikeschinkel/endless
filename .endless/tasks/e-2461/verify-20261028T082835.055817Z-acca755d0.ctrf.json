@@ -1,0 +1,74 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 11,
+      "passed": 11,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "test_land_blocks_gate, test_blocks_gate and test_unlanded pass",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "main, the branch and the status are unchanged",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "each blocker is named with its status, title and unblock line",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a landed blocker still refuses",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "assumed and declined blockers release it",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "an unblocked task goes on to land",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "refuses the same way",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "refuses with the same text as a real land",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a re-run whose branch is already merged is not refused",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a branch merely behind main is still refused",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "--record-only is not refused",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
