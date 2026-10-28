@@ -1,0 +1,366 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 58,
+      "passed": 58,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 1793178878767,
+      "stop": 1793178890458
+    },
+    "tests": [
+      {
+        "name": "TestTextOpensWithTheOverwriteNote",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/suiterules"
+      },
+      {
+        "name": "TestTextPresentsVerifyTomlAsTheSuiteFormat",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/suiterules"
+      },
+      {
+        "name": "TestTextExampleIsAValidManifest",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/suiterules"
+      },
+      {
+        "name": "TestTextNamesWhatTheRefusalsPointAt",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/suiterules"
+      },
+      {
+        "name": "TestPlace",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/suiterules"
+      },
+      {
+        "name": "TestRegistered",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/suiterules"
+      },
+      {
+        "name": "TestScheduleIsValidAndExplicit",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/suiterules"
+      },
+      {
+        "name": "TestSweepCoversEveryRegisteredProject",
+        "status": "passed",
+        "duration": 1320,
+        "suite": "github.com/mikeschinkel/endless/internal/suiterules"
+      },
+      {
+        "name": "TestSweepAdoptsAnUncommittedCopy",
+        "status": "passed",
+        "duration": 420,
+        "suite": "github.com/mikeschinkel/endless/internal/suiterules"
+      },
+      {
+        "name": "TestSweepLeavesAnIgnoredCopyOutOfGit",
+        "status": "passed",
+        "duration": 220,
+        "suite": "github.com/mikeschinkel/endless/internal/suiterules"
+      },
+      {
+        "name": "TestWriteTargetDecision/own_worktree",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestWriteTargetDecision/own_worktree_root",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestWriteTargetDecision/main_checkout",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestWriteTargetDecision/another_task's_worktree",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestWriteTargetDecision/temp_dir",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestWriteTargetDecision/temp_dir_holding_the_project_is_not_an_exemption_for_it",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestWriteTargetDecision/own_git_admin_dir",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestWriteTargetDecision/endless's_git-side_state",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestWriteTargetDecision/another_worktree's_admin_dir",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestWriteTargetDecision/shared_git_config",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestWriteTargetDecision/dev_null",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestWriteTargetDecision/dev_fd",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestWriteTargetDecision/unrelated_path",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestWriteTargetDecision/doc_mirror_in_worktree",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestWriteTargetDecision/own_verify_manifest",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestWriteTargetDecision/own_new_script_suite",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestWriteTargetDecision/own_helper_beside_the_suite",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestWriteTargetDecision/landed_foreign_suite",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestWriteTargetDecision/no_claimed_worktree:_main_allowed",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestWriteTargetDecision/no_claimed_worktree:_mirror_still_refused",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestWriteTargetDecision",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestBashWriteGateMatchesWriteGate//private/var/folders/9_/74hq9cl96432z3mc7_3y1ms40000gn/T/TestBashWriteGateMatchesWriteGate3380189015/001/proj/.endless/worktrees/e-7/a.go",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestBashWriteGateMatchesWriteGate//private/var/folders/9_/74hq9cl96432z3mc7_3y1ms40000gn/T/TestBashWriteGateMatchesWriteGate3380189015/001/proj/a.go",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestBashWriteGateMatchesWriteGate//private/var/folders/9_/74hq9cl96432z3mc7_3y1ms40000gn/T/TestBashWriteGateMatchesWriteGate3380189015/001/proj/.endless/worktrees/e-8/a.go",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestBashWriteGateMatchesWriteGate//private/var/folders/9_/74hq9cl96432z3mc7_3y1ms40000gn/T/TestBashWriteGateMatchesWriteGate3380189015/001/scratch/x",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestBashWriteGateMatchesWriteGate//dev/null",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestBashWriteGateMatchesWriteGate//private/var/folders/9_/74hq9cl96432z3mc7_3y1ms40000gn/T/TestBashWriteGateMatchesWriteGate3380189015/001/proj/.endless/worktrees/e-7/.endless/tasks/e-7/plan.md",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestBashWriteGateMatchesWriteGate//private/var/folders/9_/74hq9cl96432z3mc7_3y1ms40000gn/T/TestBashWriteGateMatchesWriteGate3380189015/001/proj/.endless/worktrees/e-7/.endless/tasks/e-101/verify.sh",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestBashWriteGateMatchesWriteGate//private/var/folders/9_/74hq9cl96432z3mc7_3y1ms40000gn/T/TestBashWriteGateMatchesWriteGate3380189015/001/proj/.endless/worktrees/e-7/.endless/tasks/e-7/verify.sh",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestBashWriteGateMatchesWriteGate//etc/hosts",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestBashWriteGateMatchesWriteGate",
+        "status": "passed",
+        "duration": 10,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestNewScriptSuiteGate/a_new_verify.sh_is_refused,_naming_verify.toml",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestNewScriptSuiteGate/a_Bash_write_that_would_create_one_is_refused_the_same_way",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestNewScriptSuiteGate/a_verify.toml_is_not_refused",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestNewScriptSuiteGate/editing_the_worktree's_existing_verify.sh_is_not_refused",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestNewScriptSuiteGate/main's_verify.sh_for_that_task_makes_it_a_restore,_not_a_creation",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestNewScriptSuiteGate/no_main_checkout_to_judge_by_is_no_opinion",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestNewScriptSuiteGate",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestRender_Handoff_VerifyPartialNamesTheSuiteLocation/todo",
+        "status": "passed",
+        "duration": 430,
+        "suite": "github.com/mikeschinkel/endless/internal/templatecmd"
+      },
+      {
+        "name": "TestRender_Handoff_VerifyPartialNamesTheSuiteLocation/bugfix",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/templatecmd"
+      },
+      {
+        "name": "TestRender_Handoff_VerifyPartialNamesTheSuiteLocation/research",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/templatecmd"
+      },
+      {
+        "name": "TestRender_Handoff_VerifyPartialNamesTheSuiteLocation/epic",
+        "status": "passed",
+        "duration": 100,
+        "suite": "github.com/mikeschinkel/endless/internal/templatecmd"
+      },
+      {
+        "name": "TestRender_Handoff_VerifyPartialNamesTheSuiteLocation/brainstorm",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/templatecmd"
+      },
+      {
+        "name": "TestRender_Handoff_VerifyPartialNamesTheSuiteLocation",
+        "status": "passed",
+        "duration": 760,
+        "suite": "github.com/mikeschinkel/endless/internal/templatecmd"
+      },
+      {
+        "name": "tests/test_suite_rules.py::test_registration_places_the_rules",
+        "status": "passed",
+        "duration": 763,
+        "suite": "tests/test_suite_rules.py"
+      },
+      {
+        "name": "tests/test_suite_rules.py::test_reregistration_overwrites_a_differing_copy",
+        "status": "passed",
+        "duration": 472,
+        "suite": "tests/test_suite_rules.py"
+      },
+      {
+        "name": "tests/test_suite_rules.py::test_endless_ships_the_same_file_it_scaffolds",
+        "status": "passed",
+        "duration": 87,
+        "suite": "tests/test_suite_rules.py"
+      },
+      {
+        "name": "docs/guide names verify.sh only as legacy",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
