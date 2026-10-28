@@ -3,7 +3,77 @@
 #   endless task update E-2445 --items-file <copy>
 
 [[item]]
+id = "P2"
+kind = "deliverable"
+statement = "endless-go has a gomod group with next-version, floors and release-check, listed in its usage"
+
+[[item]]
+id = "P3"
+kind = "deliverable"
+statement = "next-version finds the previous tag by directory prefix and diffs the module's exported API at that tag against HEAD with GOWORK=off"
+
+[[item]]
+id = "P4"
+kind = "deliverable"
+statement = "next-version proposes a minor bump on v0 (major on v1+) when any incompatible change is found, a patch otherwise, and v0.1.0 when no previous tag exists"
+
+[[item]]
+id = "P5"
+kind = "deliverable"
+statement = "next-version warns when a require's version crosses a 0.X boundary between the previous tag and HEAD, without changing its proposal"
+
+[[item]]
+id = "P6"
+kind = "deliverable"
+statement = "floors reports, for every go.mod under --root requiring the module or one of its nested modules, the version and whether it is published, tagged but not resolvable, never tagged, or replaced locally"
+
+[[item]]
+id = "P7"
+kind = "deliverable"
+statement = "The Go module proxy decides published; git ls-remote only distinguishes tagged-but-not-resolvable from never-tagged"
+
+[[item]]
+id = "P8"
+kind = "deliverable"
+statement = "release-check refuses a dirty worktree, a HEAD that differs from origin's default branch, a wrong module path, a replace directive, an unpublished require, an untidy go.mod, an existing tag, or a version not above the previous tag"
+
+[[item]]
+id = "P9"
+kind = "deliverable"
+statement = "release-check runs go test with GOWORK=off in the module and its <dir>/test module unless --no-test is given"
+
+[[item]]
+id = "P10"
+kind = "deliverable"
+statement = "Each command offers --json and exits non-zero on a refusal"
+
+[[item]]
+id = "P11"
+kind = "deliverable"
+statement = "Tests use temporary git repos and a file-based GOPROXY and make no network calls"
+
+[[item]]
+id = "P12"
+kind = "deliverable"
+statement = "endless-go's usage text and the Endless guide reference document the gomod commands"
+
+[[item]]
 id = "P1"
 kind = "deliverable"
 statement = "After this task lands, a go-dt task is filed for just recipes that call these endless-go commands, carrying this task's notes"
-detail = "Post-land item; gets E-2444's deferral mark once that exists"
+post_land = true
+
+[[item]]
+id = "P13"
+kind = "exclusion"
+statement = "No command starts a release, creates a tag or pushes"
+
+[[item]]
+id = "P14"
+kind = "exclusion"
+statement = "Does not write release descriptions"
+
+[[item]]
+id = "P15"
+kind = "exclusion"
+statement = "Does not change Gomion or E-2433, and does not settle whether a floor raise forces a minor (EQ-126 to EQ-128)"
