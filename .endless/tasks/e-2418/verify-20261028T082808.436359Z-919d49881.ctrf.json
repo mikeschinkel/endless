@@ -1,0 +1,961 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 157,
+      "passed": 157,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 1793176064536,
+      "stop": 1793176081959
+    },
+    "tests": [
+      {
+        "name": "tests/test_continue_from_earlier_session.py::test_claim_refuses_a_task_another_session_held[ended]",
+        "status": "passed",
+        "duration": 113,
+        "suite": "tests/test_continue_from_earlier_session.py"
+      },
+      {
+        "name": "tests/test_continue_from_earlier_session.py::test_claim_refuses_a_task_another_session_held[working]",
+        "status": "passed",
+        "duration": 79,
+        "suite": "tests/test_continue_from_earlier_session.py"
+      },
+      {
+        "name": "tests/test_continue_from_earlier_session.py::test_claim_refuses_an_unattended_claim_of_a_held_task",
+        "status": "passed",
+        "duration": 85,
+        "suite": "tests/test_continue_from_earlier_session.py"
+      },
+      {
+        "name": "tests/test_continue_from_earlier_session.py::test_bind_refuses_a_task_another_session_held[ended]",
+        "status": "passed",
+        "duration": 87,
+        "suite": "tests/test_continue_from_earlier_session.py"
+      },
+      {
+        "name": "tests/test_continue_from_earlier_session.py::test_bind_refuses_a_task_another_session_held[working]",
+        "status": "passed",
+        "duration": 82,
+        "suite": "tests/test_continue_from_earlier_session.py"
+      },
+      {
+        "name": "tests/test_continue_from_earlier_session.py::test_the_refusal_names_the_most_recent_holder",
+        "status": "passed",
+        "duration": 79,
+        "suite": "tests/test_continue_from_earlier_session.py"
+      },
+      {
+        "name": "tests/test_continue_from_earlier_session.py::test_binding_your_own_task_again_is_not_refused",
+        "status": "passed",
+        "duration": 81,
+        "suite": "tests/test_continue_from_earlier_session.py"
+      },
+      {
+        "name": "tests/test_continue_from_earlier_session.py::test_claiming_a_task_you_hold_is_not_refused",
+        "status": "passed",
+        "duration": 114,
+        "suite": "tests/test_continue_from_earlier_session.py"
+      },
+      {
+        "name": "tests/test_continue_from_earlier_session.py::test_new_transcript_is_offered_to_a_person_only[claim_item]",
+        "status": "passed",
+        "duration": 86,
+        "suite": "tests/test_continue_from_earlier_session.py"
+      },
+      {
+        "name": "tests/test_continue_from_earlier_session.py::test_new_transcript_is_offered_to_a_person_only[bind_item]",
+        "status": "passed",
+        "duration": 76,
+        "suite": "tests/test_continue_from_earlier_session.py"
+      },
+      {
+        "name": "tests/test_continue_from_earlier_session.py::test_session_resume_new_transcript_marks_the_launch",
+        "status": "passed",
+        "duration": 45,
+        "suite": "tests/test_continue_from_earlier_session.py"
+      },
+      {
+        "name": "tests/test_continue_from_earlier_session.py::test_a_plain_resume_carries_no_mark",
+        "status": "passed",
+        "duration": 45,
+        "suite": "tests/test_continue_from_earlier_session.py"
+      },
+      {
+        "name": "tests/test_continue_from_earlier_session.py::test_goto_resume_new_transcript_marks_the_new_window",
+        "status": "passed",
+        "duration": 45,
+        "suite": "tests/test_continue_from_earlier_session.py"
+      },
+      {
+        "name": "tests/test_continue_from_earlier_session.py::test_goto_resume_without_new_transcript_carries_no_mark",
+        "status": "passed",
+        "duration": 45,
+        "suite": "tests/test_continue_from_earlier_session.py"
+      },
+      {
+        "name": "TestCwdBind_PresentHolderInAnotherPaneIsRefused/startup",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestCwdBind_PresentHolderInAnotherPaneIsRefused/resume",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestCwdBind_PresentHolderInAnotherPaneIsRefused/clear",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestCwdBind_PresentHolderInAnotherPaneIsRefused/compact",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestCwdBind_PresentHolderInAnotherPaneIsRefused",
+        "status": "passed",
+        "duration": 280,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestCwdBind_ARefusedSessionReleasesItsWorktreeLock",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestCwdBind_FreshStartAfterAnEndedHolderIsRefused",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestCwdBind_NewTranscriptMarkAllowsTheFreshStart",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestCwdBind_AMarkForAnotherTaskDoesNotCount",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestCwdBind_NonStartupSourcesBindPastAnEndedHolder/resume",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestCwdBind_NonStartupSourcesBindPastAnEndedHolder/clear",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestCwdBind_NonStartupSourcesBindPastAnEndedHolder/compact",
+        "status": "passed",
+        "duration": 80,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestCwdBind_NonStartupSourcesBindPastAnEndedHolder",
+        "status": "passed",
+        "duration": 250,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestCwdBind_AHolderInTheSamePaneIsPassedOver/ended",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestCwdBind_AHolderInTheSamePaneIsPassedOver/present",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestCwdBind_AHolderInTheSamePaneIsPassedOver",
+        "status": "passed",
+        "duration": 150,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestCwdBind_ASpawnedSessionStillBinds",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestCwdBind_TheHoldersOwnRestartIsNotRefused",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestCwdBind_APanelessHolderIsTakenAsEnded",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestCwdBind_TheRefusalCarriesBothChannels",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/hookcmd"
+      },
+      {
+        "name": "TestStewardship_WorkedCase",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_UpdateNeverTakesStewardship",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_SoleUpdaterStewards",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_Ambiguous",
+        "status": "passed",
+        "duration": 60,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_EndedSessionReleases",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_ClaimerIsNotADuplicate",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_FrameRowsNeverHidden",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_FocusFollowsViewer",
+        "status": "passed",
+        "duration": 70,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_NoViewerAnnotatesNothing",
+        "status": "passed",
+        "duration": 40,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_HiddenRevisiterExcluded",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_HiddenSurfacerExcluded",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_HiddenNonFocuserExcluded",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_HiddenButFocusedCounts",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_GoneServerSessionDoesNotSteward",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_UnreachableSessionStewards",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_DeadPaneDoesNotSteward",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_IdlePresentSessionStillStewards",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_OneClaimerClearsDuplicate",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_GoneClaimerKeepsDuplicate",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_UnreachableClaimerClearsDuplicate",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_TwoClaimersRaiseNoDuplicate",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestStewardship_PinOutranksSteward",
+        "status": "passed",
+        "duration": 50,
+        "suite": "github.com/mikeschinkel/endless/internal/monitor"
+      },
+      {
+        "name": "TestRecord_OpensAnIncident",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestRecord_RepeatsBumpTheOpenIncidentInPlace",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestRecord_RecurrenceAfterClearingOpensANewIncident",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestRecord_SuccessDoesNotAutoResolveAnIncident",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestDetails_CarryEveryOccurrenceWithItsFullCapture",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestOpen_RanksErrorAboveWarningAndCountsEach",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestOpen_IsEmptyWhenEverythingIsCleared",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestRecord_IsASilentNoOpWhenUnbound",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestClear_TargetsSpecificIncidents",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestRecord_WritesNothingBeyondTheTableAndItsOwnLog",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestCatalog_EveryCodeIsDocumented",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestCatalog_EveryCodeCarriesARemedy",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestCatalog_RemediesMatchTheDocs",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestCatalog_CodesAreUniqueAndWellFormed",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestCatalog_ThePrefixStatesTheSeverity",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestCatalog_NumbersAreNeverReused",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestClearFingerprintSince_ClearsOnlyThatFingerprintInsideTheWindow",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestClearFingerprintSince_LeavesAnIncidentOpenedBeforeTheWindow",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestRecord_WritesTheLogLineWhenTheDBWriteFails",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestRecord_HealthyDatabaseIsUnchanged",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestLogOnly_ReadsOnlyLogOnlyLines",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestClearLogOnly_MovesTheWatermarkAndItPersists",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestLogOnly_ATruncatedLogResetsTheWatermark",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestDetails_IgnoresLogOnlyLines",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestLogOnly_WatermarkHoldsAcrossALogThatOutgrowsTheDigestPrefix",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestClearLogOnly_OnALogThatDoesNotExistYet",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestRecord_WritesTheLogOnlySpelling",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestLogOnly_ListsAndClearsPreRenameLines",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestLogOnlyCount_ReadsOnlyWhenTheLogChanged",
+        "status": "passed",
+        "duration": 0,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestRecord_SeparatesProjectsSharingAFingerprint",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestRecord_StillDedupesWithinOneProject",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestRecord_DedupesUnattributedFaults",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestRecord_ExplicitProjectIDBeatsTheAmbientOne",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestRecord_SurvivesAnAttributionThatCannotBeStored",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestList_ProjectScopeIncludesUnattributed",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestClear_ScopedClearAllLeavesOtherProjects",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestClear_ByIDIgnoresScope",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestDetail_CarriesTheProjectName",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestDetail_OmitsAnUnattributedProject",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestRecord_AttributesTheResolvedRaiser",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestRecord_ExplicitRaiserOverridesTheResolvedOne",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestRecord_ExplicitRaiserWinsOverAResolverThatIgnoresIt",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestRecord_ASecondRaiserUpdatesTheLatestAndAddsASource",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestRecord_ARepeatFromTheSameRaiserOnlyBumpsItsRow",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "TestRecord_UnattributedOccurrencesShareOneSource",
+        "status": "passed",
+        "duration": 30,
+        "suite": "github.com/mikeschinkel/endless/internal/faults"
+      },
+      {
+        "name": "tests/test_prior_claim_guard.py::test_ended_claimant_refuses_and_names_the_session",
+        "status": "passed",
+        "duration": 82,
+        "suite": "tests/test_prior_claim_guard.py"
+      },
+      {
+        "name": "tests/test_prior_claim_guard.py::test_a_task_no_session_ever_claimed_is_untouched",
+        "status": "passed",
+        "duration": 77,
+        "suite": "tests/test_prior_claim_guard.py"
+      },
+      {
+        "name": "tests/test_prior_claim_guard.py::test_revisit_flags_appear_only_for_settled_work",
+        "status": "passed",
+        "duration": 93,
+        "suite": "tests/test_prior_claim_guard.py"
+      },
+      {
+        "name": "tests/test_prior_claim_guard.py::test_several_claimants_name_the_most_recent_and_list_the_rest",
+        "status": "passed",
+        "duration": 88,
+        "suite": "tests/test_prior_claim_guard.py"
+      },
+      {
+        "name": "tests/test_prior_claim_guard.py::test_a_single_claimant_lists_no_others",
+        "status": "passed",
+        "duration": 77,
+        "suite": "tests/test_prior_claim_guard.py"
+      },
+      {
+        "name": "tests/test_prior_claim_guard.py::test_the_refusal_offers_no_escape_hatch",
+        "status": "passed",
+        "duration": 77,
+        "suite": "tests/test_prior_claim_guard.py"
+      },
+      {
+        "name": "tests/test_prior_claim_guard.py::test_claimants_reads_sessions_not_session_tasks",
+        "status": "passed",
+        "duration": 75,
+        "suite": "tests/test_prior_claim_guard.py"
+      },
+      {
+        "name": "tests/test_prior_claim_guard.py::test_spawn_runs_the_live_check_first",
+        "status": "passed",
+        "duration": 76,
+        "suite": "tests/test_prior_claim_guard.py"
+      },
+      {
+        "name": "tests/test_prior_claim_guard.py::test_spawn_refuses_when_only_a_dead_session_ever_claimed_it",
+        "status": "passed",
+        "duration": 74,
+        "suite": "tests/test_prior_claim_guard.py"
+      },
+      {
+        "name": "tests/test_check_task_ownership.py::test_dead_pane_owner_reads_free_without_being_written",
+        "status": "passed",
+        "duration": 83,
+        "suite": "tests/test_check_task_ownership.py"
+      },
+      {
+        "name": "tests/test_check_task_ownership.py::test_live_owner_still_raises",
+        "status": "passed",
+        "duration": 85,
+        "suite": "tests/test_check_task_ownership.py"
+      },
+      {
+        "name": "tests/test_check_task_ownership.py::test_unreachable_server_owner_still_raises",
+        "status": "passed",
+        "duration": 87,
+        "suite": "tests/test_check_task_ownership.py"
+      },
+      {
+        "name": "tests/test_check_task_ownership.py::test_unknown_owner_on_a_down_endless_server_names_start_then_resume",
+        "status": "passed",
+        "duration": 100,
+        "suite": "tests/test_check_task_ownership.py"
+      },
+      {
+        "name": "tests/test_check_task_ownership.py::test_unknown_owner_elsewhere_names_resume_only",
+        "status": "passed",
+        "duration": 84,
+        "suite": "tests/test_check_task_ownership.py"
+      },
+      {
+        "name": "tests/test_check_task_ownership.py::test_live_owner_keeps_its_text",
+        "status": "passed",
+        "duration": 83,
+        "suite": "tests/test_check_task_ownership.py"
+      },
+      {
+        "name": "tests/test_check_task_ownership.py::test_live_sessions_carries_liveness_and_server_down",
+        "status": "passed",
+        "duration": 72,
+        "suite": "tests/test_check_task_ownership.py"
+      },
+      {
+        "name": "tests/test_check_task_ownership.py::test_unknown_owner_names_session_end",
+        "status": "passed",
+        "duration": 85,
+        "suite": "tests/test_check_task_ownership.py"
+      },
+      {
+        "name": "tests/test_check_task_ownership.py::test_live_owner_does_not_name_session_end",
+        "status": "passed",
+        "duration": 82,
+        "suite": "tests/test_check_task_ownership.py"
+      },
+      {
+        "name": "tests/test_session_end.py::test_refuses_a_live_session",
+        "status": "passed",
+        "duration": 47,
+        "suite": "tests/test_session_end.py"
+      },
+      {
+        "name": "tests/test_session_end.py::test_refuses_recent_activity_without_force",
+        "status": "passed",
+        "duration": 45,
+        "suite": "tests/test_session_end.py"
+      },
+      {
+        "name": "tests/test_session_end.py::test_force_overrides_recent_activity",
+        "status": "passed",
+        "duration": 45,
+        "suite": "tests/test_session_end.py"
+      },
+      {
+        "name": "tests/test_session_end.py::test_prompt_yes_ends",
+        "status": "passed",
+        "duration": 45,
+        "suite": "tests/test_session_end.py"
+      },
+      {
+        "name": "tests/test_session_end.py::test_prompt_no_leaves_it",
+        "status": "passed",
+        "duration": 46,
+        "suite": "tests/test_session_end.py"
+      },
+      {
+        "name": "tests/test_session_end.py::test_yes_skips_the_prompt",
+        "status": "passed",
+        "duration": 46,
+        "suite": "tests/test_session_end.py"
+      },
+      {
+        "name": "tests/test_session_end.py::test_no_terminal_without_yes_refuses",
+        "status": "passed",
+        "duration": 46,
+        "suite": "tests/test_session_end.py"
+      },
+      {
+        "name": "tests/test_session_end.py::test_already_ended_is_reported_and_exits_zero",
+        "status": "passed",
+        "duration": 46,
+        "suite": "tests/test_session_end.py"
+      },
+      {
+        "name": "tests/test_session_end.py::test_prints_how_to_get_it_back",
+        "status": "passed",
+        "duration": 47,
+        "suite": "tests/test_session_end.py"
+      },
+      {
+        "name": "tests/test_session_end.py::test_taskless_session_omits_the_task_line",
+        "status": "passed",
+        "duration": 46,
+        "suite": "tests/test_session_end.py"
+      },
+      {
+        "name": "tests/test_session_end.py::test_cli_wires_flags",
+        "status": "passed",
+        "duration": 46,
+        "suite": "tests/test_session_end.py"
+      },
+      {
+        "name": "tests/test_task_bind_write_once.py::test_bind_fills_a_session_with_no_task",
+        "status": "passed",
+        "duration": 130,
+        "suite": "tests/test_task_bind_write_once.py"
+      },
+      {
+        "name": "tests/test_task_bind_write_once.py::test_bind_refuses_to_repoint_a_bound_session",
+        "status": "passed",
+        "duration": 101,
+        "suite": "tests/test_task_bind_write_once.py"
+      },
+      {
+        "name": "tests/test_task_bind_write_once.py::test_rebinding_the_same_task_is_a_no_op",
+        "status": "passed",
+        "duration": 91,
+        "suite": "tests/test_task_bind_write_once.py"
+      },
+      {
+        "name": "tests/test_task_bind_planning.py::test_claim_refusal_offers_bind",
+        "status": "passed",
+        "duration": 147,
+        "suite": "tests/test_task_bind_planning.py"
+      },
+      {
+        "name": "tests/test_task_bind_planning.py::test_spawn_and_prime_refusals_do_not_offer_bind[spawn]",
+        "status": "passed",
+        "duration": 150,
+        "suite": "tests/test_task_bind_planning.py"
+      },
+      {
+        "name": "tests/test_task_bind_planning.py::test_spawn_and_prime_refusals_do_not_offer_bind[prime]",
+        "status": "passed",
+        "duration": 144,
+        "suite": "tests/test_task_bind_planning.py"
+      },
+      {
+        "name": "tests/test_task_bind_planning.py::test_bind_emits_task_bound",
+        "status": "passed",
+        "duration": 134,
+        "suite": "tests/test_task_bind_planning.py"
+      },
+      {
+        "name": "tests/test_task_bind_planning.py::test_bind_records_bound_through_the_executor",
+        "status": "passed",
+        "duration": 201,
+        "suite": "tests/test_task_bind_planning.py"
+      },
+      {
+        "name": "tests/test_task_bind_planning.py::test_shell_pane_beside_one_claude_binds_that_session",
+        "status": "passed",
+        "duration": 202,
+        "suite": "tests/test_task_bind_planning.py"
+      },
+      {
+        "name": "tests/test_task_bind_planning.py::test_shell_pane_beside_no_claude_refuses_saying_who_and_where",
+        "status": "passed",
+        "duration": 130,
+        "suite": "tests/test_task_bind_planning.py"
+      },
+      {
+        "name": "tests/test_task_bind_planning.py::test_shell_pane_beside_two_claudes_refuses_rather_than_guessing",
+        "status": "passed",
+        "duration": 131,
+        "suite": "tests/test_task_bind_planning.py"
+      },
+      {
+        "name": "tests/test_transcript_gone.py::test_transcript_is_found_under_any_project_slug",
+        "status": "passed",
+        "duration": 47,
+        "suite": "tests/test_transcript_gone.py"
+      },
+      {
+        "name": "tests/test_transcript_gone.py::test_missing_transcript_reads_as_missing",
+        "status": "passed",
+        "duration": 46,
+        "suite": "tests/test_transcript_gone.py"
+      },
+      {
+        "name": "tests/test_transcript_gone.py::test_no_uuid_is_not_a_transcript",
+        "status": "passed",
+        "duration": 46,
+        "suite": "tests/test_transcript_gone.py"
+      },
+      {
+        "name": "tests/test_transcript_gone.py::test_claude_config_dir_overrides_the_home",
+        "status": "passed",
+        "duration": 45,
+        "suite": "tests/test_transcript_gone.py"
+      },
+      {
+        "name": "tests/test_transcript_gone.py::test_resume_refuses_and_launches_nothing",
+        "status": "passed",
+        "duration": 46,
+        "suite": "tests/test_transcript_gone.py"
+      },
+      {
+        "name": "tests/test_transcript_gone.py::test_goto_resume_creates_no_window",
+        "status": "passed",
+        "duration": 46,
+        "suite": "tests/test_transcript_gone.py"
+      },
+      {
+        "name": "tests/test_transcript_gone.py::test_the_refusal_names_the_uuid_where_it_looked_and_the_route",
+        "status": "passed",
+        "duration": 46,
+        "suite": "tests/test_transcript_gone.py"
+      },
+      {
+        "name": "tests/test_transcript_gone.py::test_a_present_transcript_still_resumes",
+        "status": "passed",
+        "duration": 45,
+        "suite": "tests/test_transcript_gone.py"
+      },
+      {
+        "name": "tests/test_transcript_gone.py::test_new_transcript_launches_a_plain_claude_in_place",
+        "status": "passed",
+        "duration": 47,
+        "suite": "tests/test_transcript_gone.py"
+      },
+      {
+        "name": "tests/test_transcript_gone.py::test_new_transcript_opens_a_plain_claude_in_a_new_window",
+        "status": "passed",
+        "duration": 46,
+        "suite": "tests/test_transcript_gone.py"
+      },
+      {
+        "name": "tests/test_transcript_gone.py::test_new_transcript_does_not_republish_the_dead_uuid",
+        "status": "passed",
+        "duration": 46,
+        "suite": "tests/test_transcript_gone.py"
+      },
+      {
+        "name": "tests/test_transcript_gone.py::test_new_transcript_needs_resume_on_goto",
+        "status": "passed",
+        "duration": 46,
+        "suite": "tests/test_transcript_gone.py"
+      },
+      {
+        "name": "tests/test_transcript_gone.py::test_resume_refuses_a_populated_window",
+        "status": "passed",
+        "duration": 45,
+        "suite": "tests/test_transcript_gone.py"
+      },
+      {
+        "name": "tests/test_transcript_gone.py::test_resume_outside_tmux_is_not_a_populated_window",
+        "status": "passed",
+        "duration": 48,
+        "suite": "tests/test_transcript_gone.py"
+      },
+      {
+        "name": "tests/test_transcript_gone.py::test_each_verb_builds_the_layout_exactly_once",
+        "status": "passed",
+        "duration": 55,
+        "suite": "tests/test_transcript_gone.py"
+      },
+      {
+        "name": "tests/test_transcript_gone.py::test_resume_lays_out_before_the_exec",
+        "status": "passed",
+        "duration": 50,
+        "suite": "tests/test_transcript_gone.py"
+      }
+    ]
+  }
+}
