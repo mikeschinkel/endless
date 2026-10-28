@@ -43,7 +43,7 @@ from pathlib import Path
 import click
 
 from endless import agent_help, doc_mirror, land_conflict, provenance, rowcap, unlanded
-from endless.task_cmd import _display_path, _resolve_project
+from endless.task_cmd import _display_path, _require_unblocked, _resolve_project
 from endless.project_path import resolved
 
 
@@ -1175,6 +1175,16 @@ def _git_run(args: list[str], cwd: Path, check: bool = True) -> subprocess.Compl
         ["git", *args],
         capture_output=True, text=True, check=check, cwd=str(cwd),
     )
+
+
+def _branch_merged_into(root: Path, branch: str, base: str) -> bool:
+    """Whether `branch`'s tip is already in `base`.
+
+    Fails closed: a comparison git cannot make (a missing ref) reads as not
+    merged, so the caller's gate still runs.
+    """
+    res = _git_run(["merge-base", "--is-ancestor", branch, base], cwd=root, check=False)
+    return res.returncode == 0
 
 
 def _display_path(p: Path) -> str:
@@ -4422,7 +4432,9 @@ def land_worktree(
     Before anything moves (E-2262): refuse a research or brainstorm task, and
     a todo or bugfix task that is not `unlanded` at the branch's current code
     (endless.unlanded.require_landable). --record-only skips this and the
-    settle in Step 6.1: it records a land that already happened.
+    settle in Step 6.1: it records a land that already happened. Then
+    (E-2461) refuse while a task that blocks it is not terminal, unless the
+    branch is already merged into its base — a re-run after a later step failed.
 
     Loop:
       1. Partition git status into auto-commit vs user-work.
@@ -4531,6 +4543,14 @@ def land_worktree(
     # the rebase, the branch differs from the passed commit by everything the
     # base gained, and a land the task may not take must not start.
     land_state = unlanded.require_landable(int(canonical[2:]), worktree_path)
+
+    # E-2461: the blocker gate claim, spawn and prime run (E-2296), here before
+    # the dry run's report so the rehearsal refuses the same way. Skipped for a
+    # re-run whose branch is already merged — a land that failed after its
+    # ff-merge: the code is in the base already, so refusing protects nothing
+    # and only strands the migration and the landing record.
+    if not _branch_merged_into(main_root, branch, base_branch):
+        _require_unblocked(int(canonical[2:]), "land")
 
     if dry_run:
         click.echo(f"Would land: {canonical}")
