@@ -7829,3 +7829,7 @@ While tracing why the tmux alert did not fire after a Stop (E-2455 session), I s
 ### [2026-10-27] Check task types before calling two similar-titled tasks duplicates
 While checking for a duplicate of E-719 (E-2455 session), I flagged E-2287 'Build endless doctor' as a likely duplicate of E-2285 'Build the endless doctor command and check registry' from titles and dates alone. Mike corrected me: look at their task types. E-2287 is an epic and E-2285 a todo — an epic and a todo of the same subject are a container and its work, not duplicates. Before suggesting a duplicate, compare type (and parent/children), not just title and creation date.
 - **Project**: endless
+
+### [2026-10-28] A blocks link that the code does not depend on is a wrong link, not a cost
+While presenting E-2461's open questions (should land have an override past a blocker), I listed as a con of 'no override' that a user wanting to land anyway because the code doesn't depend on the blocker would have to delete a link that is still true. Mike pointed out that's incoherent: if the code doesn't depend on the task, it isn't a blocker, so removing the link is correcting it, not losing anything. Before listing a con, check it doesn't contradict the definition of the thing it's about.
+- **Project**: endless
