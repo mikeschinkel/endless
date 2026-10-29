@@ -103,3 +103,8 @@ statement = "A [[check]]'s name is written as labels.check on every CTRF test it
 id = "P18"
 kind = "deliverable"
 statement = "The CTRF report validates against the CTRF v0.2.0 schema: reportFormat and specVersion at the root, and suite, stdout and stderr as string arrays"
+
+[[item]]
+id = "P19"
+kind = "deliverable"
+statement = "A failing check's failed tests and their messages print under its summary line, capped at 20 lines, except for a script suite, which prints its own"
