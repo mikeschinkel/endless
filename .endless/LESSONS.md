@@ -7849,3 +7849,7 @@ While planning E-2490 (Endless-Task trailer on task-branch commits, 2026-10-29) 
 ### [2026-10-29] Judge Endless features as a product for all users, not by what Mike's own repos happen to use
 While planning E-2490 (Endless-Task trailer, 2026-10-29) I recommended not supporting husky partly because it is a Node tool and none of Mike's repos use Node. Mike: 'The fact my repos do not use Node is irrelevant to PRODUCT concerns. Why should Endless not be used by Node developers?' Mike's repos are evidence about Mike's usage, not grounds for limiting what Endless supports.
 - **Project**: endless
+
+### [2026-10-29] A defect in work this session just landed is fixed by reopening that task, not by filing a new one
+Working E-2438 (verify check dir), I found my own landed change let a rotted dir in any landed suite break every task's verify, because task verify validates every suite via Discover. I told Mike both fixes needed a new task because E-2438 had landed. Mike pointed me to ED-1550: work still live in the session that landed it is exempt from the new-task rule, and reopening is right when what shipped is wrong. The session handoff says the same: a bug in work THIS session landed is reopened (status revisit) and fixed there.
+- **Project**: endless
