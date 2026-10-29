@@ -1,0 +1,1 @@
+Filed from a misunderstanding: the user wanted a way to avoid or get out of the catch-22 (E-2485), not a further refusal; and verifying a landed task is already blocked by other gates.
