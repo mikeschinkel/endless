@@ -30,7 +30,7 @@ statement = "Every install of Endless knows each version of the file it has ship
 [[item]]
 id = "P6"
 kind = "deliverable"
-statement = "If both kinds of hash share one table, it has a kind column with an open-ended set of kinds"
+statement = "The record of shipped versions can later hold other kinds of shipped file, not just this one"
 
 [[item]]
 id = "P7"
