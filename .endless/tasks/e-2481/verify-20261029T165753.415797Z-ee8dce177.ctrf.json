@@ -1,0 +1,321 @@
+{
+  "reportFormat": "CTRF",
+  "specVersion": "0.2.0",
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 60,
+      "passed": 60,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "internal/sandboxcmd tests pass",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "internal/monitor reap tests pass",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "test_db_error_diagnostic, test_agent_env and test_sandbox_path pass",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "usage offers seed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "usage offers reset",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "usage offers claude-settings-repair",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "usage does not name 'run '",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "usage does not name 'enter'",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "usage does not name 'init'",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "usage does not name 'list'",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "usage does not name 'prune'",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "usage does not name 'destroy'",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "usage does not name '\u003cname\u003e'",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "usage does not name '--mode'",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "sandbox run e-1 exits 1",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "sandbox run is an unknown command",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "sandbox enter e-1 exits 1",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "sandbox enter is an unknown command",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "sandbox list e-1 exits 1",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "sandbox list is an unknown command",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "sandbox prune e-1 exits 1",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "sandbox prune is an unknown command",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "sandbox destroy e-1 exits 1",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "sandbox destroy is an unknown command",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "sandbox init e-1 exits 1",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "sandbox init is an unknown command",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "sandbox init --mode empty \u003cname\u003e is an unknown command",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "nothing was written under \u003ccache\u003e/endless/sandboxes",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "endless-go's usage lists sandbox seed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "sandbox seed outside a worktree exits 1",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and says there is no sandbox to seed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "sandbox seed --help exits 0 (the seed hook's capability probe)",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "Endless's seed hook calls sandbox seed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "just dev-sandbox-init calls sandbox seed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "sandbox init --mode worktree reaches seed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and is not refused as an unknown command",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the seed hook falls back on a binary without seed",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the fallback is chosen by asking the binary",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no sandboxesDir and no \"sandboxes\" path segment",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "neither ReapSandbox nor ReapSandboxForWorktree exists",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "internal/sandboxcmd/reap.go is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "internal/sandboxcmd/reapguard.go is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "internal/sandboxcmd/livewriters.go is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "internal/sandboxcmd/orphan.go is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "internal/sandboxcmd/supervisor.go is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "internal/sandboxcmd/run.go is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "internal/sandboxcmd/enter.go is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "internal/sandboxcmd/enter_inject.go is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "internal/sandboxcmd/list.go is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "internal/sandboxcmd/prune.go is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "internal/sandboxcmd/destroy.go is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "internal/sandboxcmd/sandbox.go is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "drop and reap's git worktree remove takes the sandbox along",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "src/ names neither ENDLESS_SANDBOX nor SANDBOX_SAFE_SUBCOMMANDS",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "tests/test_sandbox_gate.py is gone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "endless task --help under ENDLESS_SANDBOX exits 0",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "and is not refused",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "no assignment of XDG_CONFIG_HOME in internal/, cmd/ or src/",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "docs/guide and src/ name no removed sandbox verb",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "nothing points at a sandbox subshell",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
