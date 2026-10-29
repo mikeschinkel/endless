@@ -73,4 +73,4 @@ statement = "Seeding Endless's database into a worktree sandbox is endless-go sa
 [[item]]
 id = "P13"
 kind = "deliverable"
-statement = "Until E-2484: endless-go sandbox init --mode worktree is a hidden alias for db seed-sandbox, and Endless's seed hook falls back to it when the worktree's binary has no db command, so neither side of the land breaks reset or verify"
+statement = "Until E-2484: endless-go sandbox init --mode worktree is a hidden alias for sandbox seed, and Endless's seed hook falls back to it when the worktree's binary has no sandbox seed, so neither side of the land breaks reset or verify"
