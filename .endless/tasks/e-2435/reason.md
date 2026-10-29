@@ -1,0 +1,1 @@
+Mike chose on 2026-10-29 to turn this into a brainstorm about moving Endless's records off the default branch. E-2488 already holds that brainstorm, so it absorbs this task's evidence and set-aside split-push fix instead of this task being retyped.
