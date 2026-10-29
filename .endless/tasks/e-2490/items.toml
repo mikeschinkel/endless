@@ -8,6 +8,11 @@ kind = "deliverable"
 statement = "A commit made on a task/NNNN branch, from any tool that runs Git hooks, carries an Endless-Task: E-NNNN trailer added by a prepare-commit-msg Git hook, and its E-NNNN: subject prefix is unchanged"
 
 [[item]]
+id = "P14"
+kind = "deliverable"
+statement = "endless git-hook prepare-commit-msg <message-file> [source] [sha] adds the trailer, and every setup path (lefthook entry, unmanaged hook file, the line given to husky and other managers' users) calls it"
+
+[[item]]
 id = "P2"
 kind = "deliverable"
 statement = "The Git hook adds nothing on any other branch or a detached HEAD, adds nothing when the message already has an Endless-Task trailer, and never exits non-zero"
@@ -66,8 +71,3 @@ statement = "Does not add trailers to commits that already exist"
 id = "P13"
 kind = "exclusion"
 statement = "Does not install lefthook itself; E-1852 covers installing Endless's prerequisites"
-
-[[item]]
-id = "P14"
-kind = "deliverable"
-statement = "endless git-hook prepare-commit-msg <message-file> [source] [sha] adds the trailer, and every setup path (lefthook entry, unmanaged hook file, the line given to husky and other managers' users) calls it"
