@@ -91,3 +91,9 @@ statement = "When Endless writes lefthook-local.yml it lists it in the repo's sh
 id = "P18"
 kind = "deliverable"
 statement = "Migrated hooks (P6) run each renamed <hooks dir>/<event>.old by absolute path from lefthook-local.yml, never the committed lefthook.yml; when the repo has no lefthook config, init creates a minimal lefthook.yml and the bring-up commit commits it, since lefthook ignores lefthook-local.yml without one"
+
+[[item]]
+id = "P19"
+kind = "deliverable"
+statement = "After the land, a one-time run copies each registered project's main-checkout lefthook-local file into every existing task worktree that lacks one (git_hook.copy_lefthook_local), so worktrees created before their project's lefthook setup add the Endless-Task trailer too"
+post_land = true
