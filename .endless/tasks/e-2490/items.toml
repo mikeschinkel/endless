@@ -71,3 +71,8 @@ statement = "Does not add trailers to commits that already exist"
 id = "P13"
 kind = "exclusion"
 statement = "Does not install lefthook itself; E-1852 covers installing Endless's prerequisites"
+
+[[item]]
+id = "P15"
+kind = "deliverable"
+statement = "endless git-hook commit-msg <message-file> adds the trailer after the editor closes; prepare-commit-msg leaves an editor commit (source empty or template) to it so an empty message still aborts the commit, and every setup path installs both hook entries"
