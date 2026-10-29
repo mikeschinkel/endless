@@ -40,3 +40,8 @@ statement = "`endless worktree land` gains no new check"
 id = "P7"
 kind = "exclusion"
 statement = "Does not change when plan items freeze or what `revisit` unfreezes"
+
+[[item]]
+id = "P8"
+kind = "deliverable"
+statement = "The hand-in approval check does not apply to a move from a status whose items are already frozen (e.g. unverified → assumed), so a task already at unverified with unapproved items is not stranded"
