@@ -1,0 +1,59 @@
+{
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 8,
+      "passed": 8,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 0,
+      "stop": 0
+    },
+    "tests": [
+      {
+        "name": "go test ./...",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go.mod's go directive",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the diff against main touches only the go line",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go build ./... against /Users/mikeschinkel/Projects/go-pkgs/go-cfgstore",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "E-2412's go-cfgstore declares go 1.27.0",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go build ./... against E-2412's worktree",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "go.sum unchanged by that build",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "control: go 1.26.2 against E-2412 refuses to build",
+        "status": "passed",
+        "duration": 0
+      }
+    ]
+  }
+}
