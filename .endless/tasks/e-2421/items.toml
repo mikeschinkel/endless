@@ -5,7 +5,7 @@
 [[item]]
 id = "P1"
 kind = "deliverable"
-statement = "endless project init replaces .endless/tasks/CLAUDE.md with the current SUITE_RULES text when the file matches the hash of what init last wrote into that project"
+statement = "Re-running `endless project init` replaces a project's .endless/tasks/CLAUDE.md with the rules this Endless ships when the file is exactly what init last wrote into that project"
 
 [[item]]
 id = "P2"
