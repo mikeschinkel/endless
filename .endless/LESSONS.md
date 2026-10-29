@@ -7841,3 +7841,7 @@ After confirming E-1332 (clean up worktree sandboxes after drop or land) was obs
 ### [2026-10-29] A blocked user needs a way out, not an earlier refusal
 While finishing E-2419, Mike hit 'E-2419 cannot be verified yet: the code changed since the last reconciliation' after the task had landed, and asked for a better error. I proposed, and on his 'File it.' filed, E-2489: refuse verify of a landed task with a clearer message. Mike: he had misunderstood my proposal; what he needed was a way to avoid getting into that catch-22 (E-2485, refuse verify and land while plan items are unapproved) and/or a way to get OUT of it — not another check that blocks further upstream. In that case, when Mike reports being stuck behind a gate, propose how he gets unstuck or how the state is prevented, and restate a filing proposal plainly enough that 'file it' can't approve the wrong thing.
 - **Project**: endless
+
+### [2026-10-29] Never propose installing Git hooks from Endless; they cannot compose robustly with a user's own hooks
+While planning E-2490 (Endless-Task trailer on task-branch commits, 2026-10-29) I recommended a commit-msg Git hook and called it just 'the hook'. Mike read it as an Endless hook, agreed, then on seeing it was a Git hook: 'I do not want it to ever do so because they are not able to be robustly composible with those a user might implement.' Also: say 'Git hook' or 'Claude Code hook' explicitly, never bare 'hook', since Endless has hooks of its own.
+- **Project**: endless
