@@ -59,3 +59,8 @@ statement = "Does not delete or report an existing ~/.cache/endless/sandboxes/ o
 id = "P10"
 kind = "exclusion"
 statement = "Does not change how a worktree sandbox is created, seeded, reset or located"
+
+[[item]]
+id = "P11"
+kind = "deliverable"
+statement = "Removing a worktree with git worktree remove, as drop and reap both do, takes its self-ignoring in-tree sandbox along — pinned by a real-git test"
