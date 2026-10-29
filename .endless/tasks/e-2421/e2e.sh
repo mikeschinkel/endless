@@ -13,6 +13,10 @@ scratch=$(mktemp -d)
 export GIT_AUTHOR_NAME=verify GIT_AUTHOR_EMAIL=verify@example.com
 export GIT_COMMITTER_NAME=verify GIT_COMMITTER_EMAIL=verify@example.com
 
+# The worktree's sandbox database outlives a run, so each run's projects get
+# names of their own.
+run=r$(date +%s)$$
+
 n=0
 ok() { n=$((n + 1)); echo "ok $n - $1"; }
 not_ok() { n=$((n + 1)); echo "not ok $n - $1"; }
@@ -21,16 +25,26 @@ check() { if eval "$2" >/dev/null 2>&1; then ok "$1"; else not_ok "$1"; fi; }
 project() {
     mkdir -p "$scratch/$1"
     git -C "$scratch/$1" init -q -b main
-    git -C "$scratch/$1" commit -q --allow-empty -m init
+    # A project's identity is its root commit, so each needs one of its own.
+    git -C "$scratch/$1" commit -q --allow-empty -m "init $1 $run"
 }
-init() { uv run endless --db sandbox project init --infer "$scratch/$1" 2>&1; }
-writes() { cat "$scratch/$1"/.endless/db-ledger/*.jsonl 2>/dev/null | grep -c '"shipped_file.written"'; }
+init() { uv run endless --db sandbox project init --infer --name "$1-$run" "$scratch/$1" 2>&1; }
+
+# In a sandbox the ledger lives beside the sandbox database rather than in the
+# project (E-1729), so that is where this run's records are counted.
+sandbox_db=$(uv run endless db path --db sandbox 2>/dev/null | tail -1)
+main_db=$(uv run endless db path --db main 2>/dev/null | tail -1)
+writes() {
+    cat "$(dirname "$sandbox_db")"/.endless/db-ledger/*.jsonl 2>/dev/null |
+        grep '"shipped_file.written"' | grep -c "\"project\":\"$1-$run\""
+}
+rows() { sqlite3 "$1" "SELECT COUNT(*) FROM shipped_file_writes w JOIN projects p ON p.id = w.project_id WHERE p.name LIKE '%-$run'" 2>/dev/null || echo 0; }
 
 project fresh
 out=$(init fresh)
 check "a first init writes the shipped rules" "cmp -s '$shipped' '$scratch/fresh/$rules'"
 check "and says so" "echo \"\$out\" | grep -qF 'Verification-suite rules written to $rules'"
-check "and records the write in the project's own ledger" "[ \"\$(writes fresh)\" = 1 ]"
+check "and records the write in the ledger" "[ \"\$(writes fresh)\" = 1 ]"
 
 out=$(init fresh)
 check "a re-run with nothing to do says nothing about the rules" "! echo \"\$out\" | grep -qF 'Verification-suite rules'"
@@ -60,10 +74,8 @@ out=$(init branched)
 check "off the default branch the rules are written but not recorded" "echo \"\$out\" | grep -qF '(not recorded: the checkout is on feature'"
 check "so nothing reaches that branch's ledger" "[ ! -e '$scratch/branched/.endless/db-ledger' ]"
 
-sandbox_db=$(uv run endless db path --db sandbox 2>/dev/null | tail -1)
-main_db=$(uv run endless db path --db main 2>/dev/null | tail -1)
-check "run from a worktree, the record is in the sandbox database" "[ \"\$(sqlite3 '$sandbox_db' 'SELECT COUNT(*) FROM shipped_file_writes')\" -ge 2 ]"
-check "and not in the main one" "[ \"\$(sqlite3 '$main_db' 'SELECT COUNT(*) FROM shipped_file_writes' 2>/dev/null || echo 0)\" = 0 ]"
+check "run from a worktree, the records are in the sandbox database" "[ \"\$(rows '$sandbox_db')\" = 2 ]"
+check "and not in the main one" "[ \"\$(rows '$main_db')\" = 0 ]"
 
 rm -rf "$scratch"
 echo "1..$n"
