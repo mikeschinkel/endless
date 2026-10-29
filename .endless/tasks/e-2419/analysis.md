@@ -22,4 +22,9 @@ it; SUITE_RULES and the guide ship to every project.
 
 JUnit XML as a result format is deferred until a project whose test runner
 prints neither TAP nor a supported format needs per-test results; until then
-such a runner works as one `sh` check.
+such a runner works as one `sh` check. JUnit XML is an XML report format that
+began with Java's JUnit and that many runners in other languages can also
+write (for example PHPUnit with --log-junit, pytest with --junitxml, Jest
+through a reporter, cargo-nextest). It is not universal — plain `cargo test`
+does not write it — so whether a given runner writes it is checked against
+that runner, not assumed from this note.
