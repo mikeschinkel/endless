@@ -66,3 +66,8 @@ statement = "Does not add trailers to commits that already exist"
 id = "P13"
 kind = "exclusion"
 statement = "Does not install lefthook itself; E-1852 covers installing Endless's prerequisites"
+
+[[item]]
+id = "P14"
+kind = "deliverable"
+statement = "endless git-hook prepare-commit-msg <message-file> [source] [sha] adds the trailer, and every setup path (lefthook entry, unmanaged hook file, the line given to husky and other managers' users) calls it"
