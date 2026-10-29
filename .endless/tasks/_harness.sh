@@ -1,18 +1,55 @@
 #!/usr/bin/env bash
 #
-# Shared harness for per-task verification suites. Source it, don't run it:
+# Shared harness for the endless repo's LEGACY script suites (verify.sh).
 #
+# New suites are manifests (verify.toml), in this repo as in every other: a
+# manifest points at native tests and covers the rest with `sh` checks, and
+# needs nothing installed. Only this repo has this harness and _guard.sh, so
+# .endless/tasks/CLAUDE.md — which ships to every project — teaches manifests
+# alone and sends a reader of a script suite here. The runner still runs the
+# script suites already written, and reopening one of their tasks needs this
+# file; that is why it stays.
+#
+# A script suite sources this file first and calls `summary` last:
+#
+#     #!/usr/bin/env bash
+#     # ── DO NOT EDIT ─────────────────────────────────────────────────────
+#     # This suite belongs to E-101 and records what was true when E-101
+#     # landed. Edit it only if you ARE E-101. If your change breaks an
+#     # assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
 #     source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
 #
-# It provides the section / report_pass / report_fail / setup_error / summary
-# vocabulary these suites have always shared, and adds two things a copied
-# block could not:
+#     set -u
+#
+#     section "What this proves"
+#     assert_eq "the thing does the thing" "expected" "$(the-thing)"
+#
+#     summary
+#
+# It provides section, assert_eq, assert_contains, assert_not_contains,
+# report_pass, report_fail, report_skip, setup_error (exit 2) and summary
+# (exit 0 all-passed, 1 on any failure), and two wrappers that say whose
+# experience a check tests — the script form of a manifest check's
+# `as = "agent"` and `tmux = true`:
+#
+#     assert_not_contains "a person sees no agent hint" "<agent-only text>" \
+#         "$(the-thing 2>&1)"
+#     assert_contains "an agent sees it" "<agent-only text>" \
+#         "$(as_agent the-thing 2>&1)"
+#     with_tmux as_agent the-thing     # a fixture pane on the run's private server
+#
+# as_agent layers on the agent environment the runner writes to
+# $ENDLESS_VERIFY_AGENT_ENV; with_tmux uses the private server at $TMUX_TMPDIR.
+#
+# Beyond those helpers it adds two things a copied block could not:
 #
 #   1. It sources _guard.sh, which REFUSES a suite run from another task's
 #      worktree or outside the runner's isolation. Sourcing it here rather
 #      than repeating the check is what lets a suite carry one line and get
 #      both; see _guard.sh for why neither refusal trusts an environment
-#      variable.
+#      variable. There was once a marker variable whose presence meant "the
+#      runner started you"; one `export` satisfied it, so it enforced nothing
+#      while looking like it did. Do not add another.
 #
 #   2. It emits TAP alongside the human-readable output, so the runner
 #      normalizes each assertion into the same CTRF report a manifest suite

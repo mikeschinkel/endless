@@ -37,12 +37,29 @@ import (
 	"github.com/mikeschinkel/go-dt"
 )
 
-// checkResult pairs a check's position and runner with its normalized report so
-// the summary can render one line per check before the merged totals.
+// checkResult pairs a check's position and label with its normalized report so
+// the summary can render one line per check before the merged totals. echoed
+// means the check's own output already reached the terminal (a script suite
+// runs uncaptured), so the summary does not repeat its failures.
 type checkResult struct {
 	index  int
-	runner string
+	label  string
 	report *verify.Report
+	echoed bool
+}
+
+// checkLabel is what the summary calls a check: its name, else its runner, else
+// "sh" for an unnamed shell check (whose command is too long for the line).
+func checkLabel(chk verify.Check) (label string) {
+	switch {
+	case chk.Name != "":
+		label = chk.Name
+	case chk.Sh != "":
+		label = "sh"
+	default:
+		label = chk.Runner
+	}
+	return label
 }
 
 // Run is the `endless-go verify` entry point. It takes a single positional task
@@ -137,7 +154,7 @@ func classify(err error) *refusal.Error {
 
 	case errors.Is(err, ErrNoSuiteForTask):
 		return refusal.NoReport(msg,
-			"Re-check the task id, or author verify.sh or verify.toml in the directory named above").
+			"Re-check the task id, or author verify.toml in the directory named above").
 			Command("verify")
 
 	case errors.Is(err, ErrTierNotSupported):

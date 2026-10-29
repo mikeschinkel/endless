@@ -65,7 +65,7 @@ func parsePytestJSON(raw []byte) (rpt *Report, err error) {
 	for _, pt := range pr.Tests {
 		t = Test{
 			Name:     pt.NodeID,
-			Suite:    pytestSuite(pt.NodeID),
+			Suite:    []string{pytestSuite(pt.NodeID)},
 			Status:   pytestStatus(pt.Outcome),
 			Duration: secondsToMillis(pt.Setup.Duration + pt.Call.Duration + pt.Teardown.Duration),
 		}

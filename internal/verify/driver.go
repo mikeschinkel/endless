@@ -127,6 +127,19 @@ end:
 	return d, err
 }
 
+// DriverFor resolves the driver that executes check: the shell driver for a
+// shell check (which names no runner), otherwise the driver its runner names
+// (see LookupDriver).
+func DriverFor(check Check) (d RunnerDriver, err error) {
+	if check.Sh != "" {
+		d = shellDriver{}
+		goto end
+	}
+	d, err = LookupDriver(check.Runner)
+end:
+	return d, err
+}
+
 // parseRunner splits a runner string into its family and optional variant on a
 // single "/" (the ED-1537 grammar subset: "/" separates family from variant, as
 // in "pytest/uv"). An empty family, an empty variant (trailing "/"), or more than

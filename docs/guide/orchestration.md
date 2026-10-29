@@ -62,11 +62,11 @@ A fresh worktree often needs project-specific setup endless can't bake in — Go
 - **The hook must be idempotent / re-runnable.** Because there's no teardown, completing a failed bootstrap is just re-running the hook. Write it so a second run on an already-bootstrapped worktree is a safe no-op (or a clean regenerate).
 - **Seeding is not this hook's job.** Put what goes into the worktree's sandbox in `seed-sandbox.sh` (below), which runs after this hook and before every verify. This hook runs once per worktree; that one runs on every `endless task verify`.
 
-Each piece of a task's content — plan, analysis, outcome, reason, notes — has a **document mirror** on the main checkout, named after it: `.endless/tasks/e-NNNN/plan.md`, `analysis.md`, `outcome.md`, `reason.md`, `notes.md`, in the same directory as that task's `verify.sh`. The database row is the source of truth; the file is a projection of it, written so a human can read it on GitHub without a database.
+Each piece of a task's content — plan, analysis, outcome, reason, notes — has a **document mirror** on the main checkout, named after it: `.endless/tasks/e-NNNN/plan.md`, `analysis.md`, `outcome.md`, `reason.md`, `notes.md`, in the same directory as that task's suite files. The database row is the source of truth; the file is a projection of it, written so a human can read it on GitHub without a database.
 
 `endless task update <id> --plan-file <path>` writes the row and the mirror, and commits the mirror on main straight away. It does **not** create a worktree, and it never writes into one. So setting a plan on an unclaimed task touches only the DB and main — no stray worktrees for tasks you aren't working on yet, and nothing waiting on a land.
 
-A worktree cut from main carries whatever mirrors main had at the fork point, as ordinary tracked files. Leave them alone: a hand-edit desyncs the database and is overwritten by the next sweep, and the Claude hook refuses one. Your task's own `verify.sh` in that same directory IS yours to write.
+A worktree cut from main carries whatever mirrors main had at the fork point, as ordinary tracked files. Leave them alone: a hand-edit desyncs the database and is overwritten by the next sweep, and the Claude hook refuses one. Your task's own suite files in that same directory (`verify.toml`) ARE yours to write.
 
 ### The worktree's sandbox
 
@@ -509,8 +509,8 @@ After the post-land script runs (or if none was shipped), `worktree land` verifi
 #### Per-branch land settings (`land.toml`)
 
 How a branch lands can be told to `land` by the branch itself, in
-`.endless/tasks/e-<id>/land.toml` — a per-task file beside `verify.toml` and
-`verify.sh`, written and committed on the task branch. It travels with the
+`.endless/tasks/e-<id>/land.toml` — a per-task file beside `verify.toml`,
+written and committed on the task branch. It travels with the
 branch, rebases with the code it describes, shows up in the reviewed diff, and
 `land` reads it from the **worktree** (the landing branch) at the moment it
 lands, so the agent that wrote the change is the one who says how it lands.
@@ -1072,21 +1072,50 @@ How a task proves itself before it lands, and how a session hands that proof bac
 
 ### One suite per task
 
-Every task carries **one verification suite** — a single, self-contained proof that the change does what it claims. It lives in that task's own directory, `.endless/tasks/e-<id>/`, in one of two forms:
+Every task carries **one verification suite** — a single, self-contained proof that the change does what it claims. It is a manifest, `.endless/tasks/e-<id>/verify.toml`: a list of `[[check]]` entries the runner executes and merges into one report. Write the checks in this order:
+
+1. **The project's native tests first**, as a fail-fast check, so the one command is a complete proof for that task **at land time**. A `gotest` or `pytest` check names the tests (`tests`, optionally scoped by `paths`), and Endless runs the tool and reads its results. Any other runner takes a literal `command` that prints TAP.
+2. **`sh` checks for everything no native test covers**: one shell command each, run at the worktree root. Exit `0` passes; anything else fails.
+
+```toml
+schema = 1
+task   = "E-101"
+
+[[check]]
+name   = "unit tests"
+runner = "gotest"
+paths  = ["./internal/thing/..."]
+
+[[check]]
+name     = "--help says enabled defaults off"
+sh       = "the-thing --help"
+contains = "enabled defaults OFF"
+
+[[check]]
+name = "the old config file is gone"
+sh   = "test ! -e old.conf"
+```
+
+| Key | On | What it does |
+|-----|----|--------------|
+| `name` | any check | Labels the check: the summary line, and `labels.check` on every test it reports. An unnamed `sh` check is named by its command. |
+| `sh` | an `sh` check | The command, run with `sh -c`. It stands alone: `runner`, `command`, `tests`, `paths` and `format` are refused beside it. |
+| `contains` / `not_contains` | an `sh` check | Its stdout must (not) contain this text. |
+| `equals` | an `sh` check | Its stdout must equal this, trailing newlines ignored as `$(...)` ignores them. `equals = ""` means no output. |
+| `as = "agent"`, `tmux = true` | any check | Run it with the agent's environment, or in a fixture tmux pane (see below). |
+
+The matchers read stdout only; add `2>&1` to the command to match stderr. A failing `sh` check reports why — the exit code, or the matcher's expected value — with the command's stdout and stderr, both under its summary line and in the report.
+
+The runner still runs the endless repo's legacy form:
 
 | Form | File | What it is |
 |------|------|------------|
-| Manifest | `verify.toml` | A declarative list of `[[check]]` entries the runner executes and normalizes (`gotest`, `pytest`, any TAP-emitting command). |
-| Script | `verify.sh` | A bash suite that sources `.endless/tasks/_harness.sh` and asserts. Sourcing the harness is what makes it refuse a direct run, so every suite does it. |
+| Manifest | `verify.toml` | The suite form. Every new suite is one. |
+| Script | `verify.sh` | The endless repo's **legacy** form: a bash suite that sources `.endless/tasks/_harness.sh`, which only that repo has. Existing script suites keep running; write no new one. `_harness.sh`'s header documents it. |
 
-A task carries one or the other; during a conversion it may hold both, and the manifest wins. A good suite:
-
-- Prints pass/fail per check, then a summary.
-- Exits `0` when everything passes and non-zero on any failure.
+A task carries one or the other; during a conversion it may hold both, and the manifest wins.
 
 The **runner** provides the isolation — a per-run temp `HOME` and `XDG_CONFIG_HOME`, so a suite cannot read or pollute your real config or the main database. A suite that additionally builds its own throwaway fixture dir is belt-and-braces, not a requirement.
-
-The suite folds in the task's own unit tests as a first, fail-fast check, so the one command is a complete proof for that task **at land time**.
 
 ### Running one: `endless task verify`
 
@@ -1099,9 +1128,9 @@ This is the only front door, and it is the front door for both forms — which i
 
 **It is sufficient on its own — no `cd` first, and nothing to remember.** With no id it takes the session's active task, falling back to the task whose worktree you are standing in (the same two sources `just land` uses, and the second needs no database, so it works outside tmux and in a self-dev worktree with no `--db`). Having resolved the task it runs the suite **in that task's worktree**, because a suite is a pre-land gate and has to prove the candidate tree — asking from the main checkout would otherwise run main's copy against code the task hasn't landed.
 
-The runner exports `ENDLESS_VERIFY_TASK` (the id) and `ENDLESS_VERIFY_DIR` (the suite's own directory — read files you ship beside a suite from here rather than typing the path) into the suite's environment. It runs a copy of `verify.sh` taken when the run starts, so an edit to the suite mid-run cannot break a run in progress.
+The runner exports `ENDLESS_VERIFY_TASK` (the id) and `ENDLESS_VERIFY_DIR` (the suite's own directory — read files you ship beside a suite from here rather than typing the path) into the suite's environment. It runs a legacy `verify.sh` from a copy taken when the run starts, so an edit to the suite mid-run cannot break a run in progress.
 
-**Every check runs as a person, whoever starts the run.** The runner strips the caller's identity — the agent harness's variables (`CLAUDECODE`, `CLAUDE_*`, `AI_AGENT`, `__CFBundleIdentifier`), `ENDLESS_AUDIENCE`, `ENDLESS_SESSION_ID`, `TMUX`, `TMUX_PANE` — and gives the run a private, empty tmux server (`TMUX_TMPDIR`), killed afterwards, so no check reaches the user's live sessions. A suite therefore gives you and the user the same verdict. Test both sides where they differ: wrap a check of the agent's experience in `as_agent`, and a check that needs to sit in a tmux pane in `with_tmux` (a fixture pane on the private server); they combine. A `verify.toml` check says the same with `as = "agent"` and `tmux = true`. Never read identity from the caller or hand-roll a strip — in zsh, `env $VARS cmd` does not word-split, so such a strip silently does nothing. See `.endless/tasks/CLAUDE.md`.
+**Every check runs as a person, whoever starts the run.** The runner strips the caller's identity — the agent harness's variables (`CLAUDECODE`, `CLAUDE_*`, `AI_AGENT`, `__CFBundleIdentifier`), `ENDLESS_AUDIENCE`, `ENDLESS_SESSION_ID`, `TMUX`, `TMUX_PANE` — and gives the run a private, empty tmux server (`TMUX_TMPDIR`), killed afterwards, so no check reaches the user's live sessions. A suite therefore gives you and the user the same verdict. Test both sides where they differ: give a check of the agent's experience `as = "agent"`, and a check that needs to sit in a tmux pane `tmux = true` (a fixture pane on the private server); they combine. A legacy script suite says the same with `as_agent` and `with_tmux`. Never read identity from the caller or hand-roll a strip — in zsh, `env $VARS cmd` does not word-split, so such a strip silently does nothing. See `.endless/tasks/CLAUDE.md`.
 
 **Commit before you verify.** Every run is refused, before anything executes, while the worktree has uncommitted changes — anything `git status` lists other than Endless's own `.endless/verbs.jsonl` and `.endless/db-ledger/`. The refusal lists them. This is what makes a run's record name exactly the code it tested.
 

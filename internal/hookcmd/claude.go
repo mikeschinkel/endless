@@ -1383,7 +1383,7 @@ func handleExitPlanMode(projectID int64, payload claudePayload) error {
 // session writes its own verification suite, so this directory now holds files
 // of both kinds side by side. docmirror.TaskDocRe names the database-owned
 // stems exactly and nothing else, which is what keeps a
-// session's own `verify.sh` writable.
+// session's own suite files writable.
 
 // sqliteEndlessRe matches sqlite3 invocations targeting any path inside
 // a .endless/ directory. The character class [^|;&\n] stops the match at
@@ -1679,7 +1679,7 @@ func docMirrorBlockMessage() *refusal.Error {
 		flags.String() + "\n" +
 		"(the --*-file forms load the file's content; --plan would store the " +
 		"path string itself. Use the inline forms only for short content.)\n\n" +
-		"Your task's own verify.sh in that same directory IS yours to write — " +
+		"Your task's own suite files in that same directory (verify.toml) ARE yours to write — " +
 		"only these .md files are the database's.\n\n" +
 		"Never hand-edit or git-commit a mirror yourself.")
 }

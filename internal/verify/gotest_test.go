@@ -45,11 +45,11 @@ func TestParseGotestJSON(t *testing.T) {
 			Stop:  millis(t, "2026-06-23T10:00:01.4Z"),
 		},
 		Tests: []verify.Test{
-			{Name: "TestA", Status: verify.StatusPassed, Duration: 500, Suite: "pkg"},
-			{Name: "TestB", Status: verify.StatusFailed, Duration: 200, Suite: "pkg",
+			{Name: "TestA", Status: verify.StatusPassed, Duration: 500, Suite: []string{"pkg"}},
+			{Name: "TestB", Status: verify.StatusFailed, Duration: 200, Suite: []string{"pkg"},
 				Message: "foo_test.go:10: want 1 got 2",
 				Trace:   "    foo_test.go:10: want 1 got 2"},
-			{Name: "TestC", Status: verify.StatusSkipped, Duration: 0, Suite: "pkg"},
+			{Name: "TestC", Status: verify.StatusSkipped, Duration: 0, Suite: []string{"pkg"}},
 		},
 	}}
 

@@ -1,0 +1,71 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2419 and records what was true when E-2419
+# landed. Edit it only if you ARE E-2419. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+#
+# E-2419 made verify.toml the suite form in all advice, added `sh` checks with
+# `name` and output matchers, and made the CTRF report validate against CTRF
+# v0.2.0. It is itself a manifest of native tests first and `sh` checks for the
+# rest, as the advice now says.
+
+schema = 1
+task   = "E-2419"
+
+# The manifest schema, the shell driver, its matchers and validation, the CTRF
+# shape and its schema validation (internal/verify); the runner end to end —
+# a check's name labelling its report, a failing sh check's output, as/tmux
+# (internal/verifycmd); the rendered handoff (internal/templatecmd).
+[[check]]
+name   = "Go: manifest, shell driver, CTRF, runner, handoff"
+runner = "gotest"
+paths  = ["./internal/verify/...", "./internal/verifycmd/...", "./internal/templatecmd/..."]
+
+# SUITE_RULES teaches the manifest form only, and the repo's own
+# .endless/tasks/CLAUDE.md is that text.
+[[check]]
+name   = "pytest: SUITE_RULES"
+runner = "pytest/uv"
+paths  = ["tests/test_suite_rules.py"]
+
+[[check]]
+name     = "guide: a suite is a verify.toml"
+sh       = "grep -F 'It is a manifest, `.endless/tasks/e-<id>/verify.toml`' docs/guide/orchestration.md"
+contains = "verify.toml"
+
+[[check]]
+name = "guide: documents sh, name and every matcher"
+sh   = '''
+f=docs/guide/orchestration.md
+for key in '`name`' '`sh`' '`contains` / `not_contains`' '`equals`'; do
+  grep -qF "| $key |" "$f" || { echo "missing row: $key"; exit 1; }
+done
+'''
+
+[[check]]
+name     = "guide: the script form is the endless repo's legacy form"
+sh       = "grep -F '| Script | `verify.sh` |' docs/guide/orchestration.md"
+contains = "The endless repo's **legacy** form"
+
+[[check]]
+name     = "_harness.sh header: new suites are manifests"
+sh       = "sed -n '1,/^# See .endless\\/tasks\\/CLAUDE.md/p' .endless/tasks/_harness.sh"
+contains = "New suites are manifests (verify.toml)"
+
+[[check]]
+name = "_harness.sh header: the script template and every helper"
+sh   = '''
+h=$(sed -n '1,/^# See .endless\/tasks\/CLAUDE.md/p' .endless/tasks/_harness.sh)
+for want in 'source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"' 'summary' \
+            section assert_eq assert_contains assert_not_contains report_pass \
+            report_fail report_skip setup_error as_agent with_tmux; do
+  printf '%s' "$h" | grep -qF -- "$want" || { echo "header lacks: $want"; exit 1; }
+done
+'''
+
+[[check]]
+name = "no mirror text says 'beside that task's own verify.sh'"
+sh   = "! grep -rn \"own verify.sh\\|own \\`verify.sh\\`\" src/endless/task_cmd.py docs/guide/orchestration.md docs/guide/reference.md internal/hookcmd/claude.go"
+
+[[check]]
+name = "this suite is a manifest, with no verify.sh beside it"
+sh   = 'test -f "$ENDLESS_VERIFY_DIR/verify.toml" && test ! -e "$ENDLESS_VERIFY_DIR/verify.sh"'

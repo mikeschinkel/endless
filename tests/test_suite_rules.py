@@ -74,3 +74,41 @@ def test_endless_ships_the_same_file_it_scaffolds():
     repo_copy = Path(__file__).resolve().parents[1] / ".endless" / "tasks" / "CLAUDE.md"
     assert repo_copy.is_file()
     assert repo_copy.read_text() == SUITE_RULES
+
+
+def _section(heading: str) -> str:
+    """The text of one `## ` section of SUITE_RULES, heading included."""
+    start = SUITE_RULES.index(f"## {heading}\n")
+    end = SUITE_RULES.find("\n## ", start + 1)
+    return SUITE_RULES[start:] if end < 0 else SUITE_RULES[start:end]
+
+
+def test_the_rules_teach_the_manifest_form_only():
+    """E-2419: SUITE_RULES ships to every project, and only the endless repo has
+    `_harness.sh` and `_guard.sh`. So the opening lines, the file table and
+    "Writing one" name no harness, guard or script template — a project that
+    was told to source a harness it does not have could not write a suite.
+    """
+    opening = SUITE_RULES[: SUITE_RULES.index("\n## ")]
+    file_table = _section("Three kinds of file, and only one of them is yours")
+    writing = _section("Writing one")
+    script_only = ("_guard.sh", "#!/usr/bin/env bash", "source \"$(dirname", "assert_eq",
+                   "as_agent", "with_tmux")
+
+    for name, text in (("opening lines", opening), ("file table", file_table)):
+        for word in ("_harness.sh", "verify.sh", *script_only):
+            assert word not in text, f"the {name} name {word!r}"
+
+    for word in script_only:
+        assert word not in writing, f"'Writing one' names {word!r}"
+    for want in ("verify.toml", "[[check]]", "sh ", "contains", "not_contains",
+                 "equals", "name", "Native tests first"):
+        assert want in writing, f"'Writing one' does not teach {want!r}"
+
+
+def test_one_line_sends_a_script_suite_reader_to_the_harness_header():
+    lines = [line for line in SUITE_RULES.splitlines() if "_harness.sh" in line]
+    assert len(lines) == 1, f"_harness.sh is named on {len(lines)} lines: {lines}"
+    paragraph = _section("Writing one").split("\n\n")
+    sends = [p for p in paragraph if "_harness.sh" in p]
+    assert sends and "header" in sends[0] and "verify.sh" in sends[0], sends

@@ -7,6 +7,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mattn/go-runewidth"
+
 	"github.com/mikeschinkel/endless/internal/verify"
 	"github.com/mikeschinkel/go-doterr"
 	"github.com/mikeschinkel/go-dt"
@@ -103,6 +105,12 @@ end:
 func printSummary(id string, results []checkResult, merged *verify.Report, ctrfPath dt.Filepath) {
 	var s verify.Summary
 	var mark, verdict string
+	var width int
+
+	width = 8
+	for _, r := range results {
+		width = max(width, runewidth.StringWidth(r.label))
+	}
 
 	fmt.Printf("verify %s — %d check(s)\n", id, len(results))
 	for _, r := range results {
@@ -111,7 +119,10 @@ func printSummary(id string, results []checkResult, merged *verify.Report, ctrfP
 		if cs.Failed > 0 || cs.Tests == 0 {
 			mark = "✗"
 		}
-		fmt.Printf("  %s %-8s %s\n", mark, r.runner, countsLine(cs))
+		fmt.Printf("  %s %s %s\n", mark, runewidth.FillRight(r.label, width), countsLine(cs))
+		if !r.echoed {
+			printFailures(r.report)
+		}
 	}
 
 	s = merged.Results.Summary
@@ -123,6 +134,34 @@ func printSummary(id string, results []checkResult, merged *verify.Report, ctrfP
 	fmt.Printf("%s: %s\n", verdict, countsLine(s))
 	if verdict == "FAILED" {
 		fmt.Printf("CTRF: %s\n", displayPath(string(ctrfPath)))
+	}
+}
+
+// failureLines caps how much of one failed test's message the summary prints;
+// the CTRF report holds all of it.
+const failureLines = 20
+
+// printFailures prints each failed test of a check under its summary line: the
+// test's name, then its message indented, capped at failureLines. Without it a
+// failing shell check says only that it failed, and why is in a JSON file.
+func printFailures(r *verify.Report) {
+	var lines []string
+
+	for _, t := range r.Results.Tests {
+		if t.Status != verify.StatusFailed {
+			continue
+		}
+		fmt.Printf("      ✗ %s\n", t.Name)
+		if t.Message == "" {
+			continue
+		}
+		lines = strings.Split(t.Message, "\n")
+		if len(lines) > failureLines {
+			lines = append(lines[:failureLines], fmt.Sprintf("… %d more line(s) in the CTRF report", len(lines)-failureLines))
+		}
+		for _, line := range lines {
+			fmt.Printf("        %s\n", line)
+		}
 	}
 }
 

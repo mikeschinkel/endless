@@ -16,7 +16,7 @@ func TestReport_Write(t *testing.T) {
 		Tool:    verify.Tool{Name: "go test"},
 		Summary: verify.Summary{Tests: 1, Passed: 1, Start: 10, Stop: 20},
 		Tests: []verify.Test{
-			{Name: "TestA", Status: verify.StatusPassed, Duration: 5, Suite: "pkg"},
+			{Name: "TestA", Status: verify.StatusPassed, Duration: 5, Suite: []string{"pkg"}},
 		},
 	}}
 
@@ -32,14 +32,15 @@ func TestReport_Write(t *testing.T) {
 	for _, want := range []string{
 		`"results"`, `"tool"`, `"name": "go test"`, `"summary"`,
 		`"tests": 1`, `"passed": 1`, `"tests": [`, `"name": "TestA"`,
-		`"status": "passed"`, `"duration": 5`, `"suite": "pkg"`,
+		`"status": "passed"`, `"duration": 5`, `"suite": [`,
+		`"reportFormat": "CTRF"`, `"specVersion": "` + verify.SpecVersion + `"`,
 	} {
 		if !strings.Contains(out, want) {
 			t.Errorf("Write output missing %s\n---\n%s", want, out)
 		}
 	}
 	// Optional empty fields must be omitted, not emitted as empty strings.
-	for _, absent := range []string{`"message"`, `"trace"`, `"stdout"`, `"attachments"`, `"extra"`} {
+	for _, absent := range []string{`"message"`, `"trace"`, `"stdout"`, `"labels"`, `"attachments"`, `"extra"`} {
 		if strings.Contains(out, absent) {
 			t.Errorf("Write output should omit empty %s\n---\n%s", absent, out)
 		}

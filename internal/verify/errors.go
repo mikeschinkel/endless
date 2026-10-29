@@ -18,7 +18,9 @@ var (
 
 	// Check-level validation.
 	ErrNoChecks                  = errors.New("manifest declares no [[check]] entries")
-	ErrCheckMissingRunner        = errors.New("check is missing required field: runner")
+	ErrCheckMissingRunner        = errors.New("check is missing required field: runner or sh")
+	ErrShConflict                = errors.New("sh is exclusive with runner, command, tests, paths and format")
+	ErrMatcherRequiresSh         = errors.New("contains, not_contains and equals are only valid on an sh check")
 	ErrTestsRequireFirstClass    = errors.New("tests is only valid on a runner with a structured selection")
 	ErrPathsRequireFirstClass    = errors.New("paths is only valid on a runner with a structured selection")
 	ErrRawCheckNeedsCommand      = errors.New("command-only runner requires command")

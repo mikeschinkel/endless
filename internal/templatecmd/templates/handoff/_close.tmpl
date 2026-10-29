@@ -14,12 +14,16 @@
   The cost was never the wrong path. It was that correcting the session sent it
   into a long investigation of E-2023 instead of a two-line fix.
 
-  It says `verify.sh` and not "or a verify.toml manifest" because this is the
-  one a session writes by hand; the runner is the front door for both, and
-  CLAUDE.md — which this sentence sends the session to — covers the choice.
+  E-2419 made it name `verify.toml`. It used to name a `verify.sh` sourcing
+  `.endless/tasks/_harness.sh`, but only the endless repo has that harness
+  (E-2349): a session in any other project was handed a file it could not
+  source. A manifest needs nothing installed, points at the project's native
+  tests, and covers the rest with `sh` checks. The runner still runs the
+  endless repo's legacy `verify.sh` suites; nothing tells a session to write a
+  new one.
 */ -}}
 {{define "handoff_verify" -}}
-Hand me exactly ONE command to verify this — `esu && endless task verify E-{{.spawned_id}}` — folding this task's own tests into that one suite as a fail-fast check. The suite goes at `.endless/tasks/e-{{.spawned_id}}/verify.sh`, whose first statement sources the shared harness at `.endless/tasks/_harness.sh`; read `.endless/tasks/CLAUDE.md` before you write it. Do NOT enumerate a manual checklist. Run the project-wide regression (tests, lint, build) yourself and state the result in one line — never as commands for me to run. See `endless guide orchestration`.
+Hand me exactly ONE command to verify this — `esu && endless task verify E-{{.spawned_id}}` — folding this task's own tests into that one suite as a fail-fast check. The suite goes at `.endless/tasks/e-{{.spawned_id}}/verify.toml`, a manifest whose checks run the project's native tests first and `sh` checks for whatever no native test covers; read `.endless/tasks/CLAUDE.md` before you write it. Do NOT enumerate a manual checklist. Run the project-wide regression (tests, lint, build) yourself and state the result in one line — never as commands for me to run. See `endless guide orchestration`.
 {{- end}}
 
 {{define "handoff_nonverify" -}}

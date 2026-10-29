@@ -109,7 +109,7 @@ func runScriptSuite(id string, script dt.Filepath, root dt.DirPath, keep bool) (
 		goto end
 	}
 
-	results = []checkResult{{index: 0, runner: verify.ScriptFile, report: rpt}}
+	results = []checkResult{{index: 0, label: verify.ScriptFile, report: rpt, echoed: true}}
 	merged = mergeResults(results)
 	ctrfPath, err = writeCTRF(id, merged)
 	if err != nil {

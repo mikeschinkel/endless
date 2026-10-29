@@ -81,7 +81,7 @@ func parseGotestJSON(raw []byte) (rpt *Report, err error) {
 		case "pass", "fail", "skip":
 			t = Test{
 				Name:     e.Test,
-				Suite:    e.Package,
+				Suite:    []string{e.Package},
 				Duration: secondsToMillis(e.Elapsed),
 				Status:   gotestStatus(e.Action),
 			}

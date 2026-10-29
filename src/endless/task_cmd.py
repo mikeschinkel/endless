@@ -779,7 +779,7 @@ def _mirror_task_doc(
     """Mirror one task content row onto the project's MAIN checkout.
 
     Each content name (plan, outcome, reason, analysis, notes) lands at
-    `.endless/tasks/e-NNNN/<name>.md` there, beside that task's own `verify.sh`.
+    `.endless/tasks/e-NNNN/<name>.md` there, beside that task's suite files.
     The task_content row is the source of truth and is written separately via
     the task event payload; this writes the human-readable projection of it and
     commits that file on main.

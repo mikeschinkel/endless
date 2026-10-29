@@ -53,11 +53,11 @@ func TestParsePytestJSON(t *testing.T) {
 			Stop:  1750672801500,
 		},
 		Tests: []verify.Test{
-			{Name: "tests/test_x.py::test_a", Status: verify.StatusPassed, Duration: 10, Suite: "tests/test_x.py"},
-			{Name: "tests/test_x.py::test_b", Status: verify.StatusFailed, Duration: 100, Suite: "tests/test_x.py",
+			{Name: "tests/test_x.py::test_a", Status: verify.StatusPassed, Duration: 10, Suite: []string{"tests/test_x.py"}},
+			{Name: "tests/test_x.py::test_b", Status: verify.StatusFailed, Duration: 100, Suite: []string{"tests/test_x.py"},
 				Message: "assert 1 == 2",
 				Trace:   "def test_b():\n>   assert 1 == 2\nE   assert 1 == 2"},
-			{Name: "tests/test_x.py::test_c", Status: verify.StatusSkipped, Duration: 0, Suite: "tests/test_x.py"},
+			{Name: "tests/test_x.py::test_c", Status: verify.StatusSkipped, Duration: 0, Suite: []string{"tests/test_x.py"}},
 		},
 	}}
 

@@ -20,12 +20,33 @@ import (
 // Command-only driver (any other Runner — the generic driver): Command is the
 // literal invocation Endless runs verbatim, and Format (default tap) declares the
 // native result stream it emits. Tests and Paths are not valid on such a check.
+//
+// A third form needs no runner at all: a shell check (Sh) runs one command and
+// passes on exit 0, optionally matching its stdout (Contains, NotContains,
+// Equals). It is one result, built from the exit code and the matchers rather
+// than parsed from a stream, so a fact no native test covers needs no TAP.
 type Check struct {
+	// Name labels this check's result: the test name of a shell check, and
+	// the "check" label on every test of any check (see LabelCheck).
+	Name string `toml:"name"`
+
 	Runner  string   `toml:"runner"`
 	Tests   []string `toml:"tests"`
 	Paths   []string `toml:"paths"`
 	Command string   `toml:"command"`
 	Format  Format   `toml:"format"`
+
+	// Sh is a shell check's command, run with `sh -c` at the worktree root. It
+	// excludes Runner, Command, Tests, Paths and Format.
+	Sh string `toml:"sh"`
+
+	// The matchers a shell check may add to its exit code, each read against
+	// its stdout. Equals ignores trailing newlines, as `$(...)` does, and is a
+	// pointer so that equals = "" (no output at all) is a matcher too. A check
+	// that needs stderr matched redirects it with 2>&1.
+	Contains    string  `toml:"contains"`
+	NotContains string  `toml:"not_contains"`
+	Equals      *string `toml:"equals"`
 
 	// As names whose environment this check runs in. Empty (or "person") is the
 	// default every check gets: a person's, whoever started the run. "agent"
@@ -56,6 +77,9 @@ func (c Check) ResolvedFormat() (format Format) {
 
 	d, err = LookupDriver(c.Runner)
 	switch {
+	case c.Sh != "":
+		// A shell check's result is built from its exit code; no stream.
+		format = ""
 	case err == nil && d.Format() != "":
 		format = d.Format()
 	case c.Format != "":
@@ -72,6 +96,25 @@ func (c Check) ResolvedFormat() (format Format) {
 func validateCheck(c Check, index int) (err error) {
 	var d RunnerDriver
 
+	switch c.As {
+	case "", AsPerson, AsAgent:
+	default:
+		err = doterr.NewErr(ErrInvalidManifest, ErrUnknownCheckAs,
+			"index", index, "as", c.As, "allowed", AsPerson+", "+AsAgent)
+		goto end
+	}
+
+	if c.Sh != "" {
+		err = validateShellCheck(c, index)
+		goto end
+	}
+
+	if key := c.matcherKey(); key != "" {
+		err = doterr.NewErr(ErrInvalidManifest, ErrMatcherRequiresSh,
+			"index", index, "key", key)
+		goto end
+	}
+
 	if c.Runner == "" {
 		err = doterr.NewErr(ErrInvalidManifest, ErrCheckMissingRunner, "index", index)
 		goto end
@@ -80,14 +123,6 @@ func validateCheck(c Check, index int) (err error) {
 	d, err = LookupDriver(c.Runner)
 	if err != nil {
 		err = doterr.NewErr(ErrInvalidManifest, err, "index", index, "runner", c.Runner)
-		goto end
-	}
-
-	switch c.As {
-	case "", AsPerson, AsAgent:
-	default:
-		err = doterr.NewErr(ErrInvalidManifest, ErrUnknownCheckAs,
-			"index", index, "as", c.As, "allowed", AsPerson+", "+AsAgent)
 		goto end
 	}
 
@@ -141,4 +176,41 @@ func validateCommandCheck(c Check, index int) (err error) {
 			"index", index, "format", string(c.Format), "supported", formatList())
 	}
 	return err
+}
+
+// validateShellCheck validates a shell check: sh stands alone, so a key that
+// selects or describes a runner is refused by name rather than ignored.
+func validateShellCheck(c Check, index int) (err error) {
+	var key string
+
+	switch {
+	case c.Runner != "":
+		key = "runner"
+	case c.Command != "":
+		key = "command"
+	case len(c.Tests) > 0:
+		key = "tests"
+	case len(c.Paths) > 0:
+		key = "paths"
+	case c.Format != "":
+		key = "format"
+	}
+	if key != "" {
+		err = doterr.NewErr(ErrInvalidManifest, ErrShConflict, "index", index, "key", key)
+	}
+	return err
+}
+
+// matcherKey names the first output matcher this check sets, or "" when it
+// sets none.
+func (c Check) matcherKey() (key string) {
+	switch {
+	case c.Contains != "":
+		key = "contains"
+	case c.NotContains != "":
+		key = "not_contains"
+	case c.Equals != nil:
+		key = "equals"
+	}
+	return key
 }

@@ -4,15 +4,16 @@ import (
 	"encoding/json"
 	"io"
 	"math"
+	"strings"
 
 	"github.com/mikeschinkel/go-doterr"
 )
 
 // This file implements section C of the E-1596 interface contract: the stable
 // CTRF-subset output envelope Endless writes from a native test stream. It is a
-// vendored SUBSET of the CTRF schema (pinned to the 2025-11-24 snapshot): the
-// field names and shapes match CTRF so later interop stays free, but only the
-// fields Endless needs today are implemented. Endless reads native producers
+// vendored SUBSET of the CTRF schema (pinned to SpecVersion): the field names
+// and shapes match CTRF, so a written report validates against that schema, but
+// only the fields Endless needs today are implemented. Endless reads native producers
 // itself (see normalize.go) and writes this document; there is no runtime
 // dependency on any external CTRF reporter.
 //
@@ -31,10 +32,20 @@ const (
 	StatusOther   Status = "other"
 )
 
-// Report is the top-level CTRF document Endless emits: a single JSON object with
-// one results key.
+// ReportFormat is the constant document identifier CTRF requires at the root.
+const ReportFormat = "CTRF"
+
+// SpecVersion is the CTRF specification release this subset is pinned to.
+// Changing it means re-reading that release's schema against every field here.
+const SpecVersion = "0.2.0"
+
+// Report is the top-level CTRF document Endless emits. ReportFormat and
+// SpecVersion are required by the schema; Write stamps them, so a report built
+// in memory need not set them.
 type Report struct {
-	Results Results `json:"results"`
+	ReportFormat string  `json:"reportFormat"`
+	SpecVersion  string  `json:"specVersion"`
+	Results      Results `json:"results"`
 }
 
 // Results holds the producing tool, the summary counts, and the per-test list.
@@ -66,21 +77,59 @@ type Summary struct {
 }
 
 // Test is one normalized test result. Name, Status, and Duration (milliseconds)
-// are always present; the rest are optional and omitted when empty. Attachments
-// and Extra are the non-text/passthrough hooks from the contract — they have no
-// producer yet (Extra is carried verbatim as raw JSON so the writer stays
-// deterministic without a typed schema).
+// are always present; the rest are optional and omitted when empty. Suite is
+// the hierarchy from the top level to the test's immediate parent, and Stdout
+// and Stderr are output lines, as the schema types them. Labels carries
+// key-value metadata; Endless writes LabelCheck there. Attachments and Extra
+// are the non-text/passthrough hooks from the contract — they have no producer
+// yet (Extra is carried verbatim as raw JSON so the writer stays deterministic
+// without a typed schema).
 type Test struct {
-	Name        string          `json:"name"`
-	Status      Status          `json:"status"`
-	Duration    int64           `json:"duration"`
-	Message     string          `json:"message,omitempty"`
-	Trace       string          `json:"trace,omitempty"`
-	Suite       string          `json:"suite,omitempty"`
-	Stdout      string          `json:"stdout,omitempty"`
-	Stderr      string          `json:"stderr,omitempty"`
-	Attachments []Attachment    `json:"attachments,omitempty"`
-	Extra       json.RawMessage `json:"extra,omitempty"`
+	Name        string            `json:"name"`
+	Status      Status            `json:"status"`
+	Duration    int64             `json:"duration"`
+	Message     string            `json:"message,omitempty"`
+	Trace       string            `json:"trace,omitempty"`
+	Suite       []string          `json:"suite,omitempty"`
+	Stdout      []string          `json:"stdout,omitempty"`
+	Stderr      []string          `json:"stderr,omitempty"`
+	Labels      map[string]string `json:"labels,omitempty"`
+	Attachments []Attachment      `json:"attachments,omitempty"`
+	Extra       json.RawMessage   `json:"extra,omitempty"`
+}
+
+// LabelCheck is the Labels key naming the [[check]] a test came from, set when
+// that check declares a name. A merged report concatenates many checks' tests,
+// and this is what traces one back to the check that produced it.
+const LabelCheck = "check"
+
+// LabelTests sets LabelCheck to name on every test in the report. An empty name
+// leaves the report unchanged.
+func (r *Report) LabelTests(name string) {
+	if name == "" {
+		return
+	}
+	for i := range r.Results.Tests {
+		if r.Results.Tests[i].Labels == nil {
+			r.Results.Tests[i].Labels = map[string]string{}
+		}
+		r.Results.Tests[i].Labels[LabelCheck] = name
+	}
+}
+
+// outputLines splits captured output into the line array CTRF's stdout and
+// stderr hold, dropping the final newline so it does not become an empty line.
+// Empty output yields nil, which the writer omits.
+func outputLines(b []byte) (lines []string) {
+	var s string
+
+	s = strings.TrimRight(string(b), "\n")
+	if s == "" {
+		goto end
+	}
+	lines = strings.Split(s, "\n")
+end:
+	return lines
 }
 
 // Attachment points at a non-text outcome (screenshot, HTTP transcript) by path.
@@ -124,8 +173,12 @@ func newSummary(tests []Test) (s Summary) {
 // to w. It is the public emission entry point for a normalized or merged report.
 func (r *Report) Write(w io.Writer) (err error) {
 	var data []byte
+	var doc Report
 
-	data, err = json.MarshalIndent(r, "", "  ")
+	doc = *r
+	doc.ReportFormat = ReportFormat
+	doc.SpecVersion = SpecVersion
+	data, err = json.MarshalIndent(&doc, "", "  ")
 	if err != nil {
 		err = doterr.NewErr(ErrWritingReport, err)
 		goto end

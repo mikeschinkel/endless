@@ -248,7 +248,7 @@ func runChecks(checks []verify.Check, root dt.DirPath, env []string, runDir, tmu
 	for i, chk := range checks {
 		reportFile := dt.FilepathJoin(reportsDir, fmtCheckReport(i))
 
-		driver, derr := verify.LookupDriver(chk.Runner)
+		driver, derr := verify.DriverFor(chk)
 		if derr != nil {
 			err = doterr.NewErr(derr, "check", i, "runner", chk.Runner)
 			goto end
@@ -283,7 +283,8 @@ func runChecks(checks []verify.Check, root dt.DirPath, env []string, runDir, tmu
 				"check", i, "runner", chk.Runner, "exit", res.Exit, "stderr", tail(res.Stderr))
 			goto end
 		}
-		results = append(results, checkResult{index: i, runner: chk.Runner, report: res.Report})
+		res.Report.LabelTests(chk.Name)
+		results = append(results, checkResult{index: i, label: checkLabel(chk), report: res.Report})
 	}
 end:
 	return results, err

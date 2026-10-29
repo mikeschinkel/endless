@@ -418,12 +418,16 @@ func flattenWhitespace(s string) string {
 // nothing to verify.
 func TestRender_Handoff_VerifyPartialNamesTheSuiteLocation(t *testing.T) {
 	wants := []string{
-		"The suite goes at `.endless/tasks/e-9999/verify.sh`",
-		"sources the shared harness at `.endless/tasks/_harness.sh`",
+		"The suite goes at `.endless/tasks/e-9999/verify.toml`",
+		"native tests first and `sh` checks for whatever no native test covers",
 		"read `.endless/tasks/CLAUDE.md` before you write it",
 	}
 	// The path E-2023 retired. A handoff must never lead a session back to it.
 	const retired = "tests/tasks/"
+	// The script suite and its harness exist only in the endless repo (E-2419):
+	// a handoff naming them sends a session in any other project to a file it
+	// does not have.
+	legacy := []string{"verify.sh", "_harness.sh"}
 
 	verifyLane := map[string]bool{"todo": true, "bugfix": true}
 
@@ -442,6 +446,12 @@ func TestRender_Handoff_VerifyPartialNamesTheSuiteLocation(t *testing.T) {
 				if strings.Contains(flat, retired) {
 					t.Errorf("%s names the retired suite path %q\n--- output ---\n%s",
 						name, retired, flat)
+				}
+				for _, l := range legacy {
+					if strings.Contains(flat, l) {
+						t.Errorf("%s names the legacy script suite %q\n--- output ---\n%s",
+							name, l, flat)
+					}
 				}
 				for _, w := range wants {
 					got := strings.Contains(flat, w)

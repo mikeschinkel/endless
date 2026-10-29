@@ -1,14 +1,12 @@
 # A task's own directory lives here
 
-One directory per task: `.endless/tasks/e-<id>/`. `_harness.sh` is the shared
-shell harness a script suite sources, and `_guard.sh` is the guard the harness
-sources; both belong to no task.
+One directory per task: `.endless/tasks/e-<id>/`.
 
 ## Three kinds of file, and only one of them is yours
 
 | In `e-<id>/`                                  | Whose          | Written by                     |
 |-----------------------------------------------|----------------|--------------------------------|
-| `verify.toml`, `verify.sh`, `land.toml`       | the task's     | you, on the task branch        |
+| `verify.toml`, `land.toml`                    | the task's     | you, on the task branch        |
 | `justification.md`, `context.md`, `plan.md`, `analysis.md`, `outcome.md`, `reason.md`, `notes.md` | the database's | `endless task update`, on main |
 | `verify-<UTC timestamp>-<sha>.ctrf.json`      | the runner's   | `endless task verify`, on main |
 
@@ -58,9 +56,7 @@ task, runs in that task's worktree, builds the isolation a suite needs (a temp
 `HOME` and `XDG_CONFIG_HOME`, so a suite cannot read or pollute your real config
 or the main database, with a `tmux.socket_dir` of the run's own in that `HOME`,
 so a suite cannot reach your Endless tmux servers), and refuses a task's suite
-that is not yours. Executing a
-script directly skips all of it — which is why every suite here refuses to run
-that way.
+that is not yours. Running a suite's commands by hand skips all of it.
 
 Every run is refused, before anything executes, while the worktree has
 uncommitted changes (Endless's own `.endless/verbs.jsonl` and
@@ -70,28 +66,16 @@ and the `CTRF:` line names it. A failing run's report stays in the user cache,
 where the `CTRF:` line names it, until the task passes — then the task's
 failed reports are deleted.
 
-It runs a copy of `verify.sh` taken when the run starts, so editing the suite
-mid-run cannot break somebody else's run.
-
 It exports these into a suite's environment:
 
 | Variable | What it is |
 |----------|------------|
 | `ENDLESS_VERIFY_TASK` | the task being verified, `E-NNNN` |
-| `ENDLESS_VERIFY_DIR`  | this suite's own directory (the real one, not the copy) |
-| `ENDLESS_VERIFY_AGENT_ENV` | the agent environment `as_agent` layers on |
-| `TMUX_TMPDIR` | the run's private tmux server, which `with_tmux` uses |
+| `ENDLESS_VERIFY_DIR`  | this suite's own directory |
+| `TMUX_TMPDIR` | the run's private tmux server |
 
-None of them grants permission, and there is no variable that does. `_guard.sh`
-decides what a suite may do from facts no environment can restate: the path the
-running file sits at, and whether a real config is reachable from it. It refuses
-a suite running from another task's worktree, and it refuses a direct run —
-because a direct run has your real `HOME`, and one of them wrote into the main
-database and took down session tracking.
-
-There was once a marker variable whose presence meant "the runner started you".
-One `export` satisfied it, so it enforced nothing while looking like it did.
-Do not add another.
+None of them grants permission, and there is no variable that does: a check
+that tests for one proves nothing, because one `export` satisfies it.
 
 Read a file you ship beside your suite from `$ENDLESS_VERIFY_DIR`, never from a
 path you type out. A hand-written path has to match a directory-casing
@@ -109,18 +93,21 @@ check can reach the user's live sessions, and kills that server after the run.
 So a suite gives the same verdict to everyone who runs it.
 
 - **Test both sides where they differ.** A check of the agent's experience
-  wraps its command in `as_agent`; the person's needs no wrapper:
+  says `as = "agent"`; the person's needs nothing:
 
-      assert_not_contains "a person sees no agent hint" "<agent-only text>" \
-          "$(the-thing 2>&1)"
-      assert_contains "an agent sees it" "<agent-only text>" \
-          "$(as_agent the-thing 2>&1)"
+      [[check]]
+      name         = "a person sees no agent hint"
+      sh           = "the-thing 2>&1"
+      not_contains = "<agent-only text>"
 
-- **A check that needs tmux** wraps its command in `with_tmux`, which runs it
-  in a fixture pane on the private server. The two combine:
-  `with_tmux as_agent the-thing`.
-- In a `verify.toml`, a check says the same with `as = "agent"` and
-  `tmux = true`.
+      [[check]]
+      name     = "an agent sees it"
+      as       = "agent"
+      sh       = "the-thing 2>&1"
+      contains = "<agent-only text>"
+
+- **A check that needs tmux** says `tmux = true`, which runs it in a fixture
+  pane on the private server. The two combine.
 - **Never read identity from the caller**, and never set these variables by
   hand to "simulate" a person: the runner already did, and a hand-rolled strip
   misses one. In zsh, `env $VARS cmd` does not word-split, so a strip built
@@ -162,36 +149,63 @@ is expected and accepted; bit rot there is a bug.
 
 ## Writing one
 
-A new script suite sources the harness and calls `summary` last:
+A suite is a manifest, `.endless/tasks/e-<id>/verify.toml`: a list of
+`[[check]]` entries the runner runs in order and merges into one report.
 
-    #!/usr/bin/env bash
     # ── DO NOT EDIT ─────────────────────────────────────────────────────
     # This suite belongs to E-101 and records what was true when E-101
-    # landed. Edit it only if you ARE E-101. If your change breaks an
-    # assertion here, leave it alone — see .endless/tasks/CLAUDE.md.
-    source "$(dirname "${BASH_SOURCE[0]}")/../_harness.sh"
+    # landed. Edit it only if you ARE E-101. If your change breaks a check
+    # here, leave it alone — see .endless/tasks/CLAUDE.md.
+    schema = 1
+    task   = "E-101"
 
-    set -u
+    [[check]]
+    name   = "unit tests"
+    runner = "gotest"
+    paths  = ["./internal/thing/..."]
 
-    section "What this proves"
-    assert_eq "the thing does the thing" "expected" "$(the-thing)"
+    [[check]]
+    name     = "--help says enabled defaults off"
+    sh       = "the-thing --help"
+    contains = "enabled defaults OFF"
 
-    summary
+    [[check]]
+    name = "the old config file is gone"
+    sh   = "test ! -e old.conf"
 
-The harness gives you `section`, `assert_eq`, `assert_contains`,
-`assert_not_contains`, `report_pass`, `report_fail`, `report_skip`,
-`setup_error` (exit 2), `summary` (exit 0 all-passed, 1 on any failure), and
-`as_agent` / `with_tmux` (see **Every check runs as a person**). It
-emits TAP to the runner as a side effect, so each assertion lands in the run's
-report; you write assertions, not plumbing.
+Put `schema` and `task` before the first `[[check]]`; TOML binds a key that
+follows one to that check.
 
-Fold the task's own unit tests in as a first, fail-fast check, so the one suite
-is a complete proof for that task at land time.
+**Native tests first.** Fold the task's own tests in as the first, fail-fast
+check, so the one suite is a complete proof for that task at land time. A
+`gotest` or `pytest` (or `pytest/uv`) check names `tests`, optionally scoped by
+`paths`, and Endless runs the tool and reads its results. Any other runner takes
+a literal `command` whose stdout is TAP.
+
+**`sh` checks for the rest.** A fact no native test covers is one shell
+command, run with `sh -c` at the worktree root: exit 0 passes, anything else
+fails. It stands alone — `runner`, `command`, `tests`, `paths` and `format` are
+refused beside it — and may add matchers, read against its stdout:
+
+| Key | Passes when stdout |
+|-----|--------------------|
+| `contains` | contains this text |
+| `not_contains` | does not contain it |
+| `equals` | equals it, trailing newlines ignored (`equals = ""` is no output) |
+
+Add `2>&1` to match stderr. A failing `sh` check reports why — the exit code,
+or the expected value — with the command's stdout and stderr.
+
+`name` labels any check: its line in the summary, and `labels.check` on every
+test it reports. An unnamed `sh` check is named by its command.
+
+A directory that also holds `_harness.sh` has legacy script suites
+(`verify.sh`); that file's header documents them. Write no new one.
 
 ## A second file of yours: `land.toml`
 
 `.endless/tasks/e-<id>/land.toml` is where a branch tells `endless worktree
-land` how it lands — per-task like `verify.toml` and `verify.sh`, written and
+land` how it lands — per-task like `verify.toml`, written and
 committed on the task branch, and read from the landing branch at land time. It
 is optional: without one, the land uses its defaults. Settings live in tables,
 never at the top level, and a table or key the land does not understand refuses
