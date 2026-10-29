@@ -1,0 +1,1 @@
+Mike has long wanted this: every ledger commit is titled 'Endless: record ledger entry', which says nothing about the entry. Raised while working on project init's new ledger record.
