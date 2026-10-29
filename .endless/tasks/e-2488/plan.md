@@ -49,3 +49,18 @@ Recommendation: B, with A available as an explicit refresh.
 | B. Leave existing records on main; only new records go to the branch | No large commit. | Records split across two places forever. |
 
 Recommendation: A.
+
+**Q6. Which trailers do commits on the records branch carry, and how are they spelled?**
+
+Mike, 2026-10-29, leans to Dashed-Proper-Case keys (`Endless-Git-Default`), matching the `Co-Authored-By` trailers already in his repos; Git compares keys without regard to case, so spelling is appearance only.
+
+| Option | Pros | Cons |
+|---|---|---|
+| A. Only `Endless-Git-Default: main@<sha>` | Smallest; covers the link to main. | Finding a task's records means reading paths or message text. |
+| B. Also `Endless-Task: E-NNNN` on any commit about one task (mirrors, verify reports, a land's ledger entry) | `git log` can list a task's records directly; the same key the code-commit task uses. | none |
+
+Recommendation: B, with Dashed-Proper-Case keys.
+
+## Note: trailers on code commits
+
+Task-branch code commits carrying `Endless-Task: E-NNNN` is filed as its own task (see links). It is independent of this brainstorm, but whichever spelling Q6 settles should be the one that task uses.
