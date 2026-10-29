@@ -98,3 +98,8 @@ statement = "Text that describes what the runner does with a verify.sh, and comm
 id = "P17"
 kind = "deliverable"
 statement = "A [[check]]'s name is written as labels.check on every CTRF test it produces, and replaces the runner on that check's summary line"
+
+[[item]]
+id = "P18"
+kind = "deliverable"
+statement = "The CTRF report validates against the CTRF v0.2.0 schema: reportFormat and specVersion at the root, and suite, stdout and stderr as string arrays"
