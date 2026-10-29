@@ -182,9 +182,22 @@ check, so the one suite is a complete proof for that task at land time. A
 `paths`, and Endless runs the tool and reads its results. Any other runner takes
 a literal `command` whose stdout is TAP.
 
+**Tests in a nested module or subproject.** `dir` names the directory a
+check runs in, relative to the worktree root — a subdirectory with its own
+`go.mod`, `pyproject.toml` or `package.json`. It works on every check, `sh`
+included; `paths` resolve against it, and a `pytest` check's report names its
+tests with `dir` in front. A `dir` that is absolute, leaves the root, or does
+not exist refuses the suite. Setup and teardown still run at the root.
+
+    [[check]]
+    name   = "dtx unit tests"
+    runner = "gotest"
+    dir    = "dtx"
+    paths  = ["./..."]
+
 **`sh` checks for the rest.** A fact no native test covers is one shell
-command, run with `sh -c` at the worktree root: exit 0 passes, anything else
-fails. It stands alone — `runner`, `command`, `tests`, `paths` and `format` are
+command, run with `sh -c` at the worktree root (or the check's `dir`): exit 0
+passes, anything else fails. It stands alone — `runner`, `command`, `tests`, `paths` and `format` are
 refused beside it — and may add matchers, read against its stdout:
 
 | Key | Passes when stdout |

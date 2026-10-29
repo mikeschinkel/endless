@@ -25,6 +25,7 @@ import (
 	"github.com/BurntSushi/toml"
 
 	"github.com/mikeschinkel/go-doterr"
+	"github.com/mikeschinkel/go-dt"
 )
 
 // SchemaVersion is the only verify.toml schema version this build understands.
@@ -161,6 +162,21 @@ func (m *Manifest) Validate() (err error) {
 		}
 	}
 
+end:
+	return err
+}
+
+// ValidateDirs checks each check's Dir against the repo root the run uses:
+// inside it, symlinks resolved, and an existing directory (see
+// validateCheckDir). It is separate from Validate because it reads the
+// filesystem. Errors wrap ErrInvalidManifest.
+func (m *Manifest) ValidateDirs(root dt.DirPath) (err error) {
+	for i, c := range m.Checks {
+		err = validateCheckDir(c, i, root)
+		if err != nil {
+			goto end
+		}
+	}
 end:
 	return err
 }

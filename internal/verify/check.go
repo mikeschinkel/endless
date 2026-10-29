@@ -1,7 +1,12 @@
 package verify
 
 import (
+	"os"
+	"path/filepath"
+	"strings"
+
 	"github.com/mikeschinkel/go-doterr"
+	"github.com/mikeschinkel/go-dt"
 )
 
 // Check is one runner invocation contributing to a task's verification proof. A
@@ -36,8 +41,16 @@ type Check struct {
 	Command string   `toml:"command"`
 	Format  Format   `toml:"format"`
 
-	// Sh is a shell check's command, run with `sh -c` at the worktree root. It
-	// excludes Runner, Command, Tests, Paths and Format.
+	// Dir is the directory this check's process runs in, relative to the repo
+	// root, for a check whose tests live in a nested module or subproject
+	// (a subdirectory with its own go.mod or pyproject.toml). Empty means the
+	// repo root. It means the same for every runner, and Paths resolve against
+	// it. Setup and teardown are not per check and always run at the root.
+	Dir string `toml:"dir"`
+
+	// Sh is a shell check's command, run with `sh -c` at the check's Dir (the
+	// worktree root by default). It excludes Runner, Command, Tests, Paths and
+	// Format.
 	Sh string `toml:"sh"`
 
 	// The matchers a shell check may add to its exit code, each read against
@@ -104,6 +117,12 @@ func validateCheck(c Check, index int) (err error) {
 		goto end
 	}
 
+	if filepath.IsAbs(c.Dir) {
+		err = doterr.NewErr(ErrInvalidManifest, ErrCheckDirAbsolute,
+			"index", index, "dir", c.Dir)
+		goto end
+	}
+
 	if c.Sh != "" {
 		err = validateShellCheck(c, index)
 		goto end
@@ -134,6 +153,69 @@ func validateCheck(c Check, index int) (err error) {
 	}
 end:
 	return err
+}
+
+// validateCheckDir refuses a check whose Dir, joined to root, leaves root —
+// lexically through "..", or once symlinks are resolved — or does not name an
+// existing directory. A check without a Dir passes. It is the half of a check's
+// validation that needs the filesystem, so validateCheck (which refuses an
+// absolute Dir) cannot do it. Errors wrap ErrInvalidManifest.
+func validateCheckDir(c Check, index int, root dt.DirPath) (err error) {
+	var dir, realRoot, realDir string
+	var info os.FileInfo
+
+	if c.Dir == "" {
+		goto end
+	}
+
+	dir = filepath.Join(string(root), c.Dir)
+	if !withinDir(string(root), dir) {
+		err = doterr.NewErr(ErrInvalidManifest, ErrCheckDirOutsideRoot,
+			"index", index, "dir", c.Dir, "root", root)
+		goto end
+	}
+
+	info, err = os.Stat(dir)
+	if err != nil || !info.IsDir() {
+		err = doterr.NewErr(ErrInvalidManifest, ErrCheckDirMissing,
+			"index", index, "dir", c.Dir, "root", root)
+		goto end
+	}
+
+	realRoot, err = filepath.EvalSymlinks(string(root))
+	if err == nil {
+		realDir, err = filepath.EvalSymlinks(dir)
+	}
+	if err != nil {
+		err = doterr.NewErr(ErrInvalidManifest, ErrCheckDirMissing, err,
+			"index", index, "dir", c.Dir, "root", root)
+		goto end
+	}
+	if !withinDir(realRoot, realDir) {
+		err = doterr.NewErr(ErrInvalidManifest, ErrCheckDirOutsideRoot,
+			"index", index, "dir", c.Dir, "root", root, "resolved", realDir)
+		goto end
+	}
+end:
+	return err
+}
+
+// withinDir reports whether path is base itself or lies beneath it. Both are
+// expected clean and absolute.
+func withinDir(base, path string) (within bool) {
+	rel, err := filepath.Rel(base, path)
+	within = err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+	return within
+}
+
+// WorkDir is the directory check's process runs in: root joined with its Dir,
+// or root when it sets none.
+func (c Check) WorkDir(root dt.DirPath) (dir dt.DirPath) {
+	dir = root
+	if c.Dir != "" {
+		dir = dt.DirPath(filepath.Join(string(root), c.Dir))
+	}
+	return dir
 }
 
 // validateStructuredCheck validates a check whose driver accepts a structured

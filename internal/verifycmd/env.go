@@ -269,7 +269,9 @@ func runChecks(checks []verify.Check, root dt.DirPath, env []string, runDir, tmu
 			chkEnv = overrideEnv(chkEnv, pane)
 		}
 
-		res, rerr := driver.Run(chk, root, chkEnv, reportFile)
+		// A check with a dir runs there (a nested module or subproject); setup
+		// and teardown stay at the root.
+		res, rerr := driver.Run(chk, chk.WorkDir(root), chkEnv, reportFile)
 		if rerr != nil {
 			err = doterr.NewErr(rerr, "check", i, "runner", chk.Runner)
 			goto end

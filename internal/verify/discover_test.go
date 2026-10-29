@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/mikeschinkel/go-dt"
@@ -217,5 +218,69 @@ func TestDiscover_RejectsGenuineTaskIDMismatch(t *testing.T) {
 	}
 	if !errors.Is(err, verify.ErrTaskIDMismatch) {
 		t.Fatalf("want ErrTaskIDMismatch, got %v", err)
+	}
+}
+
+// A check's dir is refused at discovery when it is absolute, leaves the repo
+// root (lexically or through a symlink), or names no existing directory, and the
+// refusal names the check's index and its dir.
+func TestDiscover_RefusesBadCheckDir(t *testing.T) {
+	outside := t.TempDir()
+	tests := []struct {
+		name    string
+		dir     string
+		wantErr error
+	}{
+		{name: "absolute", dir: outside, wantErr: verify.ErrCheckDirAbsolute},
+		{name: "dot-dot", dir: "../elsewhere", wantErr: verify.ErrCheckDirOutsideRoot},
+		{name: "symlink out", dir: "escape", wantErr: verify.ErrCheckDirOutsideRoot},
+		{name: "missing", dir: "nope", wantErr: verify.ErrCheckDirMissing},
+		{name: "a file", dir: "afile", wantErr: verify.ErrCheckDirMissing},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			root := t.TempDir()
+			if err := os.Symlink(outside, filepath.Join(root, "escape")); err != nil {
+				t.Fatalf("Symlink: %v", err)
+			}
+			if err := os.WriteFile(filepath.Join(root, "afile"), nil, 0o644); err != nil {
+				t.Fatalf("WriteFile: %v", err)
+			}
+			writeSuite(t, root, "E-1234", "schema = 1\ntask = \"E-1234\"\n"+
+				"[[check]]\nsh = \"true\"\n"+
+				"[[check]]\nsh = \"true\"\ndir = \""+tt.dir+"\"\n")
+
+			_, err := verify.Discover(dt.DirPath(root))
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("Discover error = %v, want %v", err, tt.wantErr)
+			}
+			if !errors.Is(err, verify.ErrInvalidManifest) {
+				t.Errorf("error did not wrap ErrInvalidManifest: %v", err)
+			}
+			for _, want := range []string{"index=1", "dir=" + tt.dir} {
+				if !strings.Contains(err.Error(), want) {
+					t.Errorf("error does not name %q: %v", want, err)
+				}
+			}
+		})
+	}
+}
+
+// A dir inside the root, including one reached through a symlink that stays
+// inside it, is accepted.
+func TestDiscover_AcceptsCheckDirInsideRoot(t *testing.T) {
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "mods", "sub"), 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	if err := os.Symlink(filepath.Join(root, "mods"), filepath.Join(root, "link")); err != nil {
+		t.Fatalf("Symlink: %v", err)
+	}
+	writeSuite(t, root, "E-1234", "schema = 1\ntask = \"E-1234\"\n"+
+		"[[check]]\nsh = \"true\"\ndir = \"mods/sub\"\n"+
+		"[[check]]\nsh = \"true\"\ndir = \"link/sub\"\n")
+
+	if _, err := verify.Discover(dt.DirPath(root)); err != nil {
+		t.Fatalf("Discover: %v", err)
 	}
 }

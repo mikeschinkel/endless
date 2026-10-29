@@ -3,6 +3,8 @@ package verify
 import (
 	"os"
 	"os/exec"
+	"path"
+	"path/filepath"
 	"strings"
 
 	"github.com/mikeschinkel/go-doterr"
@@ -68,7 +70,26 @@ func (pytestDriver) Run(check Check, root dt.DirPath, env []string, reportPath d
 
 	result, err = runAndNormalize(argv, StreamFile, FormatPytestJSON, root, env, reportPath)
 end:
+	if err == nil {
+		prefixPytestSuites(result.Report, check.Dir)
+	}
 	return result, err
+}
+
+// prefixPytestSuites prefixes each test's suite with dir. pytest names a test's
+// file relative to the directory it ran in, so two subprojects' tests/test_x.py
+// would otherwise share a suite in the merged report. An empty dir leaves the
+// report unchanged.
+func prefixPytestSuites(rpt *Report, dir string) {
+	if rpt == nil || dir == "" {
+		return
+	}
+	for i := range rpt.Results.Tests {
+		suite := rpt.Results.Tests[i].Suite
+		if len(suite) > 0 {
+			suite[0] = path.Join(filepath.ToSlash(dir), suite[0])
+		}
+	}
 }
 
 // resolvePytestLauncher resolves the argv prefix that launches pytest for a

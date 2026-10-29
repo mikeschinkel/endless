@@ -1075,7 +1075,7 @@ How a task proves itself before it lands, and how a session hands that proof bac
 Every task carries **one verification suite** — a single, self-contained proof that the change does what it claims. It is a manifest, `.endless/tasks/e-<id>/verify.toml`: a list of `[[check]]` entries the runner executes and merges into one report. Write the checks in this order:
 
 1. **The project's native tests first**, as a fail-fast check, so the one command is a complete proof for that task **at land time**. A `gotest` or `pytest` check names the tests (`tests`, optionally scoped by `paths`), and Endless runs the tool and reads its results. Any other runner takes a literal `command` that prints TAP.
-2. **`sh` checks for everything no native test covers**: one shell command each, run at the worktree root. Exit `0` passes; anything else fails.
+2. **`sh` checks for everything no native test covers**: one shell command each, run at the worktree root (or the check's `dir`). Exit `0` passes; anything else fails.
 
 ```toml
 schema = 1
@@ -1102,6 +1102,7 @@ sh   = "test ! -e old.conf"
 | `sh` | an `sh` check | The command, run with `sh -c`. It stands alone: `runner`, `command`, `tests`, `paths` and `format` are refused beside it. |
 | `contains` / `not_contains` | an `sh` check | Its stdout must (not) contain this text. |
 | `equals` | an `sh` check | Its stdout must equal this, trailing newlines ignored as `$(...)` ignores them. `equals = ""` means no output. |
+| `dir` | any check | The directory the check runs in, relative to the worktree root, for tests in a nested module or subproject (its own `go.mod`, `pyproject.toml`, `package.json`). `paths` resolve against it, and a `pytest` check's suites carry it as a prefix so two subprojects' `tests/test_x.py` stay distinct. Absolute, outside the root (through `..` or a symlink), or missing refuses the suite. Setup and teardown stay at the root. |
 | `as = "agent"`, `tmux = true` | any check | Run it with the agent's environment, or in a fixture tmux pane (see below). |
 
 The matchers read stdout only; add `2>&1` to the command to match stderr. A failing `sh` check reports why — the exit code, or the matcher's expected value — with the command's stdout and stderr, both under its summary line and in the report.
@@ -1116,6 +1117,16 @@ The runner still runs the endless repo's legacy form:
 A task carries one or the other; during a conversion it may hold both, and the manifest wins.
 
 The **runner** provides the isolation — a per-run temp `HOME` and `XDG_CONFIG_HOME`, so a suite cannot read or pollute your real config or the main database. A suite that additionally builds its own throwaway fixture dir is belt-and-braces, not a requirement.
+
+A repo with a nested Go module runs its tests where they live, keeping per-test results rather than falling back to `sh = "cd dtx && go test ./..."`:
+
+```toml
+[[check]]
+name   = "dtx unit tests"
+runner = "gotest"
+dir    = "dtx"
+paths  = ["./..."]
+```
 
 ### Running one: `endless task verify`
 

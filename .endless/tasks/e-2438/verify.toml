@@ -1,0 +1,39 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2438 and records what was true when E-2438
+# landed. Edit it only if you ARE E-2438. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+#
+# E-2438 adds `dir` to [[check]]: the directory a check runs in, relative to
+# the repo root, for tests in a nested module or subproject.
+#
+# This manifest does not use `dir` itself: an older runner would refuse the
+# key. The Go tests below compile this worktree's code, so they prove it.
+
+schema = 1
+task   = "E-2438"
+
+# Every runner (gotest in a nested go.mod, sh, generic, pytest) runs in dir,
+# paths resolve against it, setup stays at the root, pytest suites carry the
+# dir; and the three refusals (absolute, outside the root by .. or symlink,
+# missing) name the check's index and dir.
+[[check]]
+name   = "dir: runners, setup, pytest suites, refusals"
+runner = "gotest"
+paths  = ["./internal/verify/...", "./internal/verifycmd/..."]
+
+# SUITE_RULES documents dir, and the repo's own .endless/tasks/CLAUDE.md is
+# that text.
+[[check]]
+name   = "suite rules in sync"
+runner = "pytest/uv"
+paths  = ["tests/test_suite_rules.py"]
+
+[[check]]
+name     = "suite rules show a nested-module dir example"
+sh       = "grep -c 'dir    = \"dtx\"' .endless/tasks/CLAUDE.md"
+equals   = "1"
+
+[[check]]
+name     = "orchestration guide documents dir"
+sh       = "grep -c '^| `dir` | any check |' docs/guide/orchestration.md"
+equals   = "1"

@@ -136,6 +136,9 @@ func Discover(root dt.DirPath) (manifests map[string]*Manifest, err error) {
 		eff = Merge(project, m)
 
 		err = eff.Validate()
+		if err == nil {
+			err = eff.ValidateDirs(root)
+		}
 		if err != nil {
 			err = doterr.WithErr(err, "filepath", manifestPath)
 			goto end
