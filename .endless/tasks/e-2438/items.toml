@@ -51,3 +51,8 @@ statement = "Does not move the existing tests and paths keys under [check.<runne
 id = "P10"
 kind = "exclusion"
 statement = "Does not edit any landed task's verify suite to use dir"
+
+[[item]]
+id = "P11"
+kind = "deliverable"
+statement = "task verify loads only the named task's suite (verify.LoadSuite), so a landed suite that has rotted, such as a dir since removed or a key this build drops, cannot refuse another task's run; Discover, which loaded every suite, is removed"
