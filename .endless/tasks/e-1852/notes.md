@@ -1,0 +1,1 @@
+2026-10-29 (from E-2490's planning): lefthook joins the tools this covers. E-2490 adds the Endless-Task trailer through a prepare-commit-msg Git hook and recommends lefthook as the hook manager when a repo has none; Mike asked that whatever installs tmux and the other prerequisites install lefthook too.
