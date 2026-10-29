@@ -1,0 +1,1613 @@
+{
+  "reportFormat": "CTRF",
+  "specVersion": "0.2.0",
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 145,
+      "passed": 145,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 1793293481520,
+      "stop": 1793293575430
+    },
+    "tests": [
+      {
+        "name": "TestGate_PassesWhenCurrentAndSettled",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestGate_EachConditionOnItsOwn/research_with_no_items",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestGate_EachConditionOnItsOwn/research_with_items",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestGate_EachConditionOnItsOwn/no_deliverable",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestGate_EachConditionOnItsOwn/no_items,_handover",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestGate_EachConditionOnItsOwn/no_items,_backstop_skips",
+        "status": "passed",
+        "duration": 210,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestGate_EachConditionOnItsOwn/not_reconciled",
+        "status": "passed",
+        "duration": 260,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestGate_EachConditionOnItsOwn/code_changed",
+        "status": "passed",
+        "duration": 310,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestGate_EachConditionOnItsOwn/plan_changed_after_reconciling",
+        "status": "passed",
+        "duration": 130,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestGate_EachConditionOnItsOwn/missing_entry",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestGate_EachConditionOnItsOwn/open_discrepancy",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestGate_EachConditionOnItsOwn/any_settled_status_counts",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestGate_EachConditionOnItsOwn/unapproved_grown_item_is_a_discrepancy",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestGate_EachConditionOnItsOwn/baseline_differs",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestGate_EachConditionOnItsOwn",
+        "status": "passed",
+        "duration": 1510,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestFingerprint_OwnChangesOnly",
+        "status": "passed",
+        "duration": 830,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestGate_StandsAsideForAnIllegalMove",
+        "status": "passed",
+        "duration": 100,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestGate_HandoverRequiresPlannedItemsApproved/refused_to_unverified",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestGate_HandoverRequiresPlannedItemsApproved/refused_to_assumed",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestGate_HandoverRequiresPlannedItemsApproved/approving_them_lets_it_pass",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestGate_HandoverRequiresPlannedItemsApproved/grown_items_kept_through_an_answered_question_pass",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestGate_HandoverRequiresPlannedItemsApproved/backstop_does_not_refuse",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestGate_HandoverRequiresPlannedItemsApproved/a_frozen_task_moving_on_is_not_refused",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "TestGate_HandoverRequiresPlannedItemsApproved",
+        "status": "passed",
+        "duration": 390,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/reconcilegate"
+        ],
+        "labels": {
+          "check": "reconcile gate requires approved planned items at the hand-in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_accepts_every_spelling[P3]",
+        "status": "passed",
+        "duration": 103,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_accepts_every_spelling[p3]",
+        "status": "passed",
+        "duration": 120,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_accepts_every_spelling[3]",
+        "status": "passed",
+        "duration": 116,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_accepts_every_spelling[E-2280.P3]",
+        "status": "passed",
+        "duration": 71,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_refuses_garbage[P0]",
+        "status": "passed",
+        "duration": 113,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_refuses_garbage[Px]",
+        "status": "passed",
+        "duration": 82,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_refuses_garbage[]",
+        "status": "passed",
+        "duration": 89,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_refuses_garbage[P03]",
+        "status": "passed",
+        "duration": 76,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_refuses_garbage[-1]",
+        "status": "passed",
+        "duration": 81,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_reads_items_in_order",
+        "status": "passed",
+        "duration": 93,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_reads_the_post_land_mark",
+        "status": "passed",
+        "duration": 98,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[[[item]]\\nstatement = \"x\"\\nowner = \"me\"\\n]",
+        "status": "passed",
+        "duration": 79,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[title = \"x\"\\n[[item]]\\nstatement = \"x\"\\n]",
+        "status": "passed",
+        "duration": 101,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[[[item]]\\nkind = \"wish\"\\nstatement = \"x\"\\n]",
+        "status": "passed",
+        "duration": 72,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[[[item]]\\nstatement = \"\"\\n]",
+        "status": "passed",
+        "duration": 121,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[[[item]]\\nstatement = \"\"\"a\\nb\"\"\"\\n]",
+        "status": "passed",
+        "duration": 79,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[[[item]]\\nid = \"P1\"\\nstatement = \"a\"\\n[[item]]\\nid = \"P1\"\\nstatement = \"b\"\\n]",
+        "status": "passed",
+        "duration": 91,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[[[item]]\\nstatement = 3\\n]",
+        "status": "passed",
+        "duration": 95,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[]",
+        "status": "passed",
+        "duration": 164,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[not toml []",
+        "status": "passed",
+        "duration": 115,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_diff_adds_edits_withdraws_and_orders",
+        "status": "passed",
+        "duration": 87,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_loading_the_unchanged_set_changes_nothing",
+        "status": "passed",
+        "duration": 340,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_unknown_and_withdrawn_ids",
+        "status": "passed",
+        "duration": 136,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_reconcile_file_reads_entries",
+        "status": "passed",
+        "duration": 100,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_reconcile_file_refuses_what_it_does_not_define[[[entry]]\\nitem = \"P1\"\\nverdict = \"kept\"\\nmood = \"fine\"\\n]",
+        "status": "passed",
+        "duration": 88,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_reconcile_file_refuses_what_it_does_not_define[[[entry]]\\nverdict = \"kept\"\\n]",
+        "status": "passed",
+        "duration": 181,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_reconcile_file_refuses_what_it_does_not_define[summary = \"x\"\\n]",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_shows_verdict_answer_and_kept_reason",
+        "status": "passed",
+        "duration": 88,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_flags_grown_unapproved_and_changed_items",
+        "status": "passed",
+        "duration": 101,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_an_in_tree_sandbox_is_a_sandbox",
+        "status": "passed",
+        "duration": 156,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_plan_add_edit_withdraw_shape_their_ops",
+        "status": "passed",
+        "duration": 218,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_plan_move_rewrites_the_display_order",
+        "status": "passed",
+        "duration": 165,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_an_item_change_on_a_ready_task_drops_its_approval",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_an_item_change_underway_keeps_the_status",
+        "status": "passed",
+        "duration": 78,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_reconcile_records_entries_with_the_fingerprint",
+        "status": "passed",
+        "duration": 94,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_the_gate_refusal_lists_every_problem",
+        "status": "passed",
+        "duration": 105,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_the_plan_redirect_is_gone",
+        "status": "passed",
+        "duration": 65,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_update_to_ready_refuses_a_todo_without_items",
+        "status": "passed",
+        "duration": 563,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_update_to_ready_needs_every_item_approved",
+        "status": "passed",
+        "duration": 1762,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_approve_refuses_unapproved_items_and_names_the_route",
+        "status": "passed",
+        "duration": 2287,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_approving_each_item_then_the_task",
+        "status": "passed",
+        "duration": 2514,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_include_plan_items_approves_them_all",
+        "status": "passed",
+        "duration": 2492,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_approving_a_withdrawn_item_accepts_its_withdrawal",
+        "status": "passed",
+        "duration": 3901,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_approving_an_unknown_item_is_refused",
+        "status": "passed",
+        "duration": 1205,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_spawn_refuses_items_the_user_has_not_approved",
+        "status": "passed",
+        "duration": 1137,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_spawn_refuses_items_changed_since_approval",
+        "status": "passed",
+        "duration": 2678,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_a_task_with_no_items_needs_no_approval_to_spawn",
+        "status": "passed",
+        "duration": 572,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_hand_in_refuses_items_never_approved",
+        "status": "passed",
+        "duration": 2402,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_type_status_gate.py::test_update_epic_unverified_rejected",
+        "status": "passed",
+        "duration": 163,
+        "suite": [
+          "tests/test_type_status_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_type_status_gate.py::test_update_research_unverified_rejected",
+        "status": "passed",
+        "duration": 130,
+        "suite": [
+          "tests/test_type_status_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_type_status_gate.py::test_add_epic_unverified_rejected",
+        "status": "passed",
+        "duration": 125,
+        "suite": [
+          "tests/test_type_status_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_type_status_gate.py::test_add_research_unverified_rejected",
+        "status": "passed",
+        "duration": 199,
+        "suite": [
+          "tests/test_type_status_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_type_status_gate.py::test_update_task_unverified_allowed",
+        "status": "passed",
+        "duration": 994,
+        "suite": [
+          "tests/test_type_status_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_type_status_gate.py::test_update_bug_unverified_allowed",
+        "status": "passed",
+        "duration": 712,
+        "suite": [
+          "tests/test_type_status_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_type_status_gate.py::test_add_implementation_task_at_unverified_refused[todo-Implement the widget]",
+        "status": "passed",
+        "duration": 139,
+        "suite": [
+          "tests/test_type_status_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_type_status_gate.py::test_add_implementation_task_at_unverified_refused[bugfix-Fix the crash]",
+        "status": "passed",
+        "duration": 138,
+        "suite": [
+          "tests/test_type_status_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_type_status_gate.py::test_update_research_epic_terminal_still_rejected[assumed-3]",
+        "status": "passed",
+        "duration": 86,
+        "suite": [
+          "tests/test_type_status_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_type_status_gate.py::test_update_research_epic_terminal_still_rejected[assumed-4]",
+        "status": "passed",
+        "duration": 83,
+        "suite": [
+          "tests/test_type_status_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_type_status_gate.py::test_update_research_epic_terminal_still_rejected[confirmed-3]",
+        "status": "passed",
+        "duration": 96,
+        "suite": [
+          "tests/test_type_status_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_type_status_gate.py::test_update_research_epic_terminal_still_rejected[confirmed-4]",
+        "status": "passed",
+        "duration": 100,
+        "suite": [
+          "tests/test_type_status_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_type_status_gate.py::test_obsolete_allowed_for_all_types[1]",
+        "status": "passed",
+        "duration": 241,
+        "suite": [
+          "tests/test_type_status_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_type_status_gate.py::test_obsolete_allowed_for_all_types[2]",
+        "status": "passed",
+        "duration": 233,
+        "suite": [
+          "tests/test_type_status_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_type_status_gate.py::test_obsolete_allowed_for_all_types[3]",
+        "status": "passed",
+        "duration": 259,
+        "suite": [
+          "tests/test_type_status_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_type_status_gate.py::test_obsolete_allowed_for_all_types[4]",
+        "status": "passed",
+        "duration": 252,
+        "suite": [
+          "tests/test_type_status_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_is_report_wind_down[underway-unverified-False-True]",
+        "status": "passed",
+        "duration": 58,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_is_report_wind_down[underway-assumed-True-True]",
+        "status": "passed",
+        "duration": 63,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_is_report_wind_down[unverified-assumed-False-True]",
+        "status": "passed",
+        "duration": 63,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_is_report_wind_down[underway-completed-True-True]",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_is_report_wind_down[underway-completed-False-False]",
+        "status": "passed",
+        "duration": 62,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_is_report_wind_down[confirmed-unverified-False-False]",
+        "status": "passed",
+        "duration": 53,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_is_report_wind_down[unplanned-submitted-False-False]",
+        "status": "passed",
+        "duration": 54,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_is_report_wind_down[submitted-ready-False-False]",
+        "status": "passed",
+        "duration": 84,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_is_report_wind_down[ready-underway-False-False]",
+        "status": "passed",
+        "duration": 58,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_is_report_wind_down[unverified-confirmed-False-False]",
+        "status": "passed",
+        "duration": 51,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_is_report_wind_down[underway-declined-False-False]",
+        "status": "passed",
+        "duration": 69,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_is_report_wind_down[underway-obsolete-False-False]",
+        "status": "passed",
+        "duration": 89,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_is_report_wind_down[underway-revisit-False-False]",
+        "status": "passed",
+        "duration": 76,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_is_report_wind_down[assumed-assumed-True-False]",
+        "status": "passed",
+        "duration": 87,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_update_underway_to_unverified_fires",
+        "status": "passed",
+        "duration": 1729,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_assume_item_fires",
+        "status": "passed",
+        "duration": 729,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_update_to_assumed_fires",
+        "status": "passed",
+        "duration": 644,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_mark_completed_item_fires",
+        "status": "passed",
+        "duration": 185,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_update_to_completed_fires",
+        "status": "passed",
+        "duration": 231,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_claim_to_underway_does_not_fire",
+        "status": "passed",
+        "duration": 160,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_confirm_does_not_fire",
+        "status": "passed",
+        "duration": 139,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_submit_does_not_fire",
+        "status": "passed",
+        "duration": 353,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_decline_does_not_fire",
+        "status": "passed",
+        "duration": 578,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_non_status_update_does_not_fire",
+        "status": "passed",
+        "duration": 554,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_agent_session_fires",
+        "status": "passed",
+        "duration": 715,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_human_invocation_stays_silent",
+        "status": "passed",
+        "duration": 592,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_agent_view_flag_lets_human_preview",
+        "status": "passed",
+        "duration": 540,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_report_gate_off_stays_silent",
+        "status": "passed",
+        "duration": 560,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_report_gate_on_still_fires",
+        "status": "passed",
+        "duration": 566,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_report_gate_unset_stays_silent",
+        "status": "passed",
+        "duration": 555,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_unresolvable_project_root_uses_the_default",
+        "status": "passed",
+        "duration": 670,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_report_reminder.py::test_gate_is_read_from_the_shared_helper",
+        "status": "passed",
+        "duration": 618,
+        "suite": [
+          "tests/test_report_reminder.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_type_accepts_map_matches_model",
+        "status": "passed",
+        "duration": 57,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_action_verb_under_research_is_refused",
+        "status": "passed",
+        "duration": 89,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_investigation_verb_under_todo_is_refused",
+        "status": "passed",
+        "duration": 91,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_investigation_verb_under_research_is_accepted",
+        "status": "passed",
+        "duration": 92,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_action_verb_under_todo_is_accepted",
+        "status": "passed",
+        "duration": 102,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_action_verb_under_bugfix_is_accepted",
+        "status": "passed",
+        "duration": 81,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_investigation_verb_under_brainstorm_is_accepted",
+        "status": "passed",
+        "duration": 83,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_dual_verb_accepted_under_action_type",
+        "status": "passed",
+        "duration": 85,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_dual_verb_accepted_under_investigation_type",
+        "status": "passed",
+        "duration": 91,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_epic_exempt_action_verb",
+        "status": "passed",
+        "duration": 91,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_epic_exempt_investigation_verb",
+        "status": "passed",
+        "duration": 81,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_error_names_verb_category_and_accepted",
+        "status": "passed",
+        "duration": 85,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_add_item_refuses_investigation_verb_under_default_todo",
+        "status": "passed",
+        "duration": 98,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_add_item_refuses_action_verb_under_research",
+        "status": "passed",
+        "duration": 118,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_update_flip_type_to_research_on_action_verb_refused",
+        "status": "passed",
+        "duration": 114,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_update_title_to_investigation_verb_on_todo_refused",
+        "status": "passed",
+        "duration": 116,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_update_title_between_action_verbs_on_todo_allowed",
+        "status": "passed",
+        "duration": 155,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_update_status_only_does_not_trip_gate",
+        "status": "passed",
+        "duration": 592,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_update_flip_dual_verb_todo_to_brainstorm_allowed",
+        "status": "passed",
+        "duration": 141,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_fresh_project_single_verb_does_not_shadow_default_categories",
+        "status": "passed",
+        "duration": 85,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_fresh_project_research_title_accepted_under_research_type",
+        "status": "passed",
+        "duration": 83,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_field_wise_fall_through_keeps_default_category",
+        "status": "passed",
+        "duration": 84,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_gate_lead_verb_strips_punctuation",
+        "status": "passed",
+        "duration": 82,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "tests/test_verb_category_gate.py::test_gate_lead_verb_case_insensitive",
+        "status": "passed",
+        "duration": 83,
+        "suite": [
+          "tests/test_verb_category_gate.py"
+        ],
+        "labels": {
+          "check": "hand-in refusal through the CLI, and fixtures that approve before handing in"
+        }
+      },
+      {
+        "name": "the guide documents the approval condition",
+        "status": "passed",
+        "duration": 7,
+        "labels": {
+          "check": "the guide documents the approval condition"
+        }
+      }
+    ]
+  }
+}
