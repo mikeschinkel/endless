@@ -77,3 +77,15 @@ Evidence: go-dt was registered without the block, so every task worktree showed 
 `scaffold_gitignore` already adds the block on `project init`, but nothing checks a project registered before that, or one whose block was removed. The fix tier is auto: it calls `scaffold_gitignore`.
 
 Init side, same matching code: `scaffold_gitignore`'s docstring says entries present "in any form" are left as-is, but it compares exact stripped lines. An anchored `/.endless/worktrees/`, which is what go-dt's .gitignore now uses (Mike's style), counts as missing, so re-running init appends a duplicate unanchored block. The check and init should share one matcher that treats `/x` and `x` as the same entry.
+
+## Scope added by E-2490 (Mike's decision, 2026-10-29)
+
+A worktree- and project-scope check: task-branch commits in this checkout will not get the `Endless-Task` trailer. E-2490's P9 named `endless doctor` for this; doctor did not exist yet, so Mike chose to hand the check here rather than build a one-check doctor ahead of this design.
+
+What E-2490 already ships for it to call:
+
+- `git_hook.inspect(root)` classifies the checkout's hooks (lefthook, husky, another manager, raw Git hooks, or none) and `git_hook.problem(repo)` returns why the trailer will not be added, or None. `endless git-hook status` prints the same and exits 1 when it will not.
+- Reasons it reports: lefthook config not running `endless git-hook <event>`, lefthook not installed for an event, a hook file lefthook did not install claiming an event, no `lefthook.yml` beside the worktree's `lefthook-local.yml`; for husky, `.husky/prepare-commit-msg` or `.husky/commit-msg` lacking the `endless git-hook` line; for any other manager, that the setup cannot be confirmed.
+- `git_hooks.report` (opt-in, default on, either config file) turns the report off. The check must honor it; it is registered, not suggestable.
+
+Fix tier: advice only for husky and other managers (Endless never edits their files, ED-1641); confirm for the rest, by re-running `endless project init`, which is idempotent.
