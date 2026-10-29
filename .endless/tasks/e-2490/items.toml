@@ -86,3 +86,8 @@ statement = "endless git-hook status reports whether the current repo's task-bra
 id = "P17"
 kind = "deliverable"
 statement = "When Endless writes lefthook-local.yml it lists it in the repo's shared .git/info/exclude, and task worktree creation copies the main checkout's lefthook-local.yml into each new worktree, because lefthook reads that file from the worktree's own top level"
+
+[[item]]
+id = "P18"
+kind = "deliverable"
+statement = "Migrated hooks (P6) run each renamed <hooks dir>/<event>.old by absolute path from lefthook-local.yml, never the committed lefthook.yml; when the repo has no lefthook config, init creates a minimal lefthook.yml and the bring-up commit commits it, since lefthook ignores lefthook-local.yml without one"
