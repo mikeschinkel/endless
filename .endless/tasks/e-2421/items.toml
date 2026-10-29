@@ -33,11 +33,6 @@ kind = "deliverable"
 statement = "The record of shipped versions can later hold other kinds of shipped file, not just this one"
 
 [[item]]
-id = "P7"
-kind = "deliverable"
-statement = "A test fails when the endless repo's committed .endless/tasks/CLAUDE.md differs from SUITE_RULES"
-
-[[item]]
 id = "P8"
 kind = "deliverable"
 statement = "In the endless repo, running init from a task's worktree records into that worktree's sandbox database, not the main one"
