@@ -76,3 +76,8 @@ statement = "Does not install lefthook itself; E-1852 covers installing Endless'
 id = "P15"
 kind = "deliverable"
 statement = "endless git-hook commit-msg <message-file> adds the trailer after the editor closes; prepare-commit-msg leaves an editor commit (source empty or template) to it so an empty message still aborts the commit, and every setup path installs both hook entries"
+
+[[item]]
+id = "P16"
+kind = "deliverable"
+statement = "endless git-hook status reports whether the current repo's task-branch commits will get the trailer and why not; the doctor check that uses it is handed to E-2285 as scope, since endless doctor does not exist yet"
