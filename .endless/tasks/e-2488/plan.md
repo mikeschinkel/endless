@@ -9,8 +9,10 @@
 | C. `Endless[git-default]: main@<sha>` | Names Endless and gives a pattern for later annotations. | Git does not recognize it as a trailer, so `git interpret-trailers` and `git log --format=%(trailers)` never see it. |
 | D. `endless-git-default: main@<sha>` | Names Endless and uses Git's term; the `endless-<name>` prefix is a pattern for later annotations, and git recognizes it. | none |
 | E. `endless-base: main@<sha>` | Names Endless; short. | "base" is not Git's term for the default branch. |
+| F. `endless_git-default: main@<sha>` | Names Endless; underscore separates the namespace. | Git does not recognize it: an underscore is not allowed in a trailer key. |
+| G. `endless:git-default: main@<sha>` | Names Endless; colon reads as a namespace. | Git splits at the first colon, so it parses as key `endless` with value `git-default: main@<sha>`. |
 
-Recommendation: D. (Options A to C were Mike's, 2026-10-29.)
+Recommendation: D. (Options A to C, F and G were Mike's, 2026-10-29; F and G tested with git interpret-trailers --parse.)
 
 **Q2. What is the branch called?**
 
