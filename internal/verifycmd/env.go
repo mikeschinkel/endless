@@ -18,7 +18,7 @@ import (
 
 // findProjectRoot walks up from the current directory to the first ancestor that
 // contains a .endless directory — the project (or worktree) checkout root whose
-// .endless/tasks/*/verify.toml suites Discover reads. It fails loudly if none is
+// .endless/tasks/*/verify.toml suites LoadSuite reads. It fails loudly if none is
 // found before the filesystem root.
 func findProjectRoot() (root dt.DirPath, err error) {
 	var cwd, dir, parent dt.DirPath

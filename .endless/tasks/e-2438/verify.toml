@@ -15,7 +15,8 @@ task   = "E-2438"
 # Every runner (gotest in a nested go.mod, sh, generic, pytest) runs in dir,
 # paths resolve against it, setup stays at the root, pytest suites carry the
 # dir; and the three refusals (absolute, outside the root by .. or symlink,
-# missing) name the check's index and dir.
+# missing) name the check's index and dir. A run loads only its own task's
+# suite (verify.LoadSuite), so another task's rotted suite cannot refuse it.
 [[check]]
 name   = "dir: runners, setup, pytest suites, refusals"
 runner = "gotest"

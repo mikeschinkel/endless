@@ -38,7 +38,7 @@ func TestDiscoverScripts_KeysByNormalizedDirectoryName(t *testing.T) {
 }
 
 // A per-task directory holding no verify.sh contributes nothing — the same rule
-// Discover applies to a directory holding no verify.toml.
+// LoadSuite applies to a directory holding no verify.toml.
 func TestDiscoverScripts_SkipsDirectoriesWithoutTheFile(t *testing.T) {
 	root := t.TempDir()
 	writeScriptSuite(t, root, "e-1")
@@ -84,17 +84,17 @@ func TestDiscoverScripts_IgnoresSharedFilesBesideTheTaskDirs(t *testing.T) {
 	}
 
 	// The same files must not become manifest suites either.
-	manifests, err := Discover(dt.DirPath(root))
+	manifests, err := ManifestIDs(dt.DirPath(root))
 	if err != nil {
-		t.Fatalf("Discover: %v", err)
+		t.Fatalf("ManifestIDs: %v", err)
 	}
 	if len(manifests) != 0 {
-		t.Errorf("Discover found %d manifests beside shared files, want 0: %v", len(manifests), manifests)
+		t.Errorf("ManifestIDs found %d manifests beside shared files, want 0: %v", len(manifests), manifests)
 	}
 }
 
 // A project with no .endless/tasks directory has no suites; that is not an
-// error, exactly as it is not one for Discover.
+// error, exactly as it is not one for LoadSuite.
 func TestDiscoverScripts_MissingDirectoryIsEmpty(t *testing.T) {
 	scripts, err := DiscoverScripts(dt.DirPath(t.TempDir()))
 	if err != nil {
@@ -119,14 +119,14 @@ func TestDiscoverScripts_CoexistsWithAManifest(t *testing.T) {
 	if err != nil {
 		t.Fatalf("DiscoverScripts: %v", err)
 	}
-	manifests, err := Discover(dt.DirPath(root))
+	_, hasManifest, err := LoadSuite(dt.DirPath(root), "E-7")
 	if err != nil {
-		t.Fatalf("Discover: %v", err)
+		t.Fatalf("LoadSuite: %v", err)
 	}
 	if _, ok := scripts["E-7"]; !ok {
 		t.Error("script suite not discovered when a manifest sits beside it")
 	}
-	if _, ok := manifests["E-7"]; !ok {
+	if !hasManifest {
 		t.Error("manifest not discovered when a script sits beside it")
 	}
 }

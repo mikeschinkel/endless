@@ -197,8 +197,9 @@ not exist refuses the suite. Setup and teardown still run at the root.
 
 **`sh` checks for the rest.** A fact no native test covers is one shell
 command, run with `sh -c` at the worktree root (or the check's `dir`): exit 0
-passes, anything else fails. It stands alone — `runner`, `command`, `tests`, `paths` and `format` are
-refused beside it — and may add matchers, read against its stdout:
+passes, anything else fails. It stands alone — `runner`, `command`, `tests`,
+`paths` and `format` are refused beside it — and may add matchers, read against
+its stdout:
 
 | Key | Passes when stdout |
 |-----|--------------------|

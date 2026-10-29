@@ -247,7 +247,6 @@ func classify(err error) *refusal.Error {
 // its summary.
 func run(id string, keep bool) (code int, err error) {
 	var root dt.DirPath
-	var manifests map[string]*verify.Manifest
 	var scripts map[string]dt.Filepath
 	var script dt.Filepath
 	var eff *verify.Manifest
@@ -271,12 +270,12 @@ func run(id string, keep bool) (code int, err error) {
 		goto end
 	}
 
-	manifests, err = verify.Discover(root)
+	// Only this task's suite is read: another task's, landed and since rotted,
+	// must not refuse this run.
+	eff, ok, err = verify.LoadSuite(root, id)
 	if err != nil {
 		goto end
 	}
-
-	eff, ok = manifests[verify.NormalizeTaskID(id)]
 	if !ok {
 		// A manifest is the documented form and wins when a task has both, so
 		// the script is a FALLBACK rather than a second search path: same
@@ -290,7 +289,7 @@ func run(id string, keep bool) (code int, err error) {
 			err = doterr.NewErr(ErrNoSuiteForTask,
 				"task", id, "dir", suiteDir(root, id),
 				"looked_for", verify.ManifestFile+", "+verify.ScriptFile,
-				"suites_found", suiteCount(manifests, scripts), "root", root)
+				"suites_found", suiteCount(root, scripts), "root", root)
 			goto end
 		}
 		code, err = runScriptSuite(id, script, root, keep)
@@ -403,12 +402,14 @@ end:
 // live in and both filenames it was looked for under. The count only says
 // whether discovery found anything at all, which distinguishes "you typed the
 // wrong id" from "this project has no suites".
-func suiteCount(manifests map[string]*verify.Manifest, scripts map[string]dt.Filepath) (n int) {
+func suiteCount(root dt.DirPath, scripts map[string]dt.Filepath) (n int) {
 	var seen map[string]bool
 
-	seen = make(map[string]bool, len(manifests)+len(scripts))
-	for id := range manifests {
-		seen[id] = true
+	// A manifest is counted by its file alone, never parsed: a malformed one
+	// still says the project has suites.
+	seen, _ = verify.ManifestIDs(root)
+	if seen == nil {
+		seen = make(map[string]bool, len(scripts))
 	}
 	for id := range scripts {
 		seen[id] = true

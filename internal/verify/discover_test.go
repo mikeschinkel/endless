@@ -42,102 +42,75 @@ func writeProjectConfig(t *testing.T, root, content string) {
 	}
 }
 
-func TestDiscover_FindsSuites(t *testing.T) {
+// LoadSuite finds a task's suite by its directory, and returns ok=false for a
+// task directory without a verify.toml; a stray file under tasks/ is ignored.
+func TestLoadSuite_FindsSuite(t *testing.T) {
 	root := t.TempDir()
 	writeSuite(t, root, "E-1234", manifestFor("E-1234", "gotest"))
 	writeSuite(t, root, "E-5678", manifestFor("E-5678", "pytest"))
-
-	// A subdirectory with no verify.toml is not a suite and must be ignored.
 	if err := os.MkdirAll(filepath.Join(root, ".endless", "tasks", "E-9999"), 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
 	}
-	// A stray file directly under tasks/ is not a directory and must be ignored.
 	if err := os.WriteFile(filepath.Join(root, ".endless", "tasks", "README.md"), []byte("hi"), 0o644); err != nil {
 		t.Fatalf("WriteFile: %v", err)
 	}
 
-	manifests, err := verify.Discover(dt.DirPath(root))
-	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
+	for id, want := range map[string]verify.Format{"E-1234": verify.FormatGotestJSON, "E-5678": verify.FormatPytestJSON} {
+		m, ok, err := verify.LoadSuite(dt.DirPath(root), id)
+		if err != nil || !ok {
+			t.Fatalf("LoadSuite(%s): ok=%v err=%v", id, ok, err)
+		}
+		if len(m.Checks) != 1 || m.Checks[0].ResolvedFormat() != want {
+			t.Errorf("%s manifest wrong: %+v", id, m)
+		}
 	}
-	if len(manifests) != 2 {
-		t.Fatalf("Discover found %d manifests, want 2 (keys: %v)", len(manifests), keysOf(manifests))
-	}
-	if m := manifests["E-1234"]; m == nil || len(m.Checks) != 1 || m.Checks[0].ResolvedFormat() != verify.FormatGotestJSON {
-		t.Errorf("E-1234 manifest wrong: %+v", manifests["E-1234"])
-	}
-	if m := manifests["E-5678"]; m == nil || len(m.Checks) != 1 || m.Checks[0].ResolvedFormat() != verify.FormatPytestJSON {
-		t.Errorf("E-5678 manifest wrong: %+v", manifests["E-5678"])
-	}
-}
-
-func TestDiscover_NoTasksDir(t *testing.T) {
-	manifests, err := verify.Discover(dt.DirPath(t.TempDir()))
-	if err != nil {
-		t.Fatalf("Discover returned error for project with no suites: %v", err)
-	}
-	if len(manifests) != 0 {
-		t.Errorf("Discover found %d manifests, want 0", len(manifests))
+	for _, id := range []string{"E-9999", "README.md"} {
+		if _, ok, err := verify.LoadSuite(dt.DirPath(root), id); ok || err != nil {
+			t.Errorf("LoadSuite(%s): ok=%v err=%v, want false, nil", id, ok, err)
+		}
 	}
 }
 
-func TestDiscover_TaskIDMismatchFailsLoudly(t *testing.T) {
-	root := t.TempDir()
-	writeSuite(t, root, "E-1234", manifestFor("E-9999", "gotest"))
-
-	_, err := verify.Discover(dt.DirPath(root))
-	if err == nil {
-		t.Fatal("Discover accepted a manifest whose task id mismatched its directory")
-	}
-	if !errors.Is(err, verify.ErrTaskIDMismatch) {
-		t.Errorf("error did not wrap ErrTaskIDMismatch: %v", err)
+func TestLoadSuite_NoTasksDir(t *testing.T) {
+	_, ok, err := verify.LoadSuite(dt.DirPath(t.TempDir()), "E-1234")
+	if ok || err != nil {
+		t.Errorf("LoadSuite with no suites: ok=%v err=%v, want false, nil", ok, err)
 	}
 }
 
-func TestDiscover_InvalidManifestFailsLoudly(t *testing.T) {
+func TestLoadSuite_InvalidManifestFailsLoudly(t *testing.T) {
 	root := t.TempDir()
 	// Missing required task field.
 	writeSuite(t, root, "E-1234", "schema = 1\n[[check]]\nrunner = \"gotest\"\ntests = [\"TestX\"]\n")
 
-	_, err := verify.Discover(dt.DirPath(root))
-	if err == nil {
-		t.Fatal("Discover accepted an invalid manifest")
-	}
+	_, _, err := verify.LoadSuite(dt.DirPath(root), "E-1234")
 	if !errors.Is(err, verify.ErrMissingField) {
 		t.Errorf("error did not wrap ErrMissingField: %v", err)
 	}
 }
 
-// Discover validates the EFFECTIVE manifest, so a per-check rule violation (here
-// a raw runner with no command) surfaces loudly through discovery.
-func TestDiscover_ValidatesChecks(t *testing.T) {
+// LoadSuite validates the EFFECTIVE manifest, so a per-check rule violation
+// (here a raw runner with no command) surfaces loudly.
+func TestLoadSuite_ValidatesChecks(t *testing.T) {
 	root := t.TempDir()
 	writeSuite(t, root, "E-1234", "schema = 1\ntask = \"E-1234\"\n[[check]]\nrunner = \"bats\"\n")
 
-	_, err := verify.Discover(dt.DirPath(root))
-	if err == nil {
-		t.Fatal("Discover accepted a raw check with no command")
-	}
+	_, _, err := verify.LoadSuite(dt.DirPath(root), "E-1234")
 	if !errors.Is(err, verify.ErrRawCheckNeedsCommand) {
 		t.Errorf("error did not wrap ErrRawCheckNeedsCommand: %v", err)
 	}
 }
 
-// A project-level verify.toml merges beneath each per-task manifest: project
+// A project-level verify.toml merges beneath the per-task manifest: project
 // setup runs first, then per-task setup appends.
-func TestDiscover_MergesProjectConfig(t *testing.T) {
+func TestLoadSuite_MergesProjectConfig(t *testing.T) {
 	root := t.TempDir()
 	writeProjectConfig(t, root, "schema = 1\nsetup = [\"just build\"]\n")
-	// Per-task manifest adds its own setup step after the project's.
 	writeSuite(t, root, "E-1234", "schema = 1\ntask = \"E-1234\"\nsetup = [\"task-setup\"]\n[[check]]\nrunner = \"gotest\"\ntests = [\"TestX\"]\n")
 
-	manifests, err := verify.Discover(dt.DirPath(root))
-	if err != nil {
-		t.Fatalf("Discover returned error: %v", err)
-	}
-	m := manifests["E-1234"]
-	if m == nil {
-		t.Fatalf("Discover did not find E-1234 (keys: %v)", keysOf(manifests))
+	m, ok, err := verify.LoadSuite(dt.DirPath(root), "E-1234")
+	if err != nil || !ok {
+		t.Fatalf("LoadSuite: ok=%v err=%v", ok, err)
 	}
 	want := []string{"just build", "task-setup"}
 	if len(m.Setup) != 2 || m.Setup[0] != want[0] || m.Setup[1] != want[1] {
@@ -145,36 +118,25 @@ func TestDiscover_MergesProjectConfig(t *testing.T) {
 	}
 }
 
-// An invalid project-level verify.toml fails discovery loudly.
-func TestDiscover_InvalidProjectConfigFailsLoudly(t *testing.T) {
+// An invalid project-level verify.toml fails loudly.
+func TestLoadSuite_InvalidProjectConfigFailsLoudly(t *testing.T) {
 	root := t.TempDir()
 	writeProjectConfig(t, root, "schema = 2\n") // unknown schema version
 	writeSuite(t, root, "E-1234", manifestFor("E-1234", "gotest"))
 
-	_, err := verify.Discover(dt.DirPath(root))
-	if err == nil {
-		t.Fatal("Discover accepted an invalid project config")
-	}
+	_, _, err := verify.LoadSuite(dt.DirPath(root), "E-1234")
 	if !errors.Is(err, verify.ErrInvalidProjectConfig) {
 		t.Errorf("error did not wrap ErrInvalidProjectConfig: %v", err)
 	}
 }
 
-func keysOf(m map[string]*verify.Manifest) []string {
-	keys := make([]string, 0, len(m))
-	for k := range m {
-		keys = append(keys, k)
-	}
-	return keys
-}
-
-// TestDiscover_DirCasingIsIndependentOfTaskField pins the convention E-1927
+// TestLoadSuite_DirCasingIsIndependentOfTaskField pins the convention E-1927
 // settled: the suite DIRECTORY is lowercase, matching every other Endless path
 // (.endless/worktrees/e-1889/, .endless/tasks/e-1889/verify.sh), while the
 // manifest's `task` field stays the canonical display form E-NNNN that CLI
 // arguments and prose use. They are the same id written for two audiences, so
-// discovery normalizes rather than forcing one convention onto the other.
-func TestDiscover_DirCasingIsIndependentOfTaskField(t *testing.T) {
+// loading normalizes rather than forcing one convention onto the other.
+func TestLoadSuite_DirCasingIsIndependentOfTaskField(t *testing.T) {
 	cases := []struct {
 		name string
 		dir  string
@@ -189,42 +151,34 @@ func TestDiscover_DirCasingIsIndependentOfTaskField(t *testing.T) {
 			root := t.TempDir()
 			writeSuite(t, root, tc.dir, manifestFor(tc.task, "gotest"))
 
-			manifests, err := verify.Discover(dt.DirPath(root))
-			if err != nil {
-				t.Fatalf("Discover: %v", err)
-			}
-			// Always keyed canonically, whatever the directory looked like, so
-			// a caller passing `E-1234` (as the Python CLI always does) hits.
-			if _, ok := manifests["E-1234"]; !ok {
-				t.Fatalf("manifest not keyed by E-1234; got keys %v", keysOf(manifests))
-			}
-			if len(manifests) != 1 {
-				t.Fatalf("want 1 manifest, got %d", len(manifests))
+			// A caller passing `E-1234` (as the Python CLI always does) hits,
+			// whatever the directory looks like.
+			_, ok, err := verify.LoadSuite(dt.DirPath(root), "E-1234")
+			if err != nil || !ok {
+				t.Fatalf("LoadSuite: ok=%v err=%v", ok, err)
 			}
 		})
 	}
 }
 
-// TestDiscover_RejectsGenuineTaskIDMismatch guards the obvious regression from
-// the normalization above: relaxing CASE must not relax IDENTITY. A manifest
-// declaring a different task than its directory is still a loud failure.
-func TestDiscover_RejectsGenuineTaskIDMismatch(t *testing.T) {
-	root := t.TempDir()
-	writeSuite(t, root, "e-1234", manifestFor("E-9999", "gotest"))
+// Relaxing CASE must not relax IDENTITY: a manifest declaring a different task
+// than its directory is a loud failure.
+func TestLoadSuite_RejectsTaskIDMismatch(t *testing.T) {
+	for _, dir := range []string{"E-1234", "e-1234"} {
+		root := t.TempDir()
+		writeSuite(t, root, dir, manifestFor("E-9999", "gotest"))
 
-	_, err := verify.Discover(dt.DirPath(root))
-	if err == nil {
-		t.Fatal("want ErrTaskIDMismatch for a manifest naming a different task, got nil")
-	}
-	if !errors.Is(err, verify.ErrTaskIDMismatch) {
-		t.Fatalf("want ErrTaskIDMismatch, got %v", err)
+		_, _, err := verify.LoadSuite(dt.DirPath(root), "E-1234")
+		if !errors.Is(err, verify.ErrTaskIDMismatch) {
+			t.Errorf("dir %s: want ErrTaskIDMismatch, got %v", dir, err)
+		}
 	}
 }
 
-// A check's dir is refused at discovery when it is absolute, leaves the repo
-// root (lexically or through a symlink), or names no existing directory, and the
-// refusal names the check's index and its dir.
-func TestDiscover_RefusesBadCheckDir(t *testing.T) {
+// A check's dir is refused when its suite is loaded to run if it is absolute,
+// leaves the repo root (lexically or through a symlink), or names no existing
+// directory, and the refusal names the check's index and its dir.
+func TestLoadSuite_RefusesBadCheckDir(t *testing.T) {
 	outside := t.TempDir()
 	tests := []struct {
 		name    string
@@ -250,9 +204,9 @@ func TestDiscover_RefusesBadCheckDir(t *testing.T) {
 				"[[check]]\nsh = \"true\"\n"+
 				"[[check]]\nsh = \"true\"\ndir = \""+tt.dir+"\"\n")
 
-			_, err := verify.Discover(dt.DirPath(root))
+			_, _, err := verify.LoadSuite(dt.DirPath(root), "E-1234")
 			if !errors.Is(err, tt.wantErr) {
-				t.Fatalf("Discover error = %v, want %v", err, tt.wantErr)
+				t.Fatalf("LoadSuite error = %v, want %v", err, tt.wantErr)
 			}
 			if !errors.Is(err, verify.ErrInvalidManifest) {
 				t.Errorf("error did not wrap ErrInvalidManifest: %v", err)
@@ -268,7 +222,7 @@ func TestDiscover_RefusesBadCheckDir(t *testing.T) {
 
 // A dir inside the root, including one reached through a symlink that stays
 // inside it, is accepted.
-func TestDiscover_AcceptsCheckDirInsideRoot(t *testing.T) {
+func TestLoadSuite_AcceptsCheckDirInsideRoot(t *testing.T) {
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "mods", "sub"), 0o755); err != nil {
 		t.Fatalf("MkdirAll: %v", err)
@@ -280,7 +234,29 @@ func TestDiscover_AcceptsCheckDirInsideRoot(t *testing.T) {
 		"[[check]]\nsh = \"true\"\ndir = \"mods/sub\"\n"+
 		"[[check]]\nsh = \"true\"\ndir = \"link/sub\"\n")
 
-	if _, err := verify.Discover(dt.DirPath(root)); err != nil {
-		t.Fatalf("Discover: %v", err)
+	if _, ok, err := verify.LoadSuite(dt.DirPath(root), "E-1234"); err != nil || !ok {
+		t.Fatalf("LoadSuite: ok=%v err=%v", ok, err)
+	}
+}
+
+// LoadSuite reads only the named task's suite: another task's, rotted after it
+// landed — a dir since removed, a key this build does not know — does not
+// refuse it.
+func TestLoadSuite_IgnoresOtherSuites(t *testing.T) {
+	root := t.TempDir()
+	writeSuite(t, root, "e-1", "schema = 1\ntask = \"E-1\"\n[[check]]\nsh = \"true\"\ndir = \"gone\"\n")
+	writeSuite(t, root, "e-2", "schema = 1\ntask = \"E-2\"\nretired_key = 1\n[[check]]\nsh = \"true\"\n")
+	writeSuite(t, root, "e-3", manifestFor("E-3", "gotest"))
+
+	eff, ok, err := verify.LoadSuite(dt.DirPath(root), "E-3")
+	if err != nil || !ok {
+		t.Fatalf("LoadSuite(E-3): ok=%v err=%v", ok, err)
+	}
+	if eff.Task != "E-3" {
+		t.Errorf("task = %q, want E-3", eff.Task)
+	}
+
+	if _, ok, err := verify.LoadSuite(dt.DirPath(root), "E-4"); ok || err != nil {
+		t.Errorf("LoadSuite(E-4) with no suite: ok=%v err=%v, want false, nil", ok, err)
 	}
 }

@@ -62,102 +62,77 @@ func NormalizeTaskID(id string) string {
 // resolves and runs the entries.
 const ScriptsDir = ".endless/verify"
 
-// Discover walks <root>/.endless/tasks/*/verify.toml, merges each per-task
-// manifest beneath the optional project-level <root>/.endless/verify.toml, and
-// returns the effective manifests keyed by task id (normalized — see
-// NormalizeTaskID). Each returned manifest is the merged result a runner
-// executes (see Merge) and is fully validated. A suite directory whose declared
-// task does not match its directory name fails loudly, as does any malformed
-// manifest or project config. The match is case-insensitive: the directory is
-// lowercase by path convention while the `task` field is the canonical E-NNNN
-// form, and both name the same task.
-//
-// A missing .endless/tasks directory yields an empty map and no error: a
-// project with no suites yet is not an error. A missing project-level
-// verify.toml simply contributes no shared layer. Subdirectories without a
-// verify.toml, and non-directory entries, are ignored.
-func Discover(root dt.DirPath) (manifests map[string]*Manifest, err error) {
-	var tasksDir dt.DirPath
-	var entries []os.DirEntry
-	var entry os.DirEntry
-	var exists bool
-	var hasManifest bool
-	var id string
+// LoadSuite loads the one task's effective manifest a run executes: its
+// verify.toml merged beneath the project-level config, validated, and its
+// checks' dirs resolved against root (see Manifest.ValidateDirs). It reads no
+// other task's suite, so a landed suite that has rotted — a key a newer build
+// dropped, a dir since renamed — cannot refuse another task's run. A task with
+// no suite directory, or no verify.toml in it, returns ok=false and no error.
+func LoadSuite(root dt.DirPath, id string) (eff *Manifest, ok bool, err error) {
+	var dir dt.DirPath
 	var manifestPath dt.Filepath
 	var project *ProjectConfig
-	var m *Manifest
-	var eff *Manifest
 
-	manifests = make(map[string]*Manifest)
+	dir, ok, err = SuiteDir(root, id)
+	if err != nil || !ok {
+		goto end
+	}
+	manifestPath = dt.FilepathJoin(dir, ManifestFile)
+	ok, err = manifestPath.Exists()
+	if err != nil {
+		err = doterr.NewErr(ErrDiscoveringSuites, err)
+		goto end
+	}
+	if !ok {
+		goto end
+	}
 
 	project, err = LoadProjectConfig(root)
 	if err != nil {
 		goto end
 	}
-
-	tasksDir = root.Join(SuitesDir)
-
-	exists, err = tasksDir.Exists()
+	eff, err = effectiveManifest(project, manifestPath, string(dir.Base()))
 	if err != nil {
-		err = doterr.NewErr(ErrDiscoveringSuites, err)
 		goto end
 	}
-	if !exists {
-		goto end
-	}
-
-	entries, err = tasksDir.ReadDir()
+	err = eff.ValidateDirs(root)
 	if err != nil {
-		err = doterr.NewErr(ErrDiscoveringSuites, err)
+		err = doterr.WithErr(err, "filepath", manifestPath)
 		goto end
 	}
-
-	for _, entry = range entries {
-		if !entry.IsDir() {
-			continue
-		}
-		id = entry.Name()
-		manifestPath = dt.FilepathJoin3(tasksDir, id, ManifestFile)
-
-		hasManifest, err = manifestPath.Exists()
-		if err != nil {
-			err = doterr.NewErr(ErrDiscoveringSuites, err)
-			goto end
-		}
-		if !hasManifest {
-			continue
-		}
-
-		m, err = loadManifestForMerge(manifestPath)
-		if err != nil {
-			goto end
-		}
-
-		eff = Merge(project, m)
-
-		err = eff.Validate()
-		if err == nil {
-			err = eff.ValidateDirs(root)
-		}
-		if err != nil {
-			err = doterr.WithErr(err, "filepath", manifestPath)
-			goto end
-		}
-		if NormalizeTaskID(eff.Task) != NormalizeTaskID(id) {
-			err = doterr.NewErr(ErrInvalidManifest, ErrTaskIDMismatch,
-				"dir", id, "task", eff.Task, "filepath", manifestPath)
-			goto end
-		}
-		// Keyed by the manifest's own `task` value, not the directory name, so
-		// callers look up and error-report in the id form they were given.
-		manifests[NormalizeTaskID(eff.Task)] = eff
-	}
-
 end:
 	if err != nil {
+		ok = false
 		err = doterr.WithErr(err, "root", root)
 	}
-	return manifests, err
+	return eff, ok, err
+}
+
+// effectiveManifest decodes the per-task manifest at manifestPath, merges it
+// beneath project, validates the result, and checks its task names the suite
+// directory dirName.
+func effectiveManifest(project *ProjectConfig, manifestPath dt.Filepath, dirName string) (eff *Manifest, err error) {
+	var m *Manifest
+
+	m, err = loadManifestForMerge(manifestPath)
+	if err != nil {
+		goto end
+	}
+
+	eff = Merge(project, m)
+
+	err = eff.Validate()
+	if err != nil {
+		err = doterr.WithErr(err, "filepath", manifestPath)
+		goto end
+	}
+	if NormalizeTaskID(eff.Task) != NormalizeTaskID(dirName) {
+		err = doterr.NewErr(ErrInvalidManifest, ErrTaskIDMismatch,
+			"dir", dirName, "task", eff.Task, "filepath", manifestPath)
+		goto end
+	}
+end:
+	return eff, err
 }
 
 // SuiteDir resolves a task's suite directory: the entry under
@@ -208,9 +183,44 @@ end:
 	return dir, ok, err
 }
 
+// ManifestIDs returns the normalized ids of the suite directories under
+// <root>/.endless/tasks that hold a verify.toml, by the file's presence alone:
+// no manifest is read. A missing .endless/tasks directory yields an empty set.
+func ManifestIDs(root dt.DirPath) (ids map[string]bool, err error) {
+	var tasksDir dt.DirPath
+	var entries []os.DirEntry
+	var exists bool
+
+	ids = make(map[string]bool)
+	tasksDir = root.Join(SuitesDir)
+
+	exists, err = tasksDir.Exists()
+	if err != nil || !exists {
+		goto end
+	}
+	entries, err = tasksDir.ReadDir()
+	if err != nil {
+		goto end
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		has, ferr := dt.FilepathJoin3(tasksDir, entry.Name(), ManifestFile).Exists()
+		if ferr == nil && has {
+			ids[NormalizeTaskID(entry.Name())] = true
+		}
+	}
+end:
+	if err != nil {
+		err = doterr.NewErr(ErrDiscoveringSuites, err, "root", root)
+	}
+	return ids, err
+}
+
 // DiscoverScripts walks <root>/.endless/tasks/*/verify.sh and returns the
 // script suites keyed by task id (normalized — see NormalizeTaskID). It is the
-// script-form counterpart of Discover and deliberately mirrors its rules: only
+// script-form counterpart of ManifestIDs and deliberately mirrors its rules: only
 // directory entries are considered, a directory without the file is skipped, and
 // a missing .endless/tasks directory yields an empty map and no error.
 //
@@ -221,7 +231,7 @@ end:
 // canonical E-NNNN form.
 //
 // Non-directory entries — HarnessFile, a directory-level CLAUDE.md — are skipped
-// by the same IsDir() test that skips them in Discover, so a shared file living
+// by the same IsDir() test that skips them in ManifestIDs, so a shared file living
 // beside the per-task directories is never discoverable as a task.
 func DiscoverScripts(root dt.DirPath) (scripts map[string]dt.Filepath, err error) {
 	var tasksDir dt.DirPath

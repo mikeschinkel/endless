@@ -1,6 +1,7 @@
 package verifycmd
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"testing"
@@ -116,5 +117,35 @@ command = "cat report.json"
 		if len(got) != 1 || len(got[0].Suite) != 1 || got[0].Suite[0] != wantSuite {
 			t.Errorf("%q tests = %+v, want suite %q", name, got, wantSuite)
 		}
+	}
+}
+
+// A run reads only its own task's suite, so a landed suite that has rotted —
+// here a dir that no longer exists — does not refuse another task's run.
+func TestRun_IgnoresOtherTasksRottedSuite(t *testing.T) {
+	root := writeSuite(t, "E-OK", `
+schema = 1
+task   = "E-OK"
+[[check]]
+sh = "true"
+`)
+	rotted := filepath.Join(root, ".endless", "tasks", "e-rot")
+	if err := os.MkdirAll(rotted, 0o755); err != nil {
+		t.Fatalf("MkdirAll: %v", err)
+	}
+	body := "schema = 1\ntask = \"E-ROT\"\n[[check]]\nsh = \"true\"\ndir = \"gone\"\n"
+	if err := os.WriteFile(filepath.Join(rotted, "verify.toml"), []byte(body), 0o644); err != nil {
+		t.Fatalf("WriteFile: %v", err)
+	}
+	t.Chdir(root)
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("XDG_CONFIG_HOME", "")
+
+	code, err := run("E-OK", false)
+	if err != nil || code != 0 {
+		t.Fatalf("run(E-OK) = %d, %v; want 0, nil", code, err)
+	}
+	if _, err := run("E-ROT", false); !errors.Is(err, verify.ErrCheckDirMissing) {
+		t.Errorf("run(E-ROT) error = %v, want ErrCheckDirMissing", err)
 	}
 }

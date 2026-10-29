@@ -70,7 +70,7 @@ import (
 //     opinion about them.
 //
 // Case-insensitive because an uppercase suite directory still resolves:
-// verify.Discover compares ids through NormalizeTaskID, so `E-1758/` and
+// verify.SuiteDir compares ids through NormalizeTaskID, so `E-1758/` and
 // `e-1758/` both name the same task's suite and the gate must see both.
 var suitePathRe = regexp.MustCompile(
 	`(?i)(?:^|/)` + regexp.QuoteMeta(verify.SuitesDir) + `/e-(\d+)/.`)

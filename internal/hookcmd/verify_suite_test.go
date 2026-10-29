@@ -42,7 +42,7 @@ func TestSuiteTaskFromPath(t *testing.T) {
 		{"manifest, repo-relative", ".endless/tasks/e-1916/verify.toml", 1916},
 		{"dot-slash prefix", "./.endless/tasks/e-101/verify.sh", 101},
 		{"absolute", "/Users/x/proj/.endless/tasks/e-999/verify.toml", 999},
-		// An uppercase suite directory still RESOLVES — verify.Discover
+		// An uppercase suite directory still RESOLVES — verify.SuiteDir
 		// compares ids through NormalizeTaskID — so the gate has to see it too,
 		// or it goes blind on exactly the directories that predate the rename.
 		{"uppercase suite dir", ".endless/tasks/E-1889/verify.sh", 1889},
