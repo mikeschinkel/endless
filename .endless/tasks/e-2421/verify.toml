@@ -1,0 +1,32 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2421 and records what was true when E-2421
+# landed. Edit it only if you ARE E-2421. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+#
+# E-2421: re-running `endless project init` updates .endless/tasks/CLAUDE.md
+# to the rules this Endless ships unless the project's copy was edited. The
+# text and every shipped version's hash are embedded in Go (internal/shipped);
+# what init wrote is a shipped_file.written event in the project's ledger.
+schema = 1
+task   = "E-2421"
+
+# The shipped text, its hash list and the replace/keep decision; the event's
+# executor and replay; the migration matching schema.sql.
+[[check]]
+name   = "Go: shipped files, the shipped_file.written event, the schema"
+runner = "gotest"
+paths  = ["./internal/shipped/...", "./internal/events/...", "./internal/schema/..."]
+
+# Registration: created, updated with and without a record, edited left alone,
+# nothing recorded off the default branch.
+[[check]]
+name   = "Python: project init places and records the rules"
+runner = "pytest/uv"
+paths  = ["tests/test_suite_rules.py", "tests/test_project_bring_up.py"]
+
+# The same, end to end through the CLI, plus where the record lands.
+[[check]]
+name    = "project init end to end"
+runner  = "sh"
+command = 'sh "$ENDLESS_VERIFY_DIR/e2e.sh"'
+format  = "tap"

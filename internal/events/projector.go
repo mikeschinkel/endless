@@ -111,6 +111,8 @@ func replayEvent(db *sql.DB, evt *Event, result *ProjectResult) error {
 		return replayTaskDepDeleted(db, evt, result)
 	case KindEpicStatusDerived:
 		return replayEpicStatusDerived(db, evt, result)
+	case KindShippedFileWritten:
+		return replayShippedFileWritten(db, evt, result)
 	case KindDecisionCreated:
 		return replayDecisionCreated(db, evt, result)
 	case KindDecisionFieldsUpdated:

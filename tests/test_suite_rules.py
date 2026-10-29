@@ -2,113 +2,142 @@
 
 A file that existed only in Endless's own checkout would teach nobody, and the
 mistakes it exists to prevent are not Endless-specific. So registration places
-it, the same way it places `.gitignore` entries and `.endless/tmp/` — and, like
-those, re-running registration must neither duplicate it nor revert a project's
-own edits.
+it, the same way it places `.gitignore` entries and `.endless/tmp/`.
+
+Re-running registration brings an unedited copy up to the rules this Endless
+ships, and leaves an edited one alone (E-2421). The text, every shipped
+version's hash and that decision live in Go (internal/shipped, which also tests
+the text itself); these tests cover what a registration does with them.
 """
 
+import hashlib
+import json
 from pathlib import Path
 
+from endless import db, event_bridge
 from endless.register import register_project
-from endless.suite_rules import SUITE_RULES, scaffold_suite_rules
 
 from conftest import init_git_repo
 
+REPO = Path(__file__).resolve().parents[1]
+RULES = ".endless/tasks/CLAUDE.md"
+# The repo's own copy is the shipped text (internal/shipped asserts it).
+SHIPPED = (REPO / RULES).read_text()
+# The first version Endless shipped (53c53f8a8, E-2023), from before any record.
+FIRST_SHIPPED = (REPO / "tests" / "fixtures" / "tasks-rules-E-2023.md").read_text()
 
-def _rules_path(project: Path) -> Path:
-    return project / ".endless" / "tasks" / "CLAUDE.md"
+
+def _sha(text: str) -> str:
+    return hashlib.sha256(text.encode()).hexdigest()
 
 
-def test_registration_places_the_rules(isolated_env):
-    project_dir = isolated_env["projects_root"] / "fresh-proj"
+def _project(isolated_env, name: str) -> Path:
+    project_dir = isolated_env["projects_root"] / name
     init_git_repo(project_dir)
+    return project_dir
+
+
+def _recorded(name: str) -> str | None:
+    rows = db.query(
+        "SELECT w.sha256 FROM shipped_file_writes w "
+        "JOIN projects p ON p.id = w.project_id WHERE p.name = ? AND w.path = ?",
+        (name, RULES),
+    )
+    return rows[0]["sha256"] if rows else None
+
+
+def _ledger_writes(project_dir: Path) -> list[dict]:
+    lines = []
+    for seg in sorted((project_dir / ".endless" / "db-ledger").glob("*.jsonl")):
+        lines += [json.loads(line) for line in seg.read_text().splitlines()]
+    return [e for e in lines if e["kind"] == "shipped_file.written"]
+
+
+def test_registration_places_the_rules_and_records_them(isolated_env):
+    project_dir = _project(isolated_env, "fresh-proj")
 
     register_project(project_dir, infer=True)
 
-    rules = _rules_path(project_dir)
-    assert rules.is_file(), "a freshly registered project has no .endless/tasks/CLAUDE.md"
-    assert rules.read_text() == SUITE_RULES
+    rules = project_dir / RULES
+    assert rules.read_text() == SHIPPED
+    assert _recorded("fresh-proj") == _sha(SHIPPED)
+    # The record lives in the project's own ledger, so a clone knows it too.
+    writes = _ledger_writes(project_dir)
+    assert [(w["entity"]["id"], w["payload"]["sha256"]) for w in writes] == [
+        (RULES, _sha(SHIPPED))
+    ]
 
 
-def test_reregistration_does_not_overwrite_a_customized_copy(isolated_env):
-    project_dir = isolated_env["projects_root"] / "customized-proj"
-    init_git_repo(project_dir)
+def test_a_rerun_with_nothing_to_do_records_nothing(isolated_env, capsys):
+    project_dir = _project(isolated_env, "steady-proj")
+    register_project(project_dir, infer=True)
+    capsys.readouterr()
 
     register_project(project_dir, infer=True)
-    rules = _rules_path(project_dir)
-    rules.write_text("# Our own rules\n")
+
+    assert len(_ledger_writes(project_dir)) == 1
+    assert "Verification-suite rules" not in capsys.readouterr().out
+
+
+def test_a_rerun_updates_what_init_last_wrote(isolated_env, capsys):
+    """P1: the copy is exactly what init last wrote, so it is replaced."""
+    project_dir = _project(isolated_env, "recorded-proj")
+    register_project(project_dir, infer=True)
+    older = "# The rules as an older Endless wrote them\n"
+    (project_dir / RULES).write_text(older)
+    event_bridge.emit_event(
+        "shipped_file.written", project="recorded-proj",
+        entity_type="shipped_file", entity_id=RULES,
+        payload={"kind": "tasks-rules", "sha256": _sha(older)},
+        actor_kind="system", project_root=str(project_dir),
+    )
+    capsys.readouterr()
 
     register_project(project_dir, infer=True)
 
-    assert rules.read_text() == "# Our own rules\n"
+    assert (project_dir / RULES).read_text() == SHIPPED
+    assert _recorded("recorded-proj") == _sha(SHIPPED)
+    assert "Verification-suite rules updated in" in capsys.readouterr().out
 
 
-def test_scaffold_reports_whether_it_wrote(tmp_path):
-    assert scaffold_suite_rules(tmp_path) is True
-    assert scaffold_suite_rules(tmp_path) is False
+def test_a_rerun_without_a_record_updates_a_shipped_version(isolated_env, capsys):
+    """P2: a copy from before the record existed is replaced only if Endless
+    shipped exactly it."""
+    project_dir = _project(isolated_env, "legacy-proj")
+    (project_dir / ".endless" / "tasks").mkdir(parents=True)
+    (project_dir / RULES).write_text(FIRST_SHIPPED)
+
+    register_project(project_dir, infer=True)
+
+    assert (project_dir / RULES).read_text() == SHIPPED
+    assert _recorded("legacy-proj") == _sha(SHIPPED)
+    assert "Verification-suite rules updated in" in capsys.readouterr().out
 
 
-def test_the_rules_name_the_things_the_refusals_point_at():
-    """The runner's refusal and the harness both send a reader here by path.
+def test_a_rerun_leaves_an_edited_copy_alone_and_says_so(isolated_env, capsys):
+    """P3, with a record: the copy is not what init last wrote."""
+    project_dir = _project(isolated_env, "customized-proj")
+    register_project(project_dir, infer=True)
+    (project_dir / RULES).write_text("# Our own rules\n")
+    capsys.readouterr()
 
-    If the file stops covering what those messages promise it covers, the
-    refusal becomes a dead link — which is worse than no reference at all,
-    because it reads as though the reasoning exists somewhere.
-    """
-    for phrase in (
-        "endless task verify",
-        "_harness.sh",
-        "land-time gate",
-        "Do not run another task's suite",
-        "Do not edit a landed task's suite",
-    ):
-        assert phrase in SUITE_RULES, f"the suite rules no longer mention {phrase!r}"
+    register_project(project_dir, infer=True)
+
+    assert (project_dir / RULES).read_text() == "# Our own rules\n"
+    assert _recorded("customized-proj") == _sha(SHIPPED)
+    out = capsys.readouterr().out
+    assert f"{RULES} was edited locally and not updated" in out
 
 
-def test_endless_ships_the_same_file_it_scaffolds():
-    """Endless's own copy is the scaffolded text, not a hand-maintained twin.
+def test_without_a_record_an_edited_shipped_version_is_left_alone(isolated_env, capsys):
+    """P3, without a record: one changed byte makes it not a shipped version."""
+    project_dir = _project(isolated_env, "edited-legacy-proj")
+    (project_dir / ".endless" / "tasks").mkdir(parents=True)
+    edited = FIRST_SHIPPED + "\nOne line of our own.\n"
+    (project_dir / RULES).write_text(edited)
 
-    Two copies of a rules file drift, and the one that drifts is always the one
-    nobody is reading.
-    """
-    repo_copy = Path(__file__).resolve().parents[1] / ".endless" / "tasks" / "CLAUDE.md"
-    assert repo_copy.is_file()
-    assert repo_copy.read_text() == SUITE_RULES
+    register_project(project_dir, infer=True)
 
-
-def _section(heading: str) -> str:
-    """The text of one `## ` section of SUITE_RULES, heading included."""
-    start = SUITE_RULES.index(f"## {heading}\n")
-    end = SUITE_RULES.find("\n## ", start + 1)
-    return SUITE_RULES[start:] if end < 0 else SUITE_RULES[start:end]
-
-
-def test_the_rules_teach_the_manifest_form_only():
-    """E-2419: SUITE_RULES ships to every project, and only the endless repo has
-    `_harness.sh` and `_guard.sh`. So the opening lines, the file table and
-    "Writing one" name no harness, guard or script template — a project that
-    was told to source a harness it does not have could not write a suite.
-    """
-    opening = SUITE_RULES[: SUITE_RULES.index("\n## ")]
-    file_table = _section("Three kinds of file, and only one of them is yours")
-    writing = _section("Writing one")
-    script_only = ("_guard.sh", "#!/usr/bin/env bash", "source \"$(dirname", "assert_eq",
-                   "as_agent", "with_tmux")
-
-    for name, text in (("opening lines", opening), ("file table", file_table)):
-        for word in ("_harness.sh", "verify.sh", *script_only):
-            assert word not in text, f"the {name} name {word!r}"
-
-    for word in script_only:
-        assert word not in writing, f"'Writing one' names {word!r}"
-    for want in ("verify.toml", "[[check]]", "sh ", "contains", "not_contains",
-                 "equals", "name", "Native tests first"):
-        assert want in writing, f"'Writing one' does not teach {want!r}"
-
-
-def test_one_line_sends_a_script_suite_reader_to_the_harness_header():
-    lines = [line for line in SUITE_RULES.splitlines() if "_harness.sh" in line]
-    assert len(lines) == 1, f"_harness.sh is named on {len(lines)} lines: {lines}"
-    paragraph = _section("Writing one").split("\n\n")
-    sends = [p for p in paragraph if "_harness.sh" in p]
-    assert sends and "header" in sends[0] and "verify.sh" in sends[0], sends
+    assert (project_dir / RULES).read_text() == edited
+    assert _recorded("edited-legacy-proj") is None
+    assert "was edited locally and not updated" in capsys.readouterr().out

@@ -144,6 +144,7 @@ const (
 	EntityDecision         EntityType = "decision"          // E-1378
 	EntityDecisionRelation EntityType = "decision_relation" // E-1378
 	EntityTaskQuestion     EntityType = "task_question"     // E-2176
+	EntityShippedFile      EntityType = "shipped_file"      // E-2421
 )
 
 // ActorKind enumerates actor categories.
@@ -245,6 +246,12 @@ const (
 	KindProjectRenamed      Kind = "project.renamed"
 	KindProjectUnregistered Kind = "project.unregistered"
 	KindProjectPurged       Kind = "project.purged"
+
+	// KindShippedFileWritten (E-2421) records that `endless project init` wrote
+	// one of Endless's shipped files into the project — its path and the hash of
+	// the bytes written — so a later init can tell an unedited copy from an
+	// edited one. Entity ID is the file's project-relative path.
+	KindShippedFileWritten Kind = "shipped_file.written"
 )
 
 // Session event kinds.
@@ -440,6 +447,8 @@ var ValidKinds = map[Kind]bool{
 	KindProjectRenamed:      true,
 	KindProjectUnregistered: true,
 	KindProjectPurged:       true,
+	// Shipped files (E-2421)
+	KindShippedFileWritten: true,
 	// Session
 	KindSessionWorkStarted:   true,
 	KindSessionChatStarted:   true,
@@ -498,6 +507,7 @@ var validEntityTypes = map[EntityType]bool{
 	EntityDecision:         true,
 	EntityDecisionRelation: true,
 	EntityTaskQuestion:     true,
+	EntityShippedFile:      true,
 }
 
 // validActorKinds is the closed set of recognized actor kinds.

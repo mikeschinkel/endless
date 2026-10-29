@@ -1,29 +1,3 @@
-"""The rules that govern a project's per-task verification suites.
-
-This module holds the text of `.endless/tasks/CLAUDE.md` and the idempotent
-write that places it. It ships with every registered project — a file that
-existed only in Endless's own checkout would teach nobody, and the mistakes it
-exists to prevent are not Endless-specific: any project using Endless
-accumulates per-task suites that look like a regression suite and rot.
-
-It is explicitly NOT counted as a defense. It is prose, and prose is the layer
-that already failed: the rule was read, understood, paraphrased into "not
-required", and broken. The enforcement is the runner's own-task-only refusal,
-which runs before anything in a suite does. This file is the explanation that
-refusal points at, placed where an agent working in that directory meets it
-before it acts instead of having to go find it in `endless guide orchestration`.
-
-It teaches the manifest form (`verify.toml`) alone, because that is the only
-form every project can run (E-2419). The endless repo's legacy script suites,
-their `_harness.sh` and its `_guard.sh` exist in that repo only, and are
-documented in `_harness.sh`'s own header rather than here.
-"""
-
-from pathlib import Path
-
-SUITE_RULES_FILENAME = "CLAUDE.md"
-
-SUITE_RULES = """\
 # A task's own directory lives here
 
 One directory per task: `.endless/tasks/e-<id>/`.
@@ -251,21 +225,3 @@ is optional: without one, the land uses its defaults. Settings live in tables,
 never at the top level, and a table or key the land does not understand refuses
 the land before the merge, naming it. Which settings apply to this project, if
 any, is in **Landing the work** in `endless guide orchestration`.
-"""
-
-
-def scaffold_suite_rules(project_path: Path) -> bool:
-    """Idempotently place `.endless/tasks/CLAUDE.md`.
-
-    Returns True when the file was written, False when one was already there.
-    An existing file is never overwritten: a project that customized its own
-    rules keeps them, and re-running registration is a no-op rather than a
-    silent revert.
-    """
-    tasks_dir = project_path / ".endless" / "tasks"
-    target = tasks_dir / SUITE_RULES_FILENAME
-    if target.exists():
-        return False
-    tasks_dir.mkdir(parents=True, exist_ok=True)
-    target.write_text(SUITE_RULES)
-    return True

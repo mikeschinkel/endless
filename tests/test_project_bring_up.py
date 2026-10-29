@@ -18,6 +18,8 @@ from endless.register import (
 
 from conftest import init_git_repo
 
+LEDGER_SUBJECT = "Endless: record ledger entry"
+
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
@@ -176,7 +178,10 @@ def test_bring_up_commits_what_it_wrote_and_a_rerun_changes_nothing(isolated_env
     before = _commits(proj)
 
     register_project(proj, infer=True)
-    assert _commits(proj) == before + 1
+    # The ledger entry recording the rules file it wrote (E-2421), then the
+    # bring-up itself.
+    assert _commits(proj) == before + 2
+    assert _git(proj, "log", "-1", "--format=%s", "HEAD~1").strip() == LEDGER_SUBJECT
     assert _git(proj, "log", "-1", "--format=%s").strip() == BRING_UP_COMMIT_SUBJECT
     committed = set(_git(proj, "show", "--name-only", "--format=", "HEAD").split())
     assert committed == {
@@ -188,7 +193,7 @@ def test_bring_up_commits_what_it_wrote_and_a_rerun_changes_nothing(isolated_env
     snapshot = {p: p.read_bytes() for p in proj.rglob("*")
                 if p.is_file() and ".git" not in p.parts}
     register_project(proj, infer=True)
-    assert _commits(proj) == before + 1
+    assert _commits(proj) == before + 2
     assert _status(proj) == ""
     assert {p: p.read_bytes() for p in proj.rglob("*")
             if p.is_file() and ".git" not in p.parts} == snapshot
@@ -232,3 +237,7 @@ def test_nothing_is_committed_off_the_default_branch(isolated_env, capsys):
     assert _commits(proj) == before
     out = capsys.readouterr().out
     assert "not the default branch main" in out
+    # Not even the ledger record of the rules file (E-2421): it would commit on
+    # this branch and be lost with it.
+    assert "rules written to .endless/tasks/CLAUDE.md (not recorded:" in out
+    assert not (proj / ".endless" / "db-ledger").exists()

@@ -84,6 +84,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/sessionstatuscmd"
 	"github.com/mikeschinkel/endless/internal/settings"
 	"github.com/mikeschinkel/endless/internal/settingscmd"
+	"github.com/mikeschinkel/endless/internal/shippedcmd"
 	"github.com/mikeschinkel/endless/internal/spawnlaunchcmd"
 	"github.com/mikeschinkel/endless/internal/taskcontentcmd"
 	"github.com/mikeschinkel/endless/internal/taskstatuscmd"
@@ -265,6 +266,8 @@ func main() {
 		sessionmonitorcmd.Run(rest)
 	case "project":
 		projectcmd.Run(rest)
+	case "shipped":
+		shippedcmd.Run(rest)
 	case "project-status", "project-window":
 		projectstatuscmd.Run(sub, rest)
 	case "spawn-window", "spawn-layout", "spawn-launch":
@@ -403,6 +406,7 @@ func usageText() string {
 	fmt.Fprintln(w, "  project        resolve|ignore|activate|clear|list-ignored  (ignored directories)")
 	fmt.Fprintln(w, "  project-status render the project status view (--monitor loops it)")
 	fmt.Fprintln(w, "  project-window create the two-pane tmux session behind project monitor --tmux")
+	fmt.Fprintln(w, "  shipped        place <kind> <project> <dir>  (a file Endless ships into projects)")
 	fmt.Fprintln(w, "  spawn-window   create the tmux window that launches Claude on a task")
 	fmt.Fprintln(w, "  spawn-layout   build the standard pane layout around an existing Claude pane")
 	fmt.Fprintln(w, "  spawn-launch   (internal) set window options and exec claude inside the window")

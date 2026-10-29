@@ -12,7 +12,6 @@ from endless.project_identity import (
     CONFIG_KEY, NoIdentity, identity_for, stored_identity,
 )
 from endless.project_path import resolved, stored
-from endless.suite_rules import scaffold_suite_rules
 
 NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]*$")
 
@@ -298,12 +297,6 @@ def register_project(
     added = scaffold_gitignore(project_path)
     (project_path / ".endless" / "tmp").mkdir(parents=True, exist_ok=True)
 
-    # Place the verification-suite rules before the project has any suites, so
-    # the reasoning is already there the first time someone writes or runs one.
-    # Never overwrites an existing file — a customized copy survives re-running
-    # registration.
-    suite_rules_written = scaffold_suite_rules(project_path)
-
     # Detect group from parent directory
     group_name = None
     parent = project_path.parent
@@ -355,12 +348,7 @@ def register_project(
             + " .gitignore updated with "
             + click.style(", ".join(added), dim=True)
         )
-    if suite_rules_written:
-        click.echo(
-            click.style("•", fg="cyan")
-            + " Verification-suite rules written to "
-            + click.style(".endless/tasks/CLAUDE.md", dim=True)
-        )
+    _place_suite_rules(name, project_path)
 
     pointer_file = scaffold_guide_pointer(project_path)
     if pointer_file:
@@ -378,6 +366,42 @@ def register_project(
 
 
 # --- Bringing a project up to date (E-2349) ---------------------------------
+
+SUITE_RULES_KIND = "tasks-rules"
+
+
+def _place_suite_rules(name: str, project_path: Path) -> None:
+    """Place `.endless/tasks/CLAUDE.md`, the verification-suite rules.
+
+    Placed before the project has any suites, so the reasoning is already there
+    the first time someone writes or runs one. A re-run brings an unedited copy
+    up to the rules this Endless ships, and leaves an edited one alone (E-2421):
+    the text, every shipped version and the decision live in Go
+    (internal/shipped). Runs after the project row exists, because the record
+    of what was written is an event in this project's ledger.
+
+    Off the default branch nothing is recorded: the ledger entry would commit
+    on that branch and be lost if the branch is thrown away. With no record, a
+    later run still updates the copy, because it is exactly a shipped version.
+    """
+    from endless import event_bridge
+
+    unrecorded = _not_committable_reason(project_path)
+    placed = event_bridge.place_shipped_file(
+        SUITE_RULES_KIND, name, project_path, record=unrecorded is None)
+    path = click.style(placed["path"], dim=True)
+    action = placed["action"]
+    note = f" (not recorded: {unrecorded})" if unrecorded else ""
+    if action == "created":
+        click.echo(click.style("•", fg="cyan")
+                   + " Verification-suite rules written to " + path + note)
+    elif action == "updated":
+        click.echo(click.style("•", fg="cyan")
+                   + " Verification-suite rules updated in " + path + note)
+    elif action == "edited":
+        click.echo(click.style("•", fg="yellow") + " " + path
+                   + " was edited locally and not updated")
+
 
 GUIDE_POINTER_MARKER = "<!-- endless (managed by `endless project init`) -->"
 GUIDE_POINTER_BLOCK = (

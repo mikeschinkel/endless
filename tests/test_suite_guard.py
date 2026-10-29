@@ -161,7 +161,7 @@ def test_no_marker_variable_grants_permission_anywhere():
     absent = [
         (HARNESS, "#"),
         (REPO / "internal" / "verifycmd" / "verify.go", "//"),
-        (REPO / "src" / "endless" / "suite_rules.py", "#"),
+        (REPO / "internal" / "shipped" / "templates" / "tasks-rules.md.tmpl", "#"),
     ]
     for path, comment in absent:
         code, prose = _marker_lines(path, comment)

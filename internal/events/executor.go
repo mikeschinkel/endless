@@ -240,6 +240,8 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 		return execTaskDepCreated(db, evt)
 	case KindTaskDepDeleted:
 		return execTaskDepDeleted(db, evt)
+	case KindShippedFileWritten:
+		return execShippedFileWritten(db, evt)
 	case KindSessionStatusRecorded:
 		return execSessionStatusRecorded(db, evt)
 	case KindSessionTasksTouched:

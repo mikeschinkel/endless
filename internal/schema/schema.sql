@@ -1042,6 +1042,23 @@ CREATE TABLE IF NOT EXISTS task_landings (
 CREATE INDEX IF NOT EXISTS idx_task_landings_task
     ON task_landings(task_id, landed_at DESC);
 
+-- What `endless project init` last wrote into each project, per shipped file
+-- (E-2421): the project-relative path and the SHA-256 of exactly the bytes
+-- written. A later init replaces the file only while it still hashes to this,
+-- so a copy someone edited is left alone. Projected from the project's own
+-- ledger (shipped_file.written), so a clone knows it too; one row per path,
+-- the latest write. Which versions Endless ever shipped is not stored here —
+-- every binary carries that list (internal/shipped).
+CREATE TABLE IF NOT EXISTS shipped_file_writes (
+    project_id INTEGER NOT NULL,
+    path       TEXT    NOT NULL,
+    kind       TEXT    NOT NULL,
+    sha256     TEXT    NOT NULL,
+    written_at TEXT    NOT NULL,
+    PRIMARY KEY (project_id, path),
+    FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE
+);
+
 -- Session status snapshots (E-1312 / E-1314). Latest row by created_at is the
 -- current status. `tasks` holds all <task> elements; `summary` holds <layer>
 -- children; task_id joins to tasks.id (active_task_id until E-1969, renamed
