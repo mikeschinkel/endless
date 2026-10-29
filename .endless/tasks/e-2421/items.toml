@@ -40,4 +40,4 @@ statement = "A test fails when the endless repo's committed .endless/tasks/CLAUD
 [[item]]
 id = "P8"
 kind = "deliverable"
-statement = "Running init from a self_dev worktree writes to the sandbox database, not main"
+statement = "In the endless repo, running init from a task's worktree records into that worktree's sandbox database, not the main one"
