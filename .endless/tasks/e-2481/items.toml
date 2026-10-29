@@ -64,3 +64,8 @@ statement = "Does not change how a worktree sandbox is created, seeded, reset or
 id = "P11"
 kind = "deliverable"
 statement = "Removing a worktree with git worktree remove, as drop and reap both do, takes its self-ignoring in-tree sandbox along — pinned by a real-git test"
+
+[[item]]
+id = "P12"
+kind = "deliverable"
+statement = "Seeding Endless's database into a worktree sandbox moves out of sandbox to endless-go db seed-sandbox [--force]; sandbox offers only reset and claude-settings-repair, and init is an unknown command there"
