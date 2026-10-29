@@ -55,7 +55,7 @@ statement = "Endless never overwrites, renames or removes a Git hook file or a c
 [[item]]
 id = "P11"
 kind = "exclusion"
-statement = "Does not support husky"
+statement = "Does not edit husky's or any other unsupported hook manager's files"
 
 [[item]]
 id = "P12"
