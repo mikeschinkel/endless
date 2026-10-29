@@ -434,3 +434,22 @@ def test_spawn_refuses_items_changed_since_approval(seeded_project_at_cwd):
 
 def test_a_task_with_no_items_needs_no_approval_to_spawn(seeded_project_at_cwd):
     plan_items.require_approved(_submitted_todo(), "spawned")
+
+
+def test_hand_in_refuses_items_never_approved(seeded_project_at_cwd):
+    """E-2485: items added while underway and never approved refuse the hand-in,
+    naming the approve command, while the task is still where it can comply."""
+    from endless import task_cmd
+    from plan_item_steps import itemize, reconcile_as_planned
+    tid = _submitted_todo()
+    task_cmd.update_plan(item_id=tid, status="underway")
+    itemize(tid)
+    reconcile_as_planned(tid)
+    with pytest.raises(ClickException) as exc:
+        task_cmd.update_plan(item_id=tid, status="unverified")
+    assert f"endless task plan approve E-{tid} P1" in str(exc.value)
+    assert _status(tid) == "underway"
+    plan_items.approve(tid, ("P1",))
+    reconcile_as_planned(tid)
+    task_cmd.update_plan(item_id=tid, status="unverified")
+    assert _status(tid) == "unverified"

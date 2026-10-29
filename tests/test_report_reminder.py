@@ -77,9 +77,10 @@ def _add_task(title: str, status: str = "underway", type_id: int = 1) -> int:
         (task_cmd._current_endless_session_id(), f"uuid-report-reminder-{task_id}", task_id),
     )
     # A todo or bugfix underway has its plan items, and these tests wind it down
-    # as finished work: reconciled, as `unverified` and `assumed` require (E-2280).
+    # as finished work: approved and reconciled, as `unverified` and `assumed`
+    # require (E-2280, E-2485).
     if type_id in (1, 2) and status == "underway":
-        itemize(task_id)
+        itemize(task_id, approved=True)
         reconcile_as_planned(task_id)
     return task_id
 

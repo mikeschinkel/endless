@@ -170,7 +170,7 @@ def test_update_status_only_does_not_trip_gate(seeded_project_at_cwd):
     gate — an unrelated edit to a pre-existing row is never retroactively
     blocked."""
     tid = _add_valid_todo("Fix the parser")
-    itemize(tid)
+    itemize(tid, approved=True)
     reconcile_as_planned(tid)
     task_cmd.update_plan(tid, status="assumed")
     row = db.query("SELECT status FROM tasks WHERE id = ?", (tid,))

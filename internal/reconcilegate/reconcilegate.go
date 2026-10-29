@@ -191,6 +191,25 @@ func check(db *sql.DB, taskID int64, fingerprint string, mode Mode, to string) (
 		fail("the task has no active deliverable plan item; add the items with `endless task plan add`")
 	}
 
+	// A hand-in needs every active planned item approved (E-2485), baselined or
+	// not: items freeze from `unverified` on, so an approval skipped now could
+	// not be given later. Grown items are the discrepancy check's below. A task
+	// already frozen is not refused, since it could not comply; neither is the
+	// backstop, so a task already at `unverified` verifies as it did.
+	requireApproved := mode == ModeHandover && !planitem.IsFrozen(status)
+	if requireApproved {
+		var unapproved []string
+		for _, it := range items {
+			if it.state == planitem.StateActive && it.origin == planitem.OriginPlanned && !it.approvedAt.Valid {
+				unapproved = append(unapproved, planitem.Label(it.seq))
+			}
+		}
+		if len(unapproved) > 0 {
+			fail("plan items %s are not approved; the user reads them (`endless task show E-%d --plan`) and approves them with `endless task plan approve E-%d %s`",
+				strings.Join(unapproved, ", "), taskID, taskID, strings.Join(unapproved, " "))
+		}
+	}
+
 	// The item set matches the approved baseline.
 	if baselined {
 		var differ []string
@@ -203,7 +222,7 @@ func check(db *sql.DB, taskID int64, fingerprint string, mode Mode, to string) (
 			case it.approvedAt.Valid && (it.statement != it.approvedStatement.String || it.kind != it.approvedKind.String ||
 				it.postLand != it.approvedPostLand):
 				differ = append(differ, label+" changed")
-			case !it.approvedAt.Valid && it.origin == planitem.OriginPlanned:
+			case !it.approvedAt.Valid && it.origin == planitem.OriginPlanned && !requireApproved:
 				differ = append(differ, label+" added")
 			}
 		}

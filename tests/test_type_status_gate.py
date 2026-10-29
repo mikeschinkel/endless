@@ -78,7 +78,7 @@ def test_add_research_unverified_rejected(seeded_project_at_cwd):
 
 def test_update_task_unverified_allowed(seeded_project_at_cwd):
     tid = _add_task("Implement the widget", type_id=_TASK)
-    itemize(tid)
+    itemize(tid, approved=True)
     reconcile_as_planned(tid)
     task_cmd.update_plan(tid, status="unverified")
     assert _status(tid) == "unverified"
@@ -86,7 +86,7 @@ def test_update_task_unverified_allowed(seeded_project_at_cwd):
 
 def test_update_bug_unverified_allowed(seeded_project_at_cwd):
     tid = _add_task("Fix the crash", type_id=_BUG)
-    itemize(tid)
+    itemize(tid, approved=True)
     reconcile_as_planned(tid)
     task_cmd.update_plan(tid, status="unverified")
     assert _status(tid) == "unverified"

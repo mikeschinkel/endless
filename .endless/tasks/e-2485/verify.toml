@@ -1,0 +1,21 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2485 and records what was true when E-2485
+# landed. Edit it only if you ARE E-2485. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+schema = 1
+task   = "E-2485"
+
+[[check]]
+name   = "reconcile gate requires approved planned items at the hand-in"
+runner = "gotest"
+paths  = ["./internal/reconcilegate/..."]
+
+[[check]]
+name   = "hand-in refusal through the CLI, and fixtures that approve before handing in"
+runner = "pytest/uv"
+paths  = ["tests/test_plan_items.py", "tests/test_type_status_gate.py", "tests/test_report_reminder.py", "tests/test_verb_category_gate.py"]
+
+[[check]]
+name     = "the guide documents the approval condition"
+sh       = "grep -F 'every active planned item is approved' docs/guide/tasks.md"
+contains = "task plan approve"

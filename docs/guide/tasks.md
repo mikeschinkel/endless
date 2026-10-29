@@ -587,6 +587,7 @@ If it files questions, put them to your user **one at a time**, in the order it 
 
 - the task has at least one active deliverable item;
 - the items match what the user approved (re-approve with `task approve` after a change);
+- every active planned item is approved, including items first added while the task was `underway` (approve with `task plan approve`). Approval cannot be given later, because items freeze from `unverified` on. A grown item needs no approval of its own: the answer to its reconciliation question settles it. `task verify` skips this one, and so does a move from a status where the items are already frozen, so tasks that reached `unverified` before this rule are not stranded;
 - the latest reconciliation is current: no code outside `.endless/` changed on the branch since (a clean `git rebase` does not count; an edit does), and no item changed since;
 - every active item has exactly one entry, and every discrepancy's question is settled — answered or closed, by anyone — or carries a kept earlier answer.
 

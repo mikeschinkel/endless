@@ -305,3 +305,66 @@ func TestGate_StandsAsideForAnIllegalMove(t *testing.T) {
 	}
 	wantProblem(t, r, "no active deliverable")
 }
+
+// E-2485: a hand-in is refused while any active planned item is not approved,
+// even on a task none of whose items was ever approved — approval skipped here
+// cannot be given later, since items freeze from `unverified` on.
+func TestGate_HandoverRequiresPlannedItemsApproved(t *testing.T) {
+	unapproved := func(t *testing.T) *sql.DB {
+		db := newDB(t, 1)
+		// Both items were added while the task was underway; neither approved.
+		item(t, db, 1, "deliverable", "planned", "active", false)
+		item(t, db, 2, "exclusion", "planned", "active", false)
+		reconcile(t, db, "fp", map[int64]string{1: "as_planned", 2: "kept"}, nil)
+		return db
+	}
+	for _, to := range []string{"unverified", "assumed"} {
+		t.Run("refused to "+to, func(t *testing.T) {
+			db := unapproved(t)
+			r, err := check(db, task, "fp", ModeHandover, to)
+			if err != nil {
+				t.Fatal(err)
+			}
+			wantProblem(t, r, "P1, P2 are not approved")
+			wantProblem(t, r, "endless task plan approve E-7 P1 P2")
+		})
+	}
+	t.Run("approving them lets it pass", func(t *testing.T) {
+		db := unapproved(t)
+		mustExec(t, db, `UPDATE task_plan_items SET approved_statement = statement,
+		    approved_kind = kind, approved_at = '2026-10-02T00:00:00'`)
+		reconcile(t, db, "fp", map[int64]string{1: "as_planned", 2: "kept"}, nil)
+		if r := mustCheck(t, db, "fp", ModeHandover); !r.Pass {
+			t.Fatalf("gate refused approved items: %v", r.Problems)
+		}
+	})
+	t.Run("grown items kept through an answered question pass", func(t *testing.T) {
+		db := newDB(t, 1)
+		item(t, db, 1, "deliverable", "planned", "active", true)
+		item(t, db, 2, "deliverable", "grown", "active", false)
+		reconcile(t, db, "fp", map[int64]string{1: "as_planned", 2: "as_planned"},
+			map[int64]string{2: "answered"})
+		if r := mustCheck(t, db, "fp", ModeHandover); !r.Pass {
+			t.Fatalf("gate refused a kept grown item: %v", r.Problems)
+		}
+	})
+	t.Run("backstop does not refuse", func(t *testing.T) {
+		db := unapproved(t)
+		if r := mustCheck(t, db, "fp", ModeBackstop); !r.Pass {
+			t.Fatalf("backstop refused: %v", r.Problems)
+		}
+	})
+	t.Run("a frozen task moving on is not refused", func(t *testing.T) {
+		// Already unverified with unapproved items, as tasks were before this
+		// shipped: its items cannot be approved now, so refusing would strand it.
+		db := unapproved(t)
+		mustExec(t, db, `UPDATE tasks SET status = 'unverified' WHERE id = ?`, task)
+		r, err := check(db, task, "fp", ModeHandover, "assumed")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if !r.Pass {
+			t.Fatalf("gate refused unverified → assumed: %v", r.Problems)
+		}
+	})
+}
