@@ -7833,3 +7833,7 @@ While checking for a duplicate of E-719 (E-2455 session), I flagged E-2287 'Buil
 ### [2026-10-28] A blocks link that the code does not depend on is a wrong link, not a cost
 While presenting E-2461's open questions (should land have an override past a blocker), I listed as a con of 'no override' that a user wanting to land anyway because the code doesn't depend on the blocker would have to delete a link that is still true. Mike pointed out that's incoherent: if the code doesn't depend on the task, it isn't a blocker, so removing the link is correcting it, not losing anything. Before listing a con, check it doesn't contradict the definition of the thing it's about.
 - **Project**: endless
+
+### [2026-10-28] Fold into an open task only when it is the same work
+After confirming E-1332 (clean up worktree sandboxes after drop or land) was obsolete because sandboxes now live inside worktrees, I proposed re-scoping E-1332 to retire the cache-directory sandbox commands instead of marking it obsolete and filing a bugfix, citing ED-1550's 'fold a finding into an OPEN task'. Mike said that takes ED-1550 out of context: folding is for a finding that is evidence for the open task's own work, not for repurposing an obsolete task to a different job. Mark the obsolete task obsolete and file the new work as its own task.
+- **Project**: endless
