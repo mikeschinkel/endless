@@ -493,7 +493,8 @@ claude-settings-sweep:
 # Called from .endless/hooks/post-worktree-create.sh, which is what makes it
 # the project's declaration rather than something endless does to everybody.
 # Run it by hand for a worktree created before the hook did this, or after
-# `sandbox init --force` to rebuild a sandbox DB whose schema has drifted.
+# `endless-go db seed-sandbox --force` to rebuild a sandbox DB whose schema has
+# drifted.
 #
 # No name and no bind: the sandbox is composed from the worktree, and nothing is
 # written into the environment (E-1964 and E-2186 deleted the XDG_CONFIG_HOME
@@ -517,7 +518,7 @@ dev-sandbox-init:
     else
         sandbox_bin=endless-go
     fi
-    "$sandbox_bin" sandbox init --mode worktree
+    "$sandbox_bin" db seed-sandbox
 
 # Run Python tests.
 #

@@ -65,55 +65,41 @@ func assertNoCacheSandboxes(t *testing.T, cache string) {
 }
 
 // TestUsageNamesOnlyWorktreeVerbs pins E-2481: the usage text offers the
-// worktree sandbox's verbs and nothing that names a sandbox.
+// worktree sandbox's verbs and nothing that names or initializes a sandbox.
 func TestUsageNamesOnlyWorktreeVerbs(t *testing.T) {
 	usage := usageText()
-	for _, want := range []string{"init    --mode worktree", "reset", "claude-settings-repair"} {
+	for _, want := range []string{"reset", "claude-settings-repair"} {
 		if !strings.Contains(usage, want) {
 			t.Errorf("usage lacks %q:\n%s", want, usage)
 		}
 	}
-	for _, gone := range []string{"run ", "enter", "list", "prune", "destroy", "<name>", "empty", "--mode seed", "clone"} {
+	for _, gone := range []string{"run ", "enter", "init", "list", "prune", "destroy", "<name>", "--mode"} {
 		if strings.Contains(usage, gone) {
 			t.Errorf("usage still names %q:\n%s", gone, usage)
 		}
 	}
 }
 
-// TestRemovedVerbsAreUnknownCommands: each named-sandbox verb is refused by
-// the dispatcher as a command it does not know, and writes nothing.
+// TestRemovedVerbsAreUnknownCommands: each named-sandbox verb, and init — whose
+// seeding moved to `endless-go db seed-sandbox` — is refused by the dispatcher
+// as a command it does not know, and writes nothing.
 func TestRemovedVerbsAreUnknownCommands(t *testing.T) {
-	for _, verb := range []string{"run", "enter", "list", "prune", "destroy"} {
-		t.Run(verb, func(t *testing.T) {
-			out, code, cache := runDispatch(t, verb, "e-1")
-			if code != 1 {
-				t.Errorf("exit = %d, want 1; output:\n%s", code, out)
-			}
-			if !strings.Contains(out, `unknown command "`+verb+`"`) {
-				t.Errorf("output does not refuse %q as unknown:\n%s", verb, out)
-			}
-			assertNoCacheSandboxes(t, cache)
-		})
-	}
-}
-
-// TestInitRefusesEveryModeButWorktree: `init <name>` used to provision a named
-// sandbox under the cache directory. Every form of it now refuses, naming the
-// one mode left, and creates nothing.
-func TestInitRefusesEveryModeButWorktree(t *testing.T) {
 	for _, args := range [][]string{
+		{"run", "e-1"},
+		{"enter", "e-1"},
+		{"list"},
+		{"prune"},
+		{"destroy", "e-1"},
 		{"init", "repro-x"},
-		{"init", "--mode", "empty", "repro-x"},
-		{"init", "--mode", "seed", "repro-x"},
-		{"init", "--mode", "clone", "repro-x"},
+		{"init", "--mode", "worktree"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			out, code, cache := runDispatch(t, args...)
 			if code != 1 {
 				t.Errorf("exit = %d, want 1; output:\n%s", code, out)
 			}
-			if !strings.Contains(out, "the only mode is --mode worktree") {
-				t.Errorf("output does not name the worktree mode:\n%s", out)
+			if !strings.Contains(out, `unknown command "`+args[0]+`"`) {
+				t.Errorf("output does not refuse %q as unknown:\n%s", args[0], out)
 			}
 			assertNoCacheSandboxes(t, cache)
 		})

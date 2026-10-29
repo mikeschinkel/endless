@@ -110,7 +110,7 @@ def test_provisioning_restores_a_missing_gitignore(tmp_path):
 
 
 def test_the_two_gitignore_constants_agree():
-    """Go writes the same file when `sandbox init` provisions one, and a
+    """Go writes the same file when it provisions a sandbox, and a
     worktree provisioned by one half must not show a diff under the other."""
     go = Path("internal/sandboxcmd/worktree_sandbox.go").read_text()
     m = re.search(r"const SandboxGitignore = `(.*?)`", go, re.S)

@@ -1,4 +1,4 @@
-package sandboxcmd
+package dbcmd
 
 import (
 	"database/sql"

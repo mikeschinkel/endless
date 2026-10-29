@@ -21,11 +21,16 @@ cd "$(git -C "${ENDLESS_VERIFY_DIR}" rev-parse --show-toplevel)" \
 PYTESTS=(tests/test_db_error_diagnostic.py tests/test_agent_env.py tests/test_sandbox_path.py)
 
 section "Fail-fast: this task's tests"
-if ! out="$(go test -count=1 ./internal/sandboxcmd/ 2>&1)"; then
-    report_fail "internal/sandboxcmd tests pass" "ok" "$(printf '%s\n' "$out" | tail -20)"
+if ! out="$(go test -count=1 ./internal/sandboxcmd/ ./internal/dbcmd/ 2>&1)"; then
+    report_fail "internal/sandboxcmd and internal/dbcmd tests pass" "ok" "$(printf '%s\n' "$out" | tail -20)"
     summary
 fi
-report_pass "internal/sandboxcmd tests pass"
+report_pass "internal/sandboxcmd and internal/dbcmd tests pass"
+if ! out="$(go test -count=1 -run 'Legacy|Initialize' ./cmd/endless-go/ 2>&1)"; then
+    report_fail "cmd/endless-go bridge tests pass" "ok" "$(printf '%s\n' "$out" | tail -20)"
+    summary
+fi
+report_pass "cmd/endless-go bridge tests pass"
 if ! out="$(go test -count=1 -run 'Reap' ./internal/monitor/ 2>&1)"; then
     report_fail "internal/monitor reap tests pass" "ok" "$(printf '%s\n' "$out" | tail -20)"
     summary
@@ -49,28 +54,48 @@ sandbox_run() {
     rc=$?
 }
 
-section "P1: only the worktree verbs remain"
+section "P1, P12: sandbox offers only reset and claude-settings-repair"
 sandbox_run --help
-assert_contains "usage offers init --mode worktree" "init    --mode worktree" "$out"
 assert_contains "usage offers reset" "reset" "$out"
 assert_contains "usage offers claude-settings-repair" "claude-settings-repair" "$out"
-for gone in "run " enter list prune destroy "<name>"; do
+for gone in "run " enter init list prune destroy "<name>" "--mode"; do
     assert_not_contains "usage does not name '${gone}'" "$gone" "$out"
 done
-for verb in run enter list prune destroy; do
+for verb in run enter list prune destroy init; do
     sandbox_run "$verb" e-1
-    assert_eq "sandbox $verb exits 1" "1" "$rc"
+    assert_eq "sandbox $verb e-1 exits 1" "1" "$rc"
     assert_contains "sandbox $verb is an unknown command" "unknown command \"$verb\"" "$out"
 done
-sandbox_run init repro-x
-assert_eq "sandbox init <name> exits 1" "1" "$rc"
-assert_contains "sandbox init <name> names the only mode" "the only mode is --mode worktree" "$out"
+sandbox_run init --mode empty repro-x
+assert_contains "sandbox init --mode empty <name> is an unknown command" 'unknown command "init"' "$out"
 if [[ -e "$cache/endless/sandboxes" ]]; then
     report_fail "nothing was written under <cache>/endless/sandboxes" "absent" \
         "$(find "$cache" | head -10)"
 else
     report_pass "nothing was written under <cache>/endless/sandboxes"
 fi
+
+section "P12: seeding lives at endless-go db seed-sandbox"
+out="$("$tmp/endless-go" --help 2>&1)"
+assert_contains "endless-go's usage lists db seed-sandbox" "db             seed-sandbox" "$out"
+assert_not_contains "endless-go's usage no longer offers sandbox init" "sandbox        init" "$out"
+out="$(cd "$tmp" && "$tmp/endless-go" db seed-sandbox 2>&1)"; rc=$?
+assert_eq "db seed-sandbox outside a worktree exits 1" "1" "$rc"
+assert_contains "and says there is no sandbox to seed" "is not inside a task worktree" "$out"
+assert_contains "Endless's seed hook calls db seed-sandbox" "db seed-sandbox" \
+    "$(cat .endless/hooks/seed-sandbox.sh)"
+assert_contains "just dev-sandbox-init calls db seed-sandbox" '"$sandbox_bin" db seed-sandbox' \
+    "$(cat justfile)"
+
+section "P13: the bridge across the land, until E-2484"
+out="$(cd "$tmp" && "$tmp/endless-go" sandbox init --mode worktree 2>&1)"; rc=$?
+assert_contains "sandbox init --mode worktree reaches db seed-sandbox" \
+    "endless-go db seed-sandbox:" "$out"
+assert_not_contains "and is not refused as an unknown command" "unknown command" "$out"
+assert_contains "the seed hook falls back on a binary without db" \
+    'sandbox init --mode worktree >/dev/null' "$(cat .endless/hooks/seed-sandbox.sh)"
+assert_contains "the fallback is chosen by asking the binary" 'db --help' \
+    "$(cat .endless/hooks/seed-sandbox.sh)"
 
 # git_grep_none <label> <pattern> <pathspec...>
 git_grep_none() {

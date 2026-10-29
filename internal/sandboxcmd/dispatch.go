@@ -23,8 +23,6 @@ func Run(args []string) {
 		).Command("sandbox").Text(usageText()).Exit(1)
 	}
 	switch args[0] {
-	case "init":
-		initCmd(args[1:])
 	case "reset":
 		resetCmd(args[1:])
 	case "claude-settings-repair":
@@ -33,10 +31,9 @@ func Run(args []string) {
 		fmt.Fprint(os.Stdout, usageText())
 	default:
 		// Not the version-skew case endless-go's own dispatcher has to allow
-		// for: nothing relays a verb here except the Python task-claim path,
-		// and that only ever passes `init`. An unknown command is therefore
-		// something the caller typed, and typing a different one is the whole
-		// remedy.
+		// for: what relays a verb here is `endless sandbox reset`, which only
+		// ever passes `reset`. An unknown command is therefore something the
+		// caller typed, and typing a different one is the whole remedy.
 		refusal.NoReport(
 			fmt.Sprintf("endless-go sandbox: unknown command %q", args[0]),
 			"Re-run with one of the listed subcommands",
@@ -48,8 +45,7 @@ func usageText() string {
 	return strings.Join([]string{
 		"Usage: endless-go sandbox <command> [flags] [args]",
 		"Commands:",
-		"  init    --mode worktree [--force]  (seed this worktree's sandbox)",
-		"  reset                              (clear + reseed this worktree's sandbox)",
+		"  reset   (clear + reseed this worktree's sandbox)",
 		"  claude-settings-repair [--all] [<worktree> ...]",
 	}, "\n") + "\n"
 }
