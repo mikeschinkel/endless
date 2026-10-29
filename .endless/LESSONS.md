@@ -7837,3 +7837,7 @@ While presenting E-2461's open questions (should land have an override past a bl
 ### [2026-10-28] Fold into an open task only when it is the same work
 After confirming E-1332 (clean up worktree sandboxes after drop or land) was obsolete because sandboxes now live inside worktrees, I proposed re-scoping E-1332 to retire the cache-directory sandbox commands instead of marking it obsolete and filing a bugfix, citing ED-1550's 'fold a finding into an OPEN task'. Mike said that takes ED-1550 out of context: folding is for a finding that is evidence for the open task's own work, not for repurposing an obsolete task to a different job. Mark the obsolete task obsolete and file the new work as its own task.
 - **Project**: endless
+
+### [2026-10-29] A blocked user needs a way out, not an earlier refusal
+While finishing E-2419, Mike hit 'E-2419 cannot be verified yet: the code changed since the last reconciliation' after the task had landed, and asked for a better error. I proposed, and on his 'File it.' filed, E-2489: refuse verify of a landed task with a clearer message. Mike: he had misunderstood my proposal; what he needed was a way to avoid getting into that catch-22 (E-2485, refuse verify and land while plan items are unapproved) and/or a way to get OUT of it — not another check that blocks further upstream. In that case, when Mike reports being stuck behind a gate, propose how he gets unstuck or how the state is prevented, and restate a filing proposal plainly enough that 'file it' can't approve the wrong thing.
+- **Project**: endless
