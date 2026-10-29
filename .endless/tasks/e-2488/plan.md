@@ -1,14 +1,16 @@
 ## Open questions
 
-**Q1. What is the trailer's key?**
+**Q1. What is the trailer's key?** The value names Git's default branch and the commit, e.g. `main@<sha>`. A trailer key must be letters, digits and hyphens: `git interpret-trailers --parse` ignores a line whose key has other characters.
 
 | Option | Pros | Cons |
 |---|---|---|
-| A. Fixed: `endless-main: <sha>` | One key to search for in every repo. | Reads wrong in a repo whose default branch is not main. |
-| B. Named for the default branch: `endless-<primary_branch>: <sha>` | Says which branch the SHA is on. | The key differs per repo, so a reader must know the branch name to search; renaming the branch changes the key for new commits only. |
-| C. Fixed key, branch in the value: `endless-base: main@<sha>` (or two trailers, `endless-branch` and `endless-commit`) | One key everywhere, and it still names the branch. | none |
+| A. `endless-default: main@<sha>` | Names Endless. | Reads as a default of Endless's, which it is not. |
+| B. `git-default: main@<sha>` | Uses Git's own term. | Does not say Endless wrote it, so it could collide with another tool's trailer. |
+| C. `Endless[git-default]: main@<sha>` | Names Endless and gives a pattern for later annotations. | Git does not recognize it as a trailer, so `git interpret-trailers` and `git log --format=%(trailers)` never see it. |
+| D. `endless-git-default: main@<sha>` | Names Endless and uses Git's term; the `endless-<name>` prefix is a pattern for later annotations, and git recognizes it. | none |
+| E. `endless-base: main@<sha>` | Names Endless; short. | "base" is not Git's term for the default branch. |
 
-Recommendation: C.
+Recommendation: D. (Options A to C were Mike's, 2026-10-29.)
 
 **Q2. What is the branch called?**
 
