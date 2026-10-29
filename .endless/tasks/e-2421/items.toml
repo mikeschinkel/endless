@@ -10,7 +10,7 @@ statement = "Re-running `endless project init` replaces a project's .endless/tas
 [[item]]
 id = "P2"
 kind = "deliverable"
-statement = "When there is no record of what init last wrote, init replaces the file only if it matches the hash of a shipped SUITE_RULES version"
+statement = "When init has no record for the project, it replaces the file only if it is exactly some version Endless has shipped"
 
 [[item]]
 id = "P3"
