@@ -7845,3 +7845,7 @@ While finishing E-2419, Mike hit 'E-2419 cannot be verified yet: the code change
 ### [2026-10-29] Never propose installing Git hooks from Endless; they cannot compose robustly with a user's own hooks
 While planning E-2490 (Endless-Task trailer on task-branch commits, 2026-10-29) I recommended a commit-msg Git hook and called it just 'the hook'. Mike read it as an Endless hook, agreed, then on seeing it was a Git hook: 'I do not want it to ever do so because they are not able to be robustly composible with those a user might implement.' Also: say 'Git hook' or 'Claude Code hook' explicitly, never bare 'hook', since Endless has hooks of its own.
 - **Project**: endless
+
+### [2026-10-29] Judge Endless features as a product for all users, not by what Mike's own repos happen to use
+While planning E-2490 (Endless-Task trailer, 2026-10-29) I recommended not supporting husky partly because it is a Node tool and none of Mike's repos use Node. Mike: 'The fact my repos do not use Node is irrelevant to PRODUCT concerns. Why should Endless not be used by Node developers?' Mike's repos are evidence about Mike's usage, not grounds for limiting what Endless supports.
+- **Project**: endless
