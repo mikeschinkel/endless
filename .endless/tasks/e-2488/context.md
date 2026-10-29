@@ -1,0 +1,8 @@
+Endless commits to a project's default branch far more often than at lands: ledger entries, task-field and decision mirrors, lessons and verify reports, each as its own commit. They clutter main's history, and GitHub names a push-triggered CI run after the push's newest commit, so runs get titled "Endless: record ledger entry" or "lesson: ..." (seen on go-dt). Mike, 2026-10-29: he wants a way to keep these commits from cluttering history, and had not considered writing them to another branch.
+
+Settled with Mike, 2026-10-29 (in E-2375's session):
+- Not all of .endless/ moves. Files that change with code stay on main and task branches: config.json, each task's verify.toml and suite files, and the suite rules (tasks/CLAUDE.md, shared harness files). Records Endless writes by itself move: ledger entries, task-field and decision mirrors, LESSONS.md, verify reports.
+- Records link to main's commits through a commit-message trailer, lowercase, not through tags (one tag per main commit would flood the tag list release tooling reads). Ledger entries already name landed SHAs and verify reports carry the SHA they tested.
+- A separate repo for the records (convention <repo>-endless or <repo>-endless-meta) is a later configuration option on the same design: only the remote holding the branch differs.
+- README.md links prominently to the records branch. Main's tree no longer showing task records is counted as a plus: some people would see them as bloat in the repo they work in.
+- Pushes to the records branch start no CI run under workflows that trigger only on main and dev, as gomion's generated ones do.
