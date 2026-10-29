@@ -15,7 +15,7 @@ statement = "When init has no record for the project, it replaces the file only 
 [[item]]
 id = "P3"
 kind = "deliverable"
-statement = "Otherwise init leaves the file unchanged and reports it as locally edited"
+statement = "Otherwise init leaves the file alone and says it was edited locally and not updated"
 
 [[item]]
 id = "P4"
