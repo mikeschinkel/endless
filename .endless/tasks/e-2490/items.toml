@@ -40,7 +40,7 @@ statement = "When the user chooses lefthook and it is not installed, project ini
 [[item]]
 id = "P8"
 kind = "deliverable"
-statement = "In a repo using husky or another hook manager Endless does not support, or when the user declines lefthook with Git hooks present, project init completes without the trailer and says why"
+statement = "In a repo using husky or another hook manager Endless does not support, project init completes and prints the exact line to add to that manager's prepare-commit-msg hook (for husky, naming .husky/prepare-commit-msg); when the user declines lefthook with Git hooks present, it completes without the trailer and says why"
 
 [[item]]
 id = "P9"
