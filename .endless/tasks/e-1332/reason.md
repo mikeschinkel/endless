@@ -1,0 +1,1 @@
+Worktree sandboxes now live inside the worktree (<worktree>/.endless/sandbox), so dropping or reaping the worktree removes its sandbox; nothing is left behind to clean up on a timer. P1 (go-cfgstore's stray e-2349 worktree and branch) was done by the user in session.
