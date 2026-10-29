@@ -25,7 +25,7 @@ statement = "What init wrote into a project is recorded in that project's own hi
 [[item]]
 id = "P5"
 kind = "deliverable"
-statement = "Shipped SUITE_RULES hashes are rows seeded from a Go constant on connect"
+statement = "Every install of Endless knows each version of the file it has shipped, with no download or setup"
 
 [[item]]
 id = "P6"
