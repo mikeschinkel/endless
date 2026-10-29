@@ -7,8 +7,7 @@
 //
 //	endless-go event         emit|validate-db|rebuild-db|migrate|upgrade|backup|reap-worktrees
 //	endless-go hook          prompt|claude|codex
-//	endless-go sandbox       reset|claude-settings-repair
-//	endless-go db            seed-sandbox
+//	endless-go sandbox       seed|reset|claude-settings-repair
 //	endless-go tmux          apply|status-line|active-id|show-menu
 //	endless-go session-query list-live|task-plan|resume-target
 //	endless-go worktree      in-use|ledger-orphans  (the shared "is this worktree
@@ -44,8 +43,8 @@
 //     decision lives in projectstatuscmd.resolveProject (E-1976).
 //   - event, session-query, worktree → ConsumeDBFlags (E-1429/E-1668), and
 //     nothing else: inside a self-dev worktree they are REFUSED without a flag.
-//   - sandbox, db → no DB-context init (db seed-sandbox resolves the main
-//     database it reads and the sandbox it writes itself).
+//   - sandbox → no DB-context init (sandbox seed resolves the main database it
+//     reads and the sandbox it writes itself).
 //
 // The ENDLESS_NO_HOOKS gate is scoped to the `hook` subcommand only —
 // it must not bleed into other subcommands.
@@ -62,7 +61,6 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/mikeschinkel/endless/internal/claimhandoffcmd"
-	"github.com/mikeschinkel/endless/internal/dbcmd"
 	"github.com/mikeschinkel/endless/internal/errorscmd"
 	"github.com/mikeschinkel/endless/internal/eventcmd"
 	"github.com/mikeschinkel/endless/internal/events"
@@ -252,13 +250,7 @@ func main() {
 	case "hook":
 		hookcmd.Run(rest)
 	case "sandbox":
-		if seedArgs, ok := legacySandboxInit(rest); ok {
-			dbcmd.Run(seedArgs)
-		} else {
-			sandboxcmd.Run(rest)
-		}
-	case "db":
-		dbcmd.Run(rest)
+		sandboxcmd.Run(rest)
 	case "tmux":
 		tmuxcmd.Run(rest)
 	case "session-query":
@@ -394,39 +386,6 @@ func resolveFaultRaiser(explicit faults.Raiser) faults.Raiser {
 	})
 }
 
-// legacySandboxInit bridges `sandbox init --mode worktree [--force]`, the verb
-// `db seed-sandbox` replaced (E-2481), and reports whether args were that form.
-//
-// A bridge, not a feature: `endless sandbox reset` runs the seed hook from the
-// MAIN checkout against the WORKTREE's binary, so until every worktree's binary
-// and main's hook agree, one side still speaks the old verb. Hidden from every
-// usage text. Any other `init` form is not bridged and reaches sandboxcmd,
-// which refuses it as an unknown command.
-func legacySandboxInit(args []string) (seedArgs []string, ok bool) {
-	if len(args) == 0 || args[0] != "init" {
-		return nil, false
-	}
-	seedArgs = []string{"seed-sandbox"}
-	var sawMode bool
-	for i := 1; i < len(args); i++ {
-		switch a := args[i]; {
-		case a == "--mode=worktree" || a == "-mode=worktree":
-			sawMode = true
-		case (a == "--mode" || a == "-mode") && i+1 < len(args) && args[i+1] == "worktree":
-			sawMode = true
-			i++
-		case a == "--force" || a == "-force":
-			seedArgs = append(seedArgs, "--force")
-		default:
-			return nil, false
-		}
-	}
-	if !sawMode {
-		return nil, false
-	}
-	return seedArgs, true
-}
-
 func usageText() string {
 	var b strings.Builder
 	w := &b
@@ -434,8 +393,7 @@ func usageText() string {
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  event          emit|validate-db|rebuild-db|migrate|upgrade|backup|reap-worktrees")
 	fmt.Fprintln(w, "  hook           prompt|claude|codex")
-	fmt.Fprintln(w, "  sandbox        reset|claude-settings-repair")
-	fmt.Fprintln(w, "  db             seed-sandbox  (seed Endless's database into this worktree's sandbox)")
+	fmt.Fprintln(w, "  sandbox        seed|reset|claude-settings-repair")
 	fmt.Fprintln(w, "  tmux           apply|status-line|active-id|show-menu")
 	fmt.Fprintln(w, "  session-query  list-live|task-plan|resume-target")
 	fmt.Fprintln(w, "  resume-windows --tmux-session NAME|--all-tmux-sessions [--dry-run]  (resume every restored task window)")

@@ -8,12 +8,11 @@ import (
 	"strings"
 )
 
-// MainCheckoutFromWorktree walks from a path inside a git worktree to the
+// mainCheckoutFromWorktree walks from a path inside a git worktree to the
 // main checkout via the git-dir vs git-common-dir discriminator (also used in
 // Go at internal/monitor/db.go, and by the `install` and `claude-settings-init`
 // recipes in the justfile to refuse running from the wrong checkout).
-// Exported for dbcmd's seed-sandbox, which seeds from the main checkout it names.
-func MainCheckoutFromWorktree(dir string) (string, error) {
+func mainCheckoutFromWorktree(dir string) (string, error) {
 	gitDir, err := runGit(dir, "rev-parse", "--git-dir")
 	if err != nil {
 		return "", fmt.Errorf("git rev-parse --git-dir in %s: %w", dir, err)

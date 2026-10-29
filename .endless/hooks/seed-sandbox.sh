@@ -38,11 +38,11 @@ fi
 
 # stdout is only the sandbox path, which the caller already knows.
 #
-# `db seed-sandbox` replaced `sandbox init --mode worktree` (E-2481). This hook
+# `sandbox seed` replaced `sandbox init --mode worktree` (E-2481). This hook
 # runs from main against whichever binary the worktree built, so a worktree cut
 # before E-2481 still has only the old verb: ask the binary which it speaks.
-if "${bin}" db --help >/dev/null 2>&1; then
-    "${bin}" db seed-sandbox >/dev/null
+if "${bin}" sandbox seed --help >/dev/null 2>&1; then
+    "${bin}" sandbox seed >/dev/null
 else
     "${bin}" sandbox init --mode worktree >/dev/null
 fi

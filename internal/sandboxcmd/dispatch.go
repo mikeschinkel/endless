@@ -22,7 +22,13 @@ func Run(args []string) {
 			"Re-run with one of the listed subcommands",
 		).Command("sandbox").Text(usageText()).Exit(1)
 	}
+	if seedArgs, ok := legacyInit(args); ok {
+		seedCmd(seedArgs)
+		return
+	}
 	switch args[0] {
+	case "seed":
+		seedCmd(args[1:])
 	case "reset":
 		resetCmd(args[1:])
 	case "claude-settings-repair":
@@ -32,7 +38,8 @@ func Run(args []string) {
 	default:
 		// Not the version-skew case endless-go's own dispatcher has to allow
 		// for: what relays a verb here is `endless sandbox reset`, which only
-		// ever passes `reset`. An unknown command is therefore something the
+		// ever passes `reset`, and Endless's own seed hook, which asks before
+		// it passes `seed`. An unknown command is therefore something the
 		// caller typed, and typing a different one is the whole remedy.
 		refusal.NoReport(
 			fmt.Sprintf("endless-go sandbox: unknown command %q", args[0]),
@@ -41,11 +48,45 @@ func Run(args []string) {
 	}
 }
 
+// legacyInit bridges `init --mode worktree [--force]`, the spelling `seed`
+// replaced (E-2481), and returns seed's argv when args are that form.
+//
+// A bridge, not a feature: `endless sandbox reset` runs the seed hook from the
+// MAIN checkout against the WORKTREE's binary, so until every worktree's binary
+// and main's hook agree, one side still speaks the old verb. Hidden from the
+// usage text; E-2484 removes it. Any other `init` form is not bridged and is
+// refused as an unknown command.
+func legacyInit(args []string) (seedArgs []string, ok bool) {
+	if len(args) == 0 || args[0] != "init" {
+		return nil, false
+	}
+	seedArgs = []string{}
+	var sawMode bool
+	for i := 1; i < len(args); i++ {
+		switch a := args[i]; {
+		case a == "--mode=worktree" || a == "-mode=worktree":
+			sawMode = true
+		case (a == "--mode" || a == "-mode") && i+1 < len(args) && args[i+1] == "worktree":
+			sawMode = true
+			i++
+		case a == "--force" || a == "-force":
+			seedArgs = append(seedArgs, "--force")
+		default:
+			return nil, false
+		}
+	}
+	if !sawMode {
+		return nil, false
+	}
+	return seedArgs, true
+}
+
 func usageText() string {
 	return strings.Join([]string{
 		"Usage: endless-go sandbox <command> [flags] [args]",
 		"Commands:",
-		"  reset   (clear + reseed this worktree's sandbox)",
+		"  seed    [--force]  (seed Endless's database into this worktree's sandbox)",
+		"  reset              (clear + reseed this worktree's sandbox)",
 		"  claude-settings-repair [--all] [<worktree> ...]",
 	}, "\n") + "\n"
 }

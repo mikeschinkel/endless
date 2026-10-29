@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -68,7 +69,7 @@ func assertNoCacheSandboxes(t *testing.T, cache string) {
 // worktree sandbox's verbs and nothing that names or initializes a sandbox.
 func TestUsageNamesOnlyWorktreeVerbs(t *testing.T) {
 	usage := usageText()
-	for _, want := range []string{"reset", "claude-settings-repair"} {
+	for _, want := range []string{"seed    [--force]", "reset", "claude-settings-repair"} {
 		if !strings.Contains(usage, want) {
 			t.Errorf("usage lacks %q:\n%s", want, usage)
 		}
@@ -80,9 +81,9 @@ func TestUsageNamesOnlyWorktreeVerbs(t *testing.T) {
 	}
 }
 
-// TestRemovedVerbsAreUnknownCommands: each named-sandbox verb, and init — whose
-// seeding moved to `endless-go db seed-sandbox` — is refused by the dispatcher
-// as a command it does not know, and writes nothing.
+// TestRemovedVerbsAreUnknownCommands: each named-sandbox verb, and every init
+// form but the bridged `init --mode worktree`, is refused by the dispatcher as a
+// command it does not know, and writes nothing.
 func TestRemovedVerbsAreUnknownCommands(t *testing.T) {
 	for _, args := range [][]string{
 		{"run", "e-1"},
@@ -91,7 +92,8 @@ func TestRemovedVerbsAreUnknownCommands(t *testing.T) {
 		{"prune"},
 		{"destroy", "e-1"},
 		{"init", "repro-x"},
-		{"init", "--mode", "worktree"},
+		{"init", "--mode", "empty", "repro-x"},
+		{"init", "--mode", "worktree", "repro-x"},
 	} {
 		t.Run(strings.Join(args, " "), func(t *testing.T) {
 			out, code, cache := runDispatch(t, args...)
@@ -103,5 +105,56 @@ func TestRemovedVerbsAreUnknownCommands(t *testing.T) {
 			}
 			assertNoCacheSandboxes(t, cache)
 		})
+	}
+}
+
+// TestSeedRefusesOutsideAWorktree: there is no sandbox to seed outside a task
+// worktree, and nothing is created.
+func TestSeedRefusesOutsideAWorktree(t *testing.T) {
+	out, code, cache := runDispatch(t, "seed")
+	if code != 1 || !strings.Contains(out, "is not inside a task worktree") {
+		t.Errorf("exit = %d, output:\n%s\nwant exit 1 and a not-in-worktree refusal", code, out)
+	}
+	assertNoCacheSandboxes(t, cache)
+}
+
+func TestSeedTakesNoName(t *testing.T) {
+	out, code, _ := runDispatch(t, "seed", "e-1")
+	if code != 1 || !strings.Contains(out, `unexpected argument "e-1"`) {
+		t.Errorf("exit = %d, output:\n%s\nwant exit 1 refusing the name", code, out)
+	}
+}
+
+// TestLegacyInitReachesSeed: until E-2484, the old `init --mode worktree`
+// spelling runs seed rather than being refused (E-2481's bridge).
+func TestLegacyInitReachesSeed(t *testing.T) {
+	out, code, _ := runDispatch(t, "init", "--mode", "worktree")
+	if code != 1 || !strings.Contains(out, "is not inside a task worktree") ||
+		strings.Contains(out, "unknown command") {
+		t.Errorf("exit = %d, output:\n%s\nwant seed's own not-in-worktree refusal", code, out)
+	}
+}
+
+// TestLegacyInitBridgesOnlyTheWorktreeForm pins which argv the bridge accepts.
+func TestLegacyInitBridgesOnlyTheWorktreeForm(t *testing.T) {
+	for _, tt := range []struct {
+		args []string
+		want []string
+	}{
+		{[]string{"init", "--mode", "worktree"}, []string{}},
+		{[]string{"init", "--mode=worktree"}, []string{}},
+		{[]string{"init", "--force", "--mode", "worktree"}, []string{"--force"}},
+		{[]string{"init", "-mode", "worktree", "-force"}, []string{"--force"}},
+		{[]string{"init"}, nil},
+		{[]string{"init", "repro-x"}, nil},
+		{[]string{"init", "--mode", "empty", "repro-x"}, nil},
+		{[]string{"init", "--mode", "worktree", "repro-x"}, nil},
+		{[]string{"seed"}, nil},
+		{nil, nil},
+	} {
+		got, ok := legacyInit(tt.args)
+		if ok != (tt.want != nil) || !slices.Equal(got, tt.want) {
+			t.Errorf("legacyInit(%q) = %q, %v; want %q", tt.args, got, ok, tt.want)
+		}
 	}
 }

@@ -21,16 +21,11 @@ cd "$(git -C "${ENDLESS_VERIFY_DIR}" rev-parse --show-toplevel)" \
 PYTESTS=(tests/test_db_error_diagnostic.py tests/test_agent_env.py tests/test_sandbox_path.py)
 
 section "Fail-fast: this task's tests"
-if ! out="$(go test -count=1 ./internal/sandboxcmd/ ./internal/dbcmd/ 2>&1)"; then
-    report_fail "internal/sandboxcmd and internal/dbcmd tests pass" "ok" "$(printf '%s\n' "$out" | tail -20)"
+if ! out="$(go test -count=1 ./internal/sandboxcmd/ 2>&1)"; then
+    report_fail "internal/sandboxcmd tests pass" "ok" "$(printf '%s\n' "$out" | tail -20)"
     summary
 fi
-report_pass "internal/sandboxcmd and internal/dbcmd tests pass"
-if ! out="$(go test -count=1 -run 'Legacy|Initialize' ./cmd/endless-go/ 2>&1)"; then
-    report_fail "cmd/endless-go bridge tests pass" "ok" "$(printf '%s\n' "$out" | tail -20)"
-    summary
-fi
-report_pass "cmd/endless-go bridge tests pass"
+report_pass "internal/sandboxcmd tests pass"
 if ! out="$(go test -count=1 -run 'Reap' ./internal/monitor/ 2>&1)"; then
     report_fail "internal/monitor reap tests pass" "ok" "$(printf '%s\n' "$out" | tail -20)"
     summary
@@ -54,8 +49,9 @@ sandbox_run() {
     rc=$?
 }
 
-section "P1, P12: sandbox offers only reset and claude-settings-repair"
+section "P1, P12: sandbox offers only seed, reset and claude-settings-repair"
 sandbox_run --help
+assert_contains "usage offers seed" "seed    [--force]" "$out"
 assert_contains "usage offers reset" "reset" "$out"
 assert_contains "usage offers claude-settings-repair" "claude-settings-repair" "$out"
 for gone in "run " enter init list prune destroy "<name>" "--mode"; do
@@ -75,26 +71,26 @@ else
     report_pass "nothing was written under <cache>/endless/sandboxes"
 fi
 
-section "P12: seeding lives at endless-go db seed-sandbox"
+section "P12: seeding is endless-go sandbox seed"
 out="$("$tmp/endless-go" --help 2>&1)"
-assert_contains "endless-go's usage lists db seed-sandbox" "db             seed-sandbox" "$out"
-assert_not_contains "endless-go's usage no longer offers sandbox init" "sandbox        init" "$out"
-out="$(cd "$tmp" && "$tmp/endless-go" db seed-sandbox 2>&1)"; rc=$?
-assert_eq "db seed-sandbox outside a worktree exits 1" "1" "$rc"
+assert_contains "endless-go's usage lists sandbox seed" "sandbox        seed|reset|claude-settings-repair" "$out"
+sandbox_run seed
+assert_eq "sandbox seed outside a worktree exits 1" "1" "$rc"
 assert_contains "and says there is no sandbox to seed" "is not inside a task worktree" "$out"
-assert_contains "Endless's seed hook calls db seed-sandbox" "db seed-sandbox" \
+sandbox_run seed --help
+assert_eq "sandbox seed --help exits 0 (the seed hook's capability probe)" "0" "$rc"
+assert_contains "Endless's seed hook calls sandbox seed" '"${bin}" sandbox seed >/dev/null' \
     "$(cat .endless/hooks/seed-sandbox.sh)"
-assert_contains "just dev-sandbox-init calls db seed-sandbox" '"$sandbox_bin" db seed-sandbox' \
+assert_contains "just dev-sandbox-init calls sandbox seed" '"$sandbox_bin" sandbox seed' \
     "$(cat justfile)"
 
 section "P13: the bridge across the land, until E-2484"
-out="$(cd "$tmp" && "$tmp/endless-go" sandbox init --mode worktree 2>&1)"; rc=$?
-assert_contains "sandbox init --mode worktree reaches db seed-sandbox" \
-    "endless-go db seed-sandbox:" "$out"
+sandbox_run init --mode worktree
+assert_contains "sandbox init --mode worktree reaches seed" "endless-go sandbox seed:" "$out"
 assert_not_contains "and is not refused as an unknown command" "unknown command" "$out"
-assert_contains "the seed hook falls back on a binary without db" \
+assert_contains "the seed hook falls back on a binary without seed" \
     'sandbox init --mode worktree >/dev/null' "$(cat .endless/hooks/seed-sandbox.sh)"
-assert_contains "the fallback is chosen by asking the binary" 'db --help' \
+assert_contains "the fallback is chosen by asking the binary" 'sandbox seed --help' \
     "$(cat .endless/hooks/seed-sandbox.sh)"
 
 # git_grep_none <label> <pattern> <pathspec...>

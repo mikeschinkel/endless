@@ -100,30 +100,3 @@ func TestEveryConfigKeyIsRegistered(t *testing.T) {
 		}
 	}
 }
-
-// TestLegacySandboxInitBridgesOnlyTheWorktreeForm pins E-2481's bridge: main's
-// seed hook and a worktree's binary can disagree about which verb seeds the
-// sandbox, so the old `sandbox init --mode worktree` still reaches
-// `db seed-sandbox` — and no other `init` form does.
-func TestLegacySandboxInitBridgesOnlyTheWorktreeForm(t *testing.T) {
-	for _, tt := range []struct {
-		args []string
-		want []string
-	}{
-		{[]string{"init", "--mode", "worktree"}, []string{"seed-sandbox"}},
-		{[]string{"init", "--mode=worktree"}, []string{"seed-sandbox"}},
-		{[]string{"init", "--force", "--mode", "worktree"}, []string{"seed-sandbox", "--force"}},
-		{[]string{"init", "-mode", "worktree", "-force"}, []string{"seed-sandbox", "--force"}},
-		{[]string{"init"}, nil},
-		{[]string{"init", "repro-x"}, nil},
-		{[]string{"init", "--mode", "empty", "repro-x"}, nil},
-		{[]string{"init", "--mode", "worktree", "repro-x"}, nil},
-		{[]string{"reset"}, nil},
-		{nil, nil},
-	} {
-		got, ok := legacySandboxInit(tt.args)
-		if ok != (tt.want != nil) || !slices.Equal(got, tt.want) {
-			t.Errorf("legacySandboxInit(%q) = %q, %v; want %q", tt.args, got, ok, tt.want)
-		}
-	}
-}

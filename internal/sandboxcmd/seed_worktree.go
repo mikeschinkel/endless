@@ -1,4 +1,4 @@
-package dbcmd
+package sandboxcmd
 
 import (
 	"database/sql"
@@ -10,15 +10,14 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/dbcontext"
 	"github.com/mikeschinkel/endless/internal/monitor"
-	"github.com/mikeschinkel/endless/internal/sandboxcmd"
 	"github.com/mikeschinkel/endless/internal/schema"
 	"github.com/mikeschinkel/endless/internal/sessionstate"
 
 	_ "modernc.org/sqlite"
 )
 
-// nullSessionID is the designated non-Claude session_id. Used by db
-// seed-sandbox when CLAUDE_CODE_SESSION_ID is not set, so bare-terminal
+// nullSessionID is the designated non-Claude session_id. Used by sandbox
+// seed when CLAUDE_CODE_SESSION_ID is not set, so bare-terminal
 // invocations inside the worktree attach to a real sessions row instead of
 // hitting the "Cannot determine the Endless session for this pane" guard.
 //
@@ -34,7 +33,7 @@ func seedFromWorktree(sandboxDir string) error {
 	if err != nil {
 		return fmt.Errorf("getwd: %w", err)
 	}
-	mainCheckout, err := sandboxcmd.MainCheckoutFromWorktree(cwd)
+	mainCheckout, err := mainCheckoutFromWorktree(cwd)
 	if err != nil {
 		return err
 	}
