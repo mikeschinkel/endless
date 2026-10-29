@@ -45,7 +45,7 @@ statement = "In a repo using husky or another hook manager Endless does not supp
 [[item]]
 id = "P9"
 kind = "deliverable"
-statement = "endless doctor reports a repo where task-branch commits will not get the trailer, unless a user setting turns that report off"
+statement = "endless doctor reports a repo where task-branch commits will not get the trailer, including a husky repo whose .husky/prepare-commit-msg lacks the endless git-hook command, and reports that it cannot confirm the setup under other unsupported managers; a user setting turns these reports off"
 
 [[item]]
 id = "P10"
