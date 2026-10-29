@@ -5,49 +5,49 @@ on Mike's go-ahead, 2026-10-22.
 
 ## Problem
 
-`endless project init` is meant to be re-run to bring a project up to date
-(E-2349's EQ-82). But `scaffold_suite_rules` never overwrites
-`.endless/tasks/CLAUDE.md`, so go-cfgstore and homelab keep stale copies of
-`SUITE_RULES` (src/endless/suite_rules.py). E-2419 is about to change that
-text again.
+Every project Endless manages gets a rules file at `.endless/tasks/CLAUDE.md`.
+It tells an agent how a task's own folder works and how to write a verify
+suite. Endless writes it the first time `endless project init` runs, and never
+touches it again.
+
+Re-running `endless project init` is meant to bring a project up to date
+(E-2349's EQ-82). For this file it doesn't. So when Endless changes the rules,
+as E-2419 did, every existing project keeps the old ones: go-cfgstore and
+homelab still teach the old suite form today.
 
 ## Behaviour
 
-Init replaces the file with the current `SUITE_RULES` text only when nobody
-edited it locally:
+Re-running init updates the file to the rules this Endless ships, but only if
+nobody has edited the project's copy:
 
-- If the file matches the hash of what init last wrote into this project
-  (a project fact), replace it.
-- If there's no project fact (the copy was written before this feature) and the
-  file matches the hash of any shipped `SUITE_RULES` version (a release
-  fact), replace it.
-- Otherwise leave it, and report it as locally edited.
+- If the file is exactly what init last wrote into this project, replace it.
+- If init has no record for this project (the copy predates this feature), and
+  the file is exactly some version Endless has shipped, replace it.
+- Otherwise leave it alone, and say it was edited locally and not updated.
 
-## Storage (from E-2257's machine/project classification)
+"Exactly" is judged by a hash of the file's contents, so Endless never has to
+keep the old text itself.
 
-- **Project facts:** a project-scoped table, written through the event pipeline
-  (`endless-go event emit`) and rebuilt from the ledger, so it travels with
-  the project to a clone. It fits the E-2215 split as decided and doesn't
-  wait for it.
-- **Release facts:** rows seeded from a Go constant on connect, the same
-  pattern as `task_types` (ED-1506). Seeds are free in both files.
-- If both share one table, it has a `kind` column with an open-ended set of
-  kinds (Mike), not two hard-coded ones.
-- Storage and hashing live on the Go side; everything is being ported to Go
-  (Mike).
+## Where the records live
+
+- **What init wrote into a project** belongs to that project, so it is
+  recorded in the project's own history (the ledger) and travels with a clone.
+- **Which versions Endless has shipped** belongs to Endless itself, so each
+  install knows them with no download or setup.
+- If both are kept in one place, it can hold other kinds of shipped file later,
+  not just this one (Mike).
+- Hashing and storage are done in Go; everything is moving there (Mike).
 
 ## Content
 
-- A human-readable change list may live in the file's own content, not hidden
-  in an HTML comment (Mike).
+- A list of what changed may go in the file itself, as text a reader sees
+  (Mike).
 
-## self_dev
+## In the endless repo itself
 
-- In the endless repo, `.endless/tasks/CLAUDE.md` is a committed copy of
-  `SUITE_RULES`. Add a test that fails when the two differ, so editing the copy
-  instead of the source is caught.
-- Running init from a worktree writes to the sandbox DB, not main.
+- Running init from a task's worktree records into that worktree's sandbox,
+  not the main database.
 
 ## Blocked by
 
-- E-2419, which changes the `SUITE_RULES` text.
+- E-2419, which changed the rules text. It has landed.
