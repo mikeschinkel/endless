@@ -7865,3 +7865,7 @@ During E-2481 (retiring named cache-directory sandboxes) I kept 'sandbox init --
 ### [2026-10-29] Don't recite rules I just built as fixed constraints
 While handing off E-2490 (Endless-Task trailer), Mike asked for a one-time script to give all existing worktrees a lefthook-local.yml. I answered that a project only gets that file when endless project init sets it up through lefthook — a behavior I had designed minutes earlier — as if it were a given that made his request moot, and I said lefthook was not installed without re-checking. Mike: 'You are reciting to me rules you created?!?' Lesson for this kind of moment: when Mike asks for something that my own new code's design would rule out, treat the design as open to his request rather than as a reason against it, and re-check machine state (installed tools, files present) before stating it.
 - **Project**: endless
+
+### [2026-10-29] Don't let a new ledger record auto-commit onto a non-default branch
+E-2421: I recommended letting project init's new shipped_file.written event auto-commit its ledger segment even when the project is checked out off its default branch. Mike pointed out a ledger entry on a branch that is later thrown away is lost: auto-committing ledger entries to whatever branch is checked out is a recipe for ledger corruption (a separate task already plans to move those commits to an endless-meta branch). For init off the default branch, we skip the record instead.
+- **Project**: endless
