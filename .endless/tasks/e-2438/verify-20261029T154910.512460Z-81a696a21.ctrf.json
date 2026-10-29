@@ -1,0 +1,2369 @@
+{
+  "reportFormat": "CTRF",
+  "specVersion": "0.2.0",
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 214,
+      "passed": 214,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 1793288943552,
+      "stop": 1793288952469
+    },
+    "tests": [
+      {
+        "name": "TestDiscoverScripts_KeysByNormalizedDirectoryName",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscoverScripts_SkipsDirectoriesWithoutTheFile",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscoverScripts_IgnoresSharedFilesBesideTheTaskDirs",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscoverScripts_MissingDirectoryIsEmpty",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscoverScripts_CoexistsWithAManifest",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseRunner/gotest",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseRunner/pytest",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseRunner/pytest/uv",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseRunner/vnd.newclarity.foo/bar",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseRunner/#00",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseRunner//uv",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseRunner/pytest/",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseRunner/a/b/c",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseRunner",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestResolvePytestLauncher_PrefersVenv",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestResolvePytestLauncher_NoneAvailable",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestResolvePytestLauncher_BareFallsToPath",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestGoTestCmd_AlwaysJSON/whole_module",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestGoTestCmd_AlwaysJSON/anchored_tests",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestGoTestCmd_AlwaysJSON/scoped_paths",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestGoTestCmd_AlwaysJSON",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestExitCodeReport/zero_exit_is_one_passing_test",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestExitCodeReport/non-zero_exit_is_one_failing_test",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestExitCodeReport/setup-error_exit_is_a_failure_too",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestExitCodeReport",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestExitCodeReport_NeverZeroTests",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestAppendExitFailure/records_an_exit_the_stream_did_not_account_for",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestAppendExitFailure/no-op_on_a_clean_exit",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestAppendExitFailure/no-op_when_the_stream_already_reported_a_failure",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestAppendExitFailure",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestCheck_ResolvedFormat/gotest_infers_gotest-json",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestCheck_ResolvedFormat/pytest_infers_pytest-json",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestCheck_ResolvedFormat/raw_with_declared_format",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestCheck_ResolvedFormat/raw_without_format_defaults_tap",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestCheck_ResolvedFormat",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestCheck_ResolvedThroughParse",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestCheck_AsAndTmuxParse",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestReport_WriteValidatesAgainstCTRFSchema",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestReport_Write",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestMergeReports",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestNormalize_UnknownFormat",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscover_FindsSuites",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscover_NoTasksDir",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscover_TaskIDMismatchFailsLoudly",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscover_InvalidManifestFailsLoudly",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscover_ValidatesChecks",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscover_MergesProjectConfig",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscover_InvalidProjectConfigFailsLoudly",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscover_DirCasingIsIndependentOfTaskField/lowercase_dir_canonical_task",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscover_DirCasingIsIndependentOfTaskField/uppercase_dir_still_works",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscover_DirCasingIsIndependentOfTaskField/lowercase_both",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscover_DirCasingIsIndependentOfTaskField",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscover_RejectsGenuineTaskIDMismatch",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscover_RefusesBadCheckDir/absolute",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscover_RefusesBadCheckDir/dot-dot",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscover_RefusesBadCheckDir/symlink_out",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscover_RefusesBadCheckDir/missing",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscover_RefusesBadCheckDir/a_file",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscover_RefusesBadCheckDir",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestDiscover_AcceptsCheckDirInsideRoot",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestShellDriver_ExitCode",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestShellDriver_Name",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestShellDriver_Matchers/contains_pass",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestShellDriver_Matchers/contains_fail",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestShellDriver_Matchers/not_contains_pass",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestShellDriver_Matchers/not_contains_fail",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestShellDriver_Matchers/equals_pass",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestShellDriver_Matchers/equals_fail",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestShellDriver_Matchers/equals_empty_pass",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestShellDriver_Matchers/equals_empty_fail",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestShellDriver_Matchers/stderr_is_not_matched",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestShellDriver_Matchers/a_failing_exit_fails_before_matchers",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestShellDriver_Matchers",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/sh_alone",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/sh_with_matchers",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/sh_with_as_and_tmux",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/sh_+_runner",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/sh_+_command",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/sh_+_tests",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/sh_+_paths",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/sh_+_format",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/contains_without_sh",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/not_contains_without_sh",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/equals_without_sh",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/neither_runner_nor_sh",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/name_on_a_runner_check",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestLookupDriver/gotest",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestLookupDriver/pytest",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestLookupDriver/pytest/uv",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestLookupDriver/bats",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestLookupDriver/vnd.newclarity.foo/bar",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestLookupDriver/pytest/poetry",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestLookupDriver/gotest/uv",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestLookupDriver/a/b/c",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestLookupDriver/pytest/",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestLookupDriver//uv",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestLookupDriver",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestGenericDriver_RunTAP",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestGenericDriver_RunReportsFailures",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestGotestDriver_Run",
+        "status": "passed",
+        "duration": 360,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseGotestJSON",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseGotestJSON_Malformed",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_ValidFull",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_ValidMinimal",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_MissingRequiredField/missing_schema",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_MissingRequiredField/missing_task",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_MissingRequiredField",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_NoChecks",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_CheckValidation/tests_on_a_raw_runner_is_rejected",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_CheckValidation/paths_on_a_raw_runner_is_rejected",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_CheckValidation/raw_runner_without_command_is_rejected",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_CheckValidation/raw_runner_with_unknown_format_is_rejected",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_CheckValidation/first-class_with_both_tests_and_command_is_rejected",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_CheckValidation/first-class_with_neither_selection_nor_command_is_rejected",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_CheckValidation/first-class_with_a_mismatched_explicit_format_is_rejected",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_CheckValidation/check_without_a_runner_is_rejected",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_CheckValidation",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_FirstClassConsistentVariants/explicit_matching_format",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_FirstClassConsistentVariants/command-mode_escape_hatch",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_FirstClassConsistentVariants/paths-only_selection",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_FirstClassConsistentVariants",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_UnknownSchemaVersion",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_UnknownKeysRejected",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_TopLevelKeyAfterCheckRejected",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseManifest_MalformedTOML",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestFormat_Valid",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestMerge_NilProjectIsIdentity",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestMerge_SetupProjectFirstThenTask",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestMerge_TeardownProjectFirstThenTask",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestMerge_SeedProjectFirstThenTask",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestMerge_NeedsDefaultVsExplicitEmptyOverride",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestMerge_DoesNotMutateInputs",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseProjectConfig_ValidFull",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseProjectConfig_MinimalSchemaOnly",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseProjectConfig_MissingSchema",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseProjectConfig_UnknownSchema",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseProjectConfig_RejectsNonProjectKeys/task",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseProjectConfig_RejectsNonProjectKeys/tiers",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseProjectConfig_RejectsNonProjectKeys/format",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseProjectConfig_RejectsNonProjectKeys/runner",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseProjectConfig_RejectsNonProjectKeys",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParsePytestJSON",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParsePytestJSON_OutcomeMapping",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestParseTAP",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_ChecksRunInDir",
+        "status": "passed",
+        "duration": 400,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRunnerTmuxConfigIsWhatTheGuardAccepts",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestIsolatedEnv_CarriesCallerBuildCaches",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestIsolatedEnv_KeepsCallerSetCache",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestCallerBuildCaches_SkipsMissingTool",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_SeesCallerGOCACHE",
+        "status": "passed",
+        "duration": 170,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestMakeRunDir_IsCanonical",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestIsolatedEnv_HomeIsCanonical",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_SeesCanonicalHome",
+        "status": "passed",
+        "duration": 130,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestEnvValuesFindsBothKeys",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestGuard_AllowsYourOwnLandedTaskFromItsWorktree",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestGuard_RefusesAForeignLandedTask",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestGuard_AllowsAnUnlandedForeignTask",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestGuard_SessionEnvNamesAnOwner",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestGuard_FailsOpenWithNoMainDatabase",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestGuard_IgnoresANonTaskID",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestGuard_RefusesEveryForeignSuiteInADirectorySweep",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestTaskNumber",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestPersonEnv_StripsTheCallersIdentity",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestAgentEnv_IsTheSupportedHarness",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestWriteAgentEnv",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestMakeTmuxDir_FitsASocketPath",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestSnapshotScript_KeepsTheLayout",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_RunsASnapshot",
+        "status": "passed",
+        "duration": 530,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_SameVerdictWhoeverRunsIt/person",
+        "status": "passed",
+        "duration": 170,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_SameVerdictWhoeverRunsIt/agent",
+        "status": "passed",
+        "duration": 140,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_SameVerdictWhoeverRunsIt",
+        "status": "passed",
+        "duration": 300,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_Manifest_AsAgentIsPerCheck",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_PrivateTmuxIsTornDown",
+        "status": "passed",
+        "duration": 160,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_Manifest_TmuxIsPerCheck",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_EachRunWritesItsOwnReport",
+        "status": "passed",
+        "duration": 240,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_CTRFLineOnlyOnAFailingRun/passing_run_prints_no_CTRF_line",
+        "status": "passed",
+        "duration": 120,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_CTRFLineOnlyOnAFailingRun/failing_run_names_its_cache_report",
+        "status": "passed",
+        "duration": 110,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_CTRFLineOnlyOnAFailingRun",
+        "status": "passed",
+        "duration": 230,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestResetSandboxClearsTheWorktreeSandbox",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestResetSandboxOutsideWorktreeIsANoop",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_ExitCodeIsTheVerdict/passes",
+        "status": "passed",
+        "duration": 130,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_ExitCodeIsTheVerdict/fails",
+        "status": "passed",
+        "duration": 140,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_ExitCodeIsTheVerdict/setup_error_keeps_its_own_exit_code",
+        "status": "passed",
+        "duration": 130,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_ExitCodeIsTheVerdict",
+        "status": "passed",
+        "duration": 410,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_ExportsTAPPathAndTaskID",
+        "status": "passed",
+        "duration": 140,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestSuiteEnv_AddsNoPermissionGrantingVariable",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_NormalizesTAP",
+        "status": "passed",
+        "duration": 120,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_ReconcilesAnUnexplainedExit",
+        "status": "passed",
+        "duration": 130,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_ManifestWinsOverScript",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_NoSuiteNamesBothFilenames",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_RunsIsolated",
+        "status": "passed",
+        "duration": 140,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_ShellChecks",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_ShellCheckAsAgent",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_PassingSuite",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_FailingSuite",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_RunnerErrorFailsLoudly",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_NeedsGuard",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_SeedGuard",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestRun_UnknownTask",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestIsolatedEnvReplacesHomeAndXDG",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestCountsLine/all_pass",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestCountsLine/with_failures_leads_with_failed",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestCountsLine/with_skips",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "TestCountsLine",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "dir: runners, setup, pytest suites, refusals"
+        }
+      },
+      {
+        "name": "tests/test_suite_rules.py::test_registration_places_the_rules",
+        "status": "passed",
+        "duration": 335,
+        "suite": [
+          "tests/test_suite_rules.py"
+        ],
+        "labels": {
+          "check": "suite rules in sync"
+        }
+      },
+      {
+        "name": "tests/test_suite_rules.py::test_reregistration_does_not_overwrite_a_customized_copy",
+        "status": "passed",
+        "duration": 312,
+        "suite": [
+          "tests/test_suite_rules.py"
+        ],
+        "labels": {
+          "check": "suite rules in sync"
+        }
+      },
+      {
+        "name": "tests/test_suite_rules.py::test_scaffold_reports_whether_it_wrote",
+        "status": "passed",
+        "duration": 62,
+        "suite": [
+          "tests/test_suite_rules.py"
+        ],
+        "labels": {
+          "check": "suite rules in sync"
+        }
+      },
+      {
+        "name": "tests/test_suite_rules.py::test_the_rules_name_the_things_the_refusals_point_at",
+        "status": "passed",
+        "duration": 49,
+        "suite": [
+          "tests/test_suite_rules.py"
+        ],
+        "labels": {
+          "check": "suite rules in sync"
+        }
+      },
+      {
+        "name": "tests/test_suite_rules.py::test_endless_ships_the_same_file_it_scaffolds",
+        "status": "passed",
+        "duration": 49,
+        "suite": [
+          "tests/test_suite_rules.py"
+        ],
+        "labels": {
+          "check": "suite rules in sync"
+        }
+      },
+      {
+        "name": "tests/test_suite_rules.py::test_the_rules_teach_the_manifest_form_only",
+        "status": "passed",
+        "duration": 53,
+        "suite": [
+          "tests/test_suite_rules.py"
+        ],
+        "labels": {
+          "check": "suite rules in sync"
+        }
+      },
+      {
+        "name": "tests/test_suite_rules.py::test_one_line_sends_a_script_suite_reader_to_the_harness_header",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "tests/test_suite_rules.py"
+        ],
+        "labels": {
+          "check": "suite rules in sync"
+        }
+      },
+      {
+        "name": "suite rules show a nested-module dir example",
+        "status": "passed",
+        "duration": 5,
+        "labels": {
+          "check": "suite rules show a nested-module dir example"
+        }
+      },
+      {
+        "name": "orchestration guide documents dir",
+        "status": "passed",
+        "duration": 4,
+        "labels": {
+          "check": "orchestration guide documents dir"
+        }
+      }
+    ]
+  }
+}
