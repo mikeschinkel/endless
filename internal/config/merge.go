@@ -133,6 +133,14 @@ func (c *EndlessConfig) Merge(other cfgstore.RootConfig) cfgstore.RootConfig {
 		out.FaultTriage.Interval = o.FaultTriage.Interval
 	}
 
+	// GitHooks: layered, field by field — the project wins when it sets one.
+	if out.GitHooks.LefthookFile == "" {
+		out.GitHooks.LefthookFile = o.GitHooks.LefthookFile
+	}
+	if out.GitHooks.Report == "" || out.GitHooks.Report == settings.UnsetText {
+		out.GitHooks.Report = o.GitHooks.Report
+	}
+
 	return &out
 }
 

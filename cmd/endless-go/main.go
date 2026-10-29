@@ -105,6 +105,9 @@ import (
 	_ "github.com/mikeschinkel/endless/internal/triagejob"
 	_ "github.com/mikeschinkel/endless/internal/pathsjob"
 	_ "github.com/mikeschinkel/endless/internal/unlandedjob"
+
+	// Settings registrations with no job: imported for their init() alone.
+	_ "github.com/mikeschinkel/endless/internal/githooks"
 	"github.com/mikeschinkel/endless/internal/verifycmd"
 )
 

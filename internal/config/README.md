@@ -37,7 +37,8 @@ An opt-in is a three-way switch, written as a string: `"on"`, `"off"` or
 `"unset"`. A missing key is unset. Unset takes the setting's registered
 default; `"off"` is an explicit decline, which `endless doctor` reads as "do not
 suggest this again". The opt-ins are `auto_spawn.enabled`, `prime.enabled`,
-`main_sync.enabled`, `fault_triage.enabled` and every key of `checks`.
+`main_sync.enabled`, `fault_triage.enabled`, `git_hooks.report` and every key
+of `checks`.
 
 A JSON `true` or `false` at an opt-in key is refused when the file loads, by
 `Normalize`, with the file, the key and the value to write instead
@@ -112,6 +113,7 @@ These are not expected to appear in CLI files. Same safety-net pattern.
 | `main_sync` | `object`         | Split by field — see `main_sync` below.                                                    |
 | `fault_triage` | `object`      | Split by field — see `fault_triage` below.                                                 |
 | `project_status` | `object`    | Per list and per attribute — see `project_status` below.                                   |
+| `git_hooks` | `object`         | Per field: receiver wins when set (an opt-in's `"unset"` inherits) — see `GitHooks`.      |
 
 #### `tracking`
 

@@ -193,6 +193,8 @@ The runner itself knows nothing job-specific — jobs register themselves with i
 
 The opt-ins below — `auto_spawn.enabled`, `prime.enabled`, `main_sync.enabled`, `fault_triage.enabled`, and every key under `checks` — take one of three values: `"on"`, `"off"` or `"unset"`. A missing key is unset, and an unset opt-in takes its default (off for the four jobs). `"off"` is an explicit decline, which `endless doctor` will not suggest again; `"unset"` is what it may suggest. The old JSON `true` / `false` is refused with the file, the key and the value to write instead; `endless-go settings migrate [FILE...]` rewrites them in place (with no FILE: the user config and the current project's).
 
+`git_hooks.report` is an opt-in too, `on` by default: whether a repo whose task-branch commits will not get the `Endless-Task` trailer is reported. Its partner `git_hooks.lefthook_file` is `local` (the default) or `committed`: where `project init` adds Endless's lefthook commands. Both may live in either config file. See **The `Endless-Task` trailer** in `endless guide orchestration`.
+
 `endless project set main_sync.enabled=on` (or `<name>.main_sync.enabled=on` from anywhere) writes one into the project's own config. `endless-go settings list` shows every registered key with its effective value and the file it came from; `--json` is the export the Python CLI reads, and `--metadata` lists the keys without reading any config file.
 
 ### Auto-spawn

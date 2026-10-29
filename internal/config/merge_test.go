@@ -132,3 +132,21 @@ func TestTmuxIsCLIOnly(t *testing.T) {
 		t.Errorf("merged tmux = %+v, want the CLI layer's %+v", got, want)
 	}
 }
+
+// TestMerge_GitHooksLayered: each git_hooks field is the project's when it
+// sets one, else the user's machine-file default (E-2490). "unset" inherits.
+func TestMerge_GitHooksLayered(t *testing.T) {
+	cli := &EndlessConfig{GitHooks: GitHooks{LefthookFile: "committed", Report: "off"}}
+
+	merged := (&EndlessConfig{}).Merge(cli).(*EndlessConfig)
+	if merged.GitHooks != cli.GitHooks {
+		t.Errorf("GitHooks = %+v, want the CLI layer's %+v", merged.GitHooks, cli.GitHooks)
+	}
+
+	project := &EndlessConfig{GitHooks: GitHooks{LefthookFile: "local", Report: "unset"}}
+	merged = project.Merge(cli).(*EndlessConfig)
+	want := GitHooks{LefthookFile: "local", Report: "off"}
+	if merged.GitHooks != want {
+		t.Errorf("GitHooks = %+v, want %+v", merged.GitHooks, want)
+	}
+}

@@ -43,6 +43,7 @@ from pathlib import Path
 import click
 
 from endless import agent_help, doc_mirror, land_conflict, provenance, rowcap, unlanded
+from endless.git_hook import copy_lefthook_local
 from endless.task_cmd import _display_path, _require_unblocked, _resolve_project
 from endless.project_path import resolved
 
@@ -2745,6 +2746,10 @@ def _bootstrap_task_worktree(
     (companion_dir / "worktree.json").write_text(
         json.dumps(companion, indent=2) + "\n"
     )
+    # E-2490: lefthook reads lefthook-local.yml from this worktree's own top
+    # level, and an untracked file is not checked out, so the Endless-Task
+    # trailer's hook config would stop at the main checkout without a copy.
+    copy_lefthook_local(project_root, wt_dir)
     provision_worktree_sandbox(wt_dir)
     # E-2128: the branch was just cut at the base, so its unlanded verdict is
     # known without comparing anything. Recording it here means the row this

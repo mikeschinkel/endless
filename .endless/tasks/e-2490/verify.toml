@@ -1,0 +1,41 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2490 and records what was true when E-2490
+# landed. Edit it only if you ARE E-2490. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+#
+# E-2490 adds an `Endless-Task: E-<id>` trailer to every commit on a task
+# branch, through Git hooks that `endless project init` sets up.
+
+schema = 1
+task   = "E-2490"
+
+# Commits through real Git hooks calling this checkout's `endless`: -m and
+# editor commits get the trailer, an empty editor message still aborts, other
+# branches and a detached HEAD get none, a commit never fails. Then setup:
+# plain hooks, lefthook local and committed, migration, husky and other
+# managers, never touching a hook file Endless did not write, the worktree
+# copy, and `project init` committing the lefthook.yml it creates. The
+# real-lefthook test skips where lefthook is not installed.
+[[check]]
+name   = "trailer and hook setup"
+runner = "pytest/uv"
+paths  = ["tests/test_git_hook.py"]
+
+# Bringing a project up still commits exactly what it did, now that init also
+# writes Git hooks.
+[[check]]
+name   = "project bring-up unchanged"
+runner = "pytest/uv"
+paths  = ["tests/test_project_bring_up.py", "tests/test_register.py"]
+
+# The git_hooks settings are in the config schema, registered, and layered.
+[[check]]
+name   = "git_hooks settings"
+runner = "gotest"
+paths  = ["./cmd/endless-go/", "./internal/config/", "./internal/settings/",
+          "./internal/settingscmd/"]
+
+[[check]]
+name   = "orchestration guide documents the trailer"
+sh     = "grep -c '^#### The `Endless-Task` trailer$' docs/guide/orchestration.md"
+equals = "1"

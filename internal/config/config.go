@@ -93,7 +93,31 @@ type EndlessConfig struct {
 	// Split across the layers like AutoSpawn, for the same reasons — see
 	// FaultTriage.
 	FaultTriage FaultTriage `json:"fault_triage,omitzero"`
+
+	// GitHooks configures how `endless project init` sets up the Git hook that
+	// adds the Endless-Task trailer to task-branch commits (E-2490), and
+	// whether a repo without it is reported. Layered: see GitHooks.
+	GitHooks GitHooks `json:"git_hooks,omitzero"`
 }
+
+// GitHooks is the "git_hooks" object (E-2490). Both fields are layered: the
+// project file wins, and the user's machine file is the default for every
+// project that leaves a field unset.
+type GitHooks struct {
+	// LefthookFile is where `project init` adds Endless's lefthook commands:
+	// "local" (lefthook-local.yml, uncommitted) or "committed" (lefthook.yml).
+	// Empty means DefaultLefthookFile.
+	LefthookFile string `json:"lefthook_file,omitempty"`
+
+	// Report says whether a repo whose task-branch commits will not get the
+	// trailer is reported: "on", "off" or "unset". Unset is on.
+	Report OptInText `json:"report,omitempty"`
+}
+
+// DefaultLefthookFile is where Endless's lefthook commands go when no file
+// chooses: the uncommitted lefthook-local.yml, so setting Endless up never
+// edits a file the repo's other contributors share.
+const DefaultLefthookFile = "local"
 
 // FaultTriage is the "fault_triage" object.
 //

@@ -291,6 +291,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | `docs` | _(none yet)_ | the `docs` command is temporarily disabled and not covered by the guide. |
 | `epic` | _(none yet)_ | the `endless epic` convenience surface (add/show/list/update over type=epic tasks) isn't covered by the guide yet. |
 | `errors` | reference | Recorded errors: the session-status fault row, showing and clearing them, and the error-code catalog. |
+| `git-hook` | orchestration | The Endless-Task trailer: the Git hook commands that add it to task-branch commits, and whether this checkout gets it. |
 | `guide` | reference | The session guide; run `endless guide` for the index, `--list` for sections. |
 | `jobs` | reference | The fire-once background job runner: firing it, reading its schedule, clearing a job's backoff. |
 | `lesson` | orchestration | Recording a correction: written and committed on the main checkout, never on your branch. |

@@ -50,6 +50,10 @@ HARNESS_EXEMPT_SUBCOMMANDS = frozenset({
     # the user's rc, so this runs on every shell launch. Static stdout, no I/O
     # — nothing to refuse.
     "shell-init",
+    # Endless's Git hooks run `endless git-hook` on every commit, from any tool.
+    # A banner there lands in someone's commit output; the trailer it adds
+    # needs no harness, so there is nothing to withhold.
+    "git-hook",
 })
 
 
@@ -757,14 +761,27 @@ def project_cmd():
 @click.option("--lang", default=None, help="Primary language")
 @click.option("--status", default=None,
               type=click.Choice(["active", "paused", "archived", "idea"]))
-def init(path, infer, name, label, desc, lang, status):
+@click.option("--git-hooks", "git_hooks", default=None,
+              type=click.Choice(["lefthook", "none"]),
+              help="How to add the Endless-Task trailer where the repo has no "
+                   "hook manager: through lefthook, or a plain Git hook "
+                   "(none). With Git hooks already present, lefthook moves "
+                   "them into lefthook and none declines. Asked when omitted, "
+                   "unless --infer.")
+def init(path, infer, name, label, desc, lang, status, git_hooks):
     """Initialize a directory as a project — registers the DB row and scaffolds
-    .endless/config.json + .gitignore. Idempotent; safe to re-run."""
+    .endless/config.json + .gitignore. Idempotent; safe to re-run.
+
+    Also sets up the Git hooks that add an `Endless-Task: E-<id>` trailer to
+    every commit on a task branch: through lefthook when the repo uses it (in
+    lefthook-local.yml, or lefthook.yml per the git_hooks.lefthook_file
+    setting), else a plain hook file nothing else claims. For husky and other
+    managers it prints the line to add. See `endless git-hook --help`."""
     from endless.register import register_project
     register_project(
         Path(path).resolve(),
         name=name, label=label, description=desc,
-        language=lang, status=status, infer=infer,
+        language=lang, status=status, infer=infer, git_hooks=git_hooks,
     )
 
 
@@ -1519,6 +1536,62 @@ def shell_init():
 
 # Captured, not read: eval "$(endless shell-init)" (E-1668).
 shell_init.stdout_is_captured = True
+
+
+@main.group("git-hook")
+def git_hook_cmd():
+    """The Endless-Task trailer on task-branch commits.
+
+    A commit on a `task/<N>` branch gets an `Endless-Task: E-<N>` trailer, so
+    `git log --format='%(trailers:key=Endless-Task,valueonly)'` maps commits to
+    tasks. `endless project init` sets up the Git hooks that call these
+    commands; the first two are for those hooks, not for typing.
+    """
+    pass
+
+
+@git_hook_cmd.command("prepare-commit-msg")
+@click.argument("message_file")
+@click.argument("source", required=False, default="")
+@click.argument("sha", required=False, default="")
+def git_hook_prepare_commit_msg(message_file, source, sha):
+    """Git's prepare-commit-msg hook: add the trailer to a message given with
+    -m, -F, --amend or a merge. An editor commit is left to commit-msg, so an
+    empty message still aborts it. Always exits 0."""
+    from endless import git_hook
+    git_hook.run_hook("prepare-commit-msg", message_file, source)
+
+
+@git_hook_cmd.command("commit-msg")
+@click.argument("message_file")
+def git_hook_commit_msg(message_file):
+    """Git's commit-msg hook: add the trailer once the editor has closed, unless
+    the message is empty or already has one. Always exits 0."""
+    from endless import git_hook
+    git_hook.run_hook("commit-msg", message_file)
+
+
+@git_hook_cmd.command("status")
+@click.argument("path", default=".", type=click.Path(exists=True,
+                                                      file_okay=False))
+def git_hook_status(path):
+    """Say whether commits on task branches in this checkout will get the
+    trailer, and if not, why. Exits 1 when they will not."""
+    from endless import git_hook
+    repo = git_hook.inspect(Path(path).resolve())
+    why = "not a Git repository" if repo is None else git_hook.problem(repo)
+    if why is None:
+        click.echo(f"Task-branch commits in {repo.root} get the "
+                   f"{git_hook.TRAILER_KEY} trailer, through {repo.label}.")
+        return
+    raise agent_help.no_report(
+        f"Task-branch commits will not get the {git_hook.TRAILER_KEY} "
+        f"trailer: {why}.",
+        "Run `endless project init` in the project to set it up; for husky or "
+        "another hook manager, add the line it prints to that manager's hooks",
+        text=f"Task-branch commits will not get the {git_hook.TRAILER_KEY} "
+             f"trailer: {why}.",
+    )
 
 
 @main.group("session")

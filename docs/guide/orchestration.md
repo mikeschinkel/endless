@@ -352,6 +352,25 @@ Your commits ride into `main` on `worktree land`, so the subject line is what `m
 
 One task's work is normally one commit; split into several only when the steps are independently reviewable, and prefix each with the same id.
 
+#### The `Endless-Task` trailer
+
+Every commit on a `task/<id>` branch also gets an `Endless-Task: E-<id>` trailer, added by Git hooks rather than by you, so `git log --format='%(trailers:key=Endless-Task,valueonly)'` maps commits to tasks without parsing subjects, and the link survives a rebase. The `E-<id>:` subject prefix stays: CI run titles show the subject. Don't add the trailer yourself; a message that already has one is left alone.
+
+The hooks call `endless git-hook prepare-commit-msg` and `endless git-hook commit-msg`. The first adds the trailer to a message given with `-m`, `-F`, `--amend` or a merge; the second adds it after an editor closes, so an empty message still aborts. Neither adds anything on another branch or a detached HEAD, and neither ever fails a commit. `--no-verify` skips `commit-msg` only, so an editor commit made with it goes without.
+
+`endless project init` sets the hooks up, by what the repo already uses:
+
+| The repo has | `project init` |
+|---|---|
+| lefthook | adds Endless's commands to `lefthook-local.yml`, or to `lefthook.yml` when `git_hooks.lefthook_file` is `committed` (guarded by `command -v endless`, for clones without Endless), and runs `lefthook install` if lefthook's hooks are not installed yet |
+| no hook manager and no Git hooks | asks: lefthook, or a plain hook (`none`), which writes `prepare-commit-msg` and `commit-msg` into the directory `git rev-parse --git-path hooks` names. `--git-hooks=lefthook\|none` answers without asking; `--infer` takes `none` |
+| Git hooks and no manager | offers to move them into lefthook: `lefthook install` renames each to `<name>.old`, and `lefthook-local.yml` runs it from there, since its path is this clone's. Declined, init finishes without the trailer and says why |
+| husky, or another manager | finishes and prints the line to add to that manager's `prepare-commit-msg` and `commit-msg` hooks (for husky, `.husky/prepare-commit-msg` and `.husky/commit-msg`) |
+
+Endless never overwrites, renames or removes a hook file or a `core.hooksPath` it did not write. That includes not naming an event in lefthook's config when a hook file lefthook did not install already handles it: lefthook would rename that file. lefthook reads `lefthook-local.yml` from a worktree's own top level, and only beside a `lefthook.yml`, so init creates a minimal `lefthook.yml` where there is none, lists `lefthook-local.yml` in the repo's `.git/info/exclude`, and task worktree creation copies the main checkout's copy into each new worktree. Without lefthook installed, init says how to install it.
+
+`endless git-hook status` says whether commits on task branches in the current checkout will get the trailer, and if not, why; it exits 1 when they won't. `git_hooks.report` (`on` by default) is the setting the coming `endless doctor` check honors.
+
 Endless auto-commits a fixed, narrow set of its own files — and none of them is your work:
 
 | Path                                                 | Committed by                                       |

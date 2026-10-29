@@ -8,6 +8,7 @@ from pathlib import Path
 import click
 
 from endless import agent_help, db, config, main_commit
+from endless.git_hook import LEFTHOOK_CONFIGS
 from endless.project_identity import (
     CONFIG_KEY, NoIdentity, identity_for, stored_identity,
 )
@@ -108,8 +109,11 @@ def register_project(
     language: str | None = None,
     status: str | None = None,
     infer: bool = False,
+    git_hooks: str | None = None,
 ) -> str:
-    """Register or update a project. Returns the name."""
+    """Register or update a project. Returns the name.
+
+    git_hooks is `--git-hooks` (see git_hook.setup)."""
 
     # The RESOLVED form is what everything below touches on disk; the STORED
     # form is what the projects column holds (E-2011).
@@ -360,9 +364,28 @@ def register_project(
 
     _scaffold_output_style(project_path)
 
+    _setup_git_hooks(project_path, git_hooks, interactive=not infer)
+
     _commit_bring_up(project_path, before)
 
     return name
+
+
+def _setup_git_hooks(project_path: Path, choice: str | None,
+                     interactive: bool) -> None:
+    """Set up the Endless-Task trailer's Git hooks (E-2490). A repo Endless
+    cannot set up is registered without the trailer, and the output says why:
+    the trailer is never worth failing a registration over."""
+    from endless import git_hook, settings_export
+    setting = settings_export.by_id(settings_export.export(project_path))
+    lefthook_file = setting["git_hooks.lefthook_file"]["value"]
+    try:
+        out = git_hook.setup(project_path, choice, interactive, lefthook_file)
+    except OSError as e:
+        out = git_hook.Outcome()
+        out.warn(f"Git hooks not set up ({e}): task-branch commits will not "
+                 "get the Endless-Task trailer")
+    git_hook.echo_outcome(out)
 
 
 # --- Bringing a project up to date (E-2349) ---------------------------------
@@ -446,7 +469,7 @@ ENDLESS_OWNED = (
     ".endless/tasks/CLAUDE.md",
     ".claude/output-styles/Endless.md",
 )
-USER_OWNED = (".gitignore",) + INSTRUCTION_FILES
+USER_OWNED = (".gitignore",) + INSTRUCTION_FILES + LEFTHOOK_CONFIGS
 BRING_UP_COMMIT_SUBJECT = "Endless: bring project up to Endless usage"
 
 
