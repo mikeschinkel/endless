@@ -7,7 +7,7 @@
 //
 //	endless-go event         emit|validate-db|rebuild-db|migrate|upgrade|backup|reap-worktrees
 //	endless-go hook          prompt|claude|codex
-//	endless-go sandbox       run|enter|init|reset|bind|list|prune|destroy
+//	endless-go sandbox       init|reset|claude-settings-repair
 //	endless-go tmux          apply|status-line|active-id|show-menu
 //	endless-go session-query list-live|task-plan|resume-target
 //	endless-go worktree      in-use|ledger-orphans  (the shared "is this worktree
@@ -243,11 +243,6 @@ func main() {
 	// context instead, so the decision lives inside sessionstatuscmd.Run (E-1685).
 	// project-status/project-window do the same, keyed off --project-id (E-1976).
 
-	// Let the worktree reaper clean up each reaped worktree's sandbox (E-1904).
-	// Wired here because sandboxcmd imports monitor, so monitor cannot call into
-	// it directly. Stored, not called — free in a process that never reaps.
-	monitor.ReapSandbox = sandboxcmd.ReapSandboxForWorktree
-
 	switch sub {
 	case "event":
 		eventcmd.Run(rest)
@@ -397,7 +392,7 @@ func usageText() string {
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  event          emit|validate-db|rebuild-db|migrate|upgrade|backup|reap-worktrees")
 	fmt.Fprintln(w, "  hook           prompt|claude|codex")
-	fmt.Fprintln(w, "  sandbox        run|enter|init|reset|list|prune|destroy|claude-settings-repair")
+	fmt.Fprintln(w, "  sandbox        init|reset|claude-settings-repair")
 	fmt.Fprintln(w, "  tmux           apply|status-line|active-id|show-menu")
 	fmt.Fprintln(w, "  session-query  list-live|task-plan|resume-target")
 	fmt.Fprintln(w, "  resume-windows --tmux-session NAME|--all-tmux-sessions [--dry-run]  (resume every restored task window)")

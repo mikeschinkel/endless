@@ -23,20 +23,10 @@ func Run(args []string) {
 		).Command("sandbox").Text(usageText()).Exit(1)
 	}
 	switch args[0] {
-	case "run":
-		runCmd(args[1:])
-	case "enter":
-		enterCmd(args[1:])
 	case "init":
 		initCmd(args[1:])
 	case "reset":
 		resetCmd(args[1:])
-	case "list":
-		listCmd(args[1:])
-	case "prune":
-		pruneCmd(args[1:])
-	case "destroy":
-		destroyCmd(args[1:])
 	case "claude-settings-repair":
 		claudeSettingsRepairCmd(args[1:])
 	case "-h", "--help", "help":
@@ -58,14 +48,8 @@ func usageText() string {
 	return strings.Join([]string{
 		"Usage: endless-go sandbox <command> [flags] [args]",
 		"Commands:",
-		"  run     [--clone] [--name N] [--keep] -- <cmd> [args]",
-		"  enter   [--clone] <name>",
-		"  init    --mode worktree [--force]           (this worktree's sandbox)",
-		"  init    [--mode empty|seed|clone] [--force] <name>",
-		"  reset                                        (clear + reseed this worktree's sandbox)",
-		"  list",
-		"  prune   [--older-than DURATION]",
-		"  destroy [--force] [--if-exists] <name>",
+		"  init    --mode worktree [--force]  (seed this worktree's sandbox)",
+		"  reset                              (clear + reseed this worktree's sandbox)",
 		"  claude-settings-repair [--all] [<worktree> ...]",
 	}, "\n") + "\n"
 }
@@ -98,12 +82,11 @@ func parseVerbFlags(fs *refusal.Flags, verb string, args []string) {
 // relayed prepares an error raised deeper in this package for printing, with
 // the verb prefix a person has always read in front of it.
 //
-// The class travels with the error rather than being re-decided here:
-// validateName and Provision construct classified refusals, so a sandbox name
-// the caller can simply correct stays NO-REPORT all the way to the print site.
-// refusal.From faults anything unclassified, which is the right reading of the
-// mkdir / OpenRoot / meta-write failures underneath — those mean the sandbox
-// tree itself is broken, not that the command was misused.
+// The class travels with the error rather than being re-decided here: an error
+// constructed as a classified refusal keeps its class all the way to the print
+// site, and refusal.From faults anything unclassified, which is the right
+// reading of a mkdir or seeding failure underneath — that means the sandbox
+// itself is broken, not that the command was misused.
 func relayed(verb string, err error) *refusal.Error {
 	return refusal.From(err).
 		Command("sandbox " + verb).

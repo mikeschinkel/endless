@@ -510,8 +510,8 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 
 // ledgerRoot returns the root directory whose .endless/db-ledger/ holds the
 // event ledger for the active DB context (ED-1525: the ledger follows the DB).
-// In an E-1281 sandbox (ConfigDir() resolves under CacheDir()/sandboxes/, the
-// sole sandbox switch per ED-1528) the ledger lives beside the sandbox
+// In a worktree sandbox (ConfigDir() resolves to the worktree's own sandbox
+// config dir — see monitor.IsSandboxActive) the ledger lives beside the sandbox
 // endless.db — at ConfigDir()/.endless/db-ledger — so sandbox emits and reads
 // never touch the real project ledger. Otherwise it is projectRoot, the real
 // checkout. NewWriter/ReadAllEvents append .endless/db-ledger to whatever root

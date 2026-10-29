@@ -47,7 +47,6 @@ def test_resolver_reads_no_environment(tmp_path, monkeypatch):
     before = config.sandbox_root(wt)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "elsewhere"))
     monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "other"))
-    monkeypatch.setenv("ENDLESS_SANDBOX", str(tmp_path / "hijack"))
     assert config.sandbox_root(wt) == before
 
 

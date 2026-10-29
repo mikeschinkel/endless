@@ -359,11 +359,11 @@ def test_the_rc_line_endless_installs_invokes_an_exempt_subcommand():
 def test_exempt_subcommands_have_nothing_to_withhold():
     """An exemption is only defensible for a command with no side effect the
     refusal could be withholding — otherwise "This command did not run" would be
-    replaced by silently running it. SANDBOX_SAFE_SUBCOMMANDS already carries
-    exactly that property (pure stdout, no project/global I/O), so exemption is
-    a subset of it, not a parallel judgment call."""
+    replaced by silently running it. Pinned to the one command known to be pure
+    stdout with no project/global I/O, so widening the set is a reviewed edit
+    here rather than a silent one."""
     from endless import cli
-    assert cli.HARNESS_EXEMPT_SUBCOMMANDS <= cli.SANDBOX_SAFE_SUBCOMMANDS
+    assert cli.HARNESS_EXEMPT_SUBCOMMANDS == frozenset({"shell-init"})
 
 
 @pytest.mark.parametrize("args", [

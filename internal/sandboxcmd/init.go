@@ -11,82 +11,20 @@ import (
 
 func initCmd(args []string) {
 	fs := refusal.NewFlags("init")
-	mode := fs.String("mode", "empty", "Initial state: empty | worktree | seed | clone")
-	force := fs.Bool("force", false, "Recreate the sandbox if it already exists")
+	mode := fs.String("mode", "", "Initial state: worktree (the only mode)")
+	force := fs.Bool("force", false, "Reseed the sandbox if it is already seeded")
 	parseVerbFlags(fs, "init", args)
-	rest := fs.Args()
 
-	switch *mode {
-	case "empty":
-		// supported — bare sandbox directory, no DB seeding.
-	case "worktree":
-		// supported — seeds projects/sessions from the current worktree's
-		// main checkout so first-invocation CLI calls have a real project
-		// row to resolve and a real session row to attribute to.
-		initWorktree(rest, *force)
-		return
-	case "seed":
+	// Named sandboxes under the cache directory, and the empty/seed/clone modes
+	// that made them, went with E-2481: a sandbox lives inside its worktree, so
+	// the worktree is the only thing init can be asked to fill.
+	if *mode != "worktree" {
 		refusal.NoReport(
-			"endless-go sandbox init: --mode seed not yet implemented; use --mode empty or --mode worktree",
-			"Re-run with --mode empty or --mode worktree",
-		).Command("sandbox init").Exit(1)
-	case "clone":
-		refusal.NoReport(
-			"endless-go sandbox init: --mode clone not yet implemented (see E-1087); use --mode empty or --mode worktree",
-			"Re-run with --mode empty or --mode worktree",
-		).Command("sandbox init").Exit(1)
-	default:
-		refusal.NoReport(
-			fmt.Sprintf("endless-go sandbox init: unknown --mode %q (want: empty | worktree | seed | clone)", *mode),
-			"Re-run with --mode empty or --mode worktree",
+			fmt.Sprintf("endless-go sandbox init: --mode %q is not supported; the only mode is --mode worktree", *mode),
+			"Re-run with --mode worktree from inside a task worktree",
 		).Command("sandbox init").Exit(1)
 	}
-
-	if len(rest) != 1 {
-		refusal.NoReport(
-			"endless-go sandbox init: expected exactly one positional arg <name>",
-			"Pass exactly one sandbox name and retry",
-		).Command("sandbox init").Exit(1)
-	}
-	name := rest[0]
-	if err := validateName(name); err != nil {
-		relayed("init", err).Exit(1)
-	}
-
-	dir := filepath.Join(sandboxesDir(), name)
-	if _, err := os.Stat(dir); err == nil {
-		if *force {
-			if err := os.RemoveAll(dir); err != nil {
-				refusal.Report(
-					fmt.Sprintf("endless-go sandbox init: removing existing %s: %v", dir, err),
-					"how to clear the filesystem error blocking removal of the existing sandbox",
-				).Command("sandbox init").Exit(1)
-			}
-		} else {
-			// Idempotent: existing sandbox with the same name is treated as a no-op.
-			fmt.Println(dir)
-			return
-		}
-	} else if !os.IsNotExist(err) {
-		// The cache directory would not answer at all, which is the user's
-		// disk rather than anything about this argv.
-		refusal.Report(
-			fmt.Sprintf("endless-go sandbox init: %v", err),
-			"how to clear the permission or I/O error on the sandbox cache directory",
-		).Command("sandbox init").Exit(1)
-	}
-
-	sb, err := Provision(name, modePersistent)
-	if err != nil {
-		relayed("init", err).Exit(1)
-	}
-	// Close the root handle now; init does not keep the sandbox open.
-	if sb.root != nil {
-		sb.root.Close()
-		sb.root = nil
-	}
-
-	fmt.Println(sb.Dir)
+	initWorktree(fs.Args(), *force)
 }
 
 // initWorktree fills the CURRENT worktree's sandbox with the endless database a
@@ -128,7 +66,7 @@ func initWorktree(rest []string, force bool) {
 			fmt.Sprintf("endless-go sandbox init --mode worktree: %s is not inside a task "+
 				"worktree (.endless/worktrees/e-NNN), so there is no sandbox to seed",
 				cwd),
-			"Run it from inside a task worktree, or use --mode empty",
+			"Run it from inside a task worktree",
 		).Command("sandbox init").Exit(1)
 	}
 

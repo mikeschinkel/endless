@@ -203,31 +203,23 @@ def _missing_schema_hint() -> agent_help.Refusal:
     """Build the refusal explaining why the resolved DB has no schema.
 
     The user sees this when XDG_CONFIG_HOME points somewhere endless wasn't
-    initialized (e.g., a sandbox subshell, a stale env override, or a worktree's
-    own .endless/ — see E-1158, E-1162). Names the resolved path, the resolution
-    mechanism, and the file's state so the user can spot the problem.
+    initialized (e.g., a stale env override, or a worktree's own .endless/ —
+    see E-1158). Names the resolved path, the resolution mechanism, and the
+    file's state so the user can spot the problem.
 
-    ENDLESS_SANDBOX decides the class, and it is read here rather than named to
-    the agent as a question, because the environment variable IS the answer:
-
-    - Set: this invocation runs inside an `endless-go sandbox` subshell, whose
-      XDG_CONFIG_HOME redirected the lookup. NO-REPORT. Leaving the subshell
-      fixes it, and the user never had a database at that path to have an
-      opinion about.
-    - Unset: this is the user's real config directory — XDG_CONFIG_HOME/endless
-      when they set it, else ~/.config/endless (E-2186: a set XDG_CONFIG_HOME
-      is the user's own choice, no longer a redirect Endless injected) —
-      holding a file that exists and carries no schema. Whether to restore it
-      from a backup or replace it is a judgement about their own data, and the
-      suggestion the message has always printed cannot be followed by anyone —
-      `project register` opens the same file through get_db and lands right
-      back here.
+    Always REPORT. This is the user's real config directory —
+    XDG_CONFIG_HOME/endless when they set it, else ~/.config/endless (E-2186: a
+    set XDG_CONFIG_HOME is the user's own choice, no longer a redirect Endless
+    injected) — holding a file that exists and carries no schema. Whether to
+    restore it from a backup or replace it is a judgement about their own data,
+    and the suggestion the message has always printed cannot be followed by
+    anyone — `project register` opens the same file through get_db and lands
+    right back here.
     """
     xdg = os.environ.get("XDG_CONFIG_HOME")
     if xdg:
         mechanism = f"resolved via XDG_CONFIG_HOME={xdg}"
-        suggestion = ("    If unintentional: 'unset XDG_CONFIG_HOME' "
-                      "(or 'exit' if you're in an `endless-go sandbox` subshell).")
+        suggestion = "    If unintentional: 'unset XDG_CONFIG_HOME'."
     else:
         mechanism = "resolved via default ~/.config (XDG_CONFIG_HOME unset)"
         suggestion = ("    Initialize with 'endless project register <project-path>' "
@@ -246,15 +238,6 @@ def _missing_schema_hint() -> agent_help.Refusal:
         f"    db file: {file_state}\n"
         f"{suggestion}"
     )
-    if os.environ.get("ENDLESS_SANDBOX"):
-        return agent_help.no_report(
-            f"The database at {config.DB_PATH} has no endless schema; the path "
-            f"came from the `endless-go sandbox` subshell's "
-            f"XDG_CONFIG_HOME={xdg}. Nothing was read or written.",
-            "Re-run outside the sandbox: leave the `endless-go sandbox` "
-            "subshell",
-            text=text,
-        )
     return agent_help.report(
         f"The database in the config directory, {config.DB_PATH}, "
         f"{file_state}. Nothing was read or written.",

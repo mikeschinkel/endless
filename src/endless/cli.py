@@ -30,15 +30,6 @@ from endless.statuses import TASK_STATUSES, TASK_STATUS_HELP
 # the limit as an argument and has no default of its own.
 BRIEF_CHARS = 256
 
-# Subcommands that are safe to run inside an `endless-go sandbox` subshell
-# (no project/global I/O — pure stdout). Anything else is refused at
-# CLI entry when ENDLESS_SANDBOX is set. New subcommands inherit the
-# refusal automatically; opt in here only with a one-line justification
-# in the diff.
-SANDBOX_SAFE_SUBCOMMANDS = frozenset({
-    "shell-init",  # static stdout, no I/O
-})
-
 # Subcommands exempt from the unsupported-harness refusal (E-1962/E-1997).
 #
 # The banner is advice addressed to an agent that deliberately typed an
@@ -57,7 +48,7 @@ SANDBOX_SAFE_SUBCOMMANDS = frozenset({
 HARNESS_EXEMPT_SUBCOMMANDS = frozenset({
     # `endless setup shell-helpers` appends 'eval "$(endless shell-init)"' to
     # the user's rc, so this runs on every shell launch. Static stdout, no I/O
-    # (see SANDBOX_SAFE_SUBCOMMANDS above) — nothing to refuse.
+    # — nothing to refuse.
     "shell-init",
 })
 
@@ -729,30 +720,9 @@ def main(ctx):
     # Click parses (so it works in any position). Enforcement of "required
     # inside a worktree" happens at the DB-access choke points (db.get_db /
     # go_db_context_args), so commands that never touch the DB stay flag-free.
-    sandbox = os.environ.get("ENDLESS_SANDBOX")
-    if sandbox and ctx.invoked_subcommand not in SANDBOX_SAFE_SUBCOMMANDS:
-        # REPORT-IF, and the branch is one this process cannot see.
-        # ENDLESS_SANDBOX is inherited, so a shell the agent itself opened and a
-        # HARNESS that was launched inside the subshell look identical from
-        # here: in the first case the agent types `exit`, in the second only the
-        # user can leave, because leaving means restarting their session.
-        raise agent_help.report_if(
-            f"endless: refusing to run '{ctx.invoked_subcommand}' inside the "
-            f"endless-go sandbox at {sandbox}. Nothing ran.",
-            "your whole session was started inside the sandbox subshell rather "
-            "than you having entered it",
-            "run `exit` to leave the subshell and retry",
-            "only they can leave a sandbox their session was launched in",
-            text=(
-                f"endless: refusing to run '{ctx.invoked_subcommand}' inside "
-                f"endless-go sandbox at {sandbox}\n"
-                "    Run 'exit' to leave the sandbox subshell, "
-                "or open a new terminal."
-            ),
-        )
 
-    # E-1962: last, so a broken cwd and the sandbox guard still report their own
-    # (more specific) diagnosis first.
+    # E-1962: last, so a broken cwd still reports its own (more specific)
+    # diagnosis first.
     _refuse_unsupported_agent(ctx)
 
 
@@ -1092,12 +1062,13 @@ def _refuse_unsupported_agent(ctx) -> None:
     Exits ZERO, and this is the one place where "the command did not run" is
     better said in prose than in the exit status.
 
-    An earlier version exited 1, reasoning from the ENDLESS_SANDBOX refusal above
-    that a success status would be a lie a script could act on. That reasoning
-    does not transfer, because the two refusals are different in kind. The
-    sandbox refusal is RECOVERABLE — leave the subshell and run it again — so a
-    non-zero status correctly says "act on this". This one is terminal: there is
-    nothing to fix, nothing to retry, and no other way to run the command here.
+    An earlier version exited 1, reasoning from the sandbox-subshell refusal that
+    once stood beside it (retired by E-2481) that a success status would be a lie
+    a script could act on. That reasoning did not transfer, because the two
+    refusals were different in kind. The sandbox refusal was RECOVERABLE — leave
+    the subshell and run it again — so a non-zero status correctly said "act on
+    this". This one is terminal: there is nothing to fix, nothing to retry, and
+    no other way to run the command here.
 
     A non-zero status contradicts the message beside it. The banner says "do not
     treat it as a failure to diagnose" while the exit code says "a failure
@@ -3103,8 +3074,8 @@ def _line_citation_tokens(content, extensions):
 def _builtin_allowed_dirs():
     """endless's own config + cache dirs — ALWAYS exempt from the path gate (both
     rules), no --allow-path needed. Docs and plans legitimately reference stable
-    endless-owned locations outside the project root (the main database, sandbox
-    caches — e.g. ~/.config/endless/endless.db, ~/.cache/endless/sandboxes/…).
+    endless-owned locations outside the project root (the main database and
+    caches — e.g. ~/.config/endless/endless.db, ~/.cache/endless/…).
 
     Resolved through endless's own config/cache-dir resolution, so a user's
     XDG_CONFIG_HOME / XDG_CACHE_HOME are honored, UNIONed with the HOME-anchored
