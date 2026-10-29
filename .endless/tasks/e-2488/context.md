@@ -6,3 +6,5 @@ Settled with Mike, 2026-10-29 (in E-2375's session):
 - A separate repo for the records (convention <repo>-endless or <repo>-endless-meta) is a later configuration option on the same design: only the remote holding the branch differs.
 - README.md links prominently to the records branch. Main's tree no longer showing task records is counted as a plus: some people would see them as bloat in the repo they work in.
 - Pushes to the records branch start no CI run under workflows that trigger only on main and dev, as gomion's generated ones do.
+
+This brainstorm absorbs E-2435 (keep ledger commits from labeling CI runs). Its evidence: after a go-dt land, the push's newest commit was 'Endless: record ledger entry', and the Test run took that title instead of the task's commit. Its interim fix, splitting a push so its first half ends at the newest commit outside .endless/, was set aside on 2026-10-29: moving the records off main removes the cause, and Mike is pushing by hand for now, so the titles cost little meanwhile.
