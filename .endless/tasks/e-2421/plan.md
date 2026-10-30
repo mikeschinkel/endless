@@ -48,6 +48,30 @@ keep the old text itself.
 - Running init from a task's worktree records into that worktree's sandbox,
   not the main database.
 
+## After the first land: the default branch and every worktree
+
+Added after E-2421 first landed, while still live in the session that landed
+it (ED-1550), on Mike's direction:
+
+- **Off the default branch, init does nothing.** Whatever it writes there would
+  sit uncommitted until that branch merged, if it ever did. The off-branch
+  behaviour before this was an omission: E-2349 decided only that nothing is
+  committed there. Init refuses and says to switch to the default branch.
+- **On the default branch** the update is committed together with the rest of
+  the bring-up, and its record goes into the project's ledger.
+- **Every worktree of the project gets the update now**, not when its task
+  lands. Each copy is judged on its own, without the record (which describes
+  the default branch): an unedited copy is written and committed on that
+  worktree's branch. A copy edited there is left alone and named. Committed,
+  not just written, because `endless worktree land` refuses a worktree with
+  uncommitted files (E-1416). A fresh commit rather than a cherry-pick: a
+  worktree that branched at an older version would make the cherry-pick
+  conflict. At land the rebase drops the commit, since the default branch
+  already has the same file.
+- **The record follows the file.** A copy already current whose record says
+  otherwise is recorded again; otherwise the next shipped version would read
+  it as an edit.
+
 ## Blocked by
 
 - E-2419, which changed the rules text. It has landed.
