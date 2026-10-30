@@ -1,0 +1,1 @@
+Seen spawning E-2498 with --allow-open-questions: spawn printed 'Starting E-2498 with EQ-199 open' and 'EQ-200 open' (task_cmd.py, the open-questions waiver), then refused because the plan items were unapproved. Nothing started, but the output said it was starting. Mike wants this held for a later sweep of command output, which he finds haphazard and hard to scan.
