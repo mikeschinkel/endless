@@ -1,0 +1,964 @@
+{
+  "reportFormat": "CTRF",
+  "specVersion": "0.2.0",
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 86,
+      "passed": 86,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 1793350297144,
+      "stop": 1793350315843
+    },
+    "tests": [
+      {
+        "name": "tests/test_git_hook.py::test_message_commit_gets_trailer_and_keeps_subject",
+        "status": "passed",
+        "duration": 1843,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_editor_commit_gets_trailer",
+        "status": "passed",
+        "duration": 912,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_empty_editor_message_still_aborts",
+        "status": "passed",
+        "duration": 714,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_existing_trailer_is_not_doubled",
+        "status": "passed",
+        "duration": 1118,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_no_trailer_off_task_branches",
+        "status": "passed",
+        "duration": 1179,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_task_worktree_commit_gets_trailer",
+        "status": "passed",
+        "duration": 602,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_hook_command_exits_zero_on_failure",
+        "status": "passed",
+        "duration": 197,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_commit_succeeds_without_endless_installed",
+        "status": "passed",
+        "duration": 434,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_manager_line_succeeds_without_endless",
+        "status": "passed",
+        "duration": 54,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_inspect_classifies_managers",
+        "status": "passed",
+        "duration": 187,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_inspect_outside_git_is_none",
+        "status": "passed",
+        "duration": 59,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_plain_setup_is_idempotent_and_marked",
+        "status": "passed",
+        "duration": 125,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_infer_without_choice_writes_plain_hooks",
+        "status": "passed",
+        "duration": 98,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_declined_lefthook_leaves_existing_hooks_alone",
+        "status": "passed",
+        "duration": 98,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_lefthook_local_setup_without_lefthook",
+        "status": "passed",
+        "duration": 111,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_lefthook_committed_setup_guards_endless",
+        "status": "passed",
+        "duration": 112,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_lefthook_file_listing_the_event_is_left_for_the_user",
+        "status": "passed",
+        "duration": 98,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_lefthook_never_claims_a_foreign_hook_event",
+        "status": "passed",
+        "duration": 106,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_migration_runs_renamed_hooks_from_local",
+        "status": "passed",
+        "duration": 113,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_husky_gets_lines_and_no_edits",
+        "status": "passed",
+        "duration": 132,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_other_manager_cannot_be_confirmed",
+        "status": "passed",
+        "duration": 116,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_copy_lefthook_local_copies_only_untracked",
+        "status": "passed",
+        "duration": 102,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_status_command_exit_codes",
+        "status": "passed",
+        "duration": 308,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_real_lefthook_adds_trailer_in_a_task_worktree",
+        "status": "passed",
+        "duration": 959,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_project_init_sets_up_plain_hooks",
+        "status": "passed",
+        "duration": 1443,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_git_hook.py::test_project_init_commits_the_lefthook_yml_it_creates",
+        "status": "passed",
+        "duration": 449,
+        "suite": [
+          "tests/test_git_hook.py"
+        ],
+        "labels": {
+          "check": "trailer and hook setup"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_gitignore_entries_include_logs",
+        "status": "passed",
+        "duration": 220,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "project bring-up unchanged"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_rerun_on_an_older_gitignore_adds_only_the_missing_lines",
+        "status": "passed",
+        "duration": 65,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "project bring-up unchanged"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_every_endless_path_the_source_names_is_classified",
+        "status": "passed",
+        "duration": 154,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "project bring-up unchanged"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_init_refuses_a_linked_worktree_and_writes_nothing",
+        "status": "passed",
+        "duration": 676,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "project bring-up unchanged"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_init_refuses_a_directory_under_endless_worktrees",
+        "status": "passed",
+        "duration": 923,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "project bring-up unchanged"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_guide_pointer_creates_claude_md_when_neither_file_exists",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "project bring-up unchanged"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_guide_pointer_appends_to_an_existing_file_without_it",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "project bring-up unchanged"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_guide_pointer_leaves_a_file_that_mentions_it_alone",
+        "status": "passed",
+        "duration": 49,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "project bring-up unchanged"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_bring_up_commits_what_it_wrote_and_a_rerun_changes_nothing",
+        "status": "passed",
+        "duration": 746,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "project bring-up unchanged"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_a_never_committed_config_is_committed",
+        "status": "passed",
+        "duration": 613,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "project bring-up unchanged"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_user_files_with_their_own_changes_are_left_out",
+        "status": "passed",
+        "duration": 663,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "project bring-up unchanged"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_nothing_is_committed_off_the_default_branch",
+        "status": "passed",
+        "duration": 225,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "project bring-up unchanged"
+        }
+      },
+      {
+        "name": "tests/test_register.py::test_validate_name_accepts_valid",
+        "status": "passed",
+        "duration": 54,
+        "suite": [
+          "tests/test_register.py"
+        ],
+        "labels": {
+          "check": "project bring-up unchanged"
+        }
+      },
+      {
+        "name": "tests/test_register.py::test_validate_name_rejects_invalid",
+        "status": "passed",
+        "duration": 51,
+        "suite": [
+          "tests/test_register.py"
+        ],
+        "labels": {
+          "check": "project bring-up unchanged"
+        }
+      },
+      {
+        "name": "tests/test_register.py::test_register_creates_config_and_db_entry",
+        "status": "passed",
+        "duration": 648,
+        "suite": [
+          "tests/test_register.py"
+        ],
+        "labels": {
+          "check": "project bring-up unchanged"
+        }
+      },
+      {
+        "name": "tests/test_register.py::test_register_with_explicit_fields",
+        "status": "passed",
+        "duration": 638,
+        "suite": [
+          "tests/test_register.py"
+        ],
+        "labels": {
+          "check": "project bring-up unchanged"
+        }
+      },
+      {
+        "name": "tests/test_register.py::test_register_update_existing",
+        "status": "passed",
+        "duration": 874,
+        "suite": [
+          "tests/test_register.py"
+        ],
+        "labels": {
+          "check": "project bring-up unchanged"
+        }
+      },
+      {
+        "name": "tests/test_register.py::test_register_detects_group_name",
+        "status": "passed",
+        "duration": 631,
+        "suite": [
+          "tests/test_register.py"
+        ],
+        "labels": {
+          "check": "project bring-up unchanged"
+        }
+      },
+      {
+        "name": "TestAccessorsRefuseBeforeInitialize",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestInitialize_ValidRegistryIsOrderedAndFrozen",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestInitialize_ReportsEveryFailure",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestInitialize_RefusesAMalformedShapedDefault/path=relative/dir",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestInitialize_RefusesAMalformedShapedDefault/path=",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestInitialize_RefusesAMalformedShapedDefault/name=a.b",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestInitialize_RefusesAMalformedShapedDefault/name=",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestInitialize_RefusesAMalformedShapedDefault/command=ghostty_-e",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestInitialize_RefusesAMalformedShapedDefault",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestShapeChecks",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestKindExportNames",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestResolve",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestParseOptIn",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestLegacyReplacement",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestInitialize",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/cmd/endless-go"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestEveryConfigKeyIsRegistered",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/cmd/endless-go"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestMerge_AutoSpawnEnabledIsNeverInherited",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestMerge_AutoSpawnCadenceInherits",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestLoadProject",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestMerge_FaultTriageEnabledIsNeverInherited",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestMerge_MainSyncEnabledIsNeverInherited",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestMerge_ChecksGlobalOnly",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestMerge_ChecksProjectOverridesCLI",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestMerge_ChecksUnsetInherits",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestMerge_ChecksKeysFromBothLayers",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestMerge_TrackingProjectInheritsCLI",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestMerge_TrackingProjectOverrides",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestMerge_GlobalOnlyFieldsFlowThrough",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestMerge_ProjectOnlyFieldsPreserved",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestTmuxIsCLIOnly",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestMerge_GitHooksLayered",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestNormalize_AcceptsTheThreeSpellings",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestNormalize_RefusesALegacyBoolean",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestNormalize_RefusesAnUnknownSpelling",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestOptIns",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestLeafKeys",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestBuild_ValuesAndSources",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settingscmd"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestBuild_RefusesALegacyBoolean",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settingscmd"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestMigrateFile",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settingscmd"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestMigrateFile_MissingFile",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settingscmd"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "TestMetadata",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settingscmd"
+        ],
+        "labels": {
+          "check": "git_hooks settings"
+        }
+      },
+      {
+        "name": "orchestration guide documents the trailer",
+        "status": "passed",
+        "duration": 6,
+        "labels": {
+          "check": "orchestration guide documents the trailer"
+        }
+      }
+    ]
+  }
+}
