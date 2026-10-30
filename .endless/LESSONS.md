@@ -7869,3 +7869,7 @@ While handing off E-2490 (Endless-Task trailer), Mike asked for a one-time scrip
 ### [2026-10-29] Don't let a new ledger record auto-commit onto a non-default branch
 E-2421: I recommended letting project init's new shipped_file.written event auto-commit its ledger segment even when the project is checked out off its default branch. Mike pointed out a ledger entry on a branch that is later thrown away is lost: auto-committing ledger entries to whatever branch is checked out is a recipe for ledger corruption (a separate task already plans to move those commits to an endless-meta branch). For init off the default branch, we skip the record instead.
 - **Project**: endless
+
+### [2026-10-30] Shipped project files belong on the default branch, not wherever init runs
+On E-2421 (init updating .endless/tasks/CLAUDE.md) I let init write the file in a checkout on a non-default branch and merely skip the ledger record there. Mike: project init should always update .endless/tasks/CLAUDE.md in the default branch, full stop, because an update made on another branch could languish there for days, weeks or months. This is about that rules file; ask before assuming it covers other files init writes.
+- **Project**: endless
