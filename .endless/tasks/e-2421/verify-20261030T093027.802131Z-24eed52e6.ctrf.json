@@ -1,0 +1,5415 @@
+{
+  "reportFormat": "CTRF",
+  "specVersion": "0.2.0",
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 495,
+      "passed": 495,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 1793352616807,
+      "stop": 1793352631605
+    },
+    "tests": [
+      {
+        "name": "TestEveryCurrentVersionIsListed",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/shipped"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestVersionsAreUniqueAndBelongToAKind",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/shipped"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecide",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/shipped"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestEndlessShipsTheSameFileItHolds",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/shipped"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTheRulesNameWhatTheRefusalsPointAt",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/shipped"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTheRulesTeachTheManifestFormOnly",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/shipped"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestOneLineSendsAScriptSuiteReaderToTheHarnessHeader",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/shipped"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestActor_JSON_SessionIDOmitWhenEmpty",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestActor_JSON_RoundTrip",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestClaim_ChildOfEpicSetsEpicID",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestClaim_NestedChildResolvesNearestEpic",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestClaim_StandaloneTaskNullEpicID",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestClaim_EpicDirectlyResolvesToSelf",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestClaim_RefusesRepointingABoundSession",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestClaim_ReaffirmingTheSameTaskIsAllowed",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestClaim_RevivesEndedSession",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestClaim_PreservesLiveSessionState",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestRelease_IsRefusedByWriteOnce",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestClaim_LogsBinding",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_RewrittenHistoryStillAppends",
+        "status": "passed",
+        "duration": 820,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_SelfReleasesAfterOneAppend",
+        "status": "passed",
+        "duration": 710,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCanAmend_TaskBranchWithIdenticalLedgerTreeRefuses",
+        "status": "passed",
+        "duration": 150,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCanAmend_TaskBranchWithDifferentLedgerTreeAmends",
+        "status": "passed",
+        "duration": 130,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCanAmend_NoLedgerTreeAtHeadAmends",
+        "status": "passed",
+        "duration": 110,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCanAmend_NoTaskBranchesAmends",
+        "status": "passed",
+        "duration": 100,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsIndexLocked/nil",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsIndexLocked/the_lock_file_by_name",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsIndexLocked/git's_advisory_sentence",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsIndexLocked/an_unrelated_fatal",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsIndexLocked/nothing_to_commit",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsIndexLocked",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitPathsSucceedsOnceTheLockClears",
+        "status": "passed",
+        "duration": 100,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitPathsGivesUpOnAStuckLock",
+        "status": "passed",
+        "duration": 120,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitPathsDoesNotRetryAnUnrelatedFailure",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitDocPathsMakesOneCommit",
+        "status": "passed",
+        "duration": 110,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitDocPathsIsANoOpForNothing",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitDocPathsSkipsAPathThatWasNeverTracked",
+        "status": "passed",
+        "duration": 100,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitDocPathsStagesTheDeletionOfATrackedOriginal",
+        "status": "passed",
+        "duration": 130,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitDocPathsCommitsNothingWhenNoPathIsStageable",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitDocPathsSkipsAnIgnoredUntrackedPath",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitDocPathsSucceedsWhenTheContentIsAlreadyCommitted",
+        "status": "passed",
+        "duration": 160,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitDocPathsStillCommitsAChangeBesideAnUnchangedPath",
+        "status": "passed",
+        "duration": 150,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsNothingToCommit/nil",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsNothingToCommit/git's_own_wording",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsNothingToCommit/the_staged-nothing_wording",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsNothingToCommit/contention_is_a_different_thing",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsNothingToCommit/an_unrelated_fatal",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsNothingToCommit",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestContentionAndNothingToCommitAreDistinct",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_FirstWriteCreatesCommit",
+        "status": "passed",
+        "duration": 110,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_SecondWriteAmends",
+        "status": "passed",
+        "duration": 160,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_NonLedgerHeadStartsNewCommit",
+        "status": "passed",
+        "duration": 160,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_StagedUnrelatedPathPreventsAmend",
+        "status": "passed",
+        "duration": 200,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_PushedHeadStartsNewCommit",
+        "status": "passed",
+        "duration": 230,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_SiblingBranchStartsNewCommit",
+        "status": "passed",
+        "duration": 270,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_SoleRefAmends",
+        "status": "passed",
+        "duration": 190,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_LandedWorktreeTipStaysAncestor",
+        "status": "passed",
+        "duration": 660,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_NonGitProjectFailsLoudly",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_GitDirEnvIgnored",
+        "status": "passed",
+        "duration": 240,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_WorktreeProjectRootRefused",
+        "status": "passed",
+        "duration": 100,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_GitDirPointingAtWorktreeStillLandsOnMain",
+        "status": "passed",
+        "duration": 150,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSanitizedGitEnv_StripsRedirectVars",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitVerifyReport_EachRunIsANewCommit",
+        "status": "passed",
+        "duration": 160,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitVerifyReport_RefusesALinkedWorktree",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestCommitVerifyReport_LeavesUnrelatedStagedWorkAlone",
+        "status": "passed",
+        "duration": 120,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDeriveRule_Table/all_unplanned",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDeriveRule_Table/unplanned_+_ready",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDeriveRule_Table/any_underway",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDeriveRule_Table/all_terminal",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDeriveRule_Table/ready_+_terminal",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDeriveRule_Table/unplanned_+_terminal",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDeriveRule_Table/underway_wins_over_ready",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDeriveRule_Table/declined+obsolete_are_terminal",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDeriveRule_Table/submitted_wins_over_unplanned",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDeriveRule_Table",
+        "status": "passed",
+        "duration": 420,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDerive_ZeroChildrenUnchanged",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDerive_ReopenCase",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDerive_StickyOverrideBlocks/revisit",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDerive_StickyOverrideBlocks/declined",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDerive_StickyOverrideBlocks/obsolete",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDerive_StickyOverrideBlocks/superseded",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDerive_StickyOverrideBlocks",
+        "status": "passed",
+        "duration": 180,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDerive_NestedPropagation",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDerive_CycleHitsDepthCapWithoutPanic",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDerive_Idempotent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDerive_EmitterAttribution",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestReplayEpicStatusDerived",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestMayAmend",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestLedgerOrphans_PrefixRunAtBaseIsContiguous",
+        "status": "passed",
+        "duration": 130,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestLedgerOrphans_OrphanBehindRealWorkIsMidBranch",
+        "status": "passed",
+        "duration": 150,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestLedgerOrphans_DivergedContentIsNotAnOrphan",
+        "status": "passed",
+        "duration": 140,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestLedgerOrphans_SubjectAloneIsNotEnough",
+        "status": "passed",
+        "duration": 290,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestLedgerOrphans_CommitWithNoLedgerContentIsNotSubsumed",
+        "status": "passed",
+        "duration": 150,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestLedgerOrphans_NothingOnTheBranchIsAnEmptyReport",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestLedgerOrphans_AcceptsSHAsSoTheAnswerDescribesTheFailure",
+        "status": "passed",
+        "duration": 200,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPlanItems_FirstItemsArePlannedEvenWhenUnderway",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPlanItems_AddsBeforeClaimArePlanned",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPlanItems_RefusesBadInput",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPlanItems_FrozenFromUnverifiedOn",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPlanItems_EditAndWithdrawApprovedItemWhileUnderwayIsAllowed",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPlanBaselined_RefusesGatedTaskWithoutDeliverable",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPlanBaselined_NamedItemsOnly",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestReconcile_RefusesIncompleteOrMismatchedEntries",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestReconcile_FilesKindTaggedQuestionsAndReusesEarlierAnswers",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestReconcile_ApprovedGrownItemIsNotADiscrepancy",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPlanItems_ReplayMatchesLive",
+        "status": "passed",
+        "duration": 110,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskCreated_RefusesAnItemizedTypeAtAReportedStatus",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPostLand_MarkFitsOnlyDeliverables",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPostLand_DeferredOnlyOnPostLandItems",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPostLand_RefusesWhenNotLandedOrBranchHasCode",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPostLand_TakesPostLandItemsOnly",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPostLand_WritesOnlyItsOwnRowsAndComparesWithThePreviousOne",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPostLand_ReplayMatchesLive",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPostLand_OnlyTheUserWithdrawsAPostLandItem",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPostLand_LandedSettlesOnlyByItself",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/obsolete",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/untriaged",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/ready",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/underway",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/revisit",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/unverified",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/confirmed",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/completed",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/declined",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/blocked",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/unplanned",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/submitted",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/assumed",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskQuestionsAsked_InsertsOneOpenRowPerQuestion",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskQuestionsAsked_Refusals",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskQuestionsAsked_RefusesRemovedTask",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_AnswerRecordsWhoAnswered",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_SupersedingAnAnswerKeepsIt",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/back_to_open",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/unknown_status",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/answer_without_text",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/answer_without_answerer",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/bad_answerer",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/withdraw_with_answer",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/withdraw_without_reason",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/reject_without_reason",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/supersede_without_reason",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/answer_with_reason",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/re-answer",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/withdraw_an_invalid_one",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals",
+        "status": "passed",
+        "duration": 530,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_UnknownQuestion",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskQuestions_ReplayMatchesLive",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskQuestionEvents_Validate",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPreAllocateQuestions_SeriesPerTaskIdsGlobal",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPreAllocateQuestions_RefusesUnknownTaskAndReleasesLock",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestLiveSessionByProcessTx_AcceptsServerAlias",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionFocus_FollowsWritesNotReads",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionFocus_UnknownTaskIsNotAnError",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionFocus_OtherSessionsUntouched",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestRelation_MovesFocus",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecSessionStatus_SentinelUsesIDDirectly",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecSessionStatus_SentinelNonexistentIDErrors",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecSessionStatus_SentinelEndedIDErrors",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecSessionStatus_NoSentinelResolvesByPane",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestRenderSessionStatusMarkdown_Headline",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestRenderSessionStatusMarkdown_EmptySectionsShowEmpty",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestRenderSessionStatusMarkdown_TaskTable",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestRenderSessionStatusMarkdown_MultiLineNote",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestRenderSessionStatusMarkdown_DecisionsBulleted",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestRenderSessionStatusMarkdown_CommitsTable",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestRenderSessionStatusMarkdown_MemoryTable",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExtractAttr",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExtractElementText",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNullableEq",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasksRemoved_DropsRowAndHide",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasksRemoved_RefusesClaimed",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasksRemoved_RefusesBound",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasksRemoved_AbsentIsReportedNoOp",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasksTouched_EnrollsWithoutTouchingTheTask",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasksTouched_LeavesStrongerRelationsAlone",
+        "status": "passed",
+        "duration": 100,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasksTouched_UpgradesWeaker",
+        "status": "passed",
+        "duration": 260,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasksTouched_RejectsUnknownTask",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasksSpawned_RecordsRelationSeven",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasksSpawned_UpgradesWeakerKeepsOwned",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasksMembership_RejectsEmptyList",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasksHidden_HidesAndClearsPin",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasksHidden_FocusIsHideable",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasksHidden_RefusesOwnTask",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasksUnhidden_UnhidesOrPins",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasksUnhidden_RefusesUnknownTask",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasks_RelationClassification",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasks_RelationNeverDowngrades",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasks_RelationUpgrades",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasks_RelationEqualCaptureIsNoOp",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasks_RelationFillsNullHistoricalRow",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasks_CreatedBySession",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasks_UpdateAdvancesUpdatedAt",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasks_CLIActorWithSessionID",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasks_NoRowForCLIActorWithoutSessionID",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasks_NoRowForEmptySessionID",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasks_TwoSessionsSameTask",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasks_OneSessionTwoTasks",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasks_IdempotentReplay",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionTasks_DeletedTaskRetainsRow",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestShippedFileWritten_LatestWriteIsTheRecord",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestShippedFileWritten_RefusesAnIncompleteRecord",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestReportedCase_UnplannedNeverClaimedToUnverified",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestEveryTableEdgePasses",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestEveryAbsentEdgeIsRefused",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestRefusalNamesTheWayOut",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestUnrelatedEditIsNotJudged",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTypeChangeInTheSameUpdateWinsTheLane",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionMayNotAdvanceATaskItDoesNotHold",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionThatHoldsTheTaskMayAdvanceIt",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSessionHoldingNothingMayNotAdvanceATask",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestUnverifiedRequiresTheTaskToHaveBeenClaimed",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestUnreadableSessionStillRequiresTheTaskToHaveBeenClaimed",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestUnreadableSessionOnAClaimedTaskIsNotRefused",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestStatusesOutsideTheWorkLaneAreNotActorChecked",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNoHarnessIsExempt",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestAgentMayNotSetUnlanded",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPersonMaySetUnlanded",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTransitionLegalityStillAppliesToAPerson",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPlanAttachPromotionPassesTheGuard",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestKeepStatusPinIsANoOpWrite",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTheHappyPathRunsUnimpeded",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestFindingsPathRunsUnimpeded",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestFindingsPathCannotSkipTheReviewGate",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskBound_OwnsWithoutClaiming",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskBound_ClaimAfterBindUpgrades",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskBound_UpgradesTouched",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskBound_DoesNotDemoteClaimed",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecTaskDepCreated_RowAndTouch",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecTaskDepCreated_NoSessionNoTouch",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecTaskDepDeleted_RowAndTouch",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecTaskDepDeleted_NoMatchErrors",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestReplayTaskDep_ReproducesRows",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskDep_LegacyReplacesResolvesToSupersedes/replay",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskDep_LegacyReplacesResolvesToSupersedes/executor",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskDep_LegacyReplacesResolvesToSupersedes",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecTaskLanded_RecordsBaseBranchAndHarness",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecTaskLanded_NoHarnessRecordsNull",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestLandingNotice_AgentIsNotToldAboutItsOwnLand",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestLandingNotice_HumanLandNotifiesEveryHolder",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestLandingNotice_EndedSessionsAreNotNotified",
+        "status": "passed",
+        "duration": 100,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestLandingNotice_PayloadShape",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestLandingNotice_NoBaseBranchRecordsShaAlone",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestLandingNotice_ChangedBySessionOnlyWhenAnAgentLanded/human_land_stamps_NULL",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestLandingNotice_ChangedBySessionOnlyWhenAnAgentLanded/agent_land_stamps_the_session",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestLandingNotice_ChangedBySessionOnlyWhenAnAgentLanded",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestEmittingActor_StampsTheObservedHarness/an_agent's_Bash_tool",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestEmittingActor_StampsTheObservedHarness/a_person_at_a_shell",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestEmittingActor_StampsTheObservedHarness",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecTaskLanded_InsertsRow",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecTaskLanded_LegacyBranchKeyIgnored",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecTaskLanded_HistoricalTSSetsLandedAt",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecTaskLanded_PreservesSessionID",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecTaskLanded_AppendsOnReland",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskLandedKind_IsValid",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestRemoveTaskTree_KeepsChildParentID",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestRemoveTaskTree_LiveChildRendersUnderGrandparent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskTree_EffectiveParentContract/a_true_root_has_no_effective_parent",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskTree_EffectiveParentContract/a_live_child_of_a_removed_parent_is_adopted_by_the_grandparent",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskTree_EffectiveParentContract/an_ordinary_edge_is_unchanged",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskTree_EffectiveParentContract/no_live_ancestor_at_all_renders_at_the_root",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskTree_EffectiveParentContract/the_walk_crosses_more_than_one_removed_ancestor",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskTree_EffectiveParentContract",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskTree_DanglingAndCyclicChainsYieldNull",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestEpicDerivation_CountsAnAdoptedGrandchild",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestUnlandedRecordsThePassedCommit/live",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestUnlandedRecordsThePassedCommit/replay",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestUnlandedRecordsThePassedCommit",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestLeavingUnlandedClearsThePassedCommit/live",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestLeavingUnlandedClearsThePassedCommit/replay",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestLeavingUnlandedClearsThePassedCommit",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestFieldsUpdatedClearsExceptOnUnlanded/live",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestFieldsUpdatedClearsExceptOnUnlanded/replay",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestFieldsUpdatedClearsExceptOnUnlanded",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSplitSection/absent",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSplitSection/only_the_section",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSplitSection/section_first,_prose_after",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSplitSection/prose_first,_section_last",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSplitSection/section_between_two_others",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSplitSection/text_on_the_heading_line",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSplitSection/a_level-3_heading_stays_inside",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSplitSection/two_sections_are_joined",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSplitSection/a_longer_word_is_not_the_heading",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSplitSection",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSectionMove_LiveAndRebuildAgree",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSectionMove_SkipsAnExistingTarget",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionSuperseded_AcceptedIsRetired",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionSuperseded_OnlyAcceptedIsAllowed/proposed",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionSuperseded_OnlyAcceptedIsAllowed/rejected",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionSuperseded_OnlyAcceptedIsAllowed/superseded",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionSuperseded_OnlyAcceptedIsAllowed/obsolete",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionSuperseded_OnlyAcceptedIsAllowed",
+        "status": "passed",
+        "duration": 160,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionSuperseded_RequiresASuccessor",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionSuperseded_SelfSupersessionIsRefused",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionObsoleted_AcceptedIsRetiredWithReason",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionObsoleted_OnlyAcceptedIsAllowed/proposed",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionObsoleted_OnlyAcceptedIsAllowed/rejected",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionObsoleted_OnlyAcceptedIsAllowed/superseded",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionObsoleted_OnlyAcceptedIsAllowed/obsolete",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionObsoleted_OnlyAcceptedIsAllowed",
+        "status": "passed",
+        "duration": 170,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionObsoleted_RequiresAReason",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionReinstated_BothEndStatesReturnToAccepted/superseded",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionReinstated_BothEndStatesReturnToAccepted/obsolete",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionReinstated_BothEndStatesReturnToAccepted",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionReinstated_ClearsObsoleteReason",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionReinstated_LiveStatusesAreRefused/proposed",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionReinstated_LiveStatusesAreRefused/accepted",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionReinstated_LiveStatusesAreRefused/rejected",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionReinstated_LiveStatusesAreRefused",
+        "status": "passed",
+        "duration": 120,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionEndState_RoundTrips",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionUnaccepted_AcceptedGoesBackToProposed",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionUnaccepted_RejectedIsRefused",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionUnaccepted_ProposedIsRefused",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionUnaccepted_MissingDecisionIsRefused",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionUnrejected_RejectedGoesBackToProposedAndClearsReason",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionUnrejected_AcceptedIsRefused",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestDecisionReversal_RoundTrips",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestEventJSONRoundTrip",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestEventJSONRoundTrip_WithCorrelation",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestEventJSONLine",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestValidate_Valid",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestValidate_ActorTriager",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestValidate_Errors/bad_version",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestValidate_Errors/bad_ts",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestValidate_Errors/unknown_kind",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestValidate_Errors/unknown_entity_type",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestValidate_Errors/empty_entity_id",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestValidate_Errors/unknown_actor_kind",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestValidate_Errors/empty_actor_id",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestValidate_Errors/nil_payload",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestValidate_Errors",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestValidKinds_Count",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestRetiredKinds",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestValidate_RetiredKindsPassAndUndeclaredDoNot",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/TaskCreated",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/TaskStatusChanged",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/TaskFieldsUpdated",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/TaskMoved",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/TaskDeleted",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/TaskDepCreated",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/ProjectRegistered",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/ProjectRenamed",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/SessionWorkStarted",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/ConversationBeaconed",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/MessageSent",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/NoteCreated",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/NoteResolved",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/SessionIdled",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPreAllocateTaskID_MonotonicallyIncreasing",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestPreAllocateTaskID_RollbackReleasesLockForNextCaller",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestBeginImmediate_CommitAndRollback",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_TaskCreatedInsertsRow",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_TaskCreatedStoresNotes",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestProjectToTempDB_RetiredUntriagedLandsWhereE1993PutIt",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_TaskCreated_RejectsMaybeWithParent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_TaskCreated_AllowsMaybeRoot",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_TaskCreated_AllowsParentedNonMaybe",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_RejectsReparentMaybe",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_RejectsPhaseMaybeOnChild",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_AllowsAtomicPromoteAndParent",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_AllowsUnrelatedEditOnViolatingRow",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_TaskMoved_RejectsMaybeUnderParent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_TaskMoved_AllowsMaybeToRoot",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNoticeActor_HumanEditNotifiesTheHoldingSession",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNoticeActor_AgentEditSuppressesItsOwnNotice",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNoticeActor_AgentEditStillNotifiesOtherHolders",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNoticeActor_NoSessionStampsNull",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNoticeActor_TheEnvelopeDecidesNotTheProcess/a_human's_event_executed_inside_an_agent's_process",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNoticeActor_TheEnvelopeDecidesNotTheProcess/an_agent's_event_executed_outside_an_agent's_process",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNoticeActor_TheEnvelopeDecidesNotTheProcess/an_unsupported_harness_is_still_an_agent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNoticeActor_TheEnvelopeDecidesNotTheProcess",
+        "status": "passed",
+        "duration": 130,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_RejectsDirectParentCycle",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_RejectsSelfParent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_RejectsDeepParentCycle",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_AllowsLegalReparent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_AllowsClearingParentOutOfACycle",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_AllowsUnrelatedEditInsideACycle",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_TerminatesOnPreExistingCycle",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_TaskMoved_StillRejectsParentCycle",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_TaskMoved_RejectsSelfParent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_TaskMoved_AllowsMoveToRoot",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestValidateNoParentCycle_NilParentIsAlwaysLegal",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestValidateNoParentCycle_UnknownParentIsNotACycle",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestValidatePhase_AcceptsKnownValues",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestValidatePhase_RejectsUnknown",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestValidPhases_HasExactlyExpectedKeys",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_PlanKeyWritesPlanColumn",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_LegacyTextKeyWritesPlanColumn",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_BothKeysPresentPrefersPlan",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_PlanAttachPromotesPreJudgmentTask",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_PlanAttachPromotionAcceptsLegacyKey",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_PlanAttachYieldsToExplicitStatus",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestExecute_TaskCreatedLegacyTextKeyStoresPlan",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskCreatedPayload_EmitsPlanNeverText",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestProjector_BothPlanKeysProjectIntoPlanColumn/forward_key",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestProjector_BothPlanKeysProjectIntoPlanColumn/legacy_key",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestProjector_BothPlanKeysProjectIntoPlanColumn",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestProjector_TaskCreatedLegacyTextKeyProjectsPlan",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestProjectToTempDB_NoEventsReturnsError",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestProjectToTempDB_TaskCreatedProducesRow",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestProjectToTempDB_CreateThenUpdateApplied",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestProjectToTempDB_TaskDeletedRetainsRowAndIDFloor",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestProjectToTempDB_RetiredKindsReplayAsDeclaredNoOps",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestProjectToTempDB_StatusChangeCarriesOutcome",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestRatings_LiveAndRebuildAgree",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestRatings_ExecutorRefuses",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestRatings_StatusChangeLeavesThemAlone",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestReadAllEvents_NewPathOnly",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestReadAllEvents_NoDirAtAll",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestReadAllEvents_MultipleSegmentsConcatenateInTimestampOrder",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestReadAllEvents_MalformedLineReturnsError",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestReadAllEvents_OnlyWrongPrefix",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNotice_NullActorNotifiesEveryHolder",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNotice_NoNoticeWhenNothingChanged",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNotice_OneNoticePerEvent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNotice_FreeformNeverLeaksContent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNotice_FreeformTransitions",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNotice_DescriptionIsNotWatched",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNotice_SkipsEndedSessions",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNotice_CascadeNotifiesEveryChangedTask",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNotice_FailedEventWritesNothing",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNotice_RawUpdateNotifiesNobody",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskContent_LiveAndRebuildAgree",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskContent_UnknownFieldStillRefused",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestTaskContent_OneEditOneNotice",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestValidateTasks_IdenticalDBsReportNothing",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestValidateTasks_FieldMismatchReported",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestValidateTasks_TaskOnlyInProjectedReportedMissing",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestWriter_Append",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestWriter_Rotation",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestWriter_ExceedsMaxBytes",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestWriter_ResumeExisting",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNewWriter_CreatesLedgerDirAndFirstSegment",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNewWriter_DistinctNodesProduceDistinctSegments",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestNewWriter_AppendRoundTripsThroughReadAllEvents",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestVersions_UniqueContiguousAndConsistent",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema/migrations"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestVersions_GuardCatchesEachFault",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema/migrations"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestMigrate15_ImportsTheSiblingConfigIgnoreList",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestMigrate15_NoSiblingConfigImportsNothing",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestMigrate_MatchesSchemaSQL",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestMigrate_SeedsSurviveTheReplay",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestMigrate_SeedsReconcileOnEveryRun",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestMigrate_IsIdempotent",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestMigrate_LeavesAPreVersioningDatabaseIntact",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestMigrate_RefusesADatabaseOlderThanBothVersioningSchemes",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestMigrate_AGooseDatabaseAtUserVersionZeroMigrates",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestMigrate_FreshDatabaseReachesLatest",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestMigrate_LiftsTaskContent",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestMigrate_RatingsReplaceTier",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestMigrate_DropsNoticeTriggers",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestMigrate_RetiresUntriaged",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestMigrate_RenamesReplacesToSupersedes",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestMigrate_AddsProjectIdentity",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSchema_ReconcilesRenamedEnumRows",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestSchema_RebuildFuseIsStillDeclared",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "TestMigrate24_BackfillsOwnershipRows",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ],
+        "labels": {
+          "check": "Go: shipped files, the shipped_file.written event, the schema"
+        }
+      },
+      {
+        "name": "tests/test_suite_rules.py::test_registration_places_the_rules_and_records_them",
+        "status": "passed",
+        "duration": 434,
+        "suite": [
+          "tests/test_suite_rules.py"
+        ],
+        "labels": {
+          "check": "Python: project init places and records the rules"
+        }
+      },
+      {
+        "name": "tests/test_suite_rules.py::test_a_rerun_with_nothing_to_do_records_nothing",
+        "status": "passed",
+        "duration": 483,
+        "suite": [
+          "tests/test_suite_rules.py"
+        ],
+        "labels": {
+          "check": "Python: project init places and records the rules"
+        }
+      },
+      {
+        "name": "tests/test_suite_rules.py::test_a_rerun_updates_what_init_last_wrote",
+        "status": "passed",
+        "duration": 462,
+        "suite": [
+          "tests/test_suite_rules.py"
+        ],
+        "labels": {
+          "check": "Python: project init places and records the rules"
+        }
+      },
+      {
+        "name": "tests/test_suite_rules.py::test_a_rerun_without_a_record_updates_a_shipped_version",
+        "status": "passed",
+        "duration": 286,
+        "suite": [
+          "tests/test_suite_rules.py"
+        ],
+        "labels": {
+          "check": "Python: project init places and records the rules"
+        }
+      },
+      {
+        "name": "tests/test_suite_rules.py::test_a_rerun_leaves_an_edited_copy_alone_and_says_so",
+        "status": "passed",
+        "duration": 386,
+        "suite": [
+          "tests/test_suite_rules.py"
+        ],
+        "labels": {
+          "check": "Python: project init places and records the rules"
+        }
+      },
+      {
+        "name": "tests/test_suite_rules.py::test_without_a_record_an_edited_shipped_version_is_left_alone",
+        "status": "passed",
+        "duration": 216,
+        "suite": [
+          "tests/test_suite_rules.py"
+        ],
+        "labels": {
+          "check": "Python: project init places and records the rules"
+        }
+      },
+      {
+        "name": "tests/test_suite_rules.py::test_a_current_copy_with_a_stale_record_is_recorded_again",
+        "status": "passed",
+        "duration": 468,
+        "suite": [
+          "tests/test_suite_rules.py"
+        ],
+        "labels": {
+          "check": "Python: project init places and records the rules"
+        }
+      },
+      {
+        "name": "tests/test_suite_rules.py::test_init_brings_each_worktree_up_to_the_rules",
+        "status": "passed",
+        "duration": 634,
+        "suite": [
+          "tests/test_suite_rules.py"
+        ],
+        "labels": {
+          "check": "Python: project init places and records the rules"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_gitignore_entries_include_logs",
+        "status": "passed",
+        "duration": 49,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "Python: project init places and records the rules"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_rerun_on_an_older_gitignore_adds_only_the_missing_lines",
+        "status": "passed",
+        "duration": 52,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "Python: project init places and records the rules"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_every_endless_path_the_source_names_is_classified",
+        "status": "passed",
+        "duration": 160,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "Python: project init places and records the rules"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_init_refuses_a_linked_worktree_and_writes_nothing",
+        "status": "passed",
+        "duration": 329,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "Python: project init places and records the rules"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_init_refuses_a_directory_under_endless_worktrees",
+        "status": "passed",
+        "duration": 274,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "Python: project init places and records the rules"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_guide_pointer_creates_claude_md_when_neither_file_exists",
+        "status": "passed",
+        "duration": 51,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "Python: project init places and records the rules"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_guide_pointer_appends_to_an_existing_file_without_it",
+        "status": "passed",
+        "duration": 56,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "Python: project init places and records the rules"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_guide_pointer_leaves_a_file_that_mentions_it_alone",
+        "status": "passed",
+        "duration": 53,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "Python: project init places and records the rules"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_bring_up_commits_what_it_wrote_and_a_rerun_changes_nothing",
+        "status": "passed",
+        "duration": 401,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "Python: project init places and records the rules"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_a_never_committed_config_is_committed",
+        "status": "passed",
+        "duration": 277,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "Python: project init places and records the rules"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_user_files_with_their_own_changes_are_left_out",
+        "status": "passed",
+        "duration": 296,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "Python: project init places and records the rules"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_init_does_nothing_off_the_default_branch",
+        "status": "passed",
+        "duration": 141,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "Python: project init places and records the rules"
+        }
+      },
+      {
+        "name": "a first init writes the shipped rules",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "project init end to end"
+        }
+      },
+      {
+        "name": "and says so",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "project init end to end"
+        }
+      },
+      {
+        "name": "and records the write in the ledger",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "project init end to end"
+        }
+      },
+      {
+        "name": "a re-run with nothing to do says nothing about the rules",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "project init end to end"
+        }
+      },
+      {
+        "name": "and records nothing more",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "project init end to end"
+        }
+      },
+      {
+        "name": "an edited copy is left alone",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "project init end to end"
+        }
+      },
+      {
+        "name": "and init says it was edited locally and not updated",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "project init end to end"
+        }
+      },
+      {
+        "name": "with no record, a copy that is exactly a shipped version is updated",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "project init end to end"
+        }
+      },
+      {
+        "name": "and init says it updated it",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "project init end to end"
+        }
+      },
+      {
+        "name": "with no record, a changed shipped version is left alone",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "project init end to end"
+        }
+      },
+      {
+        "name": "off the default branch init refuses and says to switch",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "project init end to end"
+        }
+      },
+      {
+        "name": "and writes nothing at all",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "project init end to end"
+        }
+      },
+      {
+        "name": "a worktree's unedited copy is updated too",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "project init end to end"
+        }
+      },
+      {
+        "name": "and committed on its branch, leaving it clean",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "project init end to end"
+        }
+      },
+      {
+        "name": "and the land's rebase drops that commit",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "project init end to end"
+        }
+      },
+      {
+        "name": "run from a worktree, the records are in the sandbox database",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "project init end to end"
+        }
+      },
+      {
+        "name": "and not in the main one",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "project init end to end"
+        }
+      }
+    ]
+  }
+}
