@@ -1,0 +1,1 @@
+Move the 'Starting <id> with EQ-<n> open' lines out of the open-questions branch in task_cmd.py's start gate so they print only when the spawn/claim actually proceeds. Test: a spawn refused for unapproved plan items prints no 'Starting' line; an allowed one still names each open question.
