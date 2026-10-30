@@ -333,15 +333,20 @@ def project_registry(verb: str, *args: str):
 
 
 def place_shipped_file(kind: str, project: str, project_path: Path,
-                       record: bool = True) -> dict:
+                       worktree: bool = False) -> dict:
     """Place one of Endless's shipped files into a project (E-2421).
 
     `endless-go shipped place` writes the file unless the project's copy was
     edited, and answers with its path, the action taken (created, updated,
-    current or edited) and the shipped content's sha256. When it wrote and
-    `record` is set, this records the write as a `shipped_file.written` event in
-    the project's ledger, which is what lets a later run tell an unedited copy
-    from an edited one.
+    current or edited), the shipped content's sha256 and the sha256 recorded
+    before this run. On the default branch this records the write as a
+    `shipped_file.written` event in the project's ledger, which is what lets a
+    later run tell an unedited copy from an edited one. A copy already current
+    whose record differs is recorded too, so the record never trails the file.
+
+    `worktree` places into one of the project's task worktrees instead: the copy
+    is judged without the record, which describes the default branch, and
+    nothing is recorded.
 
     The record is actor `system`: it states which bytes were written, a fact of
     the run rather than a choice anyone made, and `project init` is routinely run
@@ -349,12 +354,17 @@ def place_shipped_file(kind: str, project: str, project_path: Path,
     """
     config.require_db_context()  # E-1429
     cmd = [_resolve_endless_go(), *config.go_db_context_args(),
-           "shipped", "place", kind, project, str(project_path)]
+           "shipped", "place", *(["--unrecorded"] if worktree else []),
+           kind, project, str(project_path)]
     result = subprocess.run(cmd, capture_output=True, text=True)
     if result.returncode != 0:
         raise _child_refusal(result.stderr, result.returncode, "shipped place")
     placed = json.loads(result.stdout)
-    if record and placed["action"] in ("created", "updated"):
+    if worktree:
+        return placed
+    if placed["action"] in ("created", "updated") or (
+            placed["action"] == "current"
+            and placed["recorded"] != placed["sha256"]):
         emit_event(
             "shipped_file.written", project=project,
             entity_type="shipped_file", entity_id=placed["path"],

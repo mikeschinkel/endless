@@ -55,8 +55,10 @@ func usageText() string {
 	var b strings.Builder
 	fmt.Fprintln(&b, "Usage: endless-go shipped <subcommand> [args...]")
 	fmt.Fprintln(&b, "Subcommands:")
-	fmt.Fprintln(&b, "  place <kind> <project> <dir>   write a shipped file into a project unless its copy was edited;")
-	fmt.Fprintln(&b, "                                 JSON: kind, path, action (created|updated|current|edited), sha256")
+	fmt.Fprintln(&b, "  place [--unrecorded] <kind> <project> <dir>")
+	fmt.Fprintln(&b, "      write a shipped file into a project unless its copy was edited;")
+	fmt.Fprintln(&b, "      JSON: kind, path, action (created|updated|current|edited), sha256, recorded")
+	fmt.Fprintln(&b, "      --unrecorded decides as if nothing were recorded, for a worktree's copy")
 	fmt.Fprintf(&b, "Kinds: %s\n", strings.Join(kindNames(), ", "))
 	return b.String()
 }
@@ -70,18 +72,29 @@ func kindNames() []string {
 }
 
 // placeResult is what `place` prints. SHA256 is the hash of the shipped
-// content — what was written, when Action writes.
+// content — what was written, when Action writes. Recorded is the hash the
+// project's record held before this run, empty with none or with --unrecorded,
+// so the caller can correct a record that no longer matches a current copy.
 type placeResult struct {
-	Kind   shipped.Kind   `json:"kind"`
-	Path   string         `json:"path"`
-	Action shipped.Action `json:"action"`
-	SHA256 string         `json:"sha256"`
+	Kind     shipped.Kind   `json:"kind"`
+	Path     string         `json:"path"`
+	Action   shipped.Action `json:"action"`
+	SHA256   string         `json:"sha256"`
+	Recorded string         `json:"recorded"`
 }
 
+// runPlace places one shipped file. With --unrecorded the project's record is
+// not consulted: a task worktree's copy is judged only by whether it is exactly
+// a shipped version, because the record describes the default branch, and a
+// worktree may have branched off before that copy was written.
 func runPlace(args []string) error {
+	unrecorded := len(args) > 0 && args[0] == "--unrecorded"
+	if unrecorded {
+		args = args[1:]
+	}
 	if len(args) != 3 {
 		return refusal.NoReport(
-			fmt.Sprintf("endless-go shipped place: expected <kind> <project> <dir>, got %d arguments", len(args)),
+			fmt.Sprintf("endless-go shipped place: expected [--unrecorded] <kind> <project> <dir>, got %d arguments", len(args)),
 			"Pass a kind, a registered project name and its directory, and retry")
 	}
 	file, ok := shipped.Lookup(shipped.Kind(args[0]))
@@ -110,13 +123,16 @@ func runPlace(args []string) error {
 		return fmt.Errorf("shipped: read %s: %w", target, err)
 	}
 
-	db, err := monitor.DB()
-	if err != nil {
-		return err
-	}
-	recorded, err := events.RecordedShippedFile(db, project, file.Path)
-	if err != nil {
-		return err
+	var recorded string
+	if !unrecorded {
+		db, err := monitor.DB()
+		if err != nil {
+			return err
+		}
+		recorded, err = events.RecordedShippedFile(db, project, file.Path)
+		if err != nil {
+			return err
+		}
 	}
 
 	action := file.Decide(existing, recorded, current)
@@ -130,5 +146,6 @@ func runPlace(args []string) error {
 	}
 	return dbprovenance.Encode(os.Stdout, placeResult{
 		Kind: file.Kind, Path: file.Path, Action: action, SHA256: current,
+		Recorded: recorded,
 	})
 }

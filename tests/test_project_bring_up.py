@@ -8,7 +8,7 @@ from pathlib import Path
 import click
 import pytest
 
-from endless import db
+from endless import agent_help, db
 from endless.project_path import stored
 from endless.register import (
     BRING_UP_COMMIT_SUBJECT, GITIGNORE_BLOCK_HEADER, GITIGNORE_ENTRIES,
@@ -228,16 +228,17 @@ def test_user_files_with_their_own_changes_are_left_out(isolated_env, capsys):
     assert "Not committed: .gitignore (it had uncommitted changes of yours)" in out
 
 
-def test_nothing_is_committed_off_the_default_branch(isolated_env, capsys):
+def test_init_does_nothing_off_the_default_branch(isolated_env):
+    """E-2421: what init writes belongs on the default branch. Written on
+    another, it would sit there uncommitted until that branch merged, if ever."""
     proj = _repo(isolated_env["projects_root"] / "branched")
     _git(proj, "checkout", "-q", "-b", "feature")
     before = _commits(proj)
 
-    register_project(proj, infer=True)
+    with pytest.raises(agent_help.Refusal, match="not the default branch main"):
+        register_project(proj, infer=True)
+
     assert _commits(proj) == before
-    out = capsys.readouterr().out
-    assert "not the default branch main" in out
-    # Not even the ledger record of the rules file (E-2421): it would commit on
-    # this branch and be lost with it.
-    assert "rules written to .endless/tasks/CLAUDE.md (not recorded:" in out
-    assert not (proj / ".endless" / "db-ledger").exists()
+    assert _status(proj) == ""
+    assert not (proj / ".endless").exists()
+    assert not db.query("SELECT 1 FROM projects WHERE path = ?", (stored(proj),))

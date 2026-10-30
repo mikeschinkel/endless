@@ -71,10 +71,22 @@ check "with no record, a changed shipped version is left alone" "tail -1 '$scrat
 project branched
 git -C "$scratch/branched" checkout -q -b feature
 out=$(init branched)
-check "off the default branch the rules are written but not recorded" "echo \"\$out\" | grep -qF '(not recorded: the checkout is on feature'"
-check "so nothing reaches that branch's ledger" "[ ! -e '$scratch/branched/.endless/db-ledger' ]"
+check "off the default branch init refuses and says to switch" "echo \"\$out\" | grep -qF 'not the default branch main'"
+check "and writes nothing at all" "[ ! -e '$scratch/branched/.endless' ] && [ -z \"\$(git -C '$scratch/branched' status --porcelain)\" ]"
 
-check "run from a worktree, the records are in the sandbox database" "[ \"\$(rows '$sandbox_db')\" = 2 ]"
+project worked
+mkdir -p "$scratch/worked/.endless/tasks"
+cp "$first" "$scratch/worked/$rules"
+git -C "$scratch/worked" add "$rules"
+git -C "$scratch/worked" commit -q -m "rules an older Endless shipped"
+wt="$scratch/worked-task"
+git -C "$scratch/worked" worktree add -q -b task/1 "$wt"
+out=$(init worked)
+check "a worktree's unedited copy is updated too" "cmp -s '$shipped' '$wt/$rules'"
+check "and committed on its branch, leaving it clean" "[ -z \"\$(git -C '$wt' status --porcelain)\" ] && git -C '$wt' log -1 --format=%s | grep -qF 'verification-suite rules'"
+check "and the land's rebase drops that commit" "git -C '$wt' rebase -q main && [ \"\$(git -C '$wt' rev-list --count main..HEAD)\" = 0 ]"
+
+check "run from a worktree, the records are in the sandbox database" "[ \"\$(rows '$sandbox_db')\" = 3 ]"
 check "and not in the main one" "[ \"\$(rows '$main_db')\" = 0 ]"
 
 rm -rf "$scratch"

@@ -161,6 +161,10 @@ def register_project(
     # registered somewhere else, so it is settled before anything is prompted
     # for or written (E-2217).
     identity = _identity_or_refuse(project_path)
+    # What init writes belongs on the default branch: written on another, it
+    # would sit there uncommitted until that branch merged, if it ever did
+    # (E-2421). So off it, init does nothing at all.
+    _refuse_off_default_branch(project_path)
     moved_from = None
     holder = _identity_holder(identity, existing[0]["id"] if is_update else None)
     if holder is not None:
@@ -352,7 +356,7 @@ def register_project(
             + " .gitignore updated with "
             + click.style(", ".join(added), dim=True)
         )
-    _place_suite_rules(name, project_path)
+    rules = _place_suite_rules(name, project_path)
 
     pointer_file = scaffold_guide_pointer(project_path)
     if pointer_file:
@@ -367,6 +371,8 @@ def register_project(
     _setup_git_hooks(project_path, git_hooks, interactive=not infer)
 
     _commit_bring_up(project_path, before)
+    if rules["action"] != "edited":
+        _update_worktree_rules(name, project_path)
 
     return name
 
@@ -393,7 +399,7 @@ def _setup_git_hooks(project_path: Path, choice: str | None,
 SUITE_RULES_KIND = "tasks-rules"
 
 
-def _place_suite_rules(name: str, project_path: Path) -> None:
+def _place_suite_rules(name: str, project_path: Path) -> dict:
     """Place `.endless/tasks/CLAUDE.md`, the verification-suite rules.
 
     Placed before the project has any suites, so the reasoning is already there
@@ -401,29 +407,109 @@ def _place_suite_rules(name: str, project_path: Path) -> None:
     up to the rules this Endless ships, and leaves an edited one alone (E-2421):
     the text, every shipped version and the decision live in Go
     (internal/shipped). Runs after the project row exists, because the record
-    of what was written is an event in this project's ledger.
-
-    Off the default branch nothing is recorded: the ledger entry would commit
-    on that branch and be lost if the branch is thrown away. With no record, a
-    later run still updates the copy, because it is exactly a shipped version.
+    of what was written is an event in this project's ledger. Returns what
+    `shipped place` answered.
     """
     from endless import event_bridge
 
-    unrecorded = _not_committable_reason(project_path)
-    placed = event_bridge.place_shipped_file(
-        SUITE_RULES_KIND, name, project_path, record=unrecorded is None)
+    placed = event_bridge.place_shipped_file(SUITE_RULES_KIND, name, project_path)
     path = click.style(placed["path"], dim=True)
     action = placed["action"]
-    note = f" (not recorded: {unrecorded})" if unrecorded else ""
     if action == "created":
         click.echo(click.style("•", fg="cyan")
-                   + " Verification-suite rules written to " + path + note)
+                   + " Verification-suite rules written to " + path)
     elif action == "updated":
         click.echo(click.style("•", fg="cyan")
-                   + " Verification-suite rules updated in " + path + note)
+                   + " Verification-suite rules updated in " + path)
     elif action == "edited":
         click.echo(click.style("•", fg="yellow") + " " + path
                    + " was edited locally and not updated")
+    return placed
+
+
+WORKTREE_RULES_COMMIT_SUBJECT = "Endless: update the verification-suite rules"
+
+
+def _update_worktree_rules(name: str, project_path: Path) -> None:
+    """Bring each of the project's worktrees up to the rules just placed (E-2421).
+
+    A rules change applies to work in flight now, not when each task lands. In
+    every worktree on a branch, an unedited copy is written and committed on
+    that branch alone; uncommitted, it would block the worktree's land. At land
+    the rebase drops the commit, because the default branch already has the
+    same file. A copy edited on the branch is left alone and named, and a
+    worktree that is detached, missing or mid-operation is skipped and named.
+    A failed commit restores the copy, so the worktree is left as it was.
+    """
+    from endless import event_bridge
+
+    top = _git(project_path, "rev-parse", "--show-toplevel")
+    if top.returncode != 0:
+        return
+    rel = project_path.relative_to(resolved(Path(top.stdout.strip())))
+    for wt, branch in _worktrees(project_path):
+        where = click.style(str(wt), dim=True)
+        why = _worktree_busy_reason(wt, branch)
+        if why:
+            click.echo(click.style("•", fg="yellow")
+                       + f" Rules not updated in worktree {where}: {why}")
+            continue
+        rules = wt / rel / ".endless" / "tasks" / "CLAUDE.md"
+        prior = rules.read_bytes() if rules.is_file() else None
+        placed = event_bridge.place_shipped_file(
+            SUITE_RULES_KIND, name, wt / rel, worktree=True)
+        if placed["action"] == "edited":
+            click.echo(click.style("•", fg="yellow")
+                       + f" {placed['path']} was edited on {branch} and not "
+                       f"updated in worktree {where}")
+            continue
+        if placed["action"] == "current":
+            continue
+        path = (rel / placed["path"]).as_posix()
+        try:
+            main_commit.commit_path(wt, path, WORKTREE_RULES_COMMIT_SUBJECT)
+        except RuntimeError as e:
+            if prior is None:
+                rules.unlink(missing_ok=True)
+            else:
+                rules.write_bytes(prior)
+            click.echo(click.style("•", fg="yellow")
+                       + f" Rules not updated in worktree {where}: {e}")
+            continue
+        click.echo(click.style("•", fg="cyan")
+                   + f" Verification-suite rules updated and committed on "
+                   f"{branch} in worktree {where}")
+
+
+def _worktrees(project_path: Path) -> list[tuple[Path, str | None]]:
+    """Every worktree of the project's repository but its main checkout, with
+    its branch (None when detached)."""
+    res = _git(project_path, "worktree", "list", "--porcelain")
+    if res.returncode != 0:
+        return []
+    found: list[tuple[Path, str | None]] = []
+    for block in res.stdout.strip().split("\n\n")[1:]:
+        fields = dict(
+            (line.split(" ", 1) + [""])[:2] for line in block.splitlines())
+        if "bare" in fields or "worktree" not in fields:
+            continue
+        branch = fields.get("branch", "").removeprefix("refs/heads/") or None
+        found.append((Path(fields["worktree"]), branch))
+    return found
+
+
+def _worktree_busy_reason(wt: Path, branch: str | None) -> str | None:
+    """Why a commit in this worktree would be wrong now, or None."""
+    if not wt.is_dir():
+        return "its directory is missing"
+    if branch is None:
+        return "it is not on a branch"
+    for state in ("rebase-merge", "rebase-apply", "MERGE_HEAD",
+                  "CHERRY_PICK_HEAD", "REVERT_HEAD"):
+        res = _git(wt, "rev-parse", "--path-format=absolute", "--git-path", state)
+        if res.returncode == 0 and Path(res.stdout.strip()).exists():
+            return "a rebase, merge or cherry-pick is in progress"
+    return None
 
 
 GUIDE_POINTER_MARKER = "<!-- endless (managed by `endless project init`) -->"
@@ -578,11 +664,6 @@ def _commit_bring_up(project_path: Path, before: dict) -> None:
         ):
             commit.append(path)
     if commit:
-        reason = _not_committable_reason(project_path)
-        if reason:
-            left.extend((p, reason) for p in commit)
-            commit = []
-    if commit:
         try:
             main_commit.commit_paths(project_path, commit,
                                      BRING_UP_COMMIT_SUBJECT)
@@ -601,8 +682,25 @@ def _commit_bring_up(project_path: Path, before: dict) -> None:
         )
 
 
-def _not_committable_reason(project_path: Path) -> str | None:
-    """Why this checkout takes no Endless commit now, or None when it does."""
+def _refuse_off_default_branch(project_path: Path) -> None:
+    """Refuse a checkout that is not on the project's default branch (E-2421)."""
+    reason = _off_default_branch_reason(project_path)
+    if reason is None:
+        return
+    raise agent_help.no_report(
+        f"{project_path}: {reason}. `endless project init` brings a project up "
+        "to date on its default branch only. Nothing was registered or written.",
+        "Switch the checkout to the project's default branch (or name it with "
+        "`git config init.defaultBranch <branch>`), then re-run "
+        "`endless project init`",
+        text=(f"Not on the default branch: {project_path}\n"
+              f"{reason[0].upper() + reason[1:]}. Switch to the default branch "
+              "and re-run `endless project init`."),
+    )
+
+
+def _off_default_branch_reason(project_path: Path) -> str | None:
+    """Why this checkout is not on the project's default branch, or None."""
     from endless.worktree_cmd import _default_base_branch
 
     head = _git(project_path, "symbolic-ref", "--short", "-q", "HEAD")

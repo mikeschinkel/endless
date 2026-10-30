@@ -12,6 +12,7 @@ the text itself); these tests cover what a registration does with them.
 
 import hashlib
 import json
+import subprocess
 from pathlib import Path
 
 from endless import db, event_bridge
@@ -141,3 +142,79 @@ def test_without_a_record_an_edited_shipped_version_is_left_alone(isolated_env, 
     assert (project_dir / RULES).read_text() == edited
     assert _recorded("edited-legacy-proj") is None
     assert "was edited locally and not updated" in capsys.readouterr().out
+
+
+def test_a_current_copy_with_a_stale_record_is_recorded_again(isolated_env):
+    """P12: a copy already current whose record says otherwise gets its record
+    corrected, or the next shipped version would read it as edited."""
+    project_dir = _project(isolated_env, "stale-record-proj")
+    register_project(project_dir, infer=True)
+    event_bridge.emit_event(
+        "shipped_file.written", project="stale-record-proj",
+        entity_type="shipped_file", entity_id=RULES,
+        payload={"kind": "tasks-rules", "sha256": _sha(FIRST_SHIPPED)},
+        actor_kind="system", project_root=str(project_dir),
+    )
+
+    register_project(project_dir, infer=True)
+
+    assert _recorded("stale-record-proj") == _sha(SHIPPED)
+
+
+def _git(path: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-c", "user.email=test@example.com", "-c", "user.name=Test",
+         *args], cwd=str(path), check=True, capture_output=True, text=True,
+    ).stdout
+
+
+def _worktree(project_dir: Path, name: str, rules: str | None) -> Path:
+    """A task worktree whose branch committed `rules` as its copy."""
+    wt = project_dir / ".endless" / "worktrees" / name
+    _git(project_dir, "worktree", "add", "-q", "-b", f"task/{name}", str(wt))
+    if rules is not None:
+        (wt / RULES).write_text(rules)
+        _git(wt, "commit", "-q", "-am", f"{name}: its own copy")
+    return wt
+
+
+def test_init_brings_each_worktree_up_to_the_rules(isolated_env, capsys):
+    """P11: a rules change applies to work in flight now, committed on each
+    worktree's branch; the land's rebase then drops that commit."""
+    project_dir = _project(isolated_env, "wt-proj")
+    (project_dir / ".endless" / "tasks").mkdir(parents=True)
+    (project_dir / RULES).write_text(FIRST_SHIPPED)
+    _git(project_dir, "add", RULES)
+    _git(project_dir, "commit", "-q", "-m", "the rules an older Endless shipped")
+    old = _worktree(project_dir, "old", None)
+    (old / "work.txt").write_text("task work\n")
+    _git(old, "add", "work.txt")
+    _git(old, "commit", "-q", "-m", "old: task work")
+    edited = _worktree(project_dir, "edited", "# Our own rules\n")
+    current = _worktree(project_dir, "current", SHIPPED)
+    detached = project_dir / ".endless" / "worktrees" / "detached"
+    _git(project_dir, "worktree", "add", "-q", "--detach", str(detached))
+    heads = {wt: _git(wt, "rev-parse", "HEAD") for wt in (edited, current)}
+
+    register_project(project_dir, infer=True)
+
+    out = capsys.readouterr().out
+    assert (project_dir / RULES).read_text() == SHIPPED
+    assert (old / RULES).read_text() == SHIPPED
+    assert _git(old, "status", "--porcelain") == ""
+    assert _git(old, "log", "-1", "--format=%s").strip() == (
+        "Endless: update the verification-suite rules")
+    assert "committed on task/old" in out
+    assert (edited / RULES).read_text() == "# Our own rules\n"
+    assert "was edited on task/edited and not updated" in out
+    assert (detached / RULES).read_text() == FIRST_SHIPPED
+    assert "it is not on a branch" in out
+    for wt, head in heads.items():
+        assert _git(wt, "rev-parse", "HEAD") == head
+    # Nothing in the worktrees is recorded: the record is the default branch's.
+    assert len(_ledger_writes(project_dir)) == 1
+
+    # Land rebases the branch onto the default branch, which has the same file.
+    _git(old, "rebase", "-q", "main")
+    assert _git(old, "log", "--format=%s", "main..HEAD").splitlines() == [
+        "old: task work"]

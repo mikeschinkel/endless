@@ -18,13 +18,15 @@ runner = "gotest"
 paths  = ["./internal/shipped/...", "./internal/events/...", "./internal/schema/..."]
 
 # Registration: created, updated with and without a record, edited left alone,
-# nothing recorded off the default branch.
+# a stale record corrected, each worktree brought up to date, and nothing done
+# off the default branch.
 [[check]]
 name   = "Python: project init places and records the rules"
 runner = "pytest/uv"
 paths  = ["tests/test_suite_rules.py", "tests/test_project_bring_up.py"]
 
-# The same, end to end through the CLI, plus where the record lands.
+# The same, end to end through the CLI, plus where the record lands and what a
+# land does with a worktree's update.
 [[check]]
 name    = "project init end to end"
 runner  = "sh"
