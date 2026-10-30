@@ -46,3 +46,8 @@ statement = "When the project's checkout is not on its default branch, init does
 id = "P10"
 kind = "deliverable"
 statement = "On the default branch, init commits an updated .endless/tasks/CLAUDE.md with its record"
+
+[[item]]
+id = "P11"
+kind = "deliverable"
+statement = "Init brings each of the project's worktrees up to the same rules and commits the update on that worktree's branch; a worktree whose copy was edited is left alone and named"
