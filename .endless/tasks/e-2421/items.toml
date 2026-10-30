@@ -36,3 +36,8 @@ statement = "The record of shipped versions can later hold other kinds of shippe
 id = "P8"
 kind = "deliverable"
 statement = "In the endless repo, running init from a task's worktree records into that worktree's sandbox database, not the main one"
+
+[[item]]
+id = "P9"
+kind = "deliverable"
+statement = "When the project's checkout is not on its default branch, init does nothing and says to re-run it on the default branch"
