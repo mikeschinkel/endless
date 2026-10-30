@@ -41,3 +41,8 @@ statement = "In the endless repo, running init from a task's worktree records in
 id = "P9"
 kind = "deliverable"
 statement = "When the project's checkout is not on its default branch, init does nothing and says to re-run it on the default branch"
+
+[[item]]
+id = "P10"
+kind = "deliverable"
+statement = "On the default branch, init commits an updated .endless/tasks/CLAUDE.md with its record"
