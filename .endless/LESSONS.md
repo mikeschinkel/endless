@@ -7873,3 +7873,7 @@ E-2421: I recommended letting project init's new shipped_file.written event auto
 ### [2026-10-30] Shipped project files belong on the default branch, not wherever init runs
 On E-2421 (init updating .endless/tasks/CLAUDE.md) I let init write the file in a checkout on a non-default branch and merely skip the ledger record there. Mike: project init should always update .endless/tasks/CLAUDE.md in the default branch, full stop, because an update made on another branch could languish there for days, weeks or months. This is about that rules file; ask before assuming it covers other files init writes.
 - **Project**: endless
+
+### [2026-10-30] Don't treat current behaviour as authoritative when weighing a change
+On E-2421, Mike chose to have project init refuse entirely off the default branch, and I flagged that this 'changes current behaviour' as if that were a cost. Mike: why assume current behaviour is authoritative rather than an oversight? Before presenting existing behaviour as something a change departs from, check whether it was a decision (a plan line, an ED) or just what the code happens to do, and say which.
+- **Project**: endless
