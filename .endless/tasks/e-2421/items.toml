@@ -51,3 +51,8 @@ statement = "On the default branch, init commits an updated .endless/tasks/CLAUD
 id = "P11"
 kind = "deliverable"
 statement = "Init brings each of the project's worktrees up to the same rules and commits the update on that worktree's branch; a worktree whose copy was edited is left alone and named"
+
+[[item]]
+id = "P12"
+kind = "deliverable"
+statement = "Every write is recorded on the default branch, and the record is corrected when the file is already current but the record differs"
