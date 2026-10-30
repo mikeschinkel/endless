@@ -7877,3 +7877,7 @@ On E-2421 (init updating .endless/tasks/CLAUDE.md) I let init write the file in 
 ### [2026-10-30] Don't treat current behaviour as authoritative when weighing a change
 On E-2421, Mike chose to have project init refuse entirely off the default branch, and I flagged that this 'changes current behaviour' as if that were a cost. Mike: why assume current behaviour is authoritative rather than an oversight? Before presenting existing behaviour as something a change departs from, check whether it was a decision (a plan line, an ED) or just what the code happens to do, and say which.
 - **Project**: endless
+
+### [2026-10-30] Say 'the project's worktrees', not 'linked worktrees'
+On E-2421 I wrote a plan item about 'the project's linked worktrees'. Mike didn't know what 'linked' meant and said plain 'the project's worktrees' would have raised no question. 'Linked' is git's internal word for every worktree except the main checkout; in plans and messages to Mike, use plain words.
+- **Project**: endless
