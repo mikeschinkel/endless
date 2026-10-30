@@ -359,11 +359,16 @@ def test_the_rc_line_endless_installs_invokes_an_exempt_subcommand():
 def test_exempt_subcommands_have_nothing_to_withhold():
     """An exemption is only defensible for a command with no side effect the
     refusal could be withholding — otherwise "This command did not run" would be
-    replaced by silently running it. Pinned to the one command known to be pure
-    stdout with no project/global I/O, so widening the set is a reviewed edit
-    here rather than a silent one."""
+    replaced by silently running it. Pinned, so widening the set is a reviewed
+    edit here rather than a silent one.
+
+    `shell-init` is pure stdout with no project/global I/O. `git-hook` is the
+    one reviewed exception: Git runs it on every commit from any tool, and its
+    one effect, the Endless-Task trailer on a task branch's commit message,
+    needs nothing from the harness, while the banner would land in that
+    commit's output (Mike's decision, E-2490)."""
     from endless import cli
-    assert cli.HARNESS_EXEMPT_SUBCOMMANDS == frozenset({"shell-init"})
+    assert cli.HARNESS_EXEMPT_SUBCOMMANDS == frozenset({"shell-init", "git-hook"})
 
 
 @pytest.mark.parametrize("args", [
