@@ -1,0 +1,1 @@
+project register is project init added under a second name, so the two print identical help and appear side by side in project --help with the same summary. Nothing says they are the same, and a user who could not remember the difference had to guess. One name is enough; init stays.
