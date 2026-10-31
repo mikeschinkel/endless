@@ -11,3 +11,8 @@ statement = "Each ledger commit's subject says which event it records, in place 
 id = "P2"
 kind = "deliverable"
 statement = "Land, verify and the worktree checks still recognise a ledger commit"
+
+[[item]]
+id = "P3"
+kind = "deliverable"
+statement = "Land's 'Endless: auto-record session activity' commit is never read as a ledger commit, though it can hold only ledger lines"
