@@ -1,0 +1,1 @@
+Find the alias with: grep -n 'name="register"' src/endless/cli.py. Find every mention with: git grep -n 'project register'. A user's scripts may still call it, so decide whether removing it outright is acceptable or whether it should first refuse with a message naming project init.
