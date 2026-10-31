@@ -7881,3 +7881,7 @@ On E-2421, Mike chose to have project init refuse entirely off the default branc
 ### [2026-10-30] Say 'the project's worktrees', not 'linked worktrees'
 On E-2421 I wrote a plan item about 'the project's linked worktrees'. Mike didn't know what 'linked' meant and said plain 'the project's worktrees' would have raised no question. 'Linked' is git's internal word for every worktree except the main checkout; in plans and messages to Mike, use plain words.
 - **Project**: endless
+
+### [2026-10-31] Question an existing default before presenting it as a meaningful choice
+While planning E-2358 (resolve a named session in any project), I presented 'a session's project is the one it was created in' as a design meaning to weigh and gave options built around preserving it. Mike asked whether there was ANY reason for that default over the task's project; there was none beyond 'no task claimed yet'. Before framing an existing behaviour as a semantic to preserve, check whether anything actually relies on it; if nothing does, call it an overlooked default and say what it should be.
+- **Project**: endless
