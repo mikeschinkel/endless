@@ -16,3 +16,8 @@ statement = "Land, verify and the worktree checks still recognise a ledger commi
 id = "P3"
 kind = "deliverable"
 statement = "Land's 'Endless: auto-record session activity' commit is never read as a ledger commit, though it can hold only ledger lines"
+
+[[item]]
+id = "P4"
+kind = "deliverable"
+statement = "The orchestration guide's example of an auto-commit subject shows a named-event ledger subject"
