@@ -30,3 +30,9 @@ verify = "endless task show <id> --outcome"
 id = "P5"
 kind = "exclusion"
 statement = "Does not change any guide text, template, hook or CLAUDE.md; the outcome recommends follow-up tasks and the user decides which to file"
+
+[[item]]
+id = "P6"
+kind = "deliverable"
+statement = "The outcome proposes the tasks to file, each with a title, project, one-line description and the reason it cannot fold into an existing task, with symptoms of one cause grouped into one task, and the research itself files nothing"
+verify = "endless task show E-2516 --outcome"
