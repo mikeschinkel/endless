@@ -1,0 +1,1 @@
+The rule's home is a design choice across guide, templates, handoff, a shared instruction file and enforcement, which needs investigation before any change.
