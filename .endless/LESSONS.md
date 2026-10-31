@@ -7885,3 +7885,7 @@ On E-2421 I wrote a plan item about 'the project's linked worktrees'. Mike didn'
 ### [2026-10-31] Question an existing default before presenting it as a meaningful choice
 While planning E-2358 (resolve a named session in any project), I presented 'a session's project is the one it was created in' as a design meaning to weigh and gave options built around preserving it. Mike asked whether there was ANY reason for that default over the task's project; there was none beyond 'no task claimed yet'. Before framing an existing behaviour as a semantic to preserve, check whether anything actually relies on it; if nothing does, call it an overlooked default and say what it should be.
 - **Project**: endless
+
+### [2026-10-31] When two tasks conflict, the newer one is the current direction
+Reviewing links for newly filed tasks, I found E-1032 (task IDs get a two-letter entity-type prefix, filed months earlier) clashing with E-2391's stated plan (IDs become <project code>-<id>) and asked Mike which was current. He pointed out the filing dates answer it: the later task reflects his newer thinking. When two open tasks describe conflicting directions and nothing else settles it, treat the newer one as current, act on it (link and reopen the older for re-planning), and say so, rather than asking.
+- **Project**: endless
