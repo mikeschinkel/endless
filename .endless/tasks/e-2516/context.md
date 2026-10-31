@@ -1,0 +1,1 @@
+A go-cfgstore release session read its plan as authority to commit and tag go-logutil's in-flight work, and was corrected: that work belongs to go-logutil's own tasks. Nothing in the guide or CLAUDE.md files says so.
