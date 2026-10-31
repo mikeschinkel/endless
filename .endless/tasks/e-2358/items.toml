@@ -66,3 +66,8 @@ statement = "A search-on-miss fallback naming a --project flag; no by-id lookup 
 id = "P13"
 kind = "exclusion"
 statement = "Reaching a session on a different tmux server than the caller's"
+
+[[item]]
+id = "P14"
+kind = "deliverable"
+statement = "The claim guard, the caller-is-a-session check, the current-pane and sibling-pane session lookups in task_cmd, and session turn's no-id resolver also search every project"
