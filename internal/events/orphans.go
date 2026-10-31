@@ -38,8 +38,9 @@ import (
 type LedgerCommit struct {
 	SHA     string `json:"sha"`
 	Subject string `json:"subject"`
-	// Amendable is true when Subject is one an auto-commit may amend in place,
-	// which is what makes an orphan possible in the first place.
+	// Amendable is true when the commit is a ledger commit (IsLedgerCommit),
+	// which an auto-commit may amend in place — what makes an orphan possible
+	// in the first place.
 	Amendable bool `json:"amendable"`
 	// LedgerPaths are the repo-relative ledger files this commit touches.
 	LedgerPaths []string `json:"ledger_paths"`
@@ -114,8 +115,11 @@ func LedgerOrphans(projectRoot, base, branch string) (report *LedgerOrphanReport
 		lc := LedgerCommit{
 			SHA:         sha,
 			Subject:     subject,
-			Amendable:   subject == LedgerCommitSubject,
 			LedgerPaths: []string{},
+		}
+		lc.Amendable, err = IsLedgerCommit(projectRoot, sha, subject)
+		if err != nil {
+			return nil, err
 		}
 		lc.LedgerPaths, err = ledgerPathsAt(projectRoot, sha)
 		if err != nil {

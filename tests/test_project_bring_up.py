@@ -18,7 +18,8 @@ from endless.register import (
 
 from conftest import init_git_repo
 
-LEDGER_SUBJECT = "Endless: record ledger entry"
+# E-2498: a ledger commit names the event it records.
+LEDGER_SUBJECT = "Endless: shipped_file.written .endless/tasks/CLAUDE.md"
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 

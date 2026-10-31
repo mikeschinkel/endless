@@ -12,8 +12,9 @@ from pathlib import Path
 import pytest
 
 from endless.worktree_cmd import (
-    AMENDABLE_COMMIT_SUBJECTS,
+    LEGACY_LEDGER_COMMIT_SUBJECT,
     _drop_orphan_amendable_commits,
+    _is_ledger_subject,
 )
 
 
@@ -76,8 +77,42 @@ def _create_task_branch(main: Path, tmp: Path, name: str = "task/x") -> Path:
 # Constants sanity
 # ---------------------------------------------------------------------------
 
-def test_amendable_subjects_includes_ledger():
-    assert LEDGER_SUBJECT in AMENDABLE_COMMIT_SUBJECTS
+def test_ledger_subjects_recognised():
+    """E-2498: ledger subjects name their events, so they are matched by
+    shape; the legacy fixed subject still matches."""
+    assert LEDGER_SUBJECT == LEGACY_LEDGER_COMMIT_SUBJECT
+    assert _is_ledger_subject(LEDGER_SUBJECT)
+    assert _is_ledger_subject("Endless: task.status_changed E-1 → confirmed")
+    assert _is_ledger_subject("Endless: task.created E-1 Fix it +2 more")
+    assert not _is_ledger_subject("Endless: auto-record session activity")
+    assert not _is_ledger_subject("Endless: add context for E-2505")
+    assert not _is_ledger_subject("E-2498: name the event")
+
+
+def test_named_event_orphan_dropped(repo_with_worktree):
+    """E-2498: an orphan whose subject names its event is dropped exactly
+    like a legacy one."""
+    main = repo_with_worktree["main"]
+    subject = "Endless: task.status_changed E-7 → underway"
+    _commit(main, subject, {".endless/db-ledger/x.jsonl": '{"a":1}\n'})
+    wt = _create_task_branch(main, repo_with_worktree["tmp"])
+    _commit(wt, "user work", {"hello.txt": "hello\n"})
+    _amend_with_extra_line(main, ".endless/db-ledger/x.jsonl", '{"b":2}\n')
+
+    count, subj = _drop_orphan_amendable_commits(wt, "main")
+    assert (count, subj) == (1, subject)
+    assert _log_subjects(wt, "main..HEAD") == ["user work"]
+
+
+def test_auto_record_commit_not_dropped(repo_with_worktree):
+    """Land's auto-record commit can hold only ledger lines, but it is not
+    a ledger commit and must never be dropped as an orphan."""
+    main = repo_with_worktree["main"]
+    wt = _create_task_branch(main, repo_with_worktree["tmp"])
+    _commit(wt, "Endless: auto-record session activity",
+            {".endless/db-ledger/x.jsonl": '{"a":1}\n'})
+
+    assert _drop_orphan_amendable_commits(wt, "main") == (0, None)
 
 
 # ---------------------------------------------------------------------------

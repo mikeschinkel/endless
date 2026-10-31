@@ -79,13 +79,39 @@ AUTO_COMMIT_GLOBS = (
 DB_LEDGER_DIR = ".endless/db-ledger"
 
 
-# Mirrors internal/events/commit.go (E-1342). Subjects whose auto-commits
-# can amend in place via canAmend, producing orphans at the base of task
-# branches when main amends past a branch's fork-point SHA. The orphan-drop
-# pre-step in land_worktree() filters on this set.
-AMENDABLE_COMMIT_SUBJECTS = (
-    "Endless: record ledger entry",   # LedgerCommitSubject
-)
+# Mirrors events.IsLedgerSubject in internal/events/ledger_subject.go
+# (E-2498). Ledger auto-commits can amend in place via canAmend, producing
+# orphans at the base of task branches when main amends past a branch's
+# fork-point SHA (E-1342). Their subjects name the events they hold, so they
+# are recognised by shape: the subject every one carried before E-2498, or
+# `Endless: <entity>.<verb>`. The orphan-drop pre-step in land_worktree()
+# filters on _is_ledger_commit, which also requires ledger-only paths.
+LEGACY_LEDGER_COMMIT_SUBJECT = "Endless: record ledger entry"
+_LEDGER_SUBJECT_RE = re.compile(r"^Endless: [a-z_]+\.[a-z_]+( |$)")
+
+
+def _is_ledger_subject(subject: str) -> bool:
+    """Whether a commit subject is one a ledger auto-commit carries."""
+    subject = subject.strip()
+    return (subject == LEGACY_LEDGER_COMMIT_SUBJECT
+            or _LEDGER_SUBJECT_RE.match(subject) is not None)
+
+
+def _is_ledger_commit(cwd: Path, sha: str, subject: str) -> bool:
+    """Whether a commit is a ledger auto-commit: a ledger subject, and it
+    touches at least one path and nothing outside DB_LEDGER_DIR's *.jsonl.
+    Mirrors events.IsLedgerCommit."""
+    if not _is_ledger_subject(subject):
+        return False
+    out = _git_run(
+        ["diff-tree", "--root", "-r", "--no-commit-id", "--name-only", sha],
+        cwd=cwd,
+    )
+    paths = [p for p in out.stdout.splitlines() if p.strip()]
+    return bool(paths) and all(
+        p.startswith(DB_LEDGER_DIR + "/") and p.endswith(".jsonl")
+        for p in paths
+    )
 
 # Land's retry cap for the race-with-concurrent-writers loop (E-987).
 LAND_MAX_RETRIES = 8
@@ -402,7 +428,7 @@ def _drop_orphan_amendable_commits(
     n = 0
     for line in lines:
         sha, _, subject = line.partition(" ")
-        if subject in AMENDABLE_COMMIT_SUBJECTS:
+        if _is_ledger_commit(worktree_path, sha, subject):
             last_orphan_sha = sha
             if first_subject is None:
                 first_subject = subject

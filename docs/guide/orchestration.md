@@ -348,7 +348,7 @@ E-102: show session provenance on `task show`
 E-103: add the missing commit-your-work step to the guide
 ```
 
-Your commits ride into `main` on `worktree land`, so the subject line is what `main`'s history says about the task forever. The id prefix is the load-bearing part: it makes every landed change traceable back to the task that justified it (`git log --grep 'E-101'`), which is the whole point of tracking intent. Endless's own auto-commits never carry a task id — they use subjects of their own (`Endless: record ledger entry`, `lesson: <summary>`) — so yours and its are distinguishable at a glance in `git log --oneline`.
+Your commits ride into `main` on `worktree land`, so the subject line is what `main`'s history says about the task forever. The id prefix is the load-bearing part: it makes every landed change traceable back to the task that justified it (`git log --grep 'E-101'`), which is the whole point of tracking intent. Endless's own auto-commits never lead with a task id — they use subjects of their own (`Endless: task.status_changed E-101 → unverified`, `lesson: <summary>`) — so yours and its are distinguishable at a glance in `git log --oneline`.
 
 One task's work is normally one commit; split into several only when the steps are independently reviewable, and prefix each with the same id.
 

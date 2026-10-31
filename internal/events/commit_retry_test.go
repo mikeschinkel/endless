@@ -91,8 +91,8 @@ func TestCommitPathsSucceedsOnceTheLockClears(t *testing.T) {
 	if attempts < 2 {
 		t.Errorf("committed after %d backoffs; the lock was held for two", attempts)
 	}
-	if got := mustGit(t, root, "log", "-1", "--format=%s"); got != LedgerCommitSubject {
-		t.Errorf("HEAD subject = %q, want %q", got, LedgerCommitSubject)
+	if got := mustGit(t, root, "log", "-1", "--format=%s"); !IsLedgerSubject(got) {
+		t.Errorf("HEAD subject = %q, want a ledger commit subject", got)
 	}
 }
 

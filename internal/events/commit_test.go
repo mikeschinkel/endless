@@ -79,7 +79,7 @@ func TestCommitLedgerSegment_FirstWriteCreatesCommit(t *testing.T) {
 		t.Fatalf("HEAD should advance after first ledger commit")
 	}
 	subj := mustGit(t, root, "log", "-1", "--format=%s")
-	if subj != LedgerCommitSubject {
+	if !IsLedgerSubject(subj) {
 		t.Fatalf("unexpected commit subject: %q", subj)
 	}
 	status := mustGit(t, root, "status", "--porcelain", "--", segRel)
@@ -113,7 +113,7 @@ func TestCommitLedgerSegment_SecondWriteAmends(t *testing.T) {
 		t.Fatalf("amend should produce a new HEAD hash (content changed)")
 	}
 	subj := mustGit(t, root, "log", "-1", "--format=%s")
-	if subj != LedgerCommitSubject {
+	if !IsLedgerSubject(subj) {
 		t.Fatalf("amended commit subject should still match: %q", subj)
 	}
 }
@@ -151,7 +151,7 @@ func TestCommitLedgerSegment_NonLedgerHeadStartsNewCommit(t *testing.T) {
 		t.Fatalf("post-feature ledger commit should be a new hash")
 	}
 	subj := mustGit(t, root, "log", "-1", "--format=%s")
-	if subj != LedgerCommitSubject {
+	if !IsLedgerSubject(subj) {
 		t.Fatalf("post-feature commit subject mismatch: %q", subj)
 	}
 }
@@ -387,7 +387,7 @@ func TestCommitLedgerSegment_GitDirEnvIgnored(t *testing.T) {
 	}
 
 	subj := mustGit(t, root, "log", "-1", "--format=%s")
-	if subj != LedgerCommitSubject {
+	if !IsLedgerSubject(subj) {
 		t.Fatalf("commit should have landed in projectRoot's repo; subj=%q", subj)
 	}
 }
@@ -466,7 +466,7 @@ func TestCommitLedgerSegment_GitDirPointingAtWorktreeStillLandsOnMain(t *testing
 			wtHeadBefore, wtHeadAfter)
 	}
 	mainSubj := mustGit(t, root, "log", "-1", "--format=%s")
-	if mainSubj != LedgerCommitSubject {
+	if !IsLedgerSubject(mainSubj) {
 		t.Fatalf("main's HEAD subject should be ledger; got %q", mainSubj)
 	}
 }

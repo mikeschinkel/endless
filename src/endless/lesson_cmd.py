@@ -54,8 +54,8 @@ SUMMARY_LIMIT = 384
 #
 # The type is a bare `lesson`, with no `Endless` marker in front of it. Nothing
 # in the codebase matches on such a prefix: the only programmatic subject test
-# is an exact compare against `Endless: record ledger entry`
-# (worktree_cmd.AMENDABLE_COMMIT_SUBJECTS / events.LedgerCommitSubject), and a
+# is the ledger-commit shape `Endless: <entity>.<verb>`
+# (worktree_cmd._is_ledger_subject / events.IsLedgerSubject), and a
 # vendor prefix would spend 11 of the 60 characters buying a scannability the
 # Conventional-Commits type already provides. Every character not spent here is
 # a character of the actual lesson.

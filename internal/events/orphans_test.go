@@ -34,7 +34,7 @@ func forkedRepo(t *testing.T) (root, segRel, orphanSHA string) {
 
 	// main records a ledger event.
 	mustGit(t, root, "add", segRel)
-	mustGit(t, root, "commit", "-q", "-m", LedgerCommitSubject)
+	mustGit(t, root, "commit", "-q", "-m", LegacyLedgerCommitSubject)
 	orphanSHA = mustGit(t, root, "rev-parse", "HEAD")
 
 	// A task branch forks off exactly there.
@@ -45,7 +45,7 @@ func forkedRepo(t *testing.T) (root, segRel, orphanSHA string) {
 	writeSeg(t, root, segRel,
 		`{"v":"1","kind":"task.created"}`+"\n"+`{"v":"1","kind":"task.claimed"}`+"\n")
 	mustGit(t, root, "add", segRel)
-	mustGit(t, root, "commit", "-q", "--amend", "-m", LedgerCommitSubject)
+	mustGit(t, root, "commit", "-q", "--amend", "-m", LegacyLedgerCommitSubject)
 
 	mustGit(t, root, "checkout", "-q", "task/1957")
 	return root, segRel, orphanSHA
@@ -94,7 +94,7 @@ func TestLedgerOrphans_OrphanBehindRealWorkIsMidBranch(t *testing.T) {
 	// to an unbroken run at the base and this case is reported instead.
 	root, segRel := initRepo(t)
 	mustGit(t, root, "add", segRel)
-	mustGit(t, root, "commit", "-q", "-m", LedgerCommitSubject)
+	mustGit(t, root, "commit", "-q", "-m", LegacyLedgerCommitSubject)
 
 	mustGit(t, root, "checkout", "-q", "-b", "task/1957")
 	commitFile(t, root, "src.txt", "work\n", "E-1957: real work")
@@ -103,7 +103,7 @@ func TestLedgerOrphans_OrphanBehindRealWorkIsMidBranch(t *testing.T) {
 	writeSeg(t, root, segRel,
 		`{"v":"1","kind":"task.created"}`+"\n"+`{"v":"1","kind":"task.claimed"}`+"\n")
 	mustGit(t, root, "add", segRel)
-	mustGit(t, root, "commit", "-q", "-m", LedgerCommitSubject)
+	mustGit(t, root, "commit", "-q", "-m", LegacyLedgerCommitSubject)
 	midSHA := mustGit(t, root, "rev-parse", "HEAD")
 
 	// main records the same two events and one more.
@@ -113,7 +113,7 @@ func TestLedgerOrphans_OrphanBehindRealWorkIsMidBranch(t *testing.T) {
 			`{"v":"1","kind":"task.claimed"}`+"\n"+
 			`{"v":"1","kind":"task.landed"}`+"\n")
 	mustGit(t, root, "add", segRel)
-	mustGit(t, root, "commit", "-q", "-m", LedgerCommitSubject)
+	mustGit(t, root, "commit", "-q", "-m", LegacyLedgerCommitSubject)
 	mustGit(t, root, "checkout", "-q", "task/1957")
 
 	rpt, err := LedgerOrphans(root, "main", "task/1957")
@@ -143,7 +143,7 @@ func TestLedgerOrphans_DivergedContentIsNotAnOrphan(t *testing.T) {
 	writeSeg(t, root, segRel,
 		`{"v":"1","kind":"task.created"}`+"\n"+`{"v":"1","kind":"BRANCH.ONLY"}`+"\n")
 	mustGit(t, root, "add", segRel)
-	mustGit(t, root, "commit", "-q", "--amend", "-m", LedgerCommitSubject)
+	mustGit(t, root, "commit", "-q", "--amend", "-m", LegacyLedgerCommitSubject)
 
 	rpt, err := LedgerOrphans(root, "main", "task/1957")
 	if err != nil {

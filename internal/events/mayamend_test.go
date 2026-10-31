@@ -6,7 +6,8 @@ import "testing"
 // prefix, so that prefix is exactly what main-sync must hold back (E-2273).
 func TestMayAmend(t *testing.T) {
 	for subject, want := range map[string]bool{
-		LedgerCommitSubject:                     true,
+		LegacyLedgerCommitSubject:               true,
+		"Endless: task.created E-1 +1 more":     true,
 		"Endless: add context for E-2273":       true,
 		VerifyReportSubject("E-1", "r.json"):    true,
 		"Endless: reconcile document mirrors":   true,

@@ -201,7 +201,7 @@ func TestCanAmend_TaskBranchWithIdenticalLedgerTreeRefuses(t *testing.T) {
 		t.Fatalf("setup: branch ledger tree should be identical to main's")
 	}
 
-	ok, err := canAmend(root, LedgerCommitSubject, ledgerExclude)
+	ok, err := canAmend(root, ledgerCommit, ledgerExclude)
 	if err != nil {
 		t.Fatalf("canAmend: %v", err)
 	}
@@ -221,7 +221,7 @@ func TestCanAmend_TaskBranchWithDifferentLedgerTreeAmends(t *testing.T) {
 	}
 	taskBranchAt(t, root, "task/900", base, segRel, `{"v":"1","kind":"branch.only"}`+"\n")
 
-	ok, err := canAmend(root, LedgerCommitSubject, ledgerExclude)
+	ok, err := canAmend(root, ledgerCommit, ledgerExclude)
 	if err != nil {
 		t.Fatalf("canAmend: %v", err)
 	}
@@ -232,7 +232,7 @@ func TestCanAmend_TaskBranchWithDifferentLedgerTreeAmends(t *testing.T) {
 
 // TestCanAmend_NoLedgerTreeAtHeadAmends covers the empty-OID edge: a repo whose
 // HEAD carries no `.endless/db-ledger` tree at all (a CommitDoc subject, say)
-// must be treated as "no match, do not suppress" rather than as an error or as
+// must be treated as "no match, do not suppress" by the tree check rather than as an error or as
 // a match against a branch that also lacks the tree.
 func TestCanAmend_NoLedgerTreeAtHeadAmends(t *testing.T) {
 	root, segRel := initRepo(t)
@@ -242,7 +242,7 @@ func TestCanAmend_NoLedgerTreeAtHeadAmends(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(root, "README"), []byte("changed\n"), 0644); err != nil {
 		t.Fatalf("write README: %v", err)
 	}
-	mustGit(t, root, "commit", "-q", "-a", "-m", LedgerCommitSubject)
+	mustGit(t, root, "commit", "-q", "-a", "-m", LegacyLedgerCommitSubject)
 
 	// A task branch exists and it too has no ledger tree — an empty-vs-empty
 	// comparison must not read as "identical".
@@ -253,12 +253,14 @@ func TestCanAmend_NoLedgerTreeAtHeadAmends(t *testing.T) {
 		t.Fatalf("setup: main's tip should carry no ledger tree, got %q", strings.TrimSpace(got))
 	}
 
-	ok, err := canAmend(root, LedgerCommitSubject, ledgerExclude)
+	// Asked of the tree check directly: since E-2498 canAmend never reaches it
+	// for this HEAD, which touches README and so is not a ledger commit at all.
+	shared, err := ledgerTreeSharedWithTaskBranch(root, "refs/heads/main")
 	if err != nil {
-		t.Fatalf("canAmend must not error when HEAD has no ledger tree: %v", err)
+		t.Fatalf("tree check must not error when HEAD has no ledger tree: %v", err)
 	}
-	if !ok {
-		t.Fatalf("canAmend must permit when HEAD carries no ledger tree at all")
+	if shared {
+		t.Fatalf("tree check must not suppress the amend when HEAD carries no ledger tree at all")
 	}
 }
 
@@ -284,7 +286,7 @@ func TestCanAmend_NoTaskBranchesAmends(t *testing.T) {
 		t.Fatalf("setup: expected no task branches, got %q", got)
 	}
 
-	ok, err := canAmend(root, LedgerCommitSubject, ".endless/"+LedgerDirName+"/*.jsonl")
+	ok, err := canAmend(root, ledgerCommit, ".endless/"+LedgerDirName+"/*.jsonl")
 	if err != nil {
 		t.Fatalf("canAmend: %v", err)
 	}

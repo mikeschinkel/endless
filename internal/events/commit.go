@@ -5,7 +5,8 @@
 //     Writer.Append (E-1206).
 //
 // It flows through commitPaths, which decides amend-vs-new-commit based on
-// HEAD's subject (must match the subject we're about to commit), shared-ref
+// HEAD's subject (must match the subject we're about to commit, or for the
+// ledger, HEAD must itself be a ledger commit — E-2498), shared-ref
 // status (never amend a commit reachable from any ref besides the current
 // branch — a landed worktree branch, a remote-tracking ref, or a tag),
 // ledger-content sharing (never amend a ledger tip whose content a task branch
@@ -27,10 +28,6 @@ import (
 	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
-// LedgerCommitSubject is the exact `git log --format=%s` value for ledger
-// auto-commits (E-1206). The amend decision keys off this prefix.
-const LedgerCommitSubject = "Endless: record ledger entry"
-
 // AutoCommitSubjectPrefix begins the subject of every commit Endless makes on
 // its own behalf: the ledger, document mirrors, verify reports, verbs. Callers
 // choose the rest of a document mirror's subject, so this prefix is the only
@@ -39,9 +36,10 @@ const AutoCommitSubjectPrefix = "Endless: "
 
 // MayAmend reports whether a commit with this subject is one commitPaths could
 // still amend while it is the tip of an unpublished branch (E-2273). canAmend
-// amends whenever HEAD's subject equals the one being committed, and every
-// subject it is ever given carries AutoCommitSubjectPrefix — so a tip with any
-// other subject is never rewritten here, and one with it may be.
+// amends only a HEAD whose subject equals the one being committed or, for the
+// ledger, a HEAD that IsLedgerCommit — and every such subject carries
+// AutoCommitSubjectPrefix — so a tip with any other subject is never rewritten
+// here, and one with it may be.
 //
 // Conservative by construction: a verify report's subject is unique and so is
 // never amended in practice, and a person may write a subject with this
@@ -66,15 +64,31 @@ var gitRedirectVars = []string{
 }
 
 // CommitLedgerSegment commits the given ledger segment path on the
-// project's git repo (E-1206). Thin wrapper around commitPaths.
+// project's git repo (E-1206). Thin wrapper around commitPaths. The message
+// names the events the commit holds (E-2498): see LedgerCommitMessage.
 func CommitLedgerSegment(projectRoot, segmentRelPath string) error {
 	return commitPaths(
 		projectRoot,
 		[]string{segmentRelPath},
-		LedgerCommitSubject,
+		ledgerCommit,
 		".endless/db-ledger/*.jsonl",
 	)
 }
+
+// commitSubject is what commitPaths titles a commit, and so which HEAD it may
+// amend. A fixed subject amends only a HEAD with that exact subject. A ledger
+// commit has no fixed subject (E-2498): its message is built from the events
+// it holds, and it amends any HEAD that IsLedgerCommit.
+type commitSubject struct {
+	text   string
+	ledger bool
+}
+
+// fixedSubject is a commit titled exactly text.
+func fixedSubject(text string) commitSubject { return commitSubject{text: text} }
+
+// ledgerCommit is a ledger segment commit.
+var ledgerCommit = commitSubject{ledger: true}
 
 // CommitDoc commits a single version-controlled document mirror file
 // (`.endless/tasks/e-NNNN/<kind>.md`, or `.endless/decisions/ED-NNNN.md`)
@@ -95,15 +109,15 @@ func CommitLedgerSegment(projectRoot, segmentRelPath string) error {
 // has always been enforced onto main; the mirror now follows it there.
 func CommitDoc(projectRoot, relPath, subject string) error {
 	excludeGlob := path.Dir(relPath) + "/*.md"
-	return commitPaths(projectRoot, []string{relPath}, subject, excludeGlob)
+	return commitPaths(projectRoot, []string{relPath}, fixedSubject(subject), excludeGlob)
 }
 
 // VerifyReportSubject is the commit subject for one recorded verify run
 // (E-2243): `Endless: verify E-NNNN <report filename>`. The filename carries the
 // run's timestamp and the SHA it tested, so every run's subject is unique —
 // which is what keeps canAmend (subject must equal HEAD's) from ever folding one
-// run's record into another's. It is deliberately absent from
-// worktree_cmd.AMENDABLE_COMMIT_SUBJECTS for the same reason.
+// run's record into another's. Its second word has no dot, so it never
+// satisfies IsLedgerSubject (E-2498) and land's orphan-drop leaves it alone.
 func VerifyReportSubject(taskID, relPath string) string {
 	return fmt.Sprintf("Endless: verify %s %s", taskID, path.Base(relPath))
 }
@@ -120,7 +134,7 @@ func VerifyReportSubject(taskID, relPath string) string {
 func CommitVerifyReport(projectRoot, relPath, taskID string) error {
 	excludeGlob := path.Dir(relPath) + "/*.ctrf.json"
 	return commitPaths(projectRoot, []string{relPath},
-		VerifyReportSubject(taskID, relPath), excludeGlob)
+		fixedSubject(VerifyReportSubject(taskID, relPath)), excludeGlob)
 }
 
 // CommitDocPaths commits several document mirror files as ONE commit, under a
@@ -142,7 +156,7 @@ func CommitDocPaths(projectRoot string, relPaths []string, subject string) error
 	if len(stageable) == 0 {
 		return nil
 	}
-	return commitPaths(projectRoot, stageable, subject, ".endless/**")
+	return commitPaths(projectRoot, stageable, fixedSubject(subject), ".endless/**")
 }
 
 // stageablePaths drops paths `git add` would refuse, keeping those it can act
@@ -219,15 +233,15 @@ func stageablePaths(projectRoot string, relPaths []string) ([]string, error) {
 //
 // Decision:
 //
-//	HEAD subject == subject
+//	HEAD subject == subject (ledger: HEAD is a ledger commit)
 //	AND HEAD not reachable from any ref besides the current branch
 //	AND (ledger commits only) no task branch holds HEAD's ledger tree
 //	AND index has no staged paths outside excludeGlob
 //	→ git add -- <paths>...
-//	  git commit -o <paths>... --amend --no-edit
+//	  git commit -o <paths>... --amend --no-edit (ledger: -m <events>)
 //	otherwise
 //	→ git add -- <paths>...
-//	  git commit -o <paths>... -m subject
+//	  git commit -o <paths>... -m subject (ledger: -m <events>)
 //
 // The `git add` step happens in both branches because `git commit -o
 // <path>` can't resolve a pathspec for an untracked file — even on amend.
@@ -242,7 +256,7 @@ func stageablePaths(projectRoot string, relPaths []string) ([]string, error) {
 // if projectRoot resolves to a linked worktree (E-1309), or if any git
 // subprocess returns non-zero. Per Mike's "fail loudly until we know what
 // failure modes look like" stance.
-func commitPaths(projectRoot string, paths []string, subject, excludeGlob string) error {
+func commitPaths(projectRoot string, paths []string, subject commitSubject, excludeGlob string) error {
 	if err := ensureGitRepo(projectRoot); err != nil {
 		return err
 	}
@@ -309,7 +323,7 @@ func isIndexLocked(err error) bool {
 // commitPaths so the retry wraps the whole decision — canAmend runs
 // `diff-index --cached`, which refreshes the index and can itself lose the
 // race, so retrying only the commit would leave that failure unprotected.
-func commitPathsOnce(projectRoot string, paths []string, subject, excludeGlob string) error {
+func commitPathsOnce(projectRoot string, paths []string, subject commitSubject, excludeGlob string) error {
 	canAmend, err := canAmend(projectRoot, subject, excludeGlob)
 	if err != nil {
 		return err
@@ -326,9 +340,21 @@ func commitPathsOnce(projectRoot string, paths []string, subject, excludeGlob st
 
 	commitArgs := append([]string{"commit"}, prefixOnly(paths)...)
 	if canAmend {
-		commitArgs = append(commitArgs, "--amend", "--no-edit")
-	} else {
-		commitArgs = append(commitArgs, "-m", subject)
+		commitArgs = append(commitArgs, "--amend")
+	}
+	switch {
+	case subject.ledger:
+		// Rebuilt on amend too, so a folded commit's subject and body name
+		// every event it now holds (E-2498).
+		msg, err := ledgerMessage(projectRoot, paths, canAmend)
+		if err != nil {
+			return err
+		}
+		commitArgs = append(commitArgs, "-m", msg)
+	case canAmend:
+		commitArgs = append(commitArgs, "--no-edit")
+	default:
+		commitArgs = append(commitArgs, "-m", subject.text)
 	}
 	err = runGit(projectRoot, commitArgs...)
 	if err != nil && isNothingToCommit(err) {
@@ -463,7 +489,8 @@ func ensureMainCheckout(projectRoot string, paths []string) error {
 }
 
 // canAmend returns true iff all four preconditions hold:
-//  1. HEAD's subject equals the subject we're about to commit.
+//  1. HEAD's subject equals the subject we're about to commit, or for a
+//     ledger commit, HEAD IsLedgerCommit (E-2498).
 //  2. HEAD is not reachable from any ref besides the current branch (a landed
 //     worktree branch, a remote-tracking ref, or a tag all disqualify it).
 //  3. No refs/heads/task/* tip holds a .endless/db-ledger tree byte-identical
@@ -472,13 +499,19 @@ func ensureMainCheckout(projectRoot string, paths []string) error {
 //
 // Errors only on subprocess failure; a "no" answer to any precondition
 // returns (false, nil).
-func canAmend(projectRoot, subject, excludeGlob string) (bool, error) {
+func canAmend(projectRoot string, subject commitSubject, excludeGlob string) (bool, error) {
 	headSubj, err := runGitOutput(projectRoot, "log", "-1", "--format=%s")
 	if err != nil {
 		// New repo with no commits yet: HEAD doesn't exist. Cannot amend.
 		return false, nil
 	}
-	if strings.TrimSpace(headSubj) != subject {
+	headSubj = strings.TrimSpace(headSubj)
+	if subject.ledger {
+		ok, err := IsLedgerCommit(projectRoot, "HEAD", headSubj)
+		if err != nil || !ok {
+			return false, err
+		}
+	} else if headSubj != subject.text {
 		return false, nil
 	}
 
@@ -524,7 +557,7 @@ func canAmend(projectRoot, subject, excludeGlob string) (bool, error) {
 	// This is additive, not a replacement. It scans only refs/heads/task/*, so
 	// it is structurally blind to a tip already pushed to origin/main or
 	// carrying a tag — exactly the cases the reachability test gets right.
-	if subject == LedgerCommitSubject {
+	if subject.ledger {
 		shared, err := ledgerTreeSharedWithTaskBranch(projectRoot, curRef)
 		if err != nil {
 			return false, err

@@ -1,0 +1,36 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2498 and records what was true when E-2498
+# landed. Edit it only if you ARE E-2498. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+#
+# E-2498 titles each ledger auto-commit by the events it holds, in place of
+# 'Endless: record ledger entry', keeps consecutive ledger commits folding by
+# amend, and recognises a ledger commit by shape and paths, not exact subject.
+
+schema = 1
+task   = "E-2498"
+
+# Each kind's subject within 60 runes, a folded commit's '+N more' subject and
+# body, the real commit path amending and rebuilding the message, land's
+# auto-record commit never amended, and canAmend / orphans on the predicate.
+[[check]]
+name   = "ledger subjects, folding and the predicate"
+runner = "gotest"
+paths  = ["./internal/events/", "./internal/mainsyncjob/"]
+
+# Land's orphan-drop recognises named-event and legacy ledger commits, never
+# the auto-record commit; the ledger gate and race paths are unchanged; project
+# bring-up's real ledger commit names its shipped_file.written event.
+[[check]]
+name   = "land and bring-up recognise ledger commits"
+runner = "pytest/uv"
+paths  = ["tests/test_worktree_land_orphan_drop.py",
+          "tests/test_worktree_land_dbledger_gate.py",
+          "tests/test_worktree_land_ledger_race.py",
+          "tests/test_land_conflict.py",
+          "tests/test_project_bring_up.py"]
+
+# No reader still matches a ledger commit by its old exact subject.
+[[check]]
+name   = "no exact-subject ledger readers remain"
+sh     = "! grep -rnw -e LedgerCommitSubject -e AMENDABLE_COMMIT_SUBJECTS src internal cmd"
