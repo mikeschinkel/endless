@@ -1,0 +1,62 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2358 and records what was true when E-2358
+# landed. Edit it only if you ARE E-2358. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+#
+# E-2358 resolves a session or task named by id in any project: every by-id
+# (and by-pane) lookup reads `list-live --all-projects`, each row carries its
+# own project's path, and a session's project becomes its task's project on
+# claim, bind and the cwd auto-bind, with a migration re-stamping older rows.
+# Listings with no id keep the cwd's project scope.
+
+schema = 1
+task   = "E-2358"
+
+# The all-projects query and its rows' project_path; BindSessionToTask takes
+# the project from the task and the next hook event leaves it; the claim
+# executor re-stamps the session's project; migration 00030's backfill; the
+# list-live binary's --all-projects, --project-root and their exclusivity.
+[[check]]
+name   = "all-projects query, project follows task, migration, binary"
+runner = "gotest"
+paths  = ["./internal/monitor/", "./internal/events/", "./internal/schema/...",
+          "./internal/sessionquerycmd/", "./internal/hookcmd/"]
+
+# goto, back, cd, the companion resolver by id and by pane, and the --rebind
+# guard find a session recorded under another project; a listing keeps the
+# cwd's scope; the goto/back and claim-guard suites still pass with the
+# project-aware fake.
+[[check]]
+name   = "by-id lookups resolve in any project; listings stay scoped"
+runner = "pytest/uv"
+paths  = ["tests/test_session_lookup_any_project.py",
+          "tests/test_session_goto_back.py",
+          "tests/test_check_task_ownership.py",
+          "tests/test_continue_from_earlier_session.py",
+          "tests/test_session_resume_crash_recovery.py",
+          "tests/test_session_uuid_window_option.py",
+          "tests/test_env_vars_as_truth.py"]
+
+# The verb documents both scopes.
+[[check]]
+name     = "list-live usage names --all-projects"
+sh       = "./bin/endless-go session-query 2>&1"
+contains = "list-live --all-projects"
+
+# With neither flag the verb refuses and names both.
+[[check]]
+name     = "list-live with no scope refuses naming both flags"
+sh       = "./bin/endless-go --db-dir \"$ENDLESS_VERIFY_DIR\" session-query list-live 2>&1; test $? -eq 1"
+contains = "--project-root or --all-projects is required"
+
+# No Python caller still scopes a by-id or by-pane lookup to the cwd's
+# project: the only scoped call left is `session cd --all`, a listing.
+[[check]]
+name   = "one scoped live-sessions call remains, the listing"
+sh     = "test \"$(grep -rn '_live_sessions(project_root)' src | wc -l | tr -d ' ')\" = 1"
+
+# The guide says a ref is found in any project.
+[[check]]
+name     = "sessions guide states the rule"
+sh       = "cat docs/guide/sessions.md"
+contains = "find it in any project"

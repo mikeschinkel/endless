@@ -52,7 +52,7 @@ func TestBindSessionToTask_RecordsOwnershipRelation(t *testing.T) {
 			if err := TouchSession("uuid-1", "claude", "", 1); err != nil {
 				t.Fatalf("touch: %v", err)
 			}
-			if err := BindSessionToTask("uuid-1", 1, 42); err != nil {
+			if err := BindSessionToTask("uuid-1", 42); err != nil {
 				t.Fatalf("bind: %v", err)
 			}
 			if got := relationFor(t, db, "uuid-1", 42); got != tc.want {
@@ -74,13 +74,13 @@ func TestBindSessionToTask_LeavesStrongerRowAlone(t *testing.T) {
 	if err := TouchSession("uuid-1", "claude", "", 1); err != nil {
 		t.Fatalf("touch: %v", err)
 	}
-	if err := BindSessionToTask("uuid-1", 1, 42); err != nil {
+	if err := BindSessionToTask("uuid-1", 42); err != nil {
 		t.Fatalf("bind: %v", err)
 	}
 	if _, err := db.Exec(`UPDATE tasks SET status = 'ready' WHERE id = 42`); err != nil {
 		t.Fatalf("reset status: %v", err)
 	}
-	if err := BindSessionToTask("uuid-1", 1, 42); err != nil {
+	if err := BindSessionToTask("uuid-1", 42); err != nil {
 		t.Fatalf("rebind: %v", err)
 	}
 	if got := relationFor(t, db, "uuid-1", 42); got != sessiontaskrelation.RelationClaimed {

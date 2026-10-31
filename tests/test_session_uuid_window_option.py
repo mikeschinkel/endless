@@ -28,7 +28,7 @@ def _as_sibling_shell(monkeypatch):
 
 def _no_pane_direct_match(monkeypatch):
     from endless import session_cmd
-    monkeypatch.setattr(session_cmd, "_live_sessions", lambda _root: [])
+    monkeypatch.setattr(session_cmd, "_live_sessions", lambda *_a, **_kw: [])
     monkeypatch.setattr(session_cmd, "_project_root_for_cwd", lambda: "/tmp/proj")
 
 

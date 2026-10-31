@@ -27,16 +27,21 @@ import (
 // is the same rule at the row Python reads. Process still carries the raw
 // address, and the row itself is kept: the claim is unaffected.
 type LiveSession struct {
-	SessionID        string  `json:"session_id"`
-	EndlessSessionID int64   `json:"endless_session_id"`
-	ProjectID        int64   `json:"project_id"`
-	Platform         string  `json:"platform"`
-	State            string  `json:"state"`
-	TaskID           *int64  `json:"task_id"`
-	Process          string  `json:"process"`
-	PaneID           *string `json:"pane_id"`
-	StartedAt        string  `json:"started_at"`
-	LastActivity     string  `json:"last_activity"`
+	SessionID        string `json:"session_id"`
+	EndlessSessionID int64  `json:"endless_session_id"`
+	ProjectID        int64  `json:"project_id"`
+	// ProjectPath is the session's own project root, RESOLVED (E-2358), or ""
+	// when the session has no project row. A by-id lookup no longer assumes
+	// the caller's project is the session's, so the worktree path for the
+	// session's task is computed from this, never from the caller's cwd.
+	ProjectPath  string  `json:"project_path"`
+	Platform     string  `json:"platform"`
+	State        string  `json:"state"`
+	TaskID       *int64  `json:"task_id"`
+	Process      string  `json:"process"`
+	PaneID       *string `json:"pane_id"`
+	StartedAt    string  `json:"started_at"`
+	LastActivity string  `json:"last_activity"`
 	// Liveness is the observed run state (E-1898): "live" (pane present on a
 	// server we reached), "unknown" (server unreachable — no opinion), or
 	// "unbound" (no pane binding at all). "dead" never
@@ -80,6 +85,23 @@ var presentSession = `s.state IN (` + liveSessionStates + `) AND sl.liveness != 
 // guard keeps refusing. A wrong refusal costs a retry; the inverse hands a live
 // worktree to a second session.
 func ListLiveSessions(projectID int64) ([]LiveSession, error) {
+	return listLiveSessions("AND s.project_id = ?1", projectID)
+}
+
+// ListLiveSessionsAllProjects is ListLiveSessions with no project filter
+// (E-2358): the candidate set for a lookup by a specific id. Session and task
+// ids are global, and a session working another project's task was recorded
+// under the project it started in, so a lookup scoped to the caller's project
+// missed a session that `task show` — which never scoped — called live.
+// Listings with no id keep ListLiveSessions and its project scope.
+func ListLiveSessionsAllProjects() ([]LiveSession, error) {
+	return listLiveSessions("", 0)
+}
+
+// listLiveSessions runs the one live-sessions query with an optional extra
+// predicate over `s` (empty for no filter); ?1 is projectID, ?2 is the tmux
+// server this process reaches.
+func listLiveSessions(scope string, projectID int64) ([]LiveSession, error) {
 	db, err := DB()
 	if err != nil {
 		return nil, err
@@ -93,16 +115,18 @@ func ListLiveSessions(projectID int64) ([]LiveSession, error) {
 
 	// Numbered placeholders: SameTmuxServerSQL spells ?2 twice.
 	rows, err := db.Query(
-		`SELECT s.session_id, s.id, COALESCE(s.project_id, 0), s.platform, s.state,
+		`SELECT s.session_id, s.id, COALESCE(s.project_id, 0), COALESCE(pr.path, ''),
+		        s.platform, s.state,
 		        s.task_id, COALESCE(p.address, ''),
 		        COALESCE(s.started_at, ''), COALESCE(s.last_activity, ''),
 		        sl.liveness, COALESCE(ts.socket_path, ''),
 		        ?2 != '' AND `+SameTmuxServerSQL("p.server_uuid", "?2")+`
 		 FROM sessions s
+		 LEFT JOIN projects pr ON pr.id = s.project_id
 		 LEFT JOIN processes p ON p.id = s.process_id
 		 LEFT JOIN tmux_servers ts ON ts.server_uuid = `+tmuxServerSQL("p.server_uuid")+`
 		 JOIN session_liveness sl ON sl.session_id = s.id
-		 WHERE `+presentSession+` AND s.project_id = ?1
+		 WHERE `+presentSession+` `+scope+`
 		 ORDER BY s.last_activity DESC`,
 		projectID, here,
 	)
@@ -115,14 +139,21 @@ func ListLiveSessions(projectID int64) ([]LiveSession, error) {
 	down := map[string]bool{}
 	for rows.Next() {
 		var s LiveSession
-		var socket string
+		var stored, socket string
 		var onHere bool
 		if err := rows.Scan(
-			&s.SessionID, &s.EndlessSessionID, &s.ProjectID, &s.Platform, &s.State,
+			&s.SessionID, &s.EndlessSessionID, &s.ProjectID, &stored, &s.Platform, &s.State,
 			&s.TaskID, &s.Process, &s.StartedAt, &s.LastActivity,
 			&s.Liveness, &socket, &onHere,
 		); err != nil {
 			return nil, fmt.Errorf("scan live session: %w", err)
+		}
+		// The column holds the STORED form (`~/...`, E-2011); every reader of
+		// this row treats it as a directory.
+		if stored != "" {
+			if s.ProjectPath, err = ResolvedProjectPath(stored); err != nil {
+				return nil, fmt.Errorf("resolve project path %q: %w", stored, err)
+			}
 		}
 		if s.Liveness == string(LivenessUnknown) && socket != "" {
 			d, ok := down[socket]

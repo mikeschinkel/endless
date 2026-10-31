@@ -67,7 +67,14 @@ func MarkSessionAutoSpawned(sessionID string) error {
 // transaction (E-2291): the bind writes no event, so without this a spawned
 // session's own task had no row, or read `revisited`. See
 // recordAutoBindRelation for which relation.
-func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
+//
+// The session's project is the TASK's project (E-2358), read here rather than
+// taken from the caller. The hook passed the project its cwd resolved to, which
+// for a session started in one repo to work another's task was the wrong one:
+// every lookup scoped by project then missed the session, while `task show`
+// still called it live. A task that does not exist is an error: there is
+// nothing to bind to, and the task_id foreign key would refuse it anyway.
+func BindSessionToTask(sessionID string, taskID int64) error {
 	db, err := DB()
 	if err != nil {
 		return err
@@ -81,6 +88,15 @@ func BindSessionToTask(sessionID string, projectID int64, taskID int64) error {
 		return fmt.Errorf("begin tx: %w", err)
 	}
 	defer tx.Rollback()
+
+	var projectID int64
+	err = tx.QueryRow(`SELECT project_id FROM tasks WHERE id = ?`, taskID).Scan(&projectID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("bind session to task %d: no such task", taskID)
+	}
+	if err != nil {
+		return fmt.Errorf("read task %d project: %w", taskID, err)
+	}
 
 	// COALESCE(?, sessions.process_id) keeps the E-1426 rule that a bind with no
 	// identifiable pane never stomps a known-good binding. It is now the only

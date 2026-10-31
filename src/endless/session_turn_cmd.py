@@ -55,8 +55,7 @@ def _resolve_session_id(session_ref: str | None) -> int:
     if session_ref:
         return int(session_cmd._resolve_session(session_ref)["id"])
 
-    project_root = session_cmd._project_root_for_cwd()
-    live = session_cmd._live_sessions(project_root)
+    live = session_cmd._live_sessions(all_projects=True)
     companion = session_cmd._resolve_companion(
         None, live, list_hint="endless session list")
     return int(companion["endless_session_id"])

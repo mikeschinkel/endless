@@ -151,7 +151,7 @@ func TestUnboundWorktreeGate_DoesNotBlockForeignTree(t *testing.T) {
 // is enforceClaimedCwd's half of the invariant, not this one's.
 func TestUnboundWorktreeGate_DoesNotBlockBoundSession(t *testing.T) {
 	_, worktree := gateFixture(t, "sess-bound")
-	if err := monitor.BindSessionToTask("sess-bound", 1, 1983); err != nil {
+	if err := monitor.BindSessionToTask("sess-bound", 1983); err != nil {
 		t.Fatalf("bind: %v", err)
 	}
 

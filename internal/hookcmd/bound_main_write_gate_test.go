@@ -55,7 +55,7 @@ func runBoundMainWriteChild(t *testing.T) {
 	if err := monitor.TouchSession("sess-bound", "claude", "", 1); err != nil {
 		t.Fatalf("TouchSession: %v", err)
 	}
-	if err := monitor.BindSessionToTask("sess-bound", 1, 2291); err != nil {
+	if err := monitor.BindSessionToTask("sess-bound", 2291); err != nil {
 		t.Fatalf("BindSessionToTask: %v", err)
 	}
 

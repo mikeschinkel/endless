@@ -46,7 +46,7 @@ func seedHolder(t *testing.T, guid, pane string, ended bool) {
 		t.Fatalf("touch %s: %v", guid, err)
 	}
 	t.Setenv("TMUX_PANE", pane)
-	err := monitor.BindSessionToTask(guid, 1, heldTask)
+	err := monitor.BindSessionToTask(guid, heldTask)
 	t.Setenv("TMUX_PANE", "%2")
 	if err != nil {
 		t.Fatalf("bind %s: %v", guid, err)

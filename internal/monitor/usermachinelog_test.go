@@ -190,7 +190,7 @@ func TestBindSessionToTask_LogsDedup(t *testing.T) {
 	seedSession(t, "uuid-old", "working", int64(42))
 
 	// A fresh session binds to the same task; the dedup ends uuid-old.
-	if err := BindSessionToTask("uuid-new", 1, 42); err != nil {
+	if err := BindSessionToTask("uuid-new", 42); err != nil {
 		t.Fatalf("BindSessionToTask: %v", err)
 	}
 

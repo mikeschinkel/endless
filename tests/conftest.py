@@ -510,9 +510,14 @@ def stage_live_session(monkeypatch):
     only what they care about. Multiple stage_live_session(...) calls
     accumulate.
     """
-    staged: list[dict] = []
+    staged: list[tuple[str | None, dict]] = []
 
-    def _stage(**fields) -> dict:
+    def _stage(project_root: str | None = None, **fields) -> dict:
+        """Stage one live session. `project_root` (E-2358) is the project the
+        session is recorded under: a staged session with one is returned only
+        to a query scoped to that root, or to an all-projects query, which is
+        what the real `list-live` does. A session staged without one is
+        returned to every query, as every test before E-2358 assumed."""
         data = {
             "endless_session_id": 247,
             "harness_session_id": "f41f263e-c708-4c42-af7c-083b5be04943",
@@ -527,11 +532,20 @@ def stage_live_session(monkeypatch):
             "summary": "",
         }
         data.update(fields)
-        staged.append(data)
+        staged.append((project_root, data))
         return data
 
-    def _patched(project_root, harness: str = "claude") -> list[dict]:
-        return [d for d in staged if d.get("harness") == harness]
+    def _patched(project_root=None, harness: str = "claude", *,
+                 all_projects: bool = False) -> list[dict]:
+        out: list[dict] = []
+        for scope, d in staged:
+            if d.get("harness") != harness:
+                continue
+            if (scope is not None and not all_projects
+                    and str(scope) != str(project_root)):
+                continue
+            out.append(d)
+        return out
 
     from endless import session_cmd
     monkeypatch.setattr(session_cmd, "_live_sessions", _patched)

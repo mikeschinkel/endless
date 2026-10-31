@@ -40,7 +40,7 @@ func TestBindSessionToTask_EndsStalePanelessRowsSameTask(t *testing.T) {
 	if err := TouchSession("uuid-old", "claude", "", 1); err != nil {
 		t.Fatalf("touch old: %v", err)
 	}
-	if err := BindSessionToTask("uuid-old", 1, 42); err != nil {
+	if err := BindSessionToTask("uuid-old", 42); err != nil {
 		t.Fatalf("bind old: %v", err)
 	}
 
@@ -48,7 +48,7 @@ func TestBindSessionToTask_EndsStalePanelessRowsSameTask(t *testing.T) {
 	if err := TouchSession("uuid-new", "claude", "", 1); err != nil {
 		t.Fatalf("touch new: %v", err)
 	}
-	if err := BindSessionToTask("uuid-new", 1, 42); err != nil {
+	if err := BindSessionToTask("uuid-new", 42); err != nil {
 		t.Fatalf("bind new: %v", err)
 	}
 
@@ -77,7 +77,7 @@ func TestBindSessionToTask_RepeatedLaunchesStayAtOneLiveRow(t *testing.T) {
 		if err := TouchSession(uuid, "claude", "", 1); err != nil {
 			t.Fatalf("touch %d: %v", i, err)
 		}
-		if err := BindSessionToTask(uuid, 1, 7); err != nil {
+		if err := BindSessionToTask(uuid, 7); err != nil {
 			t.Fatalf("bind %d: %v", i, err)
 		}
 		if got := liveCountForTask(t, 7); got != 1 {
@@ -111,7 +111,7 @@ func TestBindSessionToTask_EndsEveryPanelessRowSameTask(t *testing.T) {
 		t.Fatalf("seed paneless row: %v", err)
 	}
 
-	if err := BindSessionToTask("uuid-fg", 1, 42); err != nil {
+	if err := BindSessionToTask("uuid-fg", 42); err != nil {
 		t.Fatalf("bind fg: %v", err)
 	}
 
@@ -142,7 +142,7 @@ func TestBindSessionToTask_DoesNotEndPanedRowSameTask(t *testing.T) {
 		t.Fatalf("seed paned row: %v", err)
 	}
 
-	if err := BindSessionToTask("uuid-fg", 1, 42); err != nil {
+	if err := BindSessionToTask("uuid-fg", 42); err != nil {
 		t.Fatalf("bind fg: %v", err)
 	}
 
@@ -163,11 +163,11 @@ func TestBindSessionToTask_DoesNotEndOtherTasksRows(t *testing.T) {
 	if err := TouchSession("uuid-other", "claude", "", 1); err != nil {
 		t.Fatalf("touch other: %v", err)
 	}
-	if err := BindSessionToTask("uuid-other", 1, 43); err != nil {
+	if err := BindSessionToTask("uuid-other", 43); err != nil {
 		t.Fatalf("bind other: %v", err)
 	}
 
-	if err := BindSessionToTask("uuid-fg", 1, 42); err != nil {
+	if err := BindSessionToTask("uuid-fg", 42); err != nil {
 		t.Fatalf("bind fg: %v", err)
 	}
 

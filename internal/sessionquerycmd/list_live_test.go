@@ -134,3 +134,76 @@ func TestListLive_BinaryMissingFlagExitsNonZero(t *testing.T) {
 	}
 	_ = out
 }
+
+// TestListLive_AllProjects is E-2358's contract for a lookup by id: with
+// --all-projects the verb lists every project's live sessions, each row naming
+// its own project's path, and the two flags are exclusive. The scoped form is
+// unchanged, for listings.
+func TestListLive_AllProjects(t *testing.T) {
+	cfgDir := t.TempDir()
+	rootA := t.TempDir()
+	rootB := t.TempDir()
+	seedLiveSessionsDB(t, cfgDir, rootA, []sessionSeed{{"in-a", "working", "%5"}})
+	db, err := sql.Open("sqlite", filepath.Join(cfgDir, "endless.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(
+		"INSERT INTO projects (id, name, path) VALUES (2, 'proj-b', ?)", rootB,
+	); err != nil {
+		t.Fatalf("seed project b: %v", err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO sessions (session_id, project_id, platform, state, process_id, last_activity)
+		 VALUES ('in-b', 2, 'claude', 'working', ?, '2026-05-20T00:00:00')`,
+		seedPane(t, db, "%6")); err != nil {
+		t.Fatalf("seed session in-b: %v", err)
+	}
+	db.Close()
+
+	bin := endlessGoBin(t)
+	rows := func(args ...string) map[string]string {
+		t.Helper()
+		out, err := exec.Command(bin, append([]string{"--db-dir", cfgDir, "session-query", "list-live"}, args...)...).Output()
+		if err != nil {
+			t.Fatalf("list-live %v: %v\nstdout: %s", args, err, out)
+		}
+		var got struct {
+			Rows []struct {
+				SessionID   string `json:"session_id"`
+				ProjectPath string `json:"project_path"`
+			} `json:"rows"`
+		}
+		if err := json.Unmarshal(out, &got); err != nil {
+			t.Fatalf("decode: %v\nraw: %s", err, out)
+		}
+		paths := map[string]string{}
+		for _, r := range got.Rows {
+			paths[r.SessionID] = r.ProjectPath
+		}
+		return paths
+	}
+	resolve := func(p string) string {
+		t.Helper()
+		r, err := filepath.EvalSymlinks(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
+	}
+
+	all := rows("--all-projects")
+	if len(all) != 2 || all["in-a"] != resolve(rootA) || all["in-b"] != resolve(rootB) {
+		t.Errorf("--all-projects: got %v, want in-a→%s, in-b→%s", all, resolve(rootA), resolve(rootB))
+	}
+	scoped := rows("--project-root", rootA)
+	if len(scoped) != 1 || scoped["in-a"] != resolve(rootA) {
+		t.Errorf("--project-root: got %v, want only in-a", scoped)
+	}
+
+	out, err := exec.Command(bin, "--db-dir", cfgDir, "session-query", "list-live",
+		"--all-projects", "--project-root", rootA).CombinedOutput()
+	if err == nil {
+		t.Fatalf("both flags accepted\nout: %s", out)
+	}
+}

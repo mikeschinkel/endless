@@ -1919,7 +1919,7 @@ func autoBindFromCwd(projectID int64, payload claudePayload) *cwdBindRefusal {
 		}
 	}
 	snap := monitor.SnapshotSession(payload.SessionID)
-	if err := monitor.BindSessionToTask(payload.SessionID, projectID, taskID); err != nil {
+	if err := monitor.BindSessionToTask(payload.SessionID, taskID); err != nil {
 		return nil
 	}
 	logSessionBind(payload.SessionID, snap, taskID, monitor.SessionLogCwdBind, "hookcmd.autoBindFromCwd")

@@ -139,7 +139,7 @@ def crash(monkeypatch, tmp_path, stage_transcript):
         lambda ref: _target(worktree_path=str(wt)),
     )
     monkeypatch.setattr(
-        session_cmd, "_live_sessions", lambda root: list(scene.live)
+        session_cmd, "_live_sessions", lambda *_a, **_kw: list(scene.live)
     )
     monkeypatch.setattr(
         session_cmd, "_project_root_for_cwd", lambda: tmp_path

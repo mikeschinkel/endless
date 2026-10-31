@@ -199,6 +199,7 @@ func usageText() string {
 		"usage: endless-go session-query <subcommand>",
 		"subcommands:",
 		"  list-live --project-root <path>   JSON array of live sessions for the project",
+		"  list-live --all-projects          JSON array of live sessions in every project (for a lookup by id)",
 		"                                    end non-ended sessions whose tmux pane is gone (silent; DB error → exit 1)",
 		"  end-session --id <session-id>     end one session (releases its worktree lock); prints nothing",
 		"  session-liveness <session-id>...  JSON array [{session_id, liveness, pane}] in argument order (E-2294);",
@@ -1151,14 +1152,31 @@ func newWorktreeUnsettledJSON(d monitor.UnsettledDetail) worktreeUnsettledJSON {
 	}
 }
 
+// runListLive lists the live sessions of one project (--project-root) or of
+// every project (--all-projects, E-2358). The second is the candidate set for
+// a lookup by a specific session or task id, which is global; the first is for
+// a listing, which has no id to be specific about and keeps the cwd's scope.
 func runListLive(args []string) error {
 	fs := refusal.NewFlags("list-live")
 	projectRoot := fs.String("project-root", "", "absolute path of the project root")
+	allProjects := fs.Bool("all-projects", false, "list every project's live sessions, for a lookup by id")
 	if err := parseFlags(fs, "list-live", args); err != nil {
 		return err
 	}
+	if *allProjects {
+		if *projectRoot != "" {
+			return refusal.NoReport("--all-projects and --project-root are exclusive",
+				"Pass one of them and retry")
+		}
+		sessions, err := monitor.ListLiveSessionsAllProjects()
+		if err != nil {
+			return fmt.Errorf("list live sessions: %w", err)
+		}
+		return dbprovenance.Encode(os.Stdout, sessions)
+	}
 	if *projectRoot == "" {
-		return refusal.NoReport("--project-root is required", "Pass --project-root and retry")
+		return refusal.NoReport("--project-root or --all-projects is required",
+			"Pass --project-root <path> for one project's sessions, or --all-projects for every project's, and retry")
 	}
 
 	projectID, _, err := monitor.ProjectIDForPath(*projectRoot)

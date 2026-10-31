@@ -978,10 +978,17 @@ func bindSessionTask(
 	// Snapshot the session's pre-write state (within this tx) so the
 	// machine-local diagnostic log can record the task_id transition —
 	// the single-pointer rebind that otherwise leaves no trail.
+	// The session's project becomes the task's (E-2358): a session started in
+	// one repo to claim another repo's task was recorded under the first, and
+	// every project-scoped lookup missed it. COALESCE is defensive: the
+	// task_id foreign key refuses a bind to a task that is not there, so the
+	// subquery is NULL only on a database that has lost its referential
+	// checks, and even then the row keeps its own project rather than none.
 	snap := monitor.SnapshotSessionByID(db, p.SessionID)
 	res, err := db.Exec(
 		`UPDATE sessions
 		    SET task_id = ?,
+		        project_id = COALESCE((SELECT project_id FROM tasks WHERE id = ?), project_id),
 		        -- Revive an 'ended' row on bind (E-1686), mirroring TouchSession's
 		        -- revival: binding a task to a session is proof it's alive, so
 		        -- task bind must not silently land on (and report success against)
@@ -1003,7 +1010,7 @@ func bindSessionTask(
 		           ORDER BY a.depth LIMIT 1
 		        )
 		  WHERE id = ?`,
-		taskID, sessionstate.Ended, sessionstate.Idle, taskID, p.SessionID,
+		taskID, taskID, sessionstate.Ended, sessionstate.Idle, taskID, p.SessionID,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("events: %s: %w", evt.Kind, err)

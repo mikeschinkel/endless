@@ -75,7 +75,7 @@ func TestBindSessionToTask_InsertCreatesWorking(t *testing.T) {
 	seedTask(t, db, 42, 1, "test task", "ready")
 	t.Setenv("TMUX_PANE", "%5")
 
-	if err := BindSessionToTask("sess-A", 1, 42); err != nil {
+	if err := BindSessionToTask("sess-A", 42); err != nil {
 		t.Fatalf("BindSessionToTask: %v", err)
 	}
 	state, taskID, process := sessionLifecycleRow(t, db, "sess-A")
@@ -105,7 +105,7 @@ func TestBindSessionToTask_UpsertOverridesPriorState(t *testing.T) {
 	seedTask(t, db, 100, 1, "first task", "ready")
 	t.Setenv("TMUX_PANE", "%5")
 
-	if err := BindSessionToTask("sess-A", 1, 100); err != nil {
+	if err := BindSessionToTask("sess-A", 100); err != nil {
 		t.Fatalf("bind 1: %v", err)
 	}
 	// Force the session into a non-working state and clear pane to
@@ -115,7 +115,7 @@ func TestBindSessionToTask_UpsertOverridesPriorState(t *testing.T) {
 	); err != nil {
 		t.Fatalf("force idle: %v", err)
 	}
-	if err := BindSessionToTask("sess-A", 1, 100); err != nil {
+	if err := BindSessionToTask("sess-A", 100); err != nil {
 		t.Fatalf("bind 2: %v", err)
 	}
 	state, taskID, _ := sessionLifecycleRow(t, db, "sess-A")
@@ -139,10 +139,10 @@ func TestBindSessionToTask_RefusesRepoint(t *testing.T) {
 	seedTask(t, db, 200, 1, "second task", "ready")
 	t.Setenv("TMUX_PANE", "%5")
 
-	if err := BindSessionToTask("sess-A", 1, 100); err != nil {
+	if err := BindSessionToTask("sess-A", 100); err != nil {
 		t.Fatalf("bind 1: %v", err)
 	}
-	err := BindSessionToTask("sess-A", 1, 200)
+	err := BindSessionToTask("sess-A", 200)
 	if err == nil {
 		t.Fatal("re-bind to a different task succeeded, want write-once abort")
 	}
@@ -164,11 +164,11 @@ func TestBindSessionToTask_EmptyPaneDoesNotStompProcess(t *testing.T) {
 	seedTask(t, db, 42, 1, "test task", "ready")
 
 	t.Setenv("TMUX_PANE", "%5")
-	if err := BindSessionToTask("sess-A", 1, 42); err != nil {
+	if err := BindSessionToTask("sess-A", 42); err != nil {
 		t.Fatalf("bind 1: %v", err)
 	}
 	t.Setenv("TMUX_PANE", "")
-	if err := BindSessionToTask("sess-A", 1, 42); err != nil {
+	if err := BindSessionToTask("sess-A", 42); err != nil {
 		t.Fatalf("bind 2: %v", err)
 	}
 	_, _, process := sessionLifecycleRow(t, db, "sess-A")
@@ -231,7 +231,7 @@ func TestGetActiveSession_ReturnsRow(t *testing.T) {
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 	seedTask(t, db, 42, 1, "test task", "ready")
 	t.Setenv("TMUX_PANE", "%5")
-	if err := BindSessionToTask("sess-A", 1, 42); err != nil {
+	if err := BindSessionToTask("sess-A", 42); err != nil {
 		t.Fatalf("bind: %v", err)
 	}
 
@@ -271,7 +271,7 @@ func TestIdleSession_FlipsState(t *testing.T) {
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 	seedTask(t, db, 42, 1, "test task", "ready")
 	t.Setenv("TMUX_PANE", "%5")
-	if err := BindSessionToTask("sess-A", 1, 42); err != nil {
+	if err := BindSessionToTask("sess-A", 42); err != nil {
 		t.Fatalf("bind: %v", err)
 	}
 
@@ -418,7 +418,7 @@ func TestWakeSession_WakesIdleSessionHoldingATask(t *testing.T) {
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 	seedTask(t, db, 42, 1, "test task", "underway")
 
-	if err := BindSessionToTask("sess-A", 1, 42); err != nil {
+	if err := BindSessionToTask("sess-A", 42); err != nil {
 		t.Fatalf("BindSessionToTask: %v", err)
 	}
 	if err := IdleSession("sess-A"); err != nil {
@@ -483,7 +483,7 @@ func seedPromptSession(t *testing.T, state string) *sql.DB {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 	seedTask(t, db, 42, 1, "test task", "underway")
-	if err := BindSessionToTask("sess-A", 1, 42); err != nil {
+	if err := BindSessionToTask("sess-A", 42); err != nil {
 		t.Fatalf("BindSessionToTask: %v", err)
 	}
 	if _, err := db.Exec(
@@ -603,7 +603,7 @@ func TestWakeSession_LeavesEveryOtherState(t *testing.T) {
 			db := withTestDB(t)
 			seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 			seedTask(t, db, 42, 1, "test task", "underway")
-			if err := BindSessionToTask("sess-A", 1, 42); err != nil {
+			if err := BindSessionToTask("sess-A", 42); err != nil {
 				t.Fatalf("BindSessionToTask: %v", err)
 			}
 			if _, err := db.Exec(
@@ -630,7 +630,7 @@ func TestWakeSession_IsIdempotent(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 	seedTask(t, db, 42, 1, "test task", "underway")
-	if err := BindSessionToTask("sess-A", 1, 42); err != nil {
+	if err := BindSessionToTask("sess-A", 42); err != nil {
 		t.Fatalf("BindSessionToTask: %v", err)
 	}
 	if err := IdleSession("sess-A"); err != nil {
@@ -672,7 +672,7 @@ func TestTouchSession_DoesNotWakeIdle(t *testing.T) {
 	db := withTestDB(t)
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 	seedTask(t, db, 42, 1, "test task", "underway")
-	if err := BindSessionToTask("sess-A", 1, 42); err != nil {
+	if err := BindSessionToTask("sess-A", 42); err != nil {
 		t.Fatalf("BindSessionToTask: %v", err)
 	}
 	if err := IdleSession("sess-A"); err != nil {
@@ -702,7 +702,7 @@ func TestTouchSession_EndedRevivalStillLandsNeutral(t *testing.T) {
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 	seedTask(t, db, 42, 1, "test task", "underway")
 
-	if err := BindSessionToTask("sess-A", 1, 42); err != nil {
+	if err := BindSessionToTask("sess-A", 42); err != nil {
 		t.Fatalf("BindSessionToTask: %v", err)
 	}
 	if err := EndSession("sess-A"); err != nil {
@@ -727,7 +727,7 @@ func TestWakeSession_StopStillEndsIdle(t *testing.T) {
 	seedProject(t, db, 1, "proj-test-1", "/tmp/proj-test-1")
 	seedTask(t, db, 42, 1, "test task", "underway")
 
-	if err := BindSessionToTask("sess-A", 1, 42); err != nil {
+	if err := BindSessionToTask("sess-A", 42); err != nil {
 		t.Fatalf("BindSessionToTask: %v", err)
 	}
 	// The Stop event, in the order `hook claude` performs it.

@@ -81,7 +81,7 @@ def test_dead_pane_owner_reads_free_without_being_written(
     # The Go side observed the pane's server and did not find the pane, so the
     # ghost is simply not reported. (list-live's own filtering is tested in
     # internal/monitor; here we pin the guard's decision given that result.)
-    monkeypatch.setattr(session_cmd, "_live_sessions", lambda root: [])
+    monkeypatch.setattr(session_cmd, "_live_sessions", lambda *_a, **_kw: [])
 
     assert task_cmd._check_task_ownership(task_id, current_eid=None) is False
     assert _session_state(ghost) == "working", (
@@ -97,7 +97,7 @@ def test_live_owner_still_raises(seeded_project_at_cwd, monkeypatch):
     monkeypatch.setattr(session_cmd, "_project_root_for_cwd", lambda: seeded_project_at_cwd)
     monkeypatch.setattr(
         session_cmd, "_live_sessions",
-        lambda root: [{"endless_session_id": live_eid, "pane_id": "%42", "liveness": "live"}],
+        lambda *_a, **_kw: [{"endless_session_id": live_eid, "pane_id": "%42", "liveness": "live"}],
     )
 
     with pytest.raises(click.ClickException) as excinfo:
@@ -123,7 +123,7 @@ def test_unreachable_server_owner_still_raises(seeded_project_at_cwd, monkeypatc
     monkeypatch.setattr(session_cmd, "_project_root_for_cwd", lambda: seeded_project_at_cwd)
     monkeypatch.setattr(
         session_cmd, "_live_sessions",
-        lambda root: [{"endless_session_id": unprovable, "pane_id": "%7", "liveness": "unknown"}],
+        lambda *_a, **_kw: [{"endless_session_id": unprovable, "pane_id": "%7", "liveness": "unknown"}],
     )
 
     with pytest.raises(click.ClickException):
@@ -142,7 +142,7 @@ def _refuse_with_owner(seeded_project_at_cwd, monkeypatch, **comp) -> tuple[int,
     monkeypatch.setattr(session_cmd, "_project_root_for_cwd", lambda: seeded_project_at_cwd)
     monkeypatch.setattr(
         session_cmd, "_live_sessions",
-        lambda root: [{"endless_session_id": eid, "pane_id": "", **comp}],
+        lambda *_a, **_kw: [{"endless_session_id": eid, "pane_id": "", **comp}],
     )
     with pytest.raises(click.ClickException) as excinfo:
         task_cmd._check_task_ownership(task_id, current_eid=None)

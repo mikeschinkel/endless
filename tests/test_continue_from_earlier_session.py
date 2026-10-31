@@ -64,7 +64,7 @@ def as_session(seeded_project_at_cwd, monkeypatch):
         )
         monkeypatch.setattr(task_cmd, "_resolve_bind_session", lambda *a: eid)
         monkeypatch.setattr(task_cmd, "_in_claude_session", lambda: False)
-        monkeypatch.setattr(session_cmd, "_live_sessions", lambda root: [])
+        monkeypatch.setattr(session_cmd, "_live_sessions", lambda *_a, **_kw: [])
     return _use
 
 

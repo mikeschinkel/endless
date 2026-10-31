@@ -72,7 +72,7 @@ func TestAutoBindFromCwd_ResumeDoesNotRebindDifferentTask(t *testing.T) {
 	}
 
 	// The session belongs to task 1835 and is currently bound to it.
-	if err := monitor.BindSessionToTask("sess-997", 1, 1835); err != nil {
+	if err := monitor.BindSessionToTask("sess-997", 1835); err != nil {
 		t.Fatalf("seed binding: %v", err)
 	}
 

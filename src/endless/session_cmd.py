@@ -1008,7 +1008,7 @@ def _live_window_claiming(task_id: int) -> tuple[str, int] | None:
     the one being re-entered.
     """
     try:
-        live = _live_sessions(_project_root_for_cwd())
+        live = _live_sessions(all_projects=True)
     except Exception:
         return None
     here = _tmux_window_of(os.environ.get("TMUX_PANE", ""))
@@ -1492,8 +1492,7 @@ def show_history(
     """
     cap = rowcap.resolve_cap(limit, no_limit, machine=as_json)
     if session_value is None:
-        project_root = _project_root_for_cwd()
-        live = _live_sessions(project_root)
+        live = _live_sessions(all_projects=True)
         c = _resolve_companion(None, live, list_hint="endless session list")
         session_value = str(c.get("endless_session_id"))
     session = _resolve_session(session_value)
@@ -2308,8 +2307,21 @@ def _worktree_path_for_task(project_root: Path, task_id: int | None) -> str:
     return str(candidates[0])
 
 
-def _live_sessions(project_root: Path, harness: str = "claude") -> list[dict]:
-    """Return live Claude sessions for the project, sourced from the DB.
+def _live_sessions(
+    project_root: Path | None = None, harness: str = "claude", *,
+    all_projects: bool = False,
+) -> list[dict]:
+    """Return live Claude sessions, sourced from the DB: the project's at
+    `project_root`, or every project's with `all_projects` (E-2358).
+
+    Which of the two a caller wants turns on whether it has a specific id.
+    Session and task ids are global, and a session working another project's
+    task can be recorded under the project it started in, so a lookup by id
+    scoped to the cwd's project missed a session `task show` called live —
+    `session goto ES-1259` refused "No live session" from go-cfgstore while
+    the pane sat there. Every resolver of one named session or task, and of
+    the session in a given pane (as specific as an id), passes `all_projects`.
+    Listings with no id, such as `session cd --all`, keep the cwd's scope.
 
     Replaces `_read_live_companions` (E-1426). Shells out to
     `endless-go session-query list-live` so this Python layer doesn't
@@ -2318,7 +2330,10 @@ def _live_sessions(project_root: Path, harness: str = "claude") -> list[dict]:
     Each dict carries the fields the rest of this module expects from a
     companion record — endless_session_id, harness_session_id, harness,
     pane_id, cwd, worktree_path, started_at — plus richer DB fields
-    (state, task_id, last_activity). The `pid` field of
+    (state, task_id, last_activity). `worktree_path` is computed from the
+    session's OWN project root, which each row carries, never from the
+    caller's: in all-projects mode there is no caller's project to assume,
+    and even in scoped mode the two are the same project. The `pid` field of
     the old companion record is intentionally absent: liveness is decided
     Go-side, which filters out both ended rows and sessions whose pane was
     observably absent from a tmux server it actually reached (E-1898). A
@@ -2331,10 +2346,16 @@ def _live_sessions(project_root: Path, harness: str = "claude") -> list[dict]:
     import subprocess
 
     from endless import config
+    if all_projects:
+        scope = ["--all-projects"]
+    elif project_root is not None:
+        scope = ["--project-root", str(project_root)]
+    else:
+        raise ValueError("_live_sessions: a project_root or all_projects is required")
     try:
         result = subprocess.run(
             ["endless-go", *config.go_db_context_args(),
-             "session-query", "list-live", "--project-root", str(project_root)],
+             "session-query", "list-live", *scope],
             capture_output=True, text=True, timeout=5,
         )
     except (FileNotFoundError, subprocess.SubprocessError):
@@ -2356,13 +2377,17 @@ def _live_sessions(project_root: Path, harness: str = "claude") -> list[dict]:
         if r.get("platform") != harness:
             continue
         pane_id = r.get("pane_id")
+        own_root = r.get("project_path") or ""
         live.append({
             "endless_session_id": r.get("endless_session_id"),
             "harness_session_id": r.get("session_id"),
             "harness": r.get("platform"),
             "pane_id": pane_id or "",
             "cwd": pane_cwds.get(pane_id or "", ""),
-            "worktree_path": _worktree_path_for_task(project_root, r.get("task_id")),
+            "worktree_path": (
+                _worktree_path_for_task(Path(own_root), r.get("task_id"))
+                if own_root else ""
+            ),
             "started_at": r.get("started_at") or "",
             "state": r.get("state"),
             "task_id": r.get("task_id"),
@@ -2677,9 +2702,11 @@ def session_cd_resolve(
     non-zero exit.
     """
     project_root = _project_root_for_cwd()
-    live = _live_sessions(project_root)
-
+    # `--all` is a listing and keeps the project's scope; a ref, or the
+    # sibling pane in this window, names one session and is found in any
+    # project (E-2358).
     if show_all:
+        live = _live_sessions(project_root)
         if not live:
             # An empty listing, which exits 1 so a shell wrapper can tell
             # "nothing to cd to" from a path. Nothing is wrong and nothing can
@@ -2709,6 +2736,7 @@ def session_cd_resolve(
         )
         return
 
+    live = _live_sessions(all_projects=True)
     c = _resolve_companion(session_ref, live, list_hint="endless session cd --all")
     # `_resolve_target` refuses and exits on its own (E-2159), so a path
     # arriving here is a path.
@@ -2786,8 +2814,7 @@ def session_show_resolve(session_ref: str | None, as_json: bool = False) -> None
     JSON companion files) and joins per-session DB fields (state, started_at,
     last_activity, message count, active task) for a focused per-session view.
     """
-    project_root = _project_root_for_cwd()
-    live = _live_sessions(project_root)
+    live = _live_sessions(all_projects=True)
     c = _resolve_companion(session_ref, live, list_hint="endless session list")
 
     eid = c.get("endless_session_id")
@@ -2899,7 +2926,7 @@ def session_use_resolve(session_ref: str | None) -> None:
     import shlex
 
     project_root = _project_root_for_cwd()
-    live = _live_sessions(project_root)
+    live = _live_sessions(all_projects=True)
     c = _resolve_companion(session_ref, live, list_hint="endless session list")
 
     eid = c.get("endless_session_id", "")
@@ -3618,7 +3645,7 @@ def session_goto(
             "running Endless inside tmux, which is where pane navigation "
             "means anything",
         ))
-    live = _live_sessions(_project_root_for_cwd())
+    live = _live_sessions(all_projects=True)
     try:
         target_pane, label = _resolve_goto_target(target_ref, live)
     except _GotoNotLive as nl:
@@ -3667,7 +3694,7 @@ def _resume_in_background(
             "Retry with --target-session $N",
             exit_code=2,
         )
-    live = _live_sessions(_project_root_for_cwd())
+    live = _live_sessions(all_projects=True)
     try:
         pane, _label = _resolve_goto_target(target_ref, live)
     except _GotoNotLive as nl:
@@ -3697,7 +3724,7 @@ def session_back() -> None:
             "running Endless inside tmux, which is where pane navigation "
             "means anything",
         ))
-    live = _live_sessions(_project_root_for_cwd())
+    live = _live_sessions(all_projects=True)
     key = _backstack_key()
 
     while True:

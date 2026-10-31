@@ -4216,9 +4216,9 @@ def _in_claude_session() -> bool:
     pane = os.environ.get("TMUX_PANE")
     if not pane:
         return False
-    from endless.session_cmd import _live_sessions, _project_root_for_cwd
+    from endless.session_cmd import _live_sessions
     try:
-        live = _live_sessions(_project_root_for_cwd())
+        live = _live_sessions(all_projects=True)
     except Exception:
         return False
     return any(c.get("pane_id") == pane for c in live)
@@ -4410,9 +4410,8 @@ def _current_endless_session_id() -> int | None:
     pane = os.environ.get("TMUX_PANE")
     if not pane:
         return None
-    from endless.session_cmd import _live_sessions, _project_root_for_cwd
-    project_root = _project_root_for_cwd()
-    live = _live_sessions(project_root)
+    from endless.session_cmd import _live_sessions
+    live = _live_sessions(all_projects=True)
     for c in live:
         if c.get("pane_id") == pane:
             eid = c.get("endless_session_id")
@@ -4543,11 +4542,7 @@ def _list_sibling_claude_session_eids() -> list[int]:
     candidate set that `_resolve_session_id_with_prompt` validates the
     user's prompt input against.
     """
-    from endless.session_cmd import (
-        _live_sessions,
-        _project_root_for_cwd,
-        _tmux_window_pane_ids,
-    )
+    from endless.session_cmd import _live_sessions, _tmux_window_pane_ids
     pane_ids = _tmux_window_pane_ids()
     if not pane_ids:
         return []
@@ -4555,8 +4550,7 @@ def _list_sibling_claude_session_eids() -> list[int]:
     sibling_panes = {p for p in pane_ids if p != my_pane}
     if not sibling_panes:
         return []
-    project_root = _project_root_for_cwd()
-    live = _live_sessions(project_root)
+    live = _live_sessions(all_projects=True)
     return [
         c["endless_session_id"] for c in live
         if c.get("pane_id") in sibling_panes
@@ -4712,8 +4706,7 @@ def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
     # that can reach it (E-2300). One whose server is provably gone (its
     # recorded socket answers as another server, or refuses) reads `dead` and
     # is omitted like a ghost.
-    from endless.session_cmd import _live_sessions, _project_root_for_cwd
-    project_root = _project_root_for_cwd()
+    from endless.session_cmd import _live_sessions
 
     rows = db.query(
         "SELECT id AS eid FROM sessions "
@@ -4730,7 +4723,9 @@ def _check_task_ownership(item_id: int, current_eid: int | None) -> bool:
     if not candidate_eids:
         return owned_by_current
 
-    live = _live_sessions(project_root)
+    # Every project's (E-2358): the owner may be recorded under the project it
+    # started in rather than this task's, and a lookup by task id is global.
+    live = _live_sessions(all_projects=True)
     live_by_eid = {
         c["endless_session_id"]: c
         for c in live
