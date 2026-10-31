@@ -1,0 +1,6090 @@
+{
+  "reportFormat": "CTRF",
+  "specVersion": "0.2.0",
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 552,
+      "passed": 552,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 1793483239729,
+      "stop": 1793483299694
+    },
+    "tests": [
+      {
+        "name": "TestActor_JSON_SessionIDOmitWhenEmpty",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestActor_JSON_RoundTrip",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestClaim_ChildOfEpicSetsEpicID",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestClaim_NestedChildResolvesNearestEpic",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestClaim_StandaloneTaskNullEpicID",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestClaim_EpicDirectlyResolvesToSelf",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestClaim_RefusesRepointingABoundSession",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestClaim_ReaffirmingTheSameTaskIsAllowed",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestClaim_RevivesEndedSession",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestClaim_PreservesLiveSessionState",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRelease_IsRefusedByWriteOnce",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestClaim_LogsBinding",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSync_AmendableTipStaysLocal",
+        "status": "passed",
+        "duration": 400,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSync_PushesTheTipItInspected",
+        "status": "passed",
+        "duration": 350,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_RewrittenHistoryStillAppends",
+        "status": "passed",
+        "duration": 520,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSync_OnlyAnAmendableTipIsHeldBack",
+        "status": "passed",
+        "duration": 410,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSync_FastForwardsWhenOnlyOriginMoved",
+        "status": "passed",
+        "duration": 330,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_SelfReleasesAfterOneAppend",
+        "status": "passed",
+        "duration": 860,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSync_PushesWhenOnlyMainMoved",
+        "status": "passed",
+        "duration": 330,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCanAmend_TaskBranchWithIdenticalLedgerTreeRefuses",
+        "status": "passed",
+        "duration": 160,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCanAmend_TaskBranchWithDifferentLedgerTreeAmends",
+        "status": "passed",
+        "duration": 150,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCanAmend_NoLedgerTreeAtHeadAmends",
+        "status": "passed",
+        "duration": 100,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSync_DivergedChangesNothingAndRecordsAFault",
+        "status": "passed",
+        "duration": 300,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCanAmend_NoTaskBranchesAmends",
+        "status": "passed",
+        "duration": 120,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsIndexLocked/nil",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsIndexLocked/the_lock_file_by_name",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsIndexLocked/git's_advisory_sentence",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsIndexLocked/an_unrelated_fatal",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsIndexLocked/nothing_to_commit",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsIndexLocked",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitPathsSucceedsOnceTheLockClears",
+        "status": "passed",
+        "duration": 110,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitPathsGivesUpOnAStuckLock",
+        "status": "passed",
+        "duration": 130,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitPathsDoesNotRetryAnUnrelatedFailure",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSync_FailedPushIsTheRunsError",
+        "status": "passed",
+        "duration": 470,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitDocPathsMakesOneCommit",
+        "status": "passed",
+        "duration": 110,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitDocPathsIsANoOpForNothing",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSync_FailedFetchIsTheRunsError",
+        "status": "passed",
+        "duration": 160,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitDocPathsSkipsAPathThatWasNeverTracked",
+        "status": "passed",
+        "duration": 100,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitDocPathsStagesTheDeletionOfATrackedOriginal",
+        "status": "passed",
+        "duration": 120,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitDocPathsCommitsNothingWhenNoPathIsStageable",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRunProjects_DisabledDoesNothing",
+        "status": "passed",
+        "duration": 280,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitDocPathsSkipsAnIgnoredUntrackedPath",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitDocPathsSucceedsWhenTheContentIsAlreadyCommitted",
+        "status": "passed",
+        "duration": 140,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSync_UserPullConfigHasNoEffect/pull.rebase=true",
+        "status": "passed",
+        "duration": 290,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitDocPathsStillCommitsAChangeBesideAnUnchangedPath",
+        "status": "passed",
+        "duration": 140,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsNothingToCommit/nil",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsNothingToCommit/git's_own_wording",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsNothingToCommit/the_staged-nothing_wording",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsNothingToCommit/contention_is_a_different_thing",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsNothingToCommit/an_unrelated_fatal",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsNothingToCommit",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestContentionAndNothingToCommitAreDistinct",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_FirstWriteCreatesCommit",
+        "status": "passed",
+        "duration": 100,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSync_UserPullConfigHasNoEffect/pull.ff=only",
+        "status": "passed",
+        "duration": 310,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_SecondWriteAmends",
+        "status": "passed",
+        "duration": 220,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_NonLedgerHeadStartsNewCommit",
+        "status": "passed",
+        "duration": 200,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSync_UserPullConfigHasNoEffect/pull.rebase=merges",
+        "status": "passed",
+        "duration": 330,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSync_UserPullConfigHasNoEffect",
+        "status": "passed",
+        "duration": 920,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_StagedUnrelatedPathPreventsAmend",
+        "status": "passed",
+        "duration": 170,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSync_RefusesWhenMainCheckoutIsNotOnMain",
+        "status": "passed",
+        "duration": 140,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_PushedHeadStartsNewCommit",
+        "status": "passed",
+        "duration": 220,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_SiblingBranchStartsNewCommit",
+        "status": "passed",
+        "duration": 160,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_SoleRefAmends",
+        "status": "passed",
+        "duration": 160,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSync_RewrittenMainNamesStrandedBranches",
+        "status": "passed",
+        "duration": 620,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_LandedWorktreeTipStaysAncestor",
+        "status": "passed",
+        "duration": 170,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_NonGitProjectFailsLoudly",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_GitDirEnvIgnored",
+        "status": "passed",
+        "duration": 120,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_WorktreeProjectRootRefused",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSync_LinearMainSkipsTheRewriteCheck",
+        "status": "passed",
+        "duration": 430,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskWorktrees",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRewritten_TruncatedSummaryPointsAtDetail",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_GitDirPointingAtWorktreeStillLandsOnMain",
+        "status": "passed",
+        "duration": 170,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSanitizedGitEnv_StripsRedirectVars",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitVerifyReport_EachRunIsANewCommit",
+        "status": "passed",
+        "duration": 180,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitVerifyReport_RefusesALinkedWorktree",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitVerifyReport_LeavesUnrelatedStagedWorkAlone",
+        "status": "passed",
+        "duration": 110,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDeriveRule_Table/all_unplanned",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDeriveRule_Table/unplanned_+_ready",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDeriveRule_Table/any_underway",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDeriveRule_Table/all_terminal",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRewritten_FinishedTasksStayOutOfTheWarning",
+        "status": "passed",
+        "duration": 610,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDeriveRule_Table/ready_+_terminal",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDeriveRule_Table/unplanned_+_terminal",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDeriveRule_Table/underway_wins_over_ready",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDeriveRule_Table/declined+obsolete_are_terminal",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDeriveRule_Table/submitted_wins_over_unplanned",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDeriveRule_Table",
+        "status": "passed",
+        "duration": 400,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDerive_ZeroChildrenUnchanged",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDerive_ReopenCase",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDerive_StickyOverrideBlocks/revisit",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDerive_StickyOverrideBlocks/declined",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDerive_StickyOverrideBlocks/obsolete",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDerive_StickyOverrideBlocks/superseded",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDerive_StickyOverrideBlocks",
+        "status": "passed",
+        "duration": 210,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDerive_NestedPropagation",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRewritten_OnlyFinishedLeftoversClearTheWarning",
+        "status": "passed",
+        "duration": 550,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDerive_CycleHitsDepthCapWithoutPanic",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDerive_Idempotent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDerive_EmitterAttribution",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestReplayEpicStatusDerived",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerCommitMessage_OneEvent/status",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerCommitMessage_OneEvent/derived",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerCommitMessage_OneEvent/created",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerCommitMessage_OneEvent/long_title",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerCommitMessage_OneEvent/fields",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerCommitMessage_OneEvent/decision",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerCommitMessage_OneEvent/dep",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerCommitMessage_OneEvent/relation",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerCommitMessage_OneEvent/question",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerCommitMessage_OneEvent/plan_items",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerCommitMessage_OneEvent/landed",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerCommitMessage_OneEvent/claimed",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerCommitMessage_OneEvent/no_value",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerCommitMessage_OneEvent/long_path",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerCommitMessage_OneEvent",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerCommitMessage_Folded",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerCommitMessage_NoEvents",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerCommitMessage_UndottedKind",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsLedgerSubject",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_SubjectNamesEvents",
+        "status": "passed",
+        "duration": 210,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRewritten_FailedReadsDoNotFailTheRun",
+        "status": "passed",
+        "duration": 460,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestCommitLedgerSegment_AutoRecordHeadNotAmended",
+        "status": "passed",
+        "duration": 140,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsLedgerCommit",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestMayAmend",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerOrphans_PrefixRunAtBaseIsContiguous",
+        "status": "passed",
+        "duration": 150,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerOrphans_OrphanBehindRealWorkIsMidBranch",
+        "status": "passed",
+        "duration": 180,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerOrphans_DivergedContentIsNotAnOrphan",
+        "status": "passed",
+        "duration": 140,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRewritten_AgeNote",
+        "status": "passed",
+        "duration": 630,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerOrphans_SubjectAloneIsNotEnough",
+        "status": "passed",
+        "duration": 130,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerOrphans_CommitWithNoLedgerContentIsNotSubsumed",
+        "status": "passed",
+        "duration": 150,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerOrphans_NothingOnTheBranchIsAnEmptyReport",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLedgerOrphans_AcceptsSHAsSoTheAnswerDescribesTheFailure",
+        "status": "passed",
+        "duration": 210,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPlanItems_FirstItemsArePlannedEvenWhenUnderway",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPlanItems_AddsBeforeClaimArePlanned",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPlanItems_RefusesBadInput",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPlanItems_FrozenFromUnverifiedOn",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPlanItems_EditAndWithdrawApprovedItemWhileUnderwayIsAllowed",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPlanBaselined_RefusesGatedTaskWithoutDeliverable",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRewritten_ResolvesItself",
+        "status": "passed",
+        "duration": 780,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestUnreachable_MarksOnlyNetworkFailures",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPlanBaselined_NamedItemsOnly",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestReconcile_RefusesIncompleteOrMismatchedEntries",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestReconcile_FilesKindTaggedQuestionsAndReusesEarlierAnswers",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestReconcile_ApprovedGrownItemIsNotADiscrepancy",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPlanItems_ReplayMatchesLive",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskCreated_RefusesAnItemizedTypeAtAReportedStatus",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRunProjects_TransientOnlyWhenEveryFailureIs",
+        "status": "passed",
+        "duration": 360,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/mainsyncjob"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPostLand_MarkFitsOnlyDeliverables",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPostLand_DeferredOnlyOnPostLandItems",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPostLand_RefusesWhenNotLandedOrBranchHasCode",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPostLand_TakesPostLandItemsOnly",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPostLand_WritesOnlyItsOwnRowsAndComparesWithThePreviousOne",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPostLand_ReplayMatchesLive",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPostLand_OnlyTheUserWithdrawsAPostLandItem",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPostLand_LandedSettlesOnlyByItself",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/submitted",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/ready",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/underway",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/unverified",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/declined",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/obsolete",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/blocked",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/untriaged",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/unplanned",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/revisit",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/confirmed",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/assumed",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus/completed",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestIsPreJudgmentStatus",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskQuestionsAsked_InsertsOneOpenRowPerQuestion",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskQuestionsAsked_Refusals",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskQuestionsAsked_RefusesRemovedTask",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_AnswerRecordsWhoAnswered",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_SupersedingAnAnswerKeepsIt",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/back_to_open",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/unknown_status",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/answer_without_text",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/answer_without_answerer",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/bad_answerer",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/withdraw_with_answer",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/withdraw_without_reason",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/reject_without_reason",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/supersede_without_reason",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/answer_with_reason",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/re-answer",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals/withdraw_an_invalid_one",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_Refusals",
+        "status": "passed",
+        "duration": 560,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskQuestionResolved_UnknownQuestion",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskQuestions_ReplayMatchesLive",
+        "status": "passed",
+        "duration": 110,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskQuestionEvents_Validate",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPreAllocateQuestions_SeriesPerTaskIdsGlobal",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPreAllocateQuestions_RefusesUnknownTaskAndReleasesLock",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLiveSessionByProcessTx_AcceptsServerAlias",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionFocus_FollowsWritesNotReads",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionFocus_UnknownTaskIsNotAnError",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionFocus_OtherSessionsUntouched",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRelation_MovesFocus",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecSessionStatus_SentinelUsesIDDirectly",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecSessionStatus_SentinelNonexistentIDErrors",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecSessionStatus_SentinelEndedIDErrors",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecSessionStatus_NoSentinelResolvesByPane",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRenderSessionStatusMarkdown_Headline",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRenderSessionStatusMarkdown_EmptySectionsShowEmpty",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRenderSessionStatusMarkdown_TaskTable",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRenderSessionStatusMarkdown_MultiLineNote",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRenderSessionStatusMarkdown_DecisionsBulleted",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRenderSessionStatusMarkdown_CommitsTable",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRenderSessionStatusMarkdown_MemoryTable",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExtractAttr",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExtractElementText",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNullableEq",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasksRemoved_DropsRowAndHide",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasksRemoved_RefusesClaimed",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasksRemoved_RefusesBound",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasksRemoved_AbsentIsReportedNoOp",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasksTouched_EnrollsWithoutTouchingTheTask",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasksTouched_LeavesStrongerRelationsAlone",
+        "status": "passed",
+        "duration": 100,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasksTouched_UpgradesWeaker",
+        "status": "passed",
+        "duration": 130,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasksTouched_RejectsUnknownTask",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasksSpawned_RecordsRelationSeven",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasksSpawned_UpgradesWeakerKeepsOwned",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasksMembership_RejectsEmptyList",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasksHidden_HidesAndClearsPin",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasksHidden_FocusIsHideable",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasksHidden_RefusesOwnTask",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasksUnhidden_UnhidesOrPins",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasksUnhidden_RefusesUnknownTask",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasks_RelationClassification",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasks_RelationNeverDowngrades",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasks_RelationUpgrades",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasks_RelationEqualCaptureIsNoOp",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasks_RelationFillsNullHistoricalRow",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasks_CreatedBySession",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasks_UpdateAdvancesUpdatedAt",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasks_CLIActorWithSessionID",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasks_NoRowForCLIActorWithoutSessionID",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasks_NoRowForEmptySessionID",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasks_TwoSessionsSameTask",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasks_OneSessionTwoTasks",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasks_IdempotentReplay",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionTasks_DeletedTaskRetainsRow",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestShippedFileWritten_LatestWriteIsTheRecord",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestShippedFileWritten_RefusesAnIncompleteRecord",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestReportedCase_UnplannedNeverClaimedToUnverified",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestEveryTableEdgePasses",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestEveryAbsentEdgeIsRefused",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRefusalNamesTheWayOut",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestUnrelatedEditIsNotJudged",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTypeChangeInTheSameUpdateWinsTheLane",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionMayNotAdvanceATaskItDoesNotHold",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionThatHoldsTheTaskMayAdvanceIt",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSessionHoldingNothingMayNotAdvanceATask",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestUnverifiedRequiresTheTaskToHaveBeenClaimed",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestUnreadableSessionStillRequiresTheTaskToHaveBeenClaimed",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestUnreadableSessionOnAClaimedTaskIsNotRefused",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestStatusesOutsideTheWorkLaneAreNotActorChecked",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNoHarnessIsExempt",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestAgentMayNotSetUnlanded",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPersonMaySetUnlanded",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTransitionLegalityStillAppliesToAPerson",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPlanAttachPromotionPassesTheGuard",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestKeepStatusPinIsANoOpWrite",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTheHappyPathRunsUnimpeded",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestFindingsPathRunsUnimpeded",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestFindingsPathCannotSkipTheReviewGate",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskBound_OwnsWithoutClaiming",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskBound_ClaimAfterBindUpgrades",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskBound_UpgradesTouched",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskBound_DoesNotDemoteClaimed",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecTaskDepCreated_RowAndTouch",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecTaskDepCreated_NoSessionNoTouch",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecTaskDepDeleted_RowAndTouch",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecTaskDepDeleted_NoMatchErrors",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestReplayTaskDep_ReproducesRows",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskDep_LegacyReplacesResolvesToSupersedes/replay",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskDep_LegacyReplacesResolvesToSupersedes/executor",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskDep_LegacyReplacesResolvesToSupersedes",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecTaskLanded_RecordsBaseBranchAndHarness",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecTaskLanded_NoHarnessRecordsNull",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLandingNotice_AgentIsNotToldAboutItsOwnLand",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLandingNotice_HumanLandNotifiesEveryHolder",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLandingNotice_EndedSessionsAreNotNotified",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLandingNotice_PayloadShape",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLandingNotice_NoBaseBranchRecordsShaAlone",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLandingNotice_ChangedBySessionOnlyWhenAnAgentLanded/human_land_stamps_NULL",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLandingNotice_ChangedBySessionOnlyWhenAnAgentLanded/agent_land_stamps_the_session",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLandingNotice_ChangedBySessionOnlyWhenAnAgentLanded",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestEmittingActor_StampsTheObservedHarness/an_agent's_Bash_tool",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestEmittingActor_StampsTheObservedHarness/a_person_at_a_shell",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestEmittingActor_StampsTheObservedHarness",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecTaskLanded_InsertsRow",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecTaskLanded_LegacyBranchKeyIgnored",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecTaskLanded_HistoricalTSSetsLandedAt",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecTaskLanded_PreservesSessionID",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecTaskLanded_AppendsOnReland",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskLandedKind_IsValid",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRemoveTaskTree_KeepsChildParentID",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRemoveTaskTree_LiveChildRendersUnderGrandparent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskTree_EffectiveParentContract/a_true_root_has_no_effective_parent",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskTree_EffectiveParentContract/a_live_child_of_a_removed_parent_is_adopted_by_the_grandparent",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskTree_EffectiveParentContract/an_ordinary_edge_is_unchanged",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskTree_EffectiveParentContract/no_live_ancestor_at_all_renders_at_the_root",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskTree_EffectiveParentContract/the_walk_crosses_more_than_one_removed_ancestor",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskTree_EffectiveParentContract",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskTree_DanglingAndCyclicChainsYieldNull",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestEpicDerivation_CountsAnAdoptedGrandchild",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestUnlandedRecordsThePassedCommit/live",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestUnlandedRecordsThePassedCommit/replay",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestUnlandedRecordsThePassedCommit",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLeavingUnlandedClearsThePassedCommit/live",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLeavingUnlandedClearsThePassedCommit/replay",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestLeavingUnlandedClearsThePassedCommit",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestFieldsUpdatedClearsExceptOnUnlanded/live",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestFieldsUpdatedClearsExceptOnUnlanded/replay",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestFieldsUpdatedClearsExceptOnUnlanded",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSplitSection/absent",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSplitSection/only_the_section",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSplitSection/section_first,_prose_after",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSplitSection/prose_first,_section_last",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSplitSection/section_between_two_others",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSplitSection/text_on_the_heading_line",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSplitSection/a_level-3_heading_stays_inside",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSplitSection/two_sections_are_joined",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSplitSection/a_longer_word_is_not_the_heading",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSplitSection",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSectionMove_LiveAndRebuildAgree",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestSectionMove_SkipsAnExistingTarget",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionSuperseded_AcceptedIsRetired",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionSuperseded_OnlyAcceptedIsAllowed/proposed",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionSuperseded_OnlyAcceptedIsAllowed/rejected",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionSuperseded_OnlyAcceptedIsAllowed/superseded",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionSuperseded_OnlyAcceptedIsAllowed/obsolete",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionSuperseded_OnlyAcceptedIsAllowed",
+        "status": "passed",
+        "duration": 170,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionSuperseded_RequiresASuccessor",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionSuperseded_SelfSupersessionIsRefused",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionObsoleted_AcceptedIsRetiredWithReason",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionObsoleted_OnlyAcceptedIsAllowed/proposed",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionObsoleted_OnlyAcceptedIsAllowed/rejected",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionObsoleted_OnlyAcceptedIsAllowed/superseded",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionObsoleted_OnlyAcceptedIsAllowed/obsolete",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionObsoleted_OnlyAcceptedIsAllowed",
+        "status": "passed",
+        "duration": 160,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionObsoleted_RequiresAReason",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionReinstated_BothEndStatesReturnToAccepted/superseded",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionReinstated_BothEndStatesReturnToAccepted/obsolete",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionReinstated_BothEndStatesReturnToAccepted",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionReinstated_ClearsObsoleteReason",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionReinstated_LiveStatusesAreRefused/proposed",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionReinstated_LiveStatusesAreRefused/accepted",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionReinstated_LiveStatusesAreRefused/rejected",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionReinstated_LiveStatusesAreRefused",
+        "status": "passed",
+        "duration": 120,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionEndState_RoundTrips",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionUnaccepted_AcceptedGoesBackToProposed",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionUnaccepted_RejectedIsRefused",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionUnaccepted_ProposedIsRefused",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionUnaccepted_MissingDecisionIsRefused",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionUnrejected_RejectedGoesBackToProposedAndClearsReason",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionUnrejected_AcceptedIsRefused",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestDecisionReversal_RoundTrips",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestEventJSONRoundTrip",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestEventJSONRoundTrip_WithCorrelation",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestEventJSONLine",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestValidate_Valid",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestValidate_ActorTriager",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestValidate_Errors/bad_version",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestValidate_Errors/bad_ts",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestValidate_Errors/unknown_kind",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestValidate_Errors/unknown_entity_type",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestValidate_Errors/empty_entity_id",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestValidate_Errors/unknown_actor_kind",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestValidate_Errors/empty_actor_id",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestValidate_Errors/nil_payload",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestValidate_Errors",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestValidKinds_Count",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRetiredKinds",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestValidate_RetiredKindsPassAndUndeclaredDoNot",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/TaskCreated",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/TaskStatusChanged",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/TaskFieldsUpdated",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/TaskMoved",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/TaskDeleted",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/TaskDepCreated",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/ProjectRegistered",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/ProjectRenamed",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/SessionWorkStarted",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/ConversationBeaconed",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/MessageSent",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/NoteCreated",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/NoteResolved",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips/SessionIdled",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPayloadRoundTrips",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPreAllocateTaskID_MonotonicallyIncreasing",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestPreAllocateTaskID_RollbackReleasesLockForNextCaller",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestBeginImmediate_CommitAndRollback",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_TaskCreatedInsertsRow",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_TaskCreatedStoresNotes",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestProjectToTempDB_RetiredUntriagedLandsWhereE1993PutIt",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_TaskCreated_RejectsMaybeWithParent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_TaskCreated_AllowsMaybeRoot",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_TaskCreated_AllowsParentedNonMaybe",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_RejectsReparentMaybe",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_RejectsPhaseMaybeOnChild",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_AllowsAtomicPromoteAndParent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_AllowsUnrelatedEditOnViolatingRow",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_TaskMoved_RejectsMaybeUnderParent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_TaskMoved_AllowsMaybeToRoot",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNoticeActor_HumanEditNotifiesTheHoldingSession",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNoticeActor_AgentEditSuppressesItsOwnNotice",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNoticeActor_AgentEditStillNotifiesOtherHolders",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNoticeActor_NoSessionStampsNull",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNoticeActor_TheEnvelopeDecidesNotTheProcess/a_human's_event_executed_inside_an_agent's_process",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNoticeActor_TheEnvelopeDecidesNotTheProcess/an_agent's_event_executed_outside_an_agent's_process",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNoticeActor_TheEnvelopeDecidesNotTheProcess/an_unsupported_harness_is_still_an_agent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNoticeActor_TheEnvelopeDecidesNotTheProcess",
+        "status": "passed",
+        "duration": 140,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_RejectsDirectParentCycle",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_RejectsSelfParent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_RejectsDeepParentCycle",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_AllowsLegalReparent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_AllowsClearingParentOutOfACycle",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_AllowsUnrelatedEditInsideACycle",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_FieldsUpdated_TerminatesOnPreExistingCycle",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_TaskMoved_StillRejectsParentCycle",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_TaskMoved_RejectsSelfParent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_TaskMoved_AllowsMoveToRoot",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestValidateNoParentCycle_NilParentIsAlwaysLegal",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestValidateNoParentCycle_UnknownParentIsNotACycle",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestValidatePhase_AcceptsKnownValues",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestValidatePhase_RejectsUnknown",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestValidPhases_HasExactlyExpectedKeys",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_PlanKeyWritesPlanColumn",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_LegacyTextKeyWritesPlanColumn",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_BothKeysPresentPrefersPlan",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_PlanAttachPromotesPreJudgmentTask",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_PlanAttachPromotionAcceptsLegacyKey",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_PlanAttachYieldsToExplicitStatus",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestExecute_TaskCreatedLegacyTextKeyStoresPlan",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskCreatedPayload_EmitsPlanNeverText",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestProjector_BothPlanKeysProjectIntoPlanColumn/forward_key",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestProjector_BothPlanKeysProjectIntoPlanColumn/legacy_key",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestProjector_BothPlanKeysProjectIntoPlanColumn",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestProjector_TaskCreatedLegacyTextKeyProjectsPlan",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestProjectToTempDB_NoEventsReturnsError",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestProjectToTempDB_TaskCreatedProducesRow",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestProjectToTempDB_CreateThenUpdateApplied",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestProjectToTempDB_TaskDeletedRetainsRowAndIDFloor",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestProjectToTempDB_RetiredKindsReplayAsDeclaredNoOps",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestProjectToTempDB_StatusChangeCarriesOutcome",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRatings_LiveAndRebuildAgree",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRatings_ExecutorRefuses",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestRatings_StatusChangeLeavesThemAlone",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestReadAllEvents_NewPathOnly",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestReadAllEvents_NoDirAtAll",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestReadAllEvents_MultipleSegmentsConcatenateInTimestampOrder",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestReadAllEvents_MalformedLineReturnsError",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestReadAllEvents_OnlyWrongPrefix",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNotice_NullActorNotifiesEveryHolder",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNotice_NoNoticeWhenNothingChanged",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNotice_OneNoticePerEvent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNotice_FreeformNeverLeaksContent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNotice_FreeformTransitions",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNotice_DescriptionIsNotWatched",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNotice_SkipsEndedSessions",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNotice_CascadeNotifiesEveryChangedTask",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNotice_FailedEventWritesNothing",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNotice_RawUpdateNotifiesNobody",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskContent_LiveAndRebuildAgree",
+        "status": "passed",
+        "duration": 100,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskContent_UnknownFieldStillRefused",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestTaskContent_OneEditOneNotice",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestValidateTasks_IdenticalDBsReportNothing",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestValidateTasks_FieldMismatchReported",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestValidateTasks_TaskOnlyInProjectedReportedMissing",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestWriter_Append",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestWriter_Rotation",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestWriter_ExceedsMaxBytes",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestWriter_ResumeExisting",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNewWriter_CreatesLedgerDirAndFirstSegment",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNewWriter_DistinctNodesProduceDistinctSegments",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "TestNewWriter_AppendRoundTripsThroughReadAllEvents",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/events"
+        ],
+        "labels": {
+          "check": "ledger subjects, folding and the predicate"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_orphan_drop.py::test_ledger_subjects_recognised",
+        "status": "passed",
+        "duration": 95,
+        "suite": [
+          "tests/test_worktree_land_orphan_drop.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_orphan_drop.py::test_named_event_orphan_dropped",
+        "status": "passed",
+        "duration": 188,
+        "suite": [
+          "tests/test_worktree_land_orphan_drop.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_orphan_drop.py::test_auto_record_commit_not_dropped",
+        "status": "passed",
+        "duration": 125,
+        "suite": [
+          "tests/test_worktree_land_orphan_drop.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_orphan_drop.py::test_no_orphans_returns_noop",
+        "status": "passed",
+        "duration": 139,
+        "suite": [
+          "tests/test_worktree_land_orphan_drop.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_orphan_drop.py::test_empty_branch_returns_noop",
+        "status": "passed",
+        "duration": 123,
+        "suite": [
+          "tests/test_worktree_land_orphan_drop.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_orphan_drop.py::test_single_ledger_orphan_at_base_dropped",
+        "status": "passed",
+        "duration": 231,
+        "suite": [
+          "tests/test_worktree_land_orphan_drop.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_orphan_drop.py::test_two_contiguous_ledger_orphans_dropped",
+        "status": "passed",
+        "duration": 215,
+        "suite": [
+          "tests/test_worktree_land_orphan_drop.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_orphan_drop.py::test_mid_branch_amendable_subject_is_preserved",
+        "status": "passed",
+        "duration": 237,
+        "suite": [
+          "tests/test_worktree_land_orphan_drop.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_orphan_drop.py::test_drop_keeps_head_attached_to_branch",
+        "status": "passed",
+        "duration": 206,
+        "suite": [
+          "tests/test_worktree_land_orphan_drop.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_orphan_drop.py::test_rewritten_base_copies_behind_orphan_are_not_replayed",
+        "status": "passed",
+        "duration": 291,
+        "suite": [
+          "tests/test_worktree_land_orphan_drop.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_dbledger_gate.py::test_ledger_dir_pathspec",
+        "status": "passed",
+        "duration": 63,
+        "suite": [
+          "tests/test_worktree_land_dbledger_gate.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_dbledger_gate.py::test_clean_branch_no_offenders",
+        "status": "passed",
+        "duration": 128,
+        "suite": [
+          "tests/test_worktree_land_dbledger_gate.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_dbledger_gate.py::test_empty_branch_no_offenders",
+        "status": "passed",
+        "duration": 104,
+        "suite": [
+          "tests/test_worktree_land_dbledger_gate.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_dbledger_gate.py::test_standalone_ledger_commit_is_offender",
+        "status": "passed",
+        "duration": 188,
+        "suite": [
+          "tests/test_worktree_land_dbledger_gate.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_dbledger_gate.py::test_multiple_ledger_commits_all_reported",
+        "status": "passed",
+        "duration": 235,
+        "suite": [
+          "tests/test_worktree_land_dbledger_gate.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_dbledger_gate.py::test_non_ledger_endless_files_not_offenders",
+        "status": "passed",
+        "duration": 121,
+        "suite": [
+          "tests/test_worktree_land_dbledger_gate.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_dbledger_gate.py::test_orphan_no_false_positive_after_step_3_7",
+        "status": "passed",
+        "duration": 212,
+        "suite": [
+          "tests/test_worktree_land_dbledger_gate.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_dbledger_gate.py::test_mid_branch_ledger_commit_survives_step_3_7_and_is_caught",
+        "status": "passed",
+        "duration": 164,
+        "suite": [
+          "tests/test_worktree_land_dbledger_gate.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_ledger_race.py::test_race_failure_shape_is_exit_1_with_empty_stderr",
+        "status": "passed",
+        "duration": 367,
+        "suite": [
+          "tests/test_worktree_land_ledger_race.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_ledger_race.py::test_full_race_lands_with_the_recorders_commit_and_no_duplicate",
+        "status": "passed",
+        "duration": 323,
+        "suite": [
+          "tests/test_worktree_land_ledger_race.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_ledger_race.py::test_partial_race_commits_the_rest_and_lands",
+        "status": "passed",
+        "duration": 388,
+        "suite": [
+          "tests/test_worktree_land_ledger_race.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_ledger_race.py::test_real_commit_refusal_still_refuses",
+        "status": "passed",
+        "duration": 345,
+        "suite": [
+          "tests/test_worktree_land_ledger_race.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_worktree_land_ledger_race.py::test_stdout_only_failure_shows_its_stdout",
+        "status": "passed",
+        "duration": 180,
+        "suite": [
+          "tests/test_worktree_land_ledger_race.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_capture_survives_the_rebase_abort",
+        "status": "passed",
+        "duration": 232,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_capture_keeps_both_sides_of_every_hunk_whole",
+        "status": "passed",
+        "duration": 236,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_evidence_round_trips_through_storage",
+        "status": "passed",
+        "duration": 242,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_missing_capture_reads_as_none",
+        "status": "passed",
+        "duration": 76,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_capture_from_a_future_schema_reads_as_absent",
+        "status": "passed",
+        "duration": 66,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_capture_lands_in_the_worktree_sandbox",
+        "status": "passed",
+        "duration": 67,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_store_reports_a_write_it_could_not_do",
+        "status": "passed",
+        "duration": 244,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_parse_conflict_markers_default_style",
+        "status": "passed",
+        "duration": 58,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_parse_conflict_markers_diff3_style_keeps_the_ancestor",
+        "status": "passed",
+        "duration": 48,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_parse_conflict_markers_handles_several_hunks",
+        "status": "passed",
+        "duration": 53,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_symbol_lists_ignore_comments_and_string_literals",
+        "status": "passed",
+        "duration": 51,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_an_unbalanced_quote_strips_nothing_rather_than_everything",
+        "status": "passed",
+        "duration": 53,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_rebase_head_is_not_read_when_no_rebase_is_running",
+        "status": "passed",
+        "duration": 203,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_symbol_supersession_names_what_the_base_branch_deleted",
+        "status": "passed",
+        "duration": 472,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_symbol_supersession_ignores_names_the_branch_itself_introduced",
+        "status": "passed",
+        "duration": 312,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_semantic_overlap_prescribes_nothing_and_shows_both_sides",
+        "status": "passed",
+        "duration": 248,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_auto_file_only_is_proven_and_prescribes_the_restore",
+        "status": "passed",
+        "duration": 270,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_already_landed_is_proven_from_git_cherry",
+        "status": "passed",
+        "duration": 256,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_orphaned_ledger_base_is_detected_by_content",
+        "status": "passed",
+        "duration": 305,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_ledger_orphans_reports_a_prefix_run_as_contiguous",
+        "status": "passed",
+        "duration": 311,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_a_missing_endless_go_degrades_instead_of_failing",
+        "status": "passed",
+        "duration": 223,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_a_prescription_appears_only_where_the_class_is_proven[_supersession_repo-symbol-supersession]",
+        "status": "passed",
+        "duration": 245,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_a_prescription_appears_only_where_the_class_is_proven[_overlap_repo-semantic-overlap]",
+        "status": "passed",
+        "duration": 262,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_a_prescription_appears_only_where_the_class_is_proven[_auto_file_repo-auto-file-only]",
+        "status": "passed",
+        "duration": 256,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_a_prescription_appears_only_where_the_class_is_proven[_already_landed_repo-already-landed]",
+        "status": "passed",
+        "duration": 286,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_the_two_hazardous_recoveries_are_never_printed[_supersession_repo]",
+        "status": "passed",
+        "duration": 296,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_the_two_hazardous_recoveries_are_never_printed[_overlap_repo]",
+        "status": "passed",
+        "duration": 264,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_json_output_carries_the_evidence_and_the_verdict",
+        "status": "passed",
+        "duration": 300,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_diagnose_says_so_and_exits_non_zero_when_nothing_is_recorded",
+        "status": "passed",
+        "duration": 71,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_diagnose_renders_the_recorded_conflict",
+        "status": "passed",
+        "duration": 271,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_diagnose_json_is_the_same_verdict_for_a_machine",
+        "status": "passed",
+        "duration": 260,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_diagnose_is_registered_under_the_worktree_group",
+        "status": "passed",
+        "duration": 48,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_rehearsal_predicts_the_conflict_and_leaves_nothing_behind",
+        "status": "passed",
+        "duration": 330,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_dry_run_reports_the_predicted_conflict_and_exits_non_zero",
+        "status": "passed",
+        "duration": 349,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_dry_run_says_so_and_exits_zero_when_the_rebase_is_clean",
+        "status": "passed",
+        "duration": 265,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_rehearsal_returns_none_when_the_rebase_is_clean",
+        "status": "passed",
+        "duration": 225,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_rehearsal_cleans_up_when_the_rebase_machinery_raises",
+        "status": "passed",
+        "duration": 230,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_rehearsal_carries_the_live_verbs_across_without_touching_them",
+        "status": "passed",
+        "duration": 335,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_land_conflict.py::test_rehearsal_needs_no_endless_go",
+        "status": "passed",
+        "duration": 268,
+        "suite": [
+          "tests/test_land_conflict.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_gitignore_entries_include_logs",
+        "status": "passed",
+        "duration": 55,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_rerun_on_an_older_gitignore_adds_only_the_missing_lines",
+        "status": "passed",
+        "duration": 52,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_every_endless_path_the_source_names_is_classified",
+        "status": "passed",
+        "duration": 195,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_init_refuses_a_linked_worktree_and_writes_nothing",
+        "status": "passed",
+        "duration": 849,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_init_refuses_a_directory_under_endless_worktrees",
+        "status": "passed",
+        "duration": 737,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_guide_pointer_creates_claude_md_when_neither_file_exists",
+        "status": "passed",
+        "duration": 62,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_guide_pointer_appends_to_an_existing_file_without_it",
+        "status": "passed",
+        "duration": 55,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_guide_pointer_leaves_a_file_that_mentions_it_alone",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_bring_up_commits_what_it_wrote_and_a_rerun_changes_nothing",
+        "status": "passed",
+        "duration": 899,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_a_never_committed_config_is_committed",
+        "status": "passed",
+        "duration": 768,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_user_files_with_their_own_changes_are_left_out",
+        "status": "passed",
+        "duration": 824,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "tests/test_project_bring_up.py::test_init_does_nothing_off_the_default_branch",
+        "status": "passed",
+        "duration": 159,
+        "suite": [
+          "tests/test_project_bring_up.py"
+        ],
+        "labels": {
+          "check": "land and bring-up recognise ledger commits"
+        }
+      },
+      {
+        "name": "no exact-subject ledger readers remain",
+        "status": "passed",
+        "duration": 219,
+        "labels": {
+          "check": "no exact-subject ledger readers remain"
+        }
+      }
+    ]
+  }
+}
