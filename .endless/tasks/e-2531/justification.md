@@ -1,0 +1,1 @@
+The user wants to work out the resolution themselves in the Endless project, not in the go-logutil session where it surfaced; the options span CLAUDE.md, the guide, the handoff template, hooks and a structured report channel, and choosing among them is a design decision.
