@@ -1,0 +1,3617 @@
+{
+  "reportFormat": "CTRF",
+  "specVersion": "0.2.0",
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 328,
+      "passed": 328,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 1793521305543,
+      "stop": 1793521313141
+    },
+    "tests": [
+      {
+        "name": "TestRecord_OpensAnIncident",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRecord_RepeatsBumpTheOpenIncidentInPlace",
+        "status": "passed",
+        "duration": 100,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRecord_RecurrenceAfterClearingOpensANewIncident",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRecord_SuccessDoesNotAutoResolveAnIncident",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestDetails_CarryEveryOccurrenceWithItsFullCapture",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestOpen_RanksErrorAboveWarningAndCountsEach",
+        "status": "passed",
+        "duration": 100,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestOpen_IsEmptyWhenEverythingIsCleared",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRecord_IsASilentNoOpWhenUnbound",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestClear_TargetsSpecificIncidents",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRecord_WritesNothingBeyondTheTableAndItsOwnLog",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestCatalog_EveryCodeIsDocumented",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestCatalog_EveryCodeCarriesARemedy",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestCatalog_RemediesMatchTheDocs",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestCatalog_CodesAreUniqueAndWellFormed",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestCatalog_ThePrefixStatesTheSeverity",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestCatalog_NumbersAreNeverReused",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestClearFingerprintSince_ClearsOnlyThatFingerprintInsideTheWindow",
+        "status": "passed",
+        "duration": 130,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestClearFingerprintSince_LeavesAnIncidentOpenedBeforeTheWindow",
+        "status": "passed",
+        "duration": 100,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRecord_WritesTheLogLineWhenTheDBWriteFails",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRecord_HealthyDatabaseIsUnchanged",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLogOnly_ReadsOnlyLogOnlyLines",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestClearLogOnly_MovesTheWatermarkAndItPersists",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLogOnly_ATruncatedLogResetsTheWatermark",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestDetails_IgnoresLogOnlyLines",
+        "status": "passed",
+        "duration": 160,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLogOnly_WatermarkHoldsAcrossALogThatOutgrowsTheDigestPrefix",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestClearLogOnly_OnALogThatDoesNotExistYet",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRecord_WritesTheLogOnlySpelling",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLogOnly_ListsAndClearsPreRenameLines",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLogOnlyCount_ReadsOnlyWhenTheLogChanged",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRecord_SeparatesProjectsSharingAFingerprint",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRecord_StillDedupesWithinOneProject",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRecord_DedupesUnattributedFaults",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRecord_ExplicitProjectIDBeatsTheAmbientOne",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRecord_SurvivesAnAttributionThatCannotBeStored",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestList_ProjectScopeIncludesUnattributed",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestClear_ScopedClearAllLeavesOtherProjects",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestClear_ByIDIgnoresScope",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestDetail_CarriesTheProjectName",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestDetail_OmitsAnUnattributedProject",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRecord_AttributesTheResolvedRaiser",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRecord_ExplicitRaiserOverridesTheResolvedOne",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRecord_ExplicitRaiserWinsOverAResolverThatIgnoresIt",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRecord_ASecondRaiserUpdatesTheLatestAndAddsASource",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRecord_ARepeatFromTheSameRaiserOnlyBumpsItsRow",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRecord_UnattributedOccurrencesShareOneSource",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/faults"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestAccessorsRefuseBeforeInitialize",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestInitialize_ValidRegistryIsOrderedAndFrozen",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestInitialize_ReportsEveryFailure",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestDiscoverScripts_KeysByNormalizedDirectoryName",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestDiscoverScripts_SkipsDirectoriesWithoutTheFile",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestDiscoverScripts_IgnoresSharedFilesBesideTheTaskDirs",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestDiscoverScripts_MissingDirectoryIsEmpty",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestDiscoverScripts_CoexistsWithAManifest",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestInitialize_RefusesAMalformedShapedDefault/path=relative/dir",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestInitialize_RefusesAMalformedShapedDefault/path=",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseRunner/gotest",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestInitialize_RefusesAMalformedShapedDefault/name=a.b",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestInitialize_RefusesAMalformedShapedDefault/name=",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestInitialize_RefusesAMalformedShapedDefault/command=ghostty_-e",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestInitialize_RefusesAMalformedShapedDefault",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestShapeChecks",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestKindExportNames",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestResolve",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseOptIn",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLegacyReplacement",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/settings"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseRunner/pytest",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseRunner/pytest/uv",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseRunner/vnd.newclarity.foo/bar",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseRunner/#00",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseRunner//uv",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseRunner/pytest/",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseRunner/a/b/c",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseRunner",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestResolvePytestLauncher_PrefersVenv",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestResolvePytestLauncher_NoneAvailable",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestResolvePytestLauncher_BareFallsToPath",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestGoTestCmd_AlwaysJSON/whole_module",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestGoTestCmd_AlwaysJSON/anchored_tests",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestGoTestCmd_AlwaysJSON/scoped_paths",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestGoTestCmd_AlwaysJSON",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestExitCodeReport/zero_exit_is_one_passing_test",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestExitCodeReport/non-zero_exit_is_one_failing_test",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestExitCodeReport/setup-error_exit_is_a_failure_too",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestExitCodeReport",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestExitCodeReport_NeverZeroTests",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestAppendExitFailure/records_an_exit_the_stream_did_not_account_for",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestAppendExitFailure/no-op_on_a_clean_exit",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestAppendExitFailure/no-op_when_the_stream_already_reported_a_failure",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestAppendExitFailure",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestCheck_ResolvedFormat/gotest_infers_gotest-json",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestCheck_ResolvedFormat/pytest_infers_pytest-json",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestCheck_ResolvedFormat/raw_with_declared_format",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestCheck_ResolvedFormat/raw_without_format_defaults_tap",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestCheck_ResolvedFormat",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestCheck_ResolvedThroughParse",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestCheck_AsAndTmuxParse",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestReport_WriteValidatesAgainstCTRFSchema",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestReport_Write",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestMergeReports",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestNormalize_UnknownFormat",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLoadSuite_FindsSuite",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLoadSuite_NoTasksDir",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLoadSuite_InvalidManifestFailsLoudly",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLoadSuite_ValidatesChecks",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLoadSuite_MergesProjectConfig",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLoadSuite_InvalidProjectConfigFailsLoudly",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLoadSuite_DirCasingIsIndependentOfTaskField/lowercase_dir_canonical_task",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLoadSuite_DirCasingIsIndependentOfTaskField/uppercase_dir_still_works",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLoadSuite_DirCasingIsIndependentOfTaskField/lowercase_both",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLoadSuite_DirCasingIsIndependentOfTaskField",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLoadSuite_RejectsTaskIDMismatch",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLoadSuite_RefusesBadCheckDir/absolute",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLoadSuite_RefusesBadCheckDir/dot-dot",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLoadSuite_RefusesBadCheckDir/symlink_out",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLoadSuite_RefusesBadCheckDir/missing",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLoadSuite_RefusesBadCheckDir/a_file",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLoadSuite_RefusesBadCheckDir",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLoadSuite_AcceptsCheckDirInsideRoot",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLoadSuite_IgnoresOtherSuites",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestWithErr_NeverEnrichesAnotherPackagesError/LoadSuite:_check_dir_missing",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestWithErr_NeverEnrichesAnotherPackagesError/LoadSuite:_manifest_declares_no_checks",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestWithErr_NeverEnrichesAnotherPackagesError/LoadSuite:_manifest_is_not_TOML",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestWithErr_NeverEnrichesAnotherPackagesError/LoadSuite:_project_config_lacks_a_schema",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestWithErr_NeverEnrichesAnotherPackagesError/LoadProjectConfig:_project_config_is_not_TOML",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestWithErr_NeverEnrichesAnotherPackagesError/DiscoverScripts:_tasks_directory_unreadable",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestWithErr_NeverEnrichesAnotherPackagesError",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestShellDriver_ExitCode",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestShellDriver_Name",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestShellDriver_Matchers/contains_pass",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestShellDriver_Matchers/contains_fail",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestShellDriver_Matchers/not_contains_pass",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestShellDriver_Matchers/not_contains_fail",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestShellDriver_Matchers/equals_pass",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestShellDriver_Matchers/equals_fail",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestShellDriver_Matchers/equals_empty_pass",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestShellDriver_Matchers/equals_empty_fail",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestShellDriver_Matchers/stderr_is_not_matched",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestShellDriver_Matchers/a_failing_exit_fails_before_matchers",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestShellDriver_Matchers",
+        "status": "passed",
+        "duration": 190,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/sh_alone",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/sh_with_matchers",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/sh_with_as_and_tmux",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/sh_+_runner",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/sh_+_command",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/sh_+_tests",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/sh_+_paths",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/sh_+_format",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/contains_without_sh",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/not_contains_without_sh",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/equals_without_sh",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/neither_runner_nor_sh",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck/name_on_a_runner_check",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestValidate_ShellCheck",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLookupDriver/gotest",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLookupDriver/pytest",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLookupDriver/pytest/uv",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLookupDriver/bats",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLookupDriver/vnd.newclarity.foo/bar",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLookupDriver/pytest/poetry",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLookupDriver/gotest/uv",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLookupDriver/a/b/c",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLookupDriver/pytest/",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLookupDriver//uv",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLookupDriver",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestGenericDriver_RunTAP",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestGenericDriver_RunReportsFailures",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestGotestDriver_Run",
+        "status": "passed",
+        "duration": 510,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseGotestJSON",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseGotestJSON_Malformed",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_ValidFull",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_ValidMinimal",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_MissingRequiredField/missing_schema",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_MissingRequiredField/missing_task",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_MissingRequiredField",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_NoChecks",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_CheckValidation/tests_on_a_raw_runner_is_rejected",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_CheckValidation/paths_on_a_raw_runner_is_rejected",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_CheckValidation/raw_runner_without_command_is_rejected",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_CheckValidation/raw_runner_with_unknown_format_is_rejected",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_CheckValidation/first-class_with_both_tests_and_command_is_rejected",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_CheckValidation/first-class_with_neither_selection_nor_command_is_rejected",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_CheckValidation/first-class_with_a_mismatched_explicit_format_is_rejected",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_CheckValidation/check_without_a_runner_is_rejected",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_CheckValidation",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_FirstClassConsistentVariants/explicit_matching_format",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_FirstClassConsistentVariants/command-mode_escape_hatch",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_FirstClassConsistentVariants/paths-only_selection",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_FirstClassConsistentVariants",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_UnknownSchemaVersion",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_UnknownKeysRejected",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_TopLevelKeyAfterCheckRejected",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseManifest_MalformedTOML",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestFormat_Valid",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestMerge_NilProjectIsIdentity",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestMerge_SetupProjectFirstThenTask",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestMerge_TeardownProjectFirstThenTask",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestMerge_SeedProjectFirstThenTask",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestMerge_NeedsDefaultVsExplicitEmptyOverride",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestMerge_DoesNotMutateInputs",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseProjectConfig_ValidFull",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseProjectConfig_MinimalSchemaOnly",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseProjectConfig_MissingSchema",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseProjectConfig_UnknownSchema",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseProjectConfig_RejectsNonProjectKeys/runner",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseProjectConfig_RejectsNonProjectKeys/task",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseProjectConfig_RejectsNonProjectKeys/tiers",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseProjectConfig_RejectsNonProjectKeys/format",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseProjectConfig_RejectsNonProjectKeys",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParsePytestJSON",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParsePytestJSON_OutcomeMapping",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestParseTAP",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verify"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestMerge_AutoSpawnEnabledIsNeverInherited",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestMerge_AutoSpawnCadenceInherits",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLoadProject",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestMerge_FaultTriageEnabledIsNeverInherited",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestMerge_MainSyncEnabledIsNeverInherited",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestMerge_ChecksGlobalOnly",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestMerge_ChecksProjectOverridesCLI",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestMerge_ChecksUnsetInherits",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestMerge_ChecksKeysFromBothLayers",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestMerge_TrackingProjectInheritsCLI",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestMerge_TrackingProjectOverrides",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestMerge_GlobalOnlyFieldsFlowThrough",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestMerge_ProjectOnlyFieldsPreserved",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestTmuxIsCLIOnly",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestMerge_GitHooksLayered",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestNormalize_AcceptsTheThreeSpellings",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestNormalize_RefusesALegacyBoolean",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestNormalize_RefusesAnUnknownSpelling",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestOptIns",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLeafKeys",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/config"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestIsBusy_RecognizesSQLiteContention",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestEnsureRowWithRetry_SucceedsOnTheFirstUncontendedAttempt",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestEnsureRowWithRetry_IsIdempotent",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestEnsureRowWithRetry_GivesUpPromptlyOnANonBusyError",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRunDue_RunsARegisteredJobAndReschedulesIt",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRunDue_ConcurrentInvocationsRunTheJobExactlyOnce",
+        "status": "passed",
+        "duration": 90,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRunDue_ExpiredLeaseIsReclaimable",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRunDue_LiveLeaseBlocksAnotherInvocation",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRunDue_FailureRecordsAFaultAndCountsTheFailure",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRunDue_PanicIsRecoveredAndRecorded",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRunDue_StdoutLoggingIsCapturedIntoTheFaultDetail",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRunNamed_ForcesAJobThatIsNotYetDue",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRetry_ClearsBackoffAndMakesTheJobDue",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRetry_UnknownJobIsAnError",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestSchedule_NextDelayBacksOffExponentiallyAndCaps",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestSchedule_LeaseTTLDefaultsToTwiceTheIntervalWithAFloor",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_ChecksRunInDir",
+        "status": "passed",
+        "duration": 640,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_IgnoresOtherTasksRottedSuite",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRunnerTmuxConfigIsWhatTheGuardAccepts",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRunDue_DoesNothingWhenSuppressed",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestSuppressed_FalseByDefault",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRegistered_IsEmptyByDefault",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestAccessorsRefuseBeforeInitialize",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestInitialize_RejectsEveryBadRegistration",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestIsolatedEnv_CarriesCallerBuildCaches",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestIsolatedEnv_KeepsCallerSetCache",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestCallerBuildCaches_SkipsMissingTool",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestLastOkAt_ReadsThePreviousSuccessfulRun",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRunDue_NothingDueWritesNothing",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestDueJobs_MissingRowIsDueAndLiveLeaseIsNot",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestNote_RecordedAndReplacedEachRun",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestNote_OutsideARunIsANoOp",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestTransient_BelowThresholdRecordsNothingButBacksOff",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestTransient_ThresholdRecordsUnreachableNotJobFailed",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_SeesCallerGOCACHE",
+        "status": "passed",
+        "duration": 180,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestMakeRunDir_IsCanonical",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestIsolatedEnv_HomeIsCanonical",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestTransient_NonTransientReportsAtOnce",
+        "status": "passed",
+        "duration": 110,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestTransient_SuccessClearsTheWarning",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_SeesCanonicalHome",
+        "status": "passed",
+        "duration": 140,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestEnvValuesFindsBothKeys",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestGuard_AllowsYourOwnLandedTaskFromItsWorktree",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestGuard_RefusesAForeignLandedTask",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestGuard_AllowsAnUnlandedForeignTask",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestGuard_SessionEnvNamesAnOwner",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestGuard_FailsOpenWithNoMainDatabase",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestGuard_IgnoresANonTaskID",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestGuard_RefusesEveryForeignSuiteInADirectorySweep",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestTaskNumber",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestPersonEnv_StripsTheCallersIdentity",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestAgentEnv_IsTheSupportedHarness",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestWriteAgentEnv",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestMakeTmuxDir_FitsASocketPath",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestSnapshotScript_KeepsTheLayout",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestTransient_FailedClearIsNotTheRunsError",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestTransient_KeepsTheCauseReachable",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/jobs"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_RunsASnapshot",
+        "status": "passed",
+        "duration": 640,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_SameVerdictWhoeverRunsIt/person",
+        "status": "passed",
+        "duration": 180,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_SameVerdictWhoeverRunsIt/agent",
+        "status": "passed",
+        "duration": 140,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_SameVerdictWhoeverRunsIt",
+        "status": "passed",
+        "duration": 320,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_Manifest_AsAgentIsPerCheck",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_PrivateTmuxIsTornDown",
+        "status": "passed",
+        "duration": 170,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_Manifest_TmuxIsPerCheck",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_EachRunWritesItsOwnReport",
+        "status": "passed",
+        "duration": 240,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_CTRFLineOnlyOnAFailingRun/passing_run_prints_no_CTRF_line",
+        "status": "passed",
+        "duration": 130,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_CTRFLineOnlyOnAFailingRun/failing_run_names_its_cache_report",
+        "status": "passed",
+        "duration": 130,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_CTRFLineOnlyOnAFailingRun",
+        "status": "passed",
+        "duration": 260,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestResetSandboxClearsTheWorktreeSandbox",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestResetSandboxOutsideWorktreeIsANoop",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_ExitCodeIsTheVerdict/passes",
+        "status": "passed",
+        "duration": 140,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_ExitCodeIsTheVerdict/fails",
+        "status": "passed",
+        "duration": 130,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_ExitCodeIsTheVerdict/setup_error_keeps_its_own_exit_code",
+        "status": "passed",
+        "duration": 130,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_ExitCodeIsTheVerdict",
+        "status": "passed",
+        "duration": 410,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_ExportsTAPPathAndTaskID",
+        "status": "passed",
+        "duration": 140,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestSuiteEnv_AddsNoPermissionGrantingVariable",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_NormalizesTAP",
+        "status": "passed",
+        "duration": 130,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_ReconcilesAnUnexplainedExit",
+        "status": "passed",
+        "duration": 160,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_ManifestWinsOverScript",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_NoSuiteNamesBothFilenames",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_ScriptSuite_RunsIsolated",
+        "status": "passed",
+        "duration": 160,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_ShellChecks",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_ShellCheckAsAgent",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_PassingSuite",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_FailingSuite",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_RunnerErrorFailsLoudly",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_NeedsGuard",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_SeedGuard",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestRun_UnknownTask",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestIsolatedEnvReplacesHomeAndXDG",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestCountsLine/all_pass",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestCountsLine/with_failures_leads_with_failed",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestCountsLine/with_skips",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "TestCountsLine",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/verifycmd"
+        ],
+        "labels": {
+          "check": "packages holding a doterr copy pass their tests"
+        }
+      },
+      {
+        "name": "no Go file, go.mod or go.sum mentions go-doterr",
+        "status": "passed",
+        "duration": 25,
+        "labels": {
+          "check": "no Go file, go.mod or go.sum mentions go-doterr"
+        }
+      },
+      {
+        "name": "no call carries a doterr. package qualifier",
+        "status": "passed",
+        "duration": 19,
+        "labels": {
+          "check": "no call carries a doterr. package qualifier"
+        }
+      },
+      {
+        "name": "each package that uses doterr holds a copy identical to the canonical file",
+        "status": "passed",
+        "duration": 43,
+        "labels": {
+          "check": "each package that uses doterr holds a copy identical to the canonical file"
+        }
+      },
+      {
+        "name": "the whole module builds and vets",
+        "status": "passed",
+        "duration": 2893,
+        "labels": {
+          "check": "the whole module builds and vets"
+        }
+      }
+    ]
+  }
+}
