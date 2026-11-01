@@ -1,0 +1,1 @@
+The go-logutil session asserted hooks are unreliable for this without sampling any transcript; E-2531 needs the number to choose between hook capture and a session-side convention.
