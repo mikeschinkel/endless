@@ -7905,3 +7905,7 @@ During the E-2531 brainstorm Mike said hooks catching '90+%' would be good enoug
 ### [2026-10-31] Handoff means the generated spawn prompt
 In E-2531 I called the spawned session's opening prompt 'the spawn prompt' after earlier misusing 'handoff' for the paste command. Mike said the spawn prompt is officially named the handoff (what task spawn and task claim render from handoff/<type>.md.tmpl). Use 'handoff' for exactly that, and never for the command a session gives the user.
 - **Project**: endless
+
+### [2026-10-31] Stop is one of several hooks that see commands
+Twice in E-2531 I framed command capture and decay-checking as a Stop hook. Mike said twice that Stop is only one of several hook events where a session's commands appear; mid-turn text between tool calls does not reach Stop. Do not design hook capture or checking around Stop alone; the hook log shows which events carry text.
+- **Project**: endless
