@@ -40,7 +40,7 @@ paths  = ["tests/test_session_lookup_any_project.py",
 # The verb documents both scopes.
 [[check]]
 name     = "list-live usage names --all-projects"
-sh       = "./bin/endless-go session-query 2>&1"
+sh       = "./bin/endless-go session-query --help 2>&1"
 contains = "list-live --all-projects"
 
 # With neither flag the verb refuses and names both.
