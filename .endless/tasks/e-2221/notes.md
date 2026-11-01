@@ -31,5 +31,5 @@ suppression, not by leaving the mark off:
   mark when it is listed on another board. E-2414 P27 already keeps touched
   rows on the board; it does not add the mark.
 
-Board frames (focal, parent, spawner) were not addressed; that question
-stays open.
+Board frames (focal, parent, spawner) do not get the duplicate mark — Mike,
+asked whether they should: "No".
