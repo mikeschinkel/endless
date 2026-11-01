@@ -7893,3 +7893,7 @@ Reviewing links for newly filed tasks, I found E-1032 (task IDs get a two-letter
 ### [2026-10-31] Handoff is a reserved Endless term
 While brainstorming E-2531 I called the command a session gives the user to paste 'the handoff'. Mike said handoff has a specific meaning in Endless (the context a spawning session passes to a spawned one) and this is not that. Use a different word for a command handed to the user to run, such as 'the command' or 'the paste'.
 - **Project**: endless
+
+### [2026-10-31] Lessons do not reach sessions by design
+During E-2531 I framed 'lessons never reach a session' as a gap Endless might fix by feeding lessons forward. Mike said it is by design: if lessons reached sessions, flaws in the Endless PRODUCT would be masked by sessions leaning on his Claude install's memory as a crutch. Do not propose feeding LESSONS.md into sessions; fix the product instead.
+- **Project**: endless
