@@ -1,0 +1,1 @@
+The IDE's write is correct behavior on a stale file, and the land gate refusing it is also correct; reconciling the two needs options weighed (set aside and reapply, recognize tidy-equivalent diffs, land from a clean clone, IDE settings) before any do-task can be scoped.
