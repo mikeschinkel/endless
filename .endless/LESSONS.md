@@ -7933,3 +7933,7 @@ Situation: planning E-2221, Mike asked for a way to tell that another session is
 ### [2026-11-01] Hand over commands that paste without editing
 While handing off E-2520, the session gave Mike two endless decision add commands as single 150-plus-character lines with the full description inline. Mike pointed at E-2531: commands wrap in the tmux pane and break on paste, and paths spelled out in full are hard to scan. Hand over commands as short lines (about 70 columns), put long text in a shell variable or a heredoc the paste itself creates, use ~ for the home directory, and never hand over a scratchpad or worktree path.
 - **Project**: endless
+
+### [2026-11-01] Split a task when only part of its method is known
+While filing IDE-support work under E-2537, I put JetBrains and VS Code exclusion into one todo, E-2538. Mike split it: the JetBrains mechanism (an excludeFolder entry in the module .iml) is known, the VS Code one is not. A todo whose method is half known cannot be planned as one unit; the known half stalls behind the unknown. When part of a task's method is known and part is not, file the known part as a todo and the unknown part as its own research or todo task, so each can move at its own pace.
+- **Project**: endless
