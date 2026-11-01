@@ -55,3 +55,8 @@ statement = "Does not touch other projects that import go-doterr, such as macmai
 id = "P10"
 kind = "exclusion"
 statement = "Does not remove Endless's other replace directives"
+
+[[item]]
+id = "P11"
+kind = "deliverable"
+statement = "go.mod and go.sum carry the versions go mod tidy resolves from the sibling go-pkgs checkouts (go-dt v0.7.0, go-cliutil v0.4.0, appinfo v0.4.0, dtx v0.3.0, x/sys v0.49.0, x/term v0.47.0), and goose sits in the direct require block, so the tidy that drops go-doterr leaves go.mod tidy"
