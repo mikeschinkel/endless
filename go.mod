@@ -6,25 +6,14 @@ require (
 	github.com/BurntSushi/toml v1.5.0
 	github.com/mattn/go-runewidth v0.0.16
 	github.com/mikeschinkel/go-cfgstore v0.3.0
-	github.com/mikeschinkel/go-doterr v0.2.0
-	github.com/mikeschinkel/go-dt v0.6.1
+	github.com/mikeschinkel/go-dt v0.7.0
+	github.com/pressly/goose/v3 v3.28.0
 	github.com/rogpeppe/go-internal v1.14.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
 	github.com/yuin/goldmark v1.8.2
-	golang.org/x/sys v0.47.0
-	golang.org/x/term v0.40.0
+	golang.org/x/sys v0.49.0
+	golang.org/x/term v0.47.0
 	modernc.org/sqlite v1.57.0
-)
-
-// Local development of go-pkgs. Requires checkouts at ../go-pkgs/<module>/.
-replace (
-	github.com/mikeschinkel/go-cfgstore => ../go-pkgs/go-cfgstore
-	github.com/mikeschinkel/go-cliutil => ../go-pkgs/go-cliutil
-	github.com/mikeschinkel/go-doterr => ../go-pkgs/go-doterr
-	github.com/mikeschinkel/go-dt => ../go-pkgs/go-dt
-	github.com/mikeschinkel/go-dt/appinfo => ../go-pkgs/go-dt/appinfo
-	github.com/mikeschinkel/go-dt/dtx => ../go-pkgs/go-dt/dtx
-	github.com/mikeschinkel/go-logutil => ../go-pkgs/go-logutil
 )
 
 require (
@@ -32,12 +21,11 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect
-	github.com/mikeschinkel/go-cliutil v0.3.0 // indirect
-	github.com/mikeschinkel/go-dt/appinfo v0.3.0 // indirect
-	github.com/mikeschinkel/go-dt/dtx v0.2.2 // indirect
+	github.com/mikeschinkel/go-cliutil v0.4.0 // indirect
+	github.com/mikeschinkel/go-dt/appinfo v0.4.0 // indirect
+	github.com/mikeschinkel/go-dt/dtx v0.3.0 // indirect
 	github.com/mikeschinkel/go-logutil v0.2.1 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
-	github.com/pressly/goose/v3 v3.28.0
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/sethvargo/go-retry v0.4.0 // indirect
@@ -48,6 +36,16 @@ require (
 	modernc.org/libc v1.75.6 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.12.1 // indirect
+)
+
+// Local development of go-pkgs. Requires checkouts at ../go-pkgs/<module>/.
+replace (
+	github.com/mikeschinkel/go-cfgstore => ../go-pkgs/go-cfgstore
+	github.com/mikeschinkel/go-cliutil => ../go-pkgs/go-cliutil
+	github.com/mikeschinkel/go-dt => ../go-pkgs/go-dt
+	github.com/mikeschinkel/go-dt/appinfo => ../go-pkgs/go-dt/appinfo
+	github.com/mikeschinkel/go-dt/dtx => ../go-pkgs/go-dt/dtx
+	github.com/mikeschinkel/go-logutil => ../go-pkgs/go-logutil
 )
 
 replace github.com/mikeschinkel/go-gitutil => ../../../../go-pkgs/go-gitutil

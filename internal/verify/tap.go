@@ -5,8 +5,6 @@ import (
 	"bytes"
 	"regexp"
 	"strings"
-
-	"github.com/mikeschinkel/go-doterr"
 )
 
 // tapLineRE matches a TAP test line: an optional "not ", the literal ok, an
@@ -75,7 +73,7 @@ func parseTAP(raw []byte) (rpt *Report, err error) {
 
 	err = sc.Err()
 	if err != nil {
-		err = doterr.NewErr(ErrParsingTAP, err)
+		err = NewErr(ErrParsingTAP, err)
 		rpt = nil
 		goto end
 	}

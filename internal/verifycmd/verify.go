@@ -33,7 +33,6 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/verify"
-	"github.com/mikeschinkel/go-doterr"
 	"github.com/mikeschinkel/go-dt"
 )
 
@@ -286,7 +285,7 @@ func run(id string, keep bool) (code int, err error) {
 		}
 		script, ok = scripts[verify.NormalizeTaskID(id)]
 		if !ok {
-			err = doterr.NewErr(ErrNoSuiteForTask,
+			err = NewErr(ErrNoSuiteForTask,
 				"task", id, "dir", suiteDir(root, id),
 				"looked_for", verify.ManifestFile+", "+verify.ScriptFile,
 				"suites_found", suiteCount(root, scripts), "root", root)
@@ -300,11 +299,11 @@ func run(id string, keep bool) (code int, err error) {
 	// Stage 3+); seed is E-1606. Running unisolated or unseeded would silently
 	// do less than the manifest asked, so refuse loudly instead.
 	if len(eff.Needs) > 0 {
-		err = doterr.NewErr(ErrTierNotSupported, "task", id, "needs", strings.Join(eff.Needs, ", "))
+		err = NewErr(ErrTierNotSupported, "task", id, "needs", strings.Join(eff.Needs, ", "))
 		goto end
 	}
 	if len(eff.Seed) > 0 {
-		err = doterr.NewErr(ErrSeedNotSupported, "task", id, "seed", strings.Join(eff.Seed, ", "))
+		err = NewErr(ErrSeedNotSupported, "task", id, "seed", strings.Join(eff.Seed, ", "))
 		goto end
 	}
 

@@ -25,8 +25,6 @@ import (
 	"slices"
 	"strconv"
 	"time"
-
-	"github.com/mikeschinkel/go-doterr"
 )
 
 // ID is a setting's JSON path in the config file, e.g. "main_sync.enabled".
@@ -195,7 +193,7 @@ func Initialize() (err error) {
 			continue
 		}
 		if first, dup := seen[s.ID]; dup {
-			errs = append(errs, doterr.NewErr(ErrSettings, ErrInvalidSetting, ErrDuplicateID,
+			errs = append(errs, NewErr(ErrSettings, ErrInvalidSetting, ErrDuplicateID,
 				"id", string(s.ID), "first", first, "again", i))
 			continue
 		}
@@ -234,7 +232,7 @@ func validate(i int, s Setting) (errs []error) {
 	add := func(cond error, kv ...any) {
 		parts := append([]any{ErrSettings, ErrInvalidSetting, cond,
 			"id", string(s.ID), "index", i}, kv...)
-		errs = append(errs, doterr.NewErr(parts...))
+		errs = append(errs, NewErr(parts...))
 	}
 
 	switch {
@@ -299,7 +297,7 @@ func validate(i int, s Setting) (errs []error) {
 // All returns every setting, ordered by ID.
 func All() (ss []Setting, err error) {
 	if index == nil {
-		err = doterr.NewErr(ErrSettings, ErrNotInitialized)
+		err = NewErr(ErrSettings, ErrNotInitialized)
 		goto end
 	}
 	ss = slices.Clone(ordered)
@@ -311,7 +309,7 @@ end:
 // has that ID.
 func Lookup(id ID) (s Setting, ok bool, err error) {
 	if index == nil {
-		err = doterr.NewErr(ErrSettings, ErrNotInitialized, "id", string(id))
+		err = NewErr(ErrSettings, ErrNotInitialized, "id", string(id))
 		goto end
 	}
 	s, ok = index[id]

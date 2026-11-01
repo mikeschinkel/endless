@@ -14,8 +14,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/mikeschinkel/go-doterr"
-
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
@@ -189,21 +187,21 @@ func dueJobs(db *sql.DB, jobs []Job) (due map[string]bool, err error) {
 		args...,
 	)
 	if err != nil {
-		err = doterr.NewErr(ErrJobs, ErrDatabase, ErrQuery, err)
+		err = NewErr(ErrJobs, ErrDatabase, ErrQuery, err)
 		goto end
 	}
 	defer rows.Close()
 	for rows.Next() {
 		err = rows.Scan(&name, &claimable)
 		if err != nil {
-			err = doterr.NewErr(ErrJobs, ErrDatabase, ErrQuery, err)
+			err = NewErr(ErrJobs, ErrDatabase, ErrQuery, err)
 			goto end
 		}
 		due[name] = claimable
 	}
 	err = rows.Err()
 	if err != nil {
-		err = doterr.NewErr(ErrJobs, ErrDatabase, ErrQuery, err)
+		err = NewErr(ErrJobs, ErrDatabase, ErrQuery, err)
 	}
 
 end:
@@ -223,13 +221,13 @@ func RunNamed(ctx context.Context, name string) (outcome Outcome, err error) {
 		goto end
 	}
 	if !ok {
-		err = doterr.NewErr(ErrJobs, ErrUnknownJob, "name", name)
+		err = NewErr(ErrJobs, ErrUnknownJob, "name", name)
 		goto end
 	}
 
 	db, err = monitor.DB()
 	if err != nil {
-		err = doterr.NewErr(ErrJobs, ErrDatabase, err)
+		err = NewErr(ErrJobs, ErrDatabase, err)
 		goto end
 	}
 
@@ -266,7 +264,7 @@ func runOne(ctx context.Context, db *sql.DB, job Job) (outcome Outcome) {
 	schedule = job.Schedule()
 
 	if schedule.Interval <= 0 {
-		outcome.Err = doterr.NewErr(ErrJobs, ErrNoInterval, "job", job.Name())
+		outcome.Err = NewErr(ErrJobs, ErrNoInterval, "job", job.Name())
 		recordSchedulingFault(job.Name(), "job declares a non-positive interval", outcome.Err)
 		goto end
 	}
@@ -318,7 +316,7 @@ func runGuarded(ctx context.Context, job Job) (err error) {
 	defer func() {
 		recovered := recover()
 		if recovered != nil {
-			err = doterr.NewErr(ErrJobs, ErrJobPanicked,
+			err = NewErr(ErrJobs, ErrJobPanicked,
 				"job", job.Name(),
 				"panic", recovered,
 				"stack", string(debug.Stack()),
@@ -398,7 +396,7 @@ func ensureRow(db *sql.DB, name string) (err error) {
 		name,
 	)
 	if err != nil {
-		err = doterr.NewErr(ErrJobs, ErrDatabase, ErrQuery, "job", name, err)
+		err = NewErr(ErrJobs, ErrDatabase, ErrQuery, "job", name, err)
 	}
 	return err
 }
@@ -412,7 +410,7 @@ func markDue(db *sql.DB, name string) (err error) {
 		name,
 	)
 	if err != nil {
-		err = doterr.NewErr(ErrJobs, ErrDatabase, ErrQuery, "job", name, err)
+		err = NewErr(ErrJobs, ErrDatabase, ErrQuery, "job", name, err)
 	}
 	return err
 }
@@ -444,7 +442,7 @@ func claim(db *sql.DB, name, owner string, ttl time.Duration) (claimed bool, fai
 		goto end
 	}
 	if err != nil {
-		err = doterr.NewErr(ErrJobs, ErrClaiming, ErrQuery, "job", name, err)
+		err = NewErr(ErrJobs, ErrClaiming, ErrQuery, "job", name, err)
 		goto end
 	}
 	claimed = true

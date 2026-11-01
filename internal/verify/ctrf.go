@@ -5,8 +5,6 @@ import (
 	"io"
 	"math"
 	"strings"
-
-	"github.com/mikeschinkel/go-doterr"
 )
 
 // This file implements section C of the E-1596 interface contract: the stable
@@ -180,13 +178,13 @@ func (r *Report) Write(w io.Writer) (err error) {
 	doc.SpecVersion = SpecVersion
 	data, err = json.MarshalIndent(&doc, "", "  ")
 	if err != nil {
-		err = doterr.NewErr(ErrWritingReport, err)
+		err = NewErr(ErrWritingReport, err)
 		goto end
 	}
 	data = append(data, '\n')
 	_, err = w.Write(data)
 	if err != nil {
-		err = doterr.NewErr(ErrWritingReport, err)
+		err = NewErr(ErrWritingReport, err)
 	}
 
 end:

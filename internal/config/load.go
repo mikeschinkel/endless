@@ -4,7 +4,6 @@ import (
 	"errors"
 
 	"github.com/mikeschinkel/go-cfgstore"
-	"github.com/mikeschinkel/go-doterr"
 	"github.com/mikeschinkel/go-dt"
 )
 
@@ -33,9 +32,9 @@ func Load(projectPath dt.DirPath) (cfg *EndlessConfig, err error) {
 		DirsProvider: dp,
 	})
 	if err != nil {
-		err = doterr.NewErr(
+		err = NewErr(
 			ErrFailedToLoadConfig,
-			doterr.StringKV("project_path", string(projectPath)),
+			StringKV("project_path", string(projectPath)),
 			err,
 		)
 		goto end
@@ -67,9 +66,9 @@ func LoadProject(projectPath dt.DirPath) (cfg *EndlessConfig, err error) {
 		goto end
 	}
 	if err != nil {
-		err = doterr.NewErr(
+		err = NewErr(
 			ErrFailedToLoadConfig,
-			doterr.StringKV("project_path", string(projectPath)),
+			StringKV("project_path", string(projectPath)),
 			err,
 		)
 		goto end

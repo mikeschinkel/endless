@@ -3,8 +3,6 @@ package verify
 import (
 	"encoding/json"
 	"strings"
-
-	"github.com/mikeschinkel/go-doterr"
 )
 
 // pytestReport is the top-level object of the pytest-json-report plugin's
@@ -57,7 +55,7 @@ func parsePytestJSON(raw []byte) (rpt *Report, err error) {
 
 	err = json.Unmarshal(raw, &pr)
 	if err != nil {
-		err = doterr.NewErr(ErrParsingPytestJSON, err)
+		err = NewErr(ErrParsingPytestJSON, err)
 		goto end
 	}
 

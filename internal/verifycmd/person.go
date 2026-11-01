@@ -12,7 +12,6 @@ import (
 	"github.com/mikeschinkel/endless/internal/agentenv"
 	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/verify"
-	"github.com/mikeschinkel/go-doterr"
 	"github.com/mikeschinkel/go-dt"
 )
 
@@ -125,7 +124,7 @@ func writeAgentEnv(runDir dt.DirPath) (fp dt.Filepath, err error) {
 	fp = dt.FilepathJoin(runDir, agentEnvFile)
 	err = fp.WriteFile([]byte(strings.Join(agentEnv(), "\n")+"\n"), 0o644)
 	if err != nil {
-		err = doterr.NewErr(ErrIsolatingEnv, err, "filepath", fp)
+		err = NewErr(ErrIsolatingEnv, err, "filepath", fp)
 	}
 	return fp, err
 }
@@ -138,7 +137,7 @@ func makeTmuxDir() (dir dt.DirPath, err error) {
 
 	s, err = os.MkdirTemp(tmuxTmpRoot, "endless-verify-")
 	if err != nil {
-		err = doterr.NewErr(ErrMakingRunDir, err, "root", tmuxTmpRoot)
+		err = NewErr(ErrMakingRunDir, err, "root", tmuxTmpRoot)
 		goto end
 	}
 	resolved, rerr = filepath.EvalSymlinks(s)
@@ -180,19 +179,19 @@ func fixturePaneEnv(env []string, tmuxDir dt.DirPath) (kvs []string, err error) 
 		out, err = tmuxCommand(env, tmuxDir,
 			"new-session", "-d", "-s", fixtureTmuxSession, "-x", "200", "-y", "50", "sh").CombinedOutput()
 		if err != nil {
-			err = doterr.NewErr(ErrFixtureTmux, err, "output", tail(out))
+			err = NewErr(ErrFixtureTmux, err, "output", tail(out))
 			goto end
 		}
 	}
 	out, err = tmuxCommand(env, tmuxDir, "display-message", "-p", "-t", fixtureTmuxSession+":",
 		"#{socket_path},#{pid},#{session_id} #{pane_id}").Output()
 	if err != nil {
-		err = doterr.NewErr(ErrFixtureTmux, err)
+		err = NewErr(ErrFixtureTmux, err)
 		goto end
 	}
 	fields = strings.Fields(string(bytes.TrimSpace(out)))
 	if len(fields) != 2 {
-		err = doterr.NewErr(ErrFixtureTmux, "output", string(out))
+		err = NewErr(ErrFixtureTmux, "output", string(out))
 		goto end
 	}
 	// tmux's own TMUX value is socket,pid,session-index; display-message gives
@@ -274,7 +273,7 @@ func snapshotScript(script dt.Filepath, runDir dt.DirPath) (copied dt.Filepath, 
 	copied = dt.FilepathJoin(dstSuite, script.Base())
 end:
 	if err != nil {
-		err = doterr.NewErr(ErrSnapshottingSuite, err, "suite", suiteDir, "dir", runDir)
+		err = NewErr(ErrSnapshottingSuite, err, "suite", suiteDir, "dir", runDir)
 	}
 	return copied, err
 }

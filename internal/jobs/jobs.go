@@ -48,8 +48,6 @@ import (
 	"slices"
 	"sort"
 	"time"
-
-	"github.com/mikeschinkel/go-doterr"
 )
 
 // Schedule declares when a job runs and how it backs off. The zero value is
@@ -180,11 +178,11 @@ func Initialize() (err error) {
 	for i, job := range pending {
 		name := job.Name()
 		if name == "" {
-			errs = append(errs, doterr.NewErr(ErrJobs, ErrRegistering, ErrEmptyName, "index", i))
+			errs = append(errs, NewErr(ErrJobs, ErrRegistering, ErrEmptyName, "index", i))
 			continue
 		}
 		if _, dup := built[name]; dup {
-			errs = append(errs, doterr.NewErr(ErrJobs, ErrRegistering, ErrDuplicateJob, "name", name))
+			errs = append(errs, NewErr(ErrJobs, ErrRegistering, ErrDuplicateJob, "name", name))
 			continue
 		}
 		built[name] = job
@@ -208,7 +206,7 @@ end:
 // run order are deterministic. Before Initialize it returns ErrNotInitialized.
 func Registered() (jobs []Job, err error) {
 	if registry == nil {
-		err = doterr.NewErr(ErrJobs, ErrNotInitialized)
+		err = NewErr(ErrJobs, ErrNotInitialized)
 		goto end
 	}
 	jobs = slices.Clone(ordered)
@@ -222,7 +220,7 @@ end:
 // ErrNotInitialized.
 func Lookup(name string) (job Job, ok bool, err error) {
 	if registry == nil {
-		err = doterr.NewErr(ErrJobs, ErrNotInitialized, "name", name)
+		err = NewErr(ErrJobs, ErrNotInitialized, "name", name)
 		goto end
 	}
 	job, ok = registry[name]

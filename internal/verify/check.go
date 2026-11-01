@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mikeschinkel/go-doterr"
 	"github.com/mikeschinkel/go-dt"
 )
 
@@ -112,13 +111,13 @@ func validateCheck(c Check, index int) (err error) {
 	switch c.As {
 	case "", AsPerson, AsAgent:
 	default:
-		err = doterr.NewErr(ErrInvalidManifest, ErrUnknownCheckAs,
+		err = NewErr(ErrInvalidManifest, ErrUnknownCheckAs,
 			"index", index, "as", c.As, "allowed", AsPerson+", "+AsAgent)
 		goto end
 	}
 
 	if filepath.IsAbs(c.Dir) {
-		err = doterr.NewErr(ErrInvalidManifest, ErrCheckDirAbsolute,
+		err = NewErr(ErrInvalidManifest, ErrCheckDirAbsolute,
 			"index", index, "dir", c.Dir)
 		goto end
 	}
@@ -129,19 +128,19 @@ func validateCheck(c Check, index int) (err error) {
 	}
 
 	if key := c.matcherKey(); key != "" {
-		err = doterr.NewErr(ErrInvalidManifest, ErrMatcherRequiresSh,
+		err = NewErr(ErrInvalidManifest, ErrMatcherRequiresSh,
 			"index", index, "key", key)
 		goto end
 	}
 
 	if c.Runner == "" {
-		err = doterr.NewErr(ErrInvalidManifest, ErrCheckMissingRunner, "index", index)
+		err = NewErr(ErrInvalidManifest, ErrCheckMissingRunner, "index", index)
 		goto end
 	}
 
 	d, err = LookupDriver(c.Runner)
 	if err != nil {
-		err = doterr.NewErr(ErrInvalidManifest, err, "index", index, "runner", c.Runner)
+		err = NewErr(ErrInvalidManifest, err, "index", index, "runner", c.Runner)
 		goto end
 	}
 
@@ -170,14 +169,14 @@ func validateCheckDir(c Check, index int, root dt.DirPath) (err error) {
 
 	dir = filepath.Join(string(root), c.Dir)
 	if !withinDir(string(root), dir) {
-		err = doterr.NewErr(ErrInvalidManifest, ErrCheckDirOutsideRoot,
+		err = NewErr(ErrInvalidManifest, ErrCheckDirOutsideRoot,
 			"index", index, "dir", c.Dir, "root", root)
 		goto end
 	}
 
 	info, err = os.Stat(dir)
 	if err != nil || !info.IsDir() {
-		err = doterr.NewErr(ErrInvalidManifest, ErrCheckDirMissing,
+		err = NewErr(ErrInvalidManifest, ErrCheckDirMissing,
 			"index", index, "dir", c.Dir, "root", root)
 		goto end
 	}
@@ -187,12 +186,12 @@ func validateCheckDir(c Check, index int, root dt.DirPath) (err error) {
 		realDir, err = filepath.EvalSymlinks(dir)
 	}
 	if err != nil {
-		err = doterr.NewErr(ErrInvalidManifest, ErrCheckDirMissing, err,
+		err = NewErr(ErrInvalidManifest, ErrCheckDirMissing, err,
 			"index", index, "dir", c.Dir, "root", root)
 		goto end
 	}
 	if !withinDir(realRoot, realDir) {
-		err = doterr.NewErr(ErrInvalidManifest, ErrCheckDirOutsideRoot,
+		err = NewErr(ErrInvalidManifest, ErrCheckDirOutsideRoot,
 			"index", index, "dir", c.Dir, "root", root, "resolved", realDir)
 		goto end
 	}
@@ -226,13 +225,13 @@ func validateStructuredCheck(c Check, d RunnerDriver, index int) (err error) {
 
 	switch {
 	case c.Command != "" && hasSelection:
-		err = doterr.NewErr(ErrInvalidManifest, ErrFirstClassCommandConflict,
+		err = NewErr(ErrInvalidManifest, ErrFirstClassCommandConflict,
 			"index", index, "runner", c.Runner)
 	case c.Command == "" && !hasSelection:
-		err = doterr.NewErr(ErrInvalidManifest, ErrFirstClassNeedsSelection,
+		err = NewErr(ErrInvalidManifest, ErrFirstClassNeedsSelection,
 			"index", index, "runner", c.Runner)
 	case c.Format != "" && c.Format != d.Format():
-		err = doterr.NewErr(ErrInvalidManifest, ErrFormatMismatch,
+		err = NewErr(ErrInvalidManifest, ErrFormatMismatch,
 			"index", index, "runner", c.Runner,
 			"format", string(c.Format), "inferred", string(d.Format()))
 	}
@@ -245,16 +244,16 @@ func validateStructuredCheck(c Check, d RunnerDriver, index int) (err error) {
 func validateCommandCheck(c Check, index int) (err error) {
 	switch {
 	case len(c.Tests) > 0:
-		err = doterr.NewErr(ErrInvalidManifest, ErrTestsRequireFirstClass,
+		err = NewErr(ErrInvalidManifest, ErrTestsRequireFirstClass,
 			"index", index, "runner", c.Runner, "structured", driverFamilies())
 	case len(c.Paths) > 0:
-		err = doterr.NewErr(ErrInvalidManifest, ErrPathsRequireFirstClass,
+		err = NewErr(ErrInvalidManifest, ErrPathsRequireFirstClass,
 			"index", index, "runner", c.Runner, "structured", driverFamilies())
 	case c.Command == "":
-		err = doterr.NewErr(ErrInvalidManifest, ErrRawCheckNeedsCommand,
+		err = NewErr(ErrInvalidManifest, ErrRawCheckNeedsCommand,
 			"index", index, "runner", c.Runner)
 	case c.Format != "" && !c.Format.Valid():
-		err = doterr.NewErr(ErrInvalidManifest, ErrUnknownFormat,
+		err = NewErr(ErrInvalidManifest, ErrUnknownFormat,
 			"index", index, "format", string(c.Format), "supported", formatList())
 	}
 	return err
@@ -278,7 +277,7 @@ func validateShellCheck(c Check, index int) (err error) {
 		key = "format"
 	}
 	if key != "" {
-		err = doterr.NewErr(ErrInvalidManifest, ErrShConflict, "index", index, "key", key)
+		err = NewErr(ErrInvalidManifest, ErrShConflict, "index", index, "key", key)
 	}
 	return err
 }

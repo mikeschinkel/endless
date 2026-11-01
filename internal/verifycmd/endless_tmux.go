@@ -6,7 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mikeschinkel/go-doterr"
 	"github.com/mikeschinkel/go-dt"
 )
 
@@ -48,12 +47,12 @@ func writeEndlessTmuxConfig(env []string, tmuxDir dt.DirPath) (err error) {
 		filepath.Join(envValue(env, "XDG_CONFIG_HOME"), "endless"),
 	} {
 		if err = os.MkdirAll(dir, 0o755); err != nil {
-			err = doterr.NewErr(ErrIsolatingEnv, err, "dir", dir)
+			err = NewErr(ErrIsolatingEnv, err, "dir", dir)
 			goto end
 		}
 		file := filepath.Join(dir, "config.json")
 		if err = os.WriteFile(file, body, 0o644); err != nil {
-			err = doterr.NewErr(ErrIsolatingEnv, err, "file", file)
+			err = NewErr(ErrIsolatingEnv, err, "file", file)
 			goto end
 		}
 	}

@@ -4,7 +4,6 @@ import (
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/sandboxcmd"
-	"github.com/mikeschinkel/go-doterr"
 	"github.com/mikeschinkel/go-dt"
 )
 
@@ -33,7 +32,7 @@ func resetSandbox(root dt.DirPath, env []string) (err error) {
 	// as it did when this line named os.Stderr.
 	_, err = sandboxcmd.ResetEnv(string(root), refusal.Passthrough(), env)
 	if err != nil {
-		err = doterr.NewErr(ErrResettingSandbox, err, "worktree", root)
+		err = NewErr(ErrResettingSandbox, err, "worktree", root)
 	}
 end:
 	return err

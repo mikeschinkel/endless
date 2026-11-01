@@ -1,0 +1,48 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2520 and records what was true when E-2520
+# landed. Edit it only if you ARE E-2520. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+#
+# E-2520 embeds doterr.go in each Go package that uses it instead of
+# importing the go-doterr module, and drops go-doterr from go.mod.
+# canonical-doterr.go.txt beside this file is go-doterr's doterr.go as it
+# stood when E-2520 landed; every embedded copy must match it apart from
+# the package clause.
+
+schema = 1
+task   = "E-2520"
+
+# The six packages that hold a copy build and pass, including the test that
+# drives every WithErr site in internal/verify and fails if one enriches an
+# error built by another package's copy (ErrCrossPackageError).
+[[check]]
+name   = "packages holding a doterr copy pass their tests"
+runner = "gotest"
+paths  = ["./internal/config/", "./internal/faults/", "./internal/jobs/",
+          "./internal/settings/", "./internal/verify/", "./internal/verifycmd/"]
+
+[[check]]
+name = "no Go file, go.mod or go.sum mentions go-doterr"
+sh   = "! git grep -q 'mikeschinkel/go-doterr' -- '*.go' go.mod go.sum"
+
+[[check]]
+name = "no call carries a doterr. package qualifier"
+sh   = "! git grep -q 'doterr\\.' -- '*.go' ':!*/doterr.go'"
+
+[[check]]
+name = "each package that uses doterr holds a copy identical to the canonical file"
+sh   = '''
+want=$(sed '/^package /d' "$ENDLESS_VERIFY_DIR/canonical-doterr.go.txt" | cksum)
+for d in internal/config internal/faults internal/jobs internal/settings internal/verify internal/verifycmd; do
+  pkg=$(basename "$d")
+  grep -q "^package $pkg\$" "$d/doterr.go" || { echo "$d/doterr.go: package clause is not 'package $pkg'"; exit 1; }
+  got=$(sed '/^package /d' "$d/doterr.go" | cksum)
+  [ "$got" = "$want" ] || { echo "$d/doterr.go differs from the canonical doterr.go"; exit 1; }
+done
+echo identical
+'''
+contains = "identical"
+
+[[check]]
+name = "the whole module builds and vets"
+sh   = "go build ./... && go vet ./..."

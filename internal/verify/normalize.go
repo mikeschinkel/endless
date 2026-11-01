@@ -1,9 +1,5 @@
 package verify
 
-import (
-	"github.com/mikeschinkel/go-doterr"
-)
-
 // Normalize reads a native result stream named by format and produces a
 // CTRF-subset Report. It is the seam the runner (E-1603) calls once per check
 // (interface contract section B, step 4); the runner then merges the per-check
@@ -21,7 +17,7 @@ func Normalize(format Format, raw []byte) (rpt *Report, err error) {
 	case FormatTAP:
 		rpt, err = parseTAP(raw)
 	default:
-		err = doterr.NewErr(ErrNormalizingResults, ErrUnknownFormat,
+		err = NewErr(ErrNormalizingResults, ErrUnknownFormat,
 			"format", string(format), "supported", formatList())
 	}
 	return rpt, err

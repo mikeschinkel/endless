@@ -3,7 +3,6 @@ package verify
 import (
 	"github.com/BurntSushi/toml"
 
-	"github.com/mikeschinkel/go-doterr"
 	"github.com/mikeschinkel/go-dt"
 )
 
@@ -48,13 +47,13 @@ func ParseProjectConfig(data []byte) (pc *ProjectConfig, err error) {
 	pc = &ProjectConfig{}
 	md, err = toml.Decode(string(data), pc)
 	if err != nil {
-		err = doterr.NewErr(ErrInvalidProjectConfig, ErrDecodingManifest, err)
+		err = NewErr(ErrInvalidProjectConfig, ErrDecodingManifest, err)
 		goto end
 	}
 
 	undecoded = md.Undecoded()
 	if len(undecoded) > 0 {
-		err = doterr.NewErr(ErrInvalidProjectConfig, ErrUnknownManifestKeys,
+		err = NewErr(ErrInvalidProjectConfig, ErrUnknownManifestKeys,
 			"keys", joinKeys(undecoded))
 		goto end
 	}
@@ -75,9 +74,9 @@ end:
 func (pc *ProjectConfig) Validate() (err error) {
 	switch {
 	case pc.Schema == 0:
-		err = doterr.NewErr(ErrInvalidProjectConfig, ErrMissingField, "field", "schema")
+		err = NewErr(ErrInvalidProjectConfig, ErrMissingField, "field", "schema")
 	case pc.Schema != SchemaVersion:
-		err = doterr.NewErr(ErrInvalidProjectConfig, ErrUnknownSchema,
+		err = NewErr(ErrInvalidProjectConfig, ErrUnknownSchema,
 			"schema", pc.Schema, "supported", SchemaVersion)
 	}
 	return err
@@ -97,7 +96,7 @@ func LoadProjectConfig(root dt.DirPath) (pc *ProjectConfig, err error) {
 
 	exists, err = fp.Exists()
 	if err != nil {
-		err = doterr.NewErr(ErrInvalidProjectConfig, err)
+		err = NewErr(ErrInvalidProjectConfig, err)
 		goto end
 	}
 	if !exists {
@@ -106,7 +105,7 @@ func LoadProjectConfig(root dt.DirPath) (pc *ProjectConfig, err error) {
 
 	data, err = fp.ReadFile()
 	if err != nil {
-		err = doterr.NewErr(ErrInvalidProjectConfig, ErrReadingManifest, err)
+		err = NewErr(ErrInvalidProjectConfig, ErrReadingManifest, err)
 		goto end
 	}
 
@@ -117,7 +116,7 @@ func LoadProjectConfig(root dt.DirPath) (pc *ProjectConfig, err error) {
 
 end:
 	if err != nil {
-		err = doterr.WithErr(err, "filepath", fp)
+		err = WithErr(err, "filepath", fp)
 	}
 	return pc, err
 }

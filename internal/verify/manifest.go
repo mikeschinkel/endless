@@ -24,7 +24,6 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/mikeschinkel/go-doterr"
 	"github.com/mikeschinkel/go-dt"
 )
 
@@ -119,13 +118,13 @@ func decodeManifest(data []byte) (m *Manifest, err error) {
 	m = &Manifest{}
 	md, err = toml.Decode(string(data), m)
 	if err != nil {
-		err = doterr.NewErr(ErrInvalidManifest, ErrDecodingManifest, err)
+		err = NewErr(ErrInvalidManifest, ErrDecodingManifest, err)
 		goto end
 	}
 
 	undecoded = md.Undecoded()
 	if len(undecoded) > 0 {
-		err = doterr.NewErr(ErrInvalidManifest, ErrUnknownManifestKeys,
+		err = NewErr(ErrInvalidManifest, ErrUnknownManifestKeys,
 			"keys", joinKeys(undecoded))
 		goto end
 	}
@@ -141,17 +140,17 @@ end:
 func (m *Manifest) Validate() (err error) {
 	switch {
 	case m.Schema == 0:
-		err = doterr.NewErr(ErrInvalidManifest, ErrMissingField, "field", "schema")
+		err = NewErr(ErrInvalidManifest, ErrMissingField, "field", "schema")
 		goto end
 	case m.Schema != SchemaVersion:
-		err = doterr.NewErr(ErrInvalidManifest, ErrUnknownSchema,
+		err = NewErr(ErrInvalidManifest, ErrUnknownSchema,
 			"schema", m.Schema, "supported", SchemaVersion)
 		goto end
 	case m.Task == "":
-		err = doterr.NewErr(ErrInvalidManifest, ErrMissingField, "field", "task")
+		err = NewErr(ErrInvalidManifest, ErrMissingField, "field", "task")
 		goto end
 	case len(m.Checks) == 0:
-		err = doterr.NewErr(ErrInvalidManifest, ErrNoChecks)
+		err = NewErr(ErrInvalidManifest, ErrNoChecks)
 		goto end
 	}
 

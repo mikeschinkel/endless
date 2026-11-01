@@ -4,8 +4,6 @@ import (
 	"path/filepath"
 	"strings"
 	"unicode"
-
-	"github.com/mikeschinkel/go-doterr"
 )
 
 // The shape checks of the path, name and command kinds (E-2401). Exported so
@@ -28,7 +26,7 @@ func CheckPath(v string) (err error) {
 	if v == "~" || strings.HasPrefix(v, "~/") || filepath.IsAbs(v) {
 		goto end
 	}
-	err = doterr.NewErr(ErrSettings, ErrInvalidValue, ErrNotAbsolutePath, "value", v)
+	err = NewErr(ErrSettings, ErrInvalidValue, ErrNotAbsolutePath, "value", v)
 end:
 	return err
 }
@@ -42,7 +40,7 @@ func CheckName(v string) (err error) {
 	}) {
 		goto end
 	}
-	err = doterr.NewErr(ErrSettings, ErrInvalidValue, ErrMalformedName, "value", v)
+	err = NewErr(ErrSettings, ErrInvalidValue, ErrMalformedName, "value", v)
 end:
 	return err
 }
@@ -53,7 +51,7 @@ func CheckCommand(v string) (err error) {
 	if v == "" || strings.Contains(v, CommandPlaceholder) {
 		goto end
 	}
-	err = doterr.NewErr(ErrSettings, ErrInvalidValue, ErrNoCommandPlaceholder, "value", v)
+	err = NewErr(ErrSettings, ErrInvalidValue, ErrNoCommandPlaceholder, "value", v)
 end:
 	return err
 }

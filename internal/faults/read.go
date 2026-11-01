@@ -4,8 +4,6 @@ import (
 	"database/sql"
 	"sort"
 	"strings"
-
-	"github.com/mikeschinkel/go-doterr"
 )
 
 // Incident is one row of the `errors` table: a distinct fault, with the
@@ -321,12 +319,12 @@ func Clear(scope ProjectScope, ids []int64, by string) (cleared int, err error) 
 
 	result, err = db.Exec(stmt, args...)
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrClearing, ErrQuery, err)
+		err = NewErr(ErrFaults, ErrClearing, ErrQuery, err)
 		goto end
 	}
 	affected, err = result.RowsAffected()
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrClearing, err)
+		err = NewErr(ErrFaults, ErrClearing, err)
 		goto end
 	}
 	cleared = int(affected)
@@ -362,12 +360,12 @@ func ClearFingerprintSince(fingerprint, since, by string) (cleared int, err erro
 	           AND fingerprint = ?
 	           AND first_seen_at >= ?`, by, fingerprint, since)
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrClearing, ErrQuery, err)
+		err = NewErr(ErrFaults, ErrClearing, ErrQuery, err)
 		goto end
 	}
 	affected, err = result.RowsAffected()
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrClearing, err)
+		err = NewErr(ErrFaults, ErrClearing, err)
 		goto end
 	}
 	cleared = int(affected)
@@ -415,7 +413,7 @@ func query(db *sql.DB, where string, limit int, args ...any) (incidents []Incide
 
 	rows, err = db.Query(stmt, args...)
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrQuery, err)
+		err = NewErr(ErrFaults, ErrQuery, err)
 		goto end
 	}
 
@@ -429,7 +427,7 @@ func query(db *sql.DB, where string, limit int, args ...any) (incidents []Incide
 			&acceptedBy,
 		)
 		if err != nil {
-			err = doterr.NewErr(ErrFaults, ErrScanning, err)
+			err = NewErr(ErrFaults, ErrScanning, err)
 			break
 		}
 		incident.Severity = Severity(severity)
@@ -445,13 +443,13 @@ func query(db *sql.DB, where string, limit int, args ...any) (incidents []Incide
 	if err == nil {
 		err = rows.Err()
 		if err != nil {
-			err = doterr.NewErr(ErrFaults, ErrQuery, err)
+			err = NewErr(ErrFaults, ErrQuery, err)
 		}
 	}
 
 	closeErr = rows.Close()
 	if err == nil && closeErr != nil {
-		err = doterr.NewErr(ErrFaults, ErrQuery, closeErr)
+		err = NewErr(ErrFaults, ErrQuery, closeErr)
 	}
 	if err != nil {
 		incidents = nil
@@ -483,7 +481,7 @@ func Sources(id int64) (sources []Source, err error) {
 		  WHERE error_id = ?
 		  ORDER BY last_seen_at DESC, id DESC`, id)
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrQuery, err)
+		err = NewErr(ErrFaults, ErrQuery, err)
 		goto end
 	}
 
@@ -492,7 +490,7 @@ func Sources(id int64) (sources []Source, err error) {
 		err = rows.Scan(&sessionID, &taskID, &source.Occurrences,
 			&source.FirstSeenAt, &source.LastSeenAt)
 		if err != nil {
-			err = doterr.NewErr(ErrFaults, ErrScanning, err)
+			err = NewErr(ErrFaults, ErrScanning, err)
 			break
 		}
 		source.TaskID = taskID.Int64
@@ -502,13 +500,13 @@ func Sources(id int64) (sources []Source, err error) {
 	if err == nil {
 		err = rows.Err()
 		if err != nil {
-			err = doterr.NewErr(ErrFaults, ErrQuery, err)
+			err = NewErr(ErrFaults, ErrQuery, err)
 		}
 	}
 
 	closeErr = rows.Close()
 	if err == nil && closeErr != nil {
-		err = doterr.NewErr(ErrFaults, ErrQuery, closeErr)
+		err = NewErr(ErrFaults, ErrQuery, closeErr)
 	}
 	if err != nil {
 		sources = nil

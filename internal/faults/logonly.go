@@ -9,8 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-
-	"github.com/mikeschinkel/go-doterr"
 )
 
 // Log-only fault occurrences, and the watermark that dismisses them (E-1887).
@@ -108,7 +106,7 @@ func LogOnly() (details []Detail, err error) {
 
 	info, err = file.Stat()
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrReadingLog, err)
+		err = NewErr(ErrFaults, ErrReadingLog, err)
 		goto end
 	}
 
@@ -219,7 +217,7 @@ func ClearLogOnly() (cleared int, err error) {
 
 	dir = logDir()
 	if dir == "" {
-		err = doterr.NewErr(ErrFaults, ErrNotBound)
+		err = NewErr(ErrFaults, ErrNotBound)
 		goto end
 	}
 
@@ -243,19 +241,19 @@ func ClearLogOnly() (cleared int, err error) {
 
 	info, err = file.Stat()
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrClearing, err)
+		err = NewErr(ErrFaults, ErrClearing, err)
 		goto end
 	}
 
 	prefix, err = readPrefix(file, info.Size())
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrClearing, err)
+		err = NewErr(ErrFaults, ErrClearing, err)
 		goto end
 	}
 
 	err = os.MkdirAll(dir, 0o755)
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrClearing, err)
+		err = NewErr(ErrFaults, ErrClearing, err)
 		goto end
 	}
 
@@ -265,13 +263,13 @@ func ClearLogOnly() (cleared int, err error) {
 		DigestLen: int64(len(prefix)),
 	})
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrClearing, err)
+		err = NewErr(ErrFaults, ErrClearing, err)
 		goto end
 	}
 
 	err = os.WriteFile(filepath.Join(dir, watermarkFile), append(encoded, '\n'), 0o644)
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrClearing, err)
+		err = NewErr(ErrFaults, ErrClearing, err)
 	}
 
 end:
@@ -301,7 +299,7 @@ func openDetailLog() (file *os.File, err error) {
 
 	path = DetailLogPath()
 	if path == "" {
-		err = doterr.NewErr(ErrFaults, ErrNotBound)
+		err = NewErr(ErrFaults, ErrNotBound)
 		goto end
 	}
 
@@ -312,7 +310,7 @@ func openDetailLog() (file *os.File, err error) {
 			err = nil
 			goto end
 		}
-		err = doterr.NewErr(ErrFaults, ErrReadingLog, err)
+		err = NewErr(ErrFaults, ErrReadingLog, err)
 	}
 
 end:
@@ -373,7 +371,7 @@ func readWatermark() (mark watermark, err error) {
 
 	path = WatermarkPath()
 	if path == "" {
-		err = doterr.NewErr(ErrFaults, ErrNotBound)
+		err = NewErr(ErrFaults, ErrNotBound)
 		goto end
 	}
 

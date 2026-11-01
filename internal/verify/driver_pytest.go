@@ -7,7 +7,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/mikeschinkel/go-doterr"
 	"github.com/mikeschinkel/go-dt"
 )
 
@@ -126,7 +125,7 @@ func resolvePytestLauncher(variant string, root dt.DirPath) (launcher []string, 
 			goto end
 		}
 	}
-	err = doterr.NewErr(ErrPytestLauncher,
+	err = NewErr(ErrPytestLauncher,
 		"runner", pytestRunner(variant), "root", string(root),
 		"tried", pytestTried(variant))
 end:

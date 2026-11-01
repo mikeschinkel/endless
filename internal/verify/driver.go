@@ -7,7 +7,6 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/mikeschinkel/go-doterr"
 	"github.com/mikeschinkel/go-dt"
 )
 
@@ -119,7 +118,7 @@ func LookupDriver(runner string) (d RunnerDriver, err error) {
 	}
 	if !d.SupportsVariant(variant) {
 		d = nil
-		err = doterr.NewErr(ErrUnknownVariant,
+		err = NewErr(ErrUnknownVariant,
 			"runner", runner, "family", family, "variant", variant)
 		goto end
 	}
@@ -156,7 +155,7 @@ func parseRunner(runner string) (family, variant string, err error) {
 		family = parts[0]
 		variant = parts[1]
 	default:
-		err = doterr.NewErr(ErrMalformedRunner, "runner", runner)
+		err = NewErr(ErrMalformedRunner, "runner", runner)
 	}
 	return family, variant, err
 }
@@ -189,7 +188,7 @@ func runAndNormalize(argv []string, src StreamSource, format Format, root dt.Dir
 
 	stdout, stderr, exit, err = execCapture(argv, root, env)
 	if err != nil {
-		err = doterr.NewErr(ErrCheckStart, err, "command", strings.Join(argv, " "))
+		err = NewErr(ErrCheckStart, err, "command", strings.Join(argv, " "))
 		goto end
 	}
 
@@ -199,7 +198,7 @@ func runAndNormalize(argv []string, src StreamSource, format Format, root dt.Dir
 	case StreamFile:
 		raw, err = reportPath.ReadFile()
 		if err != nil {
-			err = doterr.NewErr(ErrNoResultStream, err,
+			err = NewErr(ErrNoResultStream, err,
 				"report", string(reportPath), "exit", exit, "stderr", tailBytes(stderr))
 			goto end
 		}
@@ -207,7 +206,7 @@ func runAndNormalize(argv []string, src StreamSource, format Format, root dt.Dir
 
 	rpt, err = Normalize(format, raw)
 	if err != nil {
-		err = doterr.NewErr(err, "exit", exit, "stderr", tailBytes(stderr))
+		err = NewErr(err, "exit", exit, "stderr", tailBytes(stderr))
 		goto end
 	}
 	result = RunResult{Report: rpt, Exit: exit, Stderr: stderr}

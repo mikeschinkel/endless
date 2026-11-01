@@ -6,8 +6,6 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
-
-	"github.com/mikeschinkel/go-doterr"
 )
 
 // The fault detail log (errors.jsonl).
@@ -215,7 +213,7 @@ func Details(id int64) (details []Detail, err error) {
 
 	path = DetailLogPath()
 	if path == "" {
-		err = doterr.NewErr(ErrFaults, ErrNotBound)
+		err = NewErr(ErrFaults, ErrNotBound)
 		goto end
 	}
 
@@ -225,7 +223,7 @@ func Details(id int64) (details []Detail, err error) {
 			err = nil
 			goto end
 		}
-		err = doterr.NewErr(ErrFaults, ErrReadingLog, err)
+		err = NewErr(ErrFaults, ErrReadingLog, err)
 		goto end
 	}
 

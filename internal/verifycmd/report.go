@@ -10,7 +10,6 @@ import (
 	"github.com/mattn/go-runewidth"
 
 	"github.com/mikeschinkel/endless/internal/verify"
-	"github.com/mikeschinkel/go-doterr"
 	"github.com/mikeschinkel/go-dt"
 )
 
@@ -51,7 +50,7 @@ func reportDir(id string) (dir dt.DirPath, err error) {
 
 	cacheDir, err = os.UserCacheDir()
 	if err != nil {
-		err = doterr.NewErr(ErrWritingCTRF, err)
+		err = NewErr(ErrWritingCTRF, err)
 		goto end
 	}
 	dir = dt.DirPath(cacheDir).Join("endless", "verify", id)
@@ -77,18 +76,18 @@ func writeCTRF(id string, r *verify.Report) (fp dt.Filepath, err error) {
 	}
 	err = dir.MkdirAll(0o755)
 	if err != nil {
-		err = doterr.NewErr(ErrWritingCTRF, err, "dir", dir)
+		err = NewErr(ErrWritingCTRF, err, "dir", dir)
 		goto end
 	}
 	err = r.Write(&buf)
 	if err != nil {
-		err = doterr.NewErr(ErrWritingCTRF, err)
+		err = NewErr(ErrWritingCTRF, err)
 		goto end
 	}
 	fp = dt.FilepathJoin(dir, time.Now().UTC().Format(ReportTimeLayout)+ReportFileSuffix)
 	err = fp.WriteFile(buf.Bytes(), 0o644)
 	if err != nil {
-		err = doterr.NewErr(ErrWritingCTRF, err, "filepath", fp)
+		err = NewErr(ErrWritingCTRF, err, "filepath", fp)
 		goto end
 	}
 end:

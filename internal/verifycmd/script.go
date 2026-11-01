@@ -7,7 +7,6 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/verify"
-	"github.com/mikeschinkel/go-doterr"
 	"github.com/mikeschinkel/go-dt"
 )
 
@@ -163,7 +162,7 @@ func scriptTAPPath(runDir dt.DirPath) (fp dt.Filepath, err error) {
 	reportsDir = runDir.Join("reports")
 	err = reportsDir.MkdirAll(0o755)
 	if err != nil {
-		err = doterr.NewErr(ErrMakingRunDir, err, "dir", reportsDir)
+		err = NewErr(ErrMakingRunDir, err, "dir", reportsDir)
 		goto end
 	}
 	fp = dt.FilepathJoin(reportsDir, tapFile)
@@ -196,7 +195,7 @@ func execScript(script dt.Filepath, root dt.DirPath, env []string) (exit int, er
 		exit = ee.ExitCode()
 		err = nil
 	default:
-		err = doterr.NewErr(ErrScriptStart, err, "script", script)
+		err = NewErr(ErrScriptStart, err, "script", script)
 	}
 	return exit, err
 }
@@ -214,7 +213,7 @@ func scriptReport(tapPath dt.Filepath, exit int) (rpt *verify.Report, err error)
 
 	exists, err = tapPath.Exists()
 	if err != nil {
-		err = doterr.NewErr(verify.ErrNoResultStream, err, "filepath", tapPath)
+		err = NewErr(verify.ErrNoResultStream, err, "filepath", tapPath)
 		goto end
 	}
 	if !exists {
@@ -224,7 +223,7 @@ func scriptReport(tapPath dt.Filepath, exit int) (rpt *verify.Report, err error)
 
 	raw, err = tapPath.ReadFile()
 	if err != nil {
-		err = doterr.NewErr(verify.ErrNoResultStream, err, "filepath", tapPath)
+		err = NewErr(verify.ErrNoResultStream, err, "filepath", tapPath)
 		goto end
 	}
 

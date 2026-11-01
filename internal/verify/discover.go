@@ -4,7 +4,6 @@ import (
 	"os"
 	"strings"
 
-	"github.com/mikeschinkel/go-doterr"
 	"github.com/mikeschinkel/go-dt"
 )
 
@@ -80,7 +79,7 @@ func LoadSuite(root dt.DirPath, id string) (eff *Manifest, ok bool, err error) {
 	manifestPath = dt.FilepathJoin(dir, ManifestFile)
 	ok, err = manifestPath.Exists()
 	if err != nil {
-		err = doterr.NewErr(ErrDiscoveringSuites, err)
+		err = NewErr(ErrDiscoveringSuites, err)
 		goto end
 	}
 	if !ok {
@@ -97,13 +96,13 @@ func LoadSuite(root dt.DirPath, id string) (eff *Manifest, ok bool, err error) {
 	}
 	err = eff.ValidateDirs(root)
 	if err != nil {
-		err = doterr.WithErr(err, "filepath", manifestPath)
+		err = WithErr(err, "filepath", manifestPath)
 		goto end
 	}
 end:
 	if err != nil {
 		ok = false
-		err = doterr.WithErr(err, "root", root)
+		err = WithErr(err, "root", root)
 	}
 	return eff, ok, err
 }
@@ -123,11 +122,11 @@ func effectiveManifest(project *ProjectConfig, manifestPath dt.Filepath, dirName
 
 	err = eff.Validate()
 	if err != nil {
-		err = doterr.WithErr(err, "filepath", manifestPath)
+		err = WithErr(err, "filepath", manifestPath)
 		goto end
 	}
 	if NormalizeTaskID(eff.Task) != NormalizeTaskID(dirName) {
-		err = doterr.NewErr(ErrInvalidManifest, ErrTaskIDMismatch,
+		err = NewErr(ErrInvalidManifest, ErrTaskIDMismatch,
 			"dir", dirName, "task", eff.Task, "filepath", manifestPath)
 		goto end
 	}
@@ -155,7 +154,7 @@ func SuiteDir(root dt.DirPath, id string) (dir dt.DirPath, ok bool, err error) {
 
 	exists, err = tasksDir.Exists()
 	if err != nil {
-		err = doterr.NewErr(ErrDiscoveringSuites, err, "root", root)
+		err = NewErr(ErrDiscoveringSuites, err, "root", root)
 		goto end
 	}
 	if !exists {
@@ -164,7 +163,7 @@ func SuiteDir(root dt.DirPath, id string) (dir dt.DirPath, ok bool, err error) {
 
 	entries, err = tasksDir.ReadDir()
 	if err != nil {
-		err = doterr.NewErr(ErrDiscoveringSuites, err, "root", root)
+		err = NewErr(ErrDiscoveringSuites, err, "root", root)
 		goto end
 	}
 
@@ -213,7 +212,7 @@ func ManifestIDs(root dt.DirPath) (ids map[string]bool, err error) {
 	}
 end:
 	if err != nil {
-		err = doterr.NewErr(ErrDiscoveringSuites, err, "root", root)
+		err = NewErr(ErrDiscoveringSuites, err, "root", root)
 	}
 	return ids, err
 }
@@ -247,7 +246,7 @@ func DiscoverScripts(root dt.DirPath) (scripts map[string]dt.Filepath, err error
 
 	exists, err = tasksDir.Exists()
 	if err != nil {
-		err = doterr.NewErr(ErrDiscoveringSuites, err)
+		err = NewErr(ErrDiscoveringSuites, err)
 		goto end
 	}
 	if !exists {
@@ -256,7 +255,7 @@ func DiscoverScripts(root dt.DirPath) (scripts map[string]dt.Filepath, err error
 
 	entries, err = tasksDir.ReadDir()
 	if err != nil {
-		err = doterr.NewErr(ErrDiscoveringSuites, err)
+		err = NewErr(ErrDiscoveringSuites, err)
 		goto end
 	}
 
@@ -268,7 +267,7 @@ func DiscoverScripts(root dt.DirPath) (scripts map[string]dt.Filepath, err error
 
 		hasScript, err = scriptPath.Exists()
 		if err != nil {
-			err = doterr.NewErr(ErrDiscoveringSuites, err)
+			err = NewErr(ErrDiscoveringSuites, err)
 			goto end
 		}
 		if !hasScript {
@@ -279,7 +278,7 @@ func DiscoverScripts(root dt.DirPath) (scripts map[string]dt.Filepath, err error
 
 end:
 	if err != nil {
-		err = doterr.WithErr(err, "root", root)
+		err = WithErr(err, "root", root)
 	}
 	return scripts, err
 }
@@ -292,7 +291,7 @@ func loadManifestForMerge(fp dt.Filepath) (m *Manifest, err error) {
 
 	data, err = fp.ReadFile()
 	if err != nil {
-		err = doterr.NewErr(ErrInvalidManifest, ErrReadingManifest, err)
+		err = NewErr(ErrInvalidManifest, ErrReadingManifest, err)
 		goto end
 	}
 
@@ -303,7 +302,7 @@ func loadManifestForMerge(fp dt.Filepath) (m *Manifest, err error) {
 
 end:
 	if err != nil {
-		err = doterr.WithErr(err, "filepath", fp)
+		err = WithErr(err, "filepath", fp)
 	}
 	return m, err
 }

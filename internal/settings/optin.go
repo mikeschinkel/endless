@@ -1,9 +1,5 @@
 package settings
 
-import (
-	"github.com/mikeschinkel/go-doterr"
-)
-
 // OptIn is the runtime form of a three-way opt-in setting. Unset is the zero
 // value: a key nobody wrote. Off is an explicit decline, which doctor reads as
 // "do not suggest this again"; Unset is what doctor may suggest.
@@ -43,10 +39,10 @@ func ParseOptIn(s string) (o OptIn, err error) {
 	case OffText:
 		o = Off
 	case "true", "false":
-		err = doterr.NewErr(ErrSettings, ErrInvalidValue, ErrLegacyBool,
+		err = NewErr(ErrSettings, ErrInvalidValue, ErrLegacyBool,
 			"value", s, "write", legacyReplacement(s))
 	default:
-		err = doterr.NewErr(ErrSettings, ErrInvalidValue, ErrUnknownOptIn,
+		err = NewErr(ErrSettings, ErrInvalidValue, ErrUnknownOptIn,
 			"value", s)
 	}
 	return o, err

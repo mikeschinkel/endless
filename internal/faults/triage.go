@@ -17,8 +17,6 @@ import (
 	"database/sql"
 	"errors"
 	"strings"
-
-	"github.com/mikeschinkel/go-doterr"
 )
 
 // TriageState is the job's step for one incident. See the error_triage
@@ -120,7 +118,7 @@ func GetTriage(errorID int64) (t Triage, ok bool, err error) {
 		goto end
 	}
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrQuery, err)
+		err = NewErr(ErrFaults, ErrQuery, err)
 		goto end
 	}
 	ok = true
@@ -152,7 +150,7 @@ func SaveTriage(t Triage) (err error) {
 		t.ErrorID, string(t.State), nullableID(t.SessionID), nullableText(t.DeliveredAt),
 		nullableID(t.FixTaskID), nullableText(t.Note))
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrQuery, err)
+		err = NewErr(ErrFaults, ErrQuery, err)
 	}
 
 end:
@@ -203,11 +201,11 @@ func Escalate(errorID int64) (err error) {
 		goto end
 	}
 	if !ok {
-		err = doterr.NewErr(ErrFaults, ErrNoIncident)
+		err = NewErr(ErrFaults, ErrNoIncident)
 		goto end
 	}
 	if incident.ClearedAt != "" {
-		err = doterr.NewErr(ErrFaults, ErrNotOpen)
+		err = NewErr(ErrFaults, ErrNotOpen)
 		goto end
 	}
 	err = answer(errorID, `
@@ -235,16 +233,16 @@ func answer(errorID int64, stmt string, args ...any) (err error) {
 	}
 	err = db.QueryRow(`SELECT count(*) FROM errors WHERE id = ?`, errorID).Scan(&exists)
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrQuery, err)
+		err = NewErr(ErrFaults, ErrQuery, err)
 		goto end
 	}
 	if exists == 0 {
-		err = doterr.NewErr(ErrFaults, ErrNoIncident)
+		err = NewErr(ErrFaults, ErrNoIncident)
 		goto end
 	}
 	_, err = db.Exec(stmt, args...)
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrQuery, err)
+		err = NewErr(ErrFaults, ErrQuery, err)
 	}
 
 end:
@@ -300,7 +298,7 @@ func Routables(projectIDs []int64) (out []Routable, err error) {
 	rows, err = db.Query(`SELECT `+triageColumns+` FROM error_triage t WHERE t.error_id IN (`+
 		placeholders(len(out))+`)`, routableArgs(out)...)
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrQuery, err)
+		err = NewErr(ErrFaults, ErrQuery, err)
 		goto end
 	}
 	defer rows.Close()
@@ -308,7 +306,7 @@ func Routables(projectIDs []int64) (out []Routable, err error) {
 		var t Triage
 		t, err = scanTriage(rows)
 		if err != nil {
-			err = doterr.NewErr(ErrFaults, ErrScanning, err)
+			err = NewErr(ErrFaults, ErrScanning, err)
 			goto end
 		}
 		i := byID[t.ErrorID]
@@ -316,7 +314,7 @@ func Routables(projectIDs []int64) (out []Routable, err error) {
 	}
 	err = rows.Err()
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrQuery, err)
+		err = NewErr(ErrFaults, ErrQuery, err)
 	}
 
 end:
@@ -341,7 +339,7 @@ func SyncTriageProjects(enabled []int64) (err error) {
 		_, err = db.Exec(`INSERT INTO fault_triage_projects (project_id) VALUES (?)
 		                  ON CONFLICT (project_id) DO NOTHING`, id)
 		if err != nil {
-			err = doterr.NewErr(ErrFaults, ErrQuery, err)
+			err = NewErr(ErrFaults, ErrQuery, err)
 			goto end
 		}
 	}
@@ -352,7 +350,7 @@ func SyncTriageProjects(enabled []int64) (err error) {
 			placeholders(len(enabled))+`)`, idArgs(enabled)...)
 	}
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrQuery, err)
+		err = NewErr(ErrFaults, ErrQuery, err)
 	}
 
 end:
@@ -388,7 +386,7 @@ func FixTaskFor(incident Incident) (taskID int64, err error) {
 		goto end
 	}
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrQuery, err)
+		err = NewErr(ErrFaults, ErrQuery, err)
 		goto end
 	}
 	taskID = id.Int64
@@ -415,7 +413,7 @@ func IsFixTask(taskID int64) (fix bool, err error) {
 	                    WHERE fix_task_id = ? AND state IN ('filed', 'spawned', 'linked', 'accepted')`,
 		taskID).Scan(&n)
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrQuery, err)
+		err = NewErr(ErrFaults, ErrQuery, err)
 		goto end
 	}
 	fix = n > 0
@@ -437,7 +435,7 @@ func FixTaskIncidents(taskID int64) (out []Routable, err error) {
 	}
 	rows, err = db.Query(`SELECT `+triageColumns+` FROM error_triage t WHERE t.fix_task_id = ? ORDER BY t.error_id`, taskID)
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrQuery, err)
+		err = NewErr(ErrFaults, ErrQuery, err)
 		goto end
 	}
 	defer rows.Close()
@@ -445,14 +443,14 @@ func FixTaskIncidents(taskID int64) (out []Routable, err error) {
 		var t Triage
 		t, err = scanTriage(rows)
 		if err != nil {
-			err = doterr.NewErr(ErrFaults, ErrScanning, err)
+			err = NewErr(ErrFaults, ErrScanning, err)
 			goto end
 		}
 		out = append(out, Routable{Triage: t, HasRow: true})
 	}
 	err = rows.Err()
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrQuery, err)
+		err = NewErr(ErrFaults, ErrQuery, err)
 		goto end
 	}
 	for i := range out {

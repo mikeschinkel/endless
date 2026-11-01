@@ -12,7 +12,6 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/verify"
-	"github.com/mikeschinkel/go-doterr"
 	"github.com/mikeschinkel/go-dt"
 )
 
@@ -26,7 +25,7 @@ func findProjectRoot() (root dt.DirPath, err error) {
 
 	cwd, err = dt.Getwd()
 	if err != nil {
-		err = doterr.NewErr(ErrResolvingRoot, err)
+		err = NewErr(ErrResolvingRoot, err)
 		goto end
 	}
 	for dir = cwd; ; dir = parent {
@@ -37,7 +36,7 @@ func findProjectRoot() (root dt.DirPath, err error) {
 		}
 		parent = dir.Dir()
 		if parent == dir {
-			err = doterr.NewErr(ErrProjectRootNotFound, "cwd", cwd)
+			err = NewErr(ErrProjectRootNotFound, "cwd", cwd)
 			goto end
 		}
 	}
@@ -73,7 +72,7 @@ func makeRunDir() (dir dt.DirPath, err error) {
 
 	s, err = os.MkdirTemp("", "endless-verify-")
 	if err != nil {
-		err = doterr.NewErr(ErrMakingRunDir, err)
+		err = NewErr(ErrMakingRunDir, err)
 		goto end
 	}
 	resolved, rerr = filepath.EvalSymlinks(s)
@@ -99,12 +98,12 @@ func isolatedEnv(runDir dt.DirPath, base []string) (env []string, err error) {
 	xdg = runDir.Join("xdg")
 	err = home.MkdirAll(0o755)
 	if err != nil {
-		err = doterr.NewErr(ErrIsolatingEnv, err, "dir", home)
+		err = NewErr(ErrIsolatingEnv, err, "dir", home)
 		goto end
 	}
 	err = xdg.MkdirAll(0o755)
 	if err != nil {
-		err = doterr.NewErr(ErrIsolatingEnv, err, "dir", xdg)
+		err = NewErr(ErrIsolatingEnv, err, "dir", xdg)
 		goto end
 	}
 	env = replaceEnv(base, string(home), string(xdg))
@@ -211,11 +210,11 @@ func runSetup(steps []string, root dt.DirPath, env []string) (err error) {
 	for i, step := range steps {
 		_, stderr, exit, err = runShell(step, root, env)
 		if err != nil {
-			err = doterr.NewErr(ErrSetupStep, err, "index", i, "step", step)
+			err = NewErr(ErrSetupStep, err, "index", i, "step", step)
 			goto end
 		}
 		if exit != 0 {
-			err = doterr.NewErr(ErrSetupStep, "index", i, "step", step, "exit", exit, "stderr", tail(stderr))
+			err = NewErr(ErrSetupStep, "index", i, "step", step, "exit", exit, "stderr", tail(stderr))
 			goto end
 		}
 	}
@@ -241,7 +240,7 @@ func runChecks(checks []verify.Check, root dt.DirPath, env []string, runDir, tmu
 	reportsDir = runDir.Join("reports")
 	err = reportsDir.MkdirAll(0o755)
 	if err != nil {
-		err = doterr.NewErr(ErrMakingRunDir, err, "dir", reportsDir)
+		err = NewErr(ErrMakingRunDir, err, "dir", reportsDir)
 		goto end
 	}
 
@@ -250,7 +249,7 @@ func runChecks(checks []verify.Check, root dt.DirPath, env []string, runDir, tmu
 
 		driver, derr := verify.DriverFor(chk)
 		if derr != nil {
-			err = doterr.NewErr(derr, "check", i, "runner", chk.Runner)
+			err = NewErr(derr, "check", i, "runner", chk.Runner)
 			goto end
 		}
 
@@ -262,7 +261,7 @@ func runChecks(checks []verify.Check, root dt.DirPath, env []string, runDir, tmu
 			if pane == nil {
 				pane, err = fixturePaneEnv(env, tmuxDir)
 				if err != nil {
-					err = doterr.NewErr(err, "check", i)
+					err = NewErr(err, "check", i)
 					goto end
 				}
 			}
@@ -273,7 +272,7 @@ func runChecks(checks []verify.Check, root dt.DirPath, env []string, runDir, tmu
 		// and teardown stay at the root.
 		res, rerr := driver.Run(chk, chk.WorkDir(root), chkEnv, reportFile)
 		if rerr != nil {
-			err = doterr.NewErr(rerr, "check", i, "runner", chk.Runner)
+			err = NewErr(rerr, "check", i, "runner", chk.Runner)
 			goto end
 		}
 
@@ -281,7 +280,7 @@ func runChecks(checks []verify.Check, root dt.DirPath, env []string, runDir, tmu
 		// runner error (e.g. a package that failed to compile emits no test
 		// events), which must not pass as a clean run.
 		if res.Exit != 0 && res.Report.Results.Summary.Failed == 0 {
-			err = doterr.NewErr(ErrCheckFailedNoResults,
+			err = NewErr(ErrCheckFailedNoResults,
 				"check", i, "runner", chk.Runner, "exit", res.Exit, "stderr", tail(res.Stderr))
 			goto end
 		}

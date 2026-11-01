@@ -5,8 +5,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/mikeschinkel/go-doterr"
-
 	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
@@ -43,7 +41,7 @@ func Statuses() (statuses []Status, err error) {
 
 	db, err = monitor.DB()
 	if err != nil {
-		err = doterr.NewErr(ErrJobs, ErrDatabase, err)
+		err = NewErr(ErrJobs, ErrDatabase, err)
 		goto end
 	}
 
@@ -100,13 +98,13 @@ func Retry(name string) (err error) {
 		goto end
 	}
 	if !ok {
-		err = doterr.NewErr(ErrJobs, ErrUnknownJob, "name", name)
+		err = NewErr(ErrJobs, ErrUnknownJob, "name", name)
 		goto end
 	}
 
 	db, err = monitor.DB()
 	if err != nil {
-		err = doterr.NewErr(ErrJobs, ErrDatabase, err)
+		err = NewErr(ErrJobs, ErrDatabase, err)
 		goto end
 	}
 
@@ -125,16 +123,16 @@ func Retry(name string) (err error) {
 		name,
 	)
 	if err != nil {
-		err = doterr.NewErr(ErrJobs, ErrDatabase, ErrQuery, "name", name, err)
+		err = NewErr(ErrJobs, ErrDatabase, ErrQuery, "name", name, err)
 		goto end
 	}
 	affected, err = result.RowsAffected()
 	if err != nil {
-		err = doterr.NewErr(ErrJobs, ErrDatabase, "name", name, err)
+		err = NewErr(ErrJobs, ErrDatabase, "name", name, err)
 		goto end
 	}
 	if affected == 0 {
-		err = doterr.NewErr(ErrJobs, ErrUnknownJob, "name", name)
+		err = NewErr(ErrJobs, ErrUnknownJob, "name", name)
 	}
 
 end:
@@ -150,7 +148,7 @@ func LastOkAt(name string) (at time.Time, ok bool, err error) {
 
 	db, err = monitor.DB()
 	if err != nil {
-		err = doterr.NewErr(ErrJobs, ErrDatabase, err)
+		err = NewErr(ErrJobs, ErrDatabase, err)
 		goto end
 	}
 	err = db.QueryRow(`SELECT last_ok_at FROM jobs WHERE name = ?`, name).Scan(&lastOk)
@@ -159,7 +157,7 @@ func LastOkAt(name string) (at time.Time, ok bool, err error) {
 		goto end
 	}
 	if err != nil {
-		err = doterr.NewErr(ErrJobs, ErrDatabase, ErrQuery, "name", name, err)
+		err = NewErr(ErrJobs, ErrDatabase, ErrQuery, "name", name, err)
 		goto end
 	}
 	if lastOk.String == "" {
@@ -168,7 +166,7 @@ func LastOkAt(name string) (at time.Time, ok bool, err error) {
 	// UTC without a zone suffix, as DueIn documents.
 	at, err = time.ParseInLocation("2006-01-02T15:04:05", lastOk.String, time.UTC)
 	if err != nil {
-		err = doterr.NewErr(ErrJobs, ErrDatabase, "name", name, err)
+		err = NewErr(ErrJobs, ErrDatabase, "name", name, err)
 		goto end
 	}
 	ok = true
@@ -192,7 +190,7 @@ func scheduleRows(db *sql.DB) (rows map[string]Status, err error) {
 		   FROM jobs`,
 	)
 	if err != nil {
-		err = doterr.NewErr(ErrJobs, ErrDatabase, ErrQuery, err)
+		err = NewErr(ErrJobs, ErrDatabase, ErrQuery, err)
 		goto end
 	}
 
@@ -203,7 +201,7 @@ func scheduleRows(db *sql.DB) (rows map[string]Status, err error) {
 			&lastNote, &owner, &status.RunCount, &status.FailCount,
 		)
 		if err != nil {
-			err = doterr.NewErr(ErrJobs, ErrDatabase, err)
+			err = NewErr(ErrJobs, ErrDatabase, err)
 			break
 		}
 		status.Scheduled = true
@@ -218,13 +216,13 @@ func scheduleRows(db *sql.DB) (rows map[string]Status, err error) {
 	if err == nil {
 		err = result.Err()
 		if err != nil {
-			err = doterr.NewErr(ErrJobs, ErrDatabase, ErrQuery, err)
+			err = NewErr(ErrJobs, ErrDatabase, ErrQuery, err)
 		}
 	}
 
 	closeErr = result.Close()
 	if err == nil && closeErr != nil {
-		err = doterr.NewErr(ErrJobs, ErrDatabase, closeErr)
+		err = NewErr(ErrJobs, ErrDatabase, closeErr)
 	}
 	if err != nil {
 		rows = nil

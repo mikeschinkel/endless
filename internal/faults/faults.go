@@ -81,8 +81,6 @@ import (
 	"encoding/hex"
 	"strings"
 	"sync"
-
-	"github.com/mikeschinkel/go-doterr"
 )
 
 // Fault is one occurrence of something going wrong, as reported by a caller.
@@ -204,12 +202,12 @@ func database() (db *sql.DB, err error) {
 	bindMu.RUnlock()
 
 	if accessor == nil {
-		err = doterr.NewErr(ErrFaults, ErrNotBound)
+		err = NewErr(ErrFaults, ErrNotBound)
 		goto end
 	}
 	db, err = accessor()
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrDatabase, err)
+		err = NewErr(ErrFaults, ErrDatabase, err)
 		goto end
 	}
 
@@ -415,7 +413,7 @@ func upsertIncident(db *sql.DB, f Fault, projectID int64, raiser Raiser) (id int
 
 	tx, err = db.Begin()
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrRecording, ErrQuery, err)
+		err = NewErr(ErrFaults, ErrRecording, ErrQuery, err)
 		goto end
 	}
 
@@ -439,7 +437,7 @@ func upsertIncident(db *sql.DB, f Fault, projectID int64, raiser Raiser) (id int
 		nullableID(raiser.TaskID), nullableID(raiser.SessionID),
 	).Scan(&id, &occurrence)
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrRecording, ErrQuery, err)
+		err = NewErr(ErrFaults, ErrRecording, ErrQuery, err)
 		goto rollback
 	}
 
@@ -455,13 +453,13 @@ func upsertIncident(db *sql.DB, f Fault, projectID int64, raiser Raiser) (id int
 		id, nullableID(raiser.SessionID), nullableID(raiser.TaskID),
 	)
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrRecording, ErrQuery, err)
+		err = NewErr(ErrFaults, ErrRecording, ErrQuery, err)
 		goto rollback
 	}
 
 	err = tx.Commit()
 	if err != nil {
-		err = doterr.NewErr(ErrFaults, ErrRecording, ErrQuery, err)
+		err = NewErr(ErrFaults, ErrRecording, ErrQuery, err)
 	}
 	goto end
 

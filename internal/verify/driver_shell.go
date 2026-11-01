@@ -5,7 +5,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/mikeschinkel/go-doterr"
 	"github.com/mikeschinkel/go-dt"
 )
 
@@ -42,7 +41,7 @@ func (shellDriver) Run(check Check, root dt.DirPath, env []string, _ dt.Filepath
 	stdout, stderr, exit, err = execCapture([]string{"sh", "-c", check.Sh}, root, env)
 	stop = time.Now()
 	if err != nil {
-		err = doterr.NewErr(ErrCheckStart, err, "command", check.Sh)
+		err = NewErr(ErrCheckStart, err, "command", check.Sh)
 		goto end
 	}
 

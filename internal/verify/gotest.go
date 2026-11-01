@@ -5,8 +5,6 @@ import (
 	"encoding/json"
 	"strings"
 	"time"
-
-	"github.com/mikeschinkel/go-doterr"
 )
 
 // goTestEvent is one record of the `go test -json` stream (the test2json
@@ -47,7 +45,7 @@ func parseGotestJSON(raw []byte) (rpt *Report, err error) {
 		e = goTestEvent{}
 		err = dec.Decode(&e)
 		if err != nil {
-			err = doterr.NewErr(ErrParsingGotestJSON, err)
+			err = NewErr(ErrParsingGotestJSON, err)
 			rpt = nil
 			goto end
 		}
