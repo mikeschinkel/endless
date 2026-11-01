@@ -8,13 +8,8 @@ is not working in. Marking .endless/worktrees as Excluded by hand fixes it
 for one project on one machine, and nothing remembers to do it for the
 next one.
 
-VS Code has the same problem through gopls, which loads every module it
-can see unless gopls.directoryFilters excludes the directory, and through
-its file watcher and search, which have their own exclude settings.
-
 The exclusion is additive: a JetBrains module's .iml holds excludeFolder
-elements inside its content element, and VS Code's .vscode/settings.json
-holds files.watcherExclude, search.exclude and gopls directoryFilters.
-Both IDEs watch and reload those files, and JetBrains rewrites the .iml on
-its own schedule, so an edit must be idempotent and leave every other byte
-alone. The IDE project files may be absent, gitignored, or committed.
+elements inside its content element. The IDE watches and reloads that
+file, and also rewrites it on its own schedule, so an edit must be
+idempotent and leave every other byte alone. The .idea directory and the
+.iml may be absent, gitignored, or committed.
