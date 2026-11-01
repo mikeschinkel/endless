@@ -3,3 +3,5 @@ Find the sites with: git grep -l '"github.com/mikeschinkel/go-doterr"' -- '*.go'
 Record the rule as well as fixing the code, so it doesn't creep back:
 - Record a decision with `endless decision add`, run from each of three projects: endless, gomion and go-doterr. The rule: go-doterr is a drop-in, never a module dependency. No go.mod may require or replace github.com/mikeschinkel/go-doterr, except the go-doterr repo's own test/, examples/ and cmd/ modules. Code uses it by copying doterr.go into the package. doterr.go in go-doterr changes only with the owner's explicit approval.
 - Add the same rule to the go-pkgs parent directory's CLAUDE.md (the directory holding the go-* repos, beside go-doterr), under Cross-Package Dependencies.
+
+Decided with the owner (2026-11-01): one copy of doterr.go in every package that uses it, not a shared internal/doterr package. The owner's reason: a copy in each directory means the calls never need a package qualifier.
