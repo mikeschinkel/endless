@@ -7897,3 +7897,7 @@ While brainstorming E-2531 I called the command a session gives the user to past
 ### [2026-10-31] Lessons do not reach sessions by design
 During E-2531 I framed 'lessons never reach a session' as a gap Endless might fix by feeding lessons forward. Mike said it is by design: if lessons reached sessions, flaws in the Endless PRODUCT would be masked by sessions leaning on his Claude install's memory as a crutch. Do not propose feeding LESSONS.md into sessions; fix the product instead.
 - **Project**: endless
+
+### [2026-10-31] Hand-waved numbers in a brainstorm are not specs
+During the E-2531 brainstorm Mike said hooks catching '90+%' would be good enough, and I wrote '90% threshold' into the research task E-2532 as if it were a requirement. He said he hand-waves while brainstorming and I locked it in. In a brainstorm, treat a number said in passing as an illustration; do not carry it into a filed task or synthesis as a threshold unless he confirms it is one.
+- **Project**: endless
