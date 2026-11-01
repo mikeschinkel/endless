@@ -7929,3 +7929,7 @@ Situation: planning E-2221 (duplicate marking on session status boards), I wrote
 ### [2026-11-01] task bind is not a planning relationship
 Situation: planning E-2221, Mike asked for a way to tell that another session is actively planning a task, as distinct from merely stewarding it. I said task bind was 'close' and that the guide offered it 'for exactly this case'. Mike disagreed: bind is task claim without the worktree, for associating a session with a task it owns; the guide's case is a session started with no task that files one and starts planning before it can claim. A session planning a to-be-spawned task has a different relationship to it, one that doesn't make it the owner. Reason: matching a guide sentence's words isn't matching its purpose. Check what a mechanism is for before offering it for a new need.
 - **Project**: endless
+
+### [2026-11-01] Hand over commands that paste without editing
+While handing off E-2520, the session gave Mike two endless decision add commands as single 150-plus-character lines with the full description inline. Mike pointed at E-2531: commands wrap in the tmux pane and break on paste, and paths spelled out in full are hard to scan. Hand over commands as short lines (about 70 columns), put long text in a shell variable or a heredoc the paste itself creates, use ~ for the home directory, and never hand over a scratchpad or worktree path.
+- **Project**: endless
