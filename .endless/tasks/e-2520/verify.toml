@@ -27,7 +27,7 @@ sh   = "! git grep -q 'mikeschinkel/go-doterr' -- '*.go' go.mod go.sum"
 
 [[check]]
 name = "no call carries a doterr. package qualifier"
-sh   = "! git grep -q 'doterr\\.' -- '*.go' ':!*/doterr.go'"
+sh   = "! git grep -q 'doterr\\.[A-Z]' -- '*.go' ':!*/doterr.go'"
 
 [[check]]
 name = "each package that uses doterr holds a copy identical to the canonical file"
