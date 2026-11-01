@@ -7889,3 +7889,7 @@ While planning E-2358 (resolve a named session in any project), I presented 'a s
 ### [2026-10-31] When two tasks conflict, the newer one is the current direction
 Reviewing links for newly filed tasks, I found E-1032 (task IDs get a two-letter entity-type prefix, filed months earlier) clashing with E-2391's stated plan (IDs become <project code>-<id>) and asked Mike which was current. He pointed out the filing dates answer it: the later task reflects his newer thinking. When two open tasks describe conflicting directions and nothing else settles it, treat the newer one as current, act on it (link and reopen the older for re-planning), and say so, rather than asking.
 - **Project**: endless
+
+### [2026-10-31] Handoff is a reserved Endless term
+While brainstorming E-2531 I called the command a session gives the user to paste 'the handoff'. Mike said handoff has a specific meaning in Endless (the context a spawning session passes to a spawned one) and this is not that. Use a different word for a command handed to the user to run, such as 'the command' or 'the paste'.
+- **Project**: endless
