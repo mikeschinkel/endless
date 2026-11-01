@@ -7909,3 +7909,7 @@ In E-2531 I called the spawned session's opening prompt 'the spawn prompt' after
 ### [2026-10-31] Stop is one of several hooks that see commands
 Twice in E-2531 I framed command capture and decay-checking as a Stop hook. Mike said twice that Stop is only one of several hook events where a session's commands appear; mid-turn text between tool calls does not reach Stop. Do not design hook capture or checking around Stop alone; the hook log shows which events carry text.
 - **Project**: endless
+
+### [2026-10-31] The hook log covers every hook event, not only Endless's
+In the E-2532 plan questions I wrote that the Claude hook log holds only what Endless's hooks chose to log. Mike said it is written by claude-log-hook, registered in the user's global Claude settings.json for all hook events, so it records every event's payload. Check settings.json before assuming what a log contains.
+- **Project**: endless
