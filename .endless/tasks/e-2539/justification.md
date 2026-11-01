@@ -1,0 +1,1 @@
+The mechanism is unknown: four VS Code settings and one gopls setting overlap, workspace files change where settings live, and live-edit behavior is untested. A do-task cannot be planned until one of them is verified to work.
