@@ -7901,3 +7901,7 @@ During E-2531 I framed 'lessons never reach a session' as a gap Endless might fi
 ### [2026-10-31] Hand-waved numbers in a brainstorm are not specs
 During the E-2531 brainstorm Mike said hooks catching '90+%' would be good enough, and I wrote '90% threshold' into the research task E-2532 as if it were a requirement. He said he hand-waves while brainstorming and I locked it in. In a brainstorm, treat a number said in passing as an illustration; do not carry it into a filed task or synthesis as a threshold unless he confirms it is one.
 - **Project**: endless
+
+### [2026-10-31] Handoff means the generated spawn prompt
+In E-2531 I called the spawned session's opening prompt 'the spawn prompt' after earlier misusing 'handoff' for the paste command. Mike said the spawn prompt is officially named the handoff (what task spawn and task claim render from handoff/<type>.md.tmpl). Use 'handoff' for exactly that, and never for the command a session gives the user.
+- **Project**: endless
