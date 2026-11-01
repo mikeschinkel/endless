@@ -7913,3 +7913,7 @@ Twice in E-2531 I framed command capture and decay-checking as a Stop hook. Mike
 ### [2026-10-31] The hook log covers every hook event, not only Endless's
 In the E-2532 plan questions I wrote that the Claude hook log holds only what Endless's hooks chose to log. Mike said it is written by claude-log-hook, registered in the user's global Claude settings.json for all hook events, so it records every event's payload. Check settings.json before assuming what a log contains.
 - **Project**: endless
+
+### [2026-10-31] Don't explain a feature's intent to its designer from how the code behaves
+Situation: Mike asked why E-2519 showed in two sessions' 'session monitor' views (tasks:9 and tasks:10) with no duplicate mark. I answered by stating what the duplicate mark 'means' and 'needs', taken from the guide and the code, as though that settled what it should do. Mike designed the mark: he intended it to show that a task is listed in at least one other session, so he doesn't act on it in both. Reason: the code and guide describe what was built, which can differ from what was intended. When Mike asks why a feature behaves some way, describe what the code currently does as current behaviour, not as the feature's purpose, and ask or flag where it may differ from his intent.
+- **Project**: endless
