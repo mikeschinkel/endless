@@ -7,7 +7,7 @@
 - Update, insert and delete are all supported.
 - Gates are on by default with a bypass flag, per Mike's suggestion.
 - A correction with no change entries is an annotation.
-- Tables with no entity type can't be corrected. Mike expects this to become a problem later and accepts it for now. That includes `task_plan_items`.
+- Corrections target every table the ledger writes, not entity types. The first version targeted entity types, which left task_plan_items uncorrectable, and that table was part of the deadlock that prompted this task.
 
 ## Rejected
 
