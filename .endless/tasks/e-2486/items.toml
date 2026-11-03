@@ -3,86 +3,86 @@
 #   endless task update E-2486 --items-file <copy>
 
 [[item]]
-id = "P1"
+id = "P18"
 kind = "deliverable"
-statement = "endless correct updates, inserts or deletes a row of the 11 entity types that have a table, with --reason required"
+statement = "endless correct updates, inserts or deletes a row of any of the 19 targets, one for each table the ledger writes, with --reason required"
 
 [[item]]
-id = "P2"
+id = "P19"
 kind = "deliverable"
-statement = "Each change writes a ledger.row_changed entry naming the entity, key, operation and values, with equivalent_kind set where an existing kind fits and left out where none does"
+statement = "Each change writes a ledger.row_changed entry naming the target, key, operation and values, with equivalent_kind set where an existing kind fits and left out where none does"
 
 [[item]]
-id = "P3"
+id = "P20"
 kind = "deliverable"
 statement = "Each run writes a ledger.corrected entry with the reason, before values, whether gates were skipped and the ts values of its change entries, in the same ledger commit"
 
 [[item]]
-id = "P4"
+id = "P21"
 kind = "deliverable"
 statement = "The projector applies ledger.row_changed and treats ledger.corrected as a no-op, so live and projected rows match after a correction"
 
 [[item]]
-id = "P5"
+id = "P22"
 kind = "deliverable"
-statement = "Running with no --set, --insert or --delete records an annotation: a ledger.corrected entry with no change entries and no row change, for any of the 14 entity types"
+statement = "Running with no --set, --insert or --delete records an annotation: a ledger.corrected entry with no change entries and no row change, for any target or any of the 3 entity types with no table"
 
 [[item]]
-id = "P6"
+id = "P23"
 kind = "deliverable"
 statement = "The command refuses to run when agent_env.present() is true"
 
 [[item]]
-id = "P7"
+id = "P24"
 kind = "deliverable"
 statement = "Gates refuse by default, covering the task transition table, plan-item approval and status or phase vocabulary, and --skip-gates bypasses them and is recorded"
 
 [[item]]
-id = "P8"
+id = "P25"
 kind = "deliverable"
-statement = "An unknown entity type or a column off the entity's list is refused, naming the allowed columns, with or without --skip-gates"
+statement = "An unknown target or a column off its list is refused, naming the allowed columns, with or without --skip-gates"
 
 [[item]]
-id = "P9"
+id = "P26"
 kind = "deliverable"
 statement = "A --set that changes nothing is refused, and a --delete is refused when other rows refer to the row"
 
 [[item]]
-id = "P10"
+id = "P27"
 kind = "deliverable"
 statement = "A corrected field with a mirror file gets its mirror rewritten, and a correction triggers no worktree or session change and no epic derivation"
 
 [[item]]
-id = "P11"
+id = "P28"
 kind = "deliverable"
 statement = "Correcting an epic's status prints that the next derivation can overwrite it"
 
 [[item]]
-id = "P12"
+id = "P29"
 kind = "deliverable"
 statement = "A correction's ledger commit subject names the kind and the entity"
 
 [[item]]
-id = "P13"
+id = "P30"
 kind = "deliverable"
-statement = "Tests cover each operation, the agent refusal, gates with and without --skip-gates, annotations, and projection matching the live row"
+statement = "Tests cover each operation, correcting a plan item, the agent refusal, gates with and without --skip-gates, annotations, and projection matching the live row"
 
 [[item]]
-id = "P14"
+id = "P31"
 kind = "exclusion"
 statement = "Audit commands and any display of corrections beyond git log"
 
 [[item]]
-id = "P15"
+id = "P32"
 kind = "exclusion"
 statement = "Detecting drift between the database and the ledger"
 
 [[item]]
-id = "P16"
+id = "P33"
 kind = "exclusion"
-statement = "Tables with no entity type, including task_plan_items"
+statement = "Tables the ledger does not write"
 
 [[item]]
-id = "P17"
+id = "P34"
 kind = "exclusion"
 statement = "Ledger tamper detection and removing secrets from the ledger"
