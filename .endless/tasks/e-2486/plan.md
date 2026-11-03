@@ -4,9 +4,17 @@ Add `endless correct`, a user-only command that changes tracked state through th
 
 ## Entries
 
-1. `ledger.row_changed` is the change entry. It names the target, the row's key and the operation (update, insert or delete), and for an update or insert the values written. It also carries `equivalent_kind`: the existing kind this change resembles (for example `task.status_changed`, `task.fields_updated`, `decision.fields_updated`, `project.updated`, `task.dep_created`, `task.dep_deleted`), left out when none fits. The field is a label only: nothing dispatches on it, so a change entry triggers no existing kind's effects. Executor and projector both apply the entry.
-2. `ledger.corrected` is the correction entry. It names the entity, the reason, whether gates were skipped, the before values, and a list of the `ts` values of its change entries. An annotation has an empty list. It writes no database row, and the projector treats it as a declared no-op.
-3. One run allocates all timestamps from one clock, appends the change entries and then the correction, and commits them in one ledger commit. The ledger commit subject names the kind and entity, so `git log` shows corrections.
+1. `ledger.row_changed` is the change entry. It names the target, the row's key and the operation (update, insert or delete), and for an update or insert the values written. It also carries `like_kind`: the existing kind this change resembles (for example `task.status_changed`, `task.fields_updated`, `decision.fields_updated`, `project.updated`, `task.dep_created`, `task.dep_deleted`), left out when none fits. The field is a label only: nothing dispatches on it, so a change entry triggers no existing kind's effects. Executor and projector both apply the entry.
+2. `ledger.corrected` is the correction entry. It names the entity, the reason, whether gates were skipped, the before values, and `refs`: the byte offset of each of its change entries in the segment file both are written to. An annotation has empty `refs`. It writes no database row, and the projector treats it as a declared no-op.
+3. One run holds the ledger lock, appends its change entries and then the correction as adjacent lines, and commits them in one ledger commit. The ledger commit subject names the kind and entity, so `git log` shows corrections.
+
+## Lock and offsets
+
+- `Writer` takes an exclusive file lock per ledger around every append, so all events are serialized, not only corrections. The lock file lives in the gitignored `.endless/tmp/`.
+- A correction run holds the lock from before its first change entry until after its correction entry, so no other event can land between them.
+- Under the lock, the first offset comes from `os.Stat().Size()` on the segment, and each later offset adds the previous line's length, newline included.
+- The run checks the rotation limit once, before its first line, so all its lines share one segment. A segment can go a few lines over its limit, which is harmless.
+- Because the lines are adjacent, `refs` is redundant with the file's layout: a damaged offset can be rebuilt by walking back as many lines as `refs` has entries.
 
 ## Command
 
