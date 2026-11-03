@@ -1,0 +1,1 @@
+Mike's idea is a blockchain in text: each line carries a hash of the line before it. Open points include chains across segment files and across machines, and how it coexists with removing an accidentally recorded secret.
