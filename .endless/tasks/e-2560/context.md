@@ -1,0 +1,1 @@
+Hand edits and bugs can break a ledger. Mike said a repair command is needed for corruption from a user mistake or an Endless bug, and that a check command can look for issues.
