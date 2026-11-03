@@ -3,86 +3,101 @@
 #   endless task update E-2486 --items-file <copy>
 
 [[item]]
-id = "P18"
+id = "P35"
 kind = "deliverable"
 statement = "endless correct updates, inserts or deletes a row of any of the 19 targets, one for each table the ledger writes, with --reason required"
 
 [[item]]
-id = "P19"
+id = "P36"
 kind = "deliverable"
-statement = "Each change writes a ledger.row_changed entry naming the target, key, operation and values, with equivalent_kind set where an existing kind fits and left out where none does"
+statement = "Each change writes a ledger.row_changed entry naming the target, key, operation and values, and also naming the existing kind it resembles where one fits"
 
 [[item]]
-id = "P20"
+id = "P37"
 kind = "deliverable"
-statement = "Each run writes a ledger.corrected entry with the reason, before values, whether gates were skipped and the ts values of its change entries, in the same ledger commit"
+statement = "Each run writes a ledger.corrected entry with the reason, before values, whether gates were skipped and the byte offset of each of its change entries, in the same ledger commit"
 
 [[item]]
-id = "P21"
+id = "P38"
+kind = "deliverable"
+statement = "Every ledger append takes an exclusive per-ledger file lock, and a correction run holds it from its first change entry through its correction, so those lines are adjacent in one segment"
+
+[[item]]
+id = "P39"
+kind = "deliverable"
+statement = "Each offset a correction records is where that change entry's line starts in the segment"
+
+[[item]]
+id = "P40"
 kind = "deliverable"
 statement = "The projector applies ledger.row_changed and treats ledger.corrected as a no-op, so live and projected rows match after a correction"
 
 [[item]]
-id = "P22"
+id = "P41"
 kind = "deliverable"
 statement = "Running with no --set, --insert or --delete records an annotation: a ledger.corrected entry with no change entries and no row change, for any target or any of the 3 entity types with no table"
 
 [[item]]
-id = "P23"
+id = "P42"
 kind = "deliverable"
 statement = "The command refuses to run when agent_env.present() is true"
 
 [[item]]
-id = "P24"
+id = "P43"
 kind = "deliverable"
 statement = "Gates refuse by default, covering the task transition table, plan-item approval and status or phase vocabulary, and --skip-gates bypasses them and is recorded"
 
 [[item]]
-id = "P25"
+id = "P44"
 kind = "deliverable"
 statement = "An unknown target or a column off its list is refused, naming the allowed columns, with or without --skip-gates"
 
 [[item]]
-id = "P26"
+id = "P45"
 kind = "deliverable"
 statement = "A --set that changes nothing is refused, and a --delete is refused when other rows refer to the row"
 
 [[item]]
-id = "P27"
+id = "P46"
 kind = "deliverable"
 statement = "A corrected field with a mirror file gets its mirror rewritten, and a correction triggers no worktree or session change and no epic derivation"
 
 [[item]]
-id = "P28"
+id = "P47"
 kind = "deliverable"
 statement = "Correcting an epic's status prints that the next derivation can overwrite it"
 
 [[item]]
-id = "P29"
+id = "P48"
 kind = "deliverable"
 statement = "A correction's ledger commit subject names the kind and the entity"
 
 [[item]]
-id = "P30"
+id = "P49"
 kind = "deliverable"
-statement = "Tests cover each operation, correcting a plan item, the agent refusal, gates with and without --skip-gates, annotations, and projection matching the live row"
+statement = "Tests cover each operation, correcting a plan item, concurrent appends staying whole lines, offsets pointing at line starts, the agent refusal, gates with and without --skip-gates, annotations, and projection matching the live row"
 
 [[item]]
-id = "P31"
+id = "P50"
 kind = "exclusion"
 statement = "Audit commands and any display of corrections beyond git log"
 
 [[item]]
-id = "P32"
+id = "P51"
 kind = "exclusion"
 statement = "Detecting drift between the database and the ledger"
 
 [[item]]
-id = "P33"
+id = "P52"
 kind = "exclusion"
 statement = "Tables the ledger does not write"
 
 [[item]]
-id = "P34"
+id = "P53"
 kind = "exclusion"
 statement = "Ledger tamper detection and removing secrets from the ledger"
+
+[[item]]
+id = "P54"
+kind = "exclusion"
+statement = "Commands that check a ledger or repair its offsets"
