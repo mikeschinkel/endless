@@ -4,7 +4,7 @@ Add `endless correct`, a user-only command that changes tracked state through th
 
 ## Entries
 
-1. `ledger.row_changed` is the change entry. It names the target, the row's key and the operation (update, insert or delete), and for an update or insert the values written. It also carries `like_kind`: the existing kind this change resembles (for example `task.status_changed`, `task.fields_updated`, `decision.fields_updated`, `project.updated`, `task.dep_created`, `task.dep_deleted`), left out when none fits. The field is a label only: nothing dispatches on it, so a change entry triggers no existing kind's effects. Executor and projector both apply the entry.
+1. `ledger.row_changed` is the change entry. It names the target, the row's key and the operation (update, insert or delete), and for an update or insert the values written. A change entry triggers no existing kind's effects. Executor and projector both apply the entry.
 2. `ledger.corrected` is the correction entry. It names the entity, the reason, whether gates were skipped, the before values, and `refs`: the byte offset of each of its change entries in the segment file both are written to. An annotation has empty `refs`. It writes no database row, and the projector treats it as a declared no-op.
 3. One run holds the ledger lock, appends its change entries and then the correction as adjacent lines, and commits them in one ledger commit. The ledger commit subject names the kind and entity, so `git log` shows corrections.
 
