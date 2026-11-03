@@ -1,0 +1,1 @@
+A secret that lands in a ledger entry stays there and in git history, because the ledger is append-only. Open points include redacting a payload while keeping its hash so that a hash chain still verifies, and rewriting the copies in git history.
