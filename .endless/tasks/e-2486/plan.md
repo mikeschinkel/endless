@@ -4,15 +4,15 @@ Add `endless correct`, a user-only command that changes tracked state through th
 
 ## Entries
 
-1. `ledger.row_changed` is the change entry. It names the entity type, the row's key and the operation (update, insert or delete), and for an update or insert the values written. It also carries `equivalent_kind`: the existing kind this change resembles (for example `task.status_changed`, `task.fields_updated`, `decision.fields_updated`, `project.updated`, `task.dep_created`, `task.dep_deleted`), left out when none fits. The field is a label only: nothing dispatches on it, so a change entry triggers no existing kind's effects. Executor and projector both apply the entry.
+1. `ledger.row_changed` is the change entry. It names the target, the row's key and the operation (update, insert or delete), and for an update or insert the values written. It also carries `equivalent_kind`: the existing kind this change resembles (for example `task.status_changed`, `task.fields_updated`, `decision.fields_updated`, `project.updated`, `task.dep_created`, `task.dep_deleted`), left out when none fits. The field is a label only: nothing dispatches on it, so a change entry triggers no existing kind's effects. Executor and projector both apply the entry.
 2. `ledger.corrected` is the correction entry. It names the entity, the reason, whether gates were skipped, the before values, and a list of the `ts` values of its change entries. An annotation has an empty list. It writes no database row, and the projector treats it as a declared no-op.
 3. One run allocates all timestamps from one clock, appends the change entries and then the correction, and commits them in one ledger commit. The ledger commit subject names the kind and entity, so `git log` shows corrections.
 
 ## Command
 
-- `endless correct <entity-type> <id> --set col=value ... --reason <text>` updates a row.
-- `endless correct <entity-type> --insert col=value ... --reason <text>` inserts a row. It may set the listed columns plus any column the table requires.
-- `endless correct <entity-type> <id> --delete --reason <text>` deletes a row, refusing when other rows refer to it.
+- `endless correct <target> <id> --set col=value ... --reason <text>` updates a row.
+- `endless correct <target> --insert col=value ... --reason <text>` inserts a row. It may set the listed columns plus any column the table requires.
+- `endless correct <target> <id> --delete --reason <text>` deletes a row, refusing when other rows refer to it.
 - With no `--set`, `--insert` or `--delete`, it records an annotation.
 - `--reason` is required. `--skip-gates` bypasses gates and is recorded in the correction entry.
 - It refuses when `agent_env.present()` is true.
@@ -24,7 +24,9 @@ On by default, and they only refuse. For a task's status: the transition table a
 
 ## What can be corrected
 
-| Entity type | Table | Columns |
+A target is one table the ledger writes, not an entity type, because one entity type can write several tables: `task` events write tasks, task_content, task_plan_items, task_landings and the reconciliation tables. A table with a composite key takes its key parts joined by `:`.
+
+| Target | Table | Columns |
 |---|---|---|
 | task | tasks, task_content | title, description, phase, type, status, parent_id, ratings, completed_at, verified_sha, and the content fields task.fields_updated accepts |
 | task_dep | task_deps | dep_type |
@@ -37,8 +39,16 @@ On by default, and they only refuse. For a task's status: the transition table a
 | decision_relation | decision_relations | relation_type |
 | task_question | task_questions | answer, status, reason |
 | shipped_file | shipped_file_writes | sha256 |
+| plan_item | task_plan_items | statement, kind, state, verify, detail, approved_statement, approved_kind, approved_at, post_land, approved_post_land |
+| session_hidden_task | session_hidden_tasks | none: insert and delete only |
+| session_pinned_task | session_pinned_tasks | none: insert and delete only |
+| session_notice | session_notices | notified |
+| task_landing | task_landings | merge_commit_sha, base_branch |
+| task_reconciliation | task_reconciliations | plan_digest, head |
+| task_reconciliation_entry | task_reconciliation_entries | verdict, note, holds_reason |
+| task_post_land_entry | task_post_land_entries | verdict, note, holds_reason |
 
-`conversation`, `message` and `project_next` have no table, so they accept annotations only. An unknown entity type or an unlisted column is refused, naming the columns that are allowed.
+`conversation`, `message` and `project_next` have no table, so they accept annotations only. An unknown target or an unlisted column is refused, naming the columns that are allowed.
 
 ## After the change
 
