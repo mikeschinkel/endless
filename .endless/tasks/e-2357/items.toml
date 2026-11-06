@@ -23,8 +23,8 @@ verify = "go test ./internal/sessionstatuscmd/ -run TestGraph"
 [[item]]
 id = "P4"
 kind = "deliverable"
-statement = "A graph node carries whether its task has landed, and session status --json emits it as a landed field on each node"
-verify = "endless session status --json | jq '.graph.nodes[0] | has(\"landed\")'"
+statement = "Each graph node carries a landings count, the number of landing records its task has, and session status --json emits it as a landings field on each node"
+verify = "endless session status --json | jq '.graph.nodes[0].landings | type == \"number\"'"
 
 [[item]]
 id = "P5"
