@@ -7961,3 +7961,7 @@ Planning E-2569 I recommended a build-only check over go mod tidy -diff because 
 ### [2026-11-07] A con that says a check cannot run in some projects is a design prompt, not a verdict
 In E-2569 I listed, as a con of running go mod tidy -diff under GOWORK=off, that Endless's relative replace directives make it fail from a worktree. Mike asked why the check did not re-root those paths instead. It can: copy go.mod with relative replace paths resolved against the main checkout and pass it with -modfile. When an option fails for a mechanical reason, work out whether the mechanism can be fixed inside the option before presenting the failure as a cost.
 - **Project**: endless
+
+### [2026-11-07] GOFLAGS=-mod=mod rewrites go.mod and go.sum wherever it runs
+Diagnosing the E-2357 land failure I ran GOFLAGS=-mod=mod go list -m all in the main checkout to see which requirement was stale. It silently rewrote main's go.mod and go.sum, and the hook then refused git checkout there, so Mike had to clean up. Use go mod tidy -diff, go list -m -json, or plain go list -m all under GOWORK=off to read dependency state; -mod=mod is a write, and nothing in main may be written from a worktree session.
+- **Project**: endless
