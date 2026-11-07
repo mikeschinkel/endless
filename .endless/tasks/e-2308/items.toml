@@ -8,11 +8,6 @@ kind = "deliverable"
 statement = "endless-go calls dt.EnsureUserHomeDir() at startup; when it fails, paths print in full and the command still runs"
 
 [[item]]
-id = "P2"
-kind = "deliverable"
-statement = "internal/refusal exports a path display function: a go-dt path value shows in ~ form (OrFullPath) for a person and absolute for an agent"
-
-[[item]]
 id = "P3"
 kind = "deliverable"
 statement = "internal/refusal exports a free-text display function: for a person it replaces $HOME/ with ~/, and bare $HOME when bounded as the analysis describes; for an agent it expands ~/ to $HOME/"
