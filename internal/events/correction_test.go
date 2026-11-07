@@ -301,8 +301,8 @@ func TestCorrection_TaskDeleteTwiceIsRefused(t *testing.T) {
 }
 
 // Soft removal follows the table, not the target's name: a table with a
-// removed column keeps its rows (tasks today; projects, sessions and decisions
-// once E-2010 lands), and a table without one loses the row.
+// removed column keeps its rows (tasks, and decisions since E-2010), and a
+// table without one loses the row.
 func TestCorrection_SoftRemovalFollowsTheRemovedColumn(t *testing.T) {
 	db := withExecutorDB(t)
 	soft, err := events.TableSoftRemoves(db, "tasks")
@@ -319,6 +319,16 @@ func TestCorrection_SoftRemovalFollowsTheRemovedColumn(t *testing.T) {
 	correct(t, events.CorrectionRequest{Target: "note", Key: "7", Op: events.RowOpDelete, Reason: "stray", Project: "test"})
 	if got := scalar[int](t, db, "SELECT count(*) FROM notes WHERE id = 7"); got != 0 {
 		t.Errorf("a note has no removed column, so a delete removes the row; %d left", got)
+	}
+	if _, err := db.Exec("INSERT INTO decisions (id, project_id, title, status, created_at) VALUES (9, 1, 'Stray', 'proposed', '2026-01-01')"); err != nil {
+		t.Fatal(err)
+	}
+	prep, _ := correct(t, events.CorrectionRequest{Target: "decision", Key: "ED-9", Op: events.RowOpDelete, Reason: "stray", Project: "test"})
+	if !strings.Contains(prep.Summary, "removed = 1") {
+		t.Errorf("a decision delete should say it soft-removes, got %q", prep.Summary)
+	}
+	if got := scalar[int](t, db, "SELECT removed FROM decisions WHERE id = 9"); got != 1 {
+		t.Errorf("decisions.removed = %d; a decision is retained with removed = 1 since E-2010", got)
 	}
 }
 

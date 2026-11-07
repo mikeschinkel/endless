@@ -186,9 +186,9 @@ type tableShape struct {
 }
 
 // SoftRemoves reports whether the table keeps removed rows behind a removed
-// column instead of deleting them (tasks today per ED-1547; projects, sessions
-// and decisions once E-2010 lands). A correcting delete on such a table sets
-// removed = 1, the way the table's own remove command does.
+// column instead of deleting them (tasks per ED-1547, decisions per E-2010).
+// A correcting delete on such a table sets removed = 1, the way the table's
+// own remove command does.
 func (s *tableShape) SoftRemoves() bool {
 	_, ok := s.Columns["removed"]
 	return ok

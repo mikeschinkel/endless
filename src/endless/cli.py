@@ -2511,8 +2511,8 @@ _CORRECT_OP_HELP = {
     "insert": "Insert a row: --set COL=VALUE per column; the listed columns plus "
               "any the table requires. An id is allocated.",
     "delete": "Delete a row, refused while other rows refer to it. A table that "
-              "keeps removed rows (tasks) marks the row removed = 1 instead, so "
-              "its id is never minted again.",
+              "keeps removed rows (tasks, decisions) marks the row removed = 1 "
+              "instead, so its id is never minted again.",
     "annotate": "Record an annotation: a correction entry with the reason and no "
                 "change.",
 }

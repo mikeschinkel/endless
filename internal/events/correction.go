@@ -543,10 +543,10 @@ func prepareDelete(db dbQuerier, t CorrectionTarget, shape *tableShape, req Corr
 	ks := keyString(t, key)
 	summary := fmt.Sprintf("Deleted %s %s", t.Name, ks)
 	if shape.SoftRemoves() {
-		// A table with a removed column never loses a row (ED-1547 for tasks;
-		// E-2010 extends it): the row stays with removed = 1 so its id is never
-		// minted again. A correction deletes such a row the way its own remove
-		// command does.
+		// A table with a removed column never loses a row (ED-1547 for tasks,
+		// E-2010 for decisions): the row stays with removed = 1 so its id is
+		// never minted again. A correction deletes such a row the way its own
+		// remove command does.
 		summary = fmt.Sprintf("Removed %s %s (removed = 1; the id is never reused)", t.Name, ks)
 	}
 	prep := &PreparedCorrection{
