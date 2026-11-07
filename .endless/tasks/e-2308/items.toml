@@ -61,7 +61,7 @@ statement = "A Go test runs the analyzer over internal/ and cmd/, so just test-g
 [[item]]
 id = "P13"
 kind = "deliverable"
-statement = "A test runs endless-go under a temp HOME as a person — a path-naming refusal, errors show and show --detail of a fault with a path, settings migrate, and a converted direct print — and fails if $HOME/ appears in the output"
+statement = "A test runs endless-go under a temp HOME — a path-naming refusal in both person and agent form, errors show and show --detail of a fault with a path, settings migrate, and a converted direct print — and fails if $HOME/ appears in the output"
 
 [[item]]
 id = "P15"
