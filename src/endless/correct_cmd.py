@@ -48,13 +48,40 @@ def refuse_agent() -> None:
     )
 
 
-def correct(target: str, key: str | None, sets: tuple[str, ...],
-            inserts: tuple[str, ...], delete: bool, reason: str,
-            skip_gates: bool, project: str | None) -> None:
-    """Entry point bound by cli.py for `endless correct`."""
+# The targets, as Go corrects them (internal/events/correction_targets.go).
+# cli.py builds one subcommand group per name; a test holds this list equal
+# to `endless-go correct --list-targets`, so a target added in Go without a
+# subcommand here fails the suite rather than going unreachable.
+TARGETS: tuple[str, ...] = (
+    "task", "task_dep", "project", "session", "session_status",
+    "session_tasks", "note", "decision", "decision_relation", "task_question",
+    "shipped_file", "plan_item", "session_hidden_task", "session_pinned_task",
+    "session_notice", "task_landing", "task_reconciliation",
+    "task_reconciliation_entry", "task_post_land_entry",
+    "conversation", "message", "project_next",
+)
+
+# Entity types with no table: they take annotations only.
+ANNOTATION_ONLY: frozenset[str] = frozenset({"conversation", "message", "project_next"})
+
+OPS: tuple[str, ...] = ("update", "insert", "delete", "annotate")
+
+
+def correct(target: str, op: str, key: str | None, pairs: tuple[str, ...],
+            reason: str, skip_gates: bool, project: str | None) -> None:
+    """Entry point bound by cli.py for `endless correct <target> <op> [KEY]`.
+
+    `op` is one of OPS; `pairs` are the col=value arguments of an update or an
+    insert and are empty for a delete or an annotation. The Go command still
+    takes the operation as flags (--set, --insert, --delete); this maps the
+    subcommand onto them.
+    """
     from endless.task_cmd import _resolve_project
 
     refuse_agent()
+    if op not in OPS:  # pragma: no cover - cli.py builds the subcommands
+        raise agent_help.no_report(f"correct: unknown operation {op!r}",
+                                   "Use update, insert, delete or annotate")
     if not reason or not reason.strip():
         raise agent_help.no_report(
             "correct: --reason is required; a correction records why. "
@@ -82,11 +109,13 @@ def correct(target: str, key: str | None, sets: tuple[str, ...],
     ]
     if key:
         cmd += ["--key", key]
-    for pair in sets:
-        cmd += ["--set", pair]
-    for pair in inserts:
-        cmd += ["--insert", pair]
-    if delete:
+    if op == "update":
+        for pair in pairs:
+            cmd += ["--set", pair]
+    elif op == "insert":
+        for pair in pairs:
+            cmd += ["--insert", pair]
+    elif op == "delete":
         cmd.append("--delete")
     if skip_gates:
         cmd.append("--skip-gates")
@@ -99,6 +128,15 @@ def correct(target: str, key: str | None, sets: tuple[str, ...],
 
     out = json.loads(result.stdout.strip() or "{}")
     _render(out, reason, skip_gates)
+
+
+def go_targets() -> dict:
+    """The targets as the Go binary reports them (`--list-targets`); for the
+    parity test and nothing else at runtime."""
+    result = subprocess.run(
+        [event_bridge._resolve_endless_go(), "correct", "--list-targets"],
+        capture_output=True, text=True, check=True)
+    return json.loads(result.stdout)
 
 
 def _render(out: dict, reason: str, skip_gates: bool) -> None:

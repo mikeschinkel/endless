@@ -69,8 +69,15 @@ func Run(args []string) {
 	actorKind := fs.String("actor-kind", "cli", "Actor kind")
 	actorID := fs.String("actor-id", "", "Actor identifier")
 	sessionID := fs.String("session-id", "", "Endless session ID (optional)")
+	listTargets := fs.Bool("list-targets", false, "Print the targets as JSON and exit; nothing is read or written")
 	parseFlags(fs, args)
 
+	if *listTargets {
+		if err := writeTargets(os.Stdout); err != nil {
+			refusal.From(err).Command(command).Exit(1)
+		}
+		return
+	}
 	if err := run(request{
 		target: *target, key: *key, sets: sets, inserts: inserts, del: *del,
 		reason: *reason, skipGates: *skipGates, project: *project, projectRoot: *projectRoot,
@@ -107,6 +114,26 @@ type request struct {
 	actorKind     string
 	actorID       string
 	sessionID     string
+}
+
+// targetList is what --list-targets prints: the Python command builds its
+// subcommands from the same list Go corrects, and a test holds the two equal.
+type targetList struct {
+	Targets        []string `json:"targets"`
+	AnnotationOnly []string `json:"annotation_only"`
+}
+
+// writeTargets prints every target name, and which of them take annotations
+// only, as one JSON object.
+func writeTargets(out io.Writer) error {
+	var tl targetList
+	for _, t := range events.CorrectionTargets() {
+		tl.Targets = append(tl.Targets, t.Name)
+		if t.Annotates() {
+			tl.AnnotationOnly = append(tl.AnnotationOnly, t.Name)
+		}
+	}
+	return json.NewEncoder(out).Encode(tl)
 }
 
 // AgentRefusal is the refusal an agent gets. Exported so the Python command,

@@ -508,10 +508,10 @@ func prepareDelete(db dbQuerier, t CorrectionTarget, shape *tableShape, req Corr
 	if err := requireSameProject(db, t, req.Project, row); err != nil {
 		return nil, err
 	}
-	if t.Name == "task" && row["removed"] == int64(1) {
+	if shape.SoftRemoves() && row["removed"] == int64(1) {
 		return nil, refusal.NoReport(
-			fmt.Sprintf("correct: task %s is already removed", keyString(t, key)),
-			"Nothing to delete; retry on a live task")
+			fmt.Sprintf("correct: %s %s is already removed", t.Name, keyString(t, key)),
+			fmt.Sprintf("Nothing to delete; retry on a live %s", t.Name))
 	}
 	refs, err := referrers(db, t, key)
 	if err != nil {
@@ -542,11 +542,12 @@ func prepareDelete(db dbQuerier, t CorrectionTarget, shape *tableShape, req Corr
 	}
 	ks := keyString(t, key)
 	summary := fmt.Sprintf("Deleted %s %s", t.Name, ks)
-	if t.Name == "task" {
-		// Tasks are never DELETEd (ED-1547): a removed task keeps its row with
-		// removed = 1 so its id is never minted again. A correction deletes a
-		// task the way the executor removes one.
-		summary = fmt.Sprintf("Removed task %s (removed = 1; the id is never reused)", ks)
+	if shape.SoftRemoves() {
+		// A table with a removed column never loses a row (ED-1547 for tasks;
+		// E-2010 extends it): the row stays with removed = 1 so its id is never
+		// minted again. A correction deletes such a row the way its own remove
+		// command does.
+		summary = fmt.Sprintf("Removed %s %s (removed = 1; the id is never reused)", t.Name, ks)
 	}
 	prep := &PreparedCorrection{
 		Target:  t,
@@ -1146,7 +1147,7 @@ func applyRowChanged(db dbQuerier, evt *Event) error {
 	case RowOpInsert:
 		return applyInsert(db, t, shape, values)
 	case RowOpDelete:
-		return applyDelete(db, t, key)
+		return applyDelete(db, t, shape, key)
 	}
 	return fmt.Errorf("events: ledger.row_changed has unknown op %q", p.Op)
 }
@@ -1264,13 +1265,13 @@ func applyInsert(db dbQuerier, t CorrectionTarget, shape *tableShape, values map
 	return nil
 }
 
-func applyDelete(db dbQuerier, t CorrectionTarget, key map[string]any) error {
+func applyDelete(db dbQuerier, t CorrectionTarget, shape *tableShape, key map[string]any) error {
 	where, args := keyWhere(t, key)
 	q := fmt.Sprintf("DELETE FROM %s WHERE %s", t.Table, where)
-	if t.Name == "task" {
-		// ED-1547: a task is retained with removed = 1, never deleted, so its id
-		// is never minted again.
-		q = fmt.Sprintf("UPDATE tasks SET removed = 1 WHERE %s", where)
+	if shape.SoftRemoves() {
+		// A table with a removed column retains its rows (ED-1547): the row is
+		// marked removed = 1, never deleted, so its id is never minted again.
+		q = fmt.Sprintf("UPDATE %s SET removed = 1 WHERE %s", t.Table, where)
 	}
 	if _, err := db.Exec(q, args...); err != nil {
 		return fmt.Errorf("events: ledger.row_changed delete %s: %w", t.Name, err)

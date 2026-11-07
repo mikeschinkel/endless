@@ -16,8 +16,8 @@ runner = "pytest/uv"
 paths  = ["tests/test_correct_cmd.py", "tests/test_event_bridge.py"]
 
 [[check]]
-name     = "endless correct --help names the bypass and the targets"
-sh       = "uv run endless correct --help"
+name     = "endless correct task update --help names the bypass"
+sh       = "uv run endless correct task update --help"
 contains = "--skip-gates"
 
 [[check]]
@@ -28,13 +28,18 @@ contains = "plan_item"
 [[check]]
 name     = "an agent is refused before anything runs"
 as       = "agent"
-sh       = "uv run endless correct task E-1 --reason x 2>&1; true"
+sh       = "uv run endless correct task annotate E-1 --reason x 2>&1; true"
 contains = "the user's command"
 
 [[check]]
 name         = "event emit refuses the correction kinds"
 sh       = "go run ./cmd/endless-go event emit --kind ledger.row_changed --project p --entity-type task --entity-id 1 --actor-kind cli --actor-id t --node-id a1b2 --project-root . 2>&1; true"
 contains = "written only by `endless correct`"
+
+[[check]]
+name         = "the target has no third positional: the operation is a subcommand (ED-1647)"
+sh           = "uv run endless correct task --help"
+contains     = "annotate"
 
 [[check]]
 name     = "the appendix documents the command"

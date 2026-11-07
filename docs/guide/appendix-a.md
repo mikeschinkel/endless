@@ -32,10 +32,12 @@ A user-only command. An agent that finds the recorded state wrong tells the user
 
 The ledger is append-only, and the only other way to put a wrong row right is to replay ordinary transitions through their gates. When a gate was skipped on the way in, that can deadlock — a landed todo task with unapproved plan items could reach `assumed` only through `revisit`, `submitted`, `ready` and `underway` and a fresh reconcile, and those transitions would then sit in its history as if they described real events. Accounting's answer is a correcting journal entry: never erase, post an entry that says what it corrects and why.
 
-- **`endless correct <target> <key> --set col=value ... --reason <text>`** — update a row. `NULL` (exactly) is SQL NULL. A `--set` that changes nothing is refused.
-- **`endless correct <target> --insert col=value ... --reason <text>`** — insert a row. It may set the listed columns plus any column the table requires; an `id` is allocated.
-- **`endless correct <target> <key> --delete --reason <text>`** — delete a row, refused while other rows refer to it. A task is marked `removed = 1` rather than deleted, so its id is never minted again.
-- **`endless correct <target> <key> --reason <text>`** — with none of the three, an annotation: a correction entry with the reason and no change, for any target or for `conversation`, `message` and `project_next`, which have no table.
+The command is `endless correct <target> <operation> [KEY]`: the target and the operation are subcommands, the key is the one positional argument, and everything else is a flag. `--reason` is required on every operation: a correction always records why.
+
+- **`endless correct <target> update KEY --set col=value ... --reason <text>`** — update a row. `NULL` (exactly) is SQL NULL. A `--set` that changes nothing is refused.
+- **`endless correct <target> insert --set col=value ... --reason <text>`** — insert a row. It may set the listed columns plus any column the table requires; an `id` is allocated.
+- **`endless correct <target> delete KEY --reason <text>`** — delete a row, refused while other rows refer to it. A table that keeps removed rows behind a `removed` column (tasks today; projects, sessions and decisions once soft removal reaches them) has the row marked `removed = 1` instead, so its id is never minted again.
+- **`endless correct <target> annotate KEY --reason <text>`** — an annotation: a correction entry with the reason and no change, for any target or for `conversation`, `message` and `project_next`, which have no table and take nothing else.
 
 Every run writes a `ledger.row_changed` entry per change — the target, key, operation and values, applied by the executor and the projector alike and triggering none of an existing kind's effects — and then a `ledger.corrected` entry: the reason, the before values, whether gates were skipped, and the byte offset of each change entry in the segment both were written to. The run holds the ledger lock from its first line to its last, so the lines are adjacent, and commits them in one ledger commit whose subject names the correction (`Endless: ledger.corrected E-101 …`), which is never folded with another. `git log -- .endless/db-ledger` is where corrections are read; there is no other display yet.
 

@@ -185,6 +185,25 @@ type tableShape struct {
 	Columns map[string]columnInfo
 }
 
+// SoftRemoves reports whether the table keeps removed rows behind a removed
+// column instead of deleting them (tasks today per ED-1547; projects, sessions
+// and decisions once E-2010 lands). A correcting delete on such a table sets
+// removed = 1, the way the table's own remove command does.
+func (s *tableShape) SoftRemoves() bool {
+	_, ok := s.Columns["removed"]
+	return ok
+}
+
+// TableSoftRemoves reports whether a correcting delete on table marks the row
+// removed = 1 rather than deleting it. Exported for tests.
+func TableSoftRemoves(db dbQuerier, table string) (bool, error) {
+	shape, err := readTableShape(db, table)
+	if err != nil {
+		return false, err
+	}
+	return shape.SoftRemoves(), nil
+}
+
 // readTableShape reads PRAGMA table_info for one table.
 func readTableShape(db dbQuerier, table string) (*tableShape, error) {
 	rows, err := db.Query(fmt.Sprintf("PRAGMA table_info(%s)", table))

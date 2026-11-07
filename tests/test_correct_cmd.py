@@ -10,6 +10,7 @@ have built, and an agent's never leaves Python.
 import json
 import subprocess
 
+import click
 import pytest
 from click.testing import CliRunner
 
@@ -39,7 +40,7 @@ def test_an_agent_is_refused_before_anything_runs(seeded_project_at_cwd, monkeyp
     monkeypatch.setattr(subprocess, "run", no_subprocess)
 
     r = CliRunner().invoke(
-        main, ["correct", "task", f"E-{tid}", "--set", "status=assumed",
+        main, ["correct", "task", "update", f"E-{tid}", "--set", "status=assumed",
                "--reason", "x", "--skip-gates"])
     assert r.exit_code != 0
     assert "the user's command" in r.stderr
@@ -49,7 +50,7 @@ def test_an_agent_is_refused_before_anything_runs(seeded_project_at_cwd, monkeyp
 def test_a_person_corrects_a_landed_task_past_the_gates(seeded_project_at_cwd):
     tid = _seed_landed_task()
     r = CliRunner().invoke(
-        main, ["correct", "task", f"E-{tid}", "--set", "status=assumed",
+        main, ["correct", "task", "update", f"E-{tid}", "--set", "status=assumed",
                "--reason", "the land skipped approval", "--skip-gates"])
     assert r.exit_code == 0, r.stderr
     assert _status(tid) == "assumed"
@@ -79,7 +80,7 @@ def test_a_person_corrects_a_landed_task_past_the_gates(seeded_project_at_cwd):
 def test_a_gate_refusal_is_relayed_and_writes_nothing(seeded_project_at_cwd):
     tid = _seed_landed_task()
     r = CliRunner().invoke(
-        main, ["correct", "task", f"E-{tid}", "--set", "status=assumed",
+        main, ["correct", "task", "update", f"E-{tid}", "--set", "status=assumed",
                "--reason", "x"])
     assert r.exit_code != 0
     assert "gate refuses" in r.stderr
@@ -91,7 +92,7 @@ def test_a_gate_refusal_is_relayed_and_writes_nothing(seeded_project_at_cwd):
 def test_an_annotation_records_a_reason_and_no_change(seeded_project_at_cwd):
     tid = _seed_landed_task()
     r = CliRunner().invoke(
-        main, ["correct", "task", f"E-{tid}", "--reason", "landed by hand on 2026-11-01"])
+        main, ["correct", "task", "annotate", f"E-{tid}", "--reason", "landed by hand on 2026-11-01"])
     assert r.exit_code == 0, r.stderr
     assert f"Annotated task {tid}" in r.stdout
     assert "(an annotation)" in r.stdout
@@ -99,6 +100,46 @@ def test_an_annotation_records_a_reason_and_no_change(seeded_project_at_cwd):
 
 
 def test_reason_is_required(seeded_project_at_cwd):
-    r = CliRunner().invoke(main, ["correct", "task", "E-1", "--set", "status=assumed"])
+    r = CliRunner().invoke(main, ["correct", "task", "update", "E-1", "--set", "status=assumed"])
     assert r.exit_code != 0
     assert "--reason" in r.stderr
+
+
+def test_a_delete_of_a_task_marks_it_removed(seeded_project_at_cwd):
+    tid = _seed_landed_task("Filed twice")
+    r = CliRunner().invoke(
+        main, ["correct", "task", "delete", f"E-{tid}", "--reason", "a duplicate of E-1"])
+    assert r.exit_code == 0, r.stderr
+    assert f"Removed task {tid} (removed = 1" in r.stdout
+    row = db.query("SELECT removed, title FROM tasks WHERE id = ?", (tid,))[0]
+    assert (row["removed"], row["title"]) == (1, "Filed twice")
+
+
+def test_the_command_shape_is_one_positional_argument():
+    """ED-1647: a command takes at most one positional argument. Target and
+    operation are subcommands; the key is the one argument; the rest are
+    flags. An annotation-only target has only `annotate`."""
+    from endless.cli import correct_group
+    from endless.correct_cmd import ANNOTATION_ONLY, OPS, TARGETS
+
+    assert set(correct_group.commands) == set(TARGETS)
+    for target, group in correct_group.commands.items():
+        want = {"annotate"} if target in ANNOTATION_ONLY else set(OPS)
+        assert set(group.commands) == want, target
+        for op, cmd in group.commands.items():
+            args = [p for p in cmd.params if isinstance(p, click.Argument)]
+            assert len(args) == (0 if op == "insert" else 1), (target, op)
+            names = {p.name for p in cmd.params}
+            assert "reason" in names and "project" in names
+            assert ("pairs" in names) == (op in ("update", "insert")), (target, op)
+            assert ("skip_gates" in names) == (op != "annotate"), (target, op)
+
+
+def test_python_targets_match_go(isolated_env):
+    """The subcommands are built from a list Python holds; Go owns the real
+    one. The two must agree, or a target is uncorrectable from the CLI."""
+    from endless.correct_cmd import ANNOTATION_ONLY, TARGETS, go_targets
+
+    go = go_targets()
+    assert list(TARGETS) == go["targets"]
+    assert set(ANNOTATION_ONLY) == set(go["annotation_only"])

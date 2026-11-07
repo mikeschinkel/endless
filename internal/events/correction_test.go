@@ -286,6 +286,42 @@ func TestCorrection_TaskDeleteMarksRemoved(t *testing.T) {
 	}
 }
 
+// A second delete of the same task is refused: the row is still there with
+// removed = 1, and the refusal says so rather than reporting no row.
+func TestCorrection_TaskDeleteTwiceIsRefused(t *testing.T) {
+	db := withExecutorDB(t)
+	id := seedTask(t, db, "Mistaken", "unplanned", 1)
+	req := events.CorrectionRequest{Target: "task", Key: fmt.Sprint(id), Op: events.RowOpDelete,
+		Reason: "filed twice", Project: "test"}
+	correct(t, req)
+	_, err := prepare(t, req)
+	if err == nil || !strings.Contains(err.Error(), "already removed") {
+		t.Fatalf("want the already-removed refusal, got %v", err)
+	}
+}
+
+// Soft removal follows the table, not the target's name: a table with a
+// removed column keeps its rows (tasks today; projects, sessions and decisions
+// once E-2010 lands), and a table without one loses the row.
+func TestCorrection_SoftRemovalFollowsTheRemovedColumn(t *testing.T) {
+	db := withExecutorDB(t)
+	soft, err := events.TableSoftRemoves(db, "tasks")
+	if err != nil || !soft {
+		t.Fatalf("tasks soft-removes: %v %v", soft, err)
+	}
+	hard, err := events.TableSoftRemoves(db, "notes")
+	if err != nil || hard {
+		t.Fatalf("notes soft-removes: %v %v", hard, err)
+	}
+	if _, err := db.Exec("INSERT INTO notes (id, project_id, note_type, message) VALUES (7, 1, 'info', 'm')"); err != nil {
+		t.Fatal(err)
+	}
+	correct(t, events.CorrectionRequest{Target: "note", Key: "7", Op: events.RowOpDelete, Reason: "stray", Project: "test"})
+	if got := scalar[int](t, db, "SELECT count(*) FROM notes WHERE id = 7"); got != 0 {
+		t.Errorf("a note has no removed column, so a delete removes the row; %d left", got)
+	}
+}
+
 func TestCorrection_NoOpUnknownTargetAndAnnotation(t *testing.T) {
 	db := withExecutorDB(t)
 	id := seedTask(t, db, "Same", "unplanned", 1)
