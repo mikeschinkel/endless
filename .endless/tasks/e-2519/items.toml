@@ -51,3 +51,8 @@ statement = "Ending or editing session rows to repair stale liveness; the livene
 id = "P10"
 kind = "exclusion"
 statement = "Test-fixture session rows in the main database; evidence added to E-2050"
+
+[[item]]
+id = "P11"
+kind = "deliverable"
+statement = "A plain goto to a session running where this tmux server cannot see it says so, instead of hinting --resume"
