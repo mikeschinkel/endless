@@ -7965,3 +7965,7 @@ In E-2569 I listed, as a con of running go mod tidy -diff under GOWORK=off, that
 ### [2026-11-07] GOFLAGS=-mod=mod rewrites go.mod and go.sum wherever it runs
 Diagnosing the E-2357 land failure I ran GOFLAGS=-mod=mod go list -m all in the main checkout to see which requirement was stale. It silently rewrote main's go.mod and go.sum, and the hook then refused git checkout there, so Mike had to clean up. Use go mod tidy -diff, go list -m -json, or plain go list -m all under GOWORK=off to read dependency state; -mod=mod is a write, and nothing in main may be written from a worktree session.
 - **Project**: endless
+
+### [2026-11-07] Planning a task from another session does not make it this session's task
+Situation: in the E-2284 session, after E-2284 landed, Mike ran /needs-plan E-2308 and mentioned redoing the survey and rebasing the worktree. I replied as though E-2308 might be claimed or worked here. Mike: 'E-2308 is NOT this session's task; that was E-2284 and it has landed.' In this case, planning E-2308 meant writing its questions and plan into the task with --db main, not claiming it, creating or rebasing a worktree for it, or implementing it from this session.
+- **Project**: endless
