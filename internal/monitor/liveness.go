@@ -306,10 +306,14 @@ func SetTestTmuxObservation(serverUUID string, panes map[string]string) (restore
 
 func setTestTmux(serverUUID string, panes map[string]string, reachable bool) (restore func()) {
 	prevObserve, prevUUID, prevOnce := observeServers, tmuxServerUUIDFn, livenessOnce
+	prevTasksUUID := tasksServerUUIDFn
 	prevSocket, prevProbe, prevDown := tmuxSocketPathFn, probeSocket, endlessServerDown
 	prevStart := tmuxStartTimeFn
 
 	tmuxServerUUIDFn = func() (string, error) { return serverUUID, nil }
+	// The pinned server is the task-session server too (E-2519): a test's one
+	// server is where its panes are bound AND where goto looks for them.
+	tasksServerUUIDFn = func() string { return serverUUID }
 	// The pinned server is recorded on a fixture socket nothing listens on, as
 	// a hook's first binding records every real server, so a binding made
 	// through EnsureTmuxPaneProcess reads `unknown` when unobserved rather than
@@ -341,6 +345,7 @@ func setTestTmux(serverUUID string, panes map[string]string, reachable bool) (re
 
 	return func() {
 		observeServers, tmuxServerUUIDFn, livenessOnce = prevObserve, prevUUID, prevOnce
+		tasksServerUUIDFn = prevTasksUUID
 		tmuxSocketPathFn, probeSocket, endlessServerDown = prevSocket, prevProbe, prevDown
 		tmuxStartTimeFn = prevStart
 		livenessErr = nil

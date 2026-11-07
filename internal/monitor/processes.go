@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/mikeschinkel/endless/internal/processkind"
+	"github.com/mikeschinkel/endless/internal/tmuxservers"
 )
 
 // processes.go owns the DURABLE half of "where does this session run".
@@ -305,6 +306,47 @@ func liveTmuxSocketPath() string {
 // treat that as ErrNoProcessIdentity rather than a failure.
 func TmuxServerUUID() (string, error) {
 	return tmuxServerUUIDFn()
+}
+
+// tasksServerUUIDFn is the seam setTestTmux swaps so a test's pinned server
+// stands for the task-session server as well as the ambient one. Production
+// always uses liveTasksServerUUID.
+var tasksServerUUIDFn = liveTasksServerUUID
+
+// TasksServerUUID returns the identity of Endless's task-session server, or
+// "" when it is not running or cannot be read.
+//
+// Every Claude session Endless opens runs on that server, and `session goto`
+// addresses it by socket path from wherever it is typed (E-2519). A pane id
+// read for a Python caller is therefore scoped to THIS identity, not to the
+// server the caller happens to be in: typed into the console server, a goto
+// used to see every task pane as unreachable, hint `--resume`, and relaunch a
+// running session into a second window. A hook binding a pane still records
+// the server the hook runs in (TmuxServerUUID): that is where the process is.
+func TasksServerUUID() string {
+	return tasksServerUUIDFn()
+}
+
+// liveTasksServerUUID is TasksServerUUID's real implementation. Like
+// liveTmuxServerUUID it stamps a fresh id only when the read SUCCEEDS with no
+// value (E-2428); a failed read, or no running server, yields "".
+func liveTasksServerUUID() string {
+	s, err := tmuxservers.Resolve()
+	if err != nil {
+		return ""
+	}
+	uuid, err := s.Tasks.Out(tmuxShowServerUUIDArgs()...)
+	if err != nil {
+		return ""
+	}
+	if uuid != "" {
+		return uuid
+	}
+	uuid = generateUUID()
+	if err = s.Tasks.Run(tmuxSetServerUUIDArgs(uuid)...); err != nil {
+		return ""
+	}
+	return uuid
 }
 
 // liveTmuxServerUUID is TmuxServerUUID's real implementation; see that doc.

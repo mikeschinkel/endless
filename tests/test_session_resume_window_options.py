@@ -111,7 +111,7 @@ def test_options_target_the_current_pane(harness):
         session_cmd.resume_session("E-10")
 
     for kind, args in harness:
-        if kind == "tmux":
+        if kind == "tmux" and args[:2] == ["set-option", "-w"]:
             assert args[2:4] == ["-t", "%42"]
 
 
@@ -125,13 +125,15 @@ def test_spawned_by_is_left_alone(harness):
 
 
 def test_no_tmux_no_options(harness, monkeypatch):
-    """Recovery from a bare shell outside tmux still resumes."""
+    """Recovery from a bare shell outside tmux still resumes, and writes no
+    window option: there is no pane to write one on."""
     monkeypatch.delenv("TMUX_PANE")
 
     with pytest.raises(_Exec):
         session_cmd.resume_session("E-10")
 
-    assert [k for k, _ in harness] == ["exec"]
+    assert _options(harness) == {}
+    assert [k for k, _ in harness].count("exec") == 1
 
 
 def test_dry_run_touches_nothing(harness, capsys):
@@ -161,6 +163,11 @@ def test_new_window_gets_the_same_identity(monkeypatch, tmp_path,
         return _Res()
 
     monkeypatch.setenv("TMUX_PANE", "%42")
+    # E-2519: the caller is in a pane of the running task-session server.
+    from endless import tmux_cmd
+    monkeypatch.setenv("TMUX", "/tmp/tmux-test,1,0")
+    monkeypatch.setattr(tmux_cmd, "tasks_server", lambda: ("/tmp/tmux-test", "tasks"))
+    session_cmd._tasks_server_cache.clear()
     monkeypatch.setattr(
         session_cmd, "_resume_target", lambda ref: _target(worktree_path=str(wt))
     )

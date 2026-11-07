@@ -134,10 +134,16 @@ def test_tmux_window_pane_ids_scopes_by_calling_pane(monkeypatch):
     process — so a subprocess spawned from pane %150 saw panes for
     whichever window the user was focused on at that instant, silently
     misattributing claim/bind/emit_event session resolution.
+
+    Since E-2519 the call also names the task-session server's socket, as
+    every tmux call for a session pane does; the caller's pane is on it.
     """
     import subprocess
-    monkeypatch.setenv("TMUX", "/tmp/x")
+    from endless import tmux_cmd
+    monkeypatch.setenv("TMUX", "/tmp/x,1,0")
     monkeypatch.setenv("TMUX_PANE", "%53")
+    monkeypatch.setattr(tmux_cmd, "tasks_server", lambda: ("/tmp/x", "tasks"))
+    session_cmd._tasks_server_cache.clear()
 
     captured: dict = {}
     def fake_run(cmd, **kw):
@@ -149,7 +155,7 @@ def test_tmux_window_pane_ids_scopes_by_calling_pane(monkeypatch):
 
     assert panes == ["%53", "%99"]
     assert captured["cmd"] == [
-        "tmux", "list-panes", "-t", "%53", "-F", "#{pane_id}",
+        "tmux", "-S", "/tmp/x", "list-panes", "-t", "%53", "-F", "#{pane_id}",
     ]
 
 

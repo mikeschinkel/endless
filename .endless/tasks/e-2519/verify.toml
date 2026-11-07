@@ -6,33 +6,59 @@
 # E-2519 refuses to resume a Claude session that is already running: one
 # check runs before each of the three `claude --resume` launches, matching
 # the target's UUID against every project's live sessions and against the
-# running `claude` processes, and names `endless session goto <ref>`. A
-# session on a tmux server with no recorded socket that the scan did not
+# running `claude` processes, and says where the session runs. goto, back
+# and both resume paths address Endless's task-session server by socket
+# from wherever they are typed, pane ids are scoped to that server, and
+# `session resume` runs only in one of its panes (`--new-window` otherwise).
+# A session on a tmux server with no recorded socket that the scan did not
 # see reads `dead`.
 
 schema = 1
 task   = "E-2519"
 
 # The liveness view's new cell (unrecorded, unobserved server → dead), the
-# gone-server truth table with its flipped case, the recorded test server, and
-# list-live through the binary.
+# gone-server truth table with its flipped case, the recorded test server,
+# pane ids scoped to the task-session server (not the reader's), list-live
+# through the binary, the layout builder, and the triage resume that no
+# longer names an ambient tmux session.
 [[check]]
-name   = "unrecorded unobserved server reads dead; list-live omits it"
+name   = "pane ids scope to the task-session server; unrecorded servers read dead"
 runner = "gotest"
-paths  = ["./internal/monitor/", "./internal/sessionquerycmd/"]
+paths  = ["./internal/monitor/", "./internal/sessionquerycmd/",
+          "./internal/spawnlaunchcmd/", "./internal/triagejob/"]
 
 # The guard on all three launches, both of its sources, the unknown/unbound
 # and --new-transcript exemptions, the process-listing parser, the plain-goto
-# hint for a target running out of reach, and the goto/resume suites the
-# guard sits in.
+# hint for a target running out of reach; goto and back from the console
+# (select-window, the attach line), _tmux_run naming the socket, the resume
+# gate and --new-window; and the goto/resume suites all of it sits in.
 [[check]]
-name   = "resume refuses a running target; exemptions hold"
+name   = "goto reaches the task-session server; resume refuses a running target"
 runner = "pytest/uv"
 paths  = ["tests/test_session_resume_refuses_running.py",
           "tests/test_session_goto_back.py",
           "tests/test_session_resume_crash_recovery.py",
           "tests/test_session_resume_window_options.py",
+          "tests/test_session_resume_clobber_gate.py",
+          "tests/test_transcript_gone.py",
           "tests/test_session_lookup_any_project.py"]
+
+# Every tmux call for a session pane goes through _tmux_run, and _tmux_run
+# names the task-session server's socket: no bare `tmux` is left in the module.
+[[check]]
+name     = "_tmux_run addresses the task-session server by socket"
+sh       = "sed -n '/^def _tmux_run/,/^def _pane_exists/p' src/endless/session_cmd.py"
+contains = '["tmux", "-S", tasks[0], *args]'
+
+[[check]]
+name = "no bare tmux invocation remains in session_cmd"
+sh   = "test \"$(grep -c '\[\"tmux\",' src/endless/session_cmd.py)\" = 1"
+
+# The Go reader scopes pane ids to the task-session server's identity.
+[[check]]
+name     = "list-live scopes pane ids to the task-session server"
+sh       = "sed -n '/^func listLiveSessions/,/^}/p' internal/monitor/live_sessions.go"
+contains = "here := TasksServerUUID()"
 
 # One check function, called at the two code paths behind the three launches
 # (goto --resume and --background share _resume_new_window_pane).
@@ -46,11 +72,27 @@ name     = "the running check matches against every project's live sessions"
 sh       = "sed -n '/^def _running_session/,/^def _running_refusal/p' src/endless/session_cmd.py"
 contains = "_live_sessions(all_projects=True)"
 
-# goto --help says what --resume does when the target is running.
+# goto --help says what --resume does when the target is running, and where
+# goto reaches; resume --help carries --new-window and the pane rule.
 [[check]]
 name     = "goto --help names the refusal"
 sh       = 'uv run endless session goto --help | tr "\n" " " | tr -s " "'
-contains = "refused when it is running somewhere this tmux server cannot see"
+contains = "refused when it is running in a pane goto cannot reach"
+
+[[check]]
+name     = "goto --help says it reaches the task-session server from anywhere"
+sh       = 'uv run endless session goto --help | tr "\n" " " | tr -s " "'
+contains = "goto reaches that server from wherever it is typed"
+
+[[check]]
+name     = "resume --help offers --new-window"
+sh       = 'uv run endless session resume --help | tr "\n" " " | tr -s " "'
+contains = "--new-window"
+
+[[check]]
+name     = "resume --help states the pane rule"
+sh       = 'uv run endless session resume --help | tr "\n" " " | tr -s " "'
+contains = "The pane must be on Endless's task-session server"
 
 # The sessions guide states both rules.
 [[check]]
@@ -62,3 +104,18 @@ contains = "A running session is never resumed"
 name     = "sessions guide: unrecorded unobserved servers read dead"
 sh       = "uv run endless guide sessions"
 contains = "has no recorded socket and that the socket scan did not see reads `dead`"
+
+[[check]]
+name     = "sessions guide: goto and resume address the task-session server"
+sh       = "uv run endless guide sessions"
+contains = "address that server by socket path from wherever they are typed"
+
+[[check]]
+name     = "sessions guide: session resume runs only in a task-session pane"
+sh       = "uv run endless guide sessions"
+contains = "runs only in a pane of Endless's task-session server"
+
+[[check]]
+name     = "reference guide: goto, back and --new-window reach the server too"
+sh       = "uv run endless guide reference"
+contains = "`session goto`, `session back` and `session resume --new-window` reach it"

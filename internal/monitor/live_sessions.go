@@ -10,13 +10,17 @@ import (
 
 // LiveSession is the row shape returned by ListLiveSessions, intended for
 // JSON serialization to Python callers. PaneID is set to Process when
-// Process is a tmux pane id ("%<digits>") bound on the tmux server THIS
-// process reaches, else nil — so the Python side can distinguish tmux from
-// non-tmux sessions without re-parsing the process string, and can compare
-// PaneID with $TMUX_PANE or hand it to a tmux command without asking which
-// server it belongs to.
+// Process is a tmux pane id ("%<digits>") bound on Endless's task-session
+// server, else nil — so the Python side can distinguish tmux from non-tmux
+// sessions without re-parsing the process string, and can hand PaneID to a
+// tmux command addressed to that server without asking which server it
+// belongs to.
 //
-// The server scoping is E-2196. A pane id is only unique per server: a tmux
+// The server scoping is E-2196; which server it is scoped TO is E-2519. Until
+// then the scope was the server the reading process was in, so a goto typed
+// into the console server saw every task pane as unreachable, hinted
+// `--resume`, and relaunched a running session into a second window. A pane
+// id is only unique per server: a tmux
 // restart reissues "%45" to an unrelated pane, and a session from before the
 // crash (liveness `unknown` — its server is gone, not observed) stays listed
 // as live. Reporting its bare "%45" let every Python caller that matched
@@ -99,8 +103,8 @@ func ListLiveSessionsAllProjects() ([]LiveSession, error) {
 }
 
 // listLiveSessions runs the one live-sessions query with an optional extra
-// predicate over `s` (empty for no filter); ?1 is projectID, ?2 is the tmux
-// server this process reaches.
+// predicate over `s` (empty for no filter); ?1 is projectID, ?2 is Endless's
+// task-session server, the one every pane id Python acts on belongs to.
 func listLiveSessions(scope string, projectID int64) ([]LiveSession, error) {
 	db, err := DB()
 	if err != nil {
@@ -109,9 +113,9 @@ func listLiveSessions(scope string, projectID int64) ([]LiveSession, error) {
 	if err = livenessReady(); err != nil {
 		return nil, err
 	}
-	// An unidentifiable server (no tmux, or none reachable) yields "", which
-	// no binding matches: an unscoped pane id is exactly what must not leak.
-	here, _ := TmuxServerUUID()
+	// A task-session server that is not running yields "", which no binding
+	// matches: an unscoped pane id is exactly what must not leak.
+	here := TasksServerUUID()
 
 	// Numbered placeholders: SameTmuxServerSQL spells ?2 twice.
 	rows, err := db.Query(

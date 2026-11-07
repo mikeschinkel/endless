@@ -70,6 +70,11 @@ def harness(monkeypatch, tmp_path, claude_home):
 
     monkeypatch.setenv("TMUX", "/tmp/tmux-501/default,1,0")
     monkeypatch.setenv("TMUX_PANE", "%42")
+    # E-2519: the pane is on Endless's task-session server, which is running.
+    from endless import tmux_cmd
+    monkeypatch.setattr(tmux_cmd, "tasks_server",
+                        lambda: ("/tmp/tmux-501/default", "tasks"))
+    session_cmd._tasks_server_cache.clear()
     monkeypatch.setattr(
         session_cmd, "_resume_target", lambda ref: _target(worktree_path=str(wt))
     )

@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"fmt"
 	"testing"
 
 )
@@ -138,4 +139,51 @@ func TestListLiveSessions_PaneIDScopedToThisServer(t *testing.T) {
 	if !ok || cur.PaneID == nil || *cur.PaneID != "%1" {
 		t.Errorf("current-server session PaneID = %v, want %%1", cur.PaneID)
 	}
+}
+
+// TestListLiveSessions_PaneIDScopedToTasksServer is E-2519. The scope is
+// Endless's task-session server, where every task pane is, not the server the
+// READER is in: typed into the console server, a goto saw every task pane as
+// unreachable, hinted `--resume`, and relaunched a running session into a
+// second window. With the task-session server down, no pane id is reported at
+// all — an unscoped id is exactly what must not leak.
+func TestListLiveSessions_PaneIDScopedToTasksServer(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "acme", "/tmp/acme")
+	defer SetTestTmuxObservation("tasks-srv", map[string]string{"%7": "2.1.220"})()
+	// The reader is in the console server; its panes are not the tasks'.
+	prevAmbient := tmuxServerUUIDFn
+	tmuxServerUUIDFn = func() (string, error) { return "console-srv", nil }
+	defer func() { tmuxServerUUIDFn = prevAmbient }()
+
+	seedLivenessSession(t, db, "sess-task", mustSeedPane(t, db, "tasks-srv", "%7"))
+
+	got, err := ListLiveSessions(1)
+	if err != nil {
+		t.Fatalf("ListLiveSessions: %v", err)
+	}
+	if len(got) != 1 || got[0].PaneID == nil || *got[0].PaneID != "%7" {
+		t.Fatalf("from the console server, PaneID = %v, want %%7: the pane is on the task-session server", paneOf(got))
+	}
+
+	prevTasks := tasksServerUUIDFn
+	tasksServerUUIDFn = func() string { return "" } // the task-session server is down
+	defer func() { tasksServerUUIDFn = prevTasks }()
+	got, err = ListLiveSessions(1)
+	if err != nil {
+		t.Fatalf("ListLiveSessions: %v", err)
+	}
+	if len(got) != 1 || got[0].PaneID != nil {
+		t.Fatalf("with the task-session server down, PaneID = %v, want nil", paneOf(got))
+	}
+}
+
+func paneOf(rows []LiveSession) any {
+	if len(rows) != 1 {
+		return fmt.Sprintf("%d rows", len(rows))
+	}
+	if rows[0].PaneID == nil {
+		return nil
+	}
+	return *rows[0].PaneID
 }

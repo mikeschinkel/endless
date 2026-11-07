@@ -5,6 +5,7 @@ import (
 	"os/exec"
 
 	"github.com/mikeschinkel/endless/internal/refusal"
+	"github.com/mikeschinkel/endless/internal/tmuxservers"
 )
 
 // layout.go owns the canonical Endless working layout — the three-pane
@@ -48,6 +49,22 @@ func runSpawnLayout(args []string) {
 	if *pane == "" {
 		missingFlag("--pane")
 	}
+	// The pane is on the task-session server: every window a resume opens is
+	// there, and `session resume` runs only in a pane there (E-2519). Address
+	// that server by socket, as spawn-window does, never the caller's own.
+	// Down, there is no such pane and nothing to build; exit 0 as every other
+	// layout failure does, since the session the caller is starting matters
+	// more than the layout around it.
+	tasks, running := tmuxservers.RunningTasks()
+	if !running {
+		// WARN, not a refusal: the caller's session starts regardless, and the
+		// one remedy is the user's.
+		refusal.Warn(NotRunningMessage+" No layout was built.",
+			"Run `endless start`, then lay the window out again").
+			Command("spawn-layout").Print()
+		return
+	}
+	tmuxSocket = tasks.Socket
 	buildLayoutAround(*pane, *cwd)
 }
 

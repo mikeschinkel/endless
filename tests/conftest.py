@@ -281,10 +281,19 @@ def no_endless_tasks_server(monkeypatch, request):
     spawn under test into it. Tests of the routing itself opt out with
     `@pytest.mark.tasks_server` and stub the answer they need.
     """
+    from endless import session_cmd
+    # E-2519: session_cmd memoizes the server's answer per process; a test is a
+    # process that runs many commands, so the memo is dropped around each.
+    session_cmd._tasks_server_cache.clear()
+    request.addfinalizer(session_cmd._tasks_server_cache.clear)
     if request.node.get_closest_marker("tasks_server"):
         return
     from endless import tmux_cmd
     monkeypatch.setattr(tmux_cmd, "tasks_server", lambda: None)
+    # E-2519: `session resume` runs only in a pane of that server. Tests of the
+    # resume itself are not tests of where it was typed, so the gate stands
+    # aside here; tests of the gate carry the marker and stub the server.
+    monkeypatch.setattr(session_cmd, "_require_tasks_pane", lambda ref: None)
 
 
 @pytest.fixture(autouse=True)

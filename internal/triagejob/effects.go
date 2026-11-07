@@ -64,8 +64,10 @@ func (fx realEffects) session(id int64) (s sessionInfo, err error) {
 	s.live = state != string(sessionstate.Ended) && !liveness.IsGone() && !s.unobservable
 
 	// A pane id means something only on the server that issued it, under its
-	// id or an alias of it.
-	here, _ := monitor.TmuxServerUUID()
+	// id or an alias of it. The server is Endless's task-session server, where
+	// every session pane is (E-2519) — not the one the runner happens to be
+	// in, which never holds a session and read every pane as foreign.
+	here := monitor.TasksServerUUID()
 	if !strings.HasPrefix(s.pane, "%") || here == "" {
 		s.pane = ""
 		return s, nil
@@ -181,20 +183,14 @@ func (fx realEffects) startAllowed() (ok bool, why string, err error) {
 // triage message as its first prompt, through `session goto --resume`'s own
 // path — its transcript check, window identity and layout — never reopening
 // the session's task: the session sets revisit itself if it accepts.
+//
+// The window opens on the task-session server, in its tasks session, as every
+// resumed window does (E-2519). Until then this named the runner's own tmux
+// session with --target-session, and the window opened beside the runner —
+// on whatever server the job happened to run in.
 func (realEffects) resume(ctx context.Context, sessionID int64, projectPath, message string) (err error) {
 	var f *os.File
-	var w autospawnjob.Window
 
-	w, _, err = autospawnjob.ResolveWindow()
-	if err != nil {
-		return err
-	}
-	if w.Target == "" {
-		w.Target, err = monitorSession()
-		if err != nil {
-			return err
-		}
-	}
 	f, err = os.CreateTemp("", "endless-triage-prompt-*.md")
 	if err != nil {
 		return fmt.Errorf("writing the resume prompt: %w", err)
@@ -211,20 +207,9 @@ func (realEffects) resume(ctx context.Context, sessionID int64, projectPath, mes
 	_, err = autospawnjob.RunEndless(ctx, projectPath, childEnv(), []string{
 		"--no-session", "session", "goto", "ES-" + strconv.FormatInt(sessionID, 10),
 		"--resume", "--no-revisit", "--background",
-		"--target-session", w.Target, "--prompt-file", f.Name(),
+		"--prompt-file", f.Name(),
 	})
 	return err
-}
-
-// monitorSession is the tmux session the runner's own pane is in, for an
-// auto_spawn.target of monitor.
-func monitorSession() (string, error) {
-	pane := os.Getenv("TMUX_PANE")
-	out, err := exec.Command("tmux", "display-message", "-p", "-t", pane, "#{session_id}").Output()
-	if err != nil || strings.TrimSpace(string(out)) == "" {
-		return "", fmt.Errorf("resolving the runner's tmux session from pane %q: %v", pane, err)
-	}
-	return strings.TrimSpace(string(out)), nil
 }
 
 var addedRE = regexp.MustCompile(`Added E-(\d+)`)

@@ -367,14 +367,46 @@ def _running_session(uuid: str) -> str | None:
         eid = c.get("endless_session_id")
         pane = c.get("pane_id") or ""
         if pane:
-            return f"session ES-{eid} is live in pane {pane}"
-        return (f"session ES-{eid} is live in a pane this tmux server "
-                f"cannot reach")
+            window = _tmux_window_of(pane)
+            where = f"window {window[1]}" if window else f"pane {pane}"
+            return (f"session ES-{eid} is live in {where} of Endless's "
+                    f"task-session server")
+        return (f"session ES-{eid} is live in a pane that is not on Endless's "
+                f"task-session server")
     procs = _claude_resume_processes(uuid)
     if procs:
         pid, cmd = procs[0]
         return f"process {pid} is running `{cmd}`"
     return None
+
+
+def _running_pane(uuid: str) -> str:
+    """The task-session-server pane a live session `uuid` is in, or ""."""
+    for c in _live_sessions(all_projects=True):
+        if c.get("harness_session_id") == uuid and c.get("liveness") == "live":
+            return c.get("pane_id") or ""
+    return ""
+
+
+def _reach_running(ref: str, uuid: str, where: str) -> tuple[str, str]:
+    """(remedy, human tail) for reaching a running session: `session goto`
+    when it has a pane on the task-session server — with the attach command
+    for a caller outside that server — else the process or pane named in
+    `where` (E-2519)."""
+    goto = f"endless session goto {ref}"
+    pane = _running_pane(uuid)
+    if pane:
+        line = "" if _in_tasks_server() else _reach_line(pane)
+        tail = f"  Go to it instead:\n      {goto}"
+        if line:
+            tail += f"\n  or reach its window from this terminal:\n      {line}"
+        return f"Run `{goto}` to go to the running session", tail
+    if where.startswith("process"):
+        return ("Exit or message that claude process; nothing here can focus "
+                "it", "  Exit or message that process; it is not in a pane "
+                "Endless can reach.")
+    return ("Reach that pane on its own tmux server; nothing here can focus "
+            "it", "  Reach that pane on its own tmux server.")
 
 
 def _running_refusal(
@@ -400,19 +432,16 @@ def _running_refusal(
         return None
     task = target.get("task_id")
     label = f"E-{task}" if task else f"session ES-{target.get('endless_id')}"
-    goto = f"endless session goto {ref}"
     flag = "--resume was" if drop_resume else "the resume was"
     summary = (
         f"{label} is already running ({where}), so {flag} refused: a second "
         f"`claude --resume` on one transcript corrupts it. Nothing was "
         f"launched."
     )
-    if drop_resume:
-        remedy = f"Drop --resume: run `{goto}` to go to the running session"
-        tail = f"  Drop --resume and go to it:\n      {goto}"
-    else:
-        remedy = f"Run `{goto}` to go to the running session"
-        tail = f"  Go to it instead:\n      {goto}"
+    remedy, tail = _reach_running(ref, uuid, where)
+    if drop_resume and _running_pane(uuid):
+        remedy = f"Drop --resume: {remedy[0].lower()}{remedy[1:]}"
+        tail = tail.replace("  Go to it instead:", "  Drop --resume and go to it:", 1)
     # NO-REPORT: the running session is the remedy, and going to it (or
     # messaging it) needs no decision from the user.
     return agent_help.no_report(
@@ -421,6 +450,55 @@ def _running_refusal(
               f"  Resuming it would start a second Claude on its transcript.\n"
               f"{tail}"),
     )
+
+
+def _require_tasks_pane(ref: str) -> None:
+    """Refuse `session resume` from a pane that is not on the task-session
+    server (E-2519), naming the two routes that open the session there."""
+    _require_tasks_server()
+    if _in_tasks_server():
+        return
+    goto = f"endless session goto {ref} --resume"
+    # NO-REPORT: either named route is a command the caller re-runs; nothing
+    # is decided by the user.
+    raise agent_help.no_report(
+        f"This pane is not on Endless's task-session server, so the resume "
+        f"was refused: a resumed Claude runs only there. Nothing was "
+        f"launched.",
+        f"Run `{goto}` to open it in a new window there, or re-run with "
+        f"--new-window",
+        text=(f"This pane is not on Endless's task-session server, and a "
+              f"resumed Claude runs only there.\n"
+              f"  Open the session in a NEW window of that server:\n"
+              f"      {goto}\n"
+              f"  or re-run this command with --new-window."),
+    )
+
+
+def _resume_in_new_window(
+    ref: str, new_transcript: bool, **pane_flags: object,
+) -> None:
+    """`session resume --new-window` (E-2519): the resume `goto <ref> --resume`
+    makes — a new window of the task-session server, then focused — for a
+    caller who typed `resume` outside that server. Every flag about THIS pane
+    (`pane_flags`, by name) is refused with it: there is no pane here to
+    replace, rebind, lay out, or dry-run."""
+    extra = [f"--{name.replace('_', '-')}" for name, on in pane_flags.items()
+             if on not in (None, False)]
+    if extra:
+        raise agent_help.no_report(
+            f"{', '.join(extra)} applies to the current pane; --new-window "
+            f"opens a new one.",
+            f"Retry without {', '.join(extra)}, or without --new-window",
+            exit_code=2,
+        )
+    try:
+        _require_tasks_server()
+    except click.ClickException as e:
+        _refuse_on_stderr(e)
+    live = _live_sessions(all_projects=True)
+    pane, label = _resume_new_window_pane(ref, new_transcript=new_transcript)
+    _goto_pane(pane, label, live)
 
 
 def _require_claude() -> str:
@@ -1355,6 +1433,7 @@ def resume_session(
     new_transcript: bool = False,
     rebind: bool = False,
     no_sibling_panes: bool = False,
+    new_window: bool = False,
 ) -> None:
     """Relaunch a lost Claude session in the current tmux pane.
 
@@ -1423,12 +1502,28 @@ def resume_session(
     Because the exec replaces the pane's session, it also rewrites the window's
     `@endless_*` identity to match the resumed target before launching
     (E-2104) — see `_bind_pane_window_options`.
+
+    The pane must be on Endless's task-session server (E-2519): every Claude
+    Endless runs is there, and nowhere else is a place a resumed session can
+    be found again. Anywhere else — the console server, a personal tmux, a
+    plain shell — the resume is refused before anything is launched, and the
+    two routes that DO open the session there are named: `session goto <ref>
+    --resume`, or `--new-window`, which opens the resume in a new window of
+    that server exactly as goto --resume does and then focuses it the same
+    way (`_goto_pane`). `--dry-run` launches nothing and is not gated.
     """
     if review is not None and reopen is not None:
         raise agent_help.no_report(
             "--review and --reopen are mutually exclusive.",
             "Retry with only one of the two flags",
         )
+    if new_window:
+        _resume_in_new_window(ref, new_transcript, review=review, reopen=reopen,
+                              dry_run=dry_run, force=force, rebind=rebind,
+                              no_sibling_panes=no_sibling_panes)
+        return
+    if not dry_run:
+        _require_tasks_pane(ref)
 
     # E-1968: refuse to clobber a pane that holds live work. Checked BEFORE
     # `_resolve_resume`, which can mint a container task and a worktree — a
@@ -2415,15 +2510,8 @@ def _tmux_pane_cwd_map() -> dict[str, str]:
     therefore an empty cwd. Their own platform helper adds the lookup
     when the time comes.
     """
-    import subprocess
-    try:
-        result = subprocess.run(
-            ["tmux", "list-panes", "-a", "-F", "#{pane_id} #{pane_current_path}"],
-            capture_output=True, text=True, timeout=2,
-        )
-    except (FileNotFoundError, subprocess.SubprocessError):
-        return {}
-    if result.returncode != 0:
+    result = _tmux_run(["list-panes", "-a", "-F", "#{pane_id} #{pane_current_path}"])
+    if not result or result.returncode != 0:
         return {}
     out: dict[str, str] = {}
     for line in result.stdout.splitlines():
@@ -2599,15 +2687,8 @@ def _tmux_window_pane_ids() -> list[str] | None:
     pane = os.environ.get("TMUX_PANE")
     if not pane:
         return None
-    import subprocess
-    try:
-        result = subprocess.run(
-            ["tmux", "list-panes", "-t", pane, "-F", "#{pane_id}"],
-            capture_output=True, text=True, timeout=2,
-        )
-    except (FileNotFoundError, subprocess.SubprocessError):
-        return None
-    if result.returncode != 0:
+    result = _tmux_run(["list-panes", "-t", pane, "-F", "#{pane_id}"])
+    if not result or result.returncode != 0:
         return None
     return [line.strip() for line in result.stdout.splitlines() if line.strip()]
 
@@ -3257,16 +3338,73 @@ def _match_companions(live: list[dict], ref: str) -> list[dict]:
 # ---------------------------------------------------------------------------
 
 
-def _in_tmux() -> bool:
-    return bool(os.environ.get("TMUX"))
+# One `endless-go tmux tasks-target` answer per process (E-2519). A goto asks
+# tmux several times — does the pane exist, the back-stack, the switch — and
+# each would otherwise pay for a Go process to learn the same socket path.
+# Tests clear it between runs (conftest).
+_tasks_server_cache: list = []
+
+
+def _tasks_server() -> tuple[str, str] | None:
+    """Endless's task-session server as (socket, session) while it runs, else
+    None. Memoized for this process; see `_tasks_server_cache`."""
+    from endless import tmux_cmd
+    if not _tasks_server_cache:
+        _tasks_server_cache.append(tmux_cmd.tasks_server())
+    return _tasks_server_cache[0]
+
+
+def _require_tasks_server() -> tuple[str, str]:
+    """The task-session server, or the refusal every window-opening verb makes
+    while it is down: the same words as spawn's (E-2385), since the answer is
+    the same — only the user starts Endless."""
+    from endless import tmux_cmd
+    tasks = _tasks_server()
+    if tasks is None:
+        raise agent_help.report(
+            f"{tmux_cmd.NOT_RUNNING} Nothing was done.",
+            tmux_cmd.NOT_RUNNING_DECISION,
+        )
+    return tasks
+
+
+def _in_tasks_server() -> bool:
+    """Whether this process runs in a pane of the task-session server."""
+    from endless import tmux_cmd
+    tasks = _tasks_server()
+    return tasks is not None and tmux_cmd.in_server(tasks[0])
 
 
 def _tmux_run(args: list[str], timeout: float = 2.0):
-    """Run a tmux command; return the CompletedProcess, or None on failure."""
+    """Run a tmux command on Endless's task-session server; return the
+    CompletedProcess, or None on failure or while that server is not running.
+
+    Every pane this module acts on is there (E-2519): Endless opens every task
+    window on that server, so a goto, a back and a resume address it by socket
+    path from wherever they are typed — `tmux -S <socket>`, as the guide says
+    every Endless command reaches the two servers. Until then these ran bare
+    `tmux`, which reaches whatever server the caller is in: typed into the
+    console server, goto saw every task pane as unreachable, hinted `--resume`,
+    and relaunched a running session into a second window.
+
+    The caller's own `$TMUX` / `$TMUX_PANE` stay in the environment only when
+    the caller IS in that server, so `-t $TMUX_PANE` and "the current client"
+    resolve there as they always did. From any other server they are dropped:
+    a pane id is unique per server, and the console's `%5` would otherwise
+    name an unrelated task pane.
+    """
     import subprocess
+    tasks = _tasks_server()
+    if tasks is None:
+        return None
+    env = dict(os.environ)
+    if not _in_tasks_server():
+        env.pop("TMUX", None)
+        env.pop("TMUX_PANE", None)
     try:
         return subprocess.run(
-            ["tmux", *args], capture_output=True, text=True, timeout=timeout,
+            ["tmux", "-S", tasks[0], *args],
+            capture_output=True, text=True, timeout=timeout, env=env,
         )
     except (FileNotFoundError, subprocess.SubprocessError):
         return None
@@ -3281,35 +3419,99 @@ def _pane_exists(pane: str) -> bool:
 
 
 def _spawner_session_target() -> str | None:
-    """The tmux session this process's pane lives in, as a `$N:` new-window
-    target — or None when it can't be resolved.
+    """The task-session server session a new window belongs in, as a
+    new-window target — or None when the server is not running.
 
     Every window Endless creates has to say which session it belongs in
     (E-2125). tmux resolves an untargeted `new-window` against the "current"
     session, which off a command line means the most recently active session on
     the server — so a window asked for here surfaced in whichever session the
     person happened to be looking at, carrying nothing that said where it came
-    from. The session that asked for the window is the session that gets it.
+    from. A caller in a pane of the task-session server gets the window in that
+    pane's own session (`$N:`); any other caller gets the server's tasks
+    session (`=tasks:`), which is where every spawned window opens (E-2240) —
+    the window never opens on the caller's own server (E-2519).
 
-    The id is read from `$TMUX_PANE` rather than from `$TMUX`'s third field:
-    `$TMUX` records the session a client was attached to when the process
-    started, and goes stale as soon as the pane is moved. The trailing `:` is
-    what makes tmux read `$3` as a session rather than as a window name.
+    The pane's session id is read from `$TMUX_PANE` rather than from `$TMUX`'s
+    third field: `$TMUX` records the session a client was attached to when the
+    process started, and goes stale as soon as the pane is moved. The trailing
+    `:` is what makes tmux read the value as a session rather than as a window
+    name; the leading `=` makes the name match exactly.
     """
+    tasks = _tasks_server()
+    if tasks is None:
+        return None
     pane = os.environ.get("TMUX_PANE")
-    if not pane:
-        return None
-    res = _tmux_run(["display-message", "-p", "-t", pane, "#{session_id}"])
-    if not res or res.returncode != 0:
-        return None
-    session = res.stdout.strip()
-    return f"{session}:" if session else None
+    if pane and _in_tasks_server():
+        res = _tmux_run(["display-message", "-p", "-t", pane, "#{session_id}"])
+        if res and res.returncode == 0 and res.stdout.strip():
+            return f"{res.stdout.strip()}:"
+    return f"={tasks[1]}:"
 
 
 def _tmux_switch_client(pane: str) -> bool:
     """Switch the tmux client to `pane`'s window/session. True on success."""
     res = _tmux_run(["switch-client", "-t", pane])
     return bool(res and res.returncode == 0)
+
+
+def _focus_pane(pane: str) -> bool:
+    """Show `pane` on the task-session server. True on success.
+
+    A caller in that server has a client there, and it is switched. Any other
+    caller — the console server, a personal tmux, a plain shell — has none, so
+    the pane's window is selected on the server instead: the terminal attached
+    there shows it, and `_say_where_shown` tells the caller how to reach it
+    (E-2519). A `switch-client` from outside would move some other client, or
+    none.
+    """
+    if _in_tasks_server():
+        return _tmux_switch_client(pane)
+    res = _tmux_run(["select-window", "-t", pane])
+    if not res or res.returncode != 0:
+        return False
+    _tmux_run(["select-pane", "-t", pane])
+    return True
+
+
+def _tmux_session_name_of(pane: str) -> str:
+    """The name of the tmux session holding `pane`, or "" when unknown."""
+    res = _tmux_run(["display-message", "-p", "-t", pane, "#{session_name}"])
+    return res.stdout.strip() if res and res.returncode == 0 else ""
+
+
+def _reach_line(pane: str) -> str:
+    """The command that puts `pane`'s window on a terminal, for a caller that
+    is not in the task-session server: attach to the session holding it (the
+    window is already selected). "" when it cannot be built."""
+    import shlex
+    tasks = _tasks_server()
+    session = _tmux_session_name_of(pane)
+    if tasks is None or not session:
+        return ""
+    target = shlex.quote(f"={session}")
+    if target[0] != "'":  # zsh expands a bare `=word` to a command's path
+        target = f"'{target}'"
+    return f"tmux -S {shlex.quote(tasks[0])} attach -t {target}"
+
+
+def _say_where_shown(pane: str) -> None:
+    """After a focus from outside the task-session server: say the window is
+    showing in the terminal attached there, or how to attach one (E-2519)."""
+    res = _tmux_run(["list-clients", "-t", pane, "-F", "#{client_name}"])
+    attached = bool(res and res.returncode == 0 and res.stdout.strip())
+    if attached:
+        agent_help.info(
+            "• shown in the terminal attached to Endless's task-session server",
+            err=True,
+        )
+        return
+    line = _reach_line(pane)
+    agent_help.info(
+        "• no terminal is attached to Endless's task-session server"
+        + (f"; attach one with:\n      {line}" if line else ""),
+        err=True,
+    )
 
 
 def _backstack_key() -> str:
@@ -3664,32 +3866,29 @@ def _resume_new_window_pane(
         # The resumed session's first prompt (E-2272): the fault-triage job's
         # "we think this error is yours", delivered as a turn of its own.
         cmd += " " + shlex.quote(prompt)
-    # Land in the session that asked for the window, never in whichever one
-    # tmux considers current (E-2125). Refusing beats guessing: a window that
-    # opens somewhere unexplained is the defect being fixed. A background
-    # resume has no asking pane, so its caller names the session instead.
+    # Land in a named session of the task-session server, never in whichever
+    # one tmux considers current (E-2125): the asking pane's own session for a
+    # caller in that server, else the server's tasks session (E-2519). The
+    # window never opens on the caller's own server. A caller may name a
+    # session there instead (`--target-session`, checked by its caller).
     if target_session:
-        target = target_session if target_session.endswith(":") else f"{target_session}:"
+        target = target_session if target_session.endswith(":") else f"={target_session}:"
     else:
         target = _spawner_session_target()
     if target is None:
-        # REPORT: an agent cannot move its own process into a tmux pane, so
-        # there is no retry that gets past this. This summary and the tmux one
+        # REPORT: only the user starts Endless. This summary and the tmux one
         # further down both say what has ALREADY been applied —
         # `_apply_revisit_intent`'s status flip above, and the container task
         # and worktree `_resolve_resume` may have minted — because an agent
         # that cannot tell whether those landed will run the resume again and
         # mint a second one.
+        from endless import tmux_cmd
         _refuse_on_stderr(agent_help.report(
-            "Could not tell which tmux session to open the window in (no "
-            "resolvable $TMUX_PANE), so no window was opened — but any "
-            "--revisit status flip, container task and worktree this resume "
-            "implied have already been applied.",
-            "running this from inside a tmux pane, which an agent cannot do "
-            "for them",
-            text=("Could not tell which tmux session to open the window in "
-                  "(no resolvable $TMUX_PANE). Run this from inside a tmux "
-                  "pane."),
+            f"{tmux_cmd.NOT_RUNNING} No window was opened — but any --revisit "
+            f"status flip, container task and worktree this resume implied "
+            f"have already been applied.",
+            tmux_cmd.NOT_RUNNING_DECISION,
+            text=(f"{tmux_cmd.NOT_RUNNING} No window was opened."),
         ))
     args = ["new-window", "-d", "-t", target, "-c", worktree]
     task = decision.get("task_id")
@@ -3735,19 +3934,21 @@ def _fail_not_live(nl: _GotoNotLive) -> None:
     # than one shared one.
     target = _try_resume_target(nl.ref)
     if target is not None:
-        # E-2519: a target that is running, in a pane this tmux server cannot
-        # reach, is not sent to `--resume` — that launch would refuse it as
-        # running, and the two hints would point at each other.
-        where = _running_session(target.get("session_id") or "")
+        # E-2519: a target that is running but has no pane goto can reach — a
+        # bare `claude --resume` process, or a pane on some other tmux server
+        # — is not sent to `--resume`: that launch would refuse it as running,
+        # and the two hints would point at each other.
+        uuid = target.get("session_id") or ""
+        where = _running_session(uuid)
         if where is not None:
+            remedy, tail = _reach_running(nl.ref, uuid, where)
             _refuse_on_stderr(agent_help.no_report(
-                f"{nl.base} It is running ({where}), so goto cannot focus it "
-                f"from this tmux server and --resume would start a second "
-                f"Claude on its transcript. Focus did not move.",
-                "Message the running session instead of resuming it",
-                text=(f"{nl.base} It is running — {where} — and this tmux "
-                      f"server cannot reach it. Attach to the server that "
-                      f"holds it; do not --resume it."),
+                f"{nl.base} It is running ({where}), so --resume would start "
+                f"a second Claude on its transcript. Focus did not move.",
+                remedy,
+                text=(f"{nl.base} It is running — {where}.\n"
+                      f"  Do not --resume it: that starts a second Claude on "
+                      f"its transcript.\n{tail}"),
             ))
         _refuse_on_stderr(agent_help.no_report(
             f"{nl.base} It isn't live — run "
@@ -3774,16 +3975,24 @@ def session_goto(
     """Switch tmux focus to a task's or session's pane, pushing the current pane
     onto the back-stack. See the module section header (E-1681).
 
+    Every pane goto can reach is on Endless's task-session server, and goto
+    addresses that server by socket from wherever it is typed (E-2519): in a
+    pane there, the caller's own client is switched; from the console server,
+    a personal tmux or a plain shell, the target's window is selected there and
+    the caller is told it is showing in the attached terminal, or how to attach
+    one. Until then goto ran bare `tmux` against the caller's own server, so
+    from the console every task pane read as unreachable.
+
     With `resume=True` (`--resume`), a target that resolves but has no live pane
-    is relaunched in a new tmux window and focused instead of erroring — the
-    manual find-in-DB/open-window/resume dance, automated (E-1797). When the
-    target IS live here, `--resume` is a no-op and this behaves like plain
+    is relaunched in a new tmux window there and focused instead of erroring —
+    the manual find-in-DB/open-window/resume dance, automated (E-1797). When
+    the target IS live, `--resume` is a no-op and this behaves like plain
     goto: the claim and spawn refusals name `goto <id> --resume` for a holder
-    running or ended alike, and the guide says so. A target with no pane here
-    that is nonetheless RUNNING — live in another project, or held by a `claude
-    --resume` process — is refused by `_resume_new_window_pane`'s running check
-    (E-2519), which says to drop the flag; until then it was relaunched, a
-    second Claude on one transcript.
+    running or ended alike, and the guide says so. A target with no reachable
+    pane that is nonetheless RUNNING — held by a `claude --resume` process, or
+    bound on some other tmux server — is refused by `_resume_new_window_pane`'s
+    running check (E-2519); until then it was relaunched, a second Claude on
+    one transcript.
 
     `revisit` / `no_revisit` (E-1968) say what a resume of settled work is FOR;
     see `_apply_revisit_intent`. They belong to the resume path, so like
@@ -3824,19 +4033,17 @@ def session_goto(
     if prompt_file:
         with open(prompt_file, encoding="utf-8") as f:
             prompt = f.read().strip() or None
+    # Every pane goto can reach is on the task-session server (E-2519), so
+    # that server is required and `$TMUX` is not: from the console server, a
+    # personal tmux or a plain shell the target's window is selected there.
+    try:
+        _require_tasks_server()
+    except click.ClickException as e:
+        _refuse_on_stderr(e)
     if background:
         _resume_in_background(target_ref, revisit, no_revisit, target_session,
                               prompt)
         return
-    if not _in_tmux():
-        # goto moves the attached person's tmux focus, so there is no version
-        # of this an agent can run instead: starting or attaching tmux for them
-        # is not its call, and a focus change nobody is looking at is not one.
-        _refuse_on_stderr(agent_help.report(
-            "session goto requires tmux (no $TMUX in this environment).",
-            "running Endless inside tmux, which is where pane navigation "
-            "means anything",
-        ))
     live = _live_sessions(all_projects=True)
     try:
         target_pane, label = _resolve_goto_target(target_ref, live)
@@ -3847,12 +4054,23 @@ def session_goto(
             nl.ref, revisit=revisit, no_revisit=no_revisit,
             new_transcript=new_transcript, prompt=prompt,
         )
+    _goto_pane(target_pane, label, live)
 
-    key = _backstack_key()
-    token = _current_pane_token(live)
+
+def _goto_pane(target_pane: str, label: str, live: list[dict]) -> None:
+    """Focus `target_pane` on the task-session server and say so: the end of
+    `session goto`, shared with `session resume --new-window` (E-2519).
+
+    The back-stack is pushed only for a caller in that server (E-2519): its
+    stack is keyed by the caller's client there, and a caller anywhere else has
+    no pane on that server to come back to.
+    """
+    here = _in_tasks_server()
+    key = _backstack_key() if here else ""
+    token = _current_pane_token(live) if here else None
     if token:
         _backstack_push(key, token)
-    if not _tmux_switch_client(target_pane):
+    if not _focus_pane(target_pane):
         if token:  # target closed between resolution and switch — undo the push
             _backstack_pop(key)
         # The back-stack push is undone just above, so this really does leave
@@ -3864,6 +4082,8 @@ def session_goto(
             "session list` for a target that is still there",
         ))
     agent_help.info(f"• goto {label}", err=True)
+    if not here:
+        _say_where_shown(target_pane)
 
 
 def _resume_in_background(
@@ -3871,22 +4091,28 @@ def _resume_in_background(
     target_session: str | None, prompt: str | None,
 ) -> None:
     """`goto --resume --background` (E-2272): resume a NON-live target in a new
-    window of `target_session` without moving anyone's focus.
+    window without moving anyone's focus.
 
     The fault-triage job's resume of an ended session that raised an error. It
-    runs from a background job, so there is no $TMUX and no asking pane: the
-    caller names the tmux session, and nothing is pushed or switched. A target
-    that IS live is refused — a second Claude process on a live session's
-    transcript is the route E-2269 rejected — so the caller falls back. One
-    live in another project, or resumed by a process somewhere, is refused the
-    same way by `_resume_new_window_pane`'s running check (E-2519).
+    runs from a background job, so there is no $TMUX and no asking pane, and
+    nothing is pushed or switched. The window opens in the task-session
+    server's tasks session (E-2519), or in `target_session` when the caller
+    names one there — a session on any other server is not a place a window
+    can open. A target that IS live is refused — a second Claude process on a
+    live session's transcript is the route E-2269 rejected — so the caller
+    falls back. One live in another project, or resumed by a process
+    somewhere, is refused the same way by `_resume_new_window_pane`'s running
+    check (E-2519).
     """
-    if not target_session:
+    from endless import tmux_cmd
+    tasks = _require_tasks_server()
+    if target_session and not tmux_cmd.session_exists(tasks[0], target_session):
         raise agent_help.no_report(
-            "--background needs --target-session: with no asking pane there "
-            "is no session to open the window in.",
-            "Retry with --target-session $N",
-            exit_code=2,
+            f"No session on Endless's task-session server is named "
+            f"{target_session!r}, so no window was opened.",
+            f"Pass --target-session the exact name of a session there "
+            f"(`tmux -S {tasks[0]} ls` lists them), or omit it to open the "
+            f"window in {tasks[1]!r}, and retry",
         )
     live = _live_sessions(all_projects=True)
     try:
@@ -3896,7 +4122,9 @@ def _resume_in_background(
             nl.ref, revisit=revisit, no_revisit=no_revisit,
             target_session=target_session, prompt=prompt, background=True,
         )
-        agent_help.info(f"• resumed {label} in {target_session}", err=True)
+        agent_help.info(
+            f"• resumed {label} in {target_session or _tasks_server()[1]} on "
+            f"Endless's task-session server", err=True)
         return
     _refuse_on_stderr(agent_help.no_report(
         f"{target_ref} is live (pane {pane}); --background resumes only a "
@@ -3910,32 +4138,36 @@ def session_back() -> None:
     panes/sessions that have since closed; falls back to the spawning session
     when the stack is empty. See the module section header (E-1681).
     """
-    if not _in_tmux():
-        # Same answer as `session goto`'s, for the same reason: this verb moves
-        # an attached person's focus, and an agent cannot put them in tmux.
-        _refuse_on_stderr(agent_help.report(
-            "session back requires tmux (no $TMUX in this environment).",
-            "running Endless inside tmux, which is where pane navigation "
-            "means anything",
-        ))
+    # Same requirement as `session goto`'s (E-2519): the panes are on the
+    # task-session server, which is addressed by socket from wherever this is
+    # typed; `$TMUX` is not needed.
+    try:
+        _require_tasks_server()
+    except click.ClickException as e:
+        _refuse_on_stderr(e)
     live = _live_sessions(all_projects=True)
     key = _backstack_key()
+    here = _in_tasks_server()
 
     while True:
         token = _backstack_pop(key)
         if token is None:
             break
         pane = _resolve_session_token_to_pane(live, token)
-        if pane and _tmux_switch_client(pane):
+        if pane and _focus_pane(pane):
             agent_help.info(f"• back → {_token_label(token, pane)}", err=True)
+            if not here:
+                _say_where_shown(pane)
             return
         # Stale or unswitchable token: it's already popped, so drop and retry.
 
     spawner = _spawner_pane(live)
     if spawner:
         pane, label = spawner
-        if _tmux_switch_client(pane):
+        if _focus_pane(pane):
             agent_help.info(f"• back → {label}", err=True)
+            if not here:
+                _say_where_shown(pane)
             return
 
     # Exits 1 so a keybinding can tell "went back" from "had nowhere to go",

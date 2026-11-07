@@ -112,6 +112,10 @@ which stays yours:
   only here: while it is not running, each of them refuses ("Endless isn't
   running. Run `endless start`") and creates nothing. `--tmux-session` names
   a session on this server. Only `endless start` starts either server.
+  `session goto`, `session back` and `session resume --new-window` reach it
+  the same way, from the console or any shell: goto selects the target's
+  window here and says how to attach when no terminal is; `session resume`
+  itself runs only in one of its panes.
 
 `start` starts whichever is not running and opens a terminal window attached
 to each. A console it starts opens with a monitor window for the project

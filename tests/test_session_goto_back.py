@@ -13,24 +13,36 @@ class _Result:
         self.stdout = stdout
 
 
+# The fake task-session server's socket (E-2519). `goto_env` reports it as
+# Endless's running task-session server and, by default, puts the caller's
+# `$TMUX` on it — the pane goto is typed in is one of its panes.
+FAKE_SOCKET = "/tmp/tmux-test"
+
+
 class FakeTmux:
     """In-memory tmux server for `_tmux_run`: tracks existing panes, global
     options (the back-stack lives here), the spawner marker, and records every
-    switch-client target.
+    switch-client and select-window target. It stands in for `_tmux_run`, the
+    one place that addresses the task-session server by socket (E-2519), so
+    the socket itself is pinned by `test_tmux_run_addresses_the_tasks_server`.
     """
 
-    def __init__(self, panes, spawned_by="", client="cli", session="$0"):
+    def __init__(self, panes, spawned_by="", client="cli", session="$0",
+                 session_name="tasks", attached=True):
         self.panes = set(panes)
         self.session = session
+        self.session_name = session_name
+        self.attached = attached
         self.options: dict[str, str] = {}
         self.spawned_by = spawned_by
         self.client = client
         self.switched: list[str] = []
+        self.selected: list[str] = []
         self.new_windows: list[list[str]] = []
         self._next_new_pane = 1
 
     def run(self, args, timeout=2.0):
-        return _Result(*self._dispatch(args))
+        return _Result(*self._dispatch(list(args)))
 
     def _dispatch(self, args):
         if args[:1] == ["new-window"]:
@@ -57,7 +69,19 @@ class FakeTmux:
                 return (0, self.session + "\n") if target in self.panes else (1, "")
             if fmt == "#{@endless_spawned_by}":
                 return 0, self.spawned_by + "\n"
+            if fmt == "#{session_name}":
+                return (0, self.session_name + "\n") if target in self.panes else (1, "")
             return 0, "\n"
+        if args[:1] == ["select-window"]:
+            pane = args[2]
+            if pane in self.panes:
+                self.selected.append(pane)
+                return 0, ""
+            return 1, ""
+        if args[:1] == ["select-pane"]:
+            return (0, "") if args[2] in self.panes else (1, "")
+        if args[:1] == ["list-clients"]:
+            return 0, ("/dev/ttys009\n" if self.attached else "")
         if args[:1] == ["show-options"]:
             return 0, self.options.get(args[-1], "") + "\n"
         if args[:1] == ["set-option"]:
@@ -93,11 +117,21 @@ def goto_env(registered_project, monkeypatch, stage_live_session):
     monkeypatch.setattr(session_cmd, "build_pane_layout", lambda pane, cwd: None)
 
     def _make(panes, spawned_by="", current_pane=None, client="cli",
-              session="$0"):
-        monkeypatch.setenv("TMUX", "/tmp/tmux-test,1,0")
+              session="$0", here=True, attached=True):
+        """`here=False` types the command OUTSIDE the task-session server: in
+        the console server (E-2519). `attached=False` leaves no terminal on the
+        task-session server."""
+        from endless import tmux_cmd
+        if here:
+            monkeypatch.setenv("TMUX", f"{FAKE_SOCKET},1,0")
+        else:
+            monkeypatch.setenv("TMUX", "/tmp/endless-501/endless-console,2,0")
         ft = FakeTmux(panes, spawned_by=spawned_by, client=client,
-                      session=session)
+                      session=session, attached=attached)
         monkeypatch.setattr(session_cmd, "_tmux_run", ft.run)
+        monkeypatch.setattr(tmux_cmd, "tasks_server", lambda: (FAKE_SOCKET, "tasks"))
+        monkeypatch.setattr(tmux_cmd, "session_exists", lambda socket, name: True)
+        session_cmd._tasks_server_cache.clear()
         if current_pane is not None:
             monkeypatch.setenv("TMUX_PANE", current_pane)
         else:
@@ -210,14 +244,102 @@ def test_goto_unknown_ref(goto_env, capsys):
     assert ft.switched == []
 
 
-def test_goto_outside_tmux(goto_env, monkeypatch, capsys):
+# ─── from outside the task-session server (E-2519) ───────────────────────────
+#
+# Every session pane is on Endless's task-session server, and goto addresses
+# that server by socket from wherever it is typed. Until E-2519 it ran bare
+# `tmux` against the caller's own server, so from the console server every
+# task pane read as unreachable — and `--resume` relaunched a running session.
+
+
+def test_goto_from_the_console_selects_the_window_on_the_tasks_server(
+    goto_env, capsys,
+):
     stage, make = goto_env
-    monkeypatch.delenv("TMUX", raising=False)
+    stage(endless_session_id=10, pane_id="%10", task_id=1465)
+    ft = make({"%10"}, current_pane="%3", here=False)
+
+    session_cmd.session_goto("E-1465")
+
+    assert ft.selected == ["%10"], "the window is selected on the tasks server"
+    assert ft.switched == [], "no client of the console's is switched"
+    assert ft.stack() == [], "nothing on that server to come back to"
+    err = capsys.readouterr().err
+    assert "goto E-1465" in err
+    assert "shown in the terminal attached" in err
+
+
+def test_goto_from_outside_with_no_terminal_attached_says_how_to_attach(
+    goto_env, capsys,
+):
+    stage, make = goto_env
+    stage(endless_session_id=10, pane_id="%10", task_id=1465)
+    ft = make({"%10"}, here=False, attached=False)
+    # Also outside tmux altogether: a plain shell.
+    import os
+    os.environ.pop("TMUX", None)
+
+    session_cmd.session_goto("E-1465")
+
+    assert ft.selected == ["%10"]
+    err = capsys.readouterr().err
+    assert "no terminal is attached" in err
+    assert f"tmux -S {FAKE_SOCKET} attach -t '=tasks'" in err
+
+
+@pytest.mark.parametrize("here", [True, False])
+def test_tmux_run_addresses_the_tasks_server(monkeypatch, here):
+    """`_tmux_run` is the one place tmux is invoked for a session pane, and it
+    names the task-session server's socket on every call (E-2519). The
+    caller's own $TMUX / $TMUX_PANE ride along only when the caller is in that
+    server: a pane id means nothing on another server."""
+    import subprocess
+    from endless import tmux_cmd
+    monkeypatch.setattr(tmux_cmd, "tasks_server", lambda: (FAKE_SOCKET, "tasks"))
+    session_cmd._tasks_server_cache.clear()
+    monkeypatch.setenv("TMUX", f"{FAKE_SOCKET if here else '/tmp/other'},1,0")
+    monkeypatch.setenv("TMUX_PANE", "%3")
+    calls = []
+
+    def fake_run(argv, **kw):
+        calls.append((argv, kw["env"]))
+        return _Result(0, "")
+    monkeypatch.setattr(subprocess, "run", fake_run)
+
+    session_cmd._tmux_run(["display-message", "-p", "#{pane_id}"])
+
+    argv, env = calls[0]
+    assert argv[:3] == ["tmux", "-S", FAKE_SOCKET]
+    assert argv[3:] == ["display-message", "-p", "#{pane_id}"]
+    assert ("TMUX_PANE" in env) is here
+    assert ("TMUX" in env) is here
+
+
+def test_tmux_run_answers_nothing_while_endless_is_not_running(monkeypatch):
+    import subprocess
+    from endless import tmux_cmd
+    monkeypatch.setattr(tmux_cmd, "tasks_server", lambda: None)
+    session_cmd._tasks_server_cache.clear()
+    monkeypatch.setattr(subprocess, "run",
+                        lambda *a, **k: pytest.fail("tmux was invoked"))
+
+    assert session_cmd._tmux_run(["list-panes"]) is None
+
+
+def test_goto_refuses_while_endless_is_not_running(goto_env, monkeypatch, capsys):
+    from endless import tmux_cmd
+    stage, make = goto_env
+    stage(endless_session_id=10, pane_id="%10", task_id=1465)
+    ft = make({"%10"}, current_pane="%3")
+    monkeypatch.setattr(tmux_cmd, "tasks_server", lambda: None)
+    session_cmd._tasks_server_cache.clear()
 
     with pytest.raises(SystemExit) as exc:
         session_cmd.session_goto("E-1465")
+
     assert exc.value.code == 1
-    assert "requires tmux" in capsys.readouterr().err
+    assert ft.selected == [] and ft.switched == []
+    assert "Endless isn't running" in capsys.readouterr().err
 
 
 # ─── --resume (E-1797) ────────────────────────────────────────────────────────
@@ -432,14 +554,35 @@ def test_back_drops_stale_token_then_pops_next(goto_env):
     assert ft.stack() == []  # both consumed
 
 
-def test_back_outside_tmux(goto_env, monkeypatch, capsys):
+def test_back_from_the_console_selects_the_window_on_the_tasks_server(
+    goto_env, capsys,
+):
+    """`back` addresses the task-session server as goto does (E-2519): its
+    stack lives there, and the pane it returns to is selected there."""
     stage, make = goto_env
-    monkeypatch.delenv("TMUX", raising=False)
+    ft = make({"%10", "%20"}, here=False)
+    # Keyed by the client tmux picks on THAT server (the terminal attached
+    # there), since the console's own client is not one of its clients.
+    ft.options["@endless_backstack_" + ft.client] = "%20"
+
+    session_cmd.session_back()
+
+    assert ft.selected == ["%20"]
+    assert ft.switched == []
+    assert "back → pane %20" in capsys.readouterr().err
+
+
+def test_back_refuses_while_endless_is_not_running(goto_env, monkeypatch, capsys):
+    from endless import tmux_cmd
+    stage, make = goto_env
+    make({"%10"}, current_pane="%10")
+    monkeypatch.setattr(tmux_cmd, "tasks_server", lambda: None)
+    session_cmd._tasks_server_cache.clear()
 
     with pytest.raises(SystemExit) as exc:
         session_cmd.session_back()
     assert exc.value.code == 1
-    assert "requires tmux" in capsys.readouterr().err
+    assert "Endless isn't running" in capsys.readouterr().err
 
 
 # ─── --revisit / --no-revisit (E-1968) ────────────────────────────────────────
@@ -630,20 +773,24 @@ def test_goto_resume_targets_the_spawning_session(
     assert argv[argv.index("-t") + 1] == "$7:"
 
 
-def test_goto_resume_refuses_when_the_session_is_unresolvable(
-    goto_env, registered_project, monkeypatch, capsys
+@pytest.mark.parametrize("here", [True, False])
+def test_goto_resume_without_a_pane_of_its_own_targets_the_tasks_session(
+    goto_env, registered_project, monkeypatch, here,
 ):
-    """No resolvable pane means no answer to "which session does this belong
-    in", and the fix is worth nothing if that case quietly falls back to an
-    untargeted new-window. It refuses instead, and opens no window."""
+    """With no pane of the caller's on the task-session server — no $TMUX_PANE
+    there, or a caller in the console (E-2519) — the window opens in that
+    server's tasks session, named exactly, never in an untargeted new-window
+    and never on the caller's own server."""
     stage, make = goto_env
     stage(endless_session_id=10, pane_id="%10", task_id=1465)
-    # current_pane=None deletes $TMUX_PANE, so the session lookup has no input.
-    ft = make({"%10"}, current_pane=None)
+    ft = make({"%10"}, current_pane=None if here else "%3", here=here)
     _stage_resumable(monkeypatch, registered_project)
 
-    with pytest.raises(SystemExit):
-        session_cmd.session_goto("E-1748", resume=True)
+    session_cmd.session_goto("E-1748", resume=True)
 
-    assert ft.new_windows == []
-    assert "which tmux session" in capsys.readouterr().err
+    argv = ft.new_windows[0]
+    assert argv[argv.index("-t") + 1] == "=tasks:"
+    if here:
+        assert ft.switched == ["%new1"]
+    else:
+        assert ft.selected == ["%new1"] and ft.switched == []

@@ -1944,18 +1944,20 @@ NEW_TRANSCRIPT_HELP = (
          "instead of naming a target.",
 )
 @click.option("--background", is_flag=True, hidden=True,
-              help="With --resume: open the window without focusing it and "
-                   "without needing $TMUX (the fault-triage job's resume).")
+              help="With --resume: open the window without focusing it (the "
+                   "fault-triage job's resume).")
 @click.option("--target-session", "target_session", default=None, hidden=True,
-              help="With --background: the tmux session ($N) the window opens in.")
+              help="With --background: the task-session server session the "
+                   "window opens in (default: its tasks session).")
 @click.option("--prompt-file", "prompt_file", default=None, hidden=True,
               type=click.Path(exists=True, dir_okay=False),
               help="With --resume: the resumed session's first prompt.")
 @click.option(
     "--resume", is_flag=True,
-    help="If the target isn't live, resume it in a NEW tmux window and focus "
-         "it, instead of erroring. No-op when the target is already live; "
-         "refused when it is running somewhere this tmux server cannot see.",
+    help="If the target isn't live, resume it in a NEW window of Endless's "
+         "task-session server and focus it, instead of erroring. No-op when "
+         "the target is already live; refused when it is running in a pane "
+         "goto cannot reach.",
 )
 @click.option(
     "--revisit", is_flag=True,
@@ -1979,15 +1981,21 @@ def session_goto(target_ref, error_fix, background, target_session, prompt_file,
     integer, or a Claude UUID prefix). A task id resolves to the
     most-recently-active live session working it. Prefer ES-NNNN — the form
     `task show` prints under Created:/Sessions: — since a bare integer that
-    matches both a session and a task is rejected as ambiguous. The current pane
-    is pushed onto a per-client back-stack so `endless session back` returns
-    here. Requires tmux.
+    matches both a session and a task is rejected as ambiguous.
 
-    With --resume, a target that has no live pane is relaunched in a new tmux
-    window and focused (instead of erroring) — unlike `session resume`, which
-    clobbers the current pane. A target with no pane here that is nonetheless
-    running — live in another project, or under a `claude --resume` process —
-    is refused rather than relaunched: drop --resume.
+    Every session pane is on Endless's task-session server, and goto reaches
+    that server from wherever it is typed. In a pane there, your client
+    switches and the current pane is pushed onto a per-client back-stack so
+    `endless session back` returns here. From the console server, another
+    tmux or a plain shell, the target's window is selected on that server:
+    the terminal attached there shows it, or you are told how to attach one.
+    Requires Endless to be running (`endless start`).
+
+    With --resume, a target that has no live pane is relaunched in a new
+    window of that server and focused (instead of erroring) — unlike `session
+    resume`, which clobbers the current pane. A target that is nonetheless
+    running — under a `claude --resume` process, or in a pane on some other
+    tmux server — is refused rather than relaunched.
 
     Resuming settled work (confirmed/assumed/completed) requires saying which
     you mean: --revisit reopens the task and continues; --no-revisit reads the
@@ -2076,9 +2084,16 @@ def session_goto(target_ref, error_fix, background, target_session, prompt_file,
          "and lay the window out over them. For a window a tmux crash restored "
          "full of dead shells — not one whose panes you arranged.",
 )
+@click.option(
+    "--new-window", "new_window", is_flag=True,
+    help="Open the resume in a NEW window of Endless's task-session server "
+         "and focus it, as `session goto REF --resume` does, instead of "
+         "taking over this pane. The way to resume from a pane that is not on "
+         "that server.",
+)
 def session_resume(ref, tmux_session, all_tmux_sessions, review, reopen,
                    dry_run, print_decision, force, new_transcript, rebind,
-                   no_sibling_panes):
+                   no_sibling_panes, new_window):
     """Relaunch a lost Claude session in the CURRENT tmux pane — or, with
     --tmux-session NAME / --all-tmux-sessions, in every restored task window.
 
@@ -2097,6 +2112,12 @@ def session_resume(ref, tmux_session, all_tmux_sessions, review, reopen,
 
     When the worktree was dropped after landing, `--review`/`--reopen` rebuild
     it from the surviving transcript so no git ref need be typed.
+
+    The pane must be on Endless's task-session server, where every Claude
+    Endless runs. Anywhere else the resume is refused, and the two routes that
+    open the session there are named: `session goto REF --resume`, or
+    --new-window, which opens the resume in a new window of that server and
+    focuses it just as goto --resume does.
 
     This replaces the pane it runs in. When that pane already holds a session
     working a task, it refuses without --force and points at
@@ -2135,6 +2156,7 @@ def session_resume(ref, tmux_session, all_tmux_sessions, review, reopen,
                 "--review": review is not None, "--reopen": reopen is not None,
                 "--force": force, "--new-transcript": new_transcript,
                 "--rebind": rebind, "--no-sibling-panes": no_sibling_panes,
+                "--new-window": new_window,
             },
         )
         return
@@ -2156,7 +2178,7 @@ def session_resume(ref, tmux_session, all_tmux_sessions, review, reopen,
     resume_session(ref, review=review, reopen=reopen,
                    dry_run=dry_run or print_decision, force=force,
                    new_transcript=new_transcript, rebind=rebind,
-                   no_sibling_panes=no_sibling_panes)
+                   no_sibling_panes=no_sibling_panes, new_window=new_window)
 
 
 @session_cmd.command("end")
@@ -2195,7 +2217,9 @@ def session_back():
 
     Pops the per-client back-stack and switches tmux focus there, skipping
     panes/sessions that have since closed. With an empty stack, returns to the
-    spawning session if this one was spawned. Requires tmux.
+    spawning session if this one was spawned. Reaches Endless's task-session
+    server as `goto` does, from wherever it is typed; requires Endless to be
+    running.
     """
     from endless.session_cmd import session_back as run_back
     run_back()
