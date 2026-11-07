@@ -7973,3 +7973,7 @@ Situation: in the E-2284 session, after E-2284 landed, Mike ran /needs-plan E-23
 ### [2026-11-07] Don't call a new package unavoidable when existing packages could hold the code
 Situation: planning E-2308 (show Go CLI paths with ~), I wrote that one new package, internal/pathlint for the analyzer, was 'unavoidable'. Mike: 'No it is not. You can put the funcs in existing packages.' He let it stand this time only because the source already has a huge number of little packages and he plans a major refactor after the Python-to-Go port. He wants to avoid package proliferation, so a plan that adds a package should say it is a choice and name the existing package that could hold the code instead, not claim there is no alternative.
 - **Project**: endless
+
+### [2026-11-07] Paths a person can see use ~, including paths meant to be pasted
+Situation: planning E-2308, Mike chose 'agents keep full paths' (Q3 = B). I applied that to the PreToolUse hook refusals (write outside worktree, cwd drift /cd, bash writes, unbound worktree) because they are addressed to the agent, and I kept the /cd line and the 're-target under' path absolute 'for paste-safety'. Mike: 'NOOOO!!! Why?!?' — those messages show in his terminal, /cd works with ~/, and 'For paths meant to be pasted I want to use ~ even more.' A message addressed to an agent is not agent-only when Mike can see it, and a path meant to be pasted is not a reason to make it absolute.
+- **Project**: endless
