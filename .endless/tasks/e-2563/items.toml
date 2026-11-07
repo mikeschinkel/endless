@@ -56,3 +56,8 @@ statement = "Changing go.work files in main checkouts"
 id = "P11"
 kind = "exclusion"
 statement = "Handling forks specially"
+
+[[item]]
+id = "P12"
+kind = "deliverable"
+statement = "The orchestration guide documents the built-in worktree extensions and the Go one, with a topic row in the cross-reference"
