@@ -1,0 +1,90 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2563 and records what was true when E-2563
+# landed. Edit it only if you ARE E-2563. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+#
+# E-2563 gives every Go task worktree its own go.work: a core worktree
+# extension point (src/endless/worktree_ext.py) runs after a worktree is
+# created and before a session starts in an existing one, and a Go-support
+# module outside the core (src/endless/go_support.py) writes a go.work
+# listing every module in the worktree, so a main checkout's go.work never
+# breaks it.
+
+schema = 1
+task   = "E-2563"
+
+# Native tests first. The Go-support tests run the real `go` tool and real
+# git against a main checkout that has a go.work and a worktree inside it:
+# the build fails before and passes after, nested modules are listed, an
+# existing go.work is untouched, a non-Go worktree gets nothing, an
+# existing worktree gets the file on claim, spawn and resume, and the
+# .gitignore warning fires only when the repo's .gitignore lacks go.work.
+[[check]]
+name   = "extension point and Go support"
+runner = "pytest/uv"
+paths  = ["tests/test_worktree_ext.py", "tests/test_go_support.py"]
+
+# The bootstrap and resume paths the extension point was wired into keep
+# their existing contracts.
+[[check]]
+name   = "worktree bootstrap, create and resume still behave"
+runner = "pytest/uv"
+paths  = ["tests/test_sandbox_cmd.py", "tests/test_worktree_create.py",
+          "tests/test_session_resume_recover.py",
+          "tests/test_session_resume_crash_recovery.py"]
+
+[[check]]
+name = "the core names no language"
+sh   = "! grep -q -e 'go\\.mod' -e 'go\\.work' -e GOWORK src/endless/worktree_ext.py"
+
+[[check]]
+name     = "the Go module is the one built-in extension, registered through the core"
+sh       = "uv run python -c 'from endless import worktree_ext; print([e.name for e in worktree_ext.registered()])'"
+equals   = "['go-support']"
+
+[[check]]
+name = "the Go module imports nothing of the core but the extension point and the help channel"
+sh   = "! grep -E '^from endless(\\.[a-z_]+)? import' src/endless/go_support.py | grep -v -E '^from endless import agent_help, config, worktree_ext$'"
+
+[[check]]
+name     = "the guide documents the extensions and the Go one"
+sh       = "endless guide orchestration"
+contains = "Built-in worktree extensions"
+
+[[check]]
+name = "the guide cross-reference is in sync"
+sh   = "just guide-check"
+
+# End to end, as a user sees it: a Go worktree under a main checkout with a
+# go.work builds once the extension has run, and the main file is untouched.
+[[check]]
+name = "a Go worktree under a main checkout with a go.work builds"
+sh   = '''
+set -e
+root=$(mktemp -d)
+trap 'rm -rf "$root"' EXIT
+main="$root/main"
+mkdir -p "$main/test"
+printf 'module example.com/m\n\ngo 1.21\n' > "$main/go.mod"
+printf 'package main\n\nfunc main() {}\n' > "$main/main.go"
+printf 'module example.com/m/test\n\ngo 1.21\n' > "$main/test/go.mod"
+printf 'package t\n' > "$main/test/t.go"
+printf 'go.work\ngo.work.sum\n' > "$main/.gitignore"
+git -C "$main" init -q -b main
+git -C "$main" -c user.email=t@t.t -c user.name=t add -A
+git -C "$main" -c user.email=t@t.t -c user.name=t commit -q -m init
+printf 'go 1.21\n\nuse .\n' > "$main/go.work"
+wt="$main/.endless/worktrees/e-1"
+mkdir -p "$main/.endless/worktrees"
+git -C "$main" worktree add -q -b task/1 "$wt" main
+unset GOWORK
+if (cd "$wt" && go build ./... 2>/dev/null); then echo "built before the fix"; exit 1; fi
+uv run python -c "from pathlib import Path; from endless import worktree_ext; worktree_ext.run_extensions(Path('$wt'))"
+test -f "$wt/go.work"
+grep -q './test' "$wt/go.work"
+(cd "$wt" && go build ./...)
+(cd "$wt/test" && go build ./...)
+test "$(cat "$main/go.work")" = "$(printf 'go 1.21\n\nuse .')"
+echo builds
+'''
+contains = "builds"

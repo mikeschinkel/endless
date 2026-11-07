@@ -594,6 +594,12 @@ def _resolve_resume(
         )
 
     if worktree and os.path.isdir(worktree):
+        # E-2563: a session is about to start in an existing worktree, so the
+        # worktree extensions run (the Go one writes a missing go.work). Here
+        # rather than at the exec, so `session resume` and `session goto
+        # --resume` agree, and `--dry-run` shows a worktree as it will be.
+        from endless.worktree_ext import run_extensions as run_worktree_extensions
+        run_worktree_extensions(Path(worktree))
         return _resume_decision(
             uuid, worktree, label, eid, task, project, decision_out
         )

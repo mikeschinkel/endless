@@ -26,6 +26,10 @@ topic: worktree DB sandbox (--db main vs sandbox)
 section: orchestration
 covers: Self-dev DB routing and the --db choice.
 
+topic: built-in worktree extensions (Go support: go.work per worktree)
+section: orchestration
+covers: Endless's own per-worktree steps, run at creation and before every session start; the Go one writes a go.work so a main checkout's go.work never breaks the worktree.
+
 topic: shell helpers (esu / esp / esf)
 section: orchestration
 covers: cd into your worktree and export ENDLESS_SESSION_ID.

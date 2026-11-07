@@ -44,6 +44,7 @@ import click
 
 from endless import agent_help, doc_mirror, land_conflict, provenance, rowcap, unlanded
 from endless.git_hook import copy_lefthook_local
+from endless.worktree_ext import run_extensions as run_worktree_extensions
 from endless.task_cmd import _display_path, _require_unblocked, _resolve_project
 from endless.project_path import resolved
 
@@ -2669,6 +2670,11 @@ def create_task_worktree(
         # (`e-{task_id}`) is its identity by construction here; the
         # companion's existence is the "endless-managed marker" check.
         if _task_id_from_worktree_path(wt_dir) == canonical and _read_companion(wt_dir):
+            # E-2563: a session is about to start here, so the worktree
+            # extensions run — the same ones a new worktree gets at creation.
+            # A worktree that predates an extension, or lost what one wrote,
+            # is brought up to date at the next claim or spawn.
+            run_worktree_extensions(wt_dir)
             return wt_dir, False
         # A directory Endless did not create is sitting on the path this task's
         # worktree needs. Moving or removing somebody else's directory is not
@@ -2740,9 +2746,10 @@ def _bootstrap_task_worktree(
     """Post-`git worktree add` bootstrap shared by claim and session recovery.
 
     Writes the companion marker (`.endless/worktree.json` + scratch dir),
-    creates the worktree's sandbox, runs the project's post-worktree-create
-    hook (go-work-init, bin copy, claude-settings-init, ...), then seeds the
-    sandbox with `endless sandbox reset` (E-1608).
+    creates the worktree's sandbox, runs Endless's worktree extensions
+    (E-2563), runs the project's post-worktree-create hook (go-work-init, bin
+    copy, claude-settings-init, ...), then seeds the sandbox with `endless
+    sandbox reset` (E-1608).
 
     It materializes NO document mirrors (E-2137). Those live on main, where
     `task update` writes them; a worktree copy would be a second home for
@@ -2787,6 +2794,10 @@ def _bootstrap_task_worktree(
         # Deliberately silent: a cold cache entry costs one monitor tick showing
         # `~`, and saying so would be noise on a worktree that was created fine.
         pass
+    # E-2563: Endless's own worktree extensions (the Go one writes a go.work)
+    # run BEFORE the project's hook, so a hook that regenerates the same file
+    # with more in it — Endless's own go-work-init does — has the last word.
+    run_worktree_extensions(wt_dir)
     _run_post_worktree_create_hook(project_root, wt_dir)
     # E-1608: seed through the one front door, after the create hook (which
     # may build the binary the seed hook uses).
@@ -2824,6 +2835,7 @@ def recreate_dropped_worktree(
         # mis-detected the drop; treat an already-ours dir as an idempotent
         # no-op, and refuse a foreign collision (mirrors create_task_worktree).
         if _task_id_from_worktree_path(wt_dir) == canonical and _read_companion(wt_dir):
+            run_worktree_extensions(wt_dir)  # E-2563, as in create_task_worktree
             return wt_dir
         # Same refusal as create_task_worktree's, for the same reason: a
         # directory Endless did not create is in the way, and clearing it is

@@ -335,6 +335,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 | preference vs prohibition | decisions | Soft signals ('ideally','usually') are not rules - verify before recording. |
 | the handoff (generated, not authored) | orchestration | Spawned sessions get a rendered handoff; agents never write it. |
 | worktree DB sandbox (--db main vs sandbox) | orchestration | Self-dev DB routing and the --db choice. |
+| built-in worktree extensions (Go support: go.work per worktree) | orchestration | Endless's own per-worktree steps, run at creation and before every session start; the Go one writes a go.work so a main checkout's go.work never breaks the worktree. |
 | shell helpers (esu / esp / esf) | orchestration | cd into your worktree and export ENDLESS_SESSION_ID. |
 | blocking semantics | tasks | How unverified/unreviewed/confirmed/assumed/completed affect whether a blocker is still active. |
 | verbs | tasks | The registered action words that can begin a task title. |
