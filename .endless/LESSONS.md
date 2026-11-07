@@ -7937,3 +7937,7 @@ While handing off E-2520, the session gave Mike two endless decision add command
 ### [2026-11-01] Split a task when only part of its method is known
 While filing IDE-support work under E-2537, I put JetBrains and VS Code exclusion into one todo, E-2538. Mike split it: the JetBrains mechanism (an excludeFolder entry in the module .iml) is known, the VS Code one is not. A todo whose method is half known cannot be planned as one unit; the known half stalls behind the unknown. When part of a task's method is known and part is not, file the known part as a todo and the unknown part as its own research or todo task, so each can move at its own pace.
 - **Project**: endless
+
+### [2026-11-06] One positional argument per command, the rest are flags (ED-1647)
+While building 'endless correct' for E-2486 I gave it two positional arguments, target and key, and justified the flag-based operations by that. Mike pointed out ED-1647: a command takes at most one positional argument and everything else is a flag or a subcommand. ED-1647 lives in the go-cliutil project only because there is no way yet to record a decision that spans projects; it applies to Endless and Gomion too. Check go-cliutil's decisions as well as this project's when shaping a CLI command.
+- **Project**: endless
