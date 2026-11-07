@@ -1,0 +1,1 @@
+E-2308 adds an analyzer rule that flags stdlib path calls (filepath.Join/Dir/Base/Abs, os.Getwd, os.UserHomeDir, os.MkdirTemp, os.TempDir) and a baseline of existing sites that may only shrink. Mike wants every path held in a go-dt type; internal/hookcmd is one of the packages that still builds most paths as plain strings, so its sites sit in the baseline.
