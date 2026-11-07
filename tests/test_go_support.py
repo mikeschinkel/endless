@@ -163,6 +163,22 @@ def test_pruned_directories_are_not_listed_beside_real_modules(checkout):
     assert "vendor" not in text and "testdata" not in text
 
 
+def test_a_symlinked_worktree_path_still_gets_relative_use_entries(checkout, tmp_path):
+    """Reached through a symlink (macOS's /var -> /private/var, a linked
+    ~/Projects), `go work use` would otherwise write paths that climb out
+    through the link, and the build then fails to match them."""
+    main, wt = checkout()
+    link = tmp_path / "link"
+    link.symlink_to(main)
+    via_link = link / ".endless" / "worktrees" / "e-1"
+    assert go_support.ensure_go_work(via_link) is True
+    text = (wt / "go.work").read_text()
+    assert "\t.\n" in text and "./test" in text
+    assert ".." not in text
+    built = _go_build(via_link)
+    assert built.returncode == 0, built.stdout + built.stderr
+
+
 def test_idempotent_at_every_start(checkout):
     main, wt = checkout()
     assert go_support.ensure_go_work(wt) is True

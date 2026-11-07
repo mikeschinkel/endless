@@ -48,7 +48,7 @@ sh   = "! grep -E '^from endless(\\.[a-z_]+)? import' src/endless/go_support.py 
 
 [[check]]
 name     = "the guide documents the extensions and the Go one"
-sh       = "endless guide orchestration"
+sh       = "uv run endless guide orchestration"
 contains = "Built-in worktree extensions"
 
 [[check]]

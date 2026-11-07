@@ -79,8 +79,7 @@ def ensure_go_work(worktree: Path) -> bool:
     modules = go_modules(worktree)
     if not modules:
         return False
-    go_work = worktree / GO_WORK
-    if go_work.exists():
+    if (worktree / GO_WORK).exists():
         return False
 
     go = shutil.which("go")
@@ -89,12 +88,20 @@ def ensure_go_work(worktree: Path) -> bool:
             f"{config.tilde(worktree)} holds a Go module but `go` is not on PATH, "
             f"so no go.work was written"
         )
+    # The resolved path, with symlinks followed, for both the working
+    # directory and GOWORK. `go work use` writes each module relative to the
+    # go.work's directory, computed from the directory the OS reports, and
+    # when the two spellings differ (`/var/...` vs `/private/var/...` on
+    # macOS) it writes paths that climb out through the symlink, which Go
+    # then refuses to match against the directory a build runs in.
+    real = worktree.resolve()
+    go_work = real / GO_WORK
     # GOWORK pinned to the file being written: without it `go work init`
     # finds the main checkout's go.work by walking up and refuses ("already
     # exists"), and `go work use` would then edit THAT file.
-    env = {**os.environ, "GOWORK": str(go_work)}
-    _go(go, ["work", "init"], worktree, env)
-    _go(go, ["work", "use", *(_use_arg(m) for m in modules)], worktree, env)
+    env = {**os.environ, "GOWORK": str(go_work), "PWD": str(real)}
+    _go(go, ["work", "init"], real, env)
+    _go(go, ["work", "use", *(_use_arg(m) for m in modules)], real, env)
 
     agent_help.info(
         click.style("•", fg="cyan")
