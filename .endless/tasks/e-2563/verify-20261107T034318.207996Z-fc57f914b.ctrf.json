@@ -1,0 +1,1191 @@
+{
+  "reportFormat": "CTRF",
+  "specVersion": "0.2.0",
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 108,
+      "passed": 108,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 1794022989617,
+      "stop": 1794023004047
+    },
+    "tests": [
+      {
+        "name": "tests/test_worktree_ext.py::test_every_extension_runs_in_order_with_the_worktree",
+        "status": "passed",
+        "duration": 1007,
+        "suite": [
+          "tests/test_worktree_ext.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_worktree_ext.py::test_a_failing_extension_is_named_and_does_not_stop_the_rest",
+        "status": "passed",
+        "duration": 62,
+        "suite": [
+          "tests/test_worktree_ext.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_worktree_ext.py::test_registering_a_name_twice_replaces_it",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "tests/test_worktree_ext.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_worktree_ext.py::test_the_builtin_go_extension_is_registered",
+        "status": "passed",
+        "duration": 64,
+        "suite": [
+          "tests/test_worktree_ext.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_worktree_ext.py::test_the_core_names_no_language",
+        "status": "passed",
+        "duration": 58,
+        "suite": [
+          "tests/test_worktree_ext.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_worktree_ext.py::test_bootstrap_runs_extensions_before_the_create_hook",
+        "status": "passed",
+        "duration": 83,
+        "suite": [
+          "tests/test_worktree_ext.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_worktree_ext.py::test_an_existing_worktree_runs_extensions_on_claim_and_spawn",
+        "status": "passed",
+        "duration": 55,
+        "suite": [
+          "tests/test_worktree_ext.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_worktree_ext.py::test_an_existing_worktree_runs_extensions_on_recreate",
+        "status": "passed",
+        "duration": 66,
+        "suite": [
+          "tests/test_worktree_ext.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_worktree_ext.py::test_resume_runs_extensions_in_the_existing_worktree",
+        "status": "passed",
+        "duration": 290,
+        "suite": [
+          "tests/test_worktree_ext.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_worktree_ext.py::test_a_failing_extension_does_not_stop_the_resume",
+        "status": "passed",
+        "duration": 65,
+        "suite": [
+          "tests/test_worktree_ext.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_go_support.py::test_a_go_worktree_under_a_main_go_work_builds_once_it_has_its_own",
+        "status": "passed",
+        "duration": 399,
+        "suite": [
+          "tests/test_go_support.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_go_support.py::test_nested_modules_are_listed",
+        "status": "passed",
+        "duration": 152,
+        "suite": [
+          "tests/test_go_support.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_go_support.py::test_go_sets_the_go_line",
+        "status": "passed",
+        "duration": 129,
+        "suite": [
+          "tests/test_go_support.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_go_support.py::test_it_runs_without_a_go_work_in_the_main_checkout_too",
+        "status": "passed",
+        "duration": 186,
+        "suite": [
+          "tests/test_go_support.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_go_support.py::test_an_existing_go_work_is_left_unchanged",
+        "status": "passed",
+        "duration": 115,
+        "suite": [
+          "tests/test_go_support.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_go_support.py::test_a_non_go_worktree_gets_nothing",
+        "status": "passed",
+        "duration": 51,
+        "suite": [
+          "tests/test_go_support.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_go_support.py::test_modules_under_pruned_directories_do_not_count",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "tests/test_go_support.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_go_support.py::test_pruned_directories_are_not_listed_beside_real_modules",
+        "status": "passed",
+        "duration": 129,
+        "suite": [
+          "tests/test_go_support.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_go_support.py::test_a_symlinked_worktree_path_still_gets_relative_use_entries",
+        "status": "passed",
+        "duration": 254,
+        "suite": [
+          "tests/test_go_support.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_go_support.py::test_idempotent_at_every_start",
+        "status": "passed",
+        "duration": 122,
+        "suite": [
+          "tests/test_go_support.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_go_support.py::test_no_warning_when_gitignore_covers_go_work",
+        "status": "passed",
+        "duration": 126,
+        "suite": [
+          "tests/test_go_support.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_go_support.py::test_warning_when_gitignore_lacks_go_work",
+        "status": "passed",
+        "duration": 120,
+        "suite": [
+          "tests/test_go_support.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_go_support.py::test_an_anchored_pattern_counts_as_covered",
+        "status": "passed",
+        "duration": 122,
+        "suite": [
+          "tests/test_go_support.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_go_support.py::test_a_negated_pattern_does_not_count",
+        "status": "passed",
+        "duration": 127,
+        "suite": [
+          "tests/test_go_support.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_go_support.py::test_info_exclude_does_not_count_and_is_never_written",
+        "status": "passed",
+        "duration": 136,
+        "suite": [
+          "tests/test_go_support.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_go_support.py::test_gitignore_covers_is_unknown_outside_a_repository",
+        "status": "passed",
+        "duration": 56,
+        "suite": [
+          "tests/test_go_support.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_go_support.py::test_a_missing_go_tool_is_reported_and_stops_nothing",
+        "status": "passed",
+        "duration": 115,
+        "suite": [
+          "tests/test_go_support.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_go_support.py::test_a_failing_go_command_names_the_command",
+        "status": "passed",
+        "duration": 120,
+        "suite": [
+          "tests/test_go_support.py"
+        ],
+        "labels": {
+          "check": "extension point and Go support"
+        }
+      },
+      {
+        "name": "tests/test_sandbox_cmd.py::test_cli_execs_endless_go_sandbox_reset",
+        "status": "passed",
+        "duration": 54,
+        "suite": [
+          "tests/test_sandbox_cmd.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_sandbox_cmd.py::test_reset_after_create_runs_in_the_worktree",
+        "status": "passed",
+        "duration": 49,
+        "suite": [
+          "tests/test_sandbox_cmd.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_sandbox_cmd.py::test_reset_after_create_failure_is_non_fatal_and_loud",
+        "status": "passed",
+        "duration": 49,
+        "suite": [
+          "tests/test_sandbox_cmd.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_sandbox_cmd.py::test_bootstrap_seeds_after_the_create_hook",
+        "status": "passed",
+        "duration": 66,
+        "suite": [
+          "tests/test_sandbox_cmd.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_task_branch_is_id_only",
+        "status": "passed",
+        "duration": 48,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_task_branch_ignores_everything_but_the_id",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_check_plan_file_absent_returns_none",
+        "status": "passed",
+        "duration": 98,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_check_plan_file_committed_clean_returns_none",
+        "status": "passed",
+        "duration": 113,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_check_plan_file_untracked_returns_message",
+        "status": "passed",
+        "duration": 95,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_check_plan_file_modified_tracked_returns_message",
+        "status": "passed",
+        "duration": 136,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_task_id_from_worktree_path_basic_match",
+        "status": "passed",
+        "duration": 52,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_task_id_from_worktree_path_ignores_named_alternate",
+        "status": "passed",
+        "duration": 95,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_task_id_from_worktree_path_subdir",
+        "status": "passed",
+        "duration": 56,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_task_id_from_worktree_path_main_returns_none",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_task_id_from_worktree_path_no_match",
+        "status": "passed",
+        "duration": 53,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_task_id_from_worktree_path_no_digits",
+        "status": "passed",
+        "duration": 49,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_warn_if_companion_disagrees_silent_when_matches",
+        "status": "passed",
+        "duration": 53,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_warn_if_companion_disagrees_warns_on_disagreement",
+        "status": "passed",
+        "duration": 63,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_warn_if_companion_disagrees_silent_when_field_absent",
+        "status": "passed",
+        "duration": 52,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_warn_if_companion_disagrees_silent_when_companion_none",
+        "status": "passed",
+        "duration": 58,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_companion_disagreement_reaches_the_errors_channel",
+        "status": "passed",
+        "duration": 51,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_companion_agreement_records_nothing",
+        "status": "passed",
+        "duration": 49,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_hook_runs_with_worktree_arg_and_cwd",
+        "status": "passed",
+        "duration": 228,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_hook_failure_is_non_fatal_and_loud",
+        "status": "passed",
+        "duration": 167,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_no_hook_is_a_silent_noop",
+        "status": "passed",
+        "duration": 49,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_non_executable_hook_warns_and_does_not_run",
+        "status": "passed",
+        "duration": 62,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_worktree_create.py::test_non_executable_hook_reaches_the_errors_channel",
+        "status": "passed",
+        "duration": 51,
+        "suite": [
+          "tests/test_worktree_create.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_review_landed_detaches_at_latest_and_keeps_status",
+        "status": "passed",
+        "duration": 62,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_reopen_done_task_branches_and_revisits",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_reopen_done_revisits[assumed]",
+        "status": "passed",
+        "duration": 61,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_reopen_done_revisits[completed]",
+        "status": "passed",
+        "duration": 51,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_reopen_refuses_declined_obsolete_and_names_the_route[declined]",
+        "status": "passed",
+        "duration": 51,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_reopen_refuses_declined_obsolete_and_names_the_route[obsolete]",
+        "status": "passed",
+        "duration": 48,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_review_still_allowed_on_declined_obsolete[declined]",
+        "status": "passed",
+        "duration": 49,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_review_still_allowed_on_declined_obsolete[obsolete]",
+        "status": "passed",
+        "duration": 55,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_reopen_refuses_even_when_the_worktree_survives[declined]",
+        "status": "passed",
+        "duration": 49,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_reopen_refuses_even_when_the_worktree_survives[obsolete]",
+        "status": "passed",
+        "duration": 58,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_reopen_active_or_open_keeps_status[underway]",
+        "status": "passed",
+        "duration": 58,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_reopen_active_or_open_keeps_status[unverified]",
+        "status": "passed",
+        "duration": 48,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_reopen_active_or_open_keeps_status[unplanned]",
+        "status": "passed",
+        "duration": 49,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_reopen_active_or_open_keeps_status[submitted]",
+        "status": "passed",
+        "duration": 48,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_reopen_active_or_open_keeps_status[ready]",
+        "status": "passed",
+        "duration": 48,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_reopen_active_or_open_keeps_status[revisit]",
+        "status": "passed",
+        "duration": 52,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_review_explicit_ref_used_as_base",
+        "status": "passed",
+        "duration": 48,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_review_dotlanded_resolves_to_latest_landing",
+        "status": "passed",
+        "duration": 48,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_explicit_ref_that_does_not_resolve_errors",
+        "status": "passed",
+        "duration": 48,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_default_base_falls_back_to_branch_when_never_landed",
+        "status": "passed",
+        "duration": 49,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_never_landed_no_branch_errors_with_explicit_hint",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_epic_refused[review]",
+        "status": "passed",
+        "duration": 48,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_epic_refused[reopen]",
+        "status": "passed",
+        "duration": 48,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_bare_resume_worktree_gone_names_both_flags",
+        "status": "passed",
+        "duration": 49,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_review_and_reopen_mutually_exclusive",
+        "status": "passed",
+        "duration": 47,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_dry_run_on_plain_path_prints_and_skips_exec",
+        "status": "passed",
+        "duration": 49,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_recover.py::test_present_worktree_not_recovered",
+        "status": "passed",
+        "duration": 51,
+        "suite": [
+          "tests/test_session_resume_recover.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_crash_recovery.py::test_a_crowded_window_names_the_flag",
+        "status": "passed",
+        "duration": 49,
+        "suite": [
+          "tests/test_session_resume_crash_recovery.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_crash_recovery.py::test_no_sibling_panes_proceeds",
+        "status": "passed",
+        "duration": 59,
+        "suite": [
+          "tests/test_session_resume_crash_recovery.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_crash_recovery.py::test_no_sibling_panes_still_lays_the_window_out",
+        "status": "passed",
+        "duration": 59,
+        "suite": [
+          "tests/test_session_resume_crash_recovery.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_crash_recovery.py::test_a_lone_pane_never_needed_the_flag",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "tests/test_session_resume_crash_recovery.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_crash_recovery.py::test_a_stale_claim_names_the_flag",
+        "status": "passed",
+        "duration": 53,
+        "suite": [
+          "tests/test_session_resume_crash_recovery.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_crash_recovery.py::test_rebind_rewrites_the_window_option",
+        "status": "passed",
+        "duration": 51,
+        "suite": [
+          "tests/test_session_resume_crash_recovery.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_crash_recovery.py::test_a_window_claiming_the_target_needs_no_flag",
+        "status": "passed",
+        "duration": 51,
+        "suite": [
+          "tests/test_session_resume_crash_recovery.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_crash_recovery.py::test_an_unset_claim_needs_no_flag",
+        "status": "passed",
+        "duration": 54,
+        "suite": [
+          "tests/test_session_resume_crash_recovery.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_crash_recovery.py::test_a_non_numeric_claim_needs_no_flag",
+        "status": "passed",
+        "duration": 52,
+        "suite": [
+          "tests/test_session_resume_crash_recovery.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_crash_recovery.py::test_the_two_flags_do_not_imply_each_other",
+        "status": "passed",
+        "duration": 51,
+        "suite": [
+          "tests/test_session_resume_crash_recovery.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_crash_recovery.py::test_rebind_refuses_a_live_window_on_the_target",
+        "status": "passed",
+        "duration": 51,
+        "suite": [
+          "tests/test_session_resume_crash_recovery.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_crash_recovery.py::test_rebind_allows_a_live_session_in_this_window",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "tests/test_session_resume_crash_recovery.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_crash_recovery.py::test_rebind_allows_a_dead_claim",
+        "status": "passed",
+        "duration": 51,
+        "suite": [
+          "tests/test_session_resume_crash_recovery.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_crash_recovery.py::test_neither_flag_waives_force",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "tests/test_session_resume_crash_recovery.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_crash_recovery.py::test_dry_run_is_gated_by_neither",
+        "status": "passed",
+        "duration": 49,
+        "suite": [
+          "tests/test_session_resume_crash_recovery.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_crash_recovery.py::test_the_gates_refuse_before_target_resolution",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "tests/test_session_resume_crash_recovery.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_crash_recovery.py::test_an_unresolvable_ref_is_not_gated",
+        "status": "passed",
+        "duration": 53,
+        "suite": [
+          "tests/test_session_resume_crash_recovery.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_crash_recovery.py::test_a_taskless_target_is_gated",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "tests/test_session_resume_crash_recovery.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_crash_recovery.py::test_outside_tmux_nothing_is_gated",
+        "status": "passed",
+        "duration": 52,
+        "suite": [
+          "tests/test_session_resume_crash_recovery.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "tests/test_session_resume_crash_recovery.py::test_rebind_never_writes_the_session_task_binding",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "tests/test_session_resume_crash_recovery.py"
+        ],
+        "labels": {
+          "check": "worktree bootstrap, create and resume still behave"
+        }
+      },
+      {
+        "name": "the core names no language",
+        "status": "passed",
+        "duration": 9,
+        "labels": {
+          "check": "the core names no language"
+        }
+      },
+      {
+        "name": "the Go module is the one built-in extension, registered through the core",
+        "status": "passed",
+        "duration": 160,
+        "labels": {
+          "check": "the Go module is the one built-in extension, registered through the core"
+        }
+      },
+      {
+        "name": "the Go module imports nothing of the core but the extension point and the help channel",
+        "status": "passed",
+        "duration": 5,
+        "labels": {
+          "check": "the Go module imports nothing of the core but the extension point and the help channel"
+        }
+      },
+      {
+        "name": "the guide documents the extensions and the Go one",
+        "status": "passed",
+        "duration": 265,
+        "labels": {
+          "check": "the guide documents the extensions and the Go one"
+        }
+      },
+      {
+        "name": "the guide cross-reference is in sync",
+        "status": "passed",
+        "duration": 116,
+        "labels": {
+          "check": "the guide cross-reference is in sync"
+        }
+      },
+      {
+        "name": "a Go worktree under a main checkout with a go.work builds",
+        "status": "passed",
+        "duration": 374,
+        "labels": {
+          "check": "a Go worktree under a main checkout with a go.work builds"
+        }
+      }
+    ]
+  }
+}
