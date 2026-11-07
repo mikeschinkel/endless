@@ -3,62 +3,62 @@
 #   endless task update E-2569 --items-file <copy>
 
 [[item]]
-id = "P1"
+id = "P12"
 kind = "deliverable"
 statement = "Every endless task verify run in a worktree holding a Go module begins with a built-in check row that runs go mod tidy -diff on that module with GOWORK=off, and fails the run when go.mod or go.sum would change"
 verify = "go test ./internal/verifycmd/ -run GoMod"
 
 [[item]]
-id = "P2"
+id = "P13"
 kind = "deliverable"
 statement = "A Go module is found by a go.mod outside .endless/, vendor/, testdata/ and .git/, and nested modules each get their own row"
 verify = "go test ./internal/gomodcheck/"
 
 [[item]]
-id = "P3"
+id = "P14"
 kind = "deliverable"
 statement = "Before running tidy, the check copies go.mod to a temporary directory with every relative replace path rewritten to the absolute path it resolves to from the module's counterpart directory in the main checkout, copies go.sum beside it, and passes the copy with -modfile"
 verify = "go test ./internal/gomodcheck/ -run Reroot"
 
 [[item]]
-id = "P4"
+id = "P15"
 kind = "deliverable"
 statement = "A failing row carries the tidy diff and the remedy: run go mod tidy in that module directory and commit"
 verify = "go test ./internal/verifycmd/ -run GoMod"
 
 [[item]]
-id = "P5"
+id = "P16"
 kind = "deliverable"
 statement = "The check is skipped, with no row, when the main checkout root contains a go.work, and adds nothing to a worktree with no Go module"
 verify = "go test ./internal/verifycmd/ -run GoMod"
 
 [[item]]
-id = "P6"
+id = "P17"
 kind = "deliverable"
 statement = "A go toolchain older than 1.23 fails the row naming the version go mod tidy -diff needs"
 
 [[item]]
-id = "P7"
+id = "P18"
 kind = "deliverable"
 statement = "The tests exercise the real go tool on an understated transitive requirement, a tidy module, a relative replace that resolves only from the main checkout's location, a replace for an unrequired module, and nested modules"
 verify = "go test ./internal/gomodcheck/ ./internal/verifycmd/"
 
 [[item]]
-id = "P8"
+id = "P19"
 kind = "deliverable"
 statement = "The tasks directory's CLAUDE.md documents the built-in row and its remedy, and the orchestration guide's verification-suite topic points to it"
 
 [[item]]
-id = "P9"
+id = "P20"
 kind = "exclusion"
 statement = "Does not compile the branch or run go build anywhere"
 
 [[item]]
-id = "P10"
+id = "P21"
 kind = "exclusion"
 statement = "Does not change the go.work writer, the post-worktree-create hook, or the replace directives in this repository's go.mod"
 
 [[item]]
-id = "P11"
+id = "P22"
 kind = "exclusion"
 statement = "Does not add the check to worktree land or to worktree land --check"
