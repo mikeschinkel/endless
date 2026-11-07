@@ -56,3 +56,8 @@ statement = "Test-fixture session rows in the main database; evidence added to E
 id = "P11"
 kind = "deliverable"
 statement = "A plain goto to a session running where this tmux server cannot see it says so, instead of hinting --resume"
+
+[[item]]
+id = "P12"
+kind = "deliverable"
+statement = "A seeded test pane binding records its tmux server, as a hook's first binding does; the pre-E-2300 shape is explicit"
