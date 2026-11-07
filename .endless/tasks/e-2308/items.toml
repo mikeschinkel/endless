@@ -41,7 +41,7 @@ statement = "hookcmd's tildePath and the displayPath helpers in monitor and veri
 [[item]]
 id = "P9"
 kind = "deliverable"
-statement = "internal/pathlint holds an analyzer whose printed-path rule flags a go-dt path type passed to a stdout/stderr fmt print function without the path display function"
+statement = "internal/pathlint holds an analyzer whose printed-path rule flags a go-dt path type passed to a stdout/stderr fmt print function without going through go-dt's ToTilde"
 
 [[item]]
 id = "P10"
