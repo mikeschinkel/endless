@@ -1104,6 +1104,8 @@ Every task carries **one verification suite** — a single, self-contained proof
 1. **The project's native tests first**, as a fail-fast check, so the one command is a complete proof for that task **at land time**. A `gotest` or `pytest` check names the tests (`tests`, optionally scoped by `paths`), and Endless runs the tool and reads its results. Any other runner takes a literal `command` that prints TAP.
 2. **`sh` checks for everything no native test covers**: one shell command each, run at the worktree root (or the check's `dir`). Exit `0` passes; anything else fails.
 
+In a worktree holding a Go module, every run begins with one built-in row per module, `go.mod is tidy without go.work`, ahead of the suite's own checks: `go mod tidy -diff` under `GOWORK=off`, so a `go.mod` the worktree's `go.work` lets build but the main checkout refuses fails here, not on main after the land — `.endless/tasks/CLAUDE.md` has what it checks and the remedy.
+
 ```toml
 schema = 1
 task   = "E-101"

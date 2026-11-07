@@ -1,0 +1,105 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2569 and records what was true when E-2569
+# landed. Edit it only if you ARE E-2569. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+#
+# E-2569: every `endless task verify` run in a worktree holding a Go module
+# begins with a built-in row per module, `go.mod is tidy without go.work`,
+# that runs `go mod tidy -diff` under GOWORK=off on a copy of go.mod whose
+# relative replace paths are re-rooted to the main checkout, so an untidy
+# go.mod fails in the worktree and not on main after the land.
+#
+# This run's own first row is the live proof against this repository's
+# go.mod; the checks below prove the mechanism on fixtures.
+
+schema = 1
+task   = "E-2569"
+
+# Native tests first, fail-fast: the check package, the runner, and the
+# report envelope the row is built with.
+[[check]]
+name   = "gomodcheck, verifycmd and verify unit tests"
+runner = "gotest"
+paths  = ["./internal/gomodcheck/", "./internal/verifycmd/", "./internal/verify/"]
+
+# Each contract test by name, so deleting one cannot turn the suite green
+# by absence.
+[[check]]
+name     = "P12: an understated requirement fails tidy -diff under GOWORK=off with the version diff"
+sh       = "go test ./internal/gomodcheck/ -run '^TestRun_UnderstatedRequirementFailsWithDiff$' -v 2>&1"
+contains = "--- PASS: TestRun_UnderstatedRequirementFailsWithDiff"
+
+[[check]]
+name     = "P12/P15: the row comes first, fails the run, and carries the diff and the remedy"
+sh       = "go test ./internal/verifycmd/ -run '^TestRun_UntidyGoModFailsRunWithDiffAndRemedy$' -v 2>&1"
+contains = "--- PASS: TestRun_UntidyGoModFailsRunWithDiffAndRemedy"
+
+[[check]]
+name     = "P12/P13: one row per module, root first, nested modules named by directory"
+sh       = "go test ./internal/verifycmd/ -run '^TestRun_GoModRowsComeFirst$' -v 2>&1"
+contains = "--- PASS: TestRun_GoModRowsComeFirst"
+
+[[check]]
+name     = "P13: modules are found by go.mod outside .endless/, vendor/, testdata/ and .git/"
+sh       = "go test ./internal/gomodcheck/ -run '^TestModules_FindsNestedAndSkipsPruned$' -v 2>&1"
+contains = "--- PASS: TestModules_FindsNestedAndSkipsPruned"
+
+[[check]]
+name     = "P14: a relative replace that resolves only from the main checkout passes after re-rooting"
+sh       = "go test ./internal/gomodcheck/ -run '^TestRun_RerootsRelativeReplaceToMainCheckout$' -v 2>&1"
+contains = "--- PASS: TestRun_RerootsRelativeReplaceToMainCheckout"
+
+[[check]]
+name     = "P14: the rewrite touches only relative replace paths, one-line and block forms"
+sh       = "go test ./internal/gomodcheck/ -run '^TestRerootReplaces$' -v 2>&1"
+contains = "--- PASS: TestRerootReplaces"
+
+[[check]]
+name     = "P14: the main checkout is the parent of git's common dir, from a linked worktree"
+sh       = "go test ./internal/gomodcheck/ -run '^TestMainCheckout$' -v 2>&1"
+contains = "--- PASS: TestMainCheckout"
+
+[[check]]
+name     = "P16: skipped with no row when the main checkout root has a go.work"
+sh       = "go test ./internal/verifycmd/ -run '^TestRun_GoModRowSkippedWhenMainHasGoWork$' -v 2>&1"
+contains = "--- PASS: TestRun_GoModRowSkippedWhenMainHasGoWork"
+
+[[check]]
+name     = "P16: a worktree with no Go module gets no row"
+sh       = "go test ./internal/verifycmd/ -run '^TestRun_NoGoModRowForNonGoWorktree$' -v 2>&1"
+contains = "--- PASS: TestRun_NoGoModRowForNonGoWorktree"
+
+[[check]]
+name     = "P17: a go older than 1.23 fails the row naming the version found and needed"
+sh       = "go test ./internal/verifycmd/ -run '^TestRun_OldGoFailsGoModRow$' -v 2>&1"
+contains = "--- PASS: TestRun_OldGoFailsGoModRow"
+
+[[check]]
+name     = "P18: a replace for an unrequired module is tolerated"
+sh       = "go test ./internal/gomodcheck/ -run '^TestRun_ToleratesReplaceOfUnrequiredModule$' -v 2>&1"
+contains = "--- PASS: TestRun_ToleratesReplaceOfUnrequiredModule"
+
+[[check]]
+name     = "P12: the check sets GOWORK=off for the tidy run"
+sh       = "grep -q 'GOWORK=off' internal/gomodcheck/gomodcheck.go"
+
+[[check]]
+name     = "P19: the tasks directory's CLAUDE.md documents the row and its remedy"
+sh       = "grep -q 'go.mod is tidy without go.work' .endless/tasks/CLAUDE.md && grep -q 'go mod tidy' .endless/tasks/CLAUDE.md"
+
+[[check]]
+name     = "P19: the orchestration guide's verification-suite topic points to it"
+sh       = "grep -c 'go.mod is tidy without go.work' docs/guide/orchestration.md"
+equals   = "1"
+
+[[check]]
+name = "P20: the check never compiles the branch — no go build or go test in the check package"
+sh   = "! grep -nE '\"(build|test|vet|install)\"' internal/gomodcheck/gomodcheck.go internal/verifycmd/gomod.go"
+
+[[check]]
+name = "P21: this task leaves the go.work writer, the hook and this repo's replace directives alone"
+sh   = "git diff --quiet $(git merge-base HEAD main) HEAD -- src/endless/go_support.py go.mod .endless/hooks/"
+
+[[check]]
+name = "P22: the land and land --check are untouched"
+sh   = "git diff --quiet $(git merge-base HEAD main) HEAD -- internal/landgate/ internal/worktreecmd/ && ! grep -rn gomodcheck internal/landgate/ internal/worktreecmd/"

@@ -252,7 +252,7 @@ func run(id string, keep bool) (code int, err error) {
 	var ok bool
 	var runDir, tmuxDir dt.DirPath
 	var env []string
-	var results []checkResult
+	var results, builtin []checkResult
 	var merged *verify.Report
 	var ctrfPath dt.Filepath
 
@@ -327,6 +327,13 @@ func run(id string, keep bool) (code int, err error) {
 		goto end
 	}
 
+	// The built-in rows come before the suite's own: a Go worktree's go.mod
+	// tidiness without go.work (E-2569). They need nothing from setup.
+	builtin, err = runGoModChecks(root, env)
+	if err != nil {
+		goto end
+	}
+
 	// Preconditions, in order: provision (Tier-0 no-op) -> setup -> seed
 	// (guarded out above). A failing setup step aborts loudly.
 	err = runSetup(eff.Setup, root, env)
@@ -338,6 +345,7 @@ func run(id string, keep bool) (code int, err error) {
 	if err != nil {
 		goto end
 	}
+	results = append(builtin, results...)
 
 	merged = mergeResults(results)
 	ctrfPath, err = writeCTRF(id, merged)

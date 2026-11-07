@@ -87,6 +87,13 @@ func runScriptSuite(id string, script dt.Filepath, root dt.DirPath, keep bool) (
 		goto end
 	}
 
+	// The same built-in rows a manifest run begins with (E-2569): a legacy
+	// script suite is still a verify, and its go.mod drifts the same way.
+	results, err = runGoModChecks(root, env)
+	if err != nil {
+		goto end
+	}
+
 	snapshot, err = snapshotScript(script, runDir)
 	if err != nil {
 		goto end
@@ -108,7 +115,7 @@ func runScriptSuite(id string, script dt.Filepath, root dt.DirPath, keep bool) (
 		goto end
 	}
 
-	results = []checkResult{{index: 0, label: verify.ScriptFile, report: rpt, echoed: true}}
+	results = append(results, checkResult{index: len(results), label: verify.ScriptFile, report: rpt, echoed: true})
 	merged = mergeResults(results)
 	ctrfPath, err = writeCTRF(id, merged)
 	if err != nil {

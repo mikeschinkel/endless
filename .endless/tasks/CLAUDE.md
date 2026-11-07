@@ -213,6 +213,27 @@ or the expected value — with the command's stdout and stderr.
 `name` labels any check: its line in the summary, and `labels.check` on every
 test it reports. An unnamed `sh` check is named by its command.
 
+**A Go worktree's run begins with a built-in row.** Before the suite's own
+checks, the runner checks every Go module in the worktree — a `go.mod`
+outside `.endless/`, `vendor/`, `testdata/` and `.git/` — with `go mod tidy
+-diff` under `GOWORK=off`, one row per module named `go.mod is tidy without
+go.work` (a nested module's row appends its directory). The worktree's
+`go.work` lets a build pass with a `go.mod` that understates a requirement; the
+main checkout has no `go.work` and refuses the same tree with "updates to
+go.mod needed", so the row fails here, where the fix is yours, instead of main
+after the land. It runs on a copy of `go.mod` whose relative `replace` paths
+are re-rooted to where the main checkout would resolve them, so a replace
+written for main's depth resolves from the worktree. The row fails when
+`go.mod` or `go.sum` would change, and carries the diff.
+
+Remedy: run `go mod tidy` in that module's directory, then commit `go.mod` and
+`go.sum`. When the row says the module's relative replace paths resolve only
+from the main checkout's location, a plain `go mod tidy` in the worktree stops
+at those paths, so run it from that depth. The row is skipped, with no row at
+all, when the main checkout itself has a `go.work` (main then builds in
+workspace mode too), and a worktree with no Go module gets nothing. A `go`
+older than 1.23, which has no `-diff`, fails the row naming the version.
+
 A directory that also holds `_harness.sh` has legacy script suites
 (`verify.sh`); that file's header documents them. Write no new one.
 

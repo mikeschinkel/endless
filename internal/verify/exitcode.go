@@ -14,15 +14,29 @@ import (
 // semantics instead of being reported as "0 tests" (which the runner reads as a
 // failure and which tells the reader nothing).
 func ExitCodeReport(name string, exit int) (rpt *Report) {
+	var message string
+
+	if exit != 0 {
+		message = fmt.Sprintf("exited %d", exit)
+	}
+	rpt = OneTestReport("exit-code", name, message)
+	return rpt
+}
+
+// OneTestReport builds a CTRF report holding a single test from the producer
+// named tool: passed when message is empty, failed with that message otherwise.
+// It is the envelope for a verdict that is one fact rather than a stream — an
+// exit code, or a built-in check the runner decides itself.
+func OneTestReport(tool, name, message string) (rpt *Report) {
 	var t Test
 
 	t = Test{Name: name, Status: StatusPassed}
-	if exit != 0 {
+	if message != "" {
 		t.Status = StatusFailed
-		t.Message = fmt.Sprintf("exited %d", exit)
+		t.Message = message
 	}
 	rpt = &Report{}
-	rpt.Results.Tool.Name = "exit-code"
+	rpt.Results.Tool.Name = tool
 	rpt.Results.Tests = []Test{t}
 	rpt.Results.Summary = newSummary(rpt.Results.Tests)
 	return rpt
