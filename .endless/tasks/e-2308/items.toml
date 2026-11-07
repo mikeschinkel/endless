@@ -64,11 +64,6 @@ kind = "deliverable"
 statement = "A test runs endless-go under a temp HOME as a person — a path-naming refusal, errors show and show --detail of a fault with a path, settings migrate, and a converted direct print — and fails if $HOME/ appears in the output"
 
 [[item]]
-id = "P14"
-kind = "deliverable"
-statement = "The same commands run as an agent show the absolute path"
-
-[[item]]
 id = "P15"
 kind = "deliverable"
 statement = "Python's endless.config.tilde() replaces home only at a path-segment boundary, so a home of /Users/mike leaves /Users/mikey unchanged"
