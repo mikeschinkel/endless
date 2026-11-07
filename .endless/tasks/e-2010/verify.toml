@@ -40,33 +40,38 @@ runner = "pytest"
 paths  = ["tests/test_project_sync.py", "tests/test_ignored_projects.py", "tests/test_decision_cmd.py"]
 
 # ── The schema is actually shaped this way ──────────────────────────
-# Asserted against a database the migrations built, not against the source
-# files the Go tests already compare. The runner gives the suite its own
-# HOME and XDG_CONFIG_HOME, so this is a fresh database every run, which is
-# exactly the shape a new install gets.
+# Asserted against the TREE, not against a database a binary built. The
+# earlier version of this section ran `endless sql`, which reaches the
+# INSTALLED endless — built from main, without this change — so it reported
+# `updated_at` as the last column of `decisions` and could not have passed
+# until after the land it was supposed to gate. A pre-land check may only
+# look at what the branch contains.
+#
+# Nothing is lost by it. The behaviour those queries were reaching for — the
+# removed row retained, invisible through the view, and still flooring the id
+# allocator — is asserted by TestProjectToTempDB_DecisionRemovalRetainsRowAndIDFloor
+# in the first check above, against a database built from these very
+# migrations; and TestMigrate_MatchesSchemaSQL proves the migration and
+# schema.sql agree, so asserting a fact in one asserts it in both.
 
 [[check]]
-name     = "decisions carries removed, and it is the last column"
-sh       = "endless sql \"SELECT name FROM pragma_table_info('decisions') ORDER BY cid DESC LIMIT 1\" --tsv 2>&1"
-contains = "removed"
+name     = "removed is the last column of decisions in schema.sql"
+sh       = "awk '/^CREATE TABLE IF NOT EXISTS decisions/,/^\\);/' internal/schema/schema.sql | grep -E '^    [a-z_]+ ' | tail -1"
+contains = "removed INTEGER NOT NULL DEFAULT 0"
 
 [[check]]
-name     = "live_decisions exists and filters on removed"
-sh       = "endless sql \"SELECT sql FROM sqlite_master WHERE name = 'live_decisions'\" --tsv 2>&1"
+name     = "live_decisions is declared and filters on removed"
+sh       = "awk '/^CREATE VIEW IF NOT EXISTS live_decisions/,/;/' internal/schema/schema.sql"
 contains = "WHERE removed = 0"
 
 [[check]]
-name     = "a removed decision is hidden by the view and still floors the allocator"
+name     = "the migration adds both, and is registered"
 sh       = """
-set -e
-endless sql --write "INSERT INTO projects (id, name, path) VALUES (990001, 'e-2010-fixture', '/tmp/e-2010-fixture')" >/dev/null 2>&1
-endless sql --write "INSERT INTO decisions (id, project_id, title, status, removed) VALUES (990002, 990001, 'E-2010 fixture', 'proposed', 1)" >/dev/null 2>&1
-live=$(endless sql "SELECT count(*) FROM live_decisions WHERE id = 990002" --tsv 2>&1 | tr -d '[:space:]')
-raw=$(endless sql "SELECT count(*) FROM decisions WHERE id = 990002" --tsv 2>&1 | tr -d '[:space:]')
-floor=$(endless sql "SELECT COALESCE(MAX(id), 0) + 1 FROM decisions" --tsv 2>&1 | tr -d '[:space:]')
-test "$live" = "0" || { echo "FAIL: removed decision visible through live_decisions ($live)"; exit 1; }
-test "$raw" = "1" || { echo "FAIL: the retained row is not in decisions ($raw)"; exit 1; }
-test "$floor" -gt 990002 || { echo "FAIL: allocator floor $floor does not clear the removed id"; exit 1; }
+m=internal/schema/migrations/00031_decisions_removed.go
+grep -q 'ALTER TABLE decisions ADD COLUMN removed INTEGER NOT NULL DEFAULT 0' "$m" || { echo "FAIL: the migration does not add decisions.removed"; exit 1; }
+grep -q 'CREATE VIEW IF NOT EXISTS live_decisions' "$m" || { echo "FAIL: the migration does not create live_decisions"; exit 1; }
+grep -q 'WHERE removed = 0' "$m" || { echo "FAIL: the migration's view does not filter on removed"; exit 1; }
+grep -q 'decisionsRemoved(),' internal/schema/migrations/migrations.go || { echo "FAIL: migration 31 is not registered, so no existing install runs it"; exit 1; }
 echo ok
 """
 contains = "ok"
