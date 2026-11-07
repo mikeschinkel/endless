@@ -45,6 +45,25 @@ them by accident because the row was gone.
 The wipe at `internal/eventcmd/event.go`'s rebuild path is a scoped clear before
 replay, not an entity removal, and is left alone.
 
+## The event name
+
+ED-1547 reserves two words: a covered entity is *removed* and its row stays, a
+pure row handle is *deleted* and its row is gone. `endless task remove` already
+says the right one; the event it emits, `task.deleted`, does not. Decisions have
+the same mismatch, and this task is where it costs something, because it ships
+new `removed = 1` behavior that would otherwise go out under a name promising
+the row is gone.
+
+So `decision.deleted` becomes `decision.removed`. `events.RetiredKinds` is the
+mechanism already in the codebase for this — its comment reads "a retired one
+that only replay will ever see", and it holds four kinds today. Add the new kind
+to `ValidKinds`, move the old one to `RetiredKinds`, and have the projector
+dispatch both into the one removal function. Nothing rewrites history: the
+ledger keeps both spellings forever, and only one is ever emitted again.
+
+`task.deleted` is the same contradiction on a table this task does not touch,
+and is left to its own task.
+
 ## Not a resumption of the earlier branch
 
 The branch's single commit is discarded and the work written fresh against main.
