@@ -287,6 +287,11 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 		return execDecisionRelationCreated(db, evt)
 	case KindDecisionRelationDeleted:
 		return execDecisionRelationDeleted(db, evt)
+	case KindLedgerRowChanged:
+		return execLedgerRowChanged(db, evt)
+	case KindLedgerCorrected:
+		// Writes no row (E-2486): the change entries it refers to did.
+		return &ExecuteResult{}, nil
 	default:
 		if RetiredKinds[evt.Kind] {
 			// Reachable only by hand — `event emit` gates on ValidKinds, which a

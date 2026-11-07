@@ -263,6 +263,14 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 
 	// Validate kind
 	evtKind := events.Kind(kindStr)
+	if evtKind == events.KindLedgerRowChanged || evtKind == events.KindLedgerCorrected {
+		// E-2486: a change entry without its correction entry would be a row
+		// changed for no recorded reason, which is the one thing a correction
+		// exists to rule out. Only `endless correct` writes these, as a pair.
+		return refusal.NoReport(
+			fmt.Sprintf("%s is written only by `endless correct`, never emitted directly", kindStr),
+			"Run `endless correct <target> <key> ... --reason <text>` instead")
+	}
 	if !events.ValidKinds[evtKind] {
 		// Python emits kinds from code and never from agent input, so the two
 		// readings are a hand-typed typo and a version-skewed relay — the same
@@ -518,10 +526,7 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 // they receive, and NewWriter MkdirAll's it, so the sandbox ledger dir is
 // created on first write.
 func ledgerRoot(projectRoot string) string {
-	if monitor.IsSandboxActive() {
-		return monitor.ConfigDir()
-	}
-	return projectRoot
+	return events.LedgerRoot(projectRoot)
 }
 
 // makeDerivedEmitter builds the epic-derivation ledger emitter (E-1541) threaded

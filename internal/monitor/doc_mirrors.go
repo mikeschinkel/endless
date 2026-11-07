@@ -160,3 +160,40 @@ func DecisionBody(decisionID int64) (string, error) {
 	}
 	return body, nil
 }
+
+// TaskDocRowsFor returns one task's non-empty content rows, one DocRow per
+// name, whether or not the task is live (E-2486): a correction may touch a
+// removed task's content, and its mirror follows the row either way.
+func TaskDocRowsFor(taskID int64) ([]DocRow, error) {
+	db, err := DB()
+	if err != nil {
+		return nil, err
+	}
+	rows, err := db.Query(`
+		SELECT task_id, name, content FROM task_content
+		 WHERE task_id = ? AND content != '' ORDER BY name`, taskID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	return scanDocRows(rows)
+}
+
+// DecisionDocRow returns one decision's mirror source, or ok = false when the
+// decision has no description or does not exist (E-2486).
+func DecisionDocRow(decisionID int64) (row DocRow, ok bool, err error) {
+	db, err := DB()
+	if err != nil {
+		return row, false, err
+	}
+	err = db.QueryRow(
+		"SELECT id, '', description FROM decisions WHERE id = ? AND COALESCE(description, '') != ''",
+		decisionID).Scan(&row.ID, &row.Name, &row.Content)
+	if errors.Is(err, sql.ErrNoRows) {
+		return row, false, nil
+	}
+	if err != nil {
+		return row, false, err
+	}
+	return row, true, nil
+}

@@ -41,6 +41,16 @@ type Writer struct {
 	seq       int
 	count     int
 	maxCount  int
+
+	// lockFD is the open ledger lock while this writer holds it (E-2486):
+	// for the length of one Append, or from BeginRun to EndRun.
+	lockFD *os.File
+
+	// inRun is set between BeginRun and EndRun. A run rotates once, before its
+	// first line, so every line it appends lands in one segment; runNext is the
+	// byte offset the next line of the run starts at.
+	inRun   bool
+	runNext int64
 }
 
 // NewWriter creates a Writer for the given project root and node.
@@ -71,28 +81,51 @@ func NewWriter(projectRoot string, nodeHex string) (*Writer, error) {
 
 // Append writes a JSONL line to the current segment file using O_APPEND.
 // Returns an error if the line exceeds MaxEventLineBytes.
+//
+// The write happens under the ledger lock (E-2486): taken for this one append,
+// or already held by the run this writer is in.
 func (w *Writer) Append(line []byte) error {
+	_, err := w.AppendOffset(line)
+	return err
+}
+
+// AppendOffset is Append reporting where the line starts: the byte offset of
+// its first character in the segment file CurrentSegment names after the call.
+// A correction entry records its change entries by this offset (E-2486).
+func (w *Writer) AppendOffset(line []byte) (offset int64, err error) {
 	if len(line) > MaxEventLineBytes {
 		// Checked before the append, so nothing is on disk and the create lock is
 		// rolled back — which is what makes this one retryable at all.
-		return refusal.NoReport(
+		return 0, refusal.NoReport(
 			fmt.Sprintf("events: JSONL line is %d bytes, exceeds %d byte limit (kind may contain oversized payload)",
 				len(line), MaxEventLineBytes),
 			"Shrink the oversized field — long plan or analysis content belongs outside the event — and retry")
 	}
 
-	// Rotate if current segment is full
-	if w.count >= w.maxCount {
-		w.seq++
-		w.count = 0
+	if !w.inRun {
+		if err = w.acquire(); err != nil {
+			return 0, err
+		}
+		defer w.release()
+		w.rotateIfFull()
 	}
 
 	path := w.segmentPath(w.seq)
 	f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
 	if err != nil {
-		return fmt.Errorf("events: open segment: %w", err)
+		return 0, fmt.Errorf("events: open segment: %w", err)
 	}
 	defer f.Close()
+
+	if w.inRun {
+		offset = w.runNext
+	} else {
+		info, serr := f.Stat()
+		if serr != nil {
+			return 0, fmt.Errorf("events: stat segment: %w", serr)
+		}
+		offset = info.Size()
+	}
 
 	// Write line + newline
 	buf := make([]byte, len(line)+1)
@@ -100,11 +133,57 @@ func (w *Writer) Append(line []byte) error {
 	buf[len(line)] = '\n'
 
 	if _, err := f.Write(buf); err != nil {
-		return fmt.Errorf("events: write segment: %w", err)
+		return 0, fmt.Errorf("events: write segment: %w", err)
 	}
 
 	w.count++
+	if w.inRun {
+		w.runNext = offset + int64(len(buf))
+	}
+	return offset, nil
+}
+
+// rotateIfFull moves to the next segment when the current one has reached the
+// rotation threshold. Called under the lock.
+func (w *Writer) rotateIfFull() {
+	if w.count >= w.maxCount {
+		w.seq++
+		w.count = 0
+	}
+}
+
+// BeginRun takes the ledger lock and holds it until EndRun, so every line
+// appended in between is adjacent in one segment with nothing from another
+// process among them (E-2486). The rotation limit is checked once, here, so a
+// run never straddles two segments; a segment may go a few lines over its
+// limit, which is harmless. The first offset comes from the segment's size, and
+// each later one adds the previous line's length, newline included.
+func (w *Writer) BeginRun() error {
+	if w.inRun {
+		return nil
+	}
+	if err := w.acquire(); err != nil {
+		return err
+	}
+	w.rotateIfFull()
+	info, err := os.Stat(w.segmentPath(w.seq))
+	switch {
+	case err == nil:
+		w.runNext = info.Size()
+	case os.IsNotExist(err):
+		w.runNext = 0
+	default:
+		w.release()
+		return fmt.Errorf("events: stat segment: %w", err)
+	}
+	w.inRun = true
 	return nil
+}
+
+// EndRun releases the lock BeginRun took. Safe to call without a run open.
+func (w *Writer) EndRun() {
+	w.inRun = false
+	w.release()
 }
 
 // SetMaxCount overrides the rotation threshold (for testing).

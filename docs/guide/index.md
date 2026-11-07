@@ -285,6 +285,7 @@ listed separately. (Generated — do not hand-edit; run `/regenerate-guide`.)
 
 | Command | Section | Covers |
 |---|---|---|
+| `correct` | appendix-a | Correcting or annotating anything the ledger tracks, user-only, through a change entry and a correction entry that records the reason. |
 | `db` | orchestration | Choosing the database (--db main/sandbox) in self-dev worktrees. |
 | `db restore` | reference | Recovering the database from a backup — holders, sidecars, WAL, and the reversible pre-restore copy. |
 | `decision` | decisions | Decisions as first-class items; what counts as one; preference vs prohibition (read this). |

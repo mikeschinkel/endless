@@ -25,3 +25,44 @@ Interactive commands on the `project` group. Where the `session` views above ans
 - **`endless project monitor [name]`** — the same lists, live: redrawn every 2 seconds, repainting only when a row changes. The urgent and epic lists always render in full; the third list takes whatever height the pane has left and ends with `… N more (project status)` when it is cut. The frame fits the pane it is in, so dragging the pane's divider shows more rows or fewer. Takes `--sort`. Ctrl-C exits.
 - **`endless project monitor <name> --tmux`** — the monitor's home: a window named for the project in the `console` session on Endless's console tmux server (see `endless start` in `endless guide reference`), the monitor on top and a bare shell beneath it, focus on the shell. Each run adds a window, even when one exists for the project, so a run always ends with a live monitor; close any window you have no use for. With the console not running it refuses ("Endless isn't running. Run `endless start`"): only `endless start` starts Endless's servers. A terminal is opened onto the console when none is attached (`tmux.terminal`, or a detected terminal); with no way to open one it attaches from a plain terminal, or prints the attach command inside tmux. `--no-switch` adds the window without opening a terminal.
 - **`endless project info [name]`** — the project's registration card: metadata, pending notes, dependencies. (This is what `project status` used to be, before that name moved to the command that lists the project's tasks.)
+
+## `correct` — a correcting entry for ledger state
+
+A user-only command. An agent that finds the recorded state wrong tells the user; it does not run this, and both halves of the command refuse it.
+
+The ledger is append-only, and the only other way to put a wrong row right is to replay ordinary transitions through their gates. When a gate was skipped on the way in, that can deadlock — a landed todo task with unapproved plan items could reach `assumed` only through `revisit`, `submitted`, `ready` and `underway` and a fresh reconcile, and those transitions would then sit in its history as if they described real events. Accounting's answer is a correcting journal entry: never erase, post an entry that says what it corrects and why.
+
+- **`endless correct <target> <key> --set col=value ... --reason <text>`** — update a row. `NULL` (exactly) is SQL NULL. A `--set` that changes nothing is refused.
+- **`endless correct <target> --insert col=value ... --reason <text>`** — insert a row. It may set the listed columns plus any column the table requires; an `id` is allocated.
+- **`endless correct <target> <key> --delete --reason <text>`** — delete a row, refused while other rows refer to it. A task is marked `removed = 1` rather than deleted, so its id is never minted again.
+- **`endless correct <target> <key> --reason <text>`** — with none of the three, an annotation: a correction entry with the reason and no change, for any target or for `conversation`, `message` and `project_next`, which have no table.
+
+Every run writes a `ledger.row_changed` entry per change — the target, key, operation and values, applied by the executor and the projector alike and triggering none of an existing kind's effects — and then a `ledger.corrected` entry: the reason, the before values, whether gates were skipped, and the byte offset of each change entry in the segment both were written to. The run holds the ledger lock from its first line to its last, so the lines are adjacent, and commits them in one ledger commit whose subject names the correction (`Endless: ledger.corrected E-101 …`), which is never folded with another. `git log -- .endless/db-ledger` is where corrections are read; there is no other display yet.
+
+**Gates** are on by default and only refuse: for a task's status, the transition table for its type and the plan-item approval check; for status and phase columns of any target, the vocabulary. `--skip-gates` bypasses them and is recorded on the entry. The column list, foreign keys, the no-duplicate-key rule and the parent-cycle rule hold either way, and a row of another project is refused so the entry lands in its own project's ledger. A corrected field with a document mirror gets the mirror rewritten; nothing else follows — no worktree or session change, no epic derivation — and correcting an epic's status prints that the next derivation can overwrite it.
+
+| Target | Table | Key | Columns |
+|---|---|---|---|
+| `task` | tasks, task_content | id | title, description, phase, type, status, parent_id, complexity, risk, completed_at, verified_sha, and the content kinds (justification, context, analysis, plan, outcome, reason, notes) |
+| `task_dep` | task_deps | id | dep_type |
+| `project` | projects | id | label, group_name, description, status, language |
+| `session` | sessions | id | state, task_id, focus_task_id, hidden |
+| `session_status` | session_statuses | id | headline, summary |
+| `session_tasks` | session_tasks | id | relation_id |
+| `note` | notes | id | message, resolved, resolved_at |
+| `decision` | decisions | id | title, description, text, notes, origin_task_id, rejection_reason, status |
+| `decision_relation` | decision_relations | id | relation_type |
+| `task_question` | task_questions | id | answer, status, reason |
+| `shipped_file` | shipped_file_writes | project_id:path | sha256 |
+| `plan_item` | task_plan_items | task_id:seq (`E-101:P3`) | statement, kind, state, verify, detail, approved_statement, approved_kind, approved_at, post_land, approved_post_land |
+| `session_hidden_task` | session_hidden_tasks | session_id:task_id | none: insert and delete only |
+| `session_pinned_task` | session_pinned_tasks | session_id:task_id | none: insert and delete only |
+| `session_notice` | session_notices | id | notified |
+| `task_landing` | task_landings | id | merge_commit_sha, base_branch |
+| `task_reconciliation` | task_reconciliations | id | plan_digest, head |
+| `task_reconciliation_entry` | task_reconciliation_entries | reconciliation_id:item_seq | verdict, note, holds_reason |
+| `task_post_land_entry` | task_post_land_entries | id | verdict, note, holds_reason |
+
+An unknown target, or a column off its list, is refused naming what is allowed. Display ids are accepted in keys: `E-101`, `ED-12`, `EQ-7`, `ES-3`, `P55`.
+
+Repairing drift between the database and the ledger is a separate concern, as are audit views of corrections.

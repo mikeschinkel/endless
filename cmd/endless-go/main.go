@@ -6,6 +6,7 @@
 // already parsed:
 //
 //	endless-go event         emit|validate-db|rebuild-db|migrate|upgrade|backup|reap-worktrees
+//	endless-go correct       (user-only: change or annotate a ledger-tracked row with a recorded reason, E-2486)
 //	endless-go hook          prompt|claude|codex
 //	endless-go sandbox       seed|reset|claude-settings-repair
 //	endless-go tmux          apply|status-line|active-id|show-menu
@@ -41,7 +42,7 @@
 //   - project-status, project-window → the same rule and the same reason, for
 //     the same single-database join; the headless escape is --project-id and the
 //     decision lives in projectstatuscmd.resolveProject (E-1976).
-//   - event, session-query, worktree → ConsumeDBFlags (E-1429/E-1668), and
+//   - event, correct, session-query, worktree → ConsumeDBFlags (E-1429/E-1668), and
 //     nothing else: inside a self-dev worktree they are REFUSED without a flag.
 //   - sandbox → no DB-context init (sandbox seed resolves the main database it
 //     reads and the sandbox it writes itself).
@@ -61,6 +62,7 @@ import (
 	_ "modernc.org/sqlite"
 
 	"github.com/mikeschinkel/endless/internal/claimhandoffcmd"
+	"github.com/mikeschinkel/endless/internal/correctcmd"
 	"github.com/mikeschinkel/endless/internal/errorscmd"
 	"github.com/mikeschinkel/endless/internal/eventcmd"
 	"github.com/mikeschinkel/endless/internal/events"
@@ -78,8 +80,8 @@ import (
 	"github.com/mikeschinkel/endless/internal/resumewindowscmd"
 	"github.com/mikeschinkel/endless/internal/sandboxcmd"
 	"github.com/mikeschinkel/endless/internal/sessionmonitorcmd"
-	"github.com/mikeschinkel/endless/internal/sessionquerycmd"
 	"github.com/mikeschinkel/endless/internal/sessionprimecmd"
+	"github.com/mikeschinkel/endless/internal/sessionquerycmd"
 	"github.com/mikeschinkel/endless/internal/sessionstatecmd"
 	"github.com/mikeschinkel/endless/internal/sessionstatuscmd"
 	"github.com/mikeschinkel/endless/internal/settings"
@@ -101,9 +103,9 @@ import (
 	_ "github.com/mikeschinkel/endless/internal/docsweep"
 	_ "github.com/mikeschinkel/endless/internal/mainsyncjob"
 	_ "github.com/mikeschinkel/endless/internal/minimizerjob"
+	_ "github.com/mikeschinkel/endless/internal/pathsjob"
 	_ "github.com/mikeschinkel/endless/internal/raterjob"
 	_ "github.com/mikeschinkel/endless/internal/triagejob"
-	_ "github.com/mikeschinkel/endless/internal/pathsjob"
 	_ "github.com/mikeschinkel/endless/internal/unlandedjob"
 
 	// Settings registrations with no job: imported for their init() alone.
@@ -251,6 +253,8 @@ func main() {
 	switch sub {
 	case "event":
 		eventcmd.Run(rest)
+	case "correct":
+		correctcmd.Run(rest)
 	case "hook":
 		hookcmd.Run(rest)
 	case "sandbox":
@@ -398,6 +402,7 @@ func usageText() string {
 	fmt.Fprintln(w, "Usage: endless-go <subcommand> [args...]")
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  event          emit|validate-db|rebuild-db|migrate|upgrade|backup|reap-worktrees")
+	fmt.Fprintln(w, "  correct        --target T [--key K] [--set|--insert col=v ...|--delete] --reason R  (user-only ledger correction)")
 	fmt.Fprintln(w, "  hook           prompt|claude|codex")
 	fmt.Fprintln(w, "  sandbox        seed|reset|claude-settings-repair")
 	fmt.Fprintln(w, "  tmux           apply|status-line|active-id|show-menu")

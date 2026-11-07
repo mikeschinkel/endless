@@ -1,0 +1,41 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2486 and records what was true when E-2486
+# landed. Edit it only if you ARE E-2486. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+schema = 1
+task   = "E-2486"
+
+[[check]]
+name   = "correction entries: prepare, gates, apply, offsets, lock, projection parity, commit subject"
+runner = "gotest"
+paths  = ["./internal/events/...", "./internal/correctcmd/..."]
+
+[[check]]
+name   = "endless correct through the CLI: agent refusal, relay, annotation, rendering"
+runner = "pytest/uv"
+paths  = ["tests/test_correct_cmd.py", "tests/test_event_bridge.py"]
+
+[[check]]
+name     = "endless correct --help names the bypass and the targets"
+sh       = "uv run endless correct --help"
+contains = "--skip-gates"
+
+[[check]]
+name     = "endless correct --help lists plan_item as a target"
+sh       = "uv run endless correct --help"
+contains = "plan_item"
+
+[[check]]
+name     = "an agent is refused before anything runs"
+as       = "agent"
+sh       = "uv run endless correct task E-1 --reason x 2>&1; true"
+contains = "the user's command"
+
+[[check]]
+name         = "event emit refuses the correction kinds"
+sh       = "go run ./cmd/endless-go event emit --kind ledger.row_changed --project p --entity-type task --entity-id 1 --actor-kind cli --actor-id t --node-id a1b2 --project-root . 2>&1; true"
+contains = "written only by `endless correct`"
+
+[[check]]
+name     = "the appendix documents the command"
+sh       = "grep -c 'endless correct' docs/guide/appendix-a.md"

@@ -225,3 +225,29 @@ func TestIsLedgerCommit(t *testing.T) {
 		t.Fatalf("commit touching README: ok=%v err=%v, want false", ok, err)
 	}
 }
+
+// A correction's commit names the correction (E-2486): the corrected entry
+// leads the subject even though its change entries precede it, and the kinds
+// render their row and reason.
+func TestLedgerCommitMessage_Correction(t *testing.T) {
+	change := ledgerEvent(KindLedgerRowChanged, EntityTask, "2486",
+		`{"target":"task","key":"2486","op":"update","values":{"status":"assumed"}}`)
+	corrected := ledgerEvent(KindLedgerCorrected, EntityTask, "2486",
+		`{"reason":"gate skipped","skip_gates":true,"refs":[1234]}`)
+	if got := LedgerCommitMessage([]Event{change}); got != "Endless: ledger.row_changed E-2486 update task 2486 status" {
+		t.Errorf("change subject = %q", got)
+	}
+	got := LedgerCommitMessage([]Event{change, corrected})
+	want := "Endless: ledger.corrected E-2486 gate skipped +1 more\n\n" +
+		"ledger.row_changed E-2486 update task 2486 status\n" +
+		"ledger.corrected E-2486 gate skipped"
+	if got != want {
+		t.Errorf("message =\n%s\nwant\n%s", got, want)
+	}
+	if !IsLedgerSubject(strings.SplitN(got, "\n", 2)[0]) {
+		t.Errorf("a correction subject is still a ledger subject")
+	}
+	if !HoldsCorrection([]Event{change, corrected}) || HoldsCorrection([]Event{change}) {
+		t.Errorf("HoldsCorrection")
+	}
+}

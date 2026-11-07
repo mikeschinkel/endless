@@ -134,57 +134,28 @@ def _resolve_endless_go(override: str | None = None) -> str:
     return found
 
 
-def emit_event(
-    kind: str,
+def resolve_actor(
+    actor_kind: str,
+    actor_id: str | None,
+    session_id: str | None,
     project: str,
-    entity_type: str,
-    entity_id: str | int,
-    payload: dict,
-    actor_kind: str = "cli",
-    actor_id: str | None = None,
-    session_id: str | None = None,
-    project_root: str | None = None,
-    correlation_id: str | None = None,
     prompt_verb: str | None = None,
-    endless_go_bin: str | None = None,
-    ts: str | None = None,
-) -> dict | None:
-    """Shell out to `endless-go event emit` to write an event and execute the DB mutation.
+) -> tuple[str, str, str | None]:
+    """The actor an event this process emits is attributed to.
 
-    Returns the parsed JSON output (contains ts, kind, and
-    optionally id for created tasks), or None if stdout was empty.
+    Shared by `emit_event` and `endless correct` (E-2486), which hands its
+    envelope to `endless-go correct` rather than `event emit` and must attribute
+    it the same way. Returns (actor_kind, actor_id, session_id):
 
-    `session_id` populates `actor.session_id` on the emitted event so
-    events can be attributed to the session that caused them. When None,
-    the resolver `_resolve_session_id_with_prompt()` (from task_cmd) is
-    called automatically — so most callers don't need to pass it. That
-    resolver prompts on a tty when n>1 sibling Claude panes are alive
-    and refuses loudly off-tty.
-
-    `prompt_verb` is forwarded to the resolver so the prompt question
-    can describe the action concretely, e.g. "claimed for" yields
-    "Which session should this be claimed for? [ID]:". When None, the
-    resolver falls back to "associated with".
-
-    For actor_kind in {"cli", "hook"}, an unresolvable session_id is a hard
-    error: emit_event raises click.ClickException with an actionable message
-    rather than firing an event whose attribution will be silently dropped
-    (E-1401). For actor_kind in {"system", "web"}, an empty session_id is
-    fine — system has no session, web attributes via user_id.
-
-    `endless_go_bin` pins the exact endless-go binary to exec, bypassing the
-    default PATH/sandbox resolution. A self_dev land passes the worktree binary
-    here so the task.landed emit uses the build whose schema matches the rows it
-    just applied (E-1664). None ⇒ default resolution.
-
-    `ts` sets the event timestamp to a historical RFC3339 instant instead of
-    now(). A record-only landing backfill (E-1719) passes the merge commit's
-    date so `landed_at` records when the work actually landed. None ⇒ now().
-
-    Raises click.ClickException on failure.
+    - actor_id defaults to user@host.
+    - `--no-session` (config.NO_SESSION) downgrades a cli/hook actor to system
+      with no session (E-1444).
+    - A cli/hook actor with no session_id asks the resolver, which prompts on a
+      tty when several Claude panes are alive and refuses loudly off-tty.
+    - A cli/hook actor that still has no session is refused (E-1401): silent
+      attribution loss is the bug this gate exists to stop. system and web
+      actors carry none.
     """
-    node_id = _get_or_create_node_id()
-
     if actor_id is None:
         actor_id = f"{os.getenv('USER', 'unknown')}@{socket.gethostname()}"
 
@@ -252,23 +223,80 @@ def emit_event(
                          "(actor.kind=system; for cron, scripts, plain-shell "
                          "triage filings).\n",
         )
+    return actor_kind, actor_id, session_id
 
+
+def project_root_for(project: str) -> str:
+    """The project's registered path, so events always land in the main repo
+    even when invoked from inside a git worktree (where cwd is the worktree,
+    not the project root). Falls back to cwd only if the project isn't
+    registered (defensive; shouldn't happen in normal flow since callers always
+    pass a known project name)."""
+    from endless import db
+    row = db.query(
+        "SELECT path FROM projects WHERE name = ? LIMIT 1",
+        (project,),
+    )
+    if row:
+        from endless.project_path import resolved
+        return str(resolved(row[0]["path"]))
+    return str(Path.cwd())
+
+
+def emit_event(
+    kind: str,
+    project: str,
+    entity_type: str,
+    entity_id: str | int,
+    payload: dict,
+    actor_kind: str = "cli",
+    actor_id: str | None = None,
+    session_id: str | None = None,
+    project_root: str | None = None,
+    correlation_id: str | None = None,
+    prompt_verb: str | None = None,
+    endless_go_bin: str | None = None,
+    ts: str | None = None,
+) -> dict | None:
+    """Shell out to `endless-go event emit` to write an event and execute the DB mutation.
+
+    Returns the parsed JSON output (contains ts, kind, and
+    optionally id for created tasks), or None if stdout was empty.
+
+    `session_id` populates `actor.session_id` on the emitted event so
+    events can be attributed to the session that caused them. When None,
+    the resolver `_resolve_session_id_with_prompt()` (from task_cmd) is
+    called automatically — so most callers don't need to pass it. That
+    resolver prompts on a tty when n>1 sibling Claude panes are alive
+    and refuses loudly off-tty.
+
+    `prompt_verb` is forwarded to the resolver so the prompt question
+    can describe the action concretely, e.g. "claimed for" yields
+    "Which session should this be claimed for? [ID]:". When None, the
+    resolver falls back to "associated with".
+
+    For actor_kind in {"cli", "hook"}, an unresolvable session_id is a hard
+    error: emit_event raises click.ClickException with an actionable message
+    rather than firing an event whose attribution will be silently dropped
+    (E-1401). For actor_kind in {"system", "web"}, an empty session_id is
+    fine — system has no session, web attributes via user_id.
+
+    `endless_go_bin` pins the exact endless-go binary to exec, bypassing the
+    default PATH/sandbox resolution. A self_dev land passes the worktree binary
+    here so the task.landed emit uses the build whose schema matches the rows it
+    just applied (E-1664). None ⇒ default resolution.
+
+    `ts` sets the event timestamp to a historical RFC3339 instant instead of
+    now(). A record-only landing backfill (E-1719) passes the merge commit's
+    date so `landed_at` records when the work actually landed. None ⇒ now().
+
+    Raises click.ClickException on failure.
+    """
+    node_id = _get_or_create_node_id()
+    actor_kind, actor_id, session_id = resolve_actor(
+        actor_kind, actor_id, session_id, project, prompt_verb)
     if project_root is None:
-        # Look up the project's registered path so events always land in the
-        # main repo, even when invoked from inside a git worktree (where cwd
-        # is the worktree, not the project root). Fall back to cwd only if
-        # the project isn't registered (defensive; shouldn't happen in normal
-        # flow since callers always pass a known project name).
-        from endless import db
-        row = db.query(
-            "SELECT path FROM projects WHERE name = ? LIMIT 1",
-            (project,),
-        )
-        if row:
-            from endless.project_path import resolved
-            project_root = str(resolved(row[0]["path"]))
-        else:
-            project_root = str(Path.cwd())
+        project_root = project_root_for(project)
 
     # E-1429: refuse early with the friendly message if --db is required but
     # missing, then thread the resolved DB context to endless-event.

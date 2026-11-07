@@ -451,3 +451,69 @@ func gitOutput(root string, args ...string) (string, error) {
 	}
 	return string(out), nil
 }
+
+// RewriteMirrors brings the mirrors of the named tasks and decisions into line
+// with their rows and commits what changed, in one commit (E-2486). It is the
+// write-time half of a correction: `endless correct` knows which rows it
+// changed, so it asks for exactly those rather than a whole-project pass, and
+// the sweep's periodic pass covers anything this leaves.
+//
+// Same rules as the sweep: a mirror is written only from non-empty content, and
+// compared byte for byte. Nothing is adopted here — a correct, untracked mirror
+// is the sweep's to notice.
+func RewriteMirrors(project monitor.ProjectRef, taskIDs, decisionIDs []int64) (Result, error) {
+	var result Result
+	changed := make(map[string]bool)
+	never := func(string) bool { return false }
+
+	for _, id := range taskIDs {
+		rows, err := monitor.TaskDocRowsFor(id)
+		if err != nil {
+			return result, fmt.Errorf("%s: read task E-%d documents: %w", project.Root, id, err)
+		}
+		for _, row := range rows {
+			name, err := taskcontent.Parse(row.Name)
+			if err != nil {
+				continue
+			}
+			kind, ok := docmirror.KindByName(name)
+			if !ok {
+				continue
+			}
+			rel := docmirror.TaskDocPath(row.ID, kind.Stem)
+			if err = writeIfDifferent(project.Root, rel, row.Content, never, changed, &result); err != nil {
+				return result, err
+			}
+		}
+		content, err := monitor.PlanItemsTOML(id)
+		if err != nil {
+			return result, fmt.Errorf("%s: render plan items of E-%d: %w", project.Root, id, err)
+		}
+		if content != "" {
+			if err = writeIfDifferent(project.Root, docmirror.TaskItemsPath(id), content, never, changed, &result); err != nil {
+				return result, err
+			}
+		}
+	}
+	for _, id := range decisionIDs {
+		row, ok, err := monitor.DecisionDocRow(id)
+		if err != nil {
+			return result, fmt.Errorf("%s: read decision ED-%d: %w", project.Root, id, err)
+		}
+		if !ok {
+			continue
+		}
+		rel := docmirror.DecisionDocPath(row.ID)
+		if err = writeIfDifferent(project.Root, rel, row.Content, never, changed, &result); err != nil {
+			return result, err
+		}
+	}
+	if len(changed) == 0 {
+		return result, nil
+	}
+	paths := sortedKeys(changed)
+	if err := events.CommitDocPaths(project.Root, paths, "Endless: rewrite document mirrors after a correction"); err != nil {
+		return result, fmt.Errorf("%s: commit: %w", project.Root, err)
+	}
+	return result, nil
+}

@@ -93,6 +93,29 @@ func isLedgerSegmentPath(p string) bool {
 // ledgerMessage builds the message for the ledger commit about to be made: the
 // events HEAD already holds when amending, then the events now staged in paths.
 func ledgerMessage(projectRoot string, paths []string, amend bool) (string, error) {
+	evts, err := ledgerEvents(projectRoot, paths, amend)
+	if err != nil {
+		return "", err
+	}
+	return LedgerCommitMessage(evts), nil
+}
+
+// HoldsCorrection reports whether any of the events is a correction entry.
+// A commit holding one is never folded with another (E-2486): its subject
+// names the correction, and folding would bury it under `+N more`.
+func HoldsCorrection(evts []Event) bool {
+	for _, e := range evts {
+		if e.Kind == KindLedgerCorrected {
+			return true
+		}
+	}
+	return false
+}
+
+// ledgerEvents lists the events the ledger commit about to be made would hold:
+// the events HEAD already holds when amending, then the events now staged in
+// paths.
+func ledgerEvents(projectRoot string, paths []string, amend bool) ([]Event, error) {
 	var evts []Event
 	if amend {
 		out, err := runGitOutput(projectRoot,
@@ -100,7 +123,7 @@ func ledgerMessage(projectRoot string, paths []string, amend bool) (string, erro
 			"--", ledgerDirRel,
 		)
 		if err != nil {
-			return "", fmt.Errorf("read HEAD's ledger events: %w", err)
+			return nil, fmt.Errorf("read HEAD's ledger events: %w", err)
 		}
 		evts = append(evts, addedEvents(out)...)
 	}
@@ -108,10 +131,10 @@ func ledgerMessage(projectRoot string, paths []string, amend bool) (string, erro
 	out, err := runGitOutput(projectRoot,
 		append([]string{"diff", "--cached", "--"}, paths...)...)
 	if err != nil {
-		return "", fmt.Errorf("read staged ledger events: %w", err)
+		return nil, fmt.Errorf("read staged ledger events: %w", err)
 	}
 	evts = append(evts, addedEvents(out)...)
-	return LedgerCommitMessage(evts), nil
+	return evts, nil
 }
 
 // addedEvents parses the events a unified diff adds. Only the fields a message
@@ -154,7 +177,17 @@ func LedgerCommitMessage(evts []Event) string {
 		suffix = fmt.Sprintf(" +%d more", len(evts)-1)
 	}
 	room := ledgerSubjectLimit - runeLen(AutoCommitSubjectPrefix) - runeLen(suffix)
-	msg := AutoCommitSubjectPrefix + describeEvent(evts[0]).fit(room) + suffix
+	// A correction leads its commit (E-2486): its change entries precede it in
+	// the segment, but `git log` should say that a correction happened, not
+	// which row moved first. The body still lists every event in order.
+	lead := evts[0]
+	for _, e := range evts {
+		if e.Kind == KindLedgerCorrected {
+			lead = e
+			break
+		}
+	}
+	msg := AutoCommitSubjectPrefix + describeEvent(lead).fit(room) + suffix
 	if !IsLedgerSubject(msg) {
 		msg = LegacyLedgerCommitSubject
 	} else if len(evts) == 1 {
@@ -222,6 +255,11 @@ type eventPayload struct {
 	RelationType     string                     `json:"relation_type"`
 	MergeCommitSHA   string                     `json:"merge_commit_sha"`
 	SessionID        int64                      `json:"session_id"`
+	Target           string                     `json:"target"`
+	Key              string                     `json:"key"`
+	Op               string                     `json:"op"`
+	Values           map[string]json.RawMessage `json:"values"`
+	Reason           string                     `json:"reason"`
 	Ops              []struct {
 		Op  string `json:"op"`
 		Seq int64  `json:"seq"`
@@ -272,6 +310,16 @@ func describeEvent(e Event) eventLine {
 		if p.SessionID != 0 {
 			l.value = fmt.Sprintf("ES-%d", p.SessionID)
 		}
+	case KindLedgerRowChanged:
+		// `update task 2486 status`: the operation, the row, the columns.
+		names := make([]string, 0, len(p.Values))
+		for name := range p.Values {
+			names = append(names, name)
+		}
+		sort.Strings(names)
+		l.value = strings.TrimSpace(fmt.Sprintf("%s %s %s %s", p.Op, p.Target, p.Key, strings.Join(names, ", ")))
+	case KindLedgerCorrected:
+		l.value = p.Reason
 	}
 	l.value = strings.Join(strings.Fields(l.value), " ")
 	return l

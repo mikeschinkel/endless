@@ -140,6 +140,13 @@ func replayEvent(db *sql.DB, evt *Event, result *ProjectResult) error {
 		return replayDecisionRelationCreated(db, evt, result)
 	case KindDecisionRelationDeleted:
 		return replayDecisionRelationDeleted(db, evt, result)
+	case KindLedgerRowChanged:
+		return replayLedgerRowChanged(db, evt, result)
+	case KindLedgerCorrected:
+		// A declared no-op (E-2486): the correction entry explains its change
+		// entries, which replay applies on their own. Live and projected rows
+		// match because neither path reads it.
+		return nil
 	default:
 		if RetiredKinds[evt.Kind] {
 			// A retired kind is a DECLARED no-op, not an unhandled one (E-2142).

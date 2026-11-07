@@ -2488,6 +2488,49 @@ def touch(task_refs, session_id_override):
     impl(task_refs, session_id_override)
 
 
+_CORRECT_HELP = """Correct, or annotate, anything the ledger tracks — a user-only command.
+
+TARGET is one table the ledger writes: task, task_dep, project, session,
+session_status, session_tasks, note, decision, decision_relation,
+task_question, shipped_file, plan_item, session_hidden_task,
+session_pinned_task, session_notice, task_landing, task_reconciliation,
+task_reconciliation_entry or task_post_land_entry — or conversation, message
+or project_next, which have no table and take annotations only. KEY is the
+row's key: its id (E-101, ED-12, EQ-7 and ES-3 are accepted), or a composite
+key joined by ':' (a plan item is TASK:SEQ, e.g. E-101:P3).
+
+  --set COL=VALUE ...   update the row (NULL is SQL NULL)
+  --insert COL=VALUE .. insert a row; an id is allocated
+  --delete              delete the row, refused while other rows refer to it
+  (none)                record an annotation: the reason, no change
+
+Each run writes a ledger.row_changed entry (the change) and a ledger.corrected
+entry (the reason, the before values, whether gates were skipped), adjacent in
+one ledger commit. Gates — the task transition table, plan-item approval, the
+status and phase vocabularies — refuse by default; --skip-gates bypasses them
+and is recorded. The column list, foreign keys and parent cycles hold either
+way. See `endless guide appendix-a`.
+"""
+
+
+@main.command("correct", help=_CORRECT_HELP)
+@click.argument("target")
+@click.argument("key", required=False, default=None)
+@click.option("--set", "sets", multiple=True, metavar="COL=VALUE",
+              help="Update the row: a column and its new value (repeatable)")
+@click.option("--insert", "inserts", multiple=True, metavar="COL=VALUE",
+              help="Insert a row with these columns (repeatable)")
+@click.option("--delete", is_flag=True, help="Delete the row")
+@click.option("--reason", required=True,
+              help="Why the correction is made; recorded on the entry")
+@click.option("--skip-gates", is_flag=True,
+              help="Bypass the lifecycle and vocabulary gates; recorded on the entry")
+@click.option("--project", default=None, help="Project name (default: the project at cwd)")
+def correct(target, key, sets, inserts, delete, reason, skip_gates, project):
+    from endless.correct_cmd import correct as impl
+    impl(target, key, sets, inserts, delete, reason, skip_gates, project)
+
+
 @main.group("minimizer")
 def minimizer_cmd():
     """Inspect and control the instruction the minimizer edits replies with.

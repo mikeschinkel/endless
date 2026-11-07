@@ -365,6 +365,26 @@ const (
 	KindDecisionRelationDeleted Kind = "decision_relation.deleted"
 )
 
+// Ledger correction kinds (E-2486). `endless correct`, a user-only command,
+// writes both; nothing else does, and `event emit` refuses them.
+//
+//   - ledger.row_changed is the CHANGE entry: one row of one table, written as
+//     the user said — target, key, operation, values. It triggers none of the
+//     effects an existing kind would (no gates, no derivation, no notices), so a
+//     correction cannot cascade. The executor and the projector both apply it.
+//   - ledger.corrected is the CORRECTION entry: the reason, the before values,
+//     whether gates were skipped, and the byte offset of each change entry it
+//     covers in the segment both were written to. It writes no row, and the
+//     projector treats it as a declared no-op, so replay can ignore corrections
+//     and an audit can read only them. With no refs it is an annotation.
+//
+// Accounting's answer to an append-only record: never erase, post an entry that
+// says what it corrects and why.
+const (
+	KindLedgerRowChanged Kind = "ledger.row_changed"
+	KindLedgerCorrected  Kind = "ledger.corrected"
+)
+
 // Retired event kinds (E-2142). Each named the only surface that wrote it, and
 // that surface is gone:
 //
@@ -508,6 +528,9 @@ var ValidKinds = map[Kind]bool{
 	// Decision relation (E-1378)
 	KindDecisionRelationCreated: true,
 	KindDecisionRelationDeleted: true,
+	// Ledger corrections (E-2486)
+	KindLedgerRowChanged: true,
+	KindLedgerCorrected:  true,
 }
 
 // validEntityTypes is the closed set of recognized entity types.

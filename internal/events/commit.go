@@ -338,19 +338,33 @@ func commitPathsOnce(projectRoot string, paths []string, subject commitSubject, 
 		return nil
 	}
 
+	var ledgerMsg string
+	if subject.ledger {
+		// Rebuilt on amend too, so a folded commit's subject and body name
+		// every event it now holds (E-2498).
+		evts, err := ledgerEvents(projectRoot, paths, canAmend)
+		if err != nil {
+			return err
+		}
+		// A correction is never folded (E-2486): not into the commit before
+		// it, and no later event into it. Its subject names the correction,
+		// and `git log` is where corrections are read.
+		if canAmend && HoldsCorrection(evts) {
+			canAmend = false
+			if evts, err = ledgerEvents(projectRoot, paths, false); err != nil {
+				return err
+			}
+		}
+		ledgerMsg = LedgerCommitMessage(evts)
+	}
+
 	commitArgs := append([]string{"commit"}, prefixOnly(paths)...)
 	if canAmend {
 		commitArgs = append(commitArgs, "--amend")
 	}
 	switch {
 	case subject.ledger:
-		// Rebuilt on amend too, so a folded commit's subject and body name
-		// every event it now holds (E-2498).
-		msg, err := ledgerMessage(projectRoot, paths, canAmend)
-		if err != nil {
-			return err
-		}
-		commitArgs = append(commitArgs, "-m", msg)
+		commitArgs = append(commitArgs, "-m", ledgerMsg)
 	case canAmend:
 		commitArgs = append(commitArgs, "--no-edit")
 	default:
