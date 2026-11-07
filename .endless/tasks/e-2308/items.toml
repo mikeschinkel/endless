@@ -16,7 +16,7 @@ detail = "Bounded: preceded by start, whitespace, =, :, a quote or an opening br
 [[item]]
 id = "P4"
 kind = "deliverable"
-statement = "refusal.(*Error).Render applies the free-text function in its person branch; its agent branch output is unchanged"
+statement = "refusal.(*Error).Render applies the free-text function to both the person and the agent form"
 
 [[item]]
 id = "P5"
