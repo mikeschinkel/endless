@@ -108,3 +108,8 @@ statement = "internal/refusal exports TildeDir, TildeFile and TildeEntry — go-
 id = "P23"
 kind = "deliverable"
 statement = "just test-go also runs the tests under cmd/, so TestInitialize and the temp-HOME binary test run with the suite; just lint runs the pathlint whole-tree check alone"
+
+[[item]]
+id = "P24"
+kind = "deliverable"
+statement = "golang.org/x/tools becomes a direct dependency at v0.52.0 (go/packages, go/analysis) because v0.48.0 cannot read Go 1.27 export data; x/mod and x/sync move with it"
