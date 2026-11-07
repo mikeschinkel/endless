@@ -62,3 +62,8 @@ id = "P13"
 kind = "deliverable"
 statement = "session goto, goto --resume, goto --resume --background and session back address Endless's task-session server by socket path, never the caller's tmux server; with it down they refuse with 'Endless isn't running' and move nothing"
 detail = "Replaces P11. The guide already says every Endless command reaches the two servers by full socket path; goto and back ran bare tmux against the ambient server."
+
+[[item]]
+id = "P14"
+kind = "deliverable"
+statement = "The live-session rows scope pane ids to the task-session server's identity, so a target's pane resolves from any shell; a hook still binds a pane to the server it runs in"
