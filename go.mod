@@ -6,7 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.5.0
 	github.com/mattn/go-runewidth v0.0.16
 	github.com/mikeschinkel/go-cfgstore v0.3.0
-	github.com/mikeschinkel/go-dt v0.7.0
+	github.com/mikeschinkel/go-dt v0.7.1
 	github.com/pressly/goose/v3 v3.28.0
 	github.com/rogpeppe/go-internal v1.14.1
 	github.com/santhosh-tekuri/jsonschema/v6 v6.0.2
