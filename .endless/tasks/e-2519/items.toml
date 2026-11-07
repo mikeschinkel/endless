@@ -56,3 +56,9 @@ statement = "Test-fixture session rows in the main database; evidence added to E
 id = "P12"
 kind = "deliverable"
 statement = "A seeded test pane binding records its tmux server, as a hook's first binding does; the pre-E-2300 shape is explicit"
+
+[[item]]
+id = "P13"
+kind = "deliverable"
+statement = "session goto, goto --resume, goto --resume --background and session back address Endless's task-session server by socket path, never the caller's tmux server; with it down they refuse with 'Endless isn't running' and move nothing"
+detail = "Replaces P11. The guide already says every Endless command reaches the two servers by full socket path; goto and back ran bare tmux against the ambient server."
