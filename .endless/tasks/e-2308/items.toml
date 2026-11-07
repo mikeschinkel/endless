@@ -41,7 +41,7 @@ statement = "A path passed into faults.Record as a Fields value or as a formatte
 [[item]]
 id = "P8"
 kind = "deliverable"
-statement = "hookcmd's tildePath and the displayPath helpers in monitor and verifycmd are removed; their callers use the path display function and no output is cwd-relative"
+statement = "hookcmd's tildePath and the displayPath helpers in monitor and verifycmd are removed; their callers use go-dt's ~ form, and no output is cwd-relative"
 
 [[item]]
 id = "P9"
