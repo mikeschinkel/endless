@@ -103,3 +103,8 @@ verify = "hookcmd tests for writeTargetRedirect, cdRedirect, bashWritesRefusal a
 id = "P22"
 kind = "deliverable"
 statement = "internal/refusal exports TildeDir, TildeFile and TildeEntry — go-dt's ToTilde with OrFullPath that returns the full path when $HOME is unknown — because dt.ToTilde panics unless EnsureUserHomeDir succeeded, and every typed caller needs that guard; refusal.EnsureHome is the one call that resolves $HOME"
+
+[[item]]
+id = "P23"
+kind = "deliverable"
+statement = "just test-go also runs the tests under cmd/, so TestInitialize and the temp-HOME binary test run with the suite; just lint runs the pathlint whole-tree check alone"
