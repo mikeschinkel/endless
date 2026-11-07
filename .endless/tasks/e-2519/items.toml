@@ -67,3 +67,8 @@ detail = "Replaces P11. The guide already says every Endless command reaches the
 id = "P14"
 kind = "deliverable"
 statement = "The live-session rows scope pane ids to the task-session server's identity, so a target's pane resolves from any shell; a hook still binds a pane to the server it runs in"
+
+[[item]]
+id = "P15"
+kind = "deliverable"
+statement = "goto from a terminal not attached to the task-session server selects the target's window there and prints the attach command when no terminal is attached; the back-stack is pushed only for a client of that server"
