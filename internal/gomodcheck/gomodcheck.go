@@ -58,7 +58,10 @@ const (
 // `testdata/` holds fixtures that are modules on purpose, and `.git` is never a
 // module whether it is a file (worktree) or a directory (checkout). The rule is
 // duplicated here because the runner is Go and the writer is Python.
-var PrunedDirs = []string{".endless", ".git", "testdata", "vendor"}
+//
+// `.endless` is listed last on purpose: tests/test_project_bring_up.py reads
+// `".endless", "<name>"` in source as a path under .endless/ to classify.
+var PrunedDirs = []string{".git", "testdata", "vendor", ".endless"}
 
 // Modules returns the directories under worktree that hold a go.mod, as
 // slash-separated paths relative to worktree ("." for the root), sorted, with
