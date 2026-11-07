@@ -111,7 +111,13 @@ def four_states(tmux_pane):
     # Row still says working; its pane is absent from a server we reached.
     _add_session(102, task_id=None, focus=tid, server=_SERVER, pane="%99999",
                  when="2026-10-01T00:00:04")
-    # Bound to a server that no longer exists: no opinion, forever.
+    # Bound to a recorded server we cannot reach, whose socket file is gone:
+    # no opinion. (Unrecorded AND unseen reads dead since E-2519.)
+    db.execute(
+        "INSERT INTO tmux_servers (server_uuid, socket_path, first_seen_at) "
+        "VALUES ('long-gone-server', '/endless-test/sockets/long-gone', "
+        "'2026-10-01T00:00:00')",
+    )
     _add_session(103, state="idle", task_id=other, server="long-gone-server",
                  pane=tmux_pane, when="2026-10-01T00:00:03")
     _add_session(104, state="idle", when="2026-10-01T00:00:02")

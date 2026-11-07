@@ -48,11 +48,12 @@ func TestLiveness_TruthTable(t *testing.T) {
 	)
 
 	tests := []struct {
-		name    string
-		server  string // server_uuid the binding was made against; "" = unbound
-		address string
-		want    Liveness
-		why     string
+		name       string
+		server     string // server_uuid the binding was made against; "" = unbound
+		address    string
+		unrecorded bool // no tmux_servers row for server (bound before E-2300)
+		want       Liveness
+		why        string
 	}{
 		{
 			name: "unbound session has no binding to judge", server: "", address: "",
@@ -79,6 +80,16 @@ func TestLiveness_TruthTable(t *testing.T) {
 			want: LivenessUnknown,
 			why:  "absence proves nothing about a server we did not reach",
 		},
+		{
+			name: "unrecorded, unreached server", server: otherServer, address: "%1", unrecorded: true,
+			want: LivenessDead,
+			why:  "no socket was ever recorded for it and the scan did not see it: gone before E-2300 (E-2519)",
+		},
+		{
+			name: "unrecorded but observed server", server: ourServer, address: "%1", unrecorded: true,
+			want: LivenessLive,
+			why:  "a server we reached is judged by its panes, recorded or not",
+		},
 	}
 
 	for _, tc := range tests {
@@ -91,6 +102,9 @@ func TestLiveness_TruthTable(t *testing.T) {
 			var pid int64
 			if tc.server != "" {
 				pid = mustSeedPane(t, db, tc.server, tc.address)
+			}
+			if tc.unrecorded {
+				unrecordTmuxServer(t, db, tc.server)
 			}
 			id := seedLivenessSession(t, db, "sess-"+tc.name, pid)
 

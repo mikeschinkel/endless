@@ -1954,7 +1954,8 @@ NEW_TRANSCRIPT_HELP = (
 @click.option(
     "--resume", is_flag=True,
     help="If the target isn't live, resume it in a NEW tmux window and focus "
-         "it, instead of erroring. No-op when the target is already live.",
+         "it, instead of erroring. No-op when the target is already live; "
+         "refused when it is running somewhere this tmux server cannot see.",
 )
 @click.option(
     "--revisit", is_flag=True,
@@ -1984,7 +1985,9 @@ def session_goto(target_ref, error_fix, background, target_session, prompt_file,
 
     With --resume, a target that has no live pane is relaunched in a new tmux
     window and focused (instead of erroring) — unlike `session resume`, which
-    clobbers the current pane.
+    clobbers the current pane. A target with no pane here that is nonetheless
+    running — live in another project, or under a `claude --resume` process —
+    is refused rather than relaunched: drop --resume.
 
     Resuming settled work (confirmed/assumed/completed) requires saying which
     you mean: --revisit reopens the task and continues; --no-revisit reads the

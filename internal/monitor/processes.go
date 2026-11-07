@@ -103,9 +103,10 @@ func EnsureTmuxPaneProcess(pane string) (int64, error) {
 // first time a binding is made against it (E-2300). Liveness later probes that
 // socket to tell a server that is gone from one it could not reach.
 //
-// Best-effort, and silent on failure: a server with no row is simply never
-// judged gone, which is how every binding from before E-2300 reads. Failing the
-// binding over it would trade a session's whole identity for a refinement.
+// Best-effort, and silent on failure: a server with no row is never probed,
+// and reads `dead` once the socket scan stops seeing it (E-2519) — which is how
+// every binding from before E-2300 reads. Failing the binding over it would
+// trade a session's whole identity for a refinement.
 //
 // The first time an id is recorded is also when its socket's earlier ids from
 // the same running server become its aliases (E-2428, recordTmuxServerAliases).

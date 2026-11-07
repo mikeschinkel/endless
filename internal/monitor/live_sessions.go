@@ -52,7 +52,7 @@ type LiveSession struct {
 	// EndlessServerDown is set on an `unknown` session whose recorded socket is
 	// one of Endless's own tmux servers (E-2240) and nothing answers there, so
 	// `endless start` is what brings its server back (E-2300). False whenever
-	// that cannot be shown, including every session bound before E-2300.
+	// that cannot be shown.
 	EndlessServerDown bool `json:"endless_server_down"`
 }
 

@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"syscall"
@@ -41,7 +42,9 @@ import (
 //
 //	live     — the address was present on a server we actually reached
 //	dead     — we reached its server, and the address was absent; or its
-//	           server is proven gone (see "Gone servers" below)
+//	           server is proven gone (see "Gone servers" below); or its
+//	           server was never recorded and the scan did not see it
+//	           (see "Unrecorded servers" below)
 //	unknown  — we could NOT reach its server; we have no opinion
 //	unbound  — the session has no process binding at all (background agents,
 //	           and any session started outside a multiplexer)
@@ -76,10 +79,24 @@ import (
 //
 // A missing file is no verdict because a server outlives its socket file when
 // macOS cleans /tmp; judging it gone would hand a running session's worktree
-// to someone else. A server with no tmux_servers row — every binding from
-// before E-2300 — is never probed, so never judged gone. Gone servers are
-// observation like the rest: a TEMP table, rebuilt per refresh, never written
-// to sessions.
+// to someone else. A server with no tmux_servers row has no socket to ask, so
+// it is never probed. Gone servers are observation like the rest: a TEMP
+// table, rebuilt per refresh, never written to sessions.
+//
+// # Unrecorded servers (E-2519)
+//
+// Every server gets its tmux_servers row on the first binding made against it
+// (recordTmuxServer). Servers that died before E-2300 existed have none, so
+// their sessions could never be probed and read `unknown` forever — and every
+// guard that reads `unknown` as live kept refusing for them. The scan already
+// enumerates every directory tmux puts sockets in (observeTmuxServers), so a
+// server with no row that the scan did not see either reads `dead`: nothing
+// records it, nothing answers for it. The view decides this with a NOT EXISTS
+// over tmux_servers; no session row is written, and every machine's old rows
+// read correctly on the next refresh. A running server this misses is one
+// whose recording failed (a relative `-S` path) AND whose socket is outside
+// every scanned directory; recording is what closes that, not an exception
+// here.
 //
 // # What is deliberately NOT here
 //
@@ -110,10 +127,12 @@ const (
 	// LivenessLive — address present on a server we reached.
 	LivenessLive Liveness = "live"
 	// LivenessDead — we reached the server and the address was absent, or the
-	// server's recorded socket proves it gone (E-2300). The ONLY state that may
-	// be read as "this session is over".
+	// server's recorded socket proves it gone (E-2300), or the server was never
+	// recorded and the scan did not see it (E-2519). The ONLY state that may be
+	// read as "this session is over".
 	LivenessDead Liveness = "dead"
-	// LivenessUnknown — the server was not reached. No opinion. Never `dead`.
+	// LivenessUnknown — a recorded server was not reached and its socket gave
+	// no verdict. No opinion. Never `dead`.
 	LivenessUnknown Liveness = "unknown"
 	// LivenessUnbound — no process binding (background agent, non-multiplexer).
 	LivenessUnbound Liveness = "unbound"
@@ -189,6 +208,12 @@ const (
 // createLivenessView is the single definition of liveness. Consumers SELECT
 // from it; none re-derive the CASE. Its server comparisons go through
 // SameTmuxServerSQL, which also carries the NULL handling.
+//
+// The next-to-last branch is E-2519: a tmux binding whose server has no
+// tmux_servers row, once the branches above have found it neither observed nor
+// proven gone, reads `dead` — see "Unrecorded servers" in the file header. It
+// is restricted to tmux bindings with a server id: a kind=pid process, or the
+// NULL server of E-1898's backfill, has no server to have recorded.
 var createLivenessView = `CREATE TEMP VIEW IF NOT EXISTS session_liveness AS
 	SELECT
 		s.id           AS session_id,
@@ -203,6 +228,11 @@ var createLivenessView = `CREATE TEMP VIEW IF NOT EXISTS session_liveness AS
 			 AND l.address IS NULL     THEN 'dead'
 			WHEN o.kind_id IS NOT NULL THEN 'live'
 			WHEN g.kind_id IS NOT NULL THEN 'dead'
+			WHEN p.kind_id = ` + tmuxKindSQL + `
+			 AND p.server_uuid IS NOT NULL
+			 AND NOT EXISTS (SELECT 1 FROM tmux_servers ts
+			                  WHERE ` + SameTmuxServerSQL("ts.server_uuid", "p.server_uuid") + `)
+			                           THEN 'dead'
 			ELSE                            'unknown'
 		END AS liveness
 	FROM sessions s
@@ -218,6 +248,9 @@ var createLivenessView = `CREATE TEMP VIEW IF NOT EXISTS session_liveness AS
 		   ON l.kind_id = p.kind_id
 		  AND ` + SameTmuxServerSQL("l.server_uuid", "p.server_uuid") + `
 		  AND l.address = p.address`
+
+// tmuxKindSQL is processkind.ProcessKindTmux as a SQL literal, for the view.
+var tmuxKindSQL = strconv.Itoa(int(processkind.ProcessKindTmux))
 
 var (
 	// livenessOnce gives a short-lived process (a CLI invocation, a hook) one
@@ -277,9 +310,17 @@ func setTestTmux(serverUUID string, panes map[string]string, reachable bool) (re
 	prevStart := tmuxStartTimeFn
 
 	tmuxServerUUIDFn = func() (string, error) { return serverUUID, nil }
-	// No socket is recorded and none is probed: a fixture server has no socket,
-	// and a probe of a real path would judge real servers from a test.
-	tmuxSocketPathFn = func() string { return "" }
+	// The pinned server is recorded on a fixture socket nothing listens on, as
+	// a hook's first binding records every real server, so a binding made
+	// through EnsureTmuxPaneProcess reads `unknown` when unobserved rather than
+	// `dead` (E-2519). No socket is probed: the stub gives no verdict for any
+	// path, and a probe of a real path would judge real servers from a test.
+	tmuxSocketPathFn = func() string {
+		if serverUUID == "" {
+			return ""
+		}
+		return testTmuxSocketPath(serverUUID)
+	}
 	tmuxStartTimeFn = func() time.Time { return time.Time{} }
 	probeSocket = func(string) socketProbe { return socketProbe{} }
 	endlessServerDown = func(string) bool { return false }

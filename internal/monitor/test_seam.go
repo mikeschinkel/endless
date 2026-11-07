@@ -22,9 +22,43 @@ const TestServerUUID = "test-server-uuid"
 //
 // It goes through the same ensureProcess the production path uses, so a fixture
 // cannot accidentally construct an identity shape the real code would never
-// produce.
+// produce. For the same reason it records the server (SeedTestTmuxServer), as
+// EnsureTmuxPaneProcess records every real one on its first binding: since
+// E-2519 a binding on an unrecorded server the socket scan does not see reads
+// `dead`, and a fixture that wants that pre-E-2300 shape says so by deleting
+// the row.
 func SeedPaneProcess(db *sql.DB, serverUUID, pane string) (int64, error) {
-	return ensureProcess(db, processkind.ProcessKindTmux, serverUUID, pane)
+	id, err := ensureProcess(db, processkind.ProcessKindTmux, serverUUID, pane)
+	if err != nil {
+		return 0, err
+	}
+	if err = SeedTestTmuxServer(db, serverUUID); err != nil {
+		return 0, err
+	}
+	return id, nil
+}
+
+// testTmuxSocketPath is the socket a test server is recorded on: absolute, so
+// recordTmuxServer accepts it, and one nothing listens on.
+func testTmuxSocketPath(serverUUID string) string {
+	return "/endless-test/sockets/" + serverUUID
+}
+
+// SeedTestTmuxServer records serverUUID in tmux_servers on testTmuxSocketPath,
+// unless a row already names its socket, so its sessions read `unknown` when it
+// is not observed rather than `dead` (E-2519). USE ONLY IN TESTS. The test
+// prober gives no verdict for any path, which is the `unknown` of a recorded
+// server whose socket file is gone.
+func SeedTestTmuxServer(db *sql.DB, serverUUID string) error {
+	if serverUUID == "" {
+		return nil
+	}
+	_, err := db.Exec(
+		`INSERT OR IGNORE INTO tmux_servers (server_uuid, socket_path, first_seen_at)
+		 VALUES (?, ?, '2026-01-01T00:00:00')`,
+		serverUUID, testTmuxSocketPath(serverUUID),
+	)
+	return err
 }
 
 // SetTestDB rebinds the monitor.DB() singleton to db and returns a

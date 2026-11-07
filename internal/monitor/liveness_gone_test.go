@@ -19,14 +19,26 @@ const (
 	otherSocket = "/endless-test/sockets/elsewhere"
 )
 
-// seedTmuxServer records that uuid lived on socket.
+// seedTmuxServer records that uuid lived on socket — replacing the fixture
+// socket a seeded binding on uuid recorded (SeedPaneProcess), if one came first.
 func seedTmuxServer(t *testing.T, db *sql.DB, uuid, socket string) {
 	t.Helper()
 	if _, err := db.Exec(
-		`INSERT INTO tmux_servers (server_uuid, socket_path, first_seen_at)
+		`INSERT OR REPLACE INTO tmux_servers (server_uuid, socket_path, first_seen_at)
 		 VALUES (?, ?, '2026-10-18T00:00:00')`, uuid, socket,
 	); err != nil {
 		t.Fatalf("seed tmux server %q: %v", uuid, err)
+	}
+}
+
+// unrecordTmuxServer forgets uuid's socket: the shape of every binding from
+// before E-2300, whose server died before sockets were recorded. A seeded
+// binding records its server (SeedPaneProcess), so a test wanting this shape
+// calls it AFTER binding.
+func unrecordTmuxServer(t *testing.T, db *sql.DB, uuid string) {
+	t.Helper()
+	if _, err := db.Exec(`DELETE FROM tmux_servers WHERE server_uuid = ?`, uuid); err != nil {
+		t.Fatalf("unrecord tmux server %q: %v", uuid, err)
 	}
 }
 
@@ -104,18 +116,21 @@ func TestLiveness_GoneServerTruthTable(t *testing.T) {
 		{
 			name: "no recorded socket (bound before E-2300)", recorded: false,
 			probe: socketProbe{refused: true},
-			want:  LivenessUnknown,
-			why:   "with no socket to ask, absence proves nothing",
+			want:  LivenessDead,
+			why: "nothing recorded it and the scan did not see it: a server " +
+				"from before sockets were recorded, long gone (E-2519)",
 		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			db := goneFixture(t)
-			if tc.recorded {
-				seedTmuxServer(t, db, goneServer, goneSocket)
-			}
 			stubSocketProbes(t, map[string]socketProbe{goneSocket: tc.probe})
 			id := seedLivenessSession(t, db, "sess-gone", mustSeedPane(t, db, goneServer, "%1"))
+			if tc.recorded {
+				seedTmuxServer(t, db, goneServer, goneSocket)
+			} else {
+				unrecordTmuxServer(t, db, goneServer)
+			}
 
 			if err := RefreshLiveness(); err != nil {
 				t.Fatalf("RefreshLiveness: %v", err)
@@ -409,11 +424,12 @@ func TestListLiveSessions_OmitsSessionOnGoneServer(t *testing.T) {
 
 // An `unknown` session on a recorded socket says whether that is Endless's own
 // server and down, so the claim refusal can name `endless start`. A session
-// with no recorded socket never asks.
+// with no recorded socket never asks — since E-2519 it is not listed at all.
 func TestListLiveSessions_ReportsEndlessServerDown(t *testing.T) {
 	db := readersFixture(t)
 	recorded := seedLivenessSession(t, db, "sess-recorded", mustSeedPane(t, db, "unreachable-server", "%1"))
 	unrecorded := seedLivenessSession(t, db, "sess-unrecorded", mustSeedPane(t, db, "never-recorded", "%1"))
+	unrecordTmuxServer(t, db, "never-recorded")
 	var asked []string
 	prev := endlessServerDown
 	endlessServerDown = func(socket string) bool { asked = append(asked, socket); return true }

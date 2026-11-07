@@ -164,7 +164,8 @@ def test_new_window_gets_the_same_identity(monkeypatch, tmp_path,
     monkeypatch.setattr(
         session_cmd, "_resume_target", lambda ref: _target(worktree_path=str(wt))
     )
-    monkeypatch.setattr(session_cmd, "_apply_revisit_intent", lambda *a: None)
+    monkeypatch.setattr(session_cmd, "_apply_revisit_intent",
+                        lambda *a, **k: None)
     monkeypatch.setattr(session_cmd, "_require_claude", lambda: "/bin/claude")
     monkeypatch.setattr(session_cmd, "_tmux_run", fake_tmux)
     monkeypatch.setattr(session_cmd, "build_pane_layout", lambda pane, cwd: None)

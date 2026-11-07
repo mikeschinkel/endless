@@ -49,6 +49,20 @@ def project_id(seeded_project_at_cwd):
     )[0]["id"]
 
 
+@pytest.fixture(autouse=True)
+def target_not_running(monkeypatch):
+    """E-2519: the running check resolves the target before `_resolve_resume`
+    and refuses one that is running. The target here is nothing's, so the
+    gates under test decide alone; tests that stub `_resume_target` themselves
+    override this."""
+    monkeypatch.setattr(
+        session_cmd, "_resume_target",
+        lambda ref: {"endless_id": 99, "session_id": "uuid-other",
+                     "task_id": 1859, "worktree_path": "", "state": "ended"},
+    )
+    monkeypatch.setattr(session_cmd, "_running_session", lambda uuid: None)
+
+
 @pytest.fixture
 def pane_holding(monkeypatch, project_id):
     """Make the current pane resolve to a session bound to E-1958."""

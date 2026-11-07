@@ -296,6 +296,11 @@ def test_goto_resume_names_the_window_for_the_task(
 
 
 def test_goto_resume_noop_when_live(goto_env, monkeypatch):
+    """A live target with a pane here is focused; `--resume` adds nothing. The
+    claim and spawn refusals name `goto <id> --resume` whether the holder is
+    running or ended, and this is the running half of that contract. A target
+    running where this server cannot see it is the E-2519 refusal, tested in
+    test_session_resume_refuses_running.py."""
     stage, make = goto_env
     stage(endless_session_id=10, pane_id="%10", task_id=1465)
     ft = make({"%10", "%cur"}, current_pane="%cur")

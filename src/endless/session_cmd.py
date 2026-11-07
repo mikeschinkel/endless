@@ -293,6 +293,136 @@ def _require_transcript(uuid: str, label: str, verb: str) -> None:
     )
 
 
+def _claude_resume_processes(uuid: str) -> list[tuple[int, str]]:
+    """Running `claude` processes resuming `uuid`, as (pid, command line).
+
+    The process listing is the half of the running check that liveness cannot
+    see (E-2519): a `claude --resume <uuid>` typed by hand, in a plain terminal
+    or a pane Endless never bound, has no session row that reads live. `ps`
+    is asked for every process; a line counts when it names claude and carries
+    `--resume <uuid>` (or `--resume=<uuid>`, or `-r <uuid>`).
+
+    This process and its ancestors are left out: `endless session goto
+    --resume <uuid>` has those same tokens in its own argv, and so may the
+    shell function or shim that launched it.
+    """
+    import subprocess
+    if not uuid:
+        return []
+    try:
+        out = subprocess.run(
+            ["ps", "-axo", "pid=,ppid=,args="],
+            capture_output=True, text=True, timeout=5,
+        )
+    except (OSError, subprocess.SubprocessError):
+        return []
+    rows: dict[int, tuple[int, str]] = {}
+    for line in out.stdout.splitlines():
+        parts = line.strip().split(None, 2)
+        if len(parts) != 3:
+            continue
+        try:
+            rows[int(parts[0])] = (int(parts[1]), parts[2])
+        except ValueError:
+            continue
+    skip: set[int] = set()
+    pid = os.getpid()
+    while pid in rows and pid not in skip:
+        skip.add(pid)
+        pid = rows[pid][0]
+    found: list[tuple[int, str]] = []
+    for pid, (_ppid, cmd) in sorted(rows.items()):
+        if pid in skip or "claude" not in cmd.lower():
+            continue
+        toks = cmd.split()
+        resuming = f"--resume={uuid}" in toks or any(
+            toks[i] in ("--resume", "-r") and toks[i + 1] == uuid
+            for i in range(len(toks) - 1)
+        )
+        if resuming:
+            found.append((pid, cmd))
+    return found
+
+
+def _running_session(uuid: str) -> str | None:
+    """Where the Claude session `uuid` is running now, or None when nothing
+    shows it running (E-2519).
+
+    Two sources, either sufficient. A session row that reads `live` among the
+    live sessions of EVERY project — a session is recorded under the project it
+    started in, so the cwd's project is the wrong scope for a specific id
+    (E-2358). Then the process listing, for a resume liveness never tracked.
+
+    `unknown` and `unbound` are not running: unprovable is not the same as
+    gone, but it is not the same as running either, and a session whose
+    server cannot be reached is exactly what resume exists to bring back.
+    """
+    if not uuid:
+        return None
+    for c in _live_sessions(all_projects=True):
+        if c.get("harness_session_id") != uuid:
+            continue
+        if c.get("liveness") != "live":
+            continue
+        eid = c.get("endless_session_id")
+        pane = c.get("pane_id") or ""
+        if pane:
+            return f"session ES-{eid} is live in pane {pane}"
+        return (f"session ES-{eid} is live in a pane this tmux server "
+                f"cannot reach")
+    procs = _claude_resume_processes(uuid)
+    if procs:
+        pid, cmd = procs[0]
+        return f"process {pid} is running `{cmd}`"
+    return None
+
+
+def _running_refusal(
+    ref: str, target: dict, *, drop_resume: bool,
+) -> agent_help.Refusal | None:
+    """The refusal to launch `claude --resume` on a session that is already
+    running, or None when it is not (E-2519). Checked before each of the three
+    launches — `session resume`, `session goto --resume` and `goto --resume
+    --background` — and before any of their side effects: a status flip, a
+    minted container task, a rebound window, a new window. Returned rather
+    than raised because the callers deliver a refusal differently: `session
+    resume` raises it, the shell-captured goto prints it to stderr.
+
+    A second Claude on a running session's transcript is never what was meant,
+    and it corrupts the transcript both are writing. The way to the running
+    session is `session goto <ref>`, which focuses it. `drop_resume` words the
+    remedy for `goto --resume`, where the fix is the same command without the
+    flag; the other two name goto outright.
+    """
+    uuid = target.get("session_id") or ""
+    where = _running_session(uuid)
+    if where is None:
+        return None
+    task = target.get("task_id")
+    label = f"E-{task}" if task else f"session ES-{target.get('endless_id')}"
+    goto = f"endless session goto {ref}"
+    flag = "--resume was" if drop_resume else "the resume was"
+    summary = (
+        f"{label} is already running ({where}), so {flag} refused: a second "
+        f"`claude --resume` on one transcript corrupts it. Nothing was "
+        f"launched."
+    )
+    if drop_resume:
+        remedy = f"Drop --resume: run `{goto}` to go to the running session"
+        tail = f"  Drop --resume and go to it:\n      {goto}"
+    else:
+        remedy = f"Run `{goto}` to go to the running session"
+        tail = f"  Go to it instead:\n      {goto}"
+    # NO-REPORT: the running session is the remedy, and going to it (or
+    # messaging it) needs no decision from the user.
+    return agent_help.no_report(
+        summary, remedy,
+        text=(f"{label} is already running — {where}.\n"
+              f"  Resuming it would start a second Claude on its transcript.\n"
+              f"{tail}"),
+    )
+
+
 def _require_claude() -> str:
     """Absolute path to the `claude` binary, or a refusal if it's absent."""
     import shutil
@@ -524,8 +654,13 @@ def _resolve_resume(
     intent: str | None = None,
     override: str | None = None,
     decision_out: dict | None = None,
+    target: dict | None = None,
 ) -> tuple[str, str, str, int]:
     """Resolve + validate a resume target for `ref`.
+
+    `target` is the ref's resume target when the caller already resolved it
+    (the E-2519 running check runs first and needs the uuid); None resolves it
+    here.
 
     Returns (uuid, worktree, label, endless_id). Raises click.ClickException
     when the ref resolves to a session that can't actually be resumed (no
@@ -547,7 +682,8 @@ def _resolve_resume(
         the default base chain). `decision_out`, if given, is filled with the
         resolved decision for `--dry-run`.
     """
-    target = _resume_target(ref)
+    if target is None:
+        target = _resume_target(ref)
     uuid = target.get("session_id") or ""
     worktree = target.get("worktree_path") or ""
     eid = target.get("endless_id")
@@ -1252,6 +1388,12 @@ def resume_session(
     and the give-up choice are independent, so the flag is on `session goto
     --resume` too.
 
+    A target that is already RUNNING — live in any project, or resumed by a
+    `claude --resume` process somewhere — is refused too (E-2519), with
+    `session goto <ref>` named as the way to it: a second Claude on one
+    transcript corrupts it. See `_running_refusal`. `--new-transcript` opens
+    a new transcript, so it is not checked.
+
     Once the pane is taken over, the standard three-pane layout is built around
     it — the one `task spawn` builds, from the same builder. That is only
     coherent in a window that holds this pane alone, so a populated window is
@@ -1321,12 +1463,22 @@ def resume_session(
     if not dry_run:
         _require_window_claim(ref, rebind)
 
+    # E-2519: refuse a target that is already running, before `_resolve_resume`
+    # for E-1968's reason — a refusal must leave no minted task or worktree
+    # behind. Skipped for --dry-run, which launches nothing.
+    target = _resume_target(ref)
+    if not dry_run and not new_transcript:
+        refusal = _running_refusal(ref, target, drop_resume=False)
+        if refusal is not None:
+            raise refusal
+
     intent = "review" if review is not None else "reopen" if reopen is not None else None
     override = review if review is not None else reopen
 
     decision: dict = {}
     uuid, worktree, label, eid = _resolve_resume(
-        ref, intent=intent, override=override, decision_out=decision
+        ref, intent=intent, override=override, decision_out=decision,
+        target=target,
     )
 
     if dry_run:
@@ -3365,8 +3517,13 @@ def _spawner_pane(live: list[dict]) -> tuple[str, str] | None:
     return resolved, f"spawning session {val} (pane {resolved})"
 
 
-def _apply_revisit_intent(ref: str, revisit: bool, no_revisit: bool) -> None:
+def _apply_revisit_intent(
+    ref: str, revisit: bool, no_revisit: bool, target: dict | None = None,
+) -> None:
     """Gate and apply `session goto --resume`'s `--revisit` / `--no-revisit`.
+
+    `target` is the ref's resume target when the caller has it; None looks it
+    up here, and a ref that resolves to nothing gates nothing.
 
     A target whose task is `confirmed` / `assumed` / `completed` is settled
     work. Reopening the session that did it is ambiguous — you might be picking
@@ -3388,7 +3545,8 @@ def _apply_revisit_intent(ref: str, revisit: bool, no_revisit: bool) -> None:
             "the task, the other leaves its status alone. Pick one.",
             "Retry with only one of the two flags",
         )
-    target = _try_resume_target(ref)
+    if target is None:
+        target = _try_resume_target(ref)
     if target is None:
         return
     task = target.get("task_id")
@@ -3450,7 +3608,7 @@ def _apply_revisit_intent(ref: str, revisit: bool, no_revisit: bool) -> None:
 def _resume_new_window_pane(
     ref: str, revisit: bool = False, no_revisit: bool = False,
     new_transcript: bool = False, target_session: str | None = None,
-    prompt: str | None = None,
+    prompt: str | None = None, background: bool = False,
 ) -> tuple[str, str]:
     """Open a NEW tmux window running `claude --resume <uuid>` in the target's
     worktree (detached, so the caller's own push+switch does the focusing) and
@@ -3458,8 +3616,14 @@ def _resume_new_window_pane(
     (E-1797). Raises click.ClickException if the ref isn't resumable,
     SystemExit(1) on tmux failure.
 
-    The `--revisit` / `--no-revisit` gate runs FIRST (E-1968), so a target that
-    needs an explicit intent is refused before any window is opened.
+    The running check runs FIRST (E-2519): a target that is already running —
+    live in any project, or held by a `claude --resume` process — is refused
+    before the `--revisit` flip, the container task `_resolve_resume` may mint,
+    and the window. `background` words that refusal for `goto --resume
+    --background`, which names `session goto <ref>`; the foreground verb is
+    told to drop `--resume`. `--new-transcript` opens a new transcript and is
+    not checked. The `--revisit` / `--no-revisit` gate runs next (E-1968), so a
+    target that needs an explicit intent is refused before any window is opened.
 
     The window is named for the task (E-2102). Without `-n` tmux names a window
     after its command, so every resumed window read `claude` and none of them
@@ -3472,9 +3636,16 @@ def _resume_new_window_pane(
     import shlex
     from endless.task_cmd import tmux_window_name
 
-    _apply_revisit_intent(ref, revisit, no_revisit)
+    target = _resume_target(ref)
+    if not new_transcript:
+        refusal = _running_refusal(ref, target, drop_resume=not background)
+        if refusal is not None:
+            _refuse_on_stderr(refusal)
+    _apply_revisit_intent(ref, revisit, no_revisit, target=target)
     decision: dict = {}
-    uuid, worktree, rlabel, _eid = _resolve_resume(ref, decision_out=decision)
+    uuid, worktree, rlabel, _eid = _resolve_resume(
+        ref, decision_out=decision, target=target
+    )
     # E-2106: checked in the CURRENT pane, BEFORE the window is created. This
     # is the defect the task was filed for — `tmux new-window` succeeds because
     # the window really was created, so the caller sees `(new window)` and a
@@ -3562,7 +3733,22 @@ def _fail_not_live(nl: _GotoNotLive) -> None:
     # non-resumable branch deliberately does NOT name `--resume` — there is
     # nothing to resume — which is why the two have separate remedies rather
     # than one shared one.
-    if _try_resume_target(nl.ref) is not None:
+    target = _try_resume_target(nl.ref)
+    if target is not None:
+        # E-2519: a target that is running, in a pane this tmux server cannot
+        # reach, is not sent to `--resume` — that launch would refuse it as
+        # running, and the two hints would point at each other.
+        where = _running_session(target.get("session_id") or "")
+        if where is not None:
+            _refuse_on_stderr(agent_help.no_report(
+                f"{nl.base} It is running ({where}), so goto cannot focus it "
+                f"from this tmux server and --resume would start a second "
+                f"Claude on its transcript. Focus did not move.",
+                "Message the running session instead of resuming it",
+                text=(f"{nl.base} It is running — {where} — and this tmux "
+                      f"server cannot reach it. Attach to the server that "
+                      f"holds it; do not --resume it."),
+            ))
         _refuse_on_stderr(agent_help.no_report(
             f"{nl.base} It isn't live — run "
             f"`endless session goto {nl.ref} --resume` "
@@ -3591,7 +3777,13 @@ def session_goto(
     With `resume=True` (`--resume`), a target that resolves but has no live pane
     is relaunched in a new tmux window and focused instead of erroring — the
     manual find-in-DB/open-window/resume dance, automated (E-1797). When the
-    target IS live, `--resume` is a no-op and this behaves like plain goto.
+    target IS live here, `--resume` is a no-op and this behaves like plain
+    goto: the claim and spawn refusals name `goto <id> --resume` for a holder
+    running or ended alike, and the guide says so. A target with no pane here
+    that is nonetheless RUNNING — live in another project, or held by a `claude
+    --resume` process — is refused by `_resume_new_window_pane`'s running check
+    (E-2519), which says to drop the flag; until then it was relaunched, a
+    second Claude on one transcript.
 
     `revisit` / `no_revisit` (E-1968) say what a resume of settled work is FOR;
     see `_apply_revisit_intent`. They belong to the resume path, so like
@@ -3685,7 +3877,9 @@ def _resume_in_background(
     runs from a background job, so there is no $TMUX and no asking pane: the
     caller names the tmux session, and nothing is pushed or switched. A target
     that IS live is refused — a second Claude process on a live session's
-    transcript is the route E-2269 rejected — so the caller falls back.
+    transcript is the route E-2269 rejected — so the caller falls back. One
+    live in another project, or resumed by a process somewhere, is refused the
+    same way by `_resume_new_window_pane`'s running check (E-2519).
     """
     if not target_session:
         raise agent_help.no_report(
@@ -3700,7 +3894,7 @@ def _resume_in_background(
     except _GotoNotLive as nl:
         pane, label = _resume_new_window_pane(
             nl.ref, revisit=revisit, no_revisit=no_revisit,
-            target_session=target_session, prompt=prompt,
+            target_session=target_session, prompt=prompt, background=True,
         )
         agent_help.info(f"• resumed {label} in {target_session}", err=True)
         return
