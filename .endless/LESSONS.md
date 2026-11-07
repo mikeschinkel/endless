@@ -7957,3 +7957,7 @@ While reconciling E-2519 Mike asked when a session could be 'running where this 
 ### [2026-11-07] When planning a gate, do not trade strictness away to avoid one-time cleanup
 Planning E-2569 I recommended a build-only check over go mod tidy -diff because the stricter check would fail once on main's existing drift. Mike asked whether being stricter was a good thing. It was: a gate that only catches the failure already seen leaves the next untidy go.mod to surface after the land. Recommend the check that prevents the class of failure, and treat the one-time cleanup it forces as a plan item, not a con.
 - **Project**: endless
+
+### [2026-11-07] A con that says a check cannot run in some projects is a design prompt, not a verdict
+In E-2569 I listed, as a con of running go mod tidy -diff under GOWORK=off, that Endless's relative replace directives make it fail from a worktree. Mike asked why the check did not re-root those paths instead. It can: copy go.mod with relative replace paths resolved against the main checkout and pass it with -modfile. When an option fails for a mechanical reason, work out whether the mechanism can be fixed inside the option before presenting the failure as a cost.
+- **Project**: endless
