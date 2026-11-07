@@ -15,9 +15,10 @@ package sessionstatuscmd
 // the same relation to everything on their left and right on that line (it
 // binds tighter than either arrow), `<>` marks two tasks that must not run
 // concurrently, and a line opening with `<>` is a set of which no two may.
-// Every occurrence of an id after its first is dim. An id in flight is not:
-// until it lands, the viewer must still weigh it before starting what waits on
-// it (E-2345).
+// An id draws bright while its task still needs work and dim once the task
+// has landed or reached a terminal status (E-2357); every occurrence of one id
+// draws alike. An id in flight is bright: until it lands, the viewer must
+// still weigh it before starting what waits on it (E-2345).
 //
 // Everything here is pure: the database half is monitor.SessionGraphData and
 // the detected-conflict half is monitor.WorktreeChangedPaths, both reached
@@ -65,9 +66,17 @@ type graphNode struct {
 	Status   string
 	Phase    string
 	InFlight bool
+	// Landings is how many landing records the task has; any at all draws it dim.
+	Landings int
 	// OnList is true for a task seeded from the session's own rows, false for
 	// a predecessor or downstream task the graph pulled in from outside them.
 	OnList bool
+}
+
+// dimmed reports whether the node draws dim: its task has landed or is at a
+// terminal status, so nothing remains for the viewer to do on it.
+func (n graphNode) dimmed() bool {
+	return n.Landings > 0 || isTerminal(n.Status)
 }
 
 type graphEdge struct {
@@ -126,24 +135,25 @@ type orderGraph struct {
 
 func (g orderGraph) empty() bool { return len(g.lines) == 0 }
 
-// graphSeeds picks the rows the graph starts from (E-2345): every row that has
-// not landed and is either the session's own task, at any status, or drawn at
-// full brightness and not stewarded by another session. "Full brightness" is
-// rowIntensity, the rule colorize draws the table with, so a change to which
-// rows the table dims moves the graph's starting set with it. The own task is
-// in at any status because the chain blocking it is what the viewer most needs
-// to see. Stewardship is tested on its own because suppression is not an
-// intensity: under --show-suppressed a stewarded row draws bright. A row left
-// out here still enters the graph when it blocks or should precede a seed:
-// monitor.SessionGraphData walks predecessors of both kinds (E-2455).
+// graphSeeds picks the rows the graph starts from (E-2345, E-2357): the
+// session's own task, always, plus every other row that has not landed and is
+// drawn at full brightness and not stewarded by another session. "Full
+// brightness" is rowIntensity, the rule colorize draws the table with, so a
+// change to which rows the table dims moves the graph's starting set with it.
+// Your own task always appears, at any status, landed or not: it is the "you
+// are here" pointer, and the chain blocking it is what the viewer most needs
+// to see. It dims once it has landed or reached a terminal status, which
+// lineSegments draws, but it is never removed, so the viewer sees what it
+// just unblocked. Stewardship is tested on its own because suppression is not
+// an intensity: under --show-suppressed a stewarded row draws bright. A row
+// left out here still enters the graph when it blocks or should precede a
+// seed: monitor.SessionGraphData walks predecessors of both kinds (E-2455).
 func graphSeeds(rows []monitor.SessionStatusRow) []int64 {
 	var ids []int64
 	for _, r := range rows {
 		switch {
-		case r.Landed:
-			continue
 		case r.IsFocal:
-		case r.StewardedElsewhere, rowIntensity(r) == intensityDim:
+		case r.Landed, r.StewardedElsewhere, rowIntensity(r) == intensityDim:
 			continue
 		}
 		ids = append(ids, r.ID)
@@ -187,7 +197,9 @@ func gatherGraph(rows []monitor.SessionStatusRow) (orderGraph, error) {
 	}
 	nodes := make(map[int64]graphNode, len(data.Nodes))
 	for id, n := range data.Nodes {
-		nodes[id] = graphNode{ID: id, Status: n.Status, Phase: n.Phase, InFlight: n.InFlight, OnList: onList[id]}
+		nodes[id] = graphNode{
+			ID: id, Status: n.Status, Phase: n.Phase, InFlight: n.InFlight, Landings: n.Landings, OnList: onList[id],
+		}
 	}
 	var edges []graphEdge
 	var conflicts []graphConflict
@@ -745,18 +757,19 @@ type segment struct {
 
 // lineSegments renders each line into segments. A chain yields one segment per
 // `|` group, each after the first led by its arrow; any other line is a single
-// segment, because a set or pair is never split. seen tracks ids already drawn,
-// so every later occurrence dims. In-flight ids are not dimmed (E-2345): the
-// table dims an in-flight row because there is nothing to spawn, but the graph
-// is about order, and an in-flight task still holds back what it blocks.
+// segment, because a set or pair is never split. One intensity rule for every
+// id (E-2357): it draws bright while its task still needs work, and dim once
+// the task has landed or reached a terminal status — including your own task,
+// which the graph keeps so you see what it just unblocked. Every occurrence of
+// one id draws alike, because a reader may see one copy and not another. An
+// in-flight id is neither landed nor terminal, so it draws bright (E-2345):
+// the table dims an in-flight row because there is nothing to spawn, but the
+// graph is about order, and an in-flight task still holds back what it blocks.
 func (g orderGraph) lineSegments(color bool) [][]segment {
 	st := graphStyle{color: color}
-	seen := map[int64]bool{}
 	idText := func(id int64) (string, string) {
 		label := taskLabel(id)
-		dimmed := seen[id]
-		seen[id] = true
-		return label, st.id(label, dimmed)
+		return label, st.id(label, g.nodes[id].dimmed())
 	}
 	group := func(ids []int64, sep string) segment {
 		var p, s strings.Builder
@@ -855,6 +868,9 @@ type jsonGraphNode struct {
 	Status   string `json:"status"`
 	Phase    string `json:"phase"`
 	InFlight bool   `json:"in_flight"`
+	// Landings is the number of landing records the task has; any at all
+	// draws the id dim.
+	Landings int `json:"landings"`
 	// OnList is false for a predecessor pulled in from outside the session's rows.
 	OnList bool `json:"on_list"`
 }
@@ -890,7 +906,7 @@ func (g orderGraph) toJSON() jsonGraph {
 	for _, id := range ids {
 		n := g.nodes[id]
 		out.Nodes = append(out.Nodes, jsonGraphNode{
-			ID: taskLabel(id), Status: n.Status, Phase: n.Phase, InFlight: n.InFlight, OnList: n.OnList,
+			ID: taskLabel(id), Status: n.Status, Phase: n.Phase, InFlight: n.InFlight, Landings: n.Landings, OnList: n.OnList,
 		})
 	}
 	for _, e := range g.edges {

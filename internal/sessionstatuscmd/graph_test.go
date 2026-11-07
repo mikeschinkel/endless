@@ -178,9 +178,19 @@ func TestGraph_CycleIsReportedNotTruncated(t *testing.T) {
 	}
 }
 
-// Every occurrence of an id after its first is dim. An in-flight id is not
-// (E-2345): until it lands it still holds back what it blocks.
-func TestGraph_RepeatsDimInFlightDoesNot(t *testing.T) {
+// styledLines renders g in color and returns its lines.
+func styledLines(t *testing.T, g orderGraph) []string {
+	t.Helper()
+	var out bytes.Buffer
+	renderGraph(&out, g, 200, true)
+	return strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
+}
+
+// E-2357: every occurrence of one id draws alike — a repeated id is never
+// dimmed for being repeated, since a reader may see one copy and not the
+// other. An in-flight id draws bright (E-2345): until it lands it still holds
+// back what it blocks.
+func TestGraph_RepeatedIDDrawsAlikeInFlightBright(t *testing.T) {
 	b := newGB(1, 2, 3, 4)
 	n := b.nodes[4]
 	n.InFlight, n.OnList = true, false
@@ -188,20 +198,77 @@ func TestGraph_RepeatsDimInFlightDoesNot(t *testing.T) {
 	g := b.blocks(1, 3).blocks(2, 3).blocks(4, 2).build()
 	// 4 => 2 => 3 leads (longest chain); 1 => 3 repeats E-3.
 	assertLines(t, g, "E-4 => E-2 => E-3", "E-1 => E-3")
-	var out bytes.Buffer
-	renderGraph(&out, g, 200, true)
-	lines := strings.Split(strings.TrimRight(out.String(), "\n"), "\n")
+	lines := styledLines(t, g)
 	if !strings.HasPrefix(lines[0], ansiBold+"E-4"+ansiReset) {
-		t.Errorf("in-flight E-4 should be normal, not dim: %q", lines[0])
+		t.Errorf("in-flight E-4 should be bright, not dim: %q", lines[0])
 	}
-	if !strings.Contains(lines[0], ansiBold+"E-3") {
-		t.Errorf("first E-3 should be bright: %q", lines[0])
-	}
-	if !strings.HasSuffix(lines[1], dim("E-3", true)) {
-		t.Errorf("repeated E-3 should be dim: %q", lines[1])
+	for i, ln := range lines {
+		if !strings.HasSuffix(ln, ansiBold+"E-3"+ansiReset) {
+			t.Errorf("line %d: every E-3 should be bright: %q", i, ln)
+		}
 	}
 	if !strings.Contains(lines[1], dim(" => ", true)) {
 		t.Errorf("punctuation should be dim: %q", lines[1])
+	}
+}
+
+// E-2357: an id draws dim once its task has landed or reached a terminal
+// status, bright otherwise — on every line it appears on. The own task is the
+// usual case: it stays in the graph after it lands so the viewer sees what it
+// just unblocked, drawn dim because nothing remains to do on it.
+func TestGraph_DimsLandedAndTerminalIDs(t *testing.T) {
+	cases := []struct {
+		name string
+		own  graphNode
+		dim  bool
+	}{
+		{"landed todo own task", graphNode{Status: "assumed", Landings: 1}, true},
+		{"landed but still open (post-land items)", graphNode{Status: "landed", Landings: 1}, true},
+		{"completed brainstorm own task, never lands", graphNode{Status: "completed"}, true},
+		{"confirmed, not landed", graphNode{Status: "confirmed"}, true},
+		{"declined", graphNode{Status: "declined"}, true},
+		{"ready own task", graphNode{Status: "ready"}, false},
+		{"unverified still needs work", graphNode{Status: "unverified"}, false},
+		{"in flight", graphNode{Status: "underway", InFlight: true}, false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			b := newGB(1, 2, 3)
+			own := tc.own
+			own.ID, own.Phase, own.OnList = 1, "now", true
+			b.nodes[1] = own
+			g := b.blocks(1, 2).blocks(2, 3).build()
+			assertLines(t, g, "E-1 => E-2 => E-3")
+			lines := styledLines(t, g)
+			want := ansiBold + "E-1" + ansiReset
+			if tc.dim {
+				want = dim("E-1", true)
+			}
+			if !strings.HasPrefix(lines[0], want) {
+				t.Errorf("E-1 (dim=%v): %q", tc.dim, lines[0])
+			}
+			if !strings.Contains(lines[0], ansiBold+"E-2"+ansiReset) || !strings.HasSuffix(lines[0], ansiBold+"E-3"+ansiReset) {
+				t.Errorf("open E-2 and E-3 should be bright: %q", lines[0])
+			}
+		})
+	}
+	// Dim on every line: a terminal id that appears twice draws dim both times.
+	b := newGB(1, 2, 3)
+	b.nodes[1] = graphNode{ID: 1, Status: "assumed", Phase: "now", Landings: 1, OnList: true}
+	g := b.blocks(1, 2).blocks(1, 3).build()
+	assertLines(t, g, "E-1 => E-2 | E-3")
+	lines := styledLines(t, g)
+	if !strings.HasPrefix(lines[0], dim("E-1", true)) {
+		t.Errorf("landed E-1 should be dim: %q", lines[0])
+	}
+	b = newGB(1, 2, 3, 4)
+	b.nodes[3] = graphNode{ID: 3, Status: "completed", Phase: "now", OnList: true}
+	g = b.blocks(1, 3).blocks(2, 3).blocks(4, 2).build()
+	assertLines(t, g, "E-4 => E-2 => E-3", "E-1 => E-3")
+	for i, ln := range styledLines(t, g) {
+		if !strings.HasSuffix(ln, dim("E-3", true)) {
+			t.Errorf("line %d: completed E-3 should be dim on every line: %q", i, ln)
+		}
 	}
 }
 
@@ -243,8 +310,9 @@ func TestGraph_ByteStableAcrossRenders(t *testing.T) {
 	}
 }
 
-// E-2345: the starting set is every unlanded row that is the own task, at any
-// status, or that the table draws bright and another session does not steward.
+// E-2345, E-2357: the starting set is the own task, at any status and landed
+// or not, plus every unlanded row the table draws bright and another session
+// does not steward.
 func TestGraphSeeds_BrightUnlandedRowsAndOwnTask(t *testing.T) {
 	rows := []monitor.SessionStatusRow{
 		{ID: 1, Status: "underway", Phase: "now", IsFocal: true},                                  // own task: in
@@ -267,16 +335,25 @@ func TestGraphSeeds_BrightUnlandedRowsAndOwnTask(t *testing.T) {
 	}
 }
 
-// The own task stays in at a terminal status, and even when stewarded
-// elsewhere, until it lands.
-func TestGraphSeeds_OwnTaskUntilLanded(t *testing.T) {
+// The own task stays in at a terminal status, even when stewarded elsewhere,
+// and after it lands (E-2357): the graph dims it then, but never removes it.
+func TestGraphSeeds_OwnTaskAlways(t *testing.T) {
 	own := monitor.SessionStatusRow{ID: 1, Status: "confirmed", Phase: "later", IsFocal: true, StewardedElsewhere: true}
 	if got := graphSeeds([]monitor.SessionStatusRow{own}); !reflect.DeepEqual(got, []int64{1}) {
 		t.Fatalf("unlanded confirmed own task: seeds = %v, want [1]", got)
 	}
 	own.Landed = true
-	if got := graphSeeds([]monitor.SessionStatusRow{own}); len(got) != 0 {
-		t.Fatalf("landed own task: seeds = %v, want none", got)
+	if got := graphSeeds([]monitor.SessionStatusRow{own}); !reflect.DeepEqual(got, []int64{1}) {
+		t.Fatalf("landed own task: seeds = %v, want [1]", got)
+	}
+	own.Status, own.StewardedElsewhere = "underway", false
+	if got := graphSeeds([]monitor.SessionStatusRow{own}); !reflect.DeepEqual(got, []int64{1}) {
+		t.Fatalf("landed underway own task: seeds = %v, want [1]", got)
+	}
+	// Any other landed row is still out, bright or not.
+	other := monitor.SessionStatusRow{ID: 2, Status: "ready", Phase: "now", Landed: true}
+	if got := graphSeeds([]monitor.SessionStatusRow{other}); len(got) != 0 {
+		t.Fatalf("landed other row: seeds = %v, want none", got)
 	}
 }
 
@@ -312,13 +389,31 @@ func TestGatherGraph_OwnTaskSeedsAndIsPassedAsOwn(t *testing.T) {
 	}
 	assertLines(t, g, "E-2206 => E-2208 => E-2333")
 
-	// Landed own task: not seeded, so no downstream either.
+	// Landed own task (E-2357): still seeded and still handed over as own, so
+	// its downstream is still drawn; the node's landings count dims it.
 	rows[0].Landed = true
-	if _, err = gatherGraph(rows); err != nil {
+	graphData = func(seeds []int64, own int64) (monitor.GraphData, error) {
+		gotSeeds, gotOwn = seeds, own
+		landed := gNode(2333, true)
+		landed.Status, landed.Landings = "assumed", 1
+		return monitor.GraphData{
+			Nodes: map[int64]monitor.GraphNode{2333: landed, 2208: gNode(2208, false)},
+			Edges: []monitor.GraphEdge{{From: 2333, To: 2208, Type: monitor.DepBlocks}},
+		}, nil
+	}
+	if g, err = gatherGraph(rows); err != nil {
 		t.Fatal(err)
 	}
-	if len(gotSeeds) != 0 || gotOwn != 0 {
-		t.Fatalf("landed own task: graphData(%v, %d), want ([], 0)", gotSeeds, gotOwn)
+	if !reflect.DeepEqual(gotSeeds, []int64{2333}) || gotOwn != 2333 {
+		t.Fatalf("landed own task: graphData(%v, %d), want ([2333], 2333)", gotSeeds, gotOwn)
+	}
+	assertLines(t, g, "E-2333 => E-2208")
+	lines := styledLines(t, g)
+	if !strings.HasPrefix(lines[0], dim("E-2333", true)) || !strings.HasSuffix(lines[0], ansiBold+"E-2208"+ansiReset) {
+		t.Errorf("landed own task should be dim, what it unblocked bright: %q", lines[0])
+	}
+	if js := g.toJSON(); js.Nodes[0].ID != "E-2208" || js.Nodes[0].Landings != 0 || js.Nodes[1].Landings != 1 {
+		t.Errorf("json landings: %+v", js.Nodes)
 	}
 }
 

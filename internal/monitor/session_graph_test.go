@@ -137,6 +137,35 @@ func TestSessionGraphData_TerminalOwnTaskBlockersDrawn(t *testing.T) {
 	}
 }
 
+// E-2357: a node carries how many times its task has landed, so the renderer
+// can dim a landed own task; an unlanded node carries zero.
+func TestSessionGraphData_CountsLandings(t *testing.T) {
+	db := withTestDB(t)
+	seedProject(t, db, 1, "p1", "/p1")
+	const own, blocker = 10, 20
+	snTask(t, db, own, 1, "assumed", "now", "p")
+	snTask(t, db, blocker, 1, "ready", "now", "p")
+	snBlocks(t, db, blocker, own)
+	if _, err := db.Exec(
+		`INSERT INTO task_landings (task_id, merge_commit_sha, landed_at)
+		 VALUES (?, 'sha-old', '2026-06-21T00:00:00'), (?, 'sha-new', '2026-06-22T00:00:00')`, own, own,
+	); err != nil {
+		t.Fatalf("seed landings: %v", err)
+	}
+
+	got, err := SessionGraphData([]int64{own}, own)
+	if err != nil {
+		t.Fatalf("SessionGraphData: %v", err)
+	}
+	sgHas(t, got, []int64{own, blocker}, nil)
+	if got.Nodes[own].Landings != 2 {
+		t.Errorf("own task landings = %d, want 2", got.Nodes[own].Landings)
+	}
+	if got.Nodes[blocker].Landings != 0 {
+		t.Errorf("unlanded blocker landings = %d, want 0", got.Nodes[blocker].Landings)
+	}
+}
+
 // E-2345 P3: the E-2206 => E-2208 => E-2333 shape. The own task's blocker is
 // in another project, and that blocker's blocker is another live session's
 // task; the whole chain is drawn.

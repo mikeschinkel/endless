@@ -1,0 +1,79 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2357 and records what was true when E-2357
+# landed. Edit it only if you ARE E-2357. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+#
+# E-2357: the session status graph keeps the session's own task after it
+# lands or reaches a terminal status, drawn dim instead of removed, so the
+# user sees which waiting tasks it just unblocked; every id draws by one
+# rule (dim once landed or terminal, bright otherwise, repeats alike); and
+# each --json graph node carries a landings count.
+
+schema = 1
+task   = "E-2357"
+
+# Native tests first, fail-fast: the renderer and the database half.
+[[check]]
+name   = "graph renderer and session graph data tests"
+runner = "gotest"
+paths  = ["./internal/sessionstatuscmd/", "./internal/monitor/"]
+
+# Each contract test by name, so deleting one cannot turn the suite green
+# by absence.
+[[check]]
+name     = "P1: the own task seeds the graph at every status, landed or not"
+sh       = "go test ./internal/sessionstatuscmd/ -run '^TestGraphSeeds_OwnTaskAlways$' -v 2>&1"
+contains = "--- PASS: TestGraphSeeds_OwnTaskAlways"
+
+[[check]]
+name     = "P1: a landed own task is still seeded, passed as own, and drawn dim"
+sh       = "go test ./internal/sessionstatuscmd/ -run '^TestGatherGraph_OwnTaskSeedsAndIsPassedAsOwn$' -v 2>&1"
+contains = "--- PASS: TestGatherGraph_OwnTaskSeedsAndIsPassedAsOwn"
+
+[[check]]
+name     = "P2: landed or terminal ids draw dim, open ones bright, in flight included"
+sh       = "go test ./internal/sessionstatuscmd/ -run '^TestGraph_DimsLandedAndTerminalIDs$' -v 2>&1"
+contains = "--- PASS: TestGraph_DimsLandedAndTerminalIDs"
+
+[[check]]
+name     = "P3: a repeated id draws alike on every line"
+sh       = "go test ./internal/sessionstatuscmd/ -run '^TestGraph_RepeatedIDDrawsAlikeInFlightBright$' -v 2>&1"
+contains = "--- PASS: TestGraph_RepeatedIDDrawsAlikeInFlightBright"
+
+[[check]]
+name     = "P4: SessionGraphData counts a task's landing records"
+sh       = "go test ./internal/monitor/ -run '^TestSessionGraphData_CountsLandings$' -v 2>&1"
+contains = "--- PASS: TestSessionGraphData_CountsLandings"
+
+[[check]]
+name = "P5: the test asserting that repeats dim is gone"
+sh   = "! grep -q 'TestGraph_RepeatsDimInFlightDoesNot' internal/sessionstatuscmd/graph_test.go"
+
+# P4 end to end: a binary built from this tree, a throwaway database in which
+# the own task has landed and blocks a waiting task. The graph line still
+# leads with the own task, and --json carries landings as a number on every
+# node: 1 on the own task, 0 on the waiting one.
+[[check]]
+name     = "P4: session status --json emits landings on each graph node, own task kept after landing"
+sh       = "bash \"$ENDLESS_VERIFY_DIR\"/probe.sh 2>&1"
+contains = "landed own task drawn: E-2357 => E-2400, landings 1 and 0"
+
+# P6: the rule in the user's terms, in the code comments and the guide.
+[[check]]
+name     = "P6: graphSeeds says the own task always appears"
+sh       = "sed -n '/^\\/\\/ graphSeeds picks/,/^func graphSeeds/p' internal/sessionstatuscmd/graph.go"
+contains = "Your own task always appears, at any status, landed or not"
+
+[[check]]
+name     = "P6: lineSegments states the one intensity rule"
+sh       = "sed -n '/^\\/\\/ lineSegments renders/,/^func (g orderGraph) lineSegments/p' internal/sessionstatuscmd/graph.go"
+contains = "dim once\n// the task has landed or reached a terminal status"
+
+[[check]]
+name     = "P6: the guide's 'Which tasks appear' paragraph states the rule"
+sh       = "grep '^Which tasks appear:' docs/guide/sessions.md"
+contains = "your own task, always — at any status, landed or not"
+
+[[check]]
+name = "the whole module builds and vets"
+sh   = "go build ./... && go vet ./internal/sessionstatuscmd/ ./internal/monitor/"

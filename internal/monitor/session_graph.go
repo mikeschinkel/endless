@@ -35,6 +35,10 @@ type GraphNode struct {
 	Status    string
 	Phase     string
 	InFlight  bool
+	// Landings is the number of task_landings rows the task has (E-2357). The
+	// renderer draws an id dim once its task has landed, and a count rather
+	// than a flag costs nothing more and says how many times the work landed.
+	Landings int
 }
 
 // GraphEdge is one stored relation between two graph nodes, in storage order:
@@ -68,7 +72,7 @@ type GraphData struct {
 // walked — they impose no order, exactly as the row query's upchain treats them.
 //
 // Seeds are taken at any status: the caller alone decides the starting set, and
-// it keeps the own task in it at a terminal status until the task lands.
+// it keeps the own task in it at any status, landed or not (E-2357).
 // The walk's UNION never adds a task twice, so a cycle ends it.
 func SessionGraphData(seeds []int64, own int64) (GraphData, error) {
 	out := GraphData{Nodes: map[int64]GraphNode{}}
@@ -108,7 +112,8 @@ WITH RECURSIVE nodes(id) AS (
 )
 SELECT t.id, t.project_id, t.status, t.phase,
        EXISTS(SELECT 1 FROM sessions s JOIN session_liveness sl ON sl.session_id = s.id
-               WHERE ` + presentSession + ` AND s.task_id = t.id)
+               WHERE ` + presentSession + ` AND s.task_id = t.id),
+       (SELECT COUNT(*) FROM task_landings tl WHERE tl.task_id = t.id)
   FROM live_tasks t JOIN nodes n ON n.id = t.id`
 	rows, err := db.Query(nodeQ, args...)
 	if err != nil {
@@ -116,7 +121,7 @@ SELECT t.id, t.project_id, t.status, t.phase,
 	}
 	for rows.Next() {
 		var n GraphNode
-		if err = rows.Scan(&n.ID, &n.ProjectID, &n.Status, &n.Phase, &n.InFlight); err != nil {
+		if err = rows.Scan(&n.ID, &n.ProjectID, &n.Status, &n.Phase, &n.InFlight, &n.Landings); err != nil {
 			rows.Close()
 			return out, fmt.Errorf("graph nodes: %w", err)
 		}
