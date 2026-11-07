@@ -102,3 +102,9 @@ statement = "Does not add a function to go-dt"
 id = "P20"
 kind = "exclusion"
 statement = "Does not change monitor's homeRelative stored form of projects.path"
+
+[[item]]
+id = "P21"
+kind = "deliverable"
+statement = "Every path in a PreToolUse hook refusal shows in ~ form, including the /cd line and the worktree to re-target under"
+verify = "hookcmd tests for writeTargetRedirect, cdRedirect, bashWritesRefusal and unboundWorktreeInstruction assert ~/ paths and no $HOME/"
