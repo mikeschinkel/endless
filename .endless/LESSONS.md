@@ -7969,3 +7969,7 @@ Diagnosing the E-2357 land failure I ran GOFLAGS=-mod=mod go list -m all in the 
 ### [2026-11-07] Planning a task from another session does not make it this session's task
 Situation: in the E-2284 session, after E-2284 landed, Mike ran /needs-plan E-2308 and mentioned redoing the survey and rebasing the worktree. I replied as though E-2308 might be claimed or worked here. Mike: 'E-2308 is NOT this session's task; that was E-2284 and it has landed.' In this case, planning E-2308 meant writing its questions and plan into the task with --db main, not claiming it, creating or rebasing a worktree for it, or implementing it from this session.
 - **Project**: endless
+
+### [2026-11-07] Don't call a new package unavoidable when existing packages could hold the code
+Situation: planning E-2308 (show Go CLI paths with ~), I wrote that one new package, internal/pathlint for the analyzer, was 'unavoidable'. Mike: 'No it is not. You can put the funcs in existing packages.' He let it stand this time only because the source already has a huge number of little packages and he plans a major refactor after the Python-to-Go port. He wants to avoid package proliferation, so a plan that adds a package should say it is a choice and name the existing package that could hold the code instead, not claim there is no alternative.
+- **Project**: endless
