@@ -66,3 +66,10 @@ id = "P10"
 kind = "exclusion"
 statement = "Does not add a command that removes a decision"
 detail = "No such path exists today, and the one that will reach it first is the correct command's delete, which already soft-removes on any table carrying a removed column."
+
+[[item]]
+id = "P11"
+kind = "deliverable"
+statement = "Removing a decision emits decision.removed, with decision.deleted retired rather than dropped so replay still accepts the events already in the ledger"
+verify = ".endless/tasks/e-2010/verify.toml"
+detail = "events.RetiredKinds already exists for this: add the new kind to ValidKinds, move the old one to RetiredKinds, and have the projector dispatch both into the one removal function. ED-1547 reserves 'removed' for a retained row and 'deleted' for a row that is really gone, so the new behavior must not ship under the old word."
