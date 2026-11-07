@@ -26,7 +26,7 @@ statement = "endless errors list, show, show --detail and log-only output, and t
 [[item]]
 id = "P6"
 kind = "deliverable"
-statement = "Every direct fmt print of a path value to stdout or stderr goes through the path display function; the analyzer's printed-path rule reports none"
+statement = "Every direct fmt print of a path value to stdout or stderr shows it in go-dt's ~ form (OrFullPath); the analyzer's printed-path rule reports none"
 
 [[item]]
 id = "P7"
