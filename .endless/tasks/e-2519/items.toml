@@ -77,3 +77,8 @@ statement = "goto from a terminal not attached to the task-session server select
 id = "P16"
 kind = "deliverable"
 statement = "The running-session refusals on resume, and plain goto's not-live hint, name the task-session server's window and give the reach command; a session running only as a bare claude --resume process names the process"
+
+[[item]]
+id = "P17"
+kind = "deliverable"
+statement = "A bare session resume outside a task-session server pane refuses before launching, points at session goto <ref> --resume, and offers --new-window, which opens the resume in a new window of the task-session server as goto --resume does"
