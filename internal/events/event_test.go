@@ -277,6 +277,14 @@ func TestRetiredKinds(t *testing.T) {
 		events.KindSessionTasksOrdered,
 		events.KindProjectNextRevised,
 		events.KindSessionTasksQueued,
+		// E-2010 retired this one for a different reason than the four above:
+		// it was RENAMED to decision.removed, not abandoned. The invariants
+		// below are the ones that matter either way — unemittable, still
+		// known — but note that it is NOT a replay no-op: the executor and
+		// projector keep an explicit case for it ahead of the retired-kind
+		// branch, which TestProjectToTempDB_DecisionRemovalRetainsRowAndIDFloor
+		// runs under both spellings to pin.
+		events.KindDecisionDeleted,
 	}
 	if len(events.RetiredKinds) != len(want) {
 		t.Errorf("RetiredKinds has %d entries, want %d", len(events.RetiredKinds), len(want))
@@ -325,6 +333,7 @@ func TestValidate_RetiredKindsPassAndUndeclaredDoNot(t *testing.T) {
 		events.KindSessionTasksOrdered: events.EntitySessionTasks,
 		events.KindProjectNextRevised:  events.EntityProjectNext,
 		events.KindSessionTasksQueued:  events.EntitySessionTasks,
+		events.KindDecisionDeleted:     events.EntityDecision,
 	} {
 		evt := base
 		evt.Kind = kind

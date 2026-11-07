@@ -131,8 +131,11 @@ func replayEvent(db *sql.DB, evt *Event, result *ProjectResult) error {
 		return replayDecisionObsoleted(db, evt, result)
 	case KindDecisionReinstated:
 		return replayDecisionReinstated(db, evt, result)
-	case KindDecisionDeleted:
-		return replayDecisionDeleted(db, evt, result)
+	// Both spellings, one projector (E-2010). This case MUST stay ahead of the
+	// retired-kind no-op in the default branch below: decision.deleted is in
+	// RetiredKinds to stop new writes, not because replaying it does nothing.
+	case KindDecisionRemoved, KindDecisionDeleted:
+		return replayDecisionRemoved(db, evt, result)
 	case KindDecisionRelationCreated:
 		return replayDecisionRelationCreated(db, evt, result)
 	case KindDecisionRelationDeleted:
@@ -155,8 +158,14 @@ func replayEvent(db *sql.DB, evt *Event, result *ProjectResult) error {
 
 // isDecisionID reports whether the given ID already exists in the decisions
 // table of the (in-progress) projection. Used by legacy task.* replay
-// functions to route updates/deletes targeting a legacy decision row to the
+// functions to route updates/removals targeting a legacy decision row to the
 // decisions table instead of trying to mutate a non-existent tasks row.
+//
+// `decisions`, NEVER live_decisions (E-2010). This answers "which table does
+// this id live in", which a removed row answers exactly as well as a live one.
+// Through the view a legacy event arriving after the removal would read as "not
+// a decision" and be misrouted into `tasks`, where that id may well belong to
+// an unrelated task.
 func isDecisionID(db *sql.DB, id string) bool {
 	var n int
 	db.QueryRow("SELECT COUNT(*) FROM decisions WHERE id = ?", id).Scan(&n)
@@ -501,13 +510,13 @@ func replayTaskDeleted(db *sql.DB, evt *Event, result *ProjectResult) error {
 		return err
 	}
 
-	// Legacy E-1378 routing: delete against a row routed to decisions deletes
-	// from decisions (FK cascade clears its decision_relations rows).
+	// Legacy E-1378 routing: a removal against a row routed to decisions is a
+	// DECISION removal, so it goes through removeDecision like every other one
+	// (E-2010). Before, it DELETEd and let the FK cascade clear the row's
+	// decision_relations; an UPDATE fires no FK action, which is why that
+	// cleanup now lives inside removeDecision rather than here.
 	if isDecisionID(db, evt.Entity.ID) {
-		if _, err := db.Exec("DELETE FROM decisions WHERE id = ?", evt.Entity.ID); err != nil {
-			return fmt.Errorf("decision delete %s: %w", evt.Entity.ID, err)
-		}
-		return nil
+		return removeDecision(db, evt.Entity.ID)
 	}
 
 	// ED-1547 (E-1929): replay removal exactly as the executor performs it, by

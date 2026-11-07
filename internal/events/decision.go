@@ -363,6 +363,20 @@ func execDecisionReinstated(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 // that names the status actually found, so the CLI can render something more
 // useful than "nothing happened". Shared by the E-1864 reversals; accept and
 // reject predate it and keep their inlined equivalents.
+//
+// The diagnostic read below, and its two inlined twins in execDecisionAccepted
+// and execDecisionRejected, read `decisions` rather than live_decisions
+// deliberately (E-2010). They run only AFTER the UPDATE matched nothing, and
+// their whole job is to tell "no such row" from "wrong status" — a question the
+// retained row answers and the view does not.
+//
+// The status UPDATEs themselves carry no `AND removed = 0`, matching tasks,
+// where E-1929 put the whole ED-1547 filter at the read layer and left the
+// writes alone. A removed entity is kept out of the verbs by the CLI's own
+// lookup, which goes through the live view (decision_cmd.py), so a removed
+// decision refuses as "not found" before any event is emitted. Guarding
+// eighteen decision UPDATEs would diverge from the tasks implementation for a
+// path that has no command behind it.
 func requireDecisionRowAffected(
 	db dbQuerier, result sql.Result, id string, verb string, want string,
 ) error {
@@ -417,20 +431,19 @@ func decisionReasonRequired(summary string) error {
 		"Pass --reason carrying the user's own stated rationale, and retry")
 }
 
-func execDecisionDeleted(db dbQuerier, evt *Event) (*ExecuteResult, error) {
-	// Payload is informational (title for log-trail); the DELETE keys off
-	// entity ID. decision_relations rows cascade via the FK.
-	var p DecisionDeletedPayload
+// execDecisionRemoved handles decision.removed and the retired
+// decision.deleted spelling alike (E-2010). See removeDecision.
+func execDecisionRemoved(db dbQuerier, evt *Event) (*ExecuteResult, error) {
+	// Payload is informational (title for the log trail); the removal keys off
+	// the entity id.
+	var p DecisionRemovedPayload
 	if err := json.Unmarshal(evt.Payload, &p); err != nil {
-		return nil, fmt.Errorf("events: unmarshal decision.deleted payload: %w", err)
+		return nil, fmt.Errorf("events: unmarshal %s payload: %w", evt.Kind, err)
 	}
 	_ = p // title is for the ledger trail only
 
-	if _, err := db.Exec(
-		"DELETE FROM decisions WHERE id = ?",
-		evt.Entity.ID,
-	); err != nil {
-		return nil, fmt.Errorf("events: delete decision: %w", err)
+	if err := removeDecision(db, evt.Entity.ID); err != nil {
+		return nil, err
 	}
 	return &ExecuteResult{}, nil
 }
@@ -685,14 +698,11 @@ func replayDecisionReinstated(db *sql.DB, evt *Event, result *ProjectResult) err
 	return nil
 }
 
-func replayDecisionDeleted(db *sql.DB, evt *Event, result *ProjectResult) error {
-	if _, err := db.Exec(
-		"DELETE FROM decisions WHERE id = ?",
-		evt.Entity.ID,
-	); err != nil {
-		return fmt.Errorf("delete decision %s: %w", evt.Entity.ID, err)
-	}
-	return nil
+// replayDecisionRemoved is the projector half of execDecisionRemoved, and
+// calls the SAME function so a rebuild can never re-free an id the live path
+// retained (ED-1547). Handles the retired decision.deleted spelling too.
+func replayDecisionRemoved(db *sql.DB, evt *Event, result *ProjectResult) error {
+	return removeDecision(db, evt.Entity.ID)
 }
 
 func replayDecisionRelationCreated(db *sql.DB, evt *Event, result *ProjectResult) error {

@@ -48,11 +48,22 @@ endless sql "SELECT id, title FROM live_tasks WHERE phase='now' AND status='read
 endless sql "SELECT * FROM live_tasks WHERE id = 1248" --tsv
 ```
 
-**Query `live_tasks`, not `tasks`.** A removed task keeps its row —
-that is how its id is prevented from ever being re-minted — so raw `tasks`
-includes removed work and any count off it is wrong. `live_tasks` is the same
-columns filtered to `removed = 0`. Read raw `tasks` only when you specifically
-want the removed rows too.
+**Query the `live_*` view, not the table.** Removing one of these entities
+keeps its row — that is how its id is prevented from ever being re-minted — so
+the raw table includes removed work and any count off it is wrong. Read the raw
+table only when you specifically want the removed rows too.
+
+| View | Table | Hides |
+|------|-------|-------|
+| `live_tasks` | `tasks` | `removed = 1` |
+| `live_decisions` | `decisions` | `removed = 1` |
+| `live_projects` | `projects` | `status` of `ignored` or `forgotten` |
+
+Each view is the same columns as its table, filtered. `live_projects` filters
+on status rather than a flag because an ignored row is doing a job that
+requires it to be found: it marks a directory, and its subtree, as not a
+project, and the walk that resolves a directory to its project has to reach it
+to stop there.
 
 ### Flags
 

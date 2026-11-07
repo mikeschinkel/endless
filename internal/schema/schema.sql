@@ -916,6 +916,27 @@ CREATE TABLE IF NOT EXISTS task_post_land_entries (
 -- only from `accepted` — only an accepted decision governs, so only an accepted
 -- decision can stop governing — which is what makes `decision reinstate`
 -- unambiguous: there is exactly one status to go back to.
+--
+-- decisions.removed (E-2010, ED-1547) is set instead of deleting the row.
+-- An ED-NNNN is written into task descriptions, plans, commit subjects and
+-- CLAUDE.md files, and internal/events/executor.go mints the next one from
+-- `SELECT COALESCE(MAX(id), 0) + 1 FROM decisions` — so a deleted row at the
+-- top of the range handed its id straight to the next decision and silently
+-- repointed every reference already written down. See live_decisions below for
+-- which reads filter on it.
+--
+-- It is LAST among the columns because migration 00031 appends it with ALTER
+-- TABLE: this file must list columns in the order the migrations added them, or
+-- a migrated database and a schema.sql database differ in column order and
+-- TestMigrate_MatchesSchemaSQL fails.
+--
+-- This note is HERE, above the statement, and not beside the column, for a
+-- reason worth knowing before adding the next one: SQLite stores a CREATE
+-- TABLE's text verbatim in sqlite_master, comments and all, while ALTER TABLE
+-- ADD COLUMN appends only the column. A comment inside the parentheses on a
+-- column a migration adds therefore makes the two databases differ forever.
+-- obsolete_reason's inline note survives only because it came in with the
+-- baseline, which built the whole statement at once.
 CREATE TABLE IF NOT EXISTS decisions (
     id INTEGER PRIMARY KEY,
     project_id INTEGER NOT NULL,
@@ -935,6 +956,7 @@ CREATE TABLE IF NOT EXISTS decisions (
     obsolete_reason TEXT,
     created_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now')),
     updated_at TEXT NOT NULL DEFAULT '',
+    removed INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (project_id) REFERENCES projects(id) ON DELETE CASCADE,
     FOREIGN KEY (origin_task_id) REFERENCES tasks(id) ON DELETE SET NULL,
     FOREIGN KEY (origin_session_id) REFERENCES sessions(id) ON DELETE SET NULL
@@ -945,6 +967,36 @@ BEGIN
     UPDATE decisions SET updated_at = strftime('%Y-%m-%dT%H:%M:%S', 'now')
     WHERE id = NEW.id AND updated_at != strftime('%Y-%m-%dT%H:%M:%S', 'now');
 END;
+
+-- live_decisions (E-2010) is every decision that still counts. Removal keeps
+-- the row so its id is never re-minted (ED-1547), which means the row is still
+-- there to be read, and a read that does not filter it starts matching a
+-- decision the user removed.
+--
+-- WHICH READS USE THE VIEW
+--
+--   - Listing, searching and rendering decisions read live_decisions. So does
+--     every join that reaches a decision from somewhere else — decision_relations
+--     and task_deps with target_kind = 'decision' — because those joins used to
+--     drop a dangling row by accident, the row being gone, and now have to mean
+--     it.
+--   - The ID ALLOCATOR reads `decisions`. `SELECT COALESCE(MAX(id), 0) + 1 FROM
+--     decisions` in internal/events/executor.go is the whole reason the row is
+--     retained; pointed at this view it would stop seeing removed rows, MAX(id)
+--     would drop back, and the reuse the retained row exists to PREVENT would
+--     return while looking fixed.
+--   - WRITE paths read `decisions`: the removal itself, and anything that has
+--     to find a removed row in order to act on it.
+--
+-- Note that only the TOP of the range is ever re-freed by a delete. An interior
+-- id is never refilled, which is why the seven decision.deleted events already
+-- in the ledger cost nothing — all seven name one id that was not the highest.
+-- That is luck about which row was removed, not a property of the old code.
+--
+-- No index on decisions(removed), for the reason given above live_tasks:
+-- `removed = 0` matches virtually every row, so SQLite would ignore one.
+CREATE VIEW IF NOT EXISTS live_decisions AS
+    SELECT * FROM decisions WHERE removed = 0;
 
 -- Decision-sourced relations (E-1378). Source-table mapping: rows where the
 -- source is a decision live here; task-sourced rows (incl. task->decision)

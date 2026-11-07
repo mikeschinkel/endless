@@ -7,6 +7,7 @@ from pathlib import Path
 import click
 
 from endless import db, config
+from endless.event_bridge import project_registry
 from endless.project_identity import NoIdentity, identity_for
 from endless.project_path import resolved, stored
 
@@ -16,7 +17,9 @@ def sync_projects():
 
     - Projects found on disk but not in DB → insert
     - Projects in DB whose path moved → update path
-    - Projects in DB whose path no longer exists → remove
+    - Projects in DB whose path no longer exists → marked ignored, never
+      deleted (ED-1547): the row, its id and its history stay, and `project
+      register` revives it
     - Projects on disk whose config changed → update DB
     - Relation rows whose task endpoint is gone → remove (E-1915)
     """
@@ -119,12 +122,41 @@ def sync_projects():
             continue
         path = resolved(row["path"])
         if not path.exists():
-            # Path gone and name not found elsewhere on disk
+            # Path gone and name not found elsewhere on disk.
+            #
+            # The row is RETAINED and its directory marked ignored, never
+            # deleted (ED-1547, E-2010). Eight of the ten references to
+            # projects are ON DELETE CASCADE, so the DELETE that used to be here
+            # took the project's tasks, decisions, activity, notes and
+            # shipped-file records with it, and set its sessions' project_id to
+            # NULL — silently, from an automatic sweep that `project list`,
+            # `project status` and `project scan` all run. That is the same
+            # mechanism that cost 195 sessions and 1,616 activity rows, with
+            # nobody typing a command.
+            #
+            # Marking it ignored is what `project unregister` does to a project
+            # the user retires by hand, and it means the same thing here: the id,
+            # the name and the history stay, the row drops out of live_projects
+            # so nothing lists a project that is not on disk, and the walk that
+            # resolves a directory to its project stops at the row rather than
+            # auto-registering a replacement under a NEW id that none of the old
+            # tasks point at.
+            #
+            # Reviving it is one explicit `endless project register`, which
+            # re-activates THIS row. That is deliberately not automatic: a
+            # directory that comes back — an unmounted volume, a restored
+            # backup — is re-adopted by a person, not by a sweep, which is the
+            # same rule E-2251 set for registering under any ignored tree. The
+            # cost is one command; the alternative cost the history.
+            #
+            # Through `project ignore` rather than an UPDATE here because
+            # monitor.SetDirectoryIgnored owns this status (E-2251) and no
+            # Python path writes it — every other Python site only reads
+            # config.IGNORED_STATUS. The three callers of this sweep are all
+            # explicit CLI commands, so the subprocess costs nothing the hook
+            # pays for.
             if row["name"] not in found_on_disk:
-                db.execute(
-                    "DELETE FROM projects WHERE id=?",
-                    (row["id"],),
-                )
+                project_registry("ignore", str(path))
 
     repair_orphan_relations()
 

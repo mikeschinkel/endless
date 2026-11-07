@@ -330,7 +330,10 @@ type DecisionObsoletedPayload struct {
 // undone is recoverable from the row.
 type DecisionReinstatedPayload struct{}
 
-type DecisionDeletedPayload struct {
+// DecisionRemovedPayload carries the removed decision's title for the ledger
+// trail only; the removal keys off the entity id. Also unmarshals the retired
+// decision.deleted spelling, whose payload was identical (E-2010).
+type DecisionRemovedPayload struct {
 	Title string `json:"title"`
 }
 

@@ -217,8 +217,16 @@ func setDirectoryStatus(db *sql.DB, dir, status string) (stored string, existed 
 
 // ClearIgnoredDirectory deletes dir's ignored row. Only a row that is ignored
 // AND has nothing hanging off it is deleted outright — a former project's row
-// keeps its tasks, so it is refused here and re-activated with `project
+// keeps its history, so it is refused here and re-activated with `project
 // register` instead.
+//
+// "Nothing hanging off it" means no row in ANY table that references projects
+// (see projectReferences), not merely no tasks. The tasks-only guard this
+// replaces let a project with sessions, activity, notes or decisions but no
+// tasks through, and eight of those ten references are ON DELETE CASCADE, so
+// the delete took all of it (the other two are ON DELETE SET NULL, which
+// loses the attribution instead of the row). That is the same mechanism that cost 195 sessions
+// and 1,616 activity rows, reached by a different route (E-2010, ED-1547).
 func ClearIgnoredDirectory(db *sql.DB, dir string) (stored string, err error) {
 	stored, err = StoredProjectPath(dir)
 	if err != nil {
@@ -236,12 +244,13 @@ func ClearIgnoredDirectory(db *sql.DB, dir string) (stored string, err error) {
 	if status != ProjectStatusIgnored {
 		return stored, fmt.Errorf("%w: %s", ErrNotIgnored, stored)
 	}
-	var tasks int
-	if err = db.QueryRow("SELECT count(*) FROM tasks WHERE project_id = ?", id).Scan(&tasks); err != nil {
+	held, err := projectReferrers(db, id)
+	if err != nil {
 		return stored, err
 	}
-	if tasks > 0 {
-		return stored, fmt.Errorf("%w: %s has %d task(s)", ErrIgnoredHasHistory, stored, tasks)
+	if len(held) > 0 {
+		return stored, fmt.Errorf("%w: %s still holds %s",
+			ErrIgnoredHasHistory, stored, strings.Join(held, ", "))
 	}
 	if _, err = db.Exec("DELETE FROM projects WHERE id = ?", id); err != nil {
 		return stored, fmt.Errorf("clearing %s: %w", stored, err)
@@ -249,9 +258,66 @@ func ClearIgnoredDirectory(db *sql.DB, dir string) (stored string, err error) {
 	return stored, nil
 }
 
+// projectReferences is every table that refers to a projects row, with the
+// column that does the referring. It is the guard list for the one remaining
+// hard delete of a project, and it is deliberately the WHOLE set rather than a
+// judgement about which rows matter: ON DELETE CASCADE does not distinguish
+// either, so any table left off this list is a table the delete silently
+// empties. project_deps appears twice because either end of a dependency is a
+// reference.
+//
+// Keep it in step with schema.sql. A new table referencing projects(id) that is
+// not listed here reopens exactly the hole E-2010 closed, which is why
+// TestProjectReferences_CoversEverySchemaReference reads the foreign keys out
+// of the live schema and fails when the two disagree.
+var projectReferences = []struct {
+	table  string
+	column string
+	label  string
+}{
+	{table: "tasks", column: "project_id", label: "task"},
+	{table: "decisions", column: "project_id", label: "decision"},
+	{table: "sessions", column: "project_id", label: "session"},
+	{table: "activity", column: "project_id", label: "activity row"},
+	{table: "notes", column: "project_id", label: "note"},
+	{table: "project_deps", column: "project_id", label: "dependency"},
+	{table: "project_deps", column: "depends_on_id", label: "dependent"},
+	{table: "shipped_file_writes", column: "project_id", label: "shipped-file record"},
+	{table: "errors", column: "project_id", label: "error"},
+	{table: "fault_triage_projects", column: "project_id", label: "fault-triage row"},
+}
+
+// projectReferrers counts the rows that refer to project id, as phrases ready
+// to join into a refusal ("3 tasks", "1 session"). An empty result means the
+// row is a bare ignore marker that nothing points at, which is the only kind
+// this package deletes outright.
+//
+// It counts rather than short-circuits on the first hit so the refusal can name
+// everything the delete would have taken. Ten counts, on a command a human runs
+// by hand against one project id.
+func projectReferrers(db *sql.DB, id int64) ([]string, error) {
+	var held []string
+	for _, ref := range projectReferences {
+		var n int
+		err := db.QueryRow(fmt.Sprintf(
+			"SELECT count(*) FROM %s WHERE %s = ?", ref.table, ref.column,
+		), id).Scan(&n)
+		if err != nil {
+			return nil, fmt.Errorf("counting %s.%s for project %d: %w",
+				ref.table, ref.column, id, err)
+		}
+		if n == 0 {
+			continue
+		}
+		held = append(held, fmt.Sprintf("%d %s", n, plural(n, ref.label)))
+	}
+	return held, nil
+}
+
 // ErrNotIgnored refuses clearing a row that is a registered project.
 var ErrNotIgnored = errors.New("a registered project, not an ignored directory")
 
 // ErrIgnoredHasHistory refuses deleting an ignored row that is a former
-// project's, because its tasks reference it.
-var ErrIgnoredHasHistory = errors.New("ignored directory was a project and still holds tasks")
+// project's, because something still references it. See projectReferences for
+// what counts.
+var ErrIgnoredHasHistory = errors.New("ignored directory was a project and still holds history")

@@ -103,6 +103,12 @@ func PreAllocateDecisionID() (id int64, execAndCommit func(*Event, DerivedEmitte
 		return 0, nil, nil, fmt.Errorf("events: begin immediate: %w", err)
 	}
 
+	// `decisions`, NEVER live_decisions (E-2010, ED-1547). Removal retains the
+	// row precisely so MAX(id) keeps counting past it and an ED-NNNN is never
+	// re-minted. Through the view MAX(id) would drop back to the highest live
+	// decision and hand a removed id to the next one allocated — the exact bug
+	// the retained row exists to prevent, reintroduced while looking fixed.
+	// The same warning sits on the tasks allocator a few lines up.
 	err = db.QueryRow("SELECT COALESCE(MAX(id), 0) + 1 FROM decisions").Scan(&id)
 	if err != nil {
 		db.Exec("ROLLBACK")
@@ -272,8 +278,11 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 		return execDecisionObsoleted(db, evt)
 	case KindDecisionReinstated:
 		return execDecisionReinstated(db, evt)
-	case KindDecisionDeleted:
-		return execDecisionDeleted(db, evt)
+	// Both spellings, one executor (E-2010). ValidKinds no longer admits the
+	// retired one at the front door, so this case is reached only by a replay
+	// of an event already in the ledger.
+	case KindDecisionRemoved, KindDecisionDeleted:
+		return execDecisionRemoved(db, evt)
 	case KindDecisionRelationCreated:
 		return execDecisionRelationCreated(db, evt)
 	case KindDecisionRelationDeleted:

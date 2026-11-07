@@ -4,6 +4,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -182,5 +183,134 @@ func TestClearIgnoredDirectory_RefusesARegisteredProject(t *testing.T) {
 	seedProject(t, db, 3, "live", root)
 	if _, err := ClearIgnoredDirectory(db, root); !errors.Is(err, ErrNotIgnored) {
 		t.Errorf("err = %v, want ErrNotIgnored", err)
+	}
+}
+
+// TestClearIgnoredDirectory_RefusesAnIgnoredRowWithSessionsButNoTasks is the
+// E-2010 bug. The guard counted `tasks` alone, so a former project whose tasks
+// had been moved or removed but whose sessions, activity and notes were still
+// recorded against it passed the check — and eight of the ten references to
+// projects are ON DELETE CASCADE, so clearing it took all of them.
+// Sessions in particular carry ES-NNNN ids that session_tasks, session_notices
+// and activity refer to, which is exactly what ED-1547 forbids re-minting.
+func TestClearIgnoredDirectory_RefusesAnIgnoredRowWithSessionsButNoTasks(t *testing.T) {
+	db := withTestDB(t)
+	root := tempProjectRoot(t)
+	seedIgnored(t, root)
+
+	var id int64
+	if err := db.QueryRow("SELECT id FROM projects WHERE path = ?", root).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(
+		`INSERT INTO sessions (id, session_id, project_id, state, started_at)
+		 VALUES (9001, 'sess-e2010', ?, 'ended', '2026-11-07T10:00:00')`, id,
+	); err != nil {
+		t.Fatalf("seed session: %v", err)
+	}
+
+	_, err := ClearIgnoredDirectory(db, root)
+	if !errors.Is(err, ErrIgnoredHasHistory) {
+		t.Fatalf("err = %v, want ErrIgnoredHasHistory — a project with sessions "+
+			"but no tasks was deleted, cascading its history away", err)
+	}
+	if !strings.Contains(err.Error(), "1 session") {
+		t.Errorf("refusal = %q, want it to name the session it would have taken", err)
+	}
+	if n := countProjects(t, db); n != 1 {
+		t.Errorf("projects rows = %d, want 1 — the refusal must change nothing", n)
+	}
+	var sessions int
+	if err := db.QueryRow("SELECT count(*) FROM sessions WHERE id = 9001").Scan(&sessions); err != nil {
+		t.Fatal(err)
+	}
+	if sessions != 1 {
+		t.Errorf("sessions rows = %d, want 1", sessions)
+	}
+}
+
+// TestClearIgnoredDirectory_NamesEverythingItWouldHaveTaken pins that the
+// refusal lists every kind of row, not just the first one found. Someone who
+// meant to clear the row needs to know what is on it to decide what to do
+// instead, and one name at a time turns that into a guessing game.
+func TestClearIgnoredDirectory_NamesEverythingItWouldHaveTaken(t *testing.T) {
+	db := withTestDB(t)
+	root := tempProjectRoot(t)
+	seedIgnored(t, root)
+
+	var id int64
+	if err := db.QueryRow("SELECT id FROM projects WHERE path = ?", root).Scan(&id); err != nil {
+		t.Fatal(err)
+	}
+	seedProjectStatusTask(t, db, 7701, id, "ready")
+	seedProjectStatusTask(t, db, 7702, id, "ready")
+	if _, err := db.Exec(
+		`INSERT INTO notes (project_id, note_type, message, created_at)
+		 VALUES (?, 'staleness', 'a note', '2026-11-07T10:00:00')`, id,
+	); err != nil {
+		t.Fatalf("seed note: %v", err)
+	}
+
+	_, err := ClearIgnoredDirectory(db, root)
+	if !errors.Is(err, ErrIgnoredHasHistory) {
+		t.Fatalf("err = %v, want ErrIgnoredHasHistory", err)
+	}
+	for _, want := range []string{"2 tasks", "1 note"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Errorf("refusal = %q, want it to name %q", err, want)
+		}
+	}
+}
+
+// TestProjectReferences_CoversEverySchemaReference reads the foreign keys out
+// of the live schema and fails when projectReferences disagrees with them.
+//
+// The guard list is the only thing standing between `project unignore` and a
+// cascading delete, and a table added to schema.sql later will not announce
+// itself. Without this test the list silently rots and the hole E-2010 closed
+// reopens one migration at a time.
+func TestProjectReferences_CoversEverySchemaReference(t *testing.T) {
+	db := withTestDB(t)
+
+	rows, err := db.Query(`
+		SELECT m.name, fk."from"
+		  FROM sqlite_master AS m
+		  JOIN pragma_foreign_key_list(m.name) AS fk
+		 WHERE m.type = 'table' AND fk."table" = 'projects'`)
+	if err != nil {
+		t.Fatalf("reading foreign keys: %v", err)
+	}
+	defer rows.Close()
+
+	declared := map[string]bool{}
+	for _, ref := range projectReferences {
+		declared[ref.table+"."+ref.column] = true
+	}
+
+	found := map[string]bool{}
+	for rows.Next() {
+		var table, column string
+		if err := rows.Scan(&table, &column); err != nil {
+			t.Fatal(err)
+		}
+		key := table + "." + column
+		found[key] = true
+		if !declared[key] {
+			t.Errorf("%s references projects(id) and is missing from "+
+				"projectReferences, so `project unignore` would delete a project "+
+				"holding those rows — add it there", key)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatal(err)
+	}
+	if len(found) == 0 {
+		t.Fatal("no foreign keys to projects found — the query is wrong, not the schema")
+	}
+	for key := range declared {
+		if !found[key] {
+			t.Errorf("projectReferences lists %s, which no longer references "+
+				"projects(id) — remove it", key)
+		}
 	}
 }

@@ -1,0 +1,155 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2010 and records what was true when E-2010
+# landed. Edit it only if you ARE E-2010. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+#
+# E-2010 finishes ED-1547 for projects and decisions: no id that anything
+# outside its own row refers to is ever reused, so removal retains the row.
+# Two halves, independent:
+#
+#   - the automatic disk-gone project sweep no longer hard-deletes a project
+#     row and cascades its tasks, decisions, activity and notes away, and
+#     `project unignore` refuses while ANY table still refers to the row
+#     rather than only while it has tasks;
+#   - decisions gain `removed`, `live_decisions`, one shared removal path the
+#     executor and the projector both call, and the event name ED-1547's own
+#     vocabulary calls for.
+schema = 1
+task   = "E-2010"
+
+# ── Native tests first, fail-fast ───────────────────────────────────
+
+[[check]]
+name   = "events: decision removal parity and the kind rename"
+runner = "gotest"
+paths  = ["./internal/events/..."]
+
+[[check]]
+name   = "schema: the migration and schema.sql agree"
+runner = "gotest"
+paths  = ["./internal/schema/..."]
+
+[[check]]
+name   = "monitor: the project_unignore guard"
+runner = "gotest"
+paths  = ["./internal/monitor/..."]
+
+[[check]]
+name   = "python: the project sweep retains and revives"
+runner = "pytest"
+paths  = ["tests/test_project_sync.py", "tests/test_ignored_projects.py", "tests/test_decision_cmd.py"]
+
+# ── The schema is actually shaped this way ──────────────────────────
+# Asserted against a database the migrations built, not against the source
+# files the Go tests already compare. The runner gives the suite its own
+# HOME and XDG_CONFIG_HOME, so this is a fresh database every run, which is
+# exactly the shape a new install gets.
+
+[[check]]
+name     = "decisions carries removed, and it is the last column"
+sh       = "endless sql \"SELECT name FROM pragma_table_info('decisions') ORDER BY cid DESC LIMIT 1\" --tsv 2>&1"
+contains = "removed"
+
+[[check]]
+name     = "live_decisions exists and filters on removed"
+sh       = "endless sql \"SELECT sql FROM sqlite_master WHERE name = 'live_decisions'\" --tsv 2>&1"
+contains = "WHERE removed = 0"
+
+[[check]]
+name     = "a removed decision is hidden by the view and still floors the allocator"
+sh       = """
+set -e
+endless sql --write "INSERT INTO projects (id, name, path) VALUES (990001, 'e-2010-fixture', '/tmp/e-2010-fixture')" >/dev/null 2>&1
+endless sql --write "INSERT INTO decisions (id, project_id, title, status, removed) VALUES (990002, 990001, 'E-2010 fixture', 'proposed', 1)" >/dev/null 2>&1
+live=$(endless sql "SELECT count(*) FROM live_decisions WHERE id = 990002" --tsv 2>&1 | tr -d '[:space:]')
+raw=$(endless sql "SELECT count(*) FROM decisions WHERE id = 990002" --tsv 2>&1 | tr -d '[:space:]')
+floor=$(endless sql "SELECT COALESCE(MAX(id), 0) + 1 FROM decisions" --tsv 2>&1 | tr -d '[:space:]')
+test "$live" = "0" || { echo "FAIL: removed decision visible through live_decisions ($live)"; exit 1; }
+test "$raw" = "1" || { echo "FAIL: the retained row is not in decisions ($raw)"; exit 1; }
+test "$floor" -gt 990002 || { echo "FAIL: allocator floor $floor does not clear the removed id"; exit 1; }
+echo ok
+"""
+contains = "ok"
+
+# ── No hard delete of either entity is left on a live path ──────────
+# Greps, deliberately: the point is that the STATEMENT is gone, which no
+# behavioural test can assert. Scoped to the paths that run, excluding the
+# rebuild-scoped wipe in eventcmd (a scoped clear before replay, not an
+# entity removal) and this suite itself.
+
+[[check]]
+name   = "nothing on a live path deletes a decision row"
+sh     = "! grep -rn 'DELETE FROM decisions' internal/events/ src/endless/ 2>/dev/null"
+
+[[check]]
+name   = "the automatic project sweep does not delete a project row"
+sh     = "! grep -n 'DELETE FROM projects' src/endless/project_sync.py 2>/dev/null"
+
+[[check]]
+name     = "the sweep retires the row through the registry instead"
+sh       = "grep -c 'project_registry(\"ignore\"' src/endless/project_sync.py"
+contains = "1"
+
+# ── The reads that must NOT move, and the ones that must ────────────
+
+[[check]]
+name     = "the decision allocator still reads the table, not the view"
+sh       = "grep -n 'MAX(id), 0) + 1 FROM decisions' internal/events/executor.go"
+contains = "FROM decisions"
+
+[[check]]
+name   = "the decision allocator is not pointed at the view"
+sh     = "! grep -n 'FROM live_decisions' internal/events/executor.go 2>/dev/null"
+
+[[check]]
+name   = "isDecisionID still reads the table, so a legacy event is not misrouted"
+sh     = "grep -n 'FROM decisions WHERE id' internal/events/projector.go"
+
+[[check]]
+name   = "every decision read in the CLI goes through the view"
+sh     = "! grep -nE 'FROM decisions|JOIN decisions' src/endless/decision_cmd.py 2>/dev/null"
+
+[[check]]
+name   = "the rater reads linked decisions through the view"
+sh     = "! grep -n 'JOIN decisions' internal/monitor/rater_reads.go 2>/dev/null"
+
+[[check]]
+name   = "the doc-mirror sweep reads decisions through the view"
+sh     = "! grep -n 'FROM decisions' internal/monitor/doc_mirrors.go 2>/dev/null"
+
+# ── The event name, and the tests that prove it ─────────────────────
+# The behaviour itself is proven by the gotest checks above
+# (TestKinds_DecisionDeletedIsRetiredButNotEmittable, and
+# TestProjectToTempDB_DecisionRemovalRetainsRowAndIDFloor under both
+# spellings). These two are tripwires that those tests still exist: a rename
+# whose guard tests were deleted would otherwise go green on silence.
+
+[[check]]
+name     = "the kind rename is pinned by a test"
+sh       = "grep -c 'func TestKinds_DecisionDeletedIsRetiredButNotEmittable' internal/events/event_test.go internal/events/decision_removal_test.go 2>/dev/null | grep -c ':1'"
+contains = "1"
+
+[[check]]
+name     = "removal parity is pinned under both spellings"
+sh       = "grep -c 'KindDecisionDeleted, // retired spelling' internal/events/decision_removal_test.go"
+contains = "1"
+
+[[check]]
+name     = "the projects guard list is pinned against the live schema"
+sh       = "grep -c 'func TestProjectReferences_CoversEverySchemaReference' internal/monitor/project_ignore_test.go"
+contains = "1"
+
+[[check]]
+name     = "both event spellings reach one executor and one projector"
+sh       = "grep -l 'case KindDecisionRemoved, KindDecisionDeleted:' internal/events/projector.go internal/events/executor.go | wc -l | tr -d ' '"
+contains = "2"
+
+# ── Project-wide regression ─────────────────────────────────────────
+
+[[check]]
+name   = "go build"
+sh     = "go build ./..."
+
+[[check]]
+name   = "go vet"
+sh     = "go vet ./..."

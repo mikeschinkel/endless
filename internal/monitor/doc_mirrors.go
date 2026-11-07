@@ -101,13 +101,15 @@ func TaskDocRows(projectID int64) ([]DocRow, error) {
 // DecisionDocRows returns every non-empty decision body in a project. Name is
 // empty: a decision's mirror has one source and naming it would suggest a
 // choice that does not exist.
+//
+// live_decisions, so a removed decision is not mirrored back to disk (E-2010).
 func DecisionDocRows(projectID int64) ([]DocRow, error) {
 	db, err := DB()
 	if err != nil {
 		return nil, err
 	}
 	rows, err := db.Query(
-		"SELECT id, '', description FROM decisions "+
+		"SELECT id, '', description FROM live_decisions "+
 			"WHERE project_id = ? AND COALESCE(description, '') != '' ORDER BY id",
 		projectID)
 	if err != nil {
@@ -135,7 +137,11 @@ func scanDocRows(rows *sql.Rows) ([]DocRow, error) {
 // Returns an empty string and no error when the row or the body is absent: to
 // every caller here "no body" and "no such decision" have the same consequence
 // (there is nothing a mirror should say), and distinguishing them would only
-// invite a caller to treat a deleted decision as a failure to read one.
+// invite a caller to treat a removed decision as a failure to read one.
+//
+// live_decisions, so a REMOVED decision reads as "no body" (E-2010). That is
+// the same answer the old hard delete gave by making the row vanish, and it is
+// the reason the sentence above still holds now that the row is retained.
 func DecisionBody(decisionID int64) (string, error) {
 	db, err := DB()
 	if err != nil {
@@ -143,7 +149,7 @@ func DecisionBody(decisionID int64) (string, error) {
 	}
 	var body string
 	err = db.QueryRow(
-		"SELECT COALESCE(description, '') FROM decisions WHERE id = ?",
+		"SELECT COALESCE(description, '') FROM live_decisions WHERE id = ?",
 		decisionID,
 	).Scan(&body)
 	if errors.Is(err, sql.ErrNoRows) {

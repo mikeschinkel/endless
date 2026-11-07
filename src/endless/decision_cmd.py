@@ -5,6 +5,15 @@ Display IDs use the `ED-` prefix to disambiguate decisions from tasks.
 
 Per-pair relation_type vocabularies are enforced here so the link / unlink
 dispatchers refuse illegal types with a message that lists the legal set.
+
+READS GO THROUGH `live_decisions`, NOT `decisions` (E-2010, ED-1547). Removing
+a decision retains its row so its ED-NNNN can never be re-minted, which means
+the row is still there for a query to find — and a lookup off the raw table
+would show a removed decision, and let a status verb act on it. Every lookup
+here already refuses a missing row, so the view makes a removed decision read
+as "not found", which is what it should be. The raw table is for the id
+allocator and the removal itself, both in internal/events; see the note beside
+the view in internal/schema/schema.sql for the full rule.
 """
 
 import os
@@ -138,7 +147,7 @@ def list_decisions(
     rows = db.query(
         f"SELECT d.id, d.title, d.description, d.status, d.created_at, "
         f"p.name as project_name "
-        f"FROM decisions d JOIN projects p ON d.project_id = p.id "
+        f"FROM live_decisions d JOIN projects p ON d.project_id = p.id "
         f"{where} ORDER BY {order_by}",
         tuple(params),
     )
@@ -326,7 +335,7 @@ def detail_decision(item_id: int, agent: bool = False, as_json: bool = False):
         "SELECT d.id, d.title, d.description, d.text, d.status, "
         "d.origin_task_id, d.notes, d.rejection_reason, d.obsolete_reason, "
         "d.created_at, d.updated_at, p.name as project_name "
-        "FROM decisions d JOIN projects p ON d.project_id = p.id "
+        "FROM live_decisions d JOIN projects p ON d.project_id = p.id "
         "WHERE d.id = ?",
         (item_id,),
     )
@@ -668,7 +677,7 @@ def update_decision(
 
     row = db.query(
         "SELECT d.id, d.project_id, p.name as project_name "
-        "FROM decisions d JOIN projects p ON d.project_id = p.id WHERE d.id = ?",
+        "FROM live_decisions d JOIN projects p ON d.project_id = p.id WHERE d.id = ?",
         (decision_id,),
     )
     if not row:
@@ -763,7 +772,7 @@ def accept_decision(decision_id: int):
 
     row = db.query(
         "SELECT d.id, d.status, p.name as project_name "
-        "FROM decisions d JOIN projects p ON d.project_id = p.id WHERE d.id = ?",
+        "FROM live_decisions d JOIN projects p ON d.project_id = p.id WHERE d.id = ?",
         (decision_id,),
     )
     if not row:
@@ -813,7 +822,7 @@ def reject_decision(decision_id: int, reason: str):
 
     row = db.query(
         "SELECT d.id, d.status, p.name as project_name "
-        "FROM decisions d JOIN projects p ON d.project_id = p.id WHERE d.id = ?",
+        "FROM live_decisions d JOIN projects p ON d.project_id = p.id WHERE d.id = ?",
         (decision_id,),
     )
     if not row:
@@ -866,7 +875,7 @@ def _fetch_decision_for_status_change(decision_id: int) -> dict:
     """Row (id, status, project_name) for a status verb, or ClickException."""
     row = db.query(
         "SELECT d.id, d.status, p.name as project_name "
-        "FROM decisions d JOIN projects p ON d.project_id = p.id WHERE d.id = ?",
+        "FROM live_decisions d JOIN projects p ON d.project_id = p.id WHERE d.id = ?",
         (decision_id,),
     )
     if not row:
@@ -1298,7 +1307,7 @@ def link_decision(
 
     require_legal_relation_type("decision", target_kind, relation_type)
 
-    if not db.exists("SELECT 1 FROM decisions WHERE id = ?", (source_decision_id,)):
+    if not db.exists("SELECT 1 FROM live_decisions WHERE id = ?", (source_decision_id,)):
         raise agent_help.no_report(
             f"Decision {decision_id_display(source_decision_id)} not found. "
             f"Nothing was linked.",
@@ -1313,7 +1322,7 @@ def link_decision(
                 "Re-run with a different --to id",
                 text="A decision cannot link to itself.",
             )
-        if not db.exists("SELECT 1 FROM decisions WHERE id = ?", (target_id,)):
+        if not db.exists("SELECT 1 FROM live_decisions WHERE id = ?", (target_id,)):
             raise agent_help.no_report(
                 f"Decision {decision_id_display(target_id)} not found. "
                 f"Nothing was linked.",
@@ -1526,7 +1535,7 @@ def link_task_to_decision(
             "and retry",
             text=f"Task {task_id_display(source_task_id)} not found.",
         )
-    if not db.exists("SELECT 1 FROM decisions WHERE id = ?", (target_decision_id,)):
+    if not db.exists("SELECT 1 FROM live_decisions WHERE id = ?", (target_decision_id,)):
         raise agent_help.no_report(
             f"Decision {decision_id_display(target_decision_id)} not found. "
             f"Nothing was linked.",

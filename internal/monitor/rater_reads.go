@@ -254,16 +254,23 @@ func raterSiblings(db *sql.DB, parentID, selfID int64) ([]string, error) {
 // E-1378 split them by source: a decision that `documents` this task lives in
 // decision_relations, while a relation this task holds toward a decision
 // still lives in task_deps. Reading only one would silently drop half.
+//
+// Both joins go through live_decisions (E-2010). This is the case ED-1547 costs
+// something on: a removed decision's row is RETAINED now, and task_deps rows
+// pointing at it have no foreign key and so never cascaded, so these joins used
+// to drop a removed decision by accident — the row being gone — and have to
+// mean it instead. Reading `decisions` here would quote a removed decision to
+// the rater as live context.
 func raterDecisions(db *sql.DB, taskID int64) ([]RaterDecision, error) {
 	rows, err := db.Query(
 		`SELECT d.id, d.title, d.status, dr.relation_type
 		   FROM decision_relations dr
-		   JOIN decisions d ON d.id = dr.source_decision_id
+		   JOIN live_decisions d ON d.id = dr.source_decision_id
 		  WHERE dr.target_kind = 'task' AND dr.target_id = ?
 		 UNION
 		 SELECT d.id, d.title, d.status, td.dep_type
 		   FROM task_deps td
-		   JOIN decisions d ON d.id = td.target_id
+		   JOIN live_decisions d ON d.id = td.target_id
 		  WHERE td.source_type = 'task' AND td.source_id = ?
 		    AND td.target_type = 'decision'
 		 ORDER BY 1

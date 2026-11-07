@@ -347,7 +347,14 @@ const (
 	KindDecisionSuperseded    Kind = "decision.superseded" // E-1920
 	KindDecisionObsoleted     Kind = "decision.obsoleted"  // E-1920
 	KindDecisionReinstated    Kind = "decision.reinstated" // E-1920
-	KindDecisionDeleted       Kind = "decision.deleted"
+	KindDecisionRemoved       Kind = "decision.removed"    // E-2010
+	// KindDecisionDeleted is the retired spelling of KindDecisionRemoved
+	// (E-2010). ED-1547 reserves "removed" for a row that is kept so its id
+	// cannot be re-minted and "deleted" for a row that is really gone, and this
+	// kind has done the former since E-2010 — so the old name promised the
+	// opposite of what the event means. Retired rather than dropped: the
+	// db-ledger is the permanent record and already holds events of it.
+	KindDecisionDeleted Kind = "decision.deleted"
 )
 
 // Decision relation event kinds (E-1378). Source-table mapping: rows where
@@ -407,6 +414,17 @@ var RetiredKinds = map[Kind]bool{
 	KindSessionTasksOrdered: true,
 	KindProjectNextRevised:  true,
 	KindSessionTasksQueued:  true,
+	// decision.deleted is retired for a DIFFERENT reason than the four above,
+	// and it behaves differently (E-2010). Those kinds lost their writer and
+	// their tables, so replay walks past them as declared no-ops. This one was
+	// RENAMED: its executor and projector are alive, under
+	// KindDecisionRemoved, and both switches keep an explicit case for this
+	// spelling that is matched BEFORE the retired-kind no-op below. Membership
+	// here therefore buys exactly one thing — ValidKinds gates emission, so
+	// nothing can write the old name again — while replay of the events already
+	// in the ledger still removes the decision. Drop the explicit cases and the
+	// no-op silently resurrects every decision ever removed.
+	KindDecisionDeleted: true,
 }
 
 // KnownKind reports whether a kind may appear in a well-formed event: a live
@@ -486,7 +504,7 @@ var ValidKinds = map[Kind]bool{
 	KindDecisionSuperseded:    true,
 	KindDecisionObsoleted:     true,
 	KindDecisionReinstated:    true,
-	KindDecisionDeleted:       true,
+	KindDecisionRemoved:       true,
 	// Decision relation (E-1378)
 	KindDecisionRelationCreated: true,
 	KindDecisionRelationDeleted: true,
