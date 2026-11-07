@@ -72,3 +72,8 @@ statement = "The live-session rows scope pane ids to the task-session server's i
 id = "P15"
 kind = "deliverable"
 statement = "goto from a terminal not attached to the task-session server selects the target's window there and prints the attach command when no terminal is attached; the back-stack is pushed only for a client of that server"
+
+[[item]]
+id = "P16"
+kind = "deliverable"
+statement = "The running-session refusals on resume, and plain goto's not-live hint, name the task-session server's window and give the reach command; a session running only as a bare claude --resume process names the process"
