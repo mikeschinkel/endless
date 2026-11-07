@@ -10,7 +10,7 @@ statement = "endless-go calls dt.EnsureUserHomeDir() at startup; when it fails, 
 [[item]]
 id = "P3"
 kind = "deliverable"
-statement = "internal/refusal exports a free-text display function: for a person it replaces $HOME/ with ~/, and bare $HOME when bounded as the analysis describes; for an agent it expands ~/ to $HOME/"
+statement = "internal/refusal exports a free-text display function that replaces $HOME/ with ~/, and bare $HOME when bounded as the analysis describes"
 detail = "Bounded: preceded by start, whitespace, =, :, a quote or an opening bracket; followed by end, whitespace, a quote, , ; : a closing bracket, or a . followed by end or whitespace. /Users/mike.old and /Users/mikey are not touched."
 
 [[item]]
