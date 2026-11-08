@@ -7997,3 +7997,7 @@ After E-2486's land failed on a database lock, I twice told Mike to run 'just la
 ### [2026-11-08] Search history before recommending a reversal of an existing design choice
 While planning E-2578 I recommended switching event emit from ledger-first to apply-first without checking why ledger-first exists. Mike asked whether I had looked for history; I had not. E-808 (c9425fb7f, a planned step of epic E-799) had deliberately reordered the write path from apply-first to ledger-first, and accepted decisions ED-1024 and ED-1525 name the resulting 'events-authoritative' invariant. Before recommending that an ordering, invariant or default be reversed, run git log on the code and search tasks and decisions for the change that introduced it, then state in the recommendation what the original reason was and whether it still holds.
 - **Project**: endless
+
+### [2026-11-08] State the existing behaviour before listing options on a reconcile question
+Presenting EQ-269 (E-2578, the WARN-0038 handling for a git commit that fails after a successful apply), Mike said 'It is not clear to me what the options are.' The options described code paths without first saying what the command already does (the git commit retries on index.lock contention and gives up only after that), so he could not tell what each option changed. On a discrepancy question, say the current behaviour in one or two sentences first, then the options as deltas from it.
+- **Project**: endless
