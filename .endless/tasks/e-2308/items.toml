@@ -108,3 +108,8 @@ statement = "just test-go also runs the tests under cmd/, so TestInitialize and 
 id = "P24"
 kind = "deliverable"
 statement = "golang.org/x/tools becomes a direct dependency at v0.52.0 (go/packages, go/analysis) because v0.48.0 cannot read Go 1.27 export data; x/mod and x/sync move with it"
+
+[[item]]
+id = "P25"
+kind = "deliverable"
+statement = "Call sites use dtx.HomeToTilde from go-dt's dtx module once E-2576 lands, and Endless holds no copy of the text rewrite; until then internal/refusal carries an interim HomeToTilde marked as such"
