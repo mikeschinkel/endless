@@ -1,17 +1,17 @@
 `endless correct` (E-2486) finds the references between rows two ways. SQLite
 reports the ones the schema declares with a FOREIGN KEY clause, through
 PRAGMA foreign_key_list. The rest — references the schema holds as a bare
-integer column with no FOREIGN KEY — are invisible to the database, so they are
-listed by hand in `undeclaredRefs` in internal/events/correction.go.
+integer column with no FOREIGN KEY — are listed by hand in `undeclaredRefs` in
+internal/events/correction.go.
 
 Two checks read that list. The delete refusal, in `referrers`, counts the rows
-that refer to the row being deleted and refuses the delete when any exist; it
-reads the list by REFERENCED table, so the referring table does not have to be
-a correction target. The dangling-id check, in `checkInvariants`, verifies that
-a value written into a referencing column names a real row; it reads the list by
-REFERRING table, so it only ever fires on a target's own correctable columns.
+that refer to the row being deleted; it reads the list by REFERENCED table, so
+the referring table does not have to be a correction target. The dangling-id
+check, in `checkInvariants`, verifies that a value written into a referencing
+column names a real row; it reads the list by REFERRING table, so it only fires
+on a target's own correctable columns.
 
-THE SIX MISSING ENTRIES
+THE LIST IS INCOMPLETE, AND NOTHING SAYS SO
 
 Fifteen INTEGER columns outside `sessions` refer to a sessions row without a
 declared foreign key. Nine are in `undeclaredRefs`. Six are not:
@@ -25,52 +25,44 @@ declared foreign key. Nine are in `undeclaredRefs`. Six are not:
 
 Found by querying the live schema for every INTEGER column whose name mentions
 session, subtracting those PRAGMA foreign_key_list already reports as pointing
-at sessions, and checking each remainder against the list. Three of the six
-arrived together when error_triage grew its accept/decline columns, which is the
-drift this task is really about.
+at sessions, and checking each remainder against the list. Three arrived
+together when error_triage grew its accept and decline columns.
 
-WHAT THIS COSTS, AND WHAT IT DOES NOT
+That is the defect: a hand-maintained map of the schema's undeclared references
+with nothing holding it against the schema. E-2010 closed the same hole for the
+projects guard list with TestProjectReferences_CoversEverySchemaReference, which
+reads the foreign keys out of the live schema and fails in both directions.
+`undeclaredRefs` has no equivalent, so six columns drifted off it unnoticed and
+the next ones will too.
 
-Only the delete refusal is affected. `endless correct session <id> delete`
-counts no referrer for any of the six, so it deletes a session that an
-error_triage, errors, errors_sources or session_notices row still names. Those
-rows then hold an id for a session that no longer exists.
+WHAT THE SIX COST TODAY, AFTER ED-1655
 
-It does not stop there. `sessions.id` is `INTEGER PRIMARY KEY` with no
-AUTOINCREMENT, which makes it a rowid alias allocated as max(rowid) + 1, so
-deleting the highest session hands that exact id to the next session created.
-The error_triage row then reads as "accepted by session N" and points at a real
-but unrelated session rather than at nothing, with nothing recording that it is
-wrong. A dangling id is findable; a plausible wrong one is not.
+Before ED-1655 the missing entries were reachable: `endless correct session <id>
+delete` counted no referrer for them, so it deleted a session that an
+error_triage, errors, errors_sources or session_notices row still named — and
+because `sessions.id` is a rowid alias allocated as max(rowid) + 1, deleting the
+highest session handed that id to the next one created, leaving those rows
+naming a real but unrelated session while reading as correct.
 
-The dangling-id check is NOT affected, and that is worth stating because it is
-easy to assume otherwise. errors, errors_sources and error_triage are not
-correction targets at all — they are written directly by internal/faults, not
-through the ledger — so no correcting write can reach their columns.
-session_notices IS a target, but its correctable column is `notified`, and
+ED-1655 removes that reachability by deciding sessions are never deleted, which
+this task implements. So the six entries guard nothing once the delete is gone.
+They are still required, because the invariant is that the list maps every
+undeclared reference the schema holds: which of the two checks reads a given row
+is incidental, and a list kept only where it is currently load-bearing is the
+list that just drifted.
+
+The dangling-id check never covered the six and still will not. errors,
+errors_sources and error_triage are not correction targets at all — internal/faults
+writes them directly and nothing about them goes through the ledger.
+session_notices is a target, but its correctable column is `notified`, and
 `changed_by_session` is nullable, so it is neither in the target's column list
-nor in the table's required columns and an insert cannot supply it either. All
-six are unreachable by a correcting write today.
+nor among the table's required columns and an insert cannot supply it either.
 
-WHY THE LIST DRIFTED
+A COMMENT THAT OVERSTATES ITS CASE
 
-Nothing holds `undeclaredRefs` against the schema, so a new column that refers
-to a tracked row joins neither check and nothing says so. E-2010 closed the same
-hole for the projects guard list with
-TestProjectReferences_CoversEverySchemaReference, which reads the foreign keys
-out of the live schema and fails in both directions; `undeclaredRefs` has no
-equivalent. That test, not the six entries, is what keeps this from recurring.
-
-RELATED, AND DELIBERATELY NOT PART OF THIS
-
-E-2570 proposed giving sessions a `removed` column and a `live_sessions` view.
-It was declined: sessions are not ledgered, nothing in the tree deletes one, and
-an abandoned session has no referrers by construction, so the guard already
-covers the case ED-1547 cares about — once its list is complete, which is this
-task.
-
-Whether `session` should be a delete target at all is a separate question. Its
-stated reason is uniformity across all 19 targets (ED-1652) rather than a
-demonstrated use case, and dropping the delete would remove this bug's only
-reachable harm rather than guard against it. That question is open; this task
-assumes the command stays.
+E-2010 left a comment in internal/events/projector.go saying a DELETE on the
+replay path would re-free every removed id "on a rebuild". Rebuild of the LIVE
+database is refused (E-2062), so that reads as though a routine operation were
+at stake. The hazard is real for temp-database projection, which is what the
+verification path uses, and for any future rebuild — the wording is what is
+wrong, not the reasoning.
