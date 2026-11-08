@@ -13,16 +13,20 @@ the others.
   `task_content`, `task_questions`, `task_deps`, `task_landings`,
   `decisions`, `decision_relations`. Seeded enum tables `task_types`,
   `complexity_levels` and `risk_levels` go in both files.
-- **Machine file tables:** everything else (see E-2257's outcome).
+- **Machine file tables:** every table not listed as a project table,
+  discovered from the schema when the work runs. Tables added after E-2257
+  (for example E-2063's `harnesses`, `session_instances` and
+  `claude_cli_sessions`) land here by that rule, not by being listed.
 - **Project identity:** a one-row table holding the committed identity
   (root commit, per E-2217) and the committed name, written by replay. It
   replaces the projector's `ensureProject`.
 - **`project_id`:** `tasks.project_id` and `decisions.project_id` hold the
   machine `projects.id`, stamped when the file is built. No FK across files.
-- **Project → machine FKs** lose their constraint and keep the value:
-  `task_landings.session_id`, `decisions.origin_session_id`.
-  `tasks.changed_by_session` and `task_questions.asked_by_session` are already
-  plain.
+- **Project → machine FKs** lose their constraint and keep the value.
+  Discover them when the work runs (`PRAGMA foreign_key_list` over every
+  project table, against the machine-table set above); don't work from a
+  list. As of 2026-10-22 they were `task_landings.session_id` and
+  `decisions.origin_session_id`.
 - **Resolution:** route through the `--db main|sandbox` context (E-2059), so
   every command opens the machine file plus the right project file.
 - **Rebuild:** a project rebuild deletes and rebuilds only that project's file
@@ -68,6 +72,9 @@ the others.
 - `adhoc_e2191_backlog` and `adhoc_e2191_backlog_v`: made by hand during
   E-2191, not in any schema file.
 
+Re-check those findings when the work runs: the schema may have moved since.
 Ask Mike before dropping any of them. Also ask him whether to retire the stale
-or empty tables: `report_labels` (0 rows), `session_gates` and
+or empty tables (as found on 2026-10-22; re-measure): `report_labels` (0 rows), `session_gates` and
 `report_judgments` (no writes since Aug 23), and `notes` (since Aug 22).
+
+
