@@ -1,0 +1,3 @@
+## Evidence: an unapplied ledger entry (2026-11-08)
+
+Landing E-2486 wrote a `task.landed` line for task 2486 to the ledger (segment db-entries-a7f3-000029.jsonl, committed as 596574b51 on main) and then failed to apply it: `insert task_landing: database is locked (517)`, SQLITE_BUSY_SNAPSHOT from the executor's deferred transaction. The database has no task_landings row for task 2486 while the ledger says it landed. The rebuild is refused (E-2062), so this is a case for case-by-case repair. E-2578 is making the apply itself robust and adding a reversing entry for future failures; this existing entry needs either that reversing entry or this command's repair.
