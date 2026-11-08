@@ -1,0 +1,11 @@
+# Analysis
+
+**Why the refusal names files and commits.** The fingerprint is a `git patch-id` of the branch's own changes, so "the code changed" is true for a one-line conflict fix and for a rewrite alike. Listing the commits since the reconciled commit misleads after a rebase, when that commit is no longer an ancestor of HEAD and every rebased commit shows. The file list the reconcile context already computes is unaffected by that, and the two commit shas let anyone run the exact diff.
+
+**Why reconcile is accepted at unverified when stale.** The freeze from `unverified` on exists so the user verifies a settled record: every item has a verdict, no discrepancy is waiting. The freeze on items stays. Letting a new reconciliation be recorded when the code moved removes three of the five recovery steps and the only one the user had to do themselves (`--status revisit`), so a session can recover the task alone. What weakens is that `unverified` no longer implies settled: a re-reconcile can file a discrepancy, and the user then meets the gate's "discrepancies are waiting" refusal at verify instead of before it. The reconciliation's own output saying so is the mitigation. The acceptance is keyed to a stale fingerprint so the freeze is otherwise untouched; nothing else at `unverified` could make a reconciliation stale, since items cannot change there.
+
+**Why one text in Go.** The gate runs in Go for both `task verify` and the session-side gate command, and the same recovery is the answer wherever the staleness is noticed: reconcile's own refusal at a frozen status and the notice printed when a branch moves past its passed commit. One function keeps the three in step.
+
+**Why the actor is marked.** The lifecycle fixes who does what: reconciling is the session's, verifying is the user's. A user who ran verify by hand needs to know which line is theirs and which to hand to the session, so the text says it rather than splitting by audience.
+
+**Why the context names the answer_holds items.** Step 3 of the E-2418 recovery was a refusal for a rule the agent could only learn by hitting it. The context already knows which items have an earlier answered question; saying so first removes the refusal.
