@@ -3,45 +3,57 @@
 #   endless task update E-2579 --items-file <copy>
 
 [[item]]
-id = "P8"
-kind = "deliverable"
-statement = "undeclaredRefs lists all six missing session references, so correct's delete refusal counts them"
-verify = "endless correct session <id> delete is refused, naming the holder, for a session referred to only by an error_triage, errors, errors_sources or session_notices.changed_by_session row"
-
-[[item]]
-id = "P9"
+id = "P16"
 kind = "deliverable"
 statement = "A test derives every undeclared reference from the live schema and fails when undeclaredRefs and the schema disagree, in either direction"
 verify = "go test ./internal/events/... fails when a row is removed from undeclaredRefs, and fails when a row names a table or column that no longer exists"
 
 [[item]]
-id = "P10"
+id = "P17"
+kind = "deliverable"
+statement = "undeclaredRefs lists all six missing session references, so the list maps every undeclared reference the schema holds and the test passes"
+verify = "go test ./internal/events/... passes, and the new test names no missing reference"
+
+[[item]]
+id = "P18"
+kind = "deliverable"
+statement = "endless correct refuses a delete of a session, naming why sessions are not deleted, while update, insert and annotate on a session still work"
+verify = "endless correct session <id> delete is refused and names the decision; endless correct session <id> --set hidden=1 still succeeds"
+
+[[item]]
+id = "P19"
 kind = "deliverable"
 statement = "The test states in a comment which columns it can recognize as a reference, and that a reference not matching the naming rule escapes both it and the list"
 verify = "the comment is present and names the limit"
 
 [[item]]
-id = "P11"
+id = "P20"
 kind = "deliverable"
-statement = "A comment on the six entries records that they feed the delete refusal only, because their tables are not correction targets or do not expose the column for correction"
+statement = "A comment on the six entries records that no current check reads them, and that the list is kept complete because the test enforces completeness rather than because a consumer needs each row"
 verify = "the comment is present beside the entries"
 
 [[item]]
-id = "P12"
+id = "P21"
+kind = "deliverable"
+statement = "The projector's replay comment names temp-database projection and a future rebuild instead of implying a rebuild of the live database, which is refused"
+verify = "the comment no longer reads as though rebuilding the live database were routine"
+
+[[item]]
+id = "P22"
 kind = "exclusion"
 statement = "The six are not brought within reach of the dangling-id check: errors, errors_sources and error_triage are not correction targets, and session_notices.changed_by_session is nullable and outside its target's correctable columns, so no correcting write can reach any of them"
 
 [[item]]
-id = "P13"
+id = "P23"
 kind = "exclusion"
-statement = "No removed column, live_sessions view or session read-path audit: E-2570 is declined and sessions keep their current shape"
+statement = "No removed column, live_sessions view or session read-path audit: sessions keep their current shape"
 
 [[item]]
-id = "P14"
+id = "P24"
 kind = "exclusion"
 statement = "sessions.id is not rebuilt with AUTOINCREMENT, and no migration is added"
 
 [[item]]
-id = "P15"
+id = "P25"
 kind = "exclusion"
-statement = "Which targets endless correct accepts is unchanged, session delete included"
+statement = "No target other than session changes which operations it accepts"
