@@ -105,3 +105,8 @@ statement = "Does not change the endless correct path, the rebuild-db refusal, o
 id = "P19"
 kind = "exclusion"
 statement = "Does not re-apply the E-2486 task.landed line or insert a task_landings row for it"
+
+[[item]]
+id = "P20"
+kind = "deliverable"
+statement = "A git failure after a successful apply records WARN-0038 ledger-uncommitted and exits zero, instead of failing a command that took effect"
