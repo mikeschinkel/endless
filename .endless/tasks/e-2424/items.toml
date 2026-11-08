@@ -25,7 +25,7 @@ statement = "Each project file has a one-row identity table holding the project'
 [[item]]
 id = "P5"
 kind = "deliverable"
-statement = "task_landings.session_id and decisions.origin_session_id keep their values with no FK constraint"
+statement = "Every FK from a project table to a machine table, discovered from the schema when the work runs, keeps its values with no FK constraint"
 
 [[item]]
 id = "P6"
