@@ -70,6 +70,7 @@ detail = "Go-only, no Python surface; the one positional is the segment. It exis
 id = "P12"
 kind = "deliverable"
 statement = "The task.landed line for E-2486 at ledger segment a7f3-000029 (commit 596574b51) is voided on main with a ledger.voided line whose reason names this task"
+post_land = true
 
 [[item]]
 id = "P13"
