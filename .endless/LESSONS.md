@@ -7989,3 +7989,7 @@ E-2308, discussing a panic in dt.GetUserHomeDir: I proposed guards and a degrade
 ### [2026-11-07] Name a function for what it does; refusal.Tilde was a bad name
 E-2308: I named the function that scans free text and replaces the home directory with a tilde 'refusal.Tilde'. Mike: that seems like a bad name for a scan-and-replace over text. Name functions for the operation they perform on their input, so a reader can tell a text rewrite from a typed path conversion without opening the file.
 - **Project**: endless
+
+### [2026-11-08] Recommend only commands the lifecycle gates will accept
+After E-2486's land failed on a database lock, I twice told Mike to run 'just land' and 'endless task verify' directly, forgetting the gates: a land needs the task at unlanded with a passing verify at the branch's current code, and verify needs the reconciliation to be current, which after a head change means reopening through revisit and underway and reconciling again. Mike said I keep doing this across sessions and it wastes his time. Before handing him a command, walk the status and gate path from the task's actual state and either do the agent-side steps myself or hand him the full sequence the gates will accept.
+- **Project**: endless
