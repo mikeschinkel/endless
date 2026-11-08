@@ -1,8 +1,6 @@
 package events
 
 import (
-	"bufio"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -12,7 +10,8 @@ import (
 
 // ReadAllEvents reads all event segment files from a project's ledger
 // directory, parses each JSONL line, and returns events sorted by kairos
-// timestamp.
+// timestamp. Each event carries the segment it came from and the byte offset
+// its line starts at (E-2578), which is how a ledger.voided entry names it.
 func ReadAllEvents(projectRoot string) ([]Event, error) {
 	ledgerDir := filepath.Join(projectRoot, ".endless", LedgerDirName)
 
@@ -47,37 +46,4 @@ func ReadAllEvents(projectRoot string) ([]Event, error) {
 	})
 
 	return allEvents, nil
-}
-
-func readSegmentFile(path string) ([]Event, error) {
-	f, err := os.Open(path)
-	if err != nil {
-		return nil, err
-	}
-	defer f.Close()
-
-	var events []Event
-	scanner := bufio.NewScanner(f)
-	scanner.Buffer(make([]byte, MaxEventLineBytes+1024), MaxEventLineBytes+1024)
-	lineNum := 0
-
-	for scanner.Scan() {
-		lineNum++
-		line := scanner.Bytes()
-		if len(line) == 0 {
-			continue
-		}
-
-		var evt Event
-		if err := json.Unmarshal(line, &evt); err != nil {
-			return nil, fmt.Errorf("line %d: %w", lineNum, err)
-		}
-		events = append(events, evt)
-	}
-
-	if err := scanner.Err(); err != nil {
-		return nil, err
-	}
-
-	return events, nil
 }

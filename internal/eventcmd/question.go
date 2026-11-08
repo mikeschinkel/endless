@@ -4,18 +4,16 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 
 	"github.com/mikeschinkel/endless/internal/dbprovenance"
 	"github.com/mikeschinkel/endless/internal/events"
 	"github.com/mikeschinkel/endless/internal/kairos"
-	"github.com/mikeschinkel/endless/internal/monitor"
 )
 
 // emitQuestionsAsked is the create flow for task.questions_asked (E-2176). It
-// has the same events-authoritative shape as the task and decision creates —
-// lock, append, commit the segment, execute, release — with one difference:
+// has the same shape as the task and decision creates — lock, apply (SQL, then
+// the ledger line, then COMMIT), commit the segment — with one difference:
 // what is allocated under the lock is written INTO the payload rather than into
 // the entity ref. The entity is the task, already known; the series number and
 // the question ids are not, and the ledger has to carry them so a replay
@@ -24,7 +22,7 @@ import (
 // The caller sends only question texts. A payload that already names a series
 // or an id is refused: those numbers belong to the database, and accepting one
 // from outside would let a ledger line disagree with the row it created.
-func emitQuestionsAsked(ts kairos.Timestamp, project,
+func emitQuestionsAsked(clock *kairos.Clock, ts kairos.Timestamp, project,
 	entityTypeStr, entityID, actorKindStr, actorID, sessionID, nodeIDStr,
 	projectRoot, payloadStr, correlationID string) error {
 
@@ -49,7 +47,7 @@ func emitQuestionsAsked(ts kairos.Timestamp, project,
 		}
 	}
 
-	series, firstID, execAndCommit, rollback, err := events.PreAllocateQuestions(taskID, len(p.Questions))
+	series, firstID, tx, err := events.PreAllocateQuestions(taskID, len(p.Questions))
 	if err != nil {
 		return err
 	}
@@ -61,7 +59,7 @@ func emitQuestionsAsked(ts kairos.Timestamp, project,
 	}
 	payload, err := json.Marshal(p)
 	if err != nil {
-		rollback()
+		tx.Rollback()
 		return fmt.Errorf("marshal payload: %w", err)
 	}
 
@@ -80,34 +78,19 @@ func emitQuestionsAsked(ts kairos.Timestamp, project,
 		Payload:       json.RawMessage(payload),
 	}
 	if err := evt.Validate(); err != nil {
-		rollback()
+		tx.Rollback()
 		return err
 	}
 
-	line, err := json.Marshal(evt)
-	if err != nil {
-		rollback()
-		return fmt.Errorf("marshal event: %w", err)
-	}
 	writer, err := events.NewWriter(ledgerRoot(projectRoot), nodeIDStr)
 	if err != nil {
-		rollback()
+		tx.Rollback()
 		return fmt.Errorf("create writer: %w", err)
 	}
-	if err := writer.Append(line); err != nil {
-		rollback()
-		return err
-	}
-	if !monitor.IsSandboxActive() {
-		segRel := filepath.Join(".endless", events.LedgerDirName, writer.CurrentSegment())
-		if err := events.CommitLedgerSegment(projectRoot, segRel); err != nil {
-			return fmt.Errorf("commit ledger segment: %w", err)
-		}
-	}
-
 	// Asking a question changes no task status, so it cannot cascade into an
-	// epic derivation: no derived emitter.
-	if _, err := execAndCommit(&evt, nil); err != nil {
+	// epic derivation; the apply records none.
+	applied, err := tx.Apply(events.Emit{Event: &evt, Writer: writer, Clock: clock})
+	if err := finishApply(projectRoot, applied, err); err != nil {
 		return err
 	}
 

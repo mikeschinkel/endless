@@ -869,6 +869,31 @@ var (
 			"session take a task's worktree without its lock, which is worth a " +
 			"task of its own. Dismiss with `endless errors clear <id>`.",
 	}
+
+	// ErrCodeLedgerUncommitted covers an `event emit` whose apply committed and
+	// whose ledger lines are on disk, but whose segment git would not commit
+	// (E-2578).
+	//
+	// Warning: the change is in the database and the ledger holds its line; only
+	// the commit to the project's history is missing, and a segment is committed
+	// whole, so the next ledger commit — any later emit's, or the land's —
+	// carries the line. The command exits zero, because a non-zero exit would
+	// tell its caller the command failed, and a retry of a command that took
+	// effect applies it twice.
+	ErrCodeLedgerUncommitted = Code{
+		ID:       "WARN-0038",
+		Slug:     "ledger-uncommitted",
+		Severity: SeverityWarning,
+		Title:    "An event was applied and written to the ledger but its segment was not committed",
+		Remedy: "Run `endless errors show <n> --detail` for git's error and the " +
+			"segment. The change itself is recorded in the database and on " +
+			"disk; only the commit to the project's history is missing, and the " +
+			"next ledger commit carries it. Clear what git complained about — " +
+			"an index.lock, a hook, a permission — then run `git status` in the " +
+			"main checkout: the segment should be committed by the next " +
+			"`endless` write, or commit it by hand. Dismiss with `endless " +
+			"errors clear <id>`.",
+	}
 )
 
 // catalog indexes every registered Code by ID. Built once at init from the
@@ -911,6 +936,7 @@ var catalog = buildCatalog(
 	ErrCodeMonitorHooksInstallFailed,
 	ErrCodeSessionNoticesUnwritten,
 	ErrCodeTaskHeldElsewhere,
+	ErrCodeLedgerUncommitted,
 )
 
 // buildCatalog indexes codes by ID. It panics on a duplicate ID: a collision is

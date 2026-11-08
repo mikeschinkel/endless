@@ -1,0 +1,48 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2578 and records what was true when E-2578
+# landed. Edit it only if you ARE E-2578. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+schema = 1
+task   = "E-2578"
+
+[[check]]
+name   = "apply-first emit: SQL failure leaves nothing, COMMIT failure voids the run, projector skips voided lines, event void, commit subject"
+runner = "gotest"
+paths  = ["./internal/events/...", "./internal/eventcmd/...", "./internal/correctcmd/...", "./internal/faults/..."]
+
+[[check]]
+name     = "event emit refuses ledger.voided from the command line"
+sh       = "go run ./cmd/endless-go event emit --kind ledger.voided --project p --entity-type task --entity-id 1 --actor-kind cli --actor-id t --node-id a1b2 --project-root . --payload '{\"segment\":\"x\",\"refs\":[0]}' 2>&1; true"
+contains = "never emitted directly"
+
+[[check]]
+name     = "event void refuses an agent before reading anything"
+as       = "agent"
+sh       = "go run ./cmd/endless-go event void db-entries-a1b2-000001.jsonl --offset 0 --reason x --project p --project-root . --node-id a1b2 --actor-id t 2>&1; true"
+contains = "the user's command"
+
+[[check]]
+name     = "event void requires a reason"
+sh       = "go run ./cmd/endless-go event void db-entries-a1b2-000001.jsonl --offset 0 --project p --project-root . --node-id a1b2 --actor-id t 2>&1; true"
+contains = "--reason is required"
+
+[[check]]
+name     = "event lists void among its commands"
+sh       = "go run ./cmd/endless-go event 2>&1; true"
+contains = "void"
+
+[[check]]
+name = "no deferred db.Begin() remains on the emit path"
+sh   = "! grep -n 'db.Begin()' internal/events/apply.go internal/eventcmd/event.go internal/eventcmd/plan_items.go internal/eventcmd/question.go"
+
+[[check]]
+name     = "the appendix documents the write order, ledger.voided and event void"
+sh       = "grep -c 'ledger.voided' docs/guide/appendix-a.md"
+
+[[check]]
+name     = "the appendix documents event void"
+sh       = "grep -c 'endless-go event void' docs/guide/appendix-a.md"
+
+[[check]]
+name     = "WARN-0038 is in the error catalog"
+sh       = "grep -c 'WARN-0038' docs/errors.md"

@@ -68,3 +68,18 @@ Every run writes a `ledger.row_changed` entry per change — the target, key, op
 An unknown target, or a column off its list, is refused naming what is allowed. Display ids are accepted in keys: `E-101`, `ED-12`, `EQ-7`, `ES-3`, `P55`.
 
 Repairing drift between the database and the ledger is a separate concern, as are audit views of corrections.
+
+## The ledger's write order, `ledger.voided` and `event void`
+
+Every `endless` write goes through `endless-go event emit`, which applies the event and records it in one write transaction, in this order: `BEGIN IMMEDIATE`, run the SQL, append the event's line to the ledger segment, append any `epic.status_derived` lines the apply produced, `COMMIT`, then commit the segment to git. A SQL failure rolls back and nothing reaches the ledger: the command exits non-zero with the apply's error, and re-running it is safe. The write lock is taken before anything is read, so two writers queue on the connection's busy timeout instead of one failing late with `database is locked (517)`; there is no retry loop on top of that wait.
+
+One window remains: the lines are appended and the `COMMIT` then fails. The ledger is then ahead of the database, and an append-only record can only say so with another line. `emit` appends a **`ledger.voided`** entry naming the segment, the byte offset of every line in the run, and the error that stopped the apply; commits the segment; and exits non-zero saying that the ledger holds the entry and its voiding and the database is unchanged — never that nothing was recorded. The command can then simply be re-run. The voiding carries the voided event's actor and entity, and its commit is never folded with another (`Endless: ledger.voided E-101 …`), so `git log -- .endless/db-ledger` shows it.
+
+The projector — `event validate-db`, `event rebuild-db` — reads every `ledger.voided` entry before it replays and skips every line one names, reporting the count as `N skipped as voided`. A voiding is itself a replay no-op.
+
+If git refuses to commit the segment *after* a successful apply, the change stands: it is in the database and on disk, and a segment is committed whole, so the next ledger commit carries the line. The command exits zero and records `WARN-0038 ledger-uncommitted` in the errors channel (`endless errors show`).
+
+**`endless-go event void <segment> --offset <n> [--offset <n>...] --reason <text>`** writes a `ledger.voided` entry by hand, for a run `emit` itself could not void — a process that died between the append and the `COMMIT`, or a line written before the apply came first. It is user-only (an agent is refused before anything is read), Go-only with no `endless` command, and touches no database. The one positional is the segment's file name; `--offset` is the byte offset at which a line begins, repeatable; `--reason` is required. It also takes `--project`, `--project-root` (the main checkout), `--node-id` and `--actor-id`, as `endless-go correct` does. Every named offset is read back first: one that does not start an event line, or that names a voiding, is refused with nothing written. The entry lands in the current segment, which may be later than the one it names — which is why it names it — and is committed on its own.
+
+`event emit` refuses `ledger.voided` from the command line, as it refuses `ledger.row_changed` and `ledger.corrected`.
+

@@ -100,16 +100,23 @@ func ledgerMessage(projectRoot string, paths []string, amend bool) (string, erro
 	return LedgerCommitMessage(evts), nil
 }
 
-// HoldsCorrection reports whether any of the events is a correction entry.
-// A commit holding one is never folded with another (E-2486): its subject
-// names the correction, and folding would bury it under `+N more`.
+// HoldsCorrection reports whether any of the events is a correction entry
+// (E-2486) or a voiding entry (E-2578). A commit holding one is never folded
+// with another: its subject names the correction or the voiding, and folding
+// would bury it under `+N more`.
 func HoldsCorrection(evts []Event) bool {
 	for _, e := range evts {
-		if e.Kind == KindLedgerCorrected {
+		if isAnnotation(e.Kind) {
 			return true
 		}
 	}
 	return false
+}
+
+// isAnnotation reports whether a kind is an entry about other entries, which
+// leads the commit that holds it: a correction or a voiding.
+func isAnnotation(k Kind) bool {
+	return k == KindLedgerCorrected || k == KindLedgerVoided
 }
 
 // ledgerEvents lists the events the ledger commit about to be made would hold:
@@ -177,12 +184,13 @@ func LedgerCommitMessage(evts []Event) string {
 		suffix = fmt.Sprintf(" +%d more", len(evts)-1)
 	}
 	room := ledgerSubjectLimit - runeLen(AutoCommitSubjectPrefix) - runeLen(suffix)
-	// A correction leads its commit (E-2486): its change entries precede it in
-	// the segment, but `git log` should say that a correction happened, not
-	// which row moved first. The body still lists every event in order.
+	// A correction leads its commit (E-2486), and so does a voiding (E-2578):
+	// the entries they are about precede them in the segment, but `git log`
+	// should say that a correction or a voiding happened, not which row moved
+	// first. The body still lists every event in order.
 	lead := evts[0]
 	for _, e := range evts {
-		if e.Kind == KindLedgerCorrected {
+		if isAnnotation(e.Kind) {
 			lead = e
 			break
 		}
@@ -260,6 +268,7 @@ type eventPayload struct {
 	Op               string                     `json:"op"`
 	Values           map[string]json.RawMessage `json:"values"`
 	Reason           string                     `json:"reason"`
+	Error            string                     `json:"error"`
 	Ops              []struct {
 		Op  string `json:"op"`
 		Seq int64  `json:"seq"`
@@ -320,6 +329,12 @@ func describeEvent(e Event) eventLine {
 		l.value = strings.TrimSpace(fmt.Sprintf("%s %s %s %s", p.Op, p.Target, p.Key, strings.Join(names, ", ")))
 	case KindLedgerCorrected:
 		l.value = p.Reason
+	case KindLedgerVoided:
+		// The error when a program saw one, else the reason a person gave.
+		l.value = p.Error
+		if l.value == "" {
+			l.value = p.Reason
+		}
 	}
 	l.value = strings.Join(strings.Fields(l.value), " ")
 	return l

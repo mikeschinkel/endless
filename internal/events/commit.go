@@ -346,9 +346,9 @@ func commitPathsOnce(projectRoot string, paths []string, subject commitSubject, 
 		if err != nil {
 			return err
 		}
-		// A correction is never folded (E-2486): not into the commit before
-		// it, and no later event into it. Its subject names the correction,
-		// and `git log` is where corrections are read.
+		// A correction (E-2486) or a voiding (E-2578) is never folded: not
+		// into the commit before it, and no later event into it. Its subject
+		// names the entry, and `git log` is where both are read.
 		if canAmend && HoldsCorrection(evts) {
 			canAmend = false
 			if evts, err = ledgerEvents(projectRoot, paths, false); err != nil {

@@ -35,176 +35,6 @@ type ExecuteResult struct {
 	Markdown        string `json:"markdown,omitempty"`          // rendered output for chat display
 }
 
-// PreAllocateTaskID acquires a write lock via BEGIN IMMEDIATE, reads the next
-// available task ID, and returns it along with functions to finish the transaction.
-//
-// Usage:
-//  1. Call PreAllocateTaskID() to get the ID and lock the DB
-//  2. Write the event to the segment file using the returned ID
-//  3. Call execAndCommit(evt) to run the SQL mutation and release the lock
-//  4. If anything fails before step 3, call rollback() to release the lock
-func PreAllocateTaskID() (id int64, execAndCommit func(*Event, DerivedEmitter) (*ExecuteResult, error), rollback func(), err error) {
-	db, err := monitor.DB()
-	if err != nil {
-		return 0, nil, nil, fmt.Errorf("events: db connection: %w", err)
-	}
-
-	// BEGIN IMMEDIATE acquires write lock, blocking other writers
-	if _, err := db.Exec("BEGIN IMMEDIATE"); err != nil {
-		return 0, nil, nil, fmt.Errorf("events: begin immediate: %w", err)
-	}
-
-	// DO NOT point this at live_tasks (E-1929). Removed tasks are retained with
-	// removed = 1 precisely so MAX(id) keeps counting past them and an id is
-	// never re-minted. Through the view MAX(id) would drop back to the highest
-	// LIVE id, ids would be reused again, and the FK-free rows that outlive a
-	// task (session_tasks, session_notices, task_landings) would reattach to
-	// unrelated work — reintroducing the exact bug ED-1547 exists to fix, while
-	// appearing to fix it. Only the highest id is ever re-freed this way;
-	// interior gaps are never refilled, which is why retention alone suffices.
-	err = db.QueryRow("SELECT COALESCE(MAX(id), 0) + 1 FROM tasks").Scan(&id)
-	if err != nil {
-		db.Exec("ROLLBACK")
-		return 0, nil, nil, fmt.Errorf("events: pre-allocate task id: %w", err)
-	}
-
-	doRollback := func() {
-		db.Exec("ROLLBACK")
-	}
-
-	doExecAndCommit := func(evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
-		result, notices, err := dispatchWithNotices(db, evt, emit)
-		if err != nil {
-			db.Exec("ROLLBACK")
-			return nil, err
-		}
-		if _, err := db.Exec("COMMIT"); err != nil {
-			return nil, fmt.Errorf("events: commit: %w", err)
-		}
-		notices.deliver(db)
-		return result, nil
-	}
-
-	return id, doExecAndCommit, doRollback, nil
-}
-
-// PreAllocateDecisionID is the decision-table parallel of PreAllocateTaskID.
-// Decisions use their own auto-increment column (E-1378); the ID space is
-// independent of tasks (display prefix ED- disambiguates).
-//
-// Usage mirrors PreAllocateTaskID — see that docstring.
-func PreAllocateDecisionID() (id int64, execAndCommit func(*Event, DerivedEmitter) (*ExecuteResult, error), rollback func(), err error) {
-	db, err := monitor.DB()
-	if err != nil {
-		return 0, nil, nil, fmt.Errorf("events: db connection: %w", err)
-	}
-
-	if _, err := db.Exec("BEGIN IMMEDIATE"); err != nil {
-		return 0, nil, nil, fmt.Errorf("events: begin immediate: %w", err)
-	}
-
-	// `decisions`, NEVER live_decisions (E-2010, ED-1547). Removal retains the
-	// row precisely so MAX(id) keeps counting past it and an ED-NNNN is never
-	// re-minted. Through the view MAX(id) would drop back to the highest live
-	// decision and hand a removed id to the next one allocated — the exact bug
-	// the retained row exists to prevent, reintroduced while looking fixed.
-	// The same warning sits on the tasks allocator a few lines up.
-	err = db.QueryRow("SELECT COALESCE(MAX(id), 0) + 1 FROM decisions").Scan(&id)
-	if err != nil {
-		db.Exec("ROLLBACK")
-		return 0, nil, nil, fmt.Errorf("events: pre-allocate decision id: %w", err)
-	}
-
-	doRollback := func() {
-		db.Exec("ROLLBACK")
-	}
-
-	doExecAndCommit := func(evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
-		result, notices, err := dispatchWithNotices(db, evt, emit)
-		if err != nil {
-			db.Exec("ROLLBACK")
-			return nil, err
-		}
-		if _, err := db.Exec("COMMIT"); err != nil {
-			return nil, fmt.Errorf("events: commit: %w", err)
-		}
-		notices.deliver(db)
-		return result, nil
-	}
-
-	return id, doExecAndCommit, doRollback, nil
-}
-
-// BeginImmediate acquires a write lock via BEGIN IMMEDIATE and returns
-// functions to finish the transaction. Unlike PreAllocateTaskID it reads
-// nothing up front — it exists so a multi-row rewrite (E-1436 revise) can
-// take the write lock BEFORE the events-authoritative ledger append, the
-// same ordering as the create path. A losing concurrent writer then fails
-// at BEGIN (SQLITE_BUSY) without leaving an orphan ledger line.
-//
-// Usage:
-//  1. Call BeginImmediate() to lock the DB
-//  2. Append the event to the segment file
-//  3. Call execAndCommit(evt) to run the SQL mutation and release the lock
-//  4. If anything fails before step 3, call rollback() to release the lock
-func BeginImmediate() (execAndCommit func(*Event, DerivedEmitter) (*ExecuteResult, error), rollback func(), err error) {
-	db, err := monitor.DB()
-	if err != nil {
-		return nil, nil, fmt.Errorf("events: db connection: %w", err)
-	}
-
-	if _, err := db.Exec("BEGIN IMMEDIATE"); err != nil {
-		return nil, nil, fmt.Errorf("events: begin immediate: %w", err)
-	}
-
-	doRollback := func() {
-		db.Exec("ROLLBACK")
-	}
-
-	doExecAndCommit := func(evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
-		result, notices, err := dispatchWithNotices(db, evt, emit)
-		if err != nil {
-			db.Exec("ROLLBACK")
-			return nil, err
-		}
-		if _, err := db.Exec("COMMIT"); err != nil {
-			return nil, fmt.Errorf("events: commit: %w", err)
-		}
-		notices.deliver(db)
-		return result, nil
-	}
-
-	return doExecAndCommit, doRollback, nil
-}
-
-// Execute processes an event: runs the corresponding SQL mutation.
-// Used for non-create events where ID pre-allocation is not needed. emit is the
-// epic-derivation ledger emitter (E-1541); it is nil for events that cannot
-// trigger derivation and from callers that record no derived events (tests).
-func Execute(evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
-	db, err := monitor.DB()
-	if err != nil {
-		return nil, fmt.Errorf("events: db connection: %w", err)
-	}
-
-	tx, err := db.Begin()
-	if err != nil {
-		return nil, fmt.Errorf("events: begin tx: %w", err)
-	}
-	defer tx.Rollback()
-
-	result, notices, err := dispatchWithNotices(tx, evt, emit)
-	if err != nil {
-		return nil, err
-	}
-
-	if err := tx.Commit(); err != nil {
-		return nil, fmt.Errorf("events: commit: %w", err)
-	}
-	notices.deliver(db)
-	return result, nil
-}
-
 // dispatch routes an event to its executor. emit (E-1541) is threaded to the
 // six task mutations that can change an epic's derived status; the remaining
 // executors ignore derivation.
@@ -292,6 +122,11 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 	case KindLedgerCorrected:
 		// Writes no row (E-2486): the change entries it refers to did.
 		return &ExecuteResult{}, nil
+	case KindLedgerVoided:
+		// Writes no row (E-2578): it says that other lines wrote none. The
+		// projector acts on it before replay; here it is reached only by a
+		// caller dispatching a line already on the ledger.
+		return &ExecuteResult{}, nil
 	default:
 		if RetiredKinds[evt.Kind] {
 			// Reachable only by hand — `event emit` gates on ValidKinds, which a
@@ -305,12 +140,12 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 			)
 		}
 		// The kind passed ValidKinds and then found no executor, which means
-		// Endless emits an event it cannot apply. The ledger line is already
-		// written and committed by now, so this leaves an orphan entry behind
-		// that a retry only duplicates.
+		// Endless emits an event it cannot apply. Nothing reached the ledger
+		// (E-2578: the line is appended only after the SQL ran), but a retry
+		// meets the same gap, so it needs reporting rather than retrying.
 		return nil, refusal.Report(
 			fmt.Sprintf("events: executor does not handle kind %q", evt.Kind),
-			"an event kind Endless accepts but has no executor for — the ledger already holds the entry, so it needs reporting rather than retrying")
+			"an event kind Endless accepts but has no executor for — nothing was recorded, and a retry meets the same gap")
 	}
 }
 

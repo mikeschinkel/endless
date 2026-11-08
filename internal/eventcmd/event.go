@@ -38,6 +38,8 @@ func Run(args []string) {
 	switch args[0] {
 	case "emit":
 		runEmit(args[1:])
+	case "void":
+		runVoid(args[1:])
 	case "commit-doc":
 		runCommitDoc(args[1:])
 	case "commit-verify-report":
@@ -76,7 +78,7 @@ func Run(args []string) {
 func usageText() string {
 	return strings.Join([]string{
 		"Usage: endless-go event <command> [flags]",
-		"Commands: emit, validate-db, rebuild-db, migrate, upgrade, backup, reap-worktrees, commit-doc, commit-verify-report",
+		"Commands: emit, void, validate-db, rebuild-db, migrate, upgrade, backup, reap-worktrees, commit-doc, commit-verify-report",
 	}, "\n") + "\n"
 }
 
@@ -220,19 +222,72 @@ func requiredFlag(name string) error {
 	).Command("event emit")
 }
 
-// ledgerCommitRefusal is the refusal for a ledger segment that was written to
-// disk but could not be committed.
+// ledgerCommitRefusal is the refusal for a ledger segment whose lines are on
+// disk, and applied or voided, but could not be committed to git.
 //
-// REPORT rather than NO-REPORT because a retry is not safe. The JSONL line is
-// already appended and the SQL mutation never ran, so running the command again
-// puts a SECOND ledger line down for one intended event — and on the create path
-// the BEGIN IMMEDIATE lock is released only by process exit. Clearing the git
-// problem and reconciling what is on disk is the user's call.
+// Reached only after a voiding (E-2578): the run's lines and the ledger.voided
+// line are on disk, the database is unchanged, and the command did not take
+// effect, so the exit is non-zero either way. REPORT rather than NO-REPORT
+// because clearing a git failure is the user's, and a retry of the command
+// would stack a second run on a segment git is refusing.
 func ledgerCommitRefusal(err error) error {
 	return refusal.Report(
 		fmt.Sprintf("commit ledger segment: %s", err),
-		"how to clear the git failure and reconcile a ledger line that is on disk but uncommitted, with no matching database mutation",
+		"how to clear the git failure so the ledger lines on disk — the voided run and its voiding — reach the project's history",
 	).Command("event emit").Cause(err)
+}
+
+// commitSegment commits the segment an emit wrote, outside a sandbox. In a
+// sandbox the ledger lives under the disposable, non-git sandbox dir (E-1729),
+// so there is nothing to commit.
+func commitSegment(projectRoot, segment string) error {
+	if monitor.IsSandboxActive() {
+		return nil
+	}
+	segRel := filepath.Join(".endless", events.LedgerDirName, segment)
+	return events.CommitLedgerSegment(projectRoot, segRel)
+}
+
+// finishApply is the end of every emit path (E-2578): the apply has either
+// committed, or been voided, and the segment holding its lines is committed
+// to git either way.
+//
+// After a successful apply, a git failure is recorded as a fault and the
+// command still exits zero: the change is in the database and its lines are
+// on disk, and the next ledger commit — any later emit's, or the land's —
+// carries them, because a segment is committed whole. A non-zero exit here
+// would tell the caller the command failed, and a retry of a command that
+// took effect applies it twice.
+//
+// After a voiding, the command did not take effect, so a git failure keeps
+// the non-zero exit and adds the git problem to it.
+func finishApply(projectRoot string, applied *events.Applied, applyErr error) error {
+	var ve *events.VoidedError
+	switch {
+	case applyErr == nil:
+		if err := commitSegment(projectRoot, applied.Segment); err != nil {
+			faults.Record(faults.Fault{
+				Code:    faults.ErrCodeLedgerUncommitted,
+				Source:  "events:emit",
+				Summary: "an event was applied and written to the ledger but its segment was not committed to git",
+				Detail:  err.Error(),
+				Fields: map[string]any{
+					"segment": applied.Segment,
+					"offsets": applied.Offsets,
+					"kind":    string(applied.Events[0].Kind),
+					"entity":  applied.Events[0].Entity,
+				},
+			})
+		}
+		return nil
+	case errors.As(applyErr, &ve):
+		if err := commitSegment(projectRoot, ve.Segment); err != nil {
+			return ledgerCommitRefusal(fmt.Errorf("%w; and before that: %v", err, applyErr))
+		}
+		return applyErr
+	default:
+		return applyErr
+	}
 }
 
 func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
@@ -270,6 +325,14 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 		return refusal.NoReport(
 			fmt.Sprintf("%s is written only by `endless correct`, never emitted directly", kindStr),
 			"Run `endless correct <target> <key> ... --reason <text>` instead")
+	}
+	if evtKind == events.KindLedgerVoided {
+		// E-2578: a voiding names lines by offset, which only the writer that
+		// appended them or a person reading the segment can know. emit writes
+		// one itself when an apply's COMMIT fails; `event void` is the hand.
+		return refusal.NoReport(
+			fmt.Sprintf("%s is written by emit itself when an apply fails, or by `endless-go event void`, never emitted directly", kindStr),
+			"Run `endless-go event void <segment> --offset <n> --reason <text>` instead")
 	}
 	if !events.ValidKinds[evtKind] {
 		// Python emits kinds from code and never from agent input, so the two
@@ -321,30 +384,32 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 	needsPreAlloc := needsTaskPreAlloc || needsDecisionPreAlloc
 
 	if isPreparedKind(evtKind) {
-		return emitPrepared(evtKind, ts, project, entityTypeStr, entityID,
+		return emitPrepared(evtKind, clock, ts, project, entityTypeStr, entityID,
 			actorKindStr, actorID, sessionID, nodeIDStr, projectRoot, payloadStr,
 			correlationID)
 	}
 
 	if evtKind == events.KindTaskQuestionsAsked {
-		return emitQuestionsAsked(ts, project, entityTypeStr, entityID,
+		return emitQuestionsAsked(clock, ts, project, entityTypeStr, entityID,
 			actorKindStr, actorID, sessionID, nodeIDStr, projectRoot, payloadStr,
 			correlationID)
 	}
 
+	writer, err := events.NewWriter(ledgerRoot(projectRoot), nodeIDStr)
+	if err != nil {
+		return fmt.Errorf("create writer: %w", err)
+	}
+
 	if needsPreAlloc {
-		// Events-authoritative flow for creates:
-		// 1. Pre-allocate ID (acquires write lock)
-		// 2. Build and write event to segment file
-		// 3. Execute SQL and commit (releases lock)
+		// A create allocates its id under the write lock, writes it into the
+		// event, and applies (E-2578: SQL, then the ledger line, then COMMIT).
 		var newID int64
-		var execAndCommit func(*events.Event, events.DerivedEmitter) (*events.ExecuteResult, error)
-		var rollback func()
+		var tx *events.WriteTx
 		var err error
 		if needsTaskPreAlloc {
-			newID, execAndCommit, rollback, err = events.PreAllocateTaskID()
+			newID, tx, err = events.PreAllocateTaskID()
 		} else {
-			newID, execAndCommit, rollback, err = events.PreAllocateDecisionID()
+			newID, tx, err = events.PreAllocateDecisionID()
 		}
 		if err != nil {
 			return err
@@ -364,50 +429,13 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 			CorrelationID: correlationID,
 			Payload:       json.RawMessage(payloadStr),
 		}
-
 		if err := evt.Validate(); err != nil {
-			rollback()
+			tx.Rollback()
 			return err
 		}
 
-		// Write event to segment file FIRST (events-authoritative)
-		line, err := json.Marshal(evt)
-		if err != nil {
-			rollback()
-			return fmt.Errorf("marshal event: %w", err)
-		}
-
-		writer, err := events.NewWriter(ledgerRoot(projectRoot), nodeIDStr)
-		if err != nil {
-			rollback()
-			return fmt.Errorf("create writer: %w", err)
-		}
-		if err := writer.Append(line); err != nil {
-			rollback()
-			return err
-		}
-
-		// E-1206: commit the just-written ledger segment immediately. Fail
-		// loudly on git error; the JSONL line has already been written, so a
-		// commit failure surfaces a problem (e.g., not a git repo) without
-		// rolling back the WAL. E-1729: the sandbox ledger lives under the
-		// disposable, non-git sandbox dir, so skip the commit there.
-		if !monitor.IsSandboxActive() {
-			segRel := filepath.Join(".endless", events.LedgerDirName, writer.CurrentSegment())
-			if err := events.CommitLedgerSegment(projectRoot, segRel); err != nil {
-				return ledgerCommitRefusal(err)
-			}
-		}
-
-		// E-1541: only task creates can add a child to a parent epic and so
-		// trigger derivation; decision creates never do.
-		var emit events.DerivedEmitter
-		if needsTaskPreAlloc {
-			emit = makeDerivedEmitter(clock, project, nodeIDStr, projectRoot, writer)
-		}
-
-		// Execute SQL mutation and commit (releases write lock)
-		if _, err := execAndCommit(&evt, emit); err != nil {
+		applied, err := tx.Apply(events.Emit{Event: &evt, Writer: writer, Clock: clock})
+		if err := finishApply(projectRoot, applied, err); err != nil {
 			return err
 		}
 
@@ -427,10 +455,9 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 		_ = dbprovenance.Encode(os.Stdout, output)
 
 	} else {
-		// Events-authoritative flow for updates/deletes:
-		// 1. Build event (entity ID already known)
-		// 2. Write event to segment file
-		// 3. Execute SQL mutation
+		// An update or delete: the entity is already known, so the event is
+		// built, checked, and applied (E-2578: SQL, then the ledger line, then
+		// COMMIT) under the write lock.
 		evt := events.Event{
 			V:       events.Version,
 			TS:      ts.String(),
@@ -456,37 +483,15 @@ func run(kindStr, project, entityTypeStr, entityID, actorKindStr, actorID,
 			}
 		}
 
-		// Write event to segment file FIRST (events-authoritative)
-		line, err := json.Marshal(evt)
-		if err != nil {
-			return fmt.Errorf("marshal event: %w", err)
-		}
-
-		writer, err := events.NewWriter(ledgerRoot(projectRoot), nodeIDStr)
-		if err != nil {
-			return fmt.Errorf("create writer: %w", err)
-		}
-		if err := writer.Append(line); err != nil {
-			return err
-		}
-
-		// E-1206: commit the just-written ledger segment immediately.
-		// E-1729: skip the commit in a sandbox (disposable, non-git dir).
-		if !monitor.IsSandboxActive() {
-			segRel := filepath.Join(".endless", events.LedgerDirName, writer.CurrentSegment())
-			if err := events.CommitLedgerSegment(projectRoot, segRel); err != nil {
-				return ledgerCommitRefusal(err)
-			}
-		}
-
-		// Execute SQL mutation (side effect of the event). The derived emitter
-		// (E-1541) records any epic.status_derived entries the mutation
-		// cascades into, on the same writer, after this primary event.
-		emit := makeDerivedEmitter(clock, project, nodeIDStr, projectRoot, writer)
-		execRes, err := events.Execute(&evt, emit)
+		tx, err := events.BeginWrite()
 		if err != nil {
 			return err
 		}
+		applied, err := tx.Apply(events.Emit{Event: &evt, Writer: writer, Clock: clock})
+		if err := finishApply(projectRoot, applied, err); err != nil {
+			return err
+		}
+		execRes := applied.Result
 
 		// E-1312: include ExecuteResult fields so callers (e.g. the
 		// Python session_status_cmd CLI) can render the result for chat.
@@ -529,61 +534,13 @@ func ledgerRoot(projectRoot string) string {
 	return events.LedgerRoot(projectRoot)
 }
 
-// makeDerivedEmitter builds the epic-derivation ledger emitter (E-1541) threaded
-// into the executor. When the executor's recompute changes an epic's status it
-// calls this closure, which builds an epic.status_derived event (fresh kairos
-// timestamp from the same clock, system/epic-derivation actor), appends it to
-// the same ledger segment writer as the triggering event, and commits it. The
-// emit fires inside the triggering mutation's open SQL transaction — same
-// segment-before-SQL-commit ordering as the primary event (E-1206).
-func makeDerivedEmitter(clock *kairos.Clock, project, nodeIDStr, projectRoot string,
-	writer *events.Writer) events.DerivedEmitter {
-
-	return func(epicID int64, oldStatus, newStatus string) error {
-		payload, err := json.Marshal(events.EpicStatusDerivedPayload{
-			TaskID:    epicID,
-			OldStatus: oldStatus,
-			NewStatus: newStatus,
-		})
-		if err != nil {
-			return fmt.Errorf("marshal epic.status_derived payload: %w", err)
-		}
-		evt := events.Event{
-			V:       events.Version,
-			TS:      clock.Now().String(),
-			Kind:    events.KindEpicStatusDerived,
-			Project: project,
-			Entity: events.EntityRef{
-				Type: events.EntityTask,
-				ID:   fmt.Sprintf("%d", epicID),
-			},
-			// Actor built literally rather than via events.EmittingActor:
-			// this event is synthesized by Endless, not typed by anyone, so
-			// stamping the emitting process's harness onto it would answer a
-			// question it was never asked (E-2005).
-			Actor: events.Actor{
-				Kind: events.ActorSystem,
-				ID:   "epic-derivation",
-			},
-			Payload: payload,
-		}
-		if err := evt.Validate(); err != nil {
-			return err
-		}
-		line, err := json.Marshal(evt)
-		if err != nil {
-			return fmt.Errorf("marshal epic.status_derived event: %w", err)
-		}
-		if err := writer.Append(line); err != nil {
-			return err
-		}
-		// E-1729: skip the commit in a sandbox (disposable, non-git dir). The
-		// derived event is already appended to the sandbox ledger via `writer`.
-		if monitor.IsSandboxActive() {
-			return nil
-		}
-		segRel := filepath.Join(".endless", events.LedgerDirName, writer.CurrentSegment())
-		return events.CommitLedgerSegment(projectRoot, segRel)
+// printProjection reports what a projection replayed, and what it skipped
+// because a ledger.voided entry named it (E-2578).
+func printProjection(r *events.ProjectResult) {
+	fmt.Printf("Projection: %d events replayed, %d skipped as voided, %d tasks created, %d updated, %d deleted\n",
+		r.EventsReplayed, r.EventsSkipped, r.TasksCreated, r.TasksUpdated, r.TasksDeleted)
+	for _, e := range r.Errors {
+		fmt.Printf("  warning: %s\n", e)
 	}
 }
 
@@ -608,11 +565,7 @@ func runValidateDB(args []string) {
 	}
 	defer os.Remove(tempPath)
 
-	fmt.Printf("Projection: %d events replayed, %d tasks created, %d updated, %d deleted\n",
-		projResult.EventsReplayed, projResult.TasksCreated, projResult.TasksUpdated, projResult.TasksDeleted)
-	for _, e := range projResult.Errors {
-		fmt.Printf("  warning: %s\n", e)
-	}
+	printProjection(projResult)
 
 	// Compare against current DB
 	currentDB, err := monitor.DB()
@@ -675,11 +628,7 @@ func runRebuildDB(args []string) {
 		exitRelay("event rebuild-db", "endless-go event: error: ", err)
 	}
 
-	fmt.Printf("Projection: %d events replayed, %d tasks created, %d updated, %d deleted\n",
-		projResult.EventsReplayed, projResult.TasksCreated, projResult.TasksUpdated, projResult.TasksDeleted)
-	for _, e := range projResult.Errors {
-		fmt.Printf("  warning: %s\n", e)
-	}
+	printProjection(projResult)
 
 	if !*confirm {
 		// The only path this command has. --confirm never reaches here: the

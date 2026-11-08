@@ -1,5 +1,5 @@
 // Black-box tests for the executor entry points (PreAllocateTaskID,
-// BeginImmediate, Execute). These exercise the monitor.DB() seam via
+// BeginWrite, Execute). These exercise the monitor.DB() seam via
 // monitor.SetTestDB (E-1506): each test stands up a fresh schema-applied
 // SQLite DB, rebinds monitor.DB() to it for the lifetime of t, seeds the
 // minimal rows the executors need, and asserts the resulting state.
@@ -59,7 +59,7 @@ func withExecutorDB(t *testing.T) *sql.DB {
 func TestPreAllocateTaskID_MonotonicallyIncreasing(t *testing.T) {
 	withExecutorDB(t)
 
-	id1, execAndCommit1, _, err := events.PreAllocateTaskID()
+	id1, tx1, err := events.PreAllocateTaskID()
 	if err != nil {
 		t.Fatalf("PreAllocateTaskID 1: %v", err)
 	}
@@ -68,11 +68,11 @@ func TestPreAllocateTaskID_MonotonicallyIncreasing(t *testing.T) {
 	}
 
 	evt1 := newTaskCreatedEvent(t, id1, "first")
-	if _, err := execAndCommit1(evt1, nil); err != nil {
-		t.Fatalf("execAndCommit 1: %v", err)
+	if _, err := tx1.Apply(events.Emit{Event: evt1}); err != nil {
+		t.Fatalf("apply 1: %v", err)
 	}
 
-	id2, execAndCommit2, _, err := events.PreAllocateTaskID()
+	id2, tx2, err := events.PreAllocateTaskID()
 	if err != nil {
 		t.Fatalf("PreAllocateTaskID 2: %v", err)
 	}
@@ -80,8 +80,8 @@ func TestPreAllocateTaskID_MonotonicallyIncreasing(t *testing.T) {
 		t.Errorf("second id = %d, want > %d", id2, id1)
 	}
 	evt2 := newTaskCreatedEvent(t, id2, "second")
-	if _, err := execAndCommit2(evt2, nil); err != nil {
-		t.Fatalf("execAndCommit 2: %v", err)
+	if _, err := tx2.Apply(events.Emit{Event: evt2}); err != nil {
+		t.Fatalf("apply 2: %v", err)
 	}
 }
 
@@ -92,18 +92,18 @@ func TestPreAllocateTaskID_MonotonicallyIncreasing(t *testing.T) {
 func TestPreAllocateTaskID_RollbackReleasesLockForNextCaller(t *testing.T) {
 	withExecutorDB(t)
 
-	id1, _, rollback1, err := events.PreAllocateTaskID()
+	id1, tx1, err := events.PreAllocateTaskID()
 	if err != nil {
 		t.Fatalf("PreAllocateTaskID 1: %v", err)
 	}
-	rollback1()
+	tx1.Rollback()
 
 	// After rollback, the next caller succeeds.
-	id2, _, rollback2, err := events.PreAllocateTaskID()
+	id2, tx2, err := events.PreAllocateTaskID()
 	if err != nil {
 		t.Fatalf("PreAllocateTaskID after rollback: %v", err)
 	}
-	rollback2()
+	tx2.Rollback()
 
 	// And because no row was inserted, the id stays at the same value.
 	if id2 != id1 {
@@ -111,10 +111,10 @@ func TestPreAllocateTaskID_RollbackReleasesLockForNextCaller(t *testing.T) {
 	}
 }
 
-// TestBeginImmediate_CommitAndRollback verifies the two flow paths of
-// BeginImmediate: execAndCommit applies the event and releases the lock;
-// rollback releases the lock without writing.
-func TestBeginImmediate_CommitAndRollback(t *testing.T) {
+// TestBeginWrite_CommitAndRollback verifies the two flow paths of BeginWrite:
+// Apply applies the event and releases the lock; Rollback releases the lock
+// without writing.
+func TestBeginWrite_CommitAndRollback(t *testing.T) {
 	db := withExecutorDB(t)
 
 	// Path A: commit flow with a status_change against a pre-existing task.
@@ -125,13 +125,13 @@ func TestBeginImmediate_CommitAndRollback(t *testing.T) {
 		t.Fatalf("seed task: %v", err)
 	}
 
-	execAndCommit, _, err := events.BeginImmediate()
+	tx, err := events.BeginWrite()
 	if err != nil {
-		t.Fatalf("BeginImmediate (commit path): %v", err)
+		t.Fatalf("BeginWrite (commit path): %v", err)
 	}
 	evt := newStatusChangedEvent(t, 100, "ready", "underway")
-	if _, err := execAndCommit(evt, nil); err != nil {
-		t.Fatalf("execAndCommit: %v", err)
+	if _, err := tx.Apply(events.Emit{Event: evt}); err != nil {
+		t.Fatalf("apply: %v", err)
 	}
 
 	var status string
@@ -142,18 +142,22 @@ func TestBeginImmediate_CommitAndRollback(t *testing.T) {
 		t.Errorf("status = %q, want underway", status)
 	}
 
-	// Path B: rollback releases the lock so the next BeginImmediate succeeds.
-	_, rollback, err := events.BeginImmediate()
+	// Path B: rollback releases the lock so the next BeginWrite succeeds.
+	tx, err = events.BeginWrite()
 	if err != nil {
-		t.Fatalf("BeginImmediate (rollback path): %v", err)
+		t.Fatalf("BeginWrite (rollback path): %v", err)
 	}
-	rollback()
+	tx.Rollback()
 
-	if _, _, err := events.BeginImmediate(); err != nil {
-		t.Fatalf("BeginImmediate after rollback should succeed: %v", err)
+	tx, err = events.BeginWrite()
+	if err != nil {
+		t.Fatalf("BeginWrite after rollback should succeed: %v", err)
 	}
-	// Clean up the still-open tx so SetTestDB cleanup is safe.
-	db.Exec("ROLLBACK")
+	// Apply on a transaction that already ended is refused, not silently run.
+	tx.Rollback()
+	if _, err := tx.Apply(events.Emit{Event: evt}); err == nil {
+		t.Error("Apply after Rollback succeeded; want a refusal")
+	}
 }
 
 // TestExecute_TaskCreatedInsertsRow verifies the end-to-end Execute path

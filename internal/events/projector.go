@@ -20,10 +20,13 @@ import (
 // ProjectResult holds the outcome of a projection.
 type ProjectResult struct {
 	EventsReplayed int
-	TasksCreated   int
-	TasksUpdated   int
-	TasksDeleted   int
-	Errors         []string
+	// EventsSkipped counts the lines a ledger.voided entry named (E-2578):
+	// read, matched, and not replayed. Not in EventsReplayed.
+	EventsSkipped int
+	TasksCreated  int
+	TasksUpdated  int
+	TasksDeleted  int
+	Errors        []string
 }
 
 // ProjectToTempDB replays task events into a fresh temporary SQLite database.
@@ -65,9 +68,16 @@ func ProjectToTempDB(projectRoot string) (string, *ProjectResult, error) {
 		return "", nil, fmt.Errorf("projector: set pragmas: %w", err)
 	}
 
-	// Replay events
+	// Replay events. A line a ledger.voided entry names never took effect
+	// (E-2578), so it is skipped whatever its kind; the voidings are read
+	// first because one may follow the lines it voids by any distance.
 	result := &ProjectResult{}
+	voided := voidedLines(events)
 	for _, evt := range events {
+		if voided[lineRef{evt.Segment, evt.Offset}] {
+			result.EventsSkipped++
+			continue
+		}
 		if err := replayEvent(tempDB, &evt, result); err != nil {
 			result.Errors = append(result.Errors, fmt.Sprintf("ts=%s kind=%s: %s", evt.TS, evt.Kind, err))
 		}
@@ -146,6 +156,10 @@ func replayEvent(db *sql.DB, evt *Event, result *ProjectResult) error {
 		// A declared no-op (E-2486): the correction entry explains its change
 		// entries, which replay applies on their own. Live and projected rows
 		// match because neither path reads it.
+		return nil
+	case KindLedgerVoided:
+		// A declared no-op here (E-2578): its effect is the skip above, taken
+		// before replay from every voiding in the ledger at once.
 		return nil
 	default:
 		if RetiredKinds[evt.Kind] {

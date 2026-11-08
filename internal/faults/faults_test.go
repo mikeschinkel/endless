@@ -609,6 +609,7 @@ func TestCatalog_NumbersAreNeverReused(t *testing.T) {
 		"0035": "monitor-hooks-install-failed",
 		"0036": "session-notices-unwritten",
 		"0037": "task-held-elsewhere",
+		"0038": "ledger-uncommitted",
 	}
 
 	for _, code := range faults.Codes() {

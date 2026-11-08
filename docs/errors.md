@@ -1078,3 +1078,20 @@ gets past both is a session that claimed the task from the main checkout and
 moved into the worktree afterwards, so it never took the lock.
 
 **What to do.** Close the session that was refused and go to the one holding the task: `endless session goto E-<n>`. The detail names both sessions and their panes; a repeat means some route still lets a session take a task's worktree without its lock, which is worth a task of its own. Dismiss with `endless errors clear <id>`.
+
+## WARN-0038 — ledger-uncommitted
+
+**Severity:** warning · **Raised by:** `endless-go event emit` (E-2578)
+
+An `endless` write applied its event to the database and appended the
+event's line to the ledger segment on disk, and then `git` refused to commit
+that segment on the main checkout. The change is real and recorded; only its
+commit to the project's history is missing.
+
+Warning rather than error: a ledger segment is committed whole, so the next
+ledger commit — any later `endless` write's, or the land's auto-record —
+carries the line with it. The command exits zero, because a non-zero exit
+would tell its caller that the write failed, and retrying a write that took
+effect applies it twice.
+
+**What to do.** Run `endless errors show <n> --detail` for git's error and the segment. The change itself is recorded in the database and on disk; only the commit to the project's history is missing, and the next ledger commit carries it. Clear what git complained about — an index.lock, a hook, a permission — then run `git status` in the main checkout: the segment should be committed by the next `endless` write, or commit it by hand. Dismiss with `endless errors clear <id>`.

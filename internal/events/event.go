@@ -25,6 +25,14 @@ type Event struct {
 	Actor         Actor           `json:"actor"`
 	CorrelationID string          `json:"cid,omitempty"`
 	Payload       json.RawMessage `json:"payload"`
+
+	// Segment and Offset locate the line this event was read from (E-2578):
+	// the segment file's name and the byte offset of the line's first
+	// character. ReadAllEvents sets them, so the projector can match a
+	// ledger.voided entry to the lines it names. Never serialized: they are
+	// facts about where a line sits, not part of the event.
+	Segment string `json:"-"`
+	Offset  int64  `json:"-"`
 }
 
 // EntityRef identifies the primary entity affected by an event.
@@ -85,9 +93,9 @@ type Actor struct {
 // "the harness is observed, not declared" is a property of one function rather
 // than a convention three call sites have to remember.
 //
-// Deliberately not used by the epic-derivation emitter in internal/eventcmd:
-// that event is synthesized by Endless as a consequence of another mutation and
-// is attributed to the system actor. "Which harness typed it" has no answer
+// Deliberately not used for the epic.status_derived events an apply derives
+// (newEpicStatusDerived): that event is synthesized by Endless as a consequence
+// of another mutation and is attributed to the system actor. "Which harness typed it" has no answer
 // there, and "" — no agent — would be the wrong one.
 func EmittingActor(kind ActorKind, id, sessionID string) Actor {
 	return Actor{
@@ -385,6 +393,23 @@ const (
 	KindLedgerCorrected  Kind = "ledger.corrected"
 )
 
+// KindLedgerVoided says that lines already on the ledger never took effect
+// (E-2578). Its payload names the segment, the byte offset of every line in
+// the voided run, and why.
+//
+// `event emit` writes one itself when an apply's lines were appended and the
+// database COMMIT then failed: the ledger is ahead of the database, and an
+// append-only record can only say so with another line. `endless-go event
+// void`, a user-only command, writes one by hand for a run emit could not void.
+// The projector reads every ledger.voided entry before replaying and skips the
+// lines they name; the executor writes no row for it; `event emit` refuses it
+// from the command line.
+//
+// A kind of its own rather than a ledger.corrected annotation: that kind is
+// user-only, is a replay no-op, and records a user's reason. Giving it a system
+// author and a replay effect would split one kind into two behaviours.
+const KindLedgerVoided Kind = "ledger.voided"
+
 // Retired event kinds (E-2142). Each named the only surface that wrote it, and
 // that surface is gone:
 //
@@ -531,6 +556,8 @@ var ValidKinds = map[Kind]bool{
 	// Ledger corrections (E-2486)
 	KindLedgerRowChanged: true,
 	KindLedgerCorrected:  true,
+	// Ledger voiding (E-2578)
+	KindLedgerVoided: true,
 }
 
 // validEntityTypes is the closed set of recognized entity types.

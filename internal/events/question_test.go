@@ -321,7 +321,7 @@ func withQuestionExecutorDB(t *testing.T) *sql.DB {
 // fill the payload, execute and commit.
 func ask(t *testing.T, taskID int64, texts ...string) (series, firstID int64) {
 	t.Helper()
-	series, firstID, execAndCommit, rollback, err := PreAllocateQuestions(taskID, len(texts))
+	series, firstID, tx, err := PreAllocateQuestions(taskID, len(texts))
 	if err != nil {
 		t.Fatalf("allocate: %v", err)
 	}
@@ -330,8 +330,8 @@ func ask(t *testing.T, taskID int64, texts ...string) (series, firstID int64) {
 		qs[firstID+int64(i)] = q
 	}
 	evt := askedEvent(t, taskID, series, "", qs)
-	if _, err := execAndCommit(evt, nil); err != nil {
-		rollback()
+	if _, err := tx.Apply(Emit{Event: evt}); err != nil {
+		tx.Rollback()
 		t.Fatalf("exec: %v", err)
 	}
 	return series, firstID
@@ -363,10 +363,10 @@ func TestPreAllocateQuestions_SeriesPerTaskIdsGlobal(t *testing.T) {
 
 func TestPreAllocateQuestions_RefusesUnknownTaskAndReleasesLock(t *testing.T) {
 	withQuestionExecutorDB(t)
-	if _, _, _, _, err := PreAllocateQuestions(99, 1); err == nil {
+	if _, _, _, err := PreAllocateQuestions(99, 1); err == nil {
 		t.Fatal("allocated for an unknown task")
 	}
-	if _, _, _, _, err := PreAllocateQuestions(1, 0); err == nil {
+	if _, _, _, err := PreAllocateQuestions(1, 0); err == nil {
 		t.Fatal("allocated zero questions")
 	}
 	// The refusal must have released the write lock.

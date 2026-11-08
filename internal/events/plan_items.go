@@ -24,39 +24,23 @@ import (
 // payload before the ledger append. Apply never decides; it only writes what the
 // payload says.
 
-// LockedEmit is the write lock a prepared emit holds: the connection inside
-// BEGIN IMMEDIATE, plus the two ways out of it.
+// LockedEmit is the write lock `endless correct` holds while it prepares a
+// correction against the current rows, appends its entries, and applies them
+// (E-2486). Every other emit path uses WriteTx and Apply (E-2578); this one
+// keeps its ledger-first order, which that task left alone.
 type LockedEmit struct {
-	DB            *sql.DB
-	ExecAndCommit func(*Event, DerivedEmitter) (*ExecuteResult, error)
-	Rollback      func()
+	DB       *sql.DB
+	Rollback func()
+	tx       *WriteTx
 }
 
-// BeginLocked takes the write lock for an emit whose payload must be prepared
-// against the current rows — the generalization of PreAllocateQuestions.
+// BeginLocked takes the write lock for a correction.
 func BeginLocked() (*LockedEmit, error) {
-	db, err := monitor.DB()
+	tx, err := BeginWrite()
 	if err != nil {
-		return nil, fmt.Errorf("events: db connection: %w", err)
+		return nil, err
 	}
-	if _, err := db.Exec("BEGIN IMMEDIATE"); err != nil {
-		return nil, fmt.Errorf("events: begin immediate: %w", err)
-	}
-	return &LockedEmit{
-		DB: db,
-		ExecAndCommit: func(evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
-			result, err := dispatch(db, evt, emit)
-			if err != nil {
-				db.Exec("ROLLBACK")
-				return nil, err
-			}
-			if _, err := db.Exec("COMMIT"); err != nil {
-				return nil, fmt.Errorf("events: commit: %w", err)
-			}
-			return result, nil
-		},
-		Rollback: func() { db.Exec("ROLLBACK") },
-	}, nil
+	return &LockedEmit{DB: tx.DB(), Rollback: tx.Rollback, tx: tx}, nil
 }
 
 // ---------------------------------------------------------------------------

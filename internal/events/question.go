@@ -29,53 +29,33 @@ import (
 // invariant rather than a convention. No dispenser table is needed.
 //
 // Usage mirrors PreAllocateTaskID.
-func PreAllocateQuestions(taskID int64, n int) (series, firstID int64, execAndCommit func(*Event, DerivedEmitter) (*ExecuteResult, error), rollback func(), err error) {
+func PreAllocateQuestions(taskID int64, n int) (series, firstID int64, tx *WriteTx, err error) {
 	if n <= 0 {
-		return 0, 0, nil, nil, fmt.Errorf("events: task.questions_asked needs at least one question")
+		return 0, 0, nil, fmt.Errorf("events: task.questions_asked needs at least one question")
 	}
-	db, err := monitor.DB()
+	tx, err = BeginWrite()
 	if err != nil {
-		return 0, 0, nil, nil, fmt.Errorf("events: db connection: %w", err)
+		return 0, 0, nil, err
 	}
-
-	if _, err := db.Exec("BEGIN IMMEDIATE"); err != nil {
-		return 0, 0, nil, nil, fmt.Errorf("events: begin immediate: %w", err)
-	}
-	doRollback := func() {
-		db.Exec("ROLLBACK")
-	}
-
+	db := tx.DB()
 	if err := requireLiveTask(db, taskID); err != nil {
-		doRollback()
-		return 0, 0, nil, nil, err
+		tx.Rollback()
+		return 0, 0, nil, err
 	}
 	if err := db.QueryRow(
 		"SELECT COALESCE(MAX(series), 0) + 1 FROM task_questions WHERE task_id = ?",
 		taskID,
 	).Scan(&series); err != nil {
-		doRollback()
-		return 0, 0, nil, nil, fmt.Errorf("events: allocate question series: %w", err)
+		tx.Rollback()
+		return 0, 0, nil, fmt.Errorf("events: allocate question series: %w", err)
 	}
 	if err := db.QueryRow(
 		"SELECT COALESCE(MAX(id), 0) + 1 FROM task_questions",
 	).Scan(&firstID); err != nil {
-		doRollback()
-		return 0, 0, nil, nil, fmt.Errorf("events: allocate question id: %w", err)
+		tx.Rollback()
+		return 0, 0, nil, fmt.Errorf("events: allocate question id: %w", err)
 	}
-
-	doExecAndCommit := func(evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
-		result, err := dispatch(db, evt, emit)
-		if err != nil {
-			db.Exec("ROLLBACK")
-			return nil, err
-		}
-		if _, err := db.Exec("COMMIT"); err != nil {
-			return nil, fmt.Errorf("events: commit: %w", err)
-		}
-		return result, nil
-	}
-
-	return series, firstID, doExecAndCommit, doRollback, nil
+	return series, firstID, tx, nil
 }
 
 // requireLiveTask refuses a question on a task that does not exist or was

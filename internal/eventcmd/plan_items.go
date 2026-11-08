@@ -4,14 +4,12 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/mikeschinkel/endless/internal/dbprovenance"
 	"github.com/mikeschinkel/endless/internal/events"
 	"github.com/mikeschinkel/endless/internal/kairos"
-	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/planitem"
 	"github.com/mikeschinkel/endless/internal/refusal"
 )
@@ -29,12 +27,12 @@ func isPreparedKind(k events.Kind) bool {
 }
 
 // emitPrepared is the create flow for the plan item and reconciliation kinds.
-// The shape of emitQuestionsAsked — lock, prepare, append, commit the segment,
-// execute, release — with the preparation chosen by kind. A refusal from
-// preparation leaves nothing behind: the lock is rolled back before anything
-// reaches the ledger, so a refused change can never become a line every replay
-// then fails on.
-func emitPrepared(evtKind events.Kind, ts kairos.Timestamp, project,
+// The shape of emitQuestionsAsked — lock, prepare, apply (SQL, then the
+// ledger line, then COMMIT), commit the segment — with the preparation chosen
+// by kind. A refusal from preparation leaves nothing behind: the lock is
+// rolled back before anything reaches the ledger, so a refused change can
+// never become a line every replay then fails on.
+func emitPrepared(evtKind events.Kind, clock *kairos.Clock, ts kairos.Timestamp, project,
 	entityTypeStr, entityID, actorKindStr, actorID, sessionID, nodeIDStr,
 	projectRoot, payloadStr, correlationID string) error {
 
@@ -50,7 +48,7 @@ func emitPrepared(evtKind events.Kind, ts kairos.Timestamp, project,
 			"Retry with the task's numeric id")
 	}
 
-	lock, err := events.BeginLocked()
+	tx, err := events.BeginWrite()
 	if err != nil {
 		return err
 	}
@@ -61,7 +59,7 @@ func emitPrepared(evtKind events.Kind, ts kairos.Timestamp, project,
 	case events.KindTaskPlanItemsChanged:
 		var p events.TaskPlanItemsChangedPayload
 		if err = json.Unmarshal([]byte(payloadStr), &p); err == nil {
-			err = events.PreparePlanItemsChangedBy(lock.DB, taskID, &p, events.DetectedHarness() != "")
+			err = events.PreparePlanItemsChangedBy(tx.DB(), taskID, &p, events.DetectedHarness() != "")
 		}
 		var seqs []string
 		for _, op := range p.Ops {
@@ -76,13 +74,13 @@ func emitPrepared(evtKind events.Kind, ts kairos.Timestamp, project,
 			err = json.Unmarshal([]byte(payloadStr), &p)
 		}
 		if err == nil {
-			err = events.PreparePlanBaselined(lock.DB, taskID, &p)
+			err = events.PreparePlanBaselined(tx.DB(), taskID, &p)
 		}
 		payload, summary = p, map[string]any{}
 	case events.KindTaskReconciled:
 		var p events.TaskReconciledPayload
 		if err = json.Unmarshal([]byte(payloadStr), &p); err == nil {
-			err = events.PrepareReconciled(lock.DB, taskID, &p)
+			err = events.PrepareReconciled(tx.DB(), taskID, &p)
 		}
 		var ids []string
 		for _, q := range p.Questions {
@@ -92,7 +90,7 @@ func emitPrepared(evtKind events.Kind, ts kairos.Timestamp, project,
 	case events.KindTaskPostLandReconciled:
 		var p events.TaskPostLandReconciledPayload
 		if err = json.Unmarshal([]byte(payloadStr), &p); err == nil {
-			err = events.PreparePostLandReconciled(lock.DB, taskID, &p)
+			err = events.PreparePostLandReconciled(tx.DB(), taskID, &p)
 		}
 		var ids []string
 		for _, q := range p.Questions {
@@ -102,7 +100,7 @@ func emitPrepared(evtKind events.Kind, ts kairos.Timestamp, project,
 			"series": p.Series, "ids": ids}
 	}
 	if err != nil {
-		lock.Rollback()
+		tx.Rollback()
 		// Every preparation refusal is about the caller's input against the
 		// task's current items — the caller's to fix, with nothing written.
 		return refusal.NoReport(fmt.Sprintf("%s: %s", evtKind, err.Error()),
@@ -110,7 +108,7 @@ func emitPrepared(evtKind events.Kind, ts kairos.Timestamp, project,
 	}
 	raw, err := json.Marshal(payload)
 	if err != nil {
-		lock.Rollback()
+		tx.Rollback()
 		return fmt.Errorf("marshal payload: %w", err)
 	}
 
@@ -125,32 +123,18 @@ func emitPrepared(evtKind events.Kind, ts kairos.Timestamp, project,
 		Payload:       json.RawMessage(raw),
 	}
 	if err := evt.Validate(); err != nil {
-		lock.Rollback()
+		tx.Rollback()
 		return err
-	}
-	line, err := json.Marshal(evt)
-	if err != nil {
-		lock.Rollback()
-		return fmt.Errorf("marshal event: %w", err)
 	}
 	writer, err := events.NewWriter(ledgerRoot(projectRoot), nodeIDStr)
 	if err != nil {
-		lock.Rollback()
+		tx.Rollback()
 		return fmt.Errorf("create writer: %w", err)
 	}
-	if err := writer.Append(line); err != nil {
-		lock.Rollback()
-		return err
-	}
-	if !monitor.IsSandboxActive() {
-		segRel := filepath.Join(".endless", events.LedgerDirName, writer.CurrentSegment())
-		if err := events.CommitLedgerSegment(projectRoot, segRel); err != nil {
-			return fmt.Errorf("commit ledger segment: %w", err)
-		}
-	}
 	// None of these kinds changes a task status, so none can cascade into an
-	// epic derivation: no derived emitter.
-	if _, err := lock.ExecAndCommit(&evt, nil); err != nil {
+	// epic derivation; the apply records none.
+	applied, err := tx.Apply(events.Emit{Event: &evt, Writer: writer, Clock: clock})
+	if err := finishApply(projectRoot, applied, err); err != nil {
 		return err
 	}
 

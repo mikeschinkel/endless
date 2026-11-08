@@ -1317,6 +1317,7 @@ func (l *LockedEmit) ExecAllAndCommit(evts []*Event) error {
 	if _, err := l.DB.Exec("COMMIT"); err != nil {
 		return fmt.Errorf("events: commit: %w", err)
 	}
+	l.tx.open = false
 	return nil
 }
 

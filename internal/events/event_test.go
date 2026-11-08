@@ -260,8 +260,9 @@ func TestValidKinds_Count(t *testing.T) {
 	// + 1 (E-2444 task.post_land_reconciled)
 	// + 1 (E-2405 session_tasks.spawned)
 	// + 1 (E-2421 shipped_file.written)
-	// + 2 (E-2486 ledger.row_changed, ledger.corrected) = 58.
-	want := 58
+	// + 2 (E-2486 ledger.row_changed, ledger.corrected)
+	// + 1 (E-2578 ledger.voided) = 59.
+	want := 59
 	got := len(events.ValidKinds)
 	if got != want {
 		t.Errorf("ValidKinds has %d entries, want %d", got, want)
