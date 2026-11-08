@@ -8001,3 +8001,7 @@ While planning E-2578 I recommended switching event emit from ledger-first to ap
 ### [2026-11-08] State the existing behaviour before listing options on a reconcile question
 Presenting EQ-269 (E-2578, the WARN-0038 handling for a git commit that fails after a successful apply), Mike said 'It is not clear to me what the options are.' The options described code paths without first saying what the command already does (the git commit retries on index.lock contention and gives up only after that), so he could not tell what each option changed. On a discrepancy question, say the current behaviour in one or two sentences first, then the options as deltas from it.
 - **Project**: endless
+
+### [2026-11-08] Plans name discoverable sets by how to discover them, not by a snapshot
+While reorienting E-2063 after a 23-day gap, I reported that E-2215/E-2257's table inventory omitted the three tables E-2063 adds, and offered to patch the list. Mike: a plan that enumerates specifics that can change (the table list) goes stale, and I then waste his time reporting the drift. When I write a plan, a step whose input is a set that exists in the code or DB (tables, columns, callers, files) says how to discover it at execution time ('discover the tables that exist as of now'), unless the task has a stated requirement for a frozen list. When I find someone else's plan with a snapshot list, fix the plan to discover rather than append my items.
+- **Project**: endless
