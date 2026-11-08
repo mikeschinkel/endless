@@ -8005,3 +8005,7 @@ Presenting EQ-269 (E-2578, the WARN-0038 handling for a git commit that fails af
 ### [2026-11-08] Plans name discoverable sets by how to discover them, not by a snapshot
 While reorienting E-2063 after a 23-day gap, I reported that E-2215/E-2257's table inventory omitted the three tables E-2063 adds, and offered to patch the list. Mike: a plan that enumerates specifics that can change (the table list) goes stale, and I then waste his time reporting the drift. When I write a plan, a step whose input is a set that exists in the code or DB (tables, columns, callers, files) says how to discover it at execution time ('discover the tables that exist as of now'), unless the task has a stated requirement for a frozen list. When I find someone else's plan with a snapshot list, fix the plan to discover rather than append my items.
 - **Project**: endless
+
+### [2026-11-08] A rule is not a con; name the actual cost of changing it
+Planning E-2479, I listed 'changes the rule that items freeze from unverified on' as a con of letting task reconcile run at unverified. Mike: 'Aside from changing a rule, which you over-index on not reconsidering when facts reveal the rule might need to be modified, what is the actual downside?' A rule that no longer fits the facts is a candidate for change, not a cost. When an option departs from a rule, work out what the rule protects, state what weakens if it changes, and give that as the con; if nothing weakens, the option has no con there.
+- **Project**: endless
