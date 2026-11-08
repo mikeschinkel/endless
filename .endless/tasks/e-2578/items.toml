@@ -111,3 +111,8 @@ statement = "Does not re-apply the E-2486 task.landed line or insert a task_land
 id = "P20"
 kind = "deliverable"
 statement = "A git failure after a successful apply records WARN-0038 ledger-uncommitted and exits zero, instead of failing a command that took effect"
+
+[[item]]
+id = "P21"
+kind = "deliverable"
+statement = "The ledger commit waits up to about 30 seconds for another git process to release the index, printing that it is waiting, before it gives up"
