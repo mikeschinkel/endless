@@ -1086,7 +1086,10 @@ moved into the worktree afterwards, so it never took the lock.
 An `endless` write applied its event to the database and appended the
 event's line to the ledger segment on disk, and then `git` refused to commit
 that segment on the main checkout. The change is real and recorded; only its
-commit to the project's history is missing.
+commit to the project's history is missing. Index contention is not this:
+the commit waits up to thirty seconds for another git process to release the
+index, saying so while it waits, and this is recorded only when that wait
+runs out or git fails for another reason.
 
 Warning rather than error: a ledger segment is committed whole, so the next
 ledger commit — any later `endless` write's, or the land's auto-record —
@@ -1094,4 +1097,4 @@ carries the line with it. The command exits zero, because a non-zero exit
 would tell its caller that the write failed, and retrying a write that took
 effect applies it twice.
 
-**What to do.** Run `endless errors show <n> --detail` for git's error and the segment. The change itself is recorded in the database and on disk; only the commit to the project's history is missing, and the next ledger commit carries it. Clear what git complained about — an index.lock, a hook, a permission — then run `git status` in the main checkout: the segment should be committed by the next `endless` write, or commit it by hand. Dismiss with `endless errors clear <id>`.
+**What to do.** Run `endless errors show <n> --detail` for git's error and the segment. The change itself is recorded in the database and on disk; only the commit to the project's history is missing, and the next ledger commit carries it. Clear what git complained about — an index.lock still held after thirty seconds of waiting, a hook, a permission — then run `git status` in the main checkout: the segment should be committed by the next `endless` write, or commit it by hand. Dismiss with `endless errors clear <id>`.

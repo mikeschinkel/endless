@@ -97,12 +97,23 @@ func TestCommitPathsSucceedsOnceTheLockClears(t *testing.T) {
 }
 
 // TestCommitPathsGivesUpOnAStuckLock pins the other half: a lock nobody is ever
-// going to release must surface as an error in about two seconds, not hang the
-// command. A retry with no cap would turn a crashed git into a wedged CLI.
+// going to release must surface as an error once the thirty-second window is
+// spent (E-2578), not hang the command. A retry with no cap would turn a
+// crashed git into a wedged CLI. The window is the sum of the backoffs, so the
+// test walks the whole schedule without sleeping, and sees the wait announced
+// on the first retry and then every five seconds of it.
 func TestCommitPathsGivesUpOnAStuckLock(t *testing.T) {
 	root, segmentRel := initRepo(t)
 	defer holdIndexLock(t, root)()
-	noSleep(t)
+
+	var waited time.Duration
+	prevSleep := sleepFn
+	sleepFn = func(d time.Duration) { waited += d }
+	t.Cleanup(func() { sleepFn = prevSleep })
+	var notices []time.Duration
+	prevNotice := retryNoticeFn
+	retryNoticeFn = func(w time.Duration) { notices = append(notices, w) }
+	t.Cleanup(func() { retryNoticeFn = prevNotice })
 
 	err := CommitLedgerSegment(root, segmentRel)
 	if err == nil {
@@ -110,6 +121,29 @@ func TestCommitPathsGivesUpOnAStuckLock(t *testing.T) {
 	}
 	if !isIndexLocked(err) {
 		t.Errorf("error does not read as lock contention: %v", err)
+	}
+	if waited < commitRetryWindow-commitRetryCap || waited > commitRetryWindow {
+		t.Errorf("waited %s in all; want within one step of %s", waited, commitRetryWindow)
+	}
+	// Announced at once, then about every five seconds: 7 for a 30s window.
+	if len(notices) < 6 || len(notices) > 8 || notices[0] != commitRetryBase {
+		t.Errorf("notices at %v; want one on the first retry and then every %s", notices, commitRetryNoticeEvery)
+	}
+}
+
+// TestCommitRetryDelayCapsAtTwoSeconds pins the schedule: doubling from 10ms,
+// never more than 2s a step, and no overflow however many attempts.
+func TestCommitRetryDelayCapsAtTwoSeconds(t *testing.T) {
+	if d := commitRetryDelay(0); d != commitRetryBase {
+		t.Errorf("first delay = %s, want %s", d, commitRetryBase)
+	}
+	if d := commitRetryDelay(3); d != 80*time.Millisecond {
+		t.Errorf("fourth delay = %s, want 80ms", d)
+	}
+	for _, attempt := range []int{8, 20, 40, 100} {
+		if d := commitRetryDelay(attempt); d != commitRetryCap {
+			t.Errorf("delay(%d) = %s, want the cap %s", attempt, d, commitRetryCap)
+		}
 	}
 }
 

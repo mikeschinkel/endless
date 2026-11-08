@@ -265,34 +265,70 @@ func commitPaths(projectRoot string, paths []string, subject commitSubject, excl
 	}
 
 	var err error
-	for attempt := 0; attempt <= commitMaxRetries; attempt++ {
+	var waited time.Duration
+	for attempt := 0; ; attempt++ {
 		err = commitPathsOnce(projectRoot, paths, subject, excludeGlob)
 		if err == nil || !isIndexLocked(err) {
 			break
 		}
-		sleepFn(commitRetryDelay(attempt))
+		delay := commitRetryDelay(attempt)
+		if waited+delay > commitRetryWindow {
+			break
+		}
+		if attempt == 0 || waited/commitRetryNoticeEvery != (waited+delay)/commitRetryNoticeEvery {
+			retryNoticeFn(waited + delay)
+		}
+		sleepFn(delay)
+		waited += delay
 	}
 	return err
 }
 
-// commitMaxRetries bounds the index.lock retry loop. Eight, the same cap
-// `worktree land` carries for the same reason (LAND_MAX_RETRIES): it is enough
-// that a contended write waits out another process's commit, and small enough
-// that a STUCK lock — one left behind by a killed git — surfaces as an error in
-// about two seconds rather than hanging a CLI command.
-const commitMaxRetries = 8
+// commitRetryWindow bounds how long the index.lock retry waits in all. Thirty
+// seconds (E-2578): a machine running several sessions sees the index held for
+// well over the two and a half seconds the loop used to allow, and a ledger
+// commit given up on is a line that reaches git only with the next one. Long
+// enough that ordinary contention clears; short enough that a STUCK lock — one
+// left behind by a killed git — surfaces as an error rather than a hung
+// command. Measured as the sum of the backoffs, not on the wall clock, so a
+// test that skips the sleeps still walks the whole schedule.
+const commitRetryWindow = 30 * time.Second
 
-// commitRetryBase is the first backoff step; each attempt doubles it, so eight
-// attempts span roughly 10ms + 20 + 40 + ... ≈ 2.5s in total.
+// commitRetryBase is the first backoff step; each attempt doubles it up to
+// commitRetryCap, so the schedule is 10ms, 20, 40, … 1.28s, then 2s steps
+// until the window is spent — about twenty attempts over thirty seconds.
 const commitRetryBase = 10 * time.Millisecond
+
+// commitRetryCap is the longest single backoff.
+const commitRetryCap = 2 * time.Second
+
+// commitRetryNoticeEvery is how often the wait says it is still waiting.
+const commitRetryNoticeEvery = 5 * time.Second
 
 // sleepFn is time.Sleep, indirected so a test can exercise the retry loop
 // without spending the backoff. Tests restore it; nothing else assigns it.
 var sleepFn = time.Sleep
 
+// retryNoticeFn says that the commit is waiting for another git process: on
+// the first retry, then every commitRetryNoticeEvery of waiting. Indirected so
+// a test can see it was said. The default is a progress notice on stderr —
+// not a refusal, nothing is being refused — which `endless` relays to a
+// person when the child succeeds.
+var retryNoticeFn = func(waited time.Duration) {
+	refusal.Infof("waiting for another git process to release the index (%s so far, up to %s)",
+		waited.Round(time.Second), commitRetryWindow).Print()
+}
+
 // commitRetryDelay returns the backoff before the attempt after this one.
 func commitRetryDelay(attempt int) time.Duration {
-	return commitRetryBase * time.Duration(1<<uint(attempt))
+	if attempt >= 30 {
+		return commitRetryCap
+	}
+	d := commitRetryBase * time.Duration(1<<uint(attempt))
+	if d > commitRetryCap {
+		d = commitRetryCap
+	}
+	return d
 }
 
 // isIndexLocked reports whether a git failure is `.git/index.lock` contention —

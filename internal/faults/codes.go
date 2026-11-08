@@ -889,10 +889,10 @@ var (
 			"segment. The change itself is recorded in the database and on " +
 			"disk; only the commit to the project's history is missing, and the " +
 			"next ledger commit carries it. Clear what git complained about — " +
-			"an index.lock, a hook, a permission — then run `git status` in the " +
-			"main checkout: the segment should be committed by the next " +
-			"`endless` write, or commit it by hand. Dismiss with `endless " +
-			"errors clear <id>`.",
+			"an index.lock still held after thirty seconds of waiting, a hook, " +
+			"a permission — then run `git status` in the main checkout: the " +
+			"segment should be committed by the next `endless` write, or " +
+			"commit it by hand. Dismiss with `endless errors clear <id>`.",
 	}
 )
 

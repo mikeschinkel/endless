@@ -330,6 +330,12 @@ def emit_event(
     if result.returncode != 0:
         raise _child_refusal(result.stderr, result.returncode, "event emit")
 
+    # A child that succeeded may still have said something — the ledger commit
+    # saying it waited for another git process (E-2578). Pass it through as the
+    # progress notice it is; swallowing it would hide a thirty-second wait.
+    if result.stderr and result.stderr.strip():
+        agent_help.info(result.stderr.rstrip("\n"), err=True)
+
     if result.stdout.strip():
         return json.loads(result.stdout.strip())
     return None

@@ -324,3 +324,21 @@ def test_no_session_flag_position_anywhere(monkeypatch):
     monkeypatch.setattr(config, "NO_SESSION", False)
     CliRunner().invoke(main, ["--version"])
     assert config.NO_SESSION is False
+
+
+def test_child_stderr_on_success_is_relayed_as_a_notice(captured_emit, monkeypatch, capsys):
+    """A child that exits 0 having said something — the ledger commit waiting
+    for another git process (E-2578) — has it passed through on stderr, so a
+    thirty-second wait is not silent."""
+    _force_resolver(monkeypatch, None)
+
+    class _Waited:
+        returncode = 0
+        stdout = '{"id": "E-1"}'
+        stderr = "waiting for another git process to release the index (10ms so far, up to 30s)\n"
+
+    monkeypatch.setattr(event_bridge.subprocess, "run",
+                        lambda cmd, capture_output=False, text=False: _Waited())
+    out = _emit(actor_kind="system")
+    assert out == {"id": "E-1"}
+    assert "waiting for another git process" in capsys.readouterr().err
