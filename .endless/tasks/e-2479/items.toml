@@ -12,7 +12,7 @@ detail = "The file list is computed the way the reconcile context computes files
 [[item]]
 id = "P2"
 kind = "deliverable"
-statement = "The refusal ends with the recovery as ordered commands, each marked with its actor: the session runs task reconcile E-N, then the user runs task verify E-N; a live session holding the task is named"
+statement = "The refusal ends with the recovery as ordered commands, each marked with its actor: the session runs task reconcile E-N without --file, which only shows the items and the file to fill in, records the file it writes with --file, and the user then runs task verify E-N; a live session holding the task is named"
 
 [[item]]
 id = "P3"
