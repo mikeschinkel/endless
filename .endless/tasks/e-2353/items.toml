@@ -32,7 +32,7 @@ statement = "One blank line separates items"
 [[item]]
 id = "P6"
 kind = "deliverable"
-statement = "The glyph cell has three fixed slots: state (✓ approved, blank unapproved, ~ changed since approval, – withdrawn), origin (+ grown, ↷ post-land, blank planned), kind (✗ exclusion, blank deliverable)"
+statement = "The three glyph columns are fixed positions: state (✓ approved, blank unapproved, ~ changed since approval, – withdrawn), origin (+ grown, ↷ post-land, blank planned), kind (✗ exclusion, blank deliverable), so an unapproved grown deliverable reads ' + '"
 detail = "Fixed slots keep the column aligned; a blank slot is the common case."
 
 [[item]]
