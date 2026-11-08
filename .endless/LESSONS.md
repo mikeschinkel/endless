@@ -7985,3 +7985,7 @@ E-2308: I added refusal.TildeDir/TildeFile/TildeEntry and refusal.EnsureHome to 
 ### [2026-11-07] go-dt's EnsureUserHomeDir/GetUserHomeDir contract, and scoping go-dt changes
 E-2308, discussing a panic in dt.GetUserHomeDir: I proposed guards and a degraded empty-DirPath return. Mike's design: EnsureUserHomeDir() exists because init() must never be able to fail, so the app calls it once and HANDLES its error (set $HOME, or show the user an error); GetUserHomeDir() panics only when Ensure was never called, which is a bug detector a developer fixes once. An app that handles Ensure's error never reaches the panic, so no per-call guard is needed. Two further points: (1) a go-dt change must serve go-dt's users generally, not Endless's needs alone — the failure cases go in a filed go-dt task; (2) never return an empty DirPath as a degraded value: Mike considers that a potential security vulnerability. He is open to GetUserHomeDir returning an error instead of panicking for the $HOME-unset case, and wants ToTilde to stay error-free.
 - **Project**: endless
+
+### [2026-11-07] Name a function for what it does; refusal.Tilde was a bad name
+E-2308: I named the function that scans free text and replaces the home directory with a tilde 'refusal.Tilde'. Mike: that seems like a bad name for a scan-and-replace over text. Name functions for the operation they perform on their input, so a reader can tell a text rewrite from a typed path conversion without opening the file.
+- **Project**: endless
