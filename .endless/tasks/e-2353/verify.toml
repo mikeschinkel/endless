@@ -1,0 +1,66 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2353 and records what was true when E-2353
+# landed. Edit it only if you ARE E-2353. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+#
+# E-2353: plan_items.render_items lays plan items out as a headerless
+# table — number, three fixed glyph slots, text wrapped within its column
+# to the terminal width (70 when it cannot be read) — with one blank line
+# between items and a static dim legend under it, in task plan list, task
+# show, the reconcile context and the post-land state. task show --agent
+# keeps the words rendering; --json is untouched.
+#
+# The runner's HOME holds no database, so the checks below call the
+# renderer on rows built in place rather than on a task's items.
+
+schema = 1
+task   = "E-2353"
+
+# Native tests first, fail-fast: wrapping, each glyph slot, the legend, a
+# wide label, the blank separator, the fallback width, the words rendering
+# and the guide line.
+[[check]]
+name   = "plan_items unit tests"
+runner = "pytest/uv"
+paths  = ["tests/test_plan_items.py"]
+
+[[check]]
+name     = "P1/P2/P4: number, glyph slots, then statement, verify: and detail as one block, at one offset for P9 and P100"
+sh       = "uv run python -c 'from endless import plan_items as p; r=lambda l,s,**o:{\"label\":l,\"statement\":s,\"approved_statement\":s,\"kind\":\"deliverable\",\"approved_kind\":\"deliverable\",\"origin\":\"planned\",\"state\":\"active\",\"approved_at\":\"x\",\"verify\":None,\"detail\":None,\"verdict\":None,**o}; print(p.render_items([r(\"P9\",\"a\",verify=\"go test\",detail=\"d\"), r(\"P100\",\"b\",approved_at=None,origin=\"grown\",kind=\"exclusion\",approved_kind=\"exclusion\")], width=70))'"
+contains = "P9    ✓    a verify: go test d\n\nP100   +✗  b"
+
+[[check]]
+name     = "P3: with no terminal the text wraps to 70 columns"
+sh       = "uv run python -c 'from endless import plan_items as p; out=p.render_items([{\"label\":\"P1\",\"statement\":\" \".join([\"word\"]*40),\"approved_statement\":\"\",\"kind\":\"deliverable\",\"approved_kind\":\"deliverable\",\"origin\":\"planned\",\"state\":\"active\",\"approved_at\":\"x\",\"verify\":None,\"detail\":None,\"verdict\":None}]); lines=out.splitlines(); print(len(lines) > 3 and max(map(len, lines)) <= 70)' | cat"
+contains = "True"
+
+[[check]]
+name     = "P7: one glyph map, one legend, printed dim under the table"
+sh       = "uv run python -c 'import click; from endless import plan_items as p; out=p.render_items([{\"label\":\"P1\",\"statement\":\"a\",\"approved_statement\":\"a\",\"kind\":\"deliverable\",\"approved_kind\":\"deliverable\",\"origin\":\"planned\",\"state\":\"active\",\"approved_at\":\"x\",\"verify\":None,\"detail\":None,\"verdict\":None}], width=70); print(out.endswith(chr(10)*2 + click.style(p.LEGEND, dim=True)), p.LEGEND)'"
+contains = "True ✓ approved  ~ changed  – withdrawn  + grown  ↷ post-land  ✗ exclusion"
+
+[[check]]
+name   = "P9: task plan list, task show, the reconcile context and the post-land state all render through render_items"
+sh     = "test \"$(grep -c 'render_items(' src/endless/plan_items.py)\" -ge 4 && grep -q 'plan_items.render_items(rows)' src/endless/task_cmd.py"
+
+[[check]]
+name   = "P10: task show --agent keeps the words rendering"
+sh     = "grep -q 'render_items_words(rows)' src/endless/task_cmd.py && grep -q '_plan_items_text(item_id, agent=True)' src/endless/task_cmd.py"
+
+[[check]]
+name     = "P10: the words rendering is the one it was"
+sh       = "uv run python -c 'from endless import plan_items as p; print(p.render_items_words([{\"label\":\"P1\",\"statement\":\"a\",\"kind\":\"deliverable\",\"origin\":\"grown\",\"state\":\"active\",\"approved_at\":None,\"verify\":\"go test\",\"detail\":None,\"verdict\":None}]))'"
+equals   = "  P1      a [grown, unapproved]\n          verify: go test"
+
+[[check]]
+name     = "P12: the guide's Plan items section shows the legend"
+sh       = "grep -c '✓ approved  ~ changed  – withdrawn  + grown  ↷ post-land  ✗ exclusion' docs/guide/tasks.md"
+equals   = "1"
+
+[[check]]
+name   = "P13/P14: no borders, and tabulate, not rich"
+sh     = "! grep -nE '^(import rich|from rich)' src/endless/plan_items.py && grep -q 'tablefmt=\"plain\"' src/endless/plan_items.py"
+
+[[check]]
+name   = "P15: plan-item data, events and the items.toml mirror are untouched"
+sh     = "git diff --quiet $(git merge-base HEAD main) HEAD -- internal/ cmd/ src/endless/doc_mirror.py"

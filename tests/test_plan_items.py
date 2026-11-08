@@ -9,6 +9,7 @@ check that keeps the items.toml mirror off the real main checkout.
 
 from pathlib import Path
 
+import click
 import pytest
 from click.exceptions import ClickException
 
@@ -164,30 +165,132 @@ def test_reconcile_file_refuses_what_it_does_not_define(tmp_path, body):
 
 # --- rendering ---------------------------------------------------------------
 
-def test_render_shows_verdict_answer_and_kept_reason():
-    out = plan_items.render_items([{
-        "label": "P1", "kind": "deliverable", "statement": "It renders",
-        "origin": "planned", "state": "active", "approved_at": "x",
-        "approved_statement": "It renders", "approved_kind": "deliverable",
-        "verify": "go test", "detail": None, "verdict": "differently",
-        "note": "via a template", "question_id": 7, "question_status": "answered",
-        "answer": "fine", "holds_reason": "nothing changed",
-    }])
-    assert "P1" in out and "verify: go test" in out
-    assert "done differently: via a template" in out
-    assert "EQ-7 answered: fine" in out and "kept: nothing changed" in out
+_ROW = {
+    "kind": "deliverable", "origin": "planned", "state": "active",
+    "approved_at": "x", "approved_kind": "deliverable", "post_land": False,
+    "approved_post_land": False, "verify": None, "detail": None, "verdict": None,
+}
 
 
-def test_render_flags_grown_unapproved_and_changed_items():
-    base = {"kind": "deliverable", "verify": None, "detail": None, "verdict": None}
-    out = plan_items.render_items([
-        {**base, "label": "P1", "statement": "a", "origin": "grown", "state": "active",
-         "approved_at": None},
-        {**base, "label": "P2", "statement": "b2", "origin": "planned", "state": "active",
-         "approved_at": "x", "approved_statement": "b", "approved_kind": "deliverable"},
+def _item(label: str, statement: str, **over) -> dict:
+    return {**_ROW, "label": label, "statement": statement,
+            "approved_statement": statement, **over}
+
+
+def _table(out: str) -> list[str]:
+    """The rendered lines above the legend."""
+    return out.split("\n\n" + click.style(plan_items.LEGEND, dim=True))[0].splitlines()
+
+
+def test_render_wraps_the_text_within_its_column():
+    words = " ".join(f"w{i}" for i in range(40))
+    out = plan_items.render_items([_item("P1", words, verify="go test", detail="more")], width=50)
+    lines = _table(out)
+    assert lines[0].startswith("P1  ✓")
+    assert len(lines) > 1 and all(len(line) <= 50 for line in lines)
+    offset = lines[0].index("w0")
+    assert all(line.startswith(" " * offset) and line[offset] != " " for line in lines[1:])
+    # Statement, verify: and detail are one wrapped block, not three fields.
+    assert "w39 verify: go test more" in " ".join(line.strip() for line in lines)
+
+
+def test_render_shows_verdict_answer_and_kept_reason_under_the_text():
+    out = plan_items.render_items([_item(
+        "P1", "It renders", verify="go test", verdict="differently",
+        note="via a template", question_id=7, question_status="answered",
+        answer="fine", holds_reason="nothing changed",
+    )], width=70)
+    lines = _table(out)
+    assert lines[0] == "P1  ✓    It renders verify: go test"
+    assert lines[1] == "           ⟶ done differently: via a template"
+    assert lines[2] == "             EQ-7 answered: fine"
+    assert lines[3] == "             kept: nothing changed"
+
+
+def test_render_wraps_a_verdict_line_with_a_hanging_indent():
+    out = plan_items.render_items([_item(
+        "P1", "short", verdict="differently",
+        note=" ".join(f"n{i}" for i in range(30)),
+    )], width=60)
+    lines = _table(out)
+    assert lines[1].startswith("           ⟶ done differently: n0")
+    assert lines[2].startswith("             n") and len(lines[2]) <= 60
+
+
+@pytest.mark.parametrize("over, expected", [
+    ({}, "✓  "),
+    ({"approved_at": None}, "   "),
+    ({"approved_statement": "was"}, "~  "),
+    ({"state": "withdrawn"}, "–  "),
+    ({"approved_at": None, "origin": "grown"}, " + "),
+    ({"post_land": True, "approved_post_land": True}, "✓↷ "),
+    ({"post_land": True, "approved_post_land": True, "origin": "grown"}, "✓↷ "),
+    ({"kind": "exclusion", "approved_kind": "exclusion"}, "✓ ✗"),
+    ({"approved_at": None, "origin": "grown", "kind": "exclusion"}, " +✗"),
+])
+def test_render_fills_each_glyph_slot_at_its_fixed_position(over, expected):
+    assert plan_items.glyphs(_item("P1", "a", **over)) == expected
+    out = plan_items.render_items([_item("P1", "a", **over)], width=70)
+    assert _table(out)[0] == f"P1  {expected}  a".rstrip()
+
+
+def test_render_widens_the_number_column_to_the_widest_label():
+    out = plan_items.render_items(
+        [_item("P9", "nine"), _item("P10", "ten"), _item("P100", "hundred")], width=70)
+    lines = [line for line in _table(out) if line]
+    assert lines == ["P9    ✓    nine", "P10   ✓    ten", "P100  ✓    hundred"]
+    assert len({line.index(" ✓") for line in lines}) == 1
+
+
+def test_render_separates_items_with_one_blank_line():
+    out = plan_items.render_items(
+        [_item("P1", "a b c d e f g h i j k l m n o p"), _item("P2", "b"), _item("P3", "c")],
+        width=30)
+    lines = _table(out)
+    assert lines.count("") == 2
+    assert [line[:9] for line in lines if line.startswith("P")] == ["P1  ✓    ", "P2  ✓    ", "P3  ✓    "]
+    assert lines[0].startswith("P1  ✓    a b c d") and lines[1].startswith("         ")
+    assert lines[lines.index("P2  ✓    b") - 1] == ""
+    assert lines[lines.index("P3  ✓    c") - 1] == ""
+
+
+def test_render_prints_the_legend_dim_under_the_table():
+    out = plan_items.render_items([_item("P1", "a")], width=70)
+    assert out.endswith("\n\n" + click.style(plan_items.LEGEND, dim=True))
+    assert plan_items.LEGEND == \
+        "✓ approved  ~ changed  – withdrawn  + grown  ↷ post-land  ✗ exclusion"
+
+
+def test_render_wraps_to_seventy_columns_when_the_terminal_width_is_unknown(monkeypatch):
+    monkeypatch.setattr(plan_items.shutil, "get_terminal_size",
+                        lambda fallback: type("S", (), {"columns": fallback[0]})())
+    out = plan_items.render_items([_item("P1", " ".join("word" for _ in range(30)))])
+    lines = _table(out)
+    assert len(lines) > 1 and max(len(line) for line in lines) <= 70 > 60
+
+
+def test_render_words_keeps_the_agent_rendering():
+    out = plan_items.render_items_words([
+        _item("P1", "a", origin="grown", approved_at=None, verify="go test"),
+        _item("P2", "b2", approved_statement="b", verdict="differently", note="via a template",
+             question_id=7, question_status="answered", answer="fine",
+             holds_reason="nothing changed"),
+        _item("P3", "c", kind="exclusion", approved_kind="exclusion", state="withdrawn"),
     ])
-    assert "[grown, unapproved]" in out
-    assert "[changed since approval]" in out
+    assert out.splitlines() == [
+        "  P1      a [grown, unapproved]",
+        "          verify: go test",
+        "  P2      b2 [changed since approval]",
+        "          ⟶ done differently: via a template",
+        "            EQ-7 answered: fine",
+        "            kept: nothing changed",
+        "  P3 excl c [withdrawn]",
+    ]
+
+
+def test_guide_shows_the_glyph_legend():
+    guide = (Path(__file__).parent.parent / "docs" / "guide" / "tasks.md").read_text()
+    assert plan_items.LEGEND in guide
 
 
 # --- the sandbox check the mirror depends on ----------------------------------

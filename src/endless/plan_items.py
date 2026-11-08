@@ -18,10 +18,13 @@ renders.
 """
 
 import json
+import shutil
+import textwrap
 import tomllib
 from pathlib import Path
 
 import click
+from tabulate import tabulate
 
 from endless import agent_help, config, doc_mirror, provenance
 from endless.event_bridge import emit_event
@@ -408,10 +411,150 @@ _VERDICT_WORDS = {
     "deferred": "deferred to after the land",
 }
 
+# The three glyph slots of the plan-item table (E-2353): state, origin, kind,
+# each one character at a fixed position, so the column stays aligned and the
+# eye reads a blank slot as the common case. One map per slot, keyed by the
+# word the legend uses for it; a blank glyph is a state the legend omits.
+STATE_GLYPHS = {"approved": "✓", "unapproved": " ", "changed": "~", "withdrawn": "–"}
+ORIGIN_GLYPHS = {"grown": "+", "post-land": "↷", "planned": " "}
+KIND_GLYPHS = {"exclusion": "✗", "deliverable": " "}
 
-def render_items(rows: list[dict], *, verdicts: bool = True) -> str:
-    """Items as lines: number, kind, statement, verify, and — when reconciled —
-    the latest verdict and the answer to its question.
+# Printed dim under every table. Static, as `session list`'s legend is: a
+# stable line means the eye learns one mapping instead of re-reading it. Two
+# spaces between entries, not that legend's three, so it fits FALLBACK_WIDTH.
+LEGEND = "  ".join(
+    f"{glyph} {word}"
+    for slots in (STATE_GLYPHS, ORIGIN_GLYPHS, KIND_GLYPHS)
+    for word, glyph in slots.items()
+    if glyph.strip()
+)
+
+# Where the terminal's width cannot be read — a pipe, a pager, a test — the
+# text column wraps to this; it fits a split pane.
+FALLBACK_WIDTH = 70
+# The text column never shrinks below this, however narrow the terminal.
+_MIN_TEXT_WIDTH = 20
+# The glyph cell's width, and the gap tabulate's `plain` format puts between
+# columns; the text column's width is derived from them.
+_GLYPH_SLOTS = 3
+_COLUMN_GAP = 2
+
+
+def _state_word(it: dict) -> str:
+    if it["state"] == "withdrawn":
+        return "withdrawn"
+    if it.get("approved_at") is None:
+        return "unapproved"
+    if _changed_since_approval(it):
+        return "changed"
+    return "approved"
+
+
+def _origin_word(it: dict) -> str:
+    # One slot: a post-land item's mark outranks grown, because post-land
+    # changes what the land does and grown only says where the item came from.
+    if it.get("post_land"):
+        return "post-land"
+    if it["origin"] == "grown":
+        return "grown"
+    return "planned"
+
+
+def glyphs(it: dict) -> str:
+    """The item's three glyph slots, state then origin then kind, so an
+    unapproved grown deliverable reads ' + '."""
+    return (STATE_GLYPHS[_state_word(it)]
+            + ORIGIN_GLYPHS[_origin_word(it)]
+            + KIND_GLYPHS[it["kind"]])
+
+
+def _verdict_lines(it: dict) -> list[str]:
+    """After reconciliation: the latest verdict, its question and the kept:
+    reason, each as one unwrapped line."""
+    if not it.get("verdict"):
+        return []
+    v = _VERDICT_WORDS.get(it["verdict"], it["verdict"])
+    line = f"⟶ {v}"
+    if it.get("post_land_attempt"):
+        line = f"⟶ post-land #{it['post_land_attempt']}: {v}"
+    if it.get("note"):
+        line += f": {it['note']}"
+    out = [line]
+    qid = it.get("question_id")
+    if qid:
+        status = it.get("question_status")
+        if status == "answered":
+            out.append(f"  EQ-{qid} answered: {it['answer']}")
+        elif status == "open":
+            out.append(f"  EQ-{qid} open — waiting for the user")
+        else:
+            out.append(f"  EQ-{qid} {status}: {it.get('close_reason') or ''}")
+        if it.get("holds_reason"):
+            out.append(f"  kept: {it['holds_reason']}")
+    return out
+
+
+def _text_cell(it: dict, *, verdicts: bool, width: int) -> str:
+    """The item's text column: statement, verify: and detail as one block that
+    tabulate wraps to the column, then — when reconciled — the verdict lines
+    indented under it. Those are wrapped here with a hanging indent, since
+    tabulate wraps each line of a cell on its own and would start a
+    continuation line at the column's edge; a line that already fits passes
+    through it untouched.
+    """
+    parts = [it["statement"]]
+    if it.get("verify"):
+        parts.append(f"verify: {it['verify']}")
+    if it.get("detail"):
+        parts.append(it["detail"])
+    lines = [" ".join(parts)]
+    if verdicts:
+        for line in _verdict_lines(it):
+            indent = len(line) - len(line.lstrip(" ")) + 2
+            lines += textwrap.wrap(line.strip(), width,
+                                   initial_indent=" " * indent,
+                                   subsequent_indent=" " * (indent + 2),
+                                   break_long_words=False, break_on_hyphens=False)
+    return "\n".join(lines)
+
+
+def terminal_width() -> int:
+    """The terminal's width when it can be read, else FALLBACK_WIDTH."""
+    return shutil.get_terminal_size(fallback=(FALLBACK_WIDTH, 0)).columns
+
+
+def render_items(rows: list[dict], *, verdicts: bool = True,
+                 width: int | None = None) -> str:
+    """Items as a headerless table — number, three glyph slots, text — with
+    one blank line between items and the glyph legend under it (E-2353).
+
+    The text cell wraps within its column to `width` (the terminal's when not
+    given). The number column is as wide as the widest label present, so the
+    text starts at one offset for P9, P10 and P100. tabulate keeps the cells'
+    whitespace: a blank glyph slot holds its position, and a row of blanks
+    between items renders as the blank line.
+    """
+    if width is None:
+        width = terminal_width()
+    label_w = max(len(it["label"]) for it in rows)
+    text_w = max(_MIN_TEXT_WIDTH,
+                 width - label_w - _COLUMN_GAP - _GLYPH_SLOTS - _COLUMN_GAP)
+    table: list[list[str]] = []
+    for it in rows:
+        if table:
+            table.append([" ", " ", " "])
+        table.append([it["label"], glyphs(it),
+                      _text_cell(it, verdicts=verdicts, width=text_w)])
+    out = tabulate(table, tablefmt="plain", maxcolwidths=[None, None, text_w],
+                   disable_numparse=True, preserve_whitespace=True)
+    lines = [line.rstrip() for line in out.splitlines()]
+    return "\n".join(lines) + "\n\n" + click.style(LEGEND, dim=True)
+
+
+def render_items_words(rows: list[dict], *, verdicts: bool = True) -> str:
+    """Items as lines with their states in words — `[grown, unapproved]` —
+    one field per line: the rendering `task show --agent` keeps (E-2353 P10),
+    since an agent reads words where a person reads a glyph.
     """
     lines: list[str] = []
     for it in rows:
@@ -421,37 +564,20 @@ def render_items(rows: list[dict], *, verdicts: bool = True) -> str:
             flags.append("post-land")
         if it["origin"] == "grown":
             flags.append("grown")
-        if it["state"] == "withdrawn":
-            flags.append("withdrawn")
-        elif it.get("approved_at") is None:
-            flags.append("unapproved")
-        elif _changed_since_approval(it):
+        state = _state_word(it)
+        if state == "changed":
             flags.append("changed since approval")
+        elif state != "approved":
+            flags.append(state)
         flag = f" [{', '.join(flags)}]" if flags else ""
         lines.append(f"{it['label']:>4} {tag} {it['statement']}{flag}")
         if it.get("verify"):
             lines.append(f"{'':>9} verify: {it['verify']}")
         if it.get("detail"):
             lines.append(f"{'':>9} {it['detail']}")
-        if verdicts and it.get("verdict"):
-            v = _VERDICT_WORDS.get(it["verdict"], it["verdict"])
-            line = f"{'':>9} ⟶ {v}"
-            if it.get("post_land_attempt"):
-                line = f"{'':>9} ⟶ post-land #{it['post_land_attempt']}: {v}"
-            if it.get("note"):
-                line += f": {it['note']}"
-            lines.append(line)
-            qid = it.get("question_id")
-            if qid:
-                status = it.get("question_status")
-                if status == "answered":
-                    lines.append(f"{'':>11} EQ-{qid} answered: {it['answer']}")
-                elif status == "open":
-                    lines.append(f"{'':>11} EQ-{qid} open — waiting for the user")
-                else:
-                    lines.append(f"{'':>11} EQ-{qid} {status}: {it.get('close_reason') or ''}")
-                if it.get("holds_reason"):
-                    lines.append(f"{'':>11} kept: {it['holds_reason']}")
+        if verdicts:
+            for line in _verdict_lines(it):
+                lines.append(f"{'':>9} {line}")
     return "\n".join(lines)
 
 

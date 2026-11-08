@@ -7553,7 +7553,7 @@ def detail_item(
         for slug in content_slugs:
             # E-2280: the plan renders its items first, then its prose.
             if slug == "plan" and slug in show_content:
-                items_text = _plan_items_text(item_id)
+                items_text = _plan_items_text(item_id, agent=True)
                 if items_text:
                     click.echo(f"\n## Plan items\n{items_text}")
             if slug in show_content and item[slug]:
@@ -7823,11 +7823,17 @@ def _render_detail_human(
         click.echo()
 
 
-def _plan_items_text(item_id: int) -> str:
-    """A task's plan items with their latest verdicts and answers, or ""."""
+def _plan_items_text(item_id: int, *, agent: bool = False) -> str:
+    """A task's plan items with their latest verdicts and answers, or "":
+    a wrapped table with a glyph legend for a person, states in words for an
+    agent (E-2353)."""
     from endless import plan_items
     rows = plan_items.items(item_id)
-    return plan_items.render_items(rows) if rows else ""
+    if not rows:
+        return ""
+    if agent:
+        return plan_items.render_items_words(rows)
+    return plan_items.render_items(rows)
 
 
 # The spawn handoff is generated, not stored (E-1469). Per-task variables
