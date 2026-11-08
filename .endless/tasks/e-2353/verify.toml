@@ -30,8 +30,8 @@ sh       = "uv run python -c 'from endless import plan_items as p; r=lambda l,s,
 contains = "P9    ✓    a verify: go test d\n\nP100   +✗  b"
 
 [[check]]
-name     = "P3: with no terminal the text wraps to 70 columns"
-sh       = "uv run python -c 'from endless import plan_items as p; out=p.render_items([{\"label\":\"P1\",\"statement\":\" \".join([\"word\"]*40),\"approved_statement\":\"\",\"kind\":\"deliverable\",\"approved_kind\":\"deliverable\",\"origin\":\"planned\",\"state\":\"active\",\"approved_at\":\"x\",\"verify\":None,\"detail\":None,\"verdict\":None}]); lines=out.splitlines(); print(len(lines) > 3 and max(map(len, lines)) <= 70)' | cat"
+name     = "P3: with no terminal and no COLUMNS the text wraps to 70 columns"
+sh       = "env -u COLUMNS uv run python -c 'from endless import plan_items as p; out=p.render_items([{\"label\":\"P1\",\"statement\":\" \".join([\"word\"]*40),\"approved_statement\":\"\",\"kind\":\"deliverable\",\"approved_kind\":\"deliverable\",\"origin\":\"planned\",\"state\":\"active\",\"approved_at\":\"x\",\"verify\":None,\"detail\":None,\"verdict\":None}]); lines=out.splitlines(); print(len(lines) > 3 and max(map(len, lines)) <= 70)' | cat"
 contains = "True"
 
 [[check]]
