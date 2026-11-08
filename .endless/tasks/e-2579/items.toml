@@ -3,40 +3,45 @@
 #   endless task update E-2579 --items-file <copy>
 
 [[item]]
-id = "P1"
+id = "P8"
 kind = "deliverable"
-statement = "undeclaredRefs lists all six missing session references, so the dangling-id check refuses a correcting write of a session id that names no session"
-verify = "endless correct error_triage <key> --set accepted_session_id=<unused id> is refused naming sessions; same for the other five columns"
+statement = "undeclaredRefs lists all six missing session references, so correct's delete refusal counts them"
+verify = "endless correct session <id> delete is refused, naming the holder, for a session referred to only by an error_triage, errors, errors_sources or session_notices.changed_by_session row"
 
 [[item]]
-id = "P2"
-kind = "deliverable"
-statement = "The delete refusal counts those six, so a session one of them refers to cannot be deleted"
-verify = "endless correct session <id> delete is refused for a session named only by an error_triage, errors, errors_sources or session_notices.changed_by_session row"
-
-[[item]]
-id = "P3"
+id = "P9"
 kind = "deliverable"
 statement = "A test derives every undeclared reference from the live schema and fails when undeclaredRefs and the schema disagree, in either direction"
 verify = "go test ./internal/events/... fails when a row is removed from undeclaredRefs, and fails when a row names a table or column that no longer exists"
 
 [[item]]
-id = "P4"
+id = "P10"
 kind = "deliverable"
 statement = "The test states in a comment which columns it can recognize as a reference, and that a reference not matching the naming rule escapes both it and the list"
 verify = "the comment is present and names the limit"
 
 [[item]]
-id = "P5"
+id = "P11"
+kind = "deliverable"
+statement = "A comment on the six entries records that they feed the delete refusal only, because their tables are not correction targets or do not expose the column for correction"
+verify = "the comment is present beside the entries"
+
+[[item]]
+id = "P12"
+kind = "exclusion"
+statement = "The six are not brought within reach of the dangling-id check: errors, errors_sources and error_triage are not correction targets, and session_notices.changed_by_session is nullable and outside its target's correctable columns, so no correcting write can reach any of them"
+
+[[item]]
+id = "P13"
 kind = "exclusion"
 statement = "No removed column, live_sessions view or session read-path audit: E-2570 is declined and sessions keep their current shape"
 
 [[item]]
-id = "P6"
+id = "P14"
 kind = "exclusion"
 statement = "sessions.id is not rebuilt with AUTOINCREMENT, and no migration is added"
 
 [[item]]
-id = "P7"
+id = "P15"
 kind = "exclusion"
 statement = "Which targets endless correct accepts is unchanged, session delete included"
