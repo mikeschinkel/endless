@@ -5,7 +5,7 @@
 [[item]]
 id = "P1"
 kind = "deliverable"
-statement = "render_items lays plan items out as a three-column table with no headings: item number, glyphs, text"
+statement = "render_items lays plan items out as a headerless table: item number, three one-character glyph columns with no gap between them (state, origin, kind), then text"
 verify = "tests/test_plan_items.py"
 detail = "Built with tabulate's borderless format and per-column wrap width, the library every other CLI table uses."
 
