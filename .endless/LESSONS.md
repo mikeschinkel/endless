@@ -8009,3 +8009,7 @@ While reorienting E-2063 after a 23-day gap, I reported that E-2215/E-2257's tab
 ### [2026-11-08] A rule is not a con; name the actual cost of changing it
 Planning E-2479, I listed 'changes the rule that items freeze from unverified on' as a con of letting task reconcile run at unverified. Mike: 'Aside from changing a rule, which you over-index on not reconsidering when facts reveal the rule might need to be modified, what is the actual downside?' A rule that no longer fits the facts is a candidate for change, not a cost. When an option departs from a rule, work out what the rule protects, state what weakens if it changes, and give that as the con; if nothing weakens, the option has no con there.
 - **Project**: endless
+
+### [2026-11-08] Decided-without-asking items go in a bullet list
+In the E-2479 needs-plan output I wrote the 'Decided without asking' items as one paragraph joined by semicolons. Mike: 'Please list these as a bullet list, not a run-on paragraph of text.' Each decided item is one bullet, so he can object to one without re-reading the rest.
+- **Project**: endless
