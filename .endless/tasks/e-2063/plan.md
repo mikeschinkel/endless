@@ -17,20 +17,20 @@ enum plus a mirror table.
 
 - `internal/harness` — an int enum mirroring `gatekind`: `Harness int`, explicit
   numeric constants (no iota), `String()` returning the slug, `Label()`,
-  `Parse()`, `All()`, `VerifyIntegrity(*sql.DB)`.
+  `Parse()`, `All()`. The check against the table lives in
+  `internal/harness/mirror`, so the enum stays a leaf the migration executable
+  may link (agentenv returns it, and refusal imports agentenv).
 - `harnesses (id, slug, label)` declared in the migration AND mirrored into
-  `schema.sql` (still exec'd directly by tests until E-2021 generates it), seeded
-  `(1,'claude_cli','Claude Code (CLI)')` and
-  `(2,'claude_desktop','Claude Code (Desktop)')`, with the fail-closed integrity
-  check wired into `monitor/db.go` beside the existing four.
+  `schema.sql` (still exec'd directly by tests until E-2021 generates it), its
+  rows seeded from the enum, with the fail-closed integrity check wired into
+  `monitor/db.go` beside the other mirrors. Where a harness names itself the
+  slug is its own name; `harness.Unrecognized` is a row for an agent on a
+  harness this binary cannot name, distinct from `Unknown` (no agent, no row).
 - `agentenv.ID` becomes `harness.Harness`. It is a string enum today, which is
   the non-compliance ED-1506 exists to prevent; five real call sites.
-- `task_landings.landed_by_harness TEXT` becomes
-  `landed_by_harness_id INTEGER REFERENCES harnesses(id)`. It is already a
-  persisted harness discriminator holding raw `agentenv.ID` strings, written by
-  `events/executor.go` and `events/projector.go` and read by the
-  `task_landings_notify_sessions` trigger — which must be recreated around the
-  rebuild.
+- `task_landings.landed_by_harness` is dropped. Its one reader, the
+  `task_landings_notify_sessions` trigger, left with E-2422, so nothing read it;
+  the ledger keeps `actor.harness` on every `task.landed` event.
 
 Existing `platform='claude'` maps to `claude_cli`. `'codex'` is dropped from the
 vocabulary: nothing has ever written it, and `internal/hookcmd/codex.go` is a
@@ -88,25 +88,32 @@ Nothing reads the new tables yet. Land-safe on its own.
 ## Increment 3 — resolution moves to the instance
 
 `sessions.session_id` stays in place and keeps being written through this
-increment, so it is reversible: it stops being the resolution key, not yet the
-stored value.
+increment, so it is reversible. It stops being the resolution key and becomes
+the UUID of the instance that last fired, so every reader still keyed on it —
+Go and Python alike — reaches the conversation running now until Increment 4
+removes it.
 
-- `monitor.GetActiveSession(uuid)` resolves uuid to `claude_cli_sessions` to
-  `session_instances` to `sessions`, returning the Endless session.
-- `monitor.TouchSession` upserts the INSTANCE — bumping `last_event_at`, and
-  clearing a stale `ended_at` — and inserts a `sessions` row only when no
-  instance matches the uuid. Today it is a single upsert keyed on
-  `ON CONFLICT(session_id)`; it becomes resolve-then-upsert in one transaction.
-  It fires on every hook event, so it stays one round trip where it can.
-- SessionStart reads `payload.Source` (`startup`, `resume`, `clear`, `compact`).
-  It is declared on `claudePayload` and read nowhere today. Anything other than
-  `startup` is continuation: when the window's session already exists and the
-  uuid is new, append an instance rather than inserting a `sessions` row.
-- A clear closes the prior instance by setting its `ended_at`. Nothing else ever
-  closes an instance, and nothing is closed automatically anywhere else.
-- `launch_dir` is written once, at instance creation, from `payload.CWD`. Never
-  rewritten: `/cd` changes the harness's current directory but not the directory
-  the transcript was filed under, and this column records the latter.
+- Every lookup of a UUID resolves `claude_cli_sessions` → `session_instances` →
+  `sessions`: `GetActiveSession`, the touch, the bind, the transcript offset.
+- `monitor.TouchInstance` (TouchSession wraps it for sibling shells) is
+  resolve-then-write in one transaction. A known UUID bumps its instance's
+  `last_event_at`, clears a stale `ended_at` unless the event is SessionEnd,
+  and keeps `transcript_path` current. An unknown UUID either continues a
+  session (below) or mints a session with its first instance. A sessions row
+  carrying the UUID with no instance is adopted, not collided with. Nothing
+  writes a sessions row without an instance.
+- SessionStart asks `monitor.ContinuationOf` before the touch. The candidate is
+  the session last seen in the same tmux pane, since a rotation keeps the
+  harness process. The harness's own `continued-in` link in the candidate's
+  transcript, naming the new UUID, is authoritative; failing that, any `source`
+  but `startup` is a continuation. No pane, no candidate: a new session.
+- A continuation closes the session's open instances (`ended_at`), appends one
+  for the new UUID, points `sessions.session_id` at it, and resets the
+  session-level offset mirror. Nothing else closes an instance.
+- Recorded per instance, on `claude_cli_sessions` because both are Claude Code's
+  facts: `start_source` (the SessionStart `source` that created it) and
+  `transcript_path` (the payload's, kept current). `launch_dir` is the payload
+  cwd at creation, written once. Every SessionStart also logs its `source`.
 
 ## Increment 4 — the column moves and the two rebuilds
 
@@ -364,19 +371,23 @@ it. e-2074's header predicted the opposite — "E-2063 is about to reuse the sam
 nullability for harness instances" — which is now wrong; that change file is
 history and stays as written.
 
-## `launch_dir` is new
+## `launch_dir` is new, and `transcript_path` came back beside it
 
-Not in the previous plan. `claude --resume <uuid>` resolves within the current
-directory's harness project dir, and there is no global index — the only
-structure mapping a uuid to its transcript is the per-cwd slug directory. So a
-session launched outside its worktree cannot be resumed from the worktree, which
-is what `session resume` does today.
+Not in the previous plan. `launch_dir` records where an instance began, for
+resume to put the user back there.
 
-E-1905 dropped `sessions.transcript_path` partly because it went stale on a cwd
-change. That reasoning does not carry over: it was one value per SESSION, and a
-session's cwd can change; an instance is exactly one conversation and its launch
-directory is fixed when it is created. The instance model is what makes the
-column legitimate.
+The previous version of this section said `claude --resume <uuid>` resolves only
+within the current directory's project dir, so resuming from elsewhere cannot
+find the conversation. This conversation disproves that as stated: it was
+resumed from the main checkout while its transcript was filed under its
+worktree, on 2.1.301 and again on 2.1.319, and `/cd`'d back each time keeping
+its UUID. E-2206's `/cd` on 2.1.300 minted a new UUID instead.
+
+So where the transcript is filed is observed, not derived: the hook payload
+names `transcript_path` on every event, and `claude_cli_sessions` keeps it
+current. E-1905 dropped `sessions.transcript_path` because one value per
+session went stale across a cwd change; per instance, and refreshed from the
+payload, it cannot.
 
 ## `recap` and `recap_through` are not created
 
@@ -408,8 +419,10 @@ The previous plan moved `platform` to a `harness TEXT`. `src/endless/db.py`
 carries a `CHECK (platform IN ('claude','codex'))` that `schema.sql` does not,
 which is a second declaration of a schema constraint and exactly what ED-1472
 put a stop to. ED-1506 governs the value set, so it becomes an int enum plus a
-mirror table with a fail-closed integrity check — bringing `agentenv` and
-`task_landings.landed_by_harness` into compliance with it on the way.
+mirror table with a fail-closed integrity check — bringing `agentenv` into
+compliance with it on the way. `task_landings.landed_by_harness` was going to
+convert too; by implementation it had no reader left, so it was dropped
+(2026-11-08).
 
 ## Naming
 
@@ -430,6 +443,8 @@ being removed entirely by E-2081.
 
 `session_messages` is the only table that re-points, which is the right answer —
 it is the only one whose rows are literally the conversation.
+
+
 
 
 
