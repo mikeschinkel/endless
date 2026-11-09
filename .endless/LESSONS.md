@@ -8073,3 +8073,7 @@ Handing off E-2571, I gave Mike the verify command and then added that E-2010's 
 ### [2026-11-09] A landed task's verify suite breaking is by design; never worry about it or report it
 After E-2571 landed I twice brought up that E-2010's landed verify suite had a check my change broke. Mike was angry: a landed task's verify script is by definition no longer valid, breaking it is by design and expected, and this is the second recent time an agent has over-indexed on it. His words were never: do not worry about, check, mention, or report a landed task's verify suite breaking, in a handoff or anywhere else, in any session. A prior lesson on this already existed and did not stop it, so the final-message rules in the spawn prompt are the place he can pin it.
 - **Project**: endless
+
+### [2026-11-09] Read a time in a status line as Mike means it before correcting it
+While designing the outage line for E-2589, Mike proposed 'Outage[Github]: Degraded for 09:49'. I assumed 'for' was a slip for 'since' and changed it to a start time. Mike meant a duration: he finds an elapsed time easier to reason about than a clock time he must subtract from the current time. When Mike's wording looks like a slip, ask or take it literally before 'correcting' it, and in status lines prefer elapsed durations over start times.
+- **Project**: endless
