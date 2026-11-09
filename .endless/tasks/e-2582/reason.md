@@ -1,0 +1,1 @@
+Moot under E-2583: a pass compares the branch's own lines and ignores main commits that touch only .endless/, so a refused land's rebase and another task's CTRF commit no longer void it.
