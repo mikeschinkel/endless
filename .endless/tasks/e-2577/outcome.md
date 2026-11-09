@@ -59,10 +59,10 @@ protects:
 
 - **E-2263** (folded in): verify rebases onto main first; a conflict is
   delivered to the session through the shared triage routes.
-- **E-2583** (new): compute whether a pass stands; remove `unlanded` as a
-  stored status and the sweep's demotion; land refuses naming verify.
-- **E-2584** (new): the context-free measure of the branch's own work, used by
-  the gate and the pass check.
+- **E-2583** (new): one context-free measure of the branch's own work, used
+  by the reconciliation gate and the pass check; compute whether a pass stands;
+  remove `unlanded` as a stored status and the sweep's demotion; land refuses
+  naming verify. (E-2584 was filed separately, then folded in and obsoleted.)
 - **E-2582** is obsoleted by this design (verify's rebase makes the land's
   rebase a no-op); retiring it is Mike's call.
 - E-2479 stands as is; it covers real changes to the branch's lines.
