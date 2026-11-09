@@ -91,3 +91,8 @@ statement = "One space separates the number column, the glyph cell and the text 
 id = "P17"
 kind = "deliverable"
 statement = "The table proper-cases the verdict words: As planned, Done differently, Not done, Blocked, Deferred to after the land, Kept, NOT KEPT"
+
+[[item]]
+id = "P18"
+kind = "deliverable"
+statement = "The labels Verdict:, Answer:, Question: and Answer holds: print in bright cyan, styled after the line is wrapped so the escape codes never count toward the width"
