@@ -90,7 +90,7 @@ statement = "After 3 failed handoff runs, the command stops and asks the user be
 [[item]]
 id = "P18"
 kind = "deliverable"
-statement = "A handoff run after the task's verify.sh changed since the first failed handoff run waits for the user's approval"
+statement = "A handoff run after the task's verify.toml changed since the first failed handoff run waits for the user's approval"
 
 [[item]]
 id = "P19"
