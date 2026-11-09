@@ -15,8 +15,12 @@ a failed land.
   against its merge-base with main, context excluded, and Endless-committed
   files excluded. `git patch-id` cannot do this, so it is a small routine.
 - "Endless-committed files" means exactly the files Endless itself writes and
-  commits (ledger, verbs, mirrors, lessons, CTRF reports), named by one list
-  shared with `monitor.AutoManagedStatusGlobs`. It is NOT all of `.endless/`:
+  commits (ledger, verbs, mirrors, lessons, CTRF reports), named by one Go
+  list. `monitor.AutoManagedStatusGlobs` holds only the ledger and verbs today,
+  and the land's Step 3 auto-commit has its own Python notion of
+  endless-managed files: reconcile those into the one list (checking the
+  anomaly callers before widening it), do not add a third. It is NOT all of
+  `.endless/`:
   a task's own verify suite and plan are the branch's work, and an edit to the
   suite after a pass must void it (`TestASuiteEditStalesThePass` stays).
 - The reconciliation gate uses it in place of patch-id.
