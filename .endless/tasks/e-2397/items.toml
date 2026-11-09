@@ -43,3 +43,8 @@ id = "P7"
 kind = "deliverable"
 statement = "When the branch that migrated main is landable, recover says landing it is the cheaper fix and names the command"
 verify = "With a landable branch carrying the migration, the output names its worktree land command"
+
+[[item]]
+id = "P8"
+kind = "exclusion"
+statement = "Rebuilding task state from the ledger, so task changes made after the backup come back, is left to a later child task"
