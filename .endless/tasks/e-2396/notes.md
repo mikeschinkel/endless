@@ -12,3 +12,17 @@ Running the suites this way is a workable stopgap until this lands: a temp
 HOME, with GOCACHE/GOMODCACHE/GOPATH/UV_CACHE_DIR pinned to their real
 values, and the temp dir symlink-resolved (`pwd -P`), or
 TestProjectPath_TildeExpandsToHome fails on the macOS temp-dir symlink.
+
+
+
+## Evidence from a second rerun (2026-11-09, E-2217 rebased on main)
+
+The same isolated run (temp HOME, Go paths pinned, plus GOENV, since Go's env
+file also lives under HOME) showed two more traces of the default config:
+- After the pytest suite, `<HOME>/.config/endless` existed in the temp home,
+  so a Python test still writes there. The verify harness's guard then
+  refused the next script as a direct run.
+- `internal/hookcmd` TestAutoBindFromCwd_MarksAutoSpawned panics with
+  "Must call cfgstore.SetLogger() with a *slog.Logger before reaching this
+  check", reached through monitor.livenessReady and OtherTaskHolders. A test
+  that reaches liveness reads config without setting it up.
