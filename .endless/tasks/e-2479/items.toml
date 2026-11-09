@@ -85,3 +85,8 @@ statement = "Does not change what task verify runs once the gate passes"
 id = "P16"
 kind = "deliverable"
 statement = "task verify's uncommitted-changes refusal lists each file once; it listed every file twice because the listing was passed both in the text and as detail"
+
+[[item]]
+id = "P17"
+kind = "deliverable"
+statement = "task reconcile --file first returns a stale unlanded task to unverified, as every read does, so the re-record lands on the task as it is instead of meeting the unlanded freeze"
