@@ -38,7 +38,7 @@ detail = "Fixed slots keep the column aligned; a blank slot is the common case."
 [[item]]
 id = "P7"
 kind = "deliverable"
-statement = "The glyph map is defined once in plan_items and a static dim legend prints under the table wherever it renders, as session list does; the legend omits the blank values and reads 'changed' for changed since approval"
+statement = "The glyph map is defined once in plan_items and a static dim legend prints under the table wherever it renders, between a dim box-drawing rule above and below it, each the width of the layout; the legend omits the blank values and reads 'changed' for changed since approval"
 
 [[item]]
 id = "P8"
