@@ -8069,3 +8069,7 @@ While triaging recorded faults after E-2578, I told Mike that WARN-0033 came fro
 ### [2026-11-09] Do not raise a landed suite's red check in a handoff; clear everything before the verify command
 Handing off E-2571, I gave Mike the verify command and then added that E-2010's landed verify suite had a check my change breaks and that I had left it alone. Mike said a handoff must have everything cleared before the verify command, and that the paragraph was unclear. Per .endless/tasks/CLAUDE.md a landed suite is a one-time land gate, nothing re-runs it, and its later result says nothing, so there was nothing to clear and nothing to report. Either resolve a leftover before the handoff or, when the project's rules say it is not an issue, leave it out entirely.
 - **Project**: endless
+
+### [2026-11-09] A landed task's verify suite breaking is by design; never worry about it or report it
+After E-2571 landed I twice brought up that E-2010's landed verify suite had a check my change broke. Mike was angry: a landed task's verify script is by definition no longer valid, breaking it is by design and expected, and this is the second recent time an agent has over-indexed on it. His words were never: do not worry about, check, mention, or report a landed task's verify suite breaking, in a handoff or anywhere else, in any session. A prior lesson on this already existed and did not stop it, so the final-message rules in the spawn prompt are the place he can pin it.
+- **Project**: endless
