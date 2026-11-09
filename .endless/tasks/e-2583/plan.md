@@ -38,6 +38,13 @@ a failed land.
   else stores it.
 - The land refuses when no pass stands and names `verify` as the next command.
   When main has moved, it says so. It does not run the suite itself.
+- The land's uncommitted-changes refusal (Step 2) names the one Endless file
+  that can be sitting on main uncommitted through no fault of the user: another
+  task's verify report (`.endless/tasks/e-*/verify-*.ctrf.json`), written onto
+  main by `task verify` moments before that run commits it. When every listed
+  file is such a report, the refusal says whose it is and that retrying after
+  the run commits is the whole remedy. The land never commits or waits on it
+  (absorbs E-2582, superseded by this task).
 - Delete the sweep's `unlanded → unverified` demotion and its staleness diff.
 - Migrate tasks now at `unlanded` to `unverified`; their passes keep standing
   or not by the new function.
@@ -52,5 +59,6 @@ rebase onto an unmoved main, an Endless auto-commit, and a main commit that
 touches only `.endless/`; a pass survives a refused land that rewrote the
 branch's commit ids; a pass stops standing
 when main moves or the branch's own lines change; the land refuses with the
-verify instruction in both cases; a failed land no longer changes the task's
+verify instruction in both cases; a land refused for another task's uncommitted
+verify report on main names the report and says to retry; a failed land no longer changes the task's
 status; no `unlanded` status remains.
