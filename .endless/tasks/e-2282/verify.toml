@@ -1,0 +1,46 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2282 and records what was true when E-2282
+# landed. Edit it only if you ARE E-2282. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+schema = 1
+task   = "E-2282"
+
+[[check]]
+name   = "verify refuses before its suite on a database without the task, naming it and a recording invocation; an unanswerable read lets it run; record_pass's empty read fails loudly"
+runner = "pytest/uv"
+paths  = ["tests/test_verify_cmd.py", "tests/test_unlanded.py"]
+
+[[check]]
+name   = "main's Python inside a worktree asks the installed endless-go for the status and session-state vocabularies"
+runner = "pytest/uv"
+paths  = ["tests/test_status_registry_client.py", "tests/test_session_state_lazy_lookup.py"]
+
+[[check]]
+name   = "the terminal-size stub returns a value pytest's own reporter can unpack"
+runner = "pytest/uv"
+paths  = ["tests/test_plan_items.py"]
+
+[[check]]
+name     = "the just verify recipe runs endless task verify naming no database"
+sh       = "just --show verify | tail -1 | sed 's/^ *//'"
+equals   = "endless task verify \"$tid\""
+
+[[check]]
+name     = "the just verify recipe passes no --db anywhere"
+sh       = "just --show verify | grep -c -- '--db'; true"
+equals   = "0"
+
+[[check]]
+name     = "the guide says just verify records the pass in main"
+sh       = "grep -c 'It names no database, so the pass is recorded in main' docs/guide/orchestration.md"
+equals   = "1"
+
+[[check]]
+name     = "the guide points a verify-machinery branch at driving its own candidate runner"
+sh       = "grep -c 'tests its own candidate runner from inside its suite' docs/guide/orchestration.md"
+equals   = "1"
+
+[[check]]
+name     = "the guide no longer says just verify selects the worktree's endless-go"
+sh       = "grep -c \"selects the \\*\\*worktree's\\*\\* .endless-go.\" docs/guide/orchestration.md; true"
+equals   = "0"

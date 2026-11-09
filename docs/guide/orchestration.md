@@ -1180,7 +1180,7 @@ Running a `verify.sh` directly is not a shortcut, it is a different (and worse) 
 
 **The runner refuses another task's landed suite.** Ask it for a suite that has landed and is not the task you are working on — not your session's task, and not the task whose worktree you are standing in — and it exits non-zero without running anything, naming what to run instead. Both halves of that condition matter: a task that landed and was then *reopened* is still your task, so re-verifying and re-landing your own work is untouched.
 
-> Inside Endless's own checkout, `just verify [E-NNNN]` adds one self-dev-only thing: `--db sandbox`, which selects the **worktree's** `endless-go` so a pre-land gate exercises candidate code rather than main's. Everything else it does, `endless task verify` now does itself.
+> Inside Endless's own checkout, `just verify [E-NNNN]` is a shorthand for `endless task verify`, run in the task's worktree. It names no database, so the pass is recorded in main, where `worktree land` reads it. A branch that changes the verify machinery tests its own candidate runner from inside its suite, by driving `bin/endless-go verify` against a fixture project.
 
 ### A verify suite is a land-time gate, not a standing regression suite
 

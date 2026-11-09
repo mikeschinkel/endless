@@ -79,6 +79,8 @@ def run_verify(item_id: int | None, keep: bool) -> None:
     # the same pin `worktree land` takes. An explicit --db still wins.
     config.default_db_to_main()
     unlanded.reconcile_quietly(resolved)
+    # E-2282: a database that does not know the task could only lose a pass.
+    unlanded.require_known(resolved)
     binary = _resolve_endless_go()
     run_dir = _run_dir(resolved)
     tree = Path(run_dir) if run_dir is not None else Path.cwd()

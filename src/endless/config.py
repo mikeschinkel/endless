@@ -1011,6 +1011,28 @@ def worktree_endless_go(cwd: Path | None = None) -> Path | None:
     return root / ".endless" / "worktrees" / dir_name / "bin" / "endless-go"
 
 
+def own_worktree_endless_go(cwd: Path | None = None) -> Path | None:
+    """worktree_endless_go, but only when the running Python IS that worktree's
+    source; else None. Does not check existence.
+
+    The gate for a pure vocabulary lookup (statuses, session_states). The
+    worktree's Go is the coherent partner of the worktree's Python, and of
+    nothing else: the global `endless` is main's source, and runs inside a
+    worktree without re-exec'ing whenever `--db sandbox` is absent (`--db main`,
+    `just verify`). Pairing main's Python with a worktree binary built before a
+    status group it needs is what failed every such command with `unknown
+    group` (E-2282). The installed binary ships with the installed Python, so it
+    is that Python's partner.
+
+    Reads the source check rather than the --db flag, so it answers at cli.py
+    import time, before --db is parsed.
+    """
+    candidate = worktree_endless_go(cwd)
+    if candidate is None or worktree_python_reexec_target(cwd) is not None:
+        return None
+    return candidate
+
+
 def resolved_worktree_endless_go(cwd: Path | None = None) -> Path | None:
     """Path to <worktree>/bin/endless-go when --db sandbox is the active DB
     context AND cwd is inside a self-dev worktree, else None.

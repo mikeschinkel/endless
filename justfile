@@ -549,12 +549,14 @@ test: build
 #      target silently is the same class of problem as a listing that truncates
 #      silently.
 #
-# Having resolved the task it cds into THAT task's worktree and runs there. That
-# is what `esu` was doing by hand in the old handoff, and the reason it was in
-# the handoff at all: `--db sandbox` routes `endless task verify` to the sandbox
-# config context, which selects <worktree>/bin/endless-go (E-1510), so a pre-land
-# gate exercises the CANDIDATE runner rather than main's. Exit code passes
-# straight through, so `just verify && ...` gates on the result.
+# Having resolved the task it cds into THAT task's worktree and runs there. It
+# names no database (E-2282): `endless task verify` pins main itself, which is
+# where a pass must be recorded for `worktree land` to read it. Pinning
+# `--db sandbox` here once recorded the pass in the worktree's sandbox instead,
+# so the land refused. A branch that changes the verify machinery tests its own
+# candidate runner from inside its suite, by driving `bin/endless-go verify`
+# against a fixture project. Exit code passes straight through, so
+# `just verify && ...` gates on the result.
 verify task_id="":
     #!/usr/bin/env bash
     set -u
@@ -579,7 +581,7 @@ verify task_id="":
         exit 1
     fi
     cd "$wt" || exit 1
-    endless --db sandbox task verify "$tid"
+    endless task verify "$tid"
 
 # Guide cross-reference / agent --help map (E-1502).
 #

@@ -17,7 +17,12 @@ from pathlib import Path
 import click
 import pytest
 
-from endless import unlanded, verify_cmd
+from endless import agent_help, config, unlanded, verify_cmd
+
+# The real pre-flight and recording, captured before the autouse stub below
+# replaces them, for the tests that pin them (E-2282).
+_REAL_REQUIRE_KNOWN = unlanded.require_known
+_REAL_RECORD_PASS = unlanded.record_pass
 
 
 @pytest.fixture(autouse=True)
@@ -38,6 +43,7 @@ def stub_unlanded(monkeypatch):
     behavior is pinned in test_unlanded.py. Returns the passes recorded."""
     passes: list = []
     monkeypatch.setattr(unlanded, "reconcile_quietly", lambda *a: None)
+    monkeypatch.setattr(unlanded, "require_known", lambda *a: None)
     monkeypatch.setattr(unlanded, "record_pass",
                         lambda task, sha: passes.append((task, sha)))
     return passes
@@ -380,3 +386,98 @@ def test_commit_failure_fails_the_command_and_keeps_the_cache(project, monkeypat
     assert len(recorded) == 1
     assert recorded[0] in exc.value.format_message()
     assert _git(project["main"], "status", "--porcelain", "--", ".endless/tasks")
+
+
+# E-2282: a pass is recorded in the pinned database; `worktree land` reads main.
+# A database that does not know the task can only lose the pass, so the verify
+# is refused before its suite runs, and the recording backstop says so loudly.
+
+_STATE = {"task_id": TASK, "project": "p", "root": "/r", "type": "bugfix",
+          "status": "unverified", "unlanded_lane": True}
+
+
+@pytest.fixture
+def sandbox_pin(tmp_path, monkeypatch):
+    """Pin this process to a database that is not main, the way `--db sandbox`
+    does, and restore the module globals afterwards."""
+    for name in ("CONFIG_DIR", "CONFIG_FILE", "DB_PATH", "RESOLVED_CONFIG_DIR"):
+        monkeypatch.setattr(config, name, getattr(config, name))
+    pinned = tmp_path / "sandbox" / "endless"
+    config.set_db_context(pinned)
+    return pinned
+
+
+def _preflight_with(monkeypatch, read) -> list:
+    """Restore the real pre-flight over `read`, and record any runner call."""
+    monkeypatch.setattr(unlanded, "require_known", _REAL_REQUIRE_KNOWN)
+    monkeypatch.setattr(unlanded, "verify_states", read)
+    return _stub_run(monkeypatch, returncode=0)
+
+
+def test_a_pinned_database_without_the_task_is_refused_before_the_suite(
+        sandbox_pin, monkeypatch):
+    calls = _preflight_with(monkeypatch, lambda task: [])
+    with pytest.raises(click.ClickException) as exc:
+        verify_cmd.run_verify(TASK, keep=False)
+    assert exc.value.exit_code != 0
+    assert calls == []  # the runner never ran
+
+
+def test_the_refusal_names_the_database_and_an_invocation_that_records(
+        sandbox_pin, monkeypatch):
+    _preflight_with(monkeypatch, lambda task: [])
+    with pytest.raises(click.ClickException) as exc:
+        verify_cmd.run_verify(TASK, keep=False)
+    msg = exc.value.summary + " " + exc.value.remedy
+    assert config.tilde(sandbox_pin) in msg
+    assert f"`endless task verify {TASK_ID}`" in msg
+    assert "--db sandbox" not in msg
+
+
+def test_a_task_missing_from_main_is_an_id_problem(monkeypatch):
+    for name in ("CONFIG_DIR", "CONFIG_FILE", "DB_PATH", "RESOLVED_CONFIG_DIR"):
+        monkeypatch.setattr(config, name, getattr(config, name))
+    config.set_db_context(config.main_config_dir())
+    calls = _preflight_with(monkeypatch, lambda task: [])
+    with pytest.raises(click.ClickException) as exc:
+        verify_cmd.run_verify(TASK, keep=False)
+    assert "main database" in exc.value.summary
+    assert "task id" in exc.value.remedy
+    assert calls == []
+
+
+def test_a_pre_flight_that_cannot_answer_lets_the_suite_run(
+        sandbox_pin, monkeypatch):
+    def unreachable(task):
+        raise agent_help.relay("endless-go: cannot open database\n")
+    calls = _preflight_with(monkeypatch, unreachable)
+    with pytest.raises(SystemExit) as exc:
+        verify_cmd.run_verify(TASK, keep=False)
+    assert exc.value.code == 0
+    assert calls == [["endless-go", "verify", TASK_ID]]
+
+
+def test_a_pre_flight_that_finds_the_task_lets_the_suite_run(
+        sandbox_pin, monkeypatch):
+    calls = _preflight_with(monkeypatch, lambda task: [dict(_STATE)])
+    with pytest.raises(SystemExit) as exc:
+        verify_cmd.run_verify(TASK, keep=False)
+    assert exc.value.code == 0
+    assert calls == [["endless-go", "verify", TASK_ID]]
+
+
+def test_record_pass_on_an_empty_read_says_so_and_fails(
+        sandbox_pin, monkeypatch, capsys):
+    monkeypatch.delenv("CLAUDECODE", raising=False)
+    from endless import agent_env
+    monkeypatch.setattr(agent_env, "present", lambda: False)
+    monkeypatch.setattr(unlanded, "verify_states", lambda task: [])
+    emitted: list = []
+    monkeypatch.setattr(unlanded, "_emit_status",
+                        lambda *a, **k: emitted.append(a))
+    with pytest.raises(click.ClickException) as exc:
+        _REAL_RECORD_PASS(TASK, "f" * 40)
+    assert exc.value.exit_code != 0
+    assert "was not recorded" in exc.value.summary
+    assert config.tilde(sandbox_pin) in exc.value.summary
+    assert emitted == []

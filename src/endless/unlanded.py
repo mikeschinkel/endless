@@ -128,6 +128,56 @@ def reconcile_quietly(task_num: int | None = None) -> None:
         )
 
 
+def _pinned_db_name() -> str:
+    """The database this process is pinned to, as a reader would name it.
+
+    Asked of the resolved directory, not of the flag that was typed, so a
+    default pin and an explicit --db read alike.
+    """
+    resolved = config.RESOLVED_CONFIG_DIR
+    if resolved is None or resolved == config.main_config_dir():
+        return f"the main database ({config.tilde(config.main_config_dir())})"
+    worktree = config.worktree_path()
+    if worktree is not None and resolved == config.sandbox_config_dir(worktree):
+        return (f"the sandbox database of {worktree.name} "
+                f"({config.tilde(resolved)})")
+    return f"the database at {config.tilde(resolved)}"
+
+
+def require_known(task_num: int) -> None:
+    """Before a verify runs its suite: refuse when the pinned database holds no
+    row for the task (E-2282).
+
+    A pass is recorded in the pinned database, and `worktree land` reads the
+    main one. A database that does not know the task could only lose the pass,
+    so this says so while the invocation can still be corrected, rather than
+    after a full suite run.
+
+    Refuses only on a read that ANSWERS and finds nothing. A read that cannot
+    answer lets the verify run: a suite is a proof about a checkout and keeps
+    its value when the recording cannot be filed.
+    """
+    try:
+        states = verify_states(task_num)
+    except (click.ClickException, OSError, ValueError):
+        return
+    if states:
+        return
+    task_id = f"E-{task_num}"
+    pinned = _pinned_db_name()
+    if config.RESOLVED_CONFIG_DIR in (None, config.main_config_dir()):
+        raise agent_help.no_report(
+            f"{pinned} has no task {task_id}, so its suite was not run.",
+            "Check the task id and retry",
+        )
+    raise agent_help.no_report(
+        f"{pinned} has no task {task_id}, so a pass could not be recorded "
+        f"where `worktree land` reads it; its suite was not run.",
+        f"Retry as `endless task verify {task_id}`, which names no database "
+        f"and records the pass in the main one",
+    )
+
+
 def record_pass(task_num: int, sha: str) -> None:
     """After a passing `task verify`: move the task to `unlanded` at sha.
 
@@ -135,9 +185,13 @@ def record_pass(task_num: int, sha: str) -> None:
     records the newer commit. Anything else — a task not yet `unverified`, a
     type with no `unlanded` in its lifecycle — is left alone and said so.
 
-    Never fails the verify: the suite passed and its report is recorded. A
-    failure here leaves the task where it was, and land will say so. The
-    caller pins the database (verify_cmd.run_verify).
+    A failure to read or write leaves the task where it was and warns; land will
+    say so too. The one exit that fails the verify is a read that answers and
+    finds no such task: `require_known` refuses that before the suite runs, so
+    reaching it means something upstream is wrong. The report is already on disk
+    by then (verify_cmd._record_passing_run runs first), so the only thing a
+    failure costs is the exit code. The caller pins the database
+    (verify_cmd.run_verify).
     """
     task_id = f"E-{task_num}"
     if agent_env.present():
@@ -148,22 +202,21 @@ def record_pass(task_num: int, sha: str) -> None:
         return
     try:
         states = verify_states(task_num)
-        if not states:
-            return
-        state = states[0]
-        if state["status"] not in (UNVERIFIED, UNLANDED) \
-                or not state["unlanded_lane"]:
-            click.echo(
-                f"{task_id} is {state['status']}, so the pass does not move it "
-                f"to `unlanded` — only an `unverified` {state['type']} task "
-                f"waits on a verify."
-                if state["unlanded_lane"] else
-                f"{task_id} is a {state['type']} task, which has no "
-                f"`unlanded` status; the pass is recorded and nothing else "
-                f"changes."
-            )
-            return
-        _emit_status(state, UNLANDED, verified_sha=sha)
+        if states:
+            state = states[0]
+            if state["status"] not in (UNVERIFIED, UNLANDED) \
+                    or not state["unlanded_lane"]:
+                click.echo(
+                    f"{task_id} is {state['status']}, so the pass does not "
+                    f"move it to `unlanded` — only an `unverified` "
+                    f"{state['type']} task waits on a verify."
+                    if state["unlanded_lane"] else
+                    f"{task_id} is a {state['type']} task, which has no "
+                    f"`unlanded` status; the pass is recorded and nothing else "
+                    f"changes."
+                )
+                return
+            _emit_status(state, UNLANDED, verified_sha=sha)
     except (click.ClickException, OSError, ValueError) as e:
         detail = e.message if isinstance(e, click.ClickException) else str(e)
         agent_help.warn.report(
@@ -173,6 +226,14 @@ def record_pass(task_num: int, sha: str) -> None:
             "how to clear that failure, then verify again so the task can land",
         )
         return
+    if not states:
+        raise agent_help.report(
+            f"{task_id}'s suite passed and its report is recorded, but the pass "
+            f"was not recorded: {_pinned_db_name()} has no task {task_id}, so "
+            f"it was not marked `unlanded` and cannot land yet.",
+            f"why this verify was pinned to a database without {task_id} — "
+            f"`endless task verify {task_id}` records in the main one",
+        )
     click.echo(
         f"{task_id} is unlanded at {sha[:10]}: "
         f"`endless worktree land {task_id}` will land and settle it."

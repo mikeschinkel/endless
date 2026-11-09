@@ -186,6 +186,52 @@ def test_stale_endless_go_names_the_command_that_failed(monkeypatch, tmp_path):
 # --- binary resolution -----------------------------------------------------
 
 
+@pytest.fixture(autouse=True)
+def running_the_worktrees_own_python(monkeypatch):
+    """Resolution prefers a worktree binary only for the worktree's own Python
+    (E-2282). These tests stub the worktree binary, so pin the source check to
+    "this IS the worktree's source" rather than let it read whichever directory
+    pytest happens to run from."""
+    monkeypatch.setattr(config, "worktree_python_reexec_target",
+                        lambda *a, **k: None)
+
+
+def test_mains_python_in_a_worktree_asks_the_installed_binary(monkeypatch, tmp_path):
+    """E-2282: the global `endless` is main's source and runs inside a worktree
+    without re-exec'ing whenever --db sandbox is absent (`--db main`, `just
+    verify`). The worktree binary is not its partner: one built before a status
+    group main's Python needs fails every command with `unknown group`, though
+    it knows `task-status` and so passes E-1891's probe. The installed binary
+    ships with the installed Python, so it is asked instead — and the worktree
+    binary is never even probed."""
+    worktree_bin = tmp_path / "endless-go"
+    worktree_bin.write_text("#!/bin/sh\nexit 0\n")
+    worktree_bin.chmod(0o755)
+    monkeypatch.setattr(config, "worktree_endless_go", lambda *a, **k: worktree_bin)
+    monkeypatch.setattr(config, "worktree_python_reexec_target",
+                        lambda *a, **k: tmp_path)
+    monkeypatch.setattr(statuses, "_BINARY", None)
+    monkeypatch.setattr(statuses, "_knows_task_status", lambda b: pytest.fail(
+        f"probed {b}: main's Python must not consider the worktree binary"))
+    monkeypatch.setattr(statuses.shutil, "which", lambda _: "/usr/local/bin/endless-go")
+    assert statuses._resolve_binary() == "/usr/local/bin/endless-go"
+
+
+def test_session_states_follows_the_same_rule(monkeypatch, tmp_path):
+    """session_states resolves its binary the same way, for the same reason."""
+    from endless import session_states
+    worktree_bin = tmp_path / "endless-go"
+    worktree_bin.write_text("#!/bin/sh\nexit 0\n")
+    worktree_bin.chmod(0o755)
+    monkeypatch.setattr(config, "worktree_endless_go", lambda *a, **k: worktree_bin)
+    monkeypatch.setattr(session_states.shutil, "which",
+                        lambda _: "/usr/local/bin/endless-go")
+    assert session_states._resolve_binary() == str(worktree_bin)
+    monkeypatch.setattr(config, "worktree_python_reexec_target",
+                        lambda *a, **k: tmp_path)
+    assert session_states._resolve_binary() == "/usr/local/bin/endless-go"
+
+
 def test_prefers_the_worktree_binary_over_path(monkeypatch, tmp_path):
     """A self-dev worktree runs the worktree's Python; the worktree's Go is its
     coherent partner. Without this the vocabulary would come from main's build

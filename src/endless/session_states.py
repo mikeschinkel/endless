@@ -70,9 +70,10 @@ def _knows_session_state(binary: str) -> bool:
 def _resolve_binary() -> str:
     """Pick the endless-go to ask.
 
-    Prefers the worktree's own build when running inside a self-dev worktree:
-    the worktree's Python is already what executes there, so the worktree's Go
-    is its coherent partner. It is also what lets the branch that ADDS
+    Prefers the worktree's own build when the worktree's own Python is what
+    runs (config.own_worktree_endless_go): the worktree's Go is its coherent
+    partner. Main's Python running inside a worktree asks the installed binary,
+    which ships with it (E-2282). It is also what lets the branch that ADDS
     `session-state` run before it lands.
 
     But only if that build can actually answer. A worktree branched before
@@ -85,7 +86,7 @@ def _resolve_binary() -> str:
     together, so a global new enough to serve the Python asking this question is
     the same install.
     """
-    worktree_bin = config.worktree_endless_go()
+    worktree_bin = config.own_worktree_endless_go()
     if worktree_bin is not None and worktree_bin.is_file():
         if _knows_session_state(str(worktree_bin)):
             return str(worktree_bin)
