@@ -8041,3 +8041,7 @@ E-2577 brainstorm: I replied with several long sections at once. Mike: 'You wrot
 ### [2026-11-08] Check the codebase before telling Mike a mechanism cannot work
 E-2577 brainstorm: Mike asked whether a background verify job could use claude -p to message the owning session. I said no, claude -p only starts a new headless session, and proposed tmux typing into the pane instead. Mike pushed back that he was 99% sure we already do this. He was right: internal/triagejob (E-2269, E-2268) runs a throwaway hook-disabled claude -p sender calling SendMessage, addressed by tmux pane, and resumes an ended session in a background window with the message as its first prompt. Search the repo for an existing mechanism before asserting what is or is not possible.
 - **Project**: endless
+
+### [2026-11-08] Do the obvious consequence of a decision instead of asking
+On E-2063, Mike agreed to split Increments 4-5 into a follow-up task (E-2585). I then asked whether to remove those increments from E-2063's plan. Mike: 'Why are you even asking? Of course you should.' Once Mike has made a decision, carry out what it plainly implies (here: the moved work leaves the original plan) without asking. Ask only about choices the decision leaves genuinely open.
+- **Project**: endless
