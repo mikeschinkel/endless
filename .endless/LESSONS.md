@@ -8053,3 +8053,7 @@ Writing plan items for E-2263 (user-context verify runner) in the E-2225 session
 ### [2026-11-09] Check accepted decisions before offering options
 Planning E-2306 (task spawn on a primed task), I offered and recommended options that type a message into the primed session's pane with tmux send-keys. ED-1615, an accepted decision, already says Endless never does that. Mike answered by pointing to ED-1615. Before presenting options, search the accepted decisions on the mechanism each option uses, and leave out options they rule out.
 - **Project**: endless
+
+### [2026-11-09] Use one name for a role, and ask before coining it
+Planning E-2306, I called the session that runs 'endless task prime' the 'initiator' while the task already used 'primed session' for the other session. Mike objected that this takes up two unrelated names for one subject (priming) and asked why not 'Primer', 'Task Primer' or 'Priming session'. When a role needs a name, derive it from the existing term for that subject, and say it is new.
+- **Project**: endless
