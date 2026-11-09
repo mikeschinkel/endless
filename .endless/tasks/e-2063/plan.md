@@ -108,8 +108,11 @@ removes it.
 - SessionStart asks `monitor.ContinuationOf` before the touch. The candidate is
   the session last seen in the same tmux pane, since a rotation keeps the
   harness process. The harness's own `continued-in` link in the candidate's
-  transcript, naming the new UUID, is authoritative; failing that, any `source`
-  but `startup` is a continuation. No pane, no candidate: a new session.
+  transcript, naming the new UUID, is authoritative; failing that, only
+  `source` `clear` is a continuation. A `fork` (`--fork-session`) is a second
+  conversation and starts its own session; a `resume` of a UUID Endless never
+  saw is no different from a fresh launch. No pane, no candidate: a new
+  session.
 - A continuation closes the session's open instances (`ended_at`), appends one
   for the new UUID, points `sessions.session_id` at it, and resets the
   session-level offset mirror. Nothing else closes an instance.
@@ -146,8 +149,9 @@ the clear-appends-an-instance rule (1) and the per-instance `transcript_offset`
    more `session_instances` row after.
 2. Resume does not append. Same, `source=resume` with the existing uuid: the
    instance count is unchanged.
-3. A fresh launch does not join. A NEW uuid with `source=startup` in the same
-   pane, and no `continued-in` link, gets its own session.
+3. Only a clear joins. A NEW uuid with `source` `startup`, `fork`, `resume`
+   or `compact` in the same pane, and no `continued-in` link, gets its own
+   session.
 4. The prior instance is closed on a clear; the surviving one has
    `ended_at IS NULL`.
 5. A stale `ended_at` blocks nothing. Leave two instances open, insert a third,
