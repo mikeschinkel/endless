@@ -1,6 +1,7 @@
 package hookcmd
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"os"
@@ -9,6 +10,7 @@ import (
 
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/outages"
 	"github.com/mikeschinkel/endless/internal/sessionstate"
 )
 
@@ -50,6 +52,10 @@ func stopFailureEnv(t *testing.T, state string) (db *sql.DB, projectPath string)
 		nil,
 	)
 	t.Cleanup(func() { faults.Bind(nil, nil, nil, nil) })
+
+	// No test may reach a real status page: Anthropic reports no incident
+	// unless a test says otherwise (stubAnthropic).
+	stubAnthropic(t, false)
 
 	if _, err := db.Exec(
 		"INSERT INTO projects (id, name, path) VALUES (1, 'proj', ?)", projectPath,
@@ -198,7 +204,7 @@ func TestStopFailure_DoesNotLeaveAFreshTimestampOnALiveState(t *testing.T) {
 func TestStopFailure_RecordsTheFailureAsAFault(t *testing.T) {
 	db, projectPath := stopFailureEnv(t, sessionstate.Working)
 
-	fireStopFailure(t, projectPath, "rate_limit")
+	fireStopFailure(t, projectPath, "max_output_tokens")
 
 	found := openFaults(t, db)
 	if len(found) != 1 {
@@ -208,7 +214,7 @@ func TestStopFailure_RecordsTheFailureAsAFault(t *testing.T) {
 	if f.source != "hook:stopfailure" {
 		t.Errorf("source = %q, want %q", f.source, "hook:stopfailure")
 	}
-	if !strings.Contains(f.summary, "rate_limit") {
+	if !strings.Contains(f.summary, "max_output_tokens") {
 		t.Errorf("summary = %q, want it to NAME the error type — the fault row "+
 			"renders this line, and 'a turn failed' without saying how is not "+
 			"worth a row", f.summary)
@@ -252,7 +258,14 @@ func TestStopFailure_SeverityFollowsTheErrorType(t *testing.T) {
 		t.Run(tc.errorType, func(t *testing.T) {
 			db, projectPath := stopFailureEnv(t, sessionstate.Working)
 
-			fireStopFailure(t, projectPath, tc.errorType)
+			fires := 1
+			if selfClearingTurnErrorTypes[tc.errorType] {
+				// Transient per session (E-2589): a fault only at the threshold.
+				fires = TurnFailureThreshold
+			}
+			for i := 0; i < fires; i++ {
+				fireStopFailure(t, projectPath, tc.errorType)
+			}
 
 			found := openFaults(t, db)
 			if len(found) != 1 {
@@ -275,7 +288,9 @@ func TestStopFailure_SeverityFollowsTheErrorType(t *testing.T) {
 func TestStopFailure_AnAbsentErrorTypeIsRecordedAsUnknown(t *testing.T) {
 	db, projectPath := stopFailureEnv(t, sessionstate.Working)
 
-	fireStopFailure(t, projectPath, "")
+	for i := 0; i < TurnFailureThreshold; i++ {
+		fireStopFailure(t, projectPath, "")
+	}
 
 	state, _ := stopFailureSessionState(t, db)
 	if state != sessionstate.Idle {
@@ -298,9 +313,9 @@ func TestStopFailure_AnAbsentErrorTypeIsRecordedAsUnknown(t *testing.T) {
 func TestStopFailure_RepeatsOfOneErrorTypeAreOneIncident(t *testing.T) {
 	db, projectPath := stopFailureEnv(t, sessionstate.Working)
 
-	fireStopFailure(t, projectPath, "rate_limit")
-	fireStopFailure(t, projectPath, "rate_limit")
-	fireStopFailure(t, projectPath, "rate_limit")
+	fireStopFailure(t, projectPath, "max_output_tokens")
+	fireStopFailure(t, projectPath, "max_output_tokens")
+	fireStopFailure(t, projectPath, "max_output_tokens")
 
 	found := openFaults(t, db)
 	if len(found) != 1 {
@@ -318,7 +333,7 @@ func TestStopFailure_RepeatsOfOneErrorTypeAreOneIncident(t *testing.T) {
 func TestStopFailure_DifferentErrorTypesAreDifferentIncidents(t *testing.T) {
 	db, projectPath := stopFailureEnv(t, sessionstate.Working)
 
-	fireStopFailure(t, projectPath, "rate_limit")
+	fireStopFailure(t, projectPath, "max_output_tokens")
 	fireStopFailure(t, projectPath, "billing_error")
 
 	found := openFaults(t, db)
@@ -341,5 +356,136 @@ func TestTurnFailureCode_IsTotal(t *testing.T) {
 			t.Errorf("turnFailureCode(%q) = %+v, which is not in the catalog",
 				errorType, code)
 		}
+	}
+}
+
+// stubAnthropic makes Anthropic's status page answer confirmed or not, and
+// returns how many times it was asked.
+func stubAnthropic(t *testing.T, confirmed bool) *int {
+	t.Helper()
+	var asks int
+	prev := confirmOutage
+	confirmOutage = func(_ context.Context, p outages.Provider, _ string) bool {
+		if p.Name != outages.Anthropic.Name {
+			t.Errorf("asked %s about a turn failure", p.Name)
+		}
+		asks++
+		return confirmed
+	}
+	t.Cleanup(func() { confirmOutage = prev })
+	return &asks
+}
+
+// fireStop drives a normal end of turn through the whole hook.
+func fireStop(t *testing.T, projectPath string) {
+	t.Helper()
+	t.Setenv("CLAUDE_CODE_ENTRYPOINT", "cli")
+	payload, err := json.Marshal(map[string]any{
+		"session_id":      "sess-A",
+		"cwd":             projectPath,
+		"hook_event_name": "Stop",
+	})
+	if err != nil {
+		t.Fatalf("marshal payload: %v", err)
+	}
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("pipe: %v", err)
+	}
+	if _, err = w.Write(payload); err != nil {
+		t.Fatalf("write payload: %v", err)
+	}
+	w.Close()
+	orig := os.Stdin
+	os.Stdin = r
+	t.Cleanup(func() { os.Stdin = orig; r.Close() })
+	if err = runClaude(nil); err != nil {
+		t.Fatalf("runClaude on Stop: %v", err)
+	}
+}
+
+// P8: a self-clearing API error is transient per session — no fault below the
+// threshold, WARN-0013 at it.
+func TestStopFailure_SelfClearingErrorsAreTransientPerSession(t *testing.T) {
+	db, projectPath := stopFailureEnv(t, sessionstate.Working)
+
+	for i := 0; i < TurnFailureThreshold-1; i++ {
+		fireStopFailure(t, projectPath, "unknown")
+	}
+	if found := openFaults(t, db); len(found) != 0 {
+		t.Fatalf("below the threshold: %d faults, want 0: %+v", len(found), found)
+	}
+	fireStopFailure(t, projectPath, "overloaded")
+	found := openFaults(t, db)
+	if len(found) != 1 || found[0].code != "WARN-0013" {
+		t.Fatalf("at the threshold: %+v, want one WARN-0013", found)
+	}
+}
+
+// P2: a normal turn after self-clearing errors closes the session's run
+// without a fault, and the count starts over.
+func TestStop_ClosesTheSessionsTransientRun(t *testing.T) {
+	db, projectPath := stopFailureEnv(t, sessionstate.Working)
+
+	for i := 0; i < TurnFailureThreshold-1; i++ {
+		fireStopFailure(t, projectPath, "server_error")
+	}
+	fireStop(t, projectPath)
+	for i := 0; i < TurnFailureThreshold-1; i++ {
+		fireStopFailure(t, projectPath, "server_error")
+	}
+	if found := openFaults(t, db); len(found) != 0 {
+		t.Fatalf("a normal turn between did not reset the run: %+v", found)
+	}
+	var closed int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM transient_runs
+	                        WHERE source = 'hook:stopfailure' AND closed_at IS NOT NULL
+	                          AND faulted_at IS NULL`).Scan(&closed); err != nil {
+		t.Fatalf("count runs: %v", err)
+	}
+	if closed != 1 {
+		t.Errorf("closed unfaulted runs = %d, want 1", closed)
+	}
+}
+
+// P9: max_output_tokens, authentication and billing errors are faults on
+// first occurrence, and never ask the status page.
+func TestStopFailure_ActionableErrorsAreFaultsAtOnce(t *testing.T) {
+	for _, errorType := range []string{"max_output_tokens", "authentication_failed", "billing_error"} {
+		t.Run(errorType, func(t *testing.T) {
+			db, projectPath := stopFailureEnv(t, sessionstate.Working)
+			asks := stubAnthropic(t, true)
+
+			fireStopFailure(t, projectPath, errorType)
+
+			if found := openFaults(t, db); len(found) != 1 {
+				t.Fatalf("faults = %+v, want 1 on first occurrence", found)
+			}
+			if *asks != 0 {
+				t.Errorf("asked the status page %d times", *asks)
+			}
+		})
+	}
+}
+
+// P17: during a confirmed Anthropic incident a self-clearing error raises
+// nothing and counts nothing.
+func TestStopFailure_ConfirmedIncidentIsAnOutageNotAFault(t *testing.T) {
+	db, projectPath := stopFailureEnv(t, sessionstate.Working)
+	asks := stubAnthropic(t, true)
+
+	for i := 0; i < TurnFailureThreshold+1; i++ {
+		fireStopFailure(t, projectPath, "overloaded")
+	}
+	if found := openFaults(t, db); len(found) != 0 {
+		t.Fatalf("faults = %+v, want none during an outage", found)
+	}
+	if *asks != TurnFailureThreshold+1 {
+		t.Errorf("asks = %d", *asks)
+	}
+	var runs int
+	_ = db.QueryRow(`SELECT COUNT(*) FROM transient_runs`).Scan(&runs)
+	if runs != 0 {
+		t.Errorf("transient runs = %d, want 0", runs)
 	}
 }

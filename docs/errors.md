@@ -308,6 +308,74 @@ render from whether the database opens — so there is nothing to mark seen, and
 suppressing it would mean muting a failure that is still happening. It goes
 away when the database does.
 
+## Transient failures and outages
+
+Some failures clear on their own: a tmux server busy for a moment refuses a
+connection, a remote cannot be reached for a few minutes, an API is overloaded
+and a retry answers. Raising a fault on the first one fills the fault row with
+warnings you learn to ignore, so Endless handles these two other ways (E-2589).
+
+**A transient failure** is logged, and becomes a fault only when it keeps
+happening. Each source that knows a failure is usually brief counts it on a
+*run* — its consecutive occurrences, keyed by what failed — and raises the
+fault only once the run reaches that source's threshold. A success closes the
+run without a fault. Below the threshold an occurrence writes a detail line of
+`"kind": "transient"` to `errors.jsonl` (with `run_occurrence` and
+`run_threshold` in its fields) and nothing else: no row, no fault row, nothing
+to clear.
+
+| Source | What counts | Run | Fault at |
+|--------|-------------|-----|----------|
+| a background job that marks a failure transient (`main-sync`'s unreachable remote) | a run that failed that way | the job | WARN-0032, 4 in a row |
+| `monitor-wake` and a monitor's safety-net poll | a visibility query tmux refused, after retries | the tmux server | WARN-0033, 3 in a row |
+| the `StopFailure` hook | a turn ending on `unknown`, `overloaded`, `rate_limit` or `server_error` | the session | WARN-0013, 3 turns in a row |
+
+Errors you must act on stay faults on first occurrence: a reply cut off at
+`max_output_tokens`, an authentication, billing, org-policy or account-hold
+error, a remote that rejects a push, a failed authentication to a remote that
+is not in a confirmed outage.
+
+Every run is kept in the `transient_runs` table once it closes: its source and
+fingerprint, how many occurrences it had, and how long it took to clear
+(`closed_at` minus `first_seen_at`) or that it became a fault (`faulted_at`).
+The lists of messages that mark a failure transient are written by hand today;
+that history is the evidence for classifying them from data later, and for
+setting each one's threshold from how long it usually takes to clear.
+
+**An outage** is a failure the provider's own status page confirmed. It is not
+an error at all: it has no code, no severity and no action hint, and nobody
+clears it.
+
+- **GitHub** (`https://www.githubstatus.com`, component *Git Operations*). When
+  `main-sync`'s fetch or push to a `github.com` remote fails — any failure,
+  `Permission denied (publickey)` included, since GitHub answered exactly that
+  during its 2026-11-04 incident — Endless asks GitHub's status API. If Git
+  Operations is degraded, a GitHub outage opens and no fault is raised.
+- **Anthropic** (`https://status.claude.com`, component *Claude API
+  (api.anthropic.com)*). When a turn ends on a self-clearing API error, Endless
+  asks Anthropic's status API first; during an incident an Anthropic outage
+  opens instead of a count toward WARN-0013.
+
+When the status API cannot be read or reports no incident, the failure is
+handled exactly as above — providers post incidents late or not at all, so the
+check never stands in for the threshold. A failure while an outage is already
+open makes no request: the outage is open.
+
+The `outage-check` background job reads the status page of each provider with
+an open outage once a minute, and closes the outage when the component reads
+operational. With no outage open it makes no request. Closing a GitHub outage
+makes `main-sync` due at once rather than leaving it to wait out its backoff.
+
+Open outages show:
+
+- on `session status` and `session monitor` (and `project status`), one line
+  each under the fault row, in a calm colour —
+  `Outage[GitHub]: Degraded for 4 hrs 59 min; polling every 1 min`;
+- in `endless errors list`, under an **Outages** heading above the errors,
+  with `--all` adding the closed ones as history;
+- to agents, in each turn's hook context, so a failed push or an API error
+  during one is not debugged as a local problem.
+
 ---
 
 ## WARN-0001 — job-failed
@@ -576,7 +644,12 @@ pass refills it. Dismiss with `endless errors clear <id>`.
 
 A Claude Code turn ended on an API error that should pass on its own —
 `rate_limit`, `overloaded`, `server_error`, `max_output_tokens`, or any error
-type Endless does not recognise. Claude Code fires `StopFailure` *instead of*
+type Endless does not recognise. `unknown`, `overloaded`, `rate_limit` and
+`server_error` are *transient* (see "Transient failures and outages"): this is
+raised only once a session's turns end on them three times in a row with no
+normal turn between, and not at all while Anthropic's status page confirms an
+incident on the Claude API. `max_output_tokens` — a reply cut off, which you
+must act on — and every other type are raised on first occurrence. Claude Code fires `StopFailure` *instead of*
 `Stop` when a turn dies this way, so without a hook on it the turn would end
 with no record anywhere and the session would keep reading `working` forever.
 
@@ -982,7 +1055,10 @@ run note (`endless jobs list`).
 that marks its failures transient — today the `main-sync` job (E-2260)
 
 A job failed the same likely-transient way — a DNS failure, a refused
-connection, an unreachable network, a timeout — four runs in a row. The runner
+connection, an unreachable network, a timeout — four runs in a row (the job's
+transient run; see "Transient failures and outages"). A fetch or push to
+`github.com` that fails while GitHub's status page reports Git Operations
+degraded opens a GitHub outage instead, and counts toward nothing. The runner
 records nothing for the first three: a brief outage passes on its own, the job
 backs off and retries meanwhile, and `endless jobs list` shows the failure
 count and the last error. A failure the job does not mark transient — a
@@ -1009,6 +1085,17 @@ hook was missed. This incident says tmux refused one of those questions.
 Warning rather than error: a monitor that cannot tell whether it is visible
 treats itself as visible and keeps redrawing, which costs CPU and loses nothing.
 Fingerprinted on the tmux server, so one broken server is one incident.
+
+Transient since E-2589: raised only once three queries in a row fail, with no
+success between. tmux prints `no server running on <socket>` for *any* refused
+connection, not only for a server that is gone, and a server busy for a moment
+refuses whatever exceeds its listen backlog — 128 on macOS. Every window-switch
+hook event used to start its own `monitor-wake`, so a run of events piled
+concurrent wakes onto the server and turned one busy moment into a hundred
+refusals. Wakes now coalesce — one runs at a time per server, and a wake that
+arrives meanwhile makes it run once more — and a refused connection while the
+socket file exists is retried with jittered backoff for about two seconds
+before it counts.
 
 **What to do.** Run `endless errors show <n> --detail` for tmux's own error and the command that failed. A tmux server that has exited takes its monitors with it, so one that stays open usually means the `tmux` on the monitor's PATH cannot reach the server it runs in. Until it is fixed the monitor treats itself as visible and keeps redrawing, which costs CPU and loses nothing. Dismiss with `endless errors clear <id>` once the cause is gone.
 

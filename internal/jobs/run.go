@@ -527,11 +527,17 @@ end:
 	switch {
 	case runErr == nil:
 		clearUnreachable(job.Name())
-	case IsTransient(runErr) && failCount < TransientThreshold:
-		// A failure the job expects to pass on retry, not yet repeated often
-		// enough to need a person (E-2260). The backoff above is already
-		// retrying it, and `jobs list` shows the count and the error meanwhile.
+		resolveTransient("job:"+job.Name(), unreachableFingerprint(job.Name()))
+	case IsOutage(runErr):
+		// A provider's status page confirmed the cause (E-2589), and the job
+		// opened an outage for it, which is what the user sees. No fault and no
+		// transient count: the backoff above retries meanwhile, and closing the
+		// outage can make the job due at once (Retry).
 	case IsTransient(runErr):
+		// A failure the job expects to pass on retry (E-2260): logged and
+		// counted on its run, and WARN-0032 only once the run reaches
+		// TransientThreshold. The backoff above is already retrying it, and
+		// `jobs list` shows the count and the error meanwhile.
 		recordUnreachable(job, runErr, capturedLog, failCount, schedule.nextDelay(failCount))
 	default:
 		recordRunFault(job, runErr, capturedLog, failCount, schedule.nextDelay(failCount))
@@ -541,6 +547,10 @@ end:
 // clearFingerprint is faults.ClearFingerprintSince, held as a var so a test can
 // make the clear fail.
 var clearFingerprint = faults.ClearFingerprintSince
+
+// resolveTransient is faults.ResolveTransient, held as a var for the same
+// reason.
+var resolveTransient = faults.ResolveTransient
 
 // unreachableFingerprint keys a job's WARN-0032, one incident per job.
 func unreachableFingerprint(name string) string {
@@ -555,9 +565,9 @@ func clearUnreachable(name string) {
 	_, _ = clearFingerprint(unreachableFingerprint(name), "", "job:"+name)
 }
 
-// recordUnreachable records WARN-0032 for a job whose transient failures have
-// reached TransientThreshold in a row. It replaces WARN-0001 for these: the
-// remedy is the network, not the job.
+// recordUnreachable counts one transient failure on the job's run, and records
+// WARN-0032 once the run reaches TransientThreshold (E-2260, E-2589). It
+// replaces WARN-0001 for these: the remedy is the network, not the job.
 func recordUnreachable(job Job, runErr error, capturedLog string, failCount int, nextIn time.Duration) {
 	var detail string
 
@@ -566,7 +576,11 @@ func recordUnreachable(job Job, runErr error, capturedLog string, failCount int,
 		detail += "\n\n--- job log output ---\n" + capturedLog
 	}
 
-	faults.Record(faults.Fault{
+	faults.RecordTransient(faults.TransientRun{
+		Source:      "job:" + job.Name(),
+		Fingerprint: unreachableFingerprint(job.Name()),
+		Threshold:   TransientThreshold,
+	}, faults.Fault{
 		Code:        faults.ErrCodeJobUnreachable,
 		Source:      "job:" + job.Name(),
 		Fingerprint: unreachableFingerprint(job.Name()),

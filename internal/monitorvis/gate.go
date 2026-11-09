@@ -80,7 +80,9 @@ func (g *Gate) Close() {
 func (g *Gate) poll(missingIsFault bool) (visible bool) {
 	out, err := runTmux(pollArgs(g.pane)...)
 	if err != nil {
-		record(faults.Fault{
+		// Transient (E-2589): WARN-0033 only once the server's run of failed
+		// queries reaches VisibilityThreshold.
+		visibilityFailed(faults.Fault{
 			Code:        faults.ErrCodeMonitorVisibilityUnreadable,
 			Source:      "monitorvis",
 			Fingerprint: "monitor-visibility:" + serverKey(),
@@ -90,6 +92,7 @@ func (g *Gate) poll(missingIsFault bool) (visible bool) {
 		})
 		return true
 	}
+	visibilitySucceeded()
 	s := parsePoll(out)
 	// Before the install: a stale entry is replaced, not kept beside the new.
 	removeStaleHooks(s)
@@ -118,15 +121,25 @@ func (g *Gate) poll(missingIsFault bool) (visible bool) {
 //
 // It must be fast and must never fail loudly: tmux shows a run-shell command's
 // failure to whoever is looking, and nobody asked for this one. So it always
-// exits 0, and a tmux error is recorded (WARN-0033) instead of printed.
-// Arguments are ignored.
+// exits 0, and a tmux error is counted (WARN-0033 once it repeats) instead of
+// printed. Arguments are ignored.
+//
+// Concurrent wakes on one server coalesce, and a refused connection is retried
+// before it counts — see wake.go (E-2589).
 func RunWake(args []string) {
-	if serverKey() == "" {
+	socket := serverKey()
+	if socket == "" {
 		return
 	}
-	out, err := runTmux(wakeArgs()...)
+	coalesce(wakeFilesFor(socket), wakeOnce)
+}
+
+// wakeOnce asks tmux once which windows are on screen and signals every tagged
+// monitor.
+func wakeOnce() {
+	out, err := runTmuxRetrying(wakeArgs()...)
 	if err != nil {
-		record(faults.Fault{
+		visibilityFailed(faults.Fault{
 			Code:        faults.ErrCodeMonitorVisibilityUnreadable,
 			Source:      "monitorvis",
 			Fingerprint: "monitor-visibility:" + serverKey(),
@@ -136,6 +149,7 @@ func RunWake(args []string) {
 		})
 		return
 	}
+	visibilitySucceeded()
 	show, hide := WakeTargets(parseWake(out))
 	signalAll(show, syscall.SIGUSR1)
 	signalAll(hide, syscall.SIGUSR2)

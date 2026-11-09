@@ -76,7 +76,7 @@ const detailLogFile = "errors.jsonl"
 // everywhere else, and E-N / ES-N need no database to read. Omitted when 0, and
 // absent from every line written before E-2268.
 type Detail struct {
-	Kind        string         `json:"kind"` // always "fault"
+	Kind        string         `json:"kind"` // "fault", or "transient" for a run's occurrence below its threshold
 	TS          string         `json:"ts"`
 	FaultID     *int64         `json:"fault_id"`             // errors.id; null when log only
 	Occurrence  int64          `json:"occurrence,omitempty"` // 1-based within the incident; absent when log only
@@ -131,23 +131,7 @@ end:
 // this call moved off Record's success path it was written nowhere at all —
 // the one failure mode where losing the report costs most.
 func appendDetail(f Fault, id *int64, occurrence int64, project string, raiser Raiser, dbErr string) {
-	var dir string
-	var path string
-	var data []byte
-	var file *os.File
-	var err error
-
-	dir = logDir()
-	if dir == "" {
-		goto end
-	}
-
-	err = os.MkdirAll(dir, 0o755)
-	if err != nil {
-		goto end
-	}
-
-	data, err = json.Marshal(Detail{
+	writeDetailLine(Detail{
 		Kind:        "fault",
 		TS:          time.Now().UTC().Format("2006-01-02T15:04:05"),
 		FaultID:     id,
@@ -165,6 +149,28 @@ func appendDetail(f Fault, id *int64, occurrence int64, project string, raiser R
 		Detail:      f.Detail,
 		Fields:      f.Fields,
 	})
+}
+
+// writeDetailLine appends one line to the detail log. Best-effort and silent,
+// for appendDetail's reasons.
+func writeDetailLine(line Detail) {
+	var dir string
+	var path string
+	var data []byte
+	var file *os.File
+	var err error
+
+	dir = logDir()
+	if dir == "" {
+		goto end
+	}
+
+	err = os.MkdirAll(dir, 0o755)
+	if err != nil {
+		goto end
+	}
+
+	data, err = json.Marshal(line)
 	if err != nil {
 		goto end
 	}
@@ -174,8 +180,6 @@ func appendDetail(f Fault, id *int64, occurrence int64, project string, raiser R
 	if err != nil {
 		goto end
 	}
-	// Both results are captured into err and then dropped at end: by contract
-	// there is no channel left to report a failure to write the log itself.
 	_, err = file.Write(append(data, '\n'))
 	err = file.Close()
 

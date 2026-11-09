@@ -30,11 +30,13 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/mattn/go-runewidth"
 
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/liveview"
+	"github.com/mikeschinkel/endless/internal/outages"
 )
 
 // The uncleared-fault row (E-698).
@@ -153,8 +155,9 @@ const Hint = "Run eeh"
 // is a better clearing affordance, not a timer deciding on their behalf which
 // failures were unimportant.
 
-// Render writes the fault row when uncleared incidents exist within scope, and
-// writes nothing at all otherwise.
+// Render writes the fault row when uncleared incidents exist within scope, then
+// one line per open provider outage (E-2589), and writes nothing at all when
+// there is neither. Outages are machine-wide, whatever the scope.
 //
 // scope is the caller's answer to "whose faults is this view responsible for":
 // faults.AllProjects for a machine-wide view, a project's id for a view already
@@ -197,17 +200,39 @@ func Render(w io.Writer, cols int, color bool, scope faults.ProjectScope) {
 	}
 
 	if !unreadable && logOnly == 0 {
-		goto end
+		goto outages
 	}
 
 	line = noticeLine(logOnly, unreadable, cols, color)
-	if line == "" {
-		goto end
+	if line != "" {
+		fmt.Fprintln(w, line)
 	}
-	fmt.Fprintln(w, line)
 
-end:
-	return
+outages:
+	renderOutages(w, cols, color)
+}
+
+// openOutages is outages.List(false), held as a var so tests can steer it.
+var openOutages = func() ([]outages.Outage, error) { return outages.List(false) }
+
+// renderOutages writes one line per open outage under the fault row (E-2589):
+// a provider's own status page confirmed it, so it is not a fault and is not
+// drawn as one — no reversed bar, no warning colour, no `Run eeh`. It closes
+// itself, so there is nothing to clear either.
+//
+// Silent on any read failure, for Render's reason. An unbound store (a test
+// harness, a process that never wired one) is the ordinary case of that.
+func renderOutages(w io.Writer, cols int, color bool) {
+	open, err := openOutages()
+	if err != nil {
+		return
+	}
+	now := time.Now()
+	for _, o := range open {
+		if line := outages.Line(o, now, cols, color); line != "" {
+			fmt.Fprintln(w, line)
+		}
+	}
 }
 
 // noticeLine is the one line that says something was recorded which this view

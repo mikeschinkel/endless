@@ -192,3 +192,59 @@ func TestTransient_KeepsTheCauseReachable(t *testing.T) {
 		t.Error("Transient(nil) != nil")
 	}
 }
+
+// TestOutage_RecordsNoFaultAndCountsNoTransient: a failure marked Outage backs
+// off like any other but raises nothing and leaves the transient run alone
+// (E-2589).
+func TestOutage_RecordsNoFaultAndCountsNoTransient(t *testing.T) {
+	db := newTestDB(t)
+	cause := Outage(errors.New("fetch origin: Permission denied (publickey)"))
+	flakyJob(t, "sync", &cause)
+
+	runN(t, "sync", TransientThreshold+1)
+
+	if got := openIncidents(t); len(got) != 0 {
+		t.Fatalf("an outage raised %d incidents, want 0: %+v", len(got), got)
+	}
+	var runs, failCount int
+	if err := db.QueryRow(`SELECT COUNT(*) FROM transient_runs`).Scan(&runs); err != nil {
+		t.Fatalf("count runs: %v", err)
+	}
+	if runs != 0 {
+		t.Errorf("transient_runs has %d rows, want 0", runs)
+	}
+	if err := db.QueryRow(`SELECT fail_count FROM jobs WHERE name = 'sync'`).Scan(&failCount); err != nil {
+		t.Fatalf("read jobs row: %v", err)
+	}
+	if failCount != TransientThreshold+1 {
+		t.Errorf("fail_count = %d, want %d: an outage still backs off", failCount, TransientThreshold+1)
+	}
+}
+
+// TestTransient_SuccessClosesTheRunWithoutAFault: a success after transient
+// failures below the threshold closes the run, and records no fault (E-2589).
+func TestTransient_SuccessClosesTheRunWithoutAFault(t *testing.T) {
+	db := newTestDB(t)
+	cause := Transient(errors.New("ssh: Could not resolve hostname github.com"))
+	flakyJob(t, "net", &cause)
+
+	runN(t, "net", TransientThreshold-1)
+	cause = nil
+	runN(t, "net", 1)
+
+	if got := openIncidents(t); len(got) != 0 {
+		t.Fatalf("recorded %d incidents, want 0: %+v", len(got), got)
+	}
+	var occurrences int
+	var closed sql.NullString
+	err := db.QueryRow(
+		`SELECT occurrences, closed_at FROM transient_runs WHERE source = 'job:net'`,
+	).Scan(&occurrences, &closed)
+	if err != nil {
+		t.Fatalf("read run: %v", err)
+	}
+	if occurrences != TransientThreshold-1 || !closed.Valid {
+		t.Errorf("run = %d occurrences, closed %v; want %d and closed",
+			occurrences, closed, TransientThreshold-1)
+	}
+}

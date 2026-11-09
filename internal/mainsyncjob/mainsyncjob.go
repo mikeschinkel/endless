@@ -29,7 +29,9 @@
 // it and backs off, so a missing credential is reported and decays toward the
 // cap instead of retrying at full rate forever. A fetch or push that could not
 // reach the remote at all is marked transient, and the runner reports it only
-// once it has repeated (E-2260).
+// once it has repeated (E-2260). A fetch or push to github.com that fails while
+// GitHub's status page reports Git Operations degraded opens a GitHub outage
+// instead, and raises nothing (E-2589).
 //
 // # What it never does
 //
@@ -72,6 +74,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/jobs"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/outages"
 	"github.com/mikeschinkel/endless/internal/settings"
 	"github.com/mikeschinkel/endless/internal/taskstatus"
 )
@@ -99,6 +102,9 @@ type job struct{}
 
 func init() {
 	jobs.Register(job{})
+	// A closed GitHub outage makes the sync due at once, rather than leaving it
+	// to wait out the backoff it built up while GitHub was down (E-2589).
+	outages.OnClose(outages.GitHub.Name, func() { _ = jobs.Retry(JobName) })
 }
 
 // Name returns the stable scheduling key.
@@ -144,7 +150,9 @@ func (job) Run(ctx context.Context) (err error) {
 func runProjects(ctx context.Context, projects []monitor.ProjectRef,
 	isEnabled func(root string) bool, git Git) (note string, err error) {
 	var notes, failures []string
-	transient := true
+	// excused: every failure is transient or an outage; anyTransient: at least
+	// one is transient.
+	excused, anyTransient := true, false
 	for _, p := range projects {
 		if !isEnabled(p.Root) {
 			continue
@@ -152,7 +160,8 @@ func runProjects(ctx context.Context, projects []monitor.ProjectRef,
 		res, serr := syncProject(ctx, p.ID, p.Root, git)
 		if serr != nil {
 			failures = append(failures, filepath.Base(p.Root)+": "+serr.Error())
-			transient = transient && jobs.IsTransient(serr)
+			excused = excused && (jobs.IsTransient(serr) || jobs.IsOutage(serr))
+			anyTransient = anyTransient || jobs.IsTransient(serr)
 		} else {
 			notes = append(notes, filepath.Base(p.Root)+": "+res.String())
 		}
@@ -168,10 +177,16 @@ func runProjects(ctx context.Context, projects []monitor.ProjectRef,
 	note = strings.TrimPrefix(note, "; ")
 	if len(failures) > 0 {
 		err = errors.New(strings.Join(failures, "; "))
-		// The run is transient only when every failure in it is: one
-		// project's rejected push must not wait behind another's outage.
-		if transient {
+		// The run is transient only when every failure in it is transient or
+		// an outage: one project's rejected push must not wait behind
+		// another's outage. It is an outage only when every failure is one
+		// (E-2589), so a transient failure elsewhere still counts toward its
+		// threshold.
+		switch {
+		case excused && anyTransient:
 			err = jobs.Transient(err)
+		case excused:
+			err = jobs.Outage(err)
 		}
 	}
 	return note, err
@@ -322,7 +337,7 @@ func syncProject(ctx context.Context, projectID int64, root string, git Git) (re
 
 	// Fetch first: every decision below is about the remote as it is now.
 	if _, err = run("fetch", "--quiet", remote); err != nil {
-		return res, unreachable(fmt.Errorf("fetch %s: %w", remote, err))
+		return res, remoteFailure(ctx, run, remote, "fetch "+remote, fmt.Errorf("fetch %s: %w", remote, err))
 	}
 	res.Upstream, err = run("rev-parse", "--abbrev-ref", upstreamRef)
 	if err != nil {
@@ -368,7 +383,8 @@ func syncProject(ctx context.Context, projectID int64, root string, git Git) (re
 		// cannot send something else. No --force of any kind: a push the remote
 		// rejects is a failure to report, never one to overrule.
 		if _, err = run("push", "--quiet", remote, push+":"+mergeRef); err != nil {
-			return res, unreachable(fmt.Errorf("push %s to %s: %w", res.Branch, res.Upstream, err))
+			return res, remoteFailure(ctx, run, remote, "push "+res.Branch+" to "+res.Upstream,
+				fmt.Errorf("push %s to %s: %w", res.Branch, res.Upstream, err))
 		}
 		res.Action = Pushed
 	default:
@@ -425,6 +441,48 @@ var unreachablePhrases = []string{
 	"network is unreachable",
 	"operation timed out",
 	"connection timed out",
+}
+
+// confirmOutage is outages.Confirm, held as a var so tests answer without a
+// network.
+var confirmOutage = outages.Confirm
+
+// remoteFailure classifies a failed fetch or push (E-2589). Against a
+// github.com remote it first asks GitHub's status page: while Git Operations
+// is degraded the failure is an outage — any failure, an authentication
+// failure included, since GitHub answered `Permission denied (publickey)`
+// during its 2026-11-04 incident — and the outage record opens instead of a
+// fault. When the remote is elsewhere, or the status page cannot be read or
+// reports nothing, unreachable decides as it always has: GitHub posts
+// incidents late or not at all, so the check never stands in for the
+// threshold.
+func remoteFailure(ctx context.Context, run func(args ...string) (string, error),
+	remote, op string, err error) error {
+	url, _ := run("remote", "get-url", remote)
+	if isGitHub(url) && confirmOutage(ctx, outages.GitHub, "main-sync: "+op) {
+		return jobs.Outage(err)
+	}
+	return unreachable(err)
+}
+
+// isGitHub reports whether a remote URL names github.com, in any of git's
+// forms: git@github.com:o/r.git, ssh://git@ssh.github.com:443/o/r,
+// https://github.com/o/r, git://github.com/o/r.
+func isGitHub(url string) bool {
+	host := strings.ToLower(strings.TrimSpace(url))
+	if _, rest, ok := strings.Cut(host, "://"); ok {
+		host = rest
+	}
+	if i := strings.IndexAny(host, "/"); i >= 0 {
+		host = host[:i]
+	}
+	if i := strings.LastIndex(host, "@"); i >= 0 {
+		host = host[i+1:]
+	}
+	if i := strings.Index(host, ":"); i >= 0 {
+		host = host[:i]
+	}
+	return host == "github.com" || host == "ssh.github.com"
 }
 
 // unreachable marks a failed fetch or push transient when its message shows the

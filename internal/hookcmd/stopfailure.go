@@ -1,10 +1,12 @@
 package hookcmd
 
 import (
+	"context"
 	"fmt"
 
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/outages"
 )
 
 // The `StopFailure` hook (E-2145).
@@ -45,8 +47,9 @@ import (
 // failure should take that line from a rate limit that will have passed by the
 // time anyone looks.
 //
-// Everything else is transient, INCLUDING an error type not listed in either
-// set. `invalid_request`, `model_not_found`, `cloud_credential_error` and
+// Everything else carries the warning code, INCLUDING an error type not listed
+// in either set. (Whether it is raised at once or only past a transient run is
+// a separate question: selfClearingTurnErrorTypes below.) `invalid_request`, `model_not_found`, `cloud_credential_error` and
 // `unknown` are documented values that land there today, and so will whatever a
 // future Claude Code adds. That is the forgiving direction on purpose: an
 // unrecognised failure is more likely to be a passing one, and grading it red
@@ -56,6 +59,45 @@ var fatalTurnErrorTypes = map[string]bool{
 	"billing_error":         true,
 	"oauth_org_not_allowed": true,
 	"account_on_hold":       true,
+}
+
+// selfClearingTurnErrorTypes names the `error_type` values that usually clear
+// on their own: the API was overloaded, rate-limited or failing, or the harness
+// could not say (E-2589). A stop on one of these is a TRANSIENT failure, counted
+// per session and a fault only once a session's turns keep ending on them —
+// TurnFailureThreshold in a row with no successful turn between. Unless
+// Anthropic's status page confirms an incident on the Claude API, in which case
+// it is an outage, and no fault at all.
+//
+// Everything else stays a fault on first occurrence: the fatal set above, and
+// `max_output_tokens` — a reply cut off at the output-token limit, which the
+// user must act on — and every other type, named or not.
+var selfClearingTurnErrorTypes = map[string]bool{
+	"unknown":      true,
+	"rate_limit":   true,
+	"overloaded":   true,
+	"server_error": true,
+}
+
+// TurnFailureThreshold is how many turns in a row a session may end on a
+// self-clearing API error before it becomes WARN-0013 (E-2589).
+const TurnFailureThreshold = 3
+
+// turnRunSource and turnRunFingerprint key a session's transient run.
+const turnRunSource = "hook:stopfailure"
+
+func turnRunFingerprint(sessionID string) string {
+	return "turn-failed:" + sessionID
+}
+
+// confirmOutage is outages.Confirm, held as a var so tests answer without a
+// network.
+var confirmOutage = outages.Confirm
+
+// resolveTurnFailures closes a session's transient run once a turn ends
+// normally (the `Stop` event): the API errors before it cleared on their own.
+func resolveTurnFailures(sessionID string) {
+	faults.ResolveTransient(turnRunSource, turnRunFingerprint(sessionID))
 }
 
 // unreportedTurnErrorType is what a `StopFailure` payload carrying no
@@ -118,7 +160,9 @@ func handleStopFailure(projectID int64, payload claudePayload) (err error) {
 	return err
 }
 
-// recordTurnFailure files the incident behind an ended-in-error turn.
+// recordTurnFailure files the incident behind an ended-in-error turn: a fault
+// for an error type that needs a person, and for a self-clearing one an outage
+// or an occurrence on the session's transient run (E-2589).
 //
 // Fingerprinted by the summary's default, which embeds only the error type: a
 // session hitting one rate limit twenty times is ONE incident with an occurrence
@@ -154,13 +198,30 @@ func recordTurnFailure(projectID int64, payload claudePayload) {
 		}
 	}
 
-	faults.Record(faults.Fault{
+	fault := faults.Fault{
 		Code:      turnFailureCode(errorType),
-		Source:    "hook:stopfailure",
+		Source:    turnRunSource,
 		Summary:   fmt.Sprintf("a turn ended on an API error: %s", errorType),
 		ProjectID: projectID,
 		TaskID:    raiser.TaskID,
 		SessionID: raiser.SessionID,
 		Fields:    fields,
-	})
+	}
+
+	if !selfClearingTurnErrorTypes[errorType] {
+		faults.Record(fault)
+		return
+	}
+	// Anthropic's status page first: during a confirmed incident on the Claude
+	// API the failure is Anthropic's, and the open outage is what the user
+	// sees. Bounded by outages.RequestTimeout, and no request at all while an
+	// Anthropic outage is already open.
+	if confirmOutage(context.Background(), outages.Anthropic, "a turn ended on an API error: "+errorType) {
+		return
+	}
+	faults.RecordTransient(faults.TransientRun{
+		Source:      turnRunSource,
+		Fingerprint: turnRunFingerprint(payload.SessionID),
+		Threshold:   TurnFailureThreshold,
+	}, fault)
 }

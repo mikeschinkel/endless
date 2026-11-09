@@ -73,6 +73,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/markdowncmd"
 	"github.com/mikeschinkel/endless/internal/monitor"
 	"github.com/mikeschinkel/endless/internal/monitorvis"
+	"github.com/mikeschinkel/endless/internal/outages"
 	"github.com/mikeschinkel/endless/internal/outputstylecmd"
 	"github.com/mikeschinkel/endless/internal/projectcmd"
 	"github.com/mikeschinkel/endless/internal/projectstatuscmd"
@@ -103,6 +104,7 @@ import (
 	_ "github.com/mikeschinkel/endless/internal/docsweep"
 	_ "github.com/mikeschinkel/endless/internal/mainsyncjob"
 	_ "github.com/mikeschinkel/endless/internal/minimizerjob"
+	_ "github.com/mikeschinkel/endless/internal/outagejob"
 	_ "github.com/mikeschinkel/endless/internal/pathsjob"
 	_ "github.com/mikeschinkel/endless/internal/raterjob"
 	_ "github.com/mikeschinkel/endless/internal/triagejob"
@@ -244,6 +246,10 @@ func main() {
 	faults.Bind(monitor.FaultDB, func() string {
 		return filepath.Join(monitor.ConfigDir(), "log")
 	}, resolveFaultProject, resolveFaultRaiser)
+
+	// E-2589: the outage store reads and writes the same database the fault
+	// store does. Stored, not called, like faults.Bind.
+	outages.Bind(monitor.DB)
 
 	// session-status pins main itself, but only on its normal tmux-resolved path;
 	// with --task (headless/tests) it deliberately reads the resolved sandbox

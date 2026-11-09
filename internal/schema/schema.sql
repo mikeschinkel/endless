@@ -1489,6 +1489,59 @@ CREATE TABLE IF NOT EXISTS fault_triage_projects (
     enabled_at TEXT NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%S', 'now'))
 );
 
+-- Transient runs (E-2589). One row per run of transient failures from one
+-- source: a failure that usually clears on its own — a refused tmux
+-- connection, an unreachable remote, an overloaded API — is logged here and
+-- becomes a fault (an `errors` row) only once the run reaches its threshold.
+-- A success closes the run. Machine-local like `errors`, written directly by
+-- faults.RecordTransient and faults.ResolveTransient, never through the ledger.
+--
+-- Closed runs are kept as history: how many occurrences a run had, and how
+-- long it took to clear (closed_at - first_seen_at) or that it became a fault
+-- (faulted_at). That is the evidence a later change needs to classify a
+-- failure pattern as passing or not, and to set its threshold.
+--
+-- At most one OPEN run per (source, fingerprint), the same incident model as
+-- idx_errors_open_uniq.
+CREATE TABLE IF NOT EXISTS transient_runs (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    source        TEXT NOT NULL,
+    fingerprint   TEXT NOT NULL,
+    code          TEXT NOT NULL,
+    threshold     INTEGER NOT NULL,
+    occurrences   INTEGER NOT NULL DEFAULT 1,
+    first_seen_at TEXT NOT NULL,
+    last_seen_at  TEXT NOT NULL,
+    faulted_at    TEXT,
+    closed_at     TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_transient_runs_open
+    ON transient_runs(source, fingerprint)
+ WHERE closed_at IS NULL;
+
+-- Outages (E-2589). A failure the provider's own status page confirmed — GitHub
+-- reporting Git Operations degraded while a fetch fails, Anthropic reporting
+-- the Claude API degraded while a turn dies on an API error. Not a fault: an
+-- outage opens instead of one, carries no action hint, and closes itself when
+-- the outage-check job reads the component as operational again.
+--
+-- status is the component's Statuspage status (degraded_performance,
+-- partial_outage, major_outage, under_maintenance) as last read; opened_by names
+-- the failure that opened it. At most one OPEN outage per provider.
+CREATE TABLE IF NOT EXISTS outages (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    provider        TEXT NOT NULL,
+    component       TEXT NOT NULL,
+    status          TEXT NOT NULL,
+    opened_by       TEXT NOT NULL,
+    opened_at       TEXT NOT NULL,
+    checked_at      TEXT NOT NULL,
+    closed_at       TEXT
+);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_outages_open
+    ON outages(provider)
+ WHERE closed_at IS NULL;
+
 -- ─── The minimizer autoresearch loop (E-1975) ────────────────────────────────
 --
 -- Five tables behind one idea: the minimizer prompt is not a string someone

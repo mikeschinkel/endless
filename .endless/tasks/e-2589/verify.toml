@@ -1,0 +1,45 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2589 and records what was true when E-2589
+# landed. Edit it only if you ARE E-2589. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+schema = 1
+task   = "E-2589"
+
+[[check]]
+name   = "transient runs, outages, outage-check job, main-sync GitHub check, stopfailure, monitor-wake coalescing and retry, outage lines, errors list, hook context, schema"
+runner = "gotest"
+paths  = ["./internal/faults/...", "./internal/jobs/...", "./internal/outages/...",
+          "./internal/outagejob/...", "./internal/mainsyncjob/...", "./internal/hookcmd/...",
+          "./internal/monitorvis/...", "./internal/faultrow/...", "./internal/errorscmd/...",
+          "./internal/sessionstatuscmd/...", "./internal/projectstatuscmd/...",
+          "./internal/schema/..."]
+
+[[check]]
+name   = "plan-item rendering test no longer breaks pytest's reporter (folded-in fix)"
+runner = "pytest/uv"
+paths  = ["tests/test_plan_items.py"]
+
+[[check]]
+name     = "endless-go registers the outage-check job"
+sh       = "grep -c '_ \"github.com/mikeschinkel/endless/internal/outagejob\"' cmd/endless-go/main.go"
+equals   = "1"
+
+[[check]]
+name     = "the migration adds both tables"
+sh       = "grep -c 'CREATE TABLE IF NOT EXISTS transient_runs\\|CREATE TABLE IF NOT EXISTS outages' internal/schema/migrations/00032_transient_runs_and_outages.sql"
+equals   = "2"
+
+[[check]]
+name     = "providers are exactly GitHub (Git Operations) and Anthropic (Claude API)"
+sh       = "grep -c 'Component: *\"Git Operations\"\\|Component: *\"Claude API (api.anthropic.com)\"' internal/outages/outages.go"
+equals   = "2"
+
+[[check]]
+name     = "docs/errors.md describes transient failures and outages"
+sh       = "grep -c '^## Transient failures and outages' docs/errors.md"
+equals   = "1"
+
+[[check]]
+name     = "the guide describes outages"
+sh       = "grep -c 'Failures that clear on their own are not errors on first sight' docs/guide/reference.md"
+equals   = "1"

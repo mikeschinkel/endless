@@ -33,9 +33,15 @@ func useFakeTmux(t *testing.T, answer func(args []string) (string, error)) *fake
 func useFaultCapture(t *testing.T) *[]faults.Fault {
 	t.Helper()
 	var got []faults.Fault
-	prev := record
+	prev, prevTransient := record, recordTransient
 	record = func(f faults.Fault) { got = append(got, f) }
-	t.Cleanup(func() { record = prev })
+	// A transient occurrence is captured as raised, as at a threshold of one:
+	// these tests are about WHAT is raised; wake_test.go covers the run.
+	recordTransient = func(_ faults.TransientRun, f faults.Fault) bool {
+		got = append(got, f)
+		return true
+	}
+	t.Cleanup(func() { record, recordTransient = prev, prevTransient })
 	return &got
 }
 

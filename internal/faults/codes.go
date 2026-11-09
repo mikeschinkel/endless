@@ -323,7 +323,10 @@ var (
 	//
 	// Transient: `rate_limit`, `overloaded`, `server_error`, `max_output_tokens`,
 	// and every error type not named in the fatal set — including ones a future
-	// Claude Code adds. Warning is the forgiving direction for an unrecognised
+	// Claude Code adds. Since E-2589 `unknown`, `overloaded`, `rate_limit` and
+	// `server_error` are raised only past a per-session transient run of three
+	// (faults.RecordTransient), or not at all during a confirmed Anthropic
+	// outage; the rest are raised on first occurrence. Warning is the forgiving direction for an unrecognised
 	// value: an unknown failure is more likely to be a passing one than a fatal
 	// one, and over-reporting it as red would outrank real errors for the fault
 	// row's one line.
@@ -773,6 +776,8 @@ var (
 	// Warning rather than error: a monitor that cannot tell treats itself as
 	// visible and keeps drawing, which is today's cost and not a loss.
 	// Fingerprinted on the tmux server, so one broken server is one incident.
+	// Transient since E-2589: raised only once monitorvis.VisibilityThreshold
+	// queries in a row fail (internal/monitorvis/wake.go).
 	ErrCodeMonitorVisibilityUnreadable = Code{
 		ID:       "WARN-0033",
 		Slug:     "monitor-visibility-unreadable",

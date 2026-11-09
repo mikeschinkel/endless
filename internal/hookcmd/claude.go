@@ -17,6 +17,7 @@ import (
 	"github.com/mikeschinkel/endless/internal/docmirror"
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/outages"
 	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/sessionstate"
 	"github.com/mikeschinkel/endless/internal/spawnlaunchcmd"
@@ -455,6 +456,9 @@ func runClaude(args []string) (err error) {
 		if err := monitor.IdleSession(payload.SessionID); err != nil {
 			return dbWriteFailed(fmt.Errorf("idling session: %w", err))
 		}
+		// A turn that ended normally closes the session's run of
+		// self-clearing API errors, if one is open (E-2589).
+		resolveTurnFailures(payload.SessionID)
 
 	case "StopFailure":
 		// The OTHER way a turn ends (E-2145). Claude Code fires this INSTEAD OF
@@ -663,10 +667,29 @@ func handleUserPromptSubmit(projectID int64, payload claudePayload, sigilNotice 
 		parts = append(parts, notices)
 	}
 
+	// E-2589: open provider outages, so a failed push or an API error during
+	// one is not debugged as a local problem. Every turn while one is open; a
+	// read failure costs only the line.
+	if note := outageContext(); note != "" {
+		parts = append(parts, note)
+	}
+
 	if len(parts) == 0 {
 		return nil
 	}
 	return writeContextInjection(payload.EventName, strings.Join(parts, "\n\n"))
+}
+
+// openOutages is outages.List(false), held as a var so tests can steer it.
+var openOutages = func() ([]outages.Outage, error) { return outages.List(false) }
+
+// outageContext is the agent's line for each open outage, or "".
+func outageContext() string {
+	open, err := openOutages()
+	if err != nil {
+		return ""
+	}
+	return outages.AgentContext(open, time.Now())
 }
 
 // deliverNotices drains this session's undelivered change notices (E-1917) and

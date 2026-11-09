@@ -74,12 +74,14 @@ import (
 	"strings"
 	"syscall"
 	"text/tabwriter"
+	"time"
 
 	"github.com/mattn/go-runewidth"
 
 	"github.com/mikeschinkel/endless/internal/faults"
 	"github.com/mikeschinkel/endless/internal/liveview"
 	"github.com/mikeschinkel/endless/internal/monitor"
+	"github.com/mikeschinkel/endless/internal/outages"
 	"github.com/mikeschinkel/endless/internal/refusal"
 )
 
@@ -334,6 +336,10 @@ func runList(args []string) {
 		os.Exit(1)
 	}
 
+	// Outages lead, under their own heading (E-2589): they are not errors, so
+	// they are neither counted in the header below nor dismissed by `clear`.
+	printOutages(os.Stdout, *all, time.Now())
+
 	// The header comes FIRST and is printed unconditionally, empty listing
 	// included. A bare "no errors" from a scoped listing is the sentence that
 	// contradicted the fault row; this one says which project it means and where
@@ -355,6 +361,37 @@ func runList(args []string) {
 
 	printFooter(incidents)
 	printLogOnly()
+}
+
+// listOutages is outages.List, held as a var so tests can steer it.
+var listOutages = outages.List
+
+// printOutages prints the open outages under an "Outages" heading, with the
+// closed ones after them when includeClosed is set, and nothing at all when
+// there are none (E-2589). Quiet on a read failure: it is an annotation on the
+// listing, not the listing.
+func printOutages(w io.Writer, includeClosed bool, now time.Time) {
+	list, err := listOutages(includeClosed)
+	if err != nil || len(list) == 0 {
+		return
+	}
+	fmt.Fprintln(w, "Outages")
+	for _, o := range list {
+		fmt.Fprintln(w, "  "+outageText(o, now))
+	}
+	fmt.Fprintln(w)
+}
+
+// outageText is one outage's listing line.
+func outageText(o outages.Outage, now time.Time) string {
+	head := o.Provider + " " + o.Component + ": "
+	if o.Open() {
+		return head + outages.StatusText(o.Status) + " for " + outages.Duration(o.Lasted(now)) +
+			", opened by " + o.OpenedBy + "; closes itself when " + o.Provider + " reports it operational"
+	}
+	return head + "closed after " + outages.Duration(o.Lasted(now)) + " (" +
+		o.OpenedAt.Format("2006-01-02 15:04") + " to " + o.ClosedAt.Format("2006-01-02 15:04") +
+		" UTC), opened by " + o.OpenedBy
 }
 
 // printLogOnly prints the occurrences that reached the detail log but no
