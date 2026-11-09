@@ -76,8 +76,10 @@ var correctionTargets = []CorrectionTarget{
 	// correct. Hiding is the reversible way to take one out of a listing.
 	{Name: "session", Table: "sessions", Key: []string{"id"},
 		Columns: []string{"state", "task_id", "focus_task_id", "hidden"}, Entity: EntitySession,
-		NoDelete: "sessions are never deleted (ED-1655): a freed sessions.id is handed to the next " +
-			"session created, and the rows that still hold the old id then name the wrong session; " +
+		// The text names the rule and not the decision's id: the user may be
+		// running Endless on a project whose ledger is not this one.
+		NoDelete: "sessions are never deleted: a freed session id is handed to the next session " +
+			"created, and the rows that still hold the old id then name the wrong session; " +
 			"a session that should not be listed is hidden instead"},
 	{Name: "session_status", Table: "session_statuses", Key: []string{"id"},
 		Columns: []string{"headline", "summary"}, Entity: EntitySessionStatus},

@@ -11,7 +11,7 @@ runner = "gotest"
 paths  = ["./internal/events/...", "./internal/correctcmd/..."]
 
 [[check]]
-name   = "the CLI relays the session delete refusal naming ED-1655, and --set hidden=1 still succeeds"
+name   = "the CLI relays the session delete refusal naming the rule, and --set hidden=1 still succeeds"
 runner = "pytest/uv"
 paths  = ["tests/test_correct_cmd.py"]
 
@@ -47,5 +47,10 @@ contains = "delete"
 
 [[check]]
 name     = "the guide appendix says a session is never deleted"
-sh       = "grep -c 'ED-1655' docs/guide/appendix-a.md"
+sh       = "grep -c 'never deleted' docs/guide/appendix-a.md"
 equals   = "2"
+
+[[check]]
+name   = "no self-dev id reaches the guide or the help tree"
+runner = "pytest/uv"
+paths  = ["tests/test_no_self_dev_ids.py"]

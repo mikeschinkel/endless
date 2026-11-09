@@ -36,7 +36,7 @@ The command is `endless correct <target> <operation> [KEY]`: the target and the 
 
 - **`endless correct <target> update KEY --set col=value ... --reason <text>`** — update a row. `NULL` (exactly) is SQL NULL. A `--set` that changes nothing is refused.
 - **`endless correct <target> insert --set col=value ... --reason <text>`** — insert a row. It may set the listed columns plus any column the table requires; an `id` is allocated.
-- **`endless correct <target> delete KEY --reason <text>`** — delete a row, refused while other rows refer to it. A table that keeps removed rows behind a `removed` column (tasks and decisions) has the row marked `removed = 1` instead, so its id is never minted again. A `session` is never deleted (ED-1655): the operation is refused naming the decision, and a session that should not be listed is hidden with `--set hidden=1` instead.
+- **`endless correct <target> delete KEY --reason <text>`** — delete a row, refused while other rows refer to it. A table that keeps removed rows behind a `removed` column (tasks and decisions) has the row marked `removed = 1` instead, so its id is never minted again. A `session` is never deleted: the operation is refused, because a freed session id would be handed to the next session created while rows still holding the old id name it, and a session that should not be listed is hidden with `--set hidden=1` instead.
 - **`endless correct <target> annotate KEY --reason <text>`** — an annotation: a correction entry with the reason and no change, for any target or for `conversation`, `message` and `project_next`, which have no table and take nothing else.
 
 Every run writes a `ledger.row_changed` entry per change — the target, key, operation and values, applied by the executor and the projector alike and triggering none of an existing kind's effects — and then a `ledger.corrected` entry: the reason, the before values, whether gates were skipped, and the byte offset of each change entry in the segment both were written to. The run holds the ledger lock from its first line to its last, so the lines are adjacent, and commits them in one ledger commit whose subject names the correction (`Endless: ledger.corrected E-101 …`), which is never folded with another. `git log -- .endless/db-ledger` is where corrections are read; there is no other display yet.
@@ -48,7 +48,7 @@ Every run writes a `ledger.row_changed` entry per change — the target, key, op
 | `task` | tasks, task_content | id | title, description, phase, type, status, parent_id, complexity, risk, completed_at, verified_sha, and the content kinds (justification, context, analysis, plan, outcome, reason, notes) |
 | `task_dep` | task_deps | id | dep_type |
 | `project` | projects | id | label, group_name, description, status, language |
-| `session` | sessions | id | state, task_id, focus_task_id, hidden; `delete` is refused (ED-1655) |
+| `session` | sessions | id | state, task_id, focus_task_id, hidden; `delete` is refused: sessions are never deleted |
 | `session_status` | session_statuses | id | headline, summary |
 | `session_tasks` | session_tasks | id | relation_id |
 | `note` | notes | id | message, resolved, resolved_at |

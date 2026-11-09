@@ -125,7 +125,8 @@ def test_a_delete_of_a_session_is_refused_and_hiding_still_works(seeded_project_
     r = CliRunner().invoke(
         main, ["correct", "session", "delete", f"ES-{sid}", "--reason", "a stray session"])
     assert r.exit_code != 0
-    assert "never deleted" in r.stderr and "ED-1655" in r.stderr, r.stderr
+    assert "never deleted" in r.stderr and "hidden" in r.stderr, r.stderr
+    assert "ED-" not in r.stderr, "a self-dev decision id reached a user: " + r.stderr
     assert db.query("SELECT COUNT(*) AS n FROM sessions WHERE id = ?", (sid,))[0]["n"] == 1
     r = CliRunner().invoke(
         main, ["correct", "session", "update", f"ES-{sid}", "--set", "hidden=1",

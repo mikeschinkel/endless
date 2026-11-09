@@ -625,7 +625,9 @@ func TestCorrection_SessionDeleteIsRefused(t *testing.T) {
 	if err == nil {
 		t.Fatal("a delete of a session was prepared; ED-1655 says sessions are never deleted")
 	}
-	for _, want := range []string{"never deleted", "ED-1655", "hidden"} {
+	// The refusal names the rule and the alternative, never a self-dev decision
+	// id a user on another project cannot open.
+	for _, want := range []string{"never deleted", "hidden"} {
 		if !strings.Contains(err.Error(), want) {
 			t.Errorf("the refusal does not say %q: %v", want, err)
 		}
