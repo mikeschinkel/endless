@@ -8049,3 +8049,7 @@ On E-2063, Mike agreed to split Increments 4-5 into a follow-up task (E-2585). I
 ### [2026-11-08] Task suites are verify.toml manifests, not verify.sh
 Writing plan items for E-2263 (user-context verify runner) in the E-2225 session, I carried the plan's 'the task's verify.sh changed' into P18. Mike pointed out verify.sh is obsoleted by verify.toml: a task's suite is now a manifest of [[check]] entries (.endless/tasks/CLAUDE.md, 'Writing one'); verify.sh survives only as legacy suites. Read the current suite format before naming suite files in plans or items, rather than reusing names from an older plan.
 - **Project**: endless
+
+### [2026-11-09] Check accepted decisions before offering options
+Planning E-2306 (task spawn on a primed task), I offered and recommended options that type a message into the primed session's pane with tmux send-keys. ED-1615, an accepted decision, already says Endless never does that. Mike answered by pointing to ED-1615. Before presenting options, search the accepted decisions on the mechanism each option uses, and leave out options they rule out.
+- **Project**: endless
