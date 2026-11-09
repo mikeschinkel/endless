@@ -48,3 +48,8 @@ verify = "With a landable branch carrying the migration, the output names its wo
 id = "P8"
 kind = "exclusion"
 statement = "Rebuilding task state from the ledger, so task changes made after the backup come back, is left to a later child task"
+
+[[item]]
+id = "P9"
+kind = "deliverable"
+statement = "Fix test_plan_items' terminal-size fake, which leaked into pytest's terminal writer and aborted the Python suite after ~1300 tests"
