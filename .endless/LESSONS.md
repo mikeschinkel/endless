@@ -8033,3 +8033,7 @@ During the E-2577 brainstorm I listed decisions I would file (a user-demand rule
 ### [2026-11-08] Plan-item table: one-space gaps, arrow at column 0, proper-case verdicts
 Reviewing the landed E-2353 plan-item table in task show, Mike corrected three layout choices: (1) two spaces between the number, glyph and text columns is wasteful in a borderless table; use one. (2) The verdict arrow was indented under the text, which double-indented the verdict and cost two columns before wrapping; put the arrow at the text column's edge. (3) Verdict words read better proper-cased ('As planned:', 'Kept') where they lead a line in the human table. Reason: in a borderless layout every blank column is width taken from the text, and a line-leading word reads as a label.
 - **Project**: endless
+
+### [2026-11-08] In a brainstorm, keep each turn short enough that Mike can answer it
+E-2577 brainstorm: I replied with several long sections at once. Mike: 'You wrote a wall of text so it is hard for me to condense down into answerable questions.' In discussion turns, make one point and ask one thing; hold the rest for the next turn or the synthesis.
+- **Project**: endless
