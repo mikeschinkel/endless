@@ -66,3 +66,40 @@ Suite at `.endless/tasks/e-2282/verify.sh`:
 
 The behaviour itself (a `just verify` pass lets `just land` proceed) is
 confirmed by the user's own handoff run: `just verify`, then `just land`.
+
+## Also: the status vocabulary asks the binary that matches the running Python
+
+Folded in per ED-1550 (same area, open task): found in the same session, when
+`endless task update --db main` run from inside the stale E-2278 worktree failed
+with `unknown group "reported"`.
+
+`src/endless/statuses.py` `_resolve_binary` (E-1891) prefers the worktree's
+`bin/endless-go` whenever cwd is inside a self-dev worktree, on the premise
+that "the worktree's Python is already what runs here". Without `--db sandbox`
+that premise is false: the global `endless` (main's source) runs, and gets
+paired with the worktree's binary. E-1891's fallback only catches a binary that
+lacks `task-status` entirely, so an old worktree binary that has the
+subcommand but not a newer group fails every command that needs that group.
+
+Change: prefer the worktree's binary only when the running Python IS that
+worktree's source — `config.worktree_python_reexec_target()` returns None
+while `config.worktree_endless_go()` names a binary. Otherwise use the
+installed (PATH) binary. Keep E-1891's too-old fallback for the worktree case.
+This matches ED-1601 (`--db sandbox` runs the worktree's code, `--db main` the
+installed one) and works at cli.py import time, before `--db` is parsed.
+
+Regression check:
+- A branch that adds a status group: its own Python runs under `--db sandbox`
+  (after the re-exec) or `uv run` in the worktree, so it still asks its own
+  binary.
+- E-1891's regression (main's Python asking a stale worktree binary before the
+  re-exec) is handled by the rule itself: that Python now asks the installed
+  binary.
+- Main checkout: unchanged. Installed binary older than main's Python: fails as
+  it does today; not in scope.
+
+Tests: `tests/test_status_registry_client.py` — the three worktree-preference
+tests stub the source check; add one where cwd is in a worktree but the running
+Python is not its source and the installed binary is chosen. Suite check: from
+inside a worktree whose `bin/endless-go` is replaced by a fake that rejects a
+group, `endless task show <id> --db main` still works.
