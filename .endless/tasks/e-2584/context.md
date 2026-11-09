@@ -1,0 +1,1 @@
+E-2577 brainstorm: git patch-id hashes context lines, so a rebase onto a main that changed nearby lines stales a reconciliation whose verdicts cannot have changed. E-2486 re-recorded identical verdicts three times for that reason.
