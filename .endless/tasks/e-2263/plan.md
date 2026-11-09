@@ -58,3 +58,24 @@ the result and CTRF path; a pass closes the window, keeps the log and sets
 `unlanded`; a failure keeps the window; `--show`/`--hide` join and break the
 pane and refuse together; the fourth failed handoff run and a run after a
 `verify.sh` change both stop for approval.
+
+
+
+## Rebase onto main before the run (from E-2577)
+
+- Before it runs the suite, verify rebases the branch onto main, using the
+  rebase preparation the land already has. The pass is then taken on the tree
+  that will land, so the land's own rebase onto an unmoved main changes nothing.
+- The pass records the main commit it was rebased onto. Under E-2577 the land
+  refuses and names verify when main has moved past that commit (a sibling
+  task under E-2261).
+- **A rebase conflict** stops the run before the suite starts. Verify writes no
+  pass and moves no status. It tells the owning session through the error
+  triage job's routes: a live, idle session gets a SendMessage from the
+  throwaway `claude -p` sender, and an ended session is resumed in a background
+  window with the message as its first prompt. Pull those routes out of
+  `internal/triagejob` into a shared piece both jobs call; do not copy them.
+- The message names the conflicted files and asks the session to resolve them
+  and request verify again. The user is asked nothing.
+- "The task becomes `unlanded`" above changes with the sibling task that
+  derives `unlanded`: a pass is recorded, and whether it stands is computed.
