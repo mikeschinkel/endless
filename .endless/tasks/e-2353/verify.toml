@@ -5,52 +5,70 @@
 #
 # E-2353: plan_items.render_items lays plan items out as a headerless
 # table — number, three fixed glyph slots, text wrapped within its column
-# to the terminal width (70 when it cannot be read) — with one blank line
-# between items and a static dim legend under it, in task plan list, task
-# show, the reconcile context and the post-land state. task show --agent
-# keeps the words rendering; --json is untouched.
+# to the terminal width (70 when it cannot be read), one space between
+# columns — with one blank line between items and a static dim legend
+# between two rules under it. After reconciliation the text cell carries
+# labeled lines in bright cyan: Verdict:, its note indented under it,
+# Answer: or Question:, and Answer holds:. task show --agent keeps the
+# words rendering; --json is untouched.
 #
-# The runner's HOME holds no database, so the checks below call the
-# renderer on rows built in place rather than on a task's items.
+# The runner's HOME holds no database, so the checks below exercise the
+# renderer on rows built in its tests rather than on a task's items.
 
 schema = 1
 task   = "E-2353"
 
-# Native tests first, fail-fast: wrapping, each glyph slot, the legend, a
-# wide label, the blank separator, the fallback width, the words rendering
-# and the guide line.
+# Native tests first, fail-fast.
 [[check]]
 name   = "plan_items unit tests"
 runner = "pytest/uv"
 paths  = ["tests/test_plan_items.py"]
 
+# Each plan item's tests by name, so deleting one cannot turn the suite
+# green by absence.
 [[check]]
-name     = "P1/P2/P4: number, glyph slots, then statement, verify: and detail as one block, at one offset for P9 and P100"
-sh       = "uv run python -c 'from endless import plan_items as p; r=lambda l,s,**o:{\"label\":l,\"statement\":s,\"approved_statement\":s,\"kind\":\"deliverable\",\"approved_kind\":\"deliverable\",\"origin\":\"planned\",\"state\":\"active\",\"approved_at\":\"x\",\"verify\":None,\"detail\":None,\"verdict\":None,**o}; print(p.render_items([r(\"P9\",\"a\",verify=\"go test\",detail=\"d\"), r(\"P100\",\"b\",approved_at=None,origin=\"grown\",kind=\"exclusion\",approved_kind=\"exclusion\")], width=70))'"
-contains = "P9    ✓    a verify: go test d\n\nP100   +✗  b"
+name     = "P1/P2: statement, verify: and detail wrap as one block in the text column"
+sh       = "uv run pytest tests/test_plan_items.py -q -k test_render_wraps_the_text_within_its_column 2>&1"
+contains = "1 passed"
 
 [[check]]
-name     = "P3: with no terminal and no COLUMNS the text wraps to 70 columns"
-sh       = "env -u COLUMNS uv run python -c 'from endless import plan_items as p; out=p.render_items([{\"label\":\"P1\",\"statement\":\" \".join([\"word\"]*40),\"approved_statement\":\"\",\"kind\":\"deliverable\",\"approved_kind\":\"deliverable\",\"origin\":\"planned\",\"state\":\"active\",\"approved_at\":\"x\",\"verify\":None,\"detail\":None,\"verdict\":None}]); lines=out.splitlines()[:-1]; print(len(lines) > 3 and max(map(len, lines)) <= 70)' | cat"
-contains = "True"
+name     = "P3: 70 columns when the width cannot be read"
+sh       = "uv run pytest tests/test_plan_items.py -q -k test_render_wraps_to_seventy_columns 2>&1"
+contains = "1 passed"
 
 [[check]]
-name     = "P7: one glyph map, one legend, printed dim under the table"
-sh       = "uv run python -c 'import click; from endless import plan_items as p; out=p.render_items([{\"label\":\"P1\",\"statement\":\"a\",\"approved_statement\":\"a\",\"kind\":\"deliverable\",\"approved_kind\":\"deliverable\",\"origin\":\"planned\",\"state\":\"active\",\"approved_at\":\"x\",\"verify\":None,\"detail\":None,\"verdict\":None}], width=70); print(out.endswith(chr(10)*2 + click.style(p.LEGEND, dim=True)), p.LEGEND)'"
-contains = "True ✓ approved  ~ changed  – withdrawn  + grown  ↷ post-land  ✗ exclusion"
+name     = "P4: the number column widens to the widest label"
+sh       = "uv run pytest tests/test_plan_items.py -q -k test_render_widens_the_number_column 2>&1"
+contains = "1 passed"
+
+[[check]]
+name     = "P5: one blank line between items"
+sh       = "uv run pytest tests/test_plan_items.py -q -k test_render_separates_items 2>&1"
+contains = "1 passed"
+
+[[check]]
+name     = "P6: each glyph slot at its fixed position"
+sh       = "uv run pytest tests/test_plan_items.py -q -k test_render_fills_each_glyph_slot 2>&1"
+contains = "9 passed"
+
+[[check]]
+name     = "P7: the legend prints dim between two rules the layout wide"
+sh       = "uv run pytest tests/test_plan_items.py -q -k test_render_prints_the_legend_dim_between_rules 2>&1"
+contains = "1 passed"
+
+[[check]]
+name     = "P8: Verdict:, the note, Answer:, Question: and Answer holds: as labeled lines"
+sh       = "uv run pytest tests/test_plan_items.py -q -k 'test_render_labels or test_render_shows_a_note or test_render_puts_the_post_land or test_render_wraps_a_note' 2>&1"
+contains = "6 passed"
 
 [[check]]
 name   = "P9: task plan list, task show, the reconcile context and the post-land state all render through render_items"
 sh     = "test \"$(grep -c 'render_items(' src/endless/plan_items.py)\" -ge 4 && grep -q 'plan_items.render_items(rows)' src/endless/task_cmd.py"
 
 [[check]]
-name   = "P10: task show --agent keeps the words rendering"
-sh     = "grep -q 'render_items_words(rows)' src/endless/task_cmd.py && grep -q '_plan_items_text(item_id, agent=True)' src/endless/task_cmd.py"
-
-[[check]]
-name     = "P10: the words rendering is the one it was"
-sh       = "uv run python -c 'from endless import plan_items as p; print(p.render_items_words([{\"label\":\"P1\",\"statement\":\"a\",\"kind\":\"deliverable\",\"origin\":\"grown\",\"state\":\"active\",\"approved_at\":None,\"verify\":\"go test\",\"detail\":None,\"verdict\":None}]))'"
-equals   = "  P1      a [grown, unapproved]\n          verify: go test"
+name     = "P10: task show --agent keeps the words rendering, byte for byte"
+sh       = "grep -q '_plan_items_text(item_id, agent=True)' src/endless/task_cmd.py && uv run pytest tests/test_plan_items.py -q -k test_render_words_keeps_the_agent_rendering 2>&1"
+contains = "1 passed"
 
 [[check]]
 name     = "P12: the guide's Plan items section shows the legend"
@@ -59,8 +77,23 @@ equals   = "1"
 
 [[check]]
 name   = "P13/P14: no borders, and tabulate, not rich"
-sh     = "! grep -nE '^(import rich|from rich)' src/endless/plan_items.py && grep -q 'tablefmt=\"plain\"' src/endless/plan_items.py"
+sh     = "! grep -nE '^(import rich|from rich)' src/endless/plan_items.py && grep -q 'tablefmt=_PLAIN' src/endless/plan_items.py && grep -q 'linebetweenrows=None, linebelow=None' src/endless/plan_items.py"
 
 [[check]]
 name   = "P15: plan-item data, events and the items.toml mirror are untouched"
 sh     = "git diff --quiet $(git merge-base HEAD main) HEAD -- internal/ cmd/ src/endless/doc_mirror.py"
+
+[[check]]
+name     = "P16: one space between the number, glyph and text columns"
+sh       = "uv run pytest tests/test_plan_items.py -q -k test_render_puts_one_space_between_columns 2>&1"
+contains = "1 passed"
+
+[[check]]
+name     = "P17: each verdict word proper-cased"
+sh       = "uv run pytest tests/test_plan_items.py -q -k test_render_proper_cases_each_verdict 2>&1"
+contains = "7 passed"
+
+[[check]]
+name     = "P18: the labels print bright cyan"
+sh       = "uv run pytest tests/test_plan_items.py -q -k test_render_colors_the_labels 2>&1"
+contains = "1 passed"

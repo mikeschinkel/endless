@@ -24,7 +24,7 @@ import tomllib
 from pathlib import Path
 
 import click
-from tabulate import tabulate
+import tabulate as tabulate_mod
 
 from endless import agent_help, config, doc_mirror, provenance
 from endless.event_bridge import emit_event
@@ -419,25 +419,48 @@ STATE_GLYPHS = {"approved": "✓", "unapproved": " ", "changed": "~", "withdrawn
 ORIGIN_GLYPHS = {"grown": "+", "post-land": "↷", "planned": " "}
 KIND_GLYPHS = {"exclusion": "✗", "deliverable": " "}
 
-# Printed dim under every table. Static, as `session list`'s legend is: a
-# stable line means the eye learns one mapping instead of re-reading it. Two
-# spaces between entries, not that legend's three, so it fits FALLBACK_WIDTH.
+# Printed dim under every table, between two rules. Static, as `session
+# list`'s legend is: a stable line means the eye learns one mapping instead of
+# re-reading it. Two spaces between entries, not that legend's three, so it
+# fits FALLBACK_WIDTH.
 LEGEND = "  ".join(
     f"{glyph} {word}"
     for slots in (STATE_GLYPHS, ORIGIN_GLYPHS, KIND_GLYPHS)
     for word, glyph in slots.items()
     if glyph.strip()
 )
+_RULE = "─"
 
 # Where the terminal's width cannot be read — a pipe, a pager, a test — the
 # text column wraps to this; it fits a split pane.
 FALLBACK_WIDTH = 70
 # The text column never shrinks below this, however narrow the terminal.
 _MIN_TEXT_WIDTH = 20
-# The glyph cell's width, and the gap tabulate's `plain` format puts between
-# columns; the text column's width is derived from them.
+# The glyph cell's width, and the gap between columns; the text column's width
+# is derived from them.
 _GLYPH_SLOTS = 3
-_COLUMN_GAP = 2
+_COLUMN_GAP = 1
+# How far a label's elaboration — a verdict's note, a long answer — sits
+# under the label.
+_LABEL_INDENT = 3
+# The labels after reconciliation print in this color, so a long `task show`
+# scans by them.
+_LABEL_COLOR = "bright_cyan"
+
+# tabulate's borderless `plain` format with one space between columns rather
+# than its two: in a borderless layout every blank column is width taken from
+# the text. tabulate lays out multi-line cells only for a format named in
+# `multiline_formats`, never for a TableFormat passed in, so this one is
+# registered by name in its format table; the rendering tests fail if a
+# tabulate upgrade stops honoring that.
+_PLAIN = "endless_plain"
+tabulate_mod._table_formats[_PLAIN] = tabulate_mod.TableFormat(
+    lineabove=None, linebelowheader=None, linebetweenrows=None, linebelow=None,
+    headerrow=tabulate_mod.DataRow("", " " * _COLUMN_GAP, ""),
+    datarow=tabulate_mod.DataRow("", " " * _COLUMN_GAP, ""),
+    padding=0, with_header_hide=None,
+)
+tabulate_mod.multiline_formats[_PLAIN] = _PLAIN
 
 
 def _state_word(it: dict) -> str:
@@ -468,39 +491,57 @@ def glyphs(it: dict) -> str:
             + KIND_GLYPHS[it["kind"]])
 
 
-def _verdict_lines(it: dict) -> list[str]:
-    """After reconciliation: the latest verdict, its question and the kept:
-    reason, each as one unwrapped line."""
+def _labeled(label: str, text: str, width: int) -> list[str]:
+    """`Label: text` wrapped to `width`, continuation lines indented under the
+    label, the label colored once the wrap is done so its escape codes never
+    count toward the width. A fixed label sits left of the colon; whatever
+    varies sits right of it."""
+    head = f"{label}:"
+    lines = textwrap.wrap(f"{head} {text}" if text else head, width,
+                          subsequent_indent=" " * _LABEL_INDENT,
+                          break_long_words=False, break_on_hyphens=False)
+    lines[0] = click.style(head, fg=_LABEL_COLOR) + lines[0][len(head):]
+    return lines
+
+
+def _reconciled_lines(it: dict, width: int) -> list[str]:
+    """After reconciliation, the labeled lines under an item's text: its
+    verdict with the note under it, its question's state, and whether an
+    earlier answer still holds."""
     if not it.get("verdict"):
         return []
     v = _VERDICT_WORDS.get(it["verdict"], it["verdict"])
-    line = f"⟶ {v}"
+    v = v[0].upper() + v[1:]
     if it.get("post_land_attempt"):
-        line = f"⟶ post-land #{it['post_land_attempt']}: {v}"
+        v += f" (post-land #{it['post_land_attempt']})"
+    out = _labeled("Verdict", v, width)
     if it.get("note"):
-        line += f": {it['note']}"
-    out = [line]
+        out += textwrap.wrap(it["note"], width,
+                             initial_indent=" " * _LABEL_INDENT,
+                             subsequent_indent=" " * _LABEL_INDENT,
+                             break_long_words=False, break_on_hyphens=False)
     qid = it.get("question_id")
     if qid:
         status = it.get("question_status")
         if status == "answered":
-            out.append(f"  EQ-{qid} answered: {it['answer']}")
+            out += _labeled("Answer", f"{it['answer']} (EQ-{qid})", width)
         elif status == "open":
-            out.append(f"  EQ-{qid} open — waiting for the user")
+            out += _labeled("Question", f"EQ-{qid} open, waiting for the user", width)
         else:
-            out.append(f"  EQ-{qid} {status}: {it.get('close_reason') or ''}")
+            out += _labeled("Question",
+                            f"EQ-{qid} {status}, {it.get('close_reason') or ''}".rstrip(", "),
+                            width)
         if it.get("holds_reason"):
-            out.append(f"  kept: {it['holds_reason']}")
+            out += _labeled("Answer holds", it["holds_reason"], width)
     return out
 
 
 def _text_cell(it: dict, *, verdicts: bool, width: int) -> str:
     """The item's text column: statement, verify: and detail as one block that
-    tabulate wraps to the column, then — when reconciled — the verdict lines
-    indented under it. Those are wrapped here with a hanging indent, since
-    tabulate wraps each line of a cell on its own and would start a
-    continuation line at the column's edge; a line that already fits passes
-    through it untouched.
+    tabulate wraps to the column, then — when reconciled — the labeled lines.
+    Those are wrapped here, since tabulate wraps each line of a cell on its
+    own and would start a continuation line at the column's edge; a line
+    that already fits passes through it untouched.
     """
     parts = [it["statement"]]
     if it.get("verify"):
@@ -509,12 +550,7 @@ def _text_cell(it: dict, *, verdicts: bool, width: int) -> str:
         parts.append(it["detail"])
     lines = [" ".join(parts)]
     if verdicts:
-        for line in _verdict_lines(it):
-            indent = len(line) - len(line.lstrip(" ")) + 2
-            lines += textwrap.wrap(line.strip(), width,
-                                   initial_indent=" " * indent,
-                                   subsequent_indent=" " * (indent + 2),
-                                   break_long_words=False, break_on_hyphens=False)
+        lines += _reconciled_lines(it, width)
     return "\n".join(lines)
 
 
@@ -526,7 +562,8 @@ def terminal_width() -> int:
 def render_items(rows: list[dict], *, verdicts: bool = True,
                  width: int | None = None) -> str:
     """Items as a headerless table — number, three glyph slots, text — with
-    one blank line between items and the glyph legend under it (E-2353).
+    one blank line between items and the glyph legend under it, between two
+    rules the width of the layout (E-2353).
 
     The text cell wraps within its column to `width` (the terminal's when not
     given). The number column is as wide as the widest label present, so the
@@ -545,10 +582,13 @@ def render_items(rows: list[dict], *, verdicts: bool = True,
             table.append([" ", " ", " "])
         table.append([it["label"], glyphs(it),
                       _text_cell(it, verdicts=verdicts, width=text_w)])
-    out = tabulate(table, tablefmt="plain", maxcolwidths=[None, None, text_w],
-                   disable_numparse=True, preserve_whitespace=True)
+    out = tabulate_mod.tabulate(table, tablefmt=_PLAIN,
+                                maxcolwidths=[None, None, text_w],
+                                disable_numparse=True, preserve_whitespace=True)
     lines = [line.rstrip() for line in out.splitlines()]
-    return "\n".join(lines) + "\n\n" + click.style(LEGEND, dim=True)
+    rule = click.style(_RULE * (label_w + _COLUMN_GAP + _GLYPH_SLOTS + _COLUMN_GAP + text_w),
+                       dim=True)
+    return "\n".join(lines + ["", rule, click.style(LEGEND, dim=True), rule])
 
 
 def render_items_words(rows: list[dict], *, verdicts: bool = True) -> str:
@@ -575,9 +615,25 @@ def render_items_words(rows: list[dict], *, verdicts: bool = True) -> str:
             lines.append(f"{'':>9} verify: {it['verify']}")
         if it.get("detail"):
             lines.append(f"{'':>9} {it['detail']}")
-        if verdicts:
-            for line in _verdict_lines(it):
-                lines.append(f"{'':>9} {line}")
+        if verdicts and it.get("verdict"):
+            v = _VERDICT_WORDS.get(it["verdict"], it["verdict"])
+            line = f"{'':>9} ⟶ {v}"
+            if it.get("post_land_attempt"):
+                line = f"{'':>9} ⟶ post-land #{it['post_land_attempt']}: {v}"
+            if it.get("note"):
+                line += f": {it['note']}"
+            lines.append(line)
+            qid = it.get("question_id")
+            if qid:
+                status = it.get("question_status")
+                if status == "answered":
+                    lines.append(f"{'':>11} EQ-{qid} answered: {it['answer']}")
+                elif status == "open":
+                    lines.append(f"{'':>11} EQ-{qid} open — waiting for the user")
+                else:
+                    lines.append(f"{'':>11} EQ-{qid} {status}: {it.get('close_reason') or ''}")
+                if it.get("holds_reason"):
+                    lines.append(f"{'':>11} kept: {it['holds_reason']}")
     return "\n".join(lines)
 
 

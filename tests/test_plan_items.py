@@ -178,43 +178,89 @@ def _item(label: str, statement: str, **over) -> dict:
 
 
 def _table(out: str) -> list[str]:
-    """The rendered lines above the legend."""
-    return out.split("\n\n" + click.style(plan_items.LEGEND, dim=True))[0].splitlines()
+    """The rendered lines above the legend, styling removed."""
+    return click.unstyle(out).splitlines()[:-4]
 
 
 def test_render_wraps_the_text_within_its_column():
     words = " ".join(f"w{i}" for i in range(40))
     out = plan_items.render_items([_item("P1", words, verify="go test", detail="more")], width=50)
     lines = _table(out)
-    assert lines[0].startswith("P1  ✓")
+    assert lines[0].startswith("P1 ✓   w0")
     assert len(lines) > 1 and all(len(line) <= 50 for line in lines)
-    offset = lines[0].index("w0")
-    assert all(line.startswith(" " * offset) and line[offset] != " " for line in lines[1:])
+    assert all(line.startswith(" " * 7) and line[7] != " " for line in lines[1:])
     # Statement, verify: and detail are one wrapped block, not three fields.
     assert "w39 verify: go test more" in " ".join(line.strip() for line in lines)
 
 
-def test_render_shows_verdict_answer_and_kept_reason_under_the_text():
+def test_render_puts_one_space_between_columns():
+    out = plan_items.render_items(
+        [_item("P1", "a", kind="exclusion", approved_kind="exclusion")], width=70)
+    assert _table(out)[0] == "P1 ✓ ✗ a"
+
+
+def test_render_labels_the_verdict_note_answer_and_holds_reason():
     out = plan_items.render_items([_item(
         "P1", "It renders", verify="go test", verdict="differently",
         note="via a template", question_id=7, question_status="answered",
         answer="fine", holds_reason="nothing changed",
     )], width=70)
+    assert _table(out) == [
+        "P1 ✓   It renders verify: go test",
+        "       Verdict: Done differently",
+        "          via a template",
+        "       Answer: fine (EQ-7)",
+        "       Answer holds: nothing changed",
+    ]
+
+
+def test_render_shows_a_note_on_its_own_line_even_as_planned():
+    out = plan_items.render_items(
+        [_item("P1", "a", verdict="as_planned", note="tabulate plain")], width=70)
+    assert _table(out) == ["P1 ✓   a", "       Verdict: As planned", "          tabulate plain"]
+
+
+@pytest.mark.parametrize("over, line", [
+    ({"question_status": "open"}, "Question: EQ-9 open, waiting for the user"),
+    ({"question_status": "closed", "close_reason": "moot"}, "Question: EQ-9 closed, moot"),
+])
+def test_render_labels_an_unanswered_question(over, line):
+    out = plan_items.render_items(
+        [_item("P1", "a", verdict="not_done", question_id=9, **over)], width=70)
+    assert _table(out)[1:] == ["       Verdict: Not done", f"       {line}"]
+
+
+def test_render_puts_the_post_land_attempt_right_of_the_verdict():
+    out = plan_items.render_items(
+        [_item("P1", "a", verdict="deferred", post_land_attempt=2)], width=70)
+    assert _table(out)[1] == "       Verdict: Deferred to after the land (post-land #2)"
+
+
+@pytest.mark.parametrize("verdict, word", [
+    ("as_planned", "As planned"), ("differently", "Done differently"),
+    ("not_done", "Not done"), ("blocked", "Blocked"),
+    ("deferred", "Deferred to after the land"), ("kept", "Kept"), ("not_kept", "NOT KEPT"),
+])
+def test_render_proper_cases_each_verdict(verdict, word):
+    out = plan_items.render_items([_item("P1", "a", verdict=verdict)], width=70)
+    assert _table(out)[1] == f"       Verdict: {word}"
+
+
+def test_render_wraps_a_note_under_its_label():
+    note = " ".join(f"n{i}" for i in range(30))
+    out = plan_items.render_items([_item("P1", "short", verdict="differently", note=note)],
+                                  width=50)
     lines = _table(out)
-    assert lines[0] == "P1  ✓    It renders verify: go test"
-    assert lines[1] == "           ⟶ done differently: via a template"
-    assert lines[2] == "             EQ-7 answered: fine"
-    assert lines[3] == "             kept: nothing changed"
+    assert lines[2].startswith("          n0") and len(lines) > 3
+    assert all(line.startswith(" " * 10) and len(line) <= 50 for line in lines[2:])
 
 
-def test_render_wraps_a_verdict_line_with_a_hanging_indent():
+def test_render_colors_the_labels_bright_cyan():
     out = plan_items.render_items([_item(
-        "P1", "short", verdict="differently",
-        note=" ".join(f"n{i}" for i in range(30)),
-    )], width=60)
-    lines = _table(out)
-    assert lines[1].startswith("           ⟶ done differently: n0")
-    assert lines[2].startswith("             n") and len(lines[2]) <= 60
+        "P1", "a", verdict="kept", question_id=7, question_status="answered",
+        answer="fine", holds_reason="still")], width=70)
+    for label in ("Verdict:", "Answer:", "Answer holds:"):
+        assert click.style(label, fg="bright_cyan") in out
 
 
 @pytest.mark.parametrize("over, expected", [
@@ -231,15 +277,14 @@ def test_render_wraps_a_verdict_line_with_a_hanging_indent():
 def test_render_fills_each_glyph_slot_at_its_fixed_position(over, expected):
     assert plan_items.glyphs(_item("P1", "a", **over)) == expected
     out = plan_items.render_items([_item("P1", "a", **over)], width=70)
-    assert _table(out)[0] == f"P1  {expected}  a".rstrip()
+    assert _table(out)[0] == f"P1 {expected} a"
 
 
 def test_render_widens_the_number_column_to_the_widest_label():
     out = plan_items.render_items(
         [_item("P9", "nine"), _item("P10", "ten"), _item("P100", "hundred")], width=70)
     lines = [line for line in _table(out) if line]
-    assert lines == ["P9    ✓    nine", "P10   ✓    ten", "P100  ✓    hundred"]
-    assert len({line.index(" ✓") for line in lines}) == 1
+    assert lines == ["P9   ✓   nine", "P10  ✓   ten", "P100 ✓   hundred"]
 
 
 def test_render_separates_items_with_one_blank_line():
@@ -248,15 +293,15 @@ def test_render_separates_items_with_one_blank_line():
         width=30)
     lines = _table(out)
     assert lines.count("") == 2
-    assert [line[:9] for line in lines if line.startswith("P")] == ["P1  ✓    ", "P2  ✓    ", "P3  ✓    "]
-    assert lines[0].startswith("P1  ✓    a b c d") and lines[1].startswith("         ")
-    assert lines[lines.index("P2  ✓    b") - 1] == ""
-    assert lines[lines.index("P3  ✓    c") - 1] == ""
+    assert lines[0].startswith("P1 ✓   a b c d") and lines[1].startswith("       ")
+    assert lines[lines.index("P2 ✓   b") - 1] == ""
+    assert lines[lines.index("P3 ✓   c") - 1] == ""
 
 
-def test_render_prints_the_legend_dim_under_the_table():
-    out = plan_items.render_items([_item("P1", "a")], width=70)
-    assert out.endswith("\n\n" + click.style(plan_items.LEGEND, dim=True))
+def test_render_prints_the_legend_dim_between_rules_the_layout_wide():
+    out = plan_items.render_items([_item("P1", "a")], width=72)
+    rule = click.style("─" * 72, dim=True)
+    assert out.endswith("\n\n" + "\n".join([rule, click.style(plan_items.LEGEND, dim=True), rule]))
     assert plan_items.LEGEND == \
         "✓ approved  ~ changed  – withdrawn  + grown  ↷ post-land  ✗ exclusion"
 
@@ -265,17 +310,19 @@ def test_render_wraps_to_seventy_columns_when_the_terminal_width_is_unknown(monk
     monkeypatch.setattr(plan_items.shutil, "get_terminal_size",
                         lambda fallback: type("S", (), {"columns": fallback[0]})())
     out = plan_items.render_items([_item("P1", " ".join("word" for _ in range(30)))])
-    lines = _table(out)
-    assert len(lines) > 1 and max(len(line) for line in lines) <= 70 > 60
+    lines = click.unstyle(out).splitlines()
+    assert len(lines) > 5 and max(len(line) for line in lines) == 70
 
 
 def test_render_words_keeps_the_agent_rendering():
     out = plan_items.render_items_words([
         _item("P1", "a", origin="grown", approved_at=None, verify="go test"),
         _item("P2", "b2", approved_statement="b", verdict="differently", note="via a template",
-             question_id=7, question_status="answered", answer="fine",
-             holds_reason="nothing changed"),
+              question_id=7, question_status="answered", answer="fine",
+              holds_reason="nothing changed"),
         _item("P3", "c", kind="exclusion", approved_kind="exclusion", state="withdrawn"),
+        _item("P4", "d", verdict="deferred", post_land_attempt=2, question_id=8,
+              question_status="open"),
     ])
     assert out.splitlines() == [
         "  P1      a [grown, unapproved]",
@@ -285,6 +332,9 @@ def test_render_words_keeps_the_agent_rendering():
         "            EQ-7 answered: fine",
         "            kept: nothing changed",
         "  P3 excl c [withdrawn]",
+        "  P4      d",
+        "          ⟶ post-land #2: deferred to after the land",
+        "            EQ-8 open — waiting for the user",
     ]
 
 
