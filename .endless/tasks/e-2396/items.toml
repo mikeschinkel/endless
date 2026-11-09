@@ -7,3 +7,9 @@ id = "P1"
 kind = "deliverable"
 statement = "No Python or Go test opens the default home's config or database; each uses its own isolated config"
 verify = "Both suites, run with HOME and XDG_CONFIG_HOME pointed at a decoy home holding a main database one version behind the branch, leave that database and config byte-for-byte unchanged"
+
+[[item]]
+id = "P2"
+kind = "deliverable"
+statement = "A build stamped with a task-worktree source checkout refuses the main database wherever its binary sits"
+verify = "A worktree build copied outside the worktree, and conftest's temp-dir build, each refuse main with the ED-1601 message"
