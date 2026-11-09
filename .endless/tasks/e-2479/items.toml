@@ -80,3 +80,8 @@ statement = "Does not change what the fingerprint covers or how it is computed"
 id = "P15"
 kind = "exclusion"
 statement = "Does not change what task verify runs once the gate passes"
+
+[[item]]
+id = "P16"
+kind = "deliverable"
+statement = "task verify's uncommitted-changes refusal lists each file once; it listed every file twice because the listing was passed both in the text and as detail"
