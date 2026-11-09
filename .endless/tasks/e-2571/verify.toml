@@ -29,7 +29,9 @@ paths  = ["./internal/events/..."]
 
 # `session task delete` works end to end and `remove` is no such command (P7);
 # `task remove` emits task.removed and retains the row, and `project forget
-# --with-tasks` removes through the same kind (P8).
+# --with-tasks` removes through the same kind (P8). The refusal inventory
+# anchors rows to file+symbol, so the renamed symbols (P9) must have carried
+# their rows along.
 
 [[check]]
 name   = "python: session task delete, task remove, and the unregister sweep"
@@ -39,6 +41,7 @@ paths  = [
   "tests/test_task_remove_kind.py",
   "tests/test_task_remove_relations.py",
   "tests/test_project_forget.py",
+  "tests/test_refusal_inventory_anchors.py",
 ]
 
 # ── One map, read by both dispatchers (P1, P2) ──────────────────────
