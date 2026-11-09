@@ -12,8 +12,13 @@ a failed land.
 ## 1. One measure of the branch's own work
 
 - One Go function hashes the branch's added and removed lines per file,
-  against its merge-base with main, context excluded, `.endless/` excluded.
-  `git patch-id` cannot do this, so it is a small routine.
+  against its merge-base with main, context excluded, and Endless-committed
+  files excluded. `git patch-id` cannot do this, so it is a small routine.
+- "Endless-committed files" means exactly the files Endless itself writes and
+  commits (ledger, verbs, mirrors, lessons, CTRF reports), named by one list
+  shared with `monitor.AutoManagedStatusGlobs`. It is NOT all of `.endless/`:
+  a task's own verify suite and plan are the branch's work, and an edit to the
+  suite after a pass must void it (`TestASuiteEditStalesThePass` stays).
 - The reconciliation gate uses it in place of patch-id.
 - Existing reconciliations store a patch-id. Recompute the new measure for each
   at its recorded commit, or treat a stored patch-id as current once on first
@@ -28,9 +33,9 @@ a failed land.
 - A pass stays a record: the commit it tested and the main commit verify
   rebased onto (E-2263 adds the rebase).
 - One Go function answers whether the latest pass stands: main has not moved
-  past the recorded main commit in any file outside `.endless/`, and the
+  past the recorded main commit in any file outside the Endless-committed list, and the
   measure in section 1 is unchanged. Commits on main that touch only
-  `.endless/` (another task's CTRF report, ledger, mirrors, lessons) are
+  Endless-committed files (another task's CTRF report, ledger, mirrors, lessons) are
   Endless's bookkeeping and never void a pass (ED-1657). The pass compares
   content, never commit ids, so a land's rebase that rewrote the branch's
   SHAs but left its lines alone leaves the pass standing (absorbs E-2582).
@@ -53,10 +58,10 @@ a failed land.
 ## Verify
 
 A suite proving: a clean rebase with context drift leaves the measure equal; a
-change to an added line changes it; a commit touching only `.endless/` leaves it
-equal; the gate accepts a reconciliation across such a rebase; a pass survives a
+change to an added line changes it; a commit touching only Endless-committed files
+leaves it equal; an edit to the task's verify suite changes it; the gate accepts a reconciliation across such a rebase; a pass survives a
 rebase onto an unmoved main, an Endless auto-commit, and a main commit that
-touches only `.endless/`; a pass survives a refused land that rewrote the
+touches only Endless-committed files; a pass survives a refused land that rewrote the
 branch's commit ids; a pass stops standing
 when main moves or the branch's own lines change; the land refuses with the
 verify instruction in both cases; a land refused for another task's uncommitted
