@@ -37,3 +37,9 @@ id = "P6"
 kind = "deliverable"
 statement = "After restoring, recover checks the schema version, PRAGMA integrity_check, and row counts against the backup"
 verify = "A restored copy that differs from its backup is reported as a failure"
+
+[[item]]
+id = "P7"
+kind = "deliverable"
+statement = "When the branch that migrated main is landable, recover says landing it is the cheaper fix and names the command"
+verify = "With a landable branch carrying the migration, the output names its worktree land command"
