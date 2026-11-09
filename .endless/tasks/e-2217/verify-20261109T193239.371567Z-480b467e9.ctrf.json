@@ -1,0 +1,754 @@
+{
+  "reportFormat": "CTRF",
+  "specVersion": "0.2.0",
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 101,
+      "passed": 101,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 1794252720820,
+      "stop": 1794252795621
+    },
+    "tests": [
+      {
+        "name": "go.mod is tidy without go.work",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "go.mod is tidy without go.work"
+        }
+      },
+      {
+        "name": "just build",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "alpha registers",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "config.json carries the root commit, not HEAD",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the row carries the same identity",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the slug defaults to the name",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "project info shows the identity",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "registering a clone exits non-zero",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the refusal names the registered path",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the refusal points at worktrees",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the refusal says forks are unsupported",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the clone was not registered",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the clone was left untouched",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "registering the clash exits non-zero",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the refusal names the clashing path",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the refusal names the fix",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it registers under another name",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a plain directory is refused",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it says why",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "a repo with no commits is refused",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "it says why",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "alpha is still registered at its own checkout",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "alpha was not repointed at the clone",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "the slug kept the registered name",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "config.json carries no slug",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "config.json does not carry the old name",
+        "status": "passed",
+        "duration": 0
+      },
+      {
+        "name": "TestMigrate15_ImportsTheSiblingConfigIgnoreList",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ]
+      },
+      {
+        "name": "TestMigrate15_NoSiblingConfigImportsNothing",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ]
+      },
+      {
+        "name": "TestVersions_UniqueContiguousAndConsistent",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema/migrations"
+        ]
+      },
+      {
+        "name": "TestVersions_GuardCatchesEachFault",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema/migrations"
+        ]
+      },
+      {
+        "name": "TestMigrate_MatchesSchemaSQL",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ]
+      },
+      {
+        "name": "TestMigrate_SeedsSurviveTheReplay",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ]
+      },
+      {
+        "name": "TestMigrate_SeedsReconcileOnEveryRun",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ]
+      },
+      {
+        "name": "TestMigrate_IsIdempotent",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ]
+      },
+      {
+        "name": "TestMigrate_LeavesAPreVersioningDatabaseIntact",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ]
+      },
+      {
+        "name": "TestMigrate_RefusesADatabaseOlderThanBothVersioningSchemes",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ]
+      },
+      {
+        "name": "TestMigrate_AGooseDatabaseAtUserVersionZeroMigrates",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ]
+      },
+      {
+        "name": "TestMigrate_FreshDatabaseReachesLatest",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ]
+      },
+      {
+        "name": "TestMigrate_LiftsTaskContent",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ]
+      },
+      {
+        "name": "TestMigrate_RatingsReplaceTier",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ]
+      },
+      {
+        "name": "TestMigrate_DropsNoticeTriggers",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ]
+      },
+      {
+        "name": "TestMigrate_RetiresUntriaged",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ]
+      },
+      {
+        "name": "TestMigrate_RenamesReplacesToSupersedes",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ]
+      },
+      {
+        "name": "TestMigrate_AddsProjectIdentity",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ]
+      },
+      {
+        "name": "TestSchema_ReconcilesRenamedEnumRows",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ]
+      },
+      {
+        "name": "TestSchema_RebuildFuseIsStillDeclared",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ]
+      },
+      {
+        "name": "TestMigrate30_SessionProjectFollowsTask",
+        "status": "passed",
+        "duration": 50,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ]
+      },
+      {
+        "name": "TestMigrate24_BackfillsOwnershipRows",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/schema"
+        ]
+      },
+      {
+        "name": "tests/test_project_identity.py::test_root_commit_refuses_a_directory_that_is_not_a_repo",
+        "status": "passed",
+        "duration": 291,
+        "suite": [
+          "tests/test_project_identity.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_identity.py::test_root_commit_refuses_a_repo_with_no_commits",
+        "status": "passed",
+        "duration": 92,
+        "suite": [
+          "tests/test_project_identity.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_identity.py::test_root_commit_is_the_first_commit_not_head",
+        "status": "passed",
+        "duration": 165,
+        "suite": [
+          "tests/test_project_identity.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_identity.py::test_root_commit_picks_the_oldest_of_several_roots",
+        "status": "passed",
+        "duration": 180,
+        "suite": [
+          "tests/test_project_identity.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_identity.py::test_a_stored_identity_wins_over_the_root_commit",
+        "status": "passed",
+        "duration": 82,
+        "suite": [
+          "tests/test_project_identity.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_identity.py::test_register_records_the_identity_and_defaults_the_slug",
+        "status": "passed",
+        "duration": 874,
+        "suite": [
+          "tests/test_project_identity.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_identity.py::test_register_refuses_a_directory_that_is_not_a_repo",
+        "status": "passed",
+        "duration": 76,
+        "suite": [
+          "tests/test_project_identity.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_identity.py::test_register_refuses_a_repo_with_no_commits",
+        "status": "passed",
+        "duration": 101,
+        "suite": [
+          "tests/test_project_identity.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_identity.py::test_register_refuses_a_second_clone",
+        "status": "passed",
+        "duration": 948,
+        "suite": [
+          "tests/test_project_identity.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_identity.py::test_register_refuses_a_fork_whose_config_was_never_committed",
+        "status": "passed",
+        "duration": 828,
+        "suite": [
+          "tests/test_project_identity.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_identity.py::test_register_refuses_an_unrelated_project_with_a_clashing_name",
+        "status": "passed",
+        "duration": 1487,
+        "suite": [
+          "tests/test_project_identity.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_identity.py::test_reregistering_the_same_checkout_is_an_update",
+        "status": "passed",
+        "duration": 1118,
+        "suite": [
+          "tests/test_project_identity.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_identity.py::test_reregistering_keeps_a_stored_identity",
+        "status": "passed",
+        "duration": 1275,
+        "suite": [
+          "tests/test_project_identity.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_identity.py::test_the_slug_survives_a_rename_and_never_reaches_config",
+        "status": "passed",
+        "duration": 862,
+        "suite": [
+          "tests/test_project_identity.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_identity.py::test_a_renamed_projects_slug_is_not_free_for_another",
+        "status": "passed",
+        "duration": 1529,
+        "suite": [
+          "tests/test_project_identity.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_identity.py::test_sync_does_not_repoint_a_project_at_a_second_clone",
+        "status": "passed",
+        "duration": 869,
+        "suite": [
+          "tests/test_project_identity.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_identity.py::test_sync_skips_a_second_clone_under_another_name",
+        "status": "passed",
+        "duration": 893,
+        "suite": [
+          "tests/test_project_identity.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_identity.py::test_a_checkout_whose_original_is_gone_takes_the_project_over",
+        "status": "passed",
+        "duration": 1225,
+        "suite": [
+          "tests/test_project_identity.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_identity.py::test_a_clone_of_an_unregistered_project_is_refused_accurately",
+        "status": "passed",
+        "duration": 1073,
+        "suite": [
+          "tests/test_project_identity.py"
+        ]
+      },
+      {
+        "name": "tests/test_register.py::test_validate_name_accepts_valid",
+        "status": "passed",
+        "duration": 69,
+        "suite": [
+          "tests/test_register.py"
+        ]
+      },
+      {
+        "name": "tests/test_register.py::test_validate_name_rejects_invalid",
+        "status": "passed",
+        "duration": 64,
+        "suite": [
+          "tests/test_register.py"
+        ]
+      },
+      {
+        "name": "tests/test_register.py::test_register_creates_config_and_db_entry",
+        "status": "passed",
+        "duration": 1155,
+        "suite": [
+          "tests/test_register.py"
+        ]
+      },
+      {
+        "name": "tests/test_register.py::test_register_with_explicit_fields",
+        "status": "passed",
+        "duration": 928,
+        "suite": [
+          "tests/test_register.py"
+        ]
+      },
+      {
+        "name": "tests/test_register.py::test_register_update_existing",
+        "status": "passed",
+        "duration": 1527,
+        "suite": [
+          "tests/test_register.py"
+        ]
+      },
+      {
+        "name": "tests/test_register.py::test_register_detects_group_name",
+        "status": "passed",
+        "duration": 972,
+        "suite": [
+          "tests/test_register.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_sync.py::test_sync_projects_retires_a_project_whose_directory_is_gone",
+        "status": "passed",
+        "duration": 798,
+        "suite": [
+          "tests/test_project_sync.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_sync.py::test_sync_projects_keeps_the_history_of_a_vanished_project",
+        "status": "passed",
+        "duration": 916,
+        "suite": [
+          "tests/test_project_sync.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_sync.py::test_sync_projects_revives_a_restored_project_on_re_register",
+        "status": "passed",
+        "duration": 872,
+        "suite": [
+          "tests/test_project_sync.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_sync.py::test_sync_projects_updates_moved_project",
+        "status": "passed",
+        "duration": 1092,
+        "suite": [
+          "tests/test_project_sync.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_sync.py::test_sync_projects_picks_up_new_project_on_disk",
+        "status": "passed",
+        "duration": 96,
+        "suite": [
+          "tests/test_project_sync.py"
+        ]
+      },
+      {
+        "name": "tests/test_project_sync.py::test_sync_projects_syncs_config_changes",
+        "status": "passed",
+        "duration": 1296,
+        "suite": [
+          "tests/test_project_sync.py"
+        ]
+      },
+      {
+        "name": "tests/test_ignored_projects.py::test_unregister_keeps_the_row_as_ignored_and_register_restores_it",
+        "status": "passed",
+        "duration": 1173,
+        "suite": [
+          "tests/test_ignored_projects.py"
+        ]
+      },
+      {
+        "name": "tests/test_ignored_projects.py::test_ignore_lists_and_unignore_clears",
+        "status": "passed",
+        "duration": 118,
+        "suite": [
+          "tests/test_ignored_projects.py"
+        ]
+      },
+      {
+        "name": "tests/test_ignored_projects.py::test_marker_option_writes_marker_and_git_exclude",
+        "status": "passed",
+        "duration": 89,
+        "suite": [
+          "tests/test_ignored_projects.py"
+        ]
+      },
+      {
+        "name": "tests/test_ignored_projects.py::test_register_refuses_a_directory_carrying_the_marker",
+        "status": "passed",
+        "duration": 59,
+        "suite": [
+          "tests/test_ignored_projects.py"
+        ]
+      },
+      {
+        "name": "tests/test_ignored_projects.py::test_explicit_register_is_allowed_under_an_ignored_parent",
+        "status": "passed",
+        "duration": 905,
+        "suite": [
+          "tests/test_ignored_projects.py"
+        ]
+      },
+      {
+        "name": "tests/test_ignored_projects.py::test_sync_projects_skips_projects_under_an_ignored_directory",
+        "status": "passed",
+        "duration": 81,
+        "suite": [
+          "tests/test_ignored_projects.py"
+        ]
+      },
+      {
+        "name": "tests/test_ignored_projects.py::test_sync_projects_leaves_ignored_rows_alone",
+        "status": "passed",
+        "duration": 908,
+        "suite": [
+          "tests/test_ignored_projects.py"
+        ]
+      },
+      {
+        "name": "tests/test_cli.py::test_help",
+        "status": "passed",
+        "duration": 68,
+        "suite": [
+          "tests/test_cli.py"
+        ]
+      },
+      {
+        "name": "tests/test_cli.py::test_version",
+        "status": "passed",
+        "duration": 56,
+        "suite": [
+          "tests/test_cli.py"
+        ]
+      },
+      {
+        "name": "tests/test_cli.py::test_list_empty",
+        "status": "passed",
+        "duration": 56,
+        "suite": [
+          "tests/test_cli.py"
+        ]
+      },
+      {
+        "name": "tests/test_cli.py::test_sql_refuses_mutation_without_write",
+        "status": "passed",
+        "duration": 68,
+        "suite": [
+          "tests/test_cli.py"
+        ]
+      },
+      {
+        "name": "tests/test_cli.py::test_sql_accepts_read_only_prefixes",
+        "status": "passed",
+        "duration": 59,
+        "suite": [
+          "tests/test_cli.py"
+        ]
+      },
+      {
+        "name": "tests/test_cli.py::test_sql_surfaces_real_sql_error",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "tests/test_cli.py"
+        ]
+      },
+      {
+        "name": "tests/test_cli.py::test_sql_write_commits_mutation",
+        "status": "passed",
+        "duration": 69,
+        "suite": [
+          "tests/test_cli.py"
+        ]
+      },
+      {
+        "name": "tests/test_cli.py::test_register_and_list",
+        "status": "passed",
+        "duration": 1953,
+        "suite": [
+          "tests/test_cli.py"
+        ]
+      },
+      {
+        "name": "tests/test_cli.py::test_info_by_name",
+        "status": "passed",
+        "duration": 807,
+        "suite": [
+          "tests/test_cli.py"
+        ]
+      },
+      {
+        "name": "tests/test_cli.py::test_set_field",
+        "status": "passed",
+        "duration": 785,
+        "suite": [
+          "tests/test_cli.py"
+        ]
+      },
+      {
+        "name": "tests/test_cli.py::test_rename",
+        "status": "passed",
+        "duration": 805,
+        "suite": [
+          "tests/test_cli.py"
+        ]
+      },
+      {
+        "name": "tests/test_cli.py::test_unregister",
+        "status": "passed",
+        "duration": 825,
+        "suite": [
+          "tests/test_cli.py"
+        ]
+      },
+      {
+        "name": "tests/test_cli.py::test_scan",
+        "status": "passed",
+        "duration": 801,
+        "suite": [
+          "tests/test_cli.py"
+        ]
+      },
+      {
+        "name": "tests/test_cli.py::test_task_add_rejects_invalid_phase_at_parse_time",
+        "status": "passed",
+        "duration": 53,
+        "suite": [
+          "tests/test_cli.py"
+        ]
+      },
+      {
+        "name": "tests/test_cli.py::test_phase_help_lists_urgent_first",
+        "status": "passed",
+        "duration": 54,
+        "suite": [
+          "tests/test_cli.py"
+        ]
+      }
+    ]
+  }
+}
