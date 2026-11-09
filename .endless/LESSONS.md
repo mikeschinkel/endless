@@ -8037,3 +8037,7 @@ Reviewing the landed E-2353 plan-item table in task show, Mike corrected three l
 ### [2026-11-08] In a brainstorm, keep each turn short enough that Mike can answer it
 E-2577 brainstorm: I replied with several long sections at once. Mike: 'You wrote a wall of text so it is hard for me to condense down into answerable questions.' In discussion turns, make one point and ask one thing; hold the rest for the next turn or the synthesis.
 - **Project**: endless
+
+### [2026-11-08] Check the codebase before telling Mike a mechanism cannot work
+E-2577 brainstorm: Mike asked whether a background verify job could use claude -p to message the owning session. I said no, claude -p only starts a new headless session, and proposed tmux typing into the pane instead. Mike pushed back that he was 99% sure we already do this. He was right: internal/triagejob (E-2269, E-2268) runs a throwaway hook-disabled claude -p sender calling SendMessage, addressed by tmux pane, and resumes an ended session in a background window with the message as its first prompt. Search the repo for an existing mechanism before asserting what is or is not possible.
+- **Project**: endless
