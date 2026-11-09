@@ -24,3 +24,8 @@ verify = "grep the template"
 id = "P4"
 kind = "exclusion"
 statement = "Does not change .endless/tasks/CLAUDE.md or the verify runner's refusal to run a landed suite"
+
+[[item]]
+id = "P5"
+kind = "deliverable"
+statement = "tests/test_plan_items.py's terminal-width stub returns a real os.terminal_size, so pytest -v no longer crashes with INTERNALERROR after the suite passes"
