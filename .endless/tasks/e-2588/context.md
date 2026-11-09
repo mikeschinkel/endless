@@ -1,0 +1,7 @@
+Every spawn prompt Endless hands a session is rendered from the templates in `internal/templatecmd/templates/handoff/`. The "Final message" paragraph of every task kind comes from two shared blocks in `_close.tmpl`: `handoff_verify` (todo, bugfix, and claim of either) hands the one verify command, and `handoff_close` carries the anti-ceremony rules ("Do NOT recap task status, phase, or relationships, and do NOT confirm the negative").
+
+`.endless/tasks/CLAUDE.md` already states that a landed task's verify suite is a land-time gate for one task at one moment, that nothing re-runs it, and that its later result says nothing. Despite that, sessions keep over-indexing on it: while handing off E-2571, the session reported that E-2010's landed suite had a check the change broke, and said it had left the suite alone. This is at least the second recent occurrence, and a lesson on the point already existed in `.endless/LESSONS.md` when it happened again.
+
+The rule lives in a directory-level CLAUDE.md and in the lessons file, but the session writes its final message against the spawn prompt's final-message rules. That is the checklist in front of it at the moment it writes, so that is where this rule has to be pinned. The same reasoning put the `verify.toml` location into `handoff_verify` under E-2093 (see the comment in `_close.tmpl`).
+
+The cost is Mike's time and attention: each such report reads as an open issue and has to be investigated and dismissed.
