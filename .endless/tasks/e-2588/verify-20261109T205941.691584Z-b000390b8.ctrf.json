@@ -1,0 +1,2437 @@
+{
+  "reportFormat": "CTRF",
+  "specVersion": "0.2.0",
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 221,
+      "passed": 221,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 1794257913758,
+      "stop": 1794257981680
+    },
+    "tests": [
+      {
+        "name": "go.mod is tidy without go.work",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "go.mod is tidy without go.work"
+        }
+      },
+      {
+        "name": "TestRender_Claim_ArrivalMechanicsClose/todo",
+        "status": "passed",
+        "duration": 320,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_ArrivalMechanicsClose/bugfix",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_ArrivalMechanicsClose/research",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_ArrivalMechanicsClose/epic",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_ArrivalMechanicsClose/brainstorm",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_ArrivalMechanicsClose",
+        "status": "passed",
+        "duration": 390,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_TerminalRulePerType/todo",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_TerminalRulePerType/bugfix",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_TerminalRulePerType/research",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_TerminalRulePerType/brainstorm",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_TerminalRulePerType/epic",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_TerminalRulePerType",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_MechanicsPartial_SharedBySpawnAndClaim/todo",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_MechanicsPartial_SharedBySpawnAndClaim/bugfix",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_MechanicsPartial_SharedBySpawnAndClaim/research",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_MechanicsPartial_SharedBySpawnAndClaim/epic",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_MechanicsPartial_SharedBySpawnAndClaim/brainstorm",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_MechanicsPartial_SharedBySpawnAndClaim",
+        "status": "passed",
+        "duration": 150,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_UnknownTaskType_FallsBackToTodo/absent",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_UnknownTaskType_FallsBackToTodo/unknown",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_UnknownTaskType_FallsBackToTodo",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Claim_EpicCarriesChildrenState",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_WorktreeRemovalIsCategorical/todo",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_WorktreeRemovalIsCategorical/bugfix",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_WorktreeRemovalIsCategorical/research",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_WorktreeRemovalIsCategorical/epic",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_WorktreeRemovalIsCategorical/brainstorm",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_WorktreeRemovalIsCategorical",
+        "status": "passed",
+        "duration": 150,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_DiscoveryBranchesSurviveCompression/todo",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_DiscoveryBranchesSurviveCompression/bugfix",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_DiscoveryBranchesSurviveCompression/research",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_DiscoveryBranchesSurviveCompression/epic",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_DiscoveryBranchesSurviveCompression/brainstorm",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_DiscoveryBranchesSurviveCompression",
+        "status": "passed",
+        "duration": 140,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_VerifyPartialNamesTheSuiteLocation/todo",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_VerifyPartialNamesTheSuiteLocation/bugfix",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_VerifyPartialNamesTheSuiteLocation/research",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_VerifyPartialNamesTheSuiteLocation/epic",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_VerifyPartialNamesTheSuiteLocation/brainstorm",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Handoff_VerifyPartialNamesTheSuiteLocation",
+        "status": "passed",
+        "duration": 150,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/todo/todo",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/todo/bugfix",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/todo/research",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/todo/epic",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/todo/brainstorm",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/bugfix/todo",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/bugfix/bugfix",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/bugfix/research",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/bugfix/epic",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/bugfix/brainstorm",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/research/todo",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/research/bugfix",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/research/research",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/research/epic",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/research/brainstorm",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/epic/todo",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/epic/bugfix",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/epic/research",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/epic/epic",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/epic/brainstorm",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/brainstorm/todo",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/brainstorm/bugfix",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/brainstorm/research",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/brainstorm/epic",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/brainstorm/brainstorm",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/claim/todo",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/claim/bugfix",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/claim/research",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/claim/epic",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions/claim/brainstorm",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestHandoffStatusInstructionsAreLegalTransitions",
+        "status": "passed",
+        "duration": 450,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestFindingsHandoffsNameTheReviewGate/research/research",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestFindingsHandoffsNameTheReviewGate/claim/research",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestFindingsHandoffsNameTheReviewGate/brainstorm/brainstorm",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestFindingsHandoffsNameTheReviewGate/claim/brainstorm",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestFindingsHandoffsNameTheReviewGate",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestEveryTypeHandoffNamesSomeTerminalInstruction/todo",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestEveryTypeHandoffNamesSomeTerminalInstruction/bugfix",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestEveryTypeHandoffNamesSomeTerminalInstruction/research",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestEveryTypeHandoffNamesSomeTerminalInstruction/epic",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestEveryTypeHandoffNamesSomeTerminalInstruction/brainstorm",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestEveryTypeHandoffNamesSomeTerminalInstruction",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRenderFile_BothBranches",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRenderFile_NeedsNoProjectContext",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRenderFile_MissingFileExitsNonZero",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRenderFile_RejectsATemplateName",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRenderFile_RejectsProject",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRenderFile_DoesNotMaterialize",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_FullVars_ContainsExpectedSubstitutions",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_ExceptionRule/todo",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_ExceptionRule/bugfix",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_ExceptionRule/epic",
+        "status": "passed",
+        "duration": 30,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_ExceptionRule/research",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_ExceptionRule/brainstorm",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_ExceptionRule",
+        "status": "passed",
+        "duration": 120,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Brainstorm_InterviewModeFraming",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Brainstorm_DecisionTests",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_MissingVar_PrintsNoValuePlaceholder",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_UnknownTemplate_ExitsNonZero",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_MaterializesEmbedded",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_UserEditPersists",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_DeleteToRestore",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_LocalTmplPrecedence",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_NoProjectContext_ExitsNonZero",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_ProjectFlagResolvesViaDB",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_UnknownProjectFlag_ExitsNonZero",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestNormalizeName_AppliesDefaultExtension",
+        "status": "passed",
+        "duration": 0,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_BareNameAndExplicitMd_AreEquivalent",
+        "status": "passed",
+        "duration": 40,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_SelfDev_SkipsMaterialize",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Consumer_AutoCommitsMaterialized",
+        "status": "passed",
+        "duration": 100,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_Consumer_NonGit_NoError",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_OmitsReportingWhenGateOff/todo",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_OmitsReportingWhenGateOff/bugfix",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_OmitsReportingWhenGateOff/epic",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_OmitsReportingWhenGateOff/research",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_OmitsReportingWhenGateOff/brainstorm",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_OmitsReportingWhenGateOff",
+        "status": "passed",
+        "duration": 80,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_EpicHandoff_ContextOrPlan",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/todo/todo/gate=true",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/claim/todo/gate=true",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/bugfix/bugfix/gate=true",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/claim/bugfix/gate=true",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/epic/epic/gate=true",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/claim/epic/gate=true",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/research/research/gate=true",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/claim/research/gate=true",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/brainstorm/brainstorm/gate=true",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/claim/brainstorm/gate=true",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/todo/todo/gate=false",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/claim/todo/gate=false",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/bugfix/bugfix/gate=false",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/claim/bugfix/gate=false",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/epic/epic/gate=false",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/claim/epic/gate=false",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/research/research/gate=false",
+        "status": "passed",
+        "duration": 20,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/claim/research/gate=false",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/brainstorm/brainstorm/gate=false",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites/handoff/claim/brainstorm/gate=false",
+        "status": "passed",
+        "duration": 10,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "TestRender_HandoffClose_IgnoresLandedSuites",
+        "status": "passed",
+        "duration": 320,
+        "suite": [
+          "github.com/mikeschinkel/endless/internal/templatecmd"
+        ],
+        "labels": {
+          "check": "every handoff template, spawn and claim, renders the landed-suite rule with the report gate on and off"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_accepts_every_spelling[P3]",
+        "status": "passed",
+        "duration": 192,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_accepts_every_spelling[p3]",
+        "status": "passed",
+        "duration": 69,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_accepts_every_spelling[3]",
+        "status": "passed",
+        "duration": 69,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_accepts_every_spelling[E-2280.P3]",
+        "status": "passed",
+        "duration": 55,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_refuses_garbage[P0]",
+        "status": "passed",
+        "duration": 57,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_refuses_garbage[Px]",
+        "status": "passed",
+        "duration": 57,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_refuses_garbage[]",
+        "status": "passed",
+        "duration": 66,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_refuses_garbage[P03]",
+        "status": "passed",
+        "duration": 58,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_refuses_garbage[-1]",
+        "status": "passed",
+        "duration": 85,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_reads_items_in_order",
+        "status": "passed",
+        "duration": 57,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_reads_the_post_land_mark",
+        "status": "passed",
+        "duration": 64,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[[[item]]\\nstatement = \"x\"\\nowner = \"me\"\\n]",
+        "status": "passed",
+        "duration": 68,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[title = \"x\"\\n[[item]]\\nstatement = \"x\"\\n]",
+        "status": "passed",
+        "duration": 58,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[[[item]]\\nkind = \"wish\"\\nstatement = \"x\"\\n]",
+        "status": "passed",
+        "duration": 53,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[[[item]]\\nstatement = \"\"\\n]",
+        "status": "passed",
+        "duration": 54,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[[[item]]\\nstatement = \"\"\"a\\nb\"\"\"\\n]",
+        "status": "passed",
+        "duration": 66,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[[[item]]\\nid = \"P1\"\\nstatement = \"a\"\\n[[item]]\\nid = \"P1\"\\nstatement = \"b\"\\n]",
+        "status": "passed",
+        "duration": 53,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[[[item]]\\nstatement = 3\\n]",
+        "status": "passed",
+        "duration": 53,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[]",
+        "status": "passed",
+        "duration": 54,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[not toml []",
+        "status": "passed",
+        "duration": 57,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_diff_adds_edits_withdraws_and_orders",
+        "status": "passed",
+        "duration": 57,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_loading_the_unchanged_set_changes_nothing",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_unknown_and_withdrawn_ids",
+        "status": "passed",
+        "duration": 56,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_reconcile_file_reads_entries",
+        "status": "passed",
+        "duration": 61,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_reconcile_file_refuses_what_it_does_not_define[[[entry]]\\nitem = \"P1\"\\nverdict = \"kept\"\\nmood = \"fine\"\\n]",
+        "status": "passed",
+        "duration": 72,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_reconcile_file_refuses_what_it_does_not_define[[[entry]]\\nverdict = \"kept\"\\n]",
+        "status": "passed",
+        "duration": 94,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_reconcile_file_refuses_what_it_does_not_define[summary = \"x\"\\n]",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_wraps_the_text_within_its_column",
+        "status": "passed",
+        "duration": 56,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_puts_one_space_between_columns",
+        "status": "passed",
+        "duration": 54,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_labels_the_verdict_note_answer_and_holds_reason",
+        "status": "passed",
+        "duration": 54,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_shows_a_note_on_its_own_line_even_as_planned",
+        "status": "passed",
+        "duration": 53,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_labels_an_unanswered_question[over0-Question: EQ-9 open, waiting for the user]",
+        "status": "passed",
+        "duration": 53,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_labels_an_unanswered_question[over1-Question: EQ-9 closed, moot]",
+        "status": "passed",
+        "duration": 56,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_puts_the_post_land_attempt_right_of_the_verdict",
+        "status": "passed",
+        "duration": 64,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_proper_cases_each_verdict[as_planned-As planned]",
+        "status": "passed",
+        "duration": 63,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_proper_cases_each_verdict[differently-Done differently]",
+        "status": "passed",
+        "duration": 67,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_proper_cases_each_verdict[not_done-Not done]",
+        "status": "passed",
+        "duration": 54,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_proper_cases_each_verdict[blocked-Blocked]",
+        "status": "passed",
+        "duration": 57,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_proper_cases_each_verdict[deferred-Deferred to after the land]",
+        "status": "passed",
+        "duration": 56,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_proper_cases_each_verdict[kept-Kept]",
+        "status": "passed",
+        "duration": 63,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_proper_cases_each_verdict[not_kept-NOT KEPT]",
+        "status": "passed",
+        "duration": 58,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_wraps_a_note_under_its_label",
+        "status": "passed",
+        "duration": 60,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_colors_the_labels_bright_cyan",
+        "status": "passed",
+        "duration": 70,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_fills_each_glyph_slot_at_its_fixed_position[over0-\\u2713  ]",
+        "status": "passed",
+        "duration": 67,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_fills_each_glyph_slot_at_its_fixed_position[over1-   ]",
+        "status": "passed",
+        "duration": 54,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_fills_each_glyph_slot_at_its_fixed_position[over2-~  ]",
+        "status": "passed",
+        "duration": 61,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_fills_each_glyph_slot_at_its_fixed_position[over3-\\u2013  ]",
+        "status": "passed",
+        "duration": 58,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_fills_each_glyph_slot_at_its_fixed_position[over4- + ]",
+        "status": "passed",
+        "duration": 59,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_fills_each_glyph_slot_at_its_fixed_position[over5-\\u2713\\u21b7 ]",
+        "status": "passed",
+        "duration": 68,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_fills_each_glyph_slot_at_its_fixed_position[over6-\\u2713\\u21b7 ]",
+        "status": "passed",
+        "duration": 61,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_fills_each_glyph_slot_at_its_fixed_position[over7-\\u2713 \\u2717]",
+        "status": "passed",
+        "duration": 53,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_fills_each_glyph_slot_at_its_fixed_position[over8- +\\u2717]",
+        "status": "passed",
+        "duration": 62,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_widens_the_number_column_to_the_widest_label",
+        "status": "passed",
+        "duration": 54,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_separates_items_with_one_blank_line",
+        "status": "passed",
+        "duration": 57,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_prints_the_legend_dim_between_rules_the_layout_wide",
+        "status": "passed",
+        "duration": 75,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_wraps_to_seventy_columns_when_the_terminal_width_is_unknown",
+        "status": "passed",
+        "duration": 62,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_words_keeps_the_agent_rendering",
+        "status": "passed",
+        "duration": 71,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_guide_shows_the_glyph_legend",
+        "status": "passed",
+        "duration": 56,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_an_in_tree_sandbox_is_a_sandbox",
+        "status": "passed",
+        "duration": 58,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_plan_add_edit_withdraw_shape_their_ops",
+        "status": "passed",
+        "duration": 71,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_plan_move_rewrites_the_display_order",
+        "status": "passed",
+        "duration": 67,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_an_item_change_on_a_ready_task_drops_its_approval",
+        "status": "passed",
+        "duration": 53,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_an_item_change_underway_keeps_the_status",
+        "status": "passed",
+        "duration": 71,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_reconcile_records_entries_with_the_fingerprint",
+        "status": "passed",
+        "duration": 54,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_the_gate_refusal_lists_every_problem",
+        "status": "passed",
+        "duration": 54,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_the_plan_redirect_is_gone",
+        "status": "passed",
+        "duration": 58,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_update_to_ready_refuses_a_todo_without_items",
+        "status": "passed",
+        "duration": 398,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_update_to_ready_needs_every_item_approved",
+        "status": "passed",
+        "duration": 1378,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_approve_refuses_unapproved_items_and_names_the_route",
+        "status": "passed",
+        "duration": 921,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_approving_each_item_then_the_task",
+        "status": "passed",
+        "duration": 1398,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_include_plan_items_approves_them_all",
+        "status": "passed",
+        "duration": 1104,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_approving_a_withdrawn_item_accepts_its_withdrawal",
+        "status": "passed",
+        "duration": 1188,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_approving_an_unknown_item_is_refused",
+        "status": "passed",
+        "duration": 616,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_spawn_refuses_items_the_user_has_not_approved",
+        "status": "passed",
+        "duration": 642,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_spawn_refuses_items_changed_since_approval",
+        "status": "passed",
+        "duration": 917,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_a_task_with_no_items_needs_no_approval_to_spawn",
+        "status": "passed",
+        "duration": 329,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_hand_in_refuses_items_never_approved",
+        "status": "passed",
+        "duration": 1455,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "the plan-item width test no longer breaks pytest's own progress writer"
+        }
+      },
+      {
+        "name": "the sentence sits in handoff_close, outside the report_gate branch",
+        "status": "passed",
+        "duration": 15,
+        "labels": {
+          "check": "the sentence sits in handoff_close, outside the report_gate branch"
+        }
+      },
+      {
+        "name": "a comment in _close.tmpl records why the sentence exists",
+        "status": "passed",
+        "duration": 11,
+        "labels": {
+          "check": "a comment in _close.tmpl records why the sentence exists"
+        }
+      },
+      {
+        "name": "the guide's final-message discipline says the same, in both gate branches",
+        "status": "passed",
+        "duration": 18,
+        "labels": {
+          "check": "the guide's final-message discipline says the same, in both gate branches"
+        }
+      },
+      {
+        "name": ".endless/tasks/CLAUDE.md is unchanged by this task",
+        "status": "passed",
+        "duration": 38,
+        "labels": {
+          "check": ".endless/tasks/CLAUDE.md is unchanged by this task"
+        }
+      }
+    ]
+  }
+}
