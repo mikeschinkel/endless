@@ -9,8 +9,10 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
+	"testing"
 	"time"
 
 	"github.com/mikeschinkel/go-dt"
@@ -314,13 +316,46 @@ func DBContextPinned() bool { return dbPathOverride != "" }
 // candidateBuild reports whether this executable was built inside a task
 // worktree, i.e. whether it is unlanded code.
 //
-// Keyed on the EXECUTABLE's path rather than cwd. cwd answers "where is the
-// user working", which is a different question and the wrong one: the global
-// binary invoked from inside a worktree is still the installed build and may
-// open main, while the worktree's binary invoked from anywhere may not
-// (ED-1601).
+// Never keyed on cwd. cwd answers "where is the user working", which is a
+// different question and the wrong one: the global binary invoked from inside
+// a worktree is still the installed build and may open main, while the
+// worktree's binary invoked from anywhere may not (ED-1601).
+//
+// Two facts each make a build a candidate:
+//
+//   - its SOURCE was compiled from a task worktree (E-2396). The compiler
+//     records every file's absolute path, so this holds wherever the binary
+//     goes afterwards: conftest's temp-dir build, a `go test` binary in the
+//     build cache, a copy a verify suite took out of the worktree. The
+//     executable's path alone missed all three, and one of them migrated the
+//     main database on 2026-10-18.
+//   - its EXECUTABLE sits in a task worktree. Kept for a binary whose source
+//     path was trimmed (-trimpath), which records no directory to read.
 func candidateBuild() bool {
-	return strings.Contains(executablePath(), worktreePathMarker)
+	return strings.Contains(sourceFile, worktreePathMarker) ||
+		strings.Contains(executablePath(), worktreePathMarker)
+}
+
+// sourceFile is this file's path as the compiler recorded it: absolute in an
+// ordinary build, module-relative under -trimpath. A variable so a test can
+// play a build compiled somewhere else.
+var sourceFile = func() string {
+	_, file, _, _ := runtime.Caller(0)
+	return file
+}()
+
+// runningGoTest reports whether this process is a `go test` binary. A variable
+// so a test can play a release build.
+var runningGoTest = testing.Testing
+
+// releaseBuild reports whether this process is the installed release: the one
+// endless-go that may migrate the main database forward (E-2396). A candidate
+// build never may (ED-1601 refuses it main outright), and neither may a `go
+// test` binary from any checkout — a test owns the databases it builds, never
+// main. The land's endless-migrate is the other writer, and it never reaches
+// DB() at all.
+func releaseBuild() bool {
+	return !candidateBuild() && !runningGoTest()
 }
 
 // osExecutable is os.Executable, a variable so a test can play a worktree build

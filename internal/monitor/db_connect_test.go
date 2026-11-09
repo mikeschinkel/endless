@@ -6,6 +6,7 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 
@@ -65,7 +66,9 @@ func resetDBSingleton(t *testing.T) {
 	t.Helper()
 	prevOnce, prevConn, prevErr, prevFault := dbOnce, dbConn, dbErr, faultConn
 	prevCtxDir, prevPathOverride, prevExe := dbContextDir, dbPathOverride, osExecutable
+	prevSource, prevGoTest := sourceFile, runningGoTest
 	t.Cleanup(func() {
+		sourceFile, runningGoTest = prevSource, prevGoTest
 		if dbConn != nil {
 			dbConn.Close()
 		}
@@ -399,5 +402,169 @@ func TestDatabaseAheadFingerprint_MatchesTheRecordedRefusal(t *testing.T) {
 	}
 	if want != "database-ahead:database is at schema v12, endless-go carries v11: upgrade endless" {
 		t.Errorf("the recorded fingerprint changed shape: %q", want)
+	}
+}
+
+// playBuild sets where this process's source was compiled and where its
+// executable sits, and whether it is a `go test` binary, for the rest of the
+// test. resetDBSingleton restores all three.
+func playBuild(t *testing.T, source, exe string, goTest bool) {
+	t.Helper()
+	sourceFile = source
+	osExecutable = func() (string, error) { return exe, nil }
+	runningGoTest = func() bool { return goTest }
+}
+
+const (
+	worktreeSource = "/Users/x/Projects/endless/.endless/worktrees/e-2020/internal/monitor/db.go"
+	mainSource     = "/Users/x/Projects/endless/internal/monitor/db.go"
+	installedExe   = "/usr/local/bin/endless-go"
+)
+
+// TestCandidateBuild_FollowsTheSourceNotTheExecutable (E-2396): a build
+// compiled in a task worktree is a candidate wherever its binary sits — copied
+// out, built by conftest into the temp dir, or a `go test` binary in the build
+// cache — and a main-checkout build stays the installed release wherever it is
+// run from.
+func TestCandidateBuild_FollowsTheSourceNotTheExecutable(t *testing.T) {
+	cases := []struct {
+		name, source, exe string
+		want              bool
+	}{
+		{"worktree build copied out", worktreeSource, "/tmp/suite/bin/endless-go", true},
+		{"conftest temp-dir build", worktreeSource, "/var/folders/T/endless-go-test-1/endless-go", true},
+		{"go test binary", worktreeSource, "/Users/x/Library/Caches/go-build/ab/monitor.test", true},
+		{"worktree build in place", worktreeSource, "/Users/x/Projects/endless/.endless/worktrees/e-2020/bin/endless-go", true},
+		{"trimmed worktree build in place", "github.com/mikeschinkel/endless/internal/monitor/db.go",
+			"/Users/x/Projects/endless/.endless/worktrees/e-2020/bin/endless-go", true},
+		{"installed release", mainSource, installedExe, false},
+		{"trimmed release build", "github.com/mikeschinkel/endless/internal/monitor/db.go", installedExe, false},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			resetDBSingleton(t)
+			playBuild(t, c.source, c.exe, false)
+			if got := candidateBuild(); got != c.want {
+				t.Errorf("candidateBuild() = %v, want %v", got, c.want)
+			}
+		})
+	}
+}
+
+// TestDB_BuildFromWorktreeSourceRefusesMainWhereverItSits (E-2396, P2/P3): the
+// ED-1601 refusal reaches a worktree-compiled binary that runs from outside the
+// worktree, and a `go test` binary whose package lives in one.
+func TestDB_BuildFromWorktreeSourceRefusesMainWhereverItSits(t *testing.T) {
+	for _, c := range []struct {
+		name, exe string
+		goTest    bool
+	}{
+		{"copied binary", "/tmp/suite/bin/endless-go", false},
+		{"go test binary", "/Users/x/Library/Caches/go-build/ab/monitor.test", true},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			path := mainDBUnderTempHome(t)
+			buildAt(t, path, latestVersion(t)-1)
+			before := schemaText(t, path)
+
+			resetDBSingleton(t)
+			playBuild(t, worktreeSource, c.exe, c.goTest)
+			PinMainDB()
+
+			_, err := DB()
+			var refusal *SchemaRefusal
+			if !errors.As(err, &refusal) || refusal.Kind != "worktree-build-on-main" {
+				t.Fatalf("DB() = %v, want a worktree-build-on-main refusal", err)
+			}
+			if !strings.Contains(err.Error(), "ED-1601") {
+				t.Errorf("the refusal does not name ED-1601: %v", err)
+			}
+			if after := schemaText(t, path); after != before {
+				t.Error("a refused build changed the main database's schema")
+			}
+		})
+	}
+}
+
+// TestDB_OnlyTheReleaseMigratesMain (E-2396, P4): a `go test` binary from the
+// main checkout is no candidate, but it is not the installed release either, so
+// a main database behind it is refused, not backed up, and left unchanged —
+// while the release migrates the same database forward.
+func TestDB_OnlyTheReleaseMigratesMain(t *testing.T) {
+	t.Run("go test binary refuses", func(t *testing.T) {
+		path := mainDBUnderTempHome(t)
+		buildAt(t, path, latestVersion(t)-1)
+		before := schemaText(t, path)
+
+		resetDBSingleton(t)
+		playBuild(t, mainSource, "/Users/x/Library/Caches/go-build/ab/monitor.test", true)
+		PinMainDB()
+
+		_, err := DB()
+		var refusal *SchemaRefusal
+		if !errors.As(err, &refusal) || refusal.Kind != "migrate-main-refused" {
+			t.Fatalf("DB() = %v, want a migrate-main-refused refusal", err)
+		}
+		if after := schemaText(t, path); after != before {
+			t.Error("a refused build changed the main database's schema")
+		}
+		if got := dbVersionAt(t, path); got != latestVersion(t)-1 {
+			t.Errorf("main is at version %d, want it untouched at %d", got, latestVersion(t)-1)
+		}
+		if _, err := os.Stat(filepath.Join(filepath.Dir(path), "backups")); err == nil {
+			t.Error("a refused migration still took a backup")
+		}
+		if _, err := UpgradeTarget(); !errors.As(err, &refusal) || refusal.Kind != "migrate-main-refused" {
+			t.Errorf("UpgradeTarget() = %v, want a migrate-main-refused refusal", err)
+		}
+	})
+	t.Run("go test binary migrates its own database", func(t *testing.T) {
+		mainDBUnderTempHome(t)
+		path := filepath.Join(t.TempDir(), "endless.db")
+		buildAt(t, path, latestVersion(t)-1)
+
+		resetDBSingleton(t)
+		playBuild(t, mainSource, "/Users/x/Library/Caches/go-build/ab/monitor.test", true)
+		dbContextDir = filepath.Dir(path)
+
+		if _, err := DB(); err != nil {
+			t.Fatalf("a test binary on its own database must migrate it, got: %v", err)
+		}
+		if got := dbVersionAt(t, path); got != latestVersion(t) {
+			t.Errorf("version after connect = %d, want %d", got, latestVersion(t))
+		}
+	})
+	t.Run("installed release migrates", func(t *testing.T) {
+		path := mainDBUnderTempHome(t)
+		buildAt(t, path, latestVersion(t)-1)
+
+		resetDBSingleton(t)
+		playBuild(t, mainSource, installedExe, false)
+		PinMainDB()
+
+		if _, err := DB(); err != nil {
+			t.Fatalf("the installed release must migrate main forward, got: %v", err)
+		}
+		if got := dbVersionAt(t, path); got != latestVersion(t) {
+			t.Errorf("version after connect = %d, want %d", got, latestVersion(t))
+		}
+	})
+}
+
+// TestCandidateBuild_ThisTestBinary (E-2396, P3) runs the real seams, nothing
+// played: a `go test` binary is a candidate exactly when the package under
+// test lives in a task worktree. go test runs it in the package directory, so
+// cwd says where that package lives.
+func TestCandidateBuild_ThisTestBinary(t *testing.T) {
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := strings.Contains(cwd, worktreePathMarker)
+	if got := candidateBuild(); got != want {
+		t.Errorf("candidateBuild() = %v for a test of the package in %s, want %v", got, cwd, want)
+	}
+	if releaseBuild() {
+		t.Error("a go test binary reports itself as the installed release")
 	}
 }

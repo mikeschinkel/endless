@@ -77,7 +77,7 @@ var ErrSchemaRefused = errors.New("database refused by this endless-go")
 // path or the underlying error, so every event that trips over the same
 // mismatch lands on one incident.
 type SchemaRefusal struct {
-	Kind          string // "worktree-build-on-main", "database-ahead" or "upgrade-failed"
+	Kind          string // "worktree-build-on-main", "migrate-main-refused", "database-ahead" or "upgrade-failed"
 	DBPath        string
 	DBVersion     int64
 	BinaryVersion int64
@@ -98,6 +98,8 @@ func (e *SchemaRefusal) Summary() string {
 	switch e.Kind {
 	case "worktree-build-on-main":
 		return "a worktree-built endless-go refused the main database"
+	case "migrate-main-refused":
+		return "an endless-go that is not the installed release refused to migrate the main database"
 	case "database-ahead":
 		return fmt.Sprintf("database is at schema v%d, endless-go carries v%d: upgrade endless",
 			e.DBVersion, e.BinaryVersion)
@@ -138,6 +140,37 @@ func worktreeBuildRefusal(path string) *SchemaRefusal {
 				"--db main ...` already does — or pass --db sandbox to use this "+
 				"worktree's own database.",
 			exe, path),
+	}
+}
+
+// mainMigrationRefusal is E-2396's: a build that is not the installed release
+// met a main database behind it. A candidate build never gets this far
+// (worktreeBuildRefusal stops it before the open); what reaches here is a `go
+// test` binary, which owns the databases it builds and never main.
+//
+// latest is 0 when the caller has not read the versions (UpgradeTarget refuses
+// before it opens anything), and the message then names none.
+func mainMigrationRefusal(path string, dbVersion, latest int64) *SchemaRefusal {
+	exe := executablePath()
+	versions := ""
+	if latest > 0 {
+		versions = fmt.Sprintf(" from schema version %d to %d", dbVersion, latest)
+	}
+	return &SchemaRefusal{
+		Kind:          "migrate-main-refused",
+		DBPath:        path,
+		DBVersion:     dbVersion,
+		BinaryVersion: latest,
+		Binary:        exe,
+		message: fmt.Sprintf(
+			"refusing to migrate the main database%s: "+
+				"only the installed endless-go, or the endless-migrate a land "+
+				"builds, moves main forward (E-2396).\n\n"+
+				"  binary:   %s\n"+
+				"  database: %s\n\n"+
+				"Nothing was changed. A test builds its own database rather than "+
+				"opening main; point this one at a database of its own with --db-dir.",
+			versions, exe, path),
 	}
 }
 
@@ -211,6 +244,11 @@ func reconcileSchema(db *sql.DB, path string) error {
 	case actionHalt:
 		return databaseAheadRefusal(path, version, latest)
 	case actionApply:
+		// E-2396: only the installed release migrates main. Checked before the
+		// backup, so a refused build leaves main exactly as it found it.
+		if isMainDB(path) && !releaseBuild() {
+			return mainMigrationRefusal(path, version, latest)
+		}
 		if version > 0 {
 			if _, err := BackupDBContext(ctx); err != nil {
 				return upgradeFailedRefusal(path, version, latest,
@@ -299,6 +337,11 @@ func UpgradeTarget() (string, error) {
 	path := DBPath()
 	if refusesMainDB(candidateBuild(), isMainDB(path)) {
 		return "", worktreeBuildRefusal(path)
+	}
+	// E-2396: upgrade exists to move a database forward, so on main it is the
+	// installed release's alone, exactly as the connect's apply is.
+	if isMainDB(path) && !releaseBuild() {
+		return "", mainMigrationRefusal(path, 0, 0)
 	}
 	return path, nil
 }

@@ -1,0 +1,41 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2396 and records what was true when E-2396
+# landed. Edit it only if you ARE E-2396. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+#
+# E-2396: branch code never opens or migrates the main database, wherever its
+# binary sits. decoy-home.sh (beside this file) builds a decoy HOME whose main
+# database is one schema version behind the branch and reports any change to
+# it; refuses-main.sh runs one binary against it.
+schema = 1
+task   = "E-2396"
+
+# The guard's own tests: source-path candidacy (copied, temp-dir and go test
+# binaries), the ED-1601 refusal for each, and release-only migration of main.
+[[check]]
+name   = "monitor unit tests"
+runner = "gotest"
+paths  = ["./internal/monitor/..."]
+
+# P2: conftest's pattern — this worktree's endless-go built into a temp dir.
+[[check]]
+name     = "a temp-dir build of this worktree refuses main"
+sh       = "d=$(mktemp -d) && go build -o \"$d/endless-go\" ./cmd/endless-go && bash \"$ENDLESS_VERIFY_DIR\"/refuses-main.sh \"$d/endless-go\""
+contains = "REFUSED-UNCHANGED"
+
+# P2: a worktree build (`just build`) copied out of the worktree.
+[[check]]
+name     = "a worktree build copied out of the worktree refuses main"
+sh       = "just build >/dev/null 2>&1 && d=$(mktemp -d) && cp bin/endless-go \"$d/endless-go\" && bash \"$ENDLESS_VERIFY_DIR\"/refuses-main.sh \"$d/endless-go\""
+contains = "REFUSED-UNCHANGED"
+
+# P1: both suites, under a decoy home holding a main database one version
+# behind, leave that home byte-for-byte unchanged (decoy-home.sh exits 1 and
+# prints the diff when anything there changed).
+[[check]]
+name = "the Go suite leaves a decoy main home unchanged"
+sh   = "out=$(bash \"$ENDLESS_VERIFY_DIR\"/decoy-home.sh go test ./internal/... 2>&1); s=$?; echo \"$out\" | tail -60; exit $s"
+
+[[check]]
+name = "the Python suite leaves a decoy main home unchanged"
+sh   = "out=$(bash \"$ENDLESS_VERIFY_DIR\"/decoy-home.sh uv run pytest tests/ -q -p no:cacheprovider 2>&1); s=$?; echo \"$out\" | tail -60; exit $s"
