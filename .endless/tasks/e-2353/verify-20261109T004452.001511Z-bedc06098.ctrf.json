@@ -1,0 +1,805 @@
+{
+  "reportFormat": "CTRF",
+  "specVersion": "0.2.0",
+  "results": {
+    "tool": {
+      "name": "endless"
+    },
+    "summary": {
+      "tests": 74,
+      "passed": 74,
+      "failed": 0,
+      "skipped": 0,
+      "pending": 0,
+      "other": 0,
+      "start": 1794185089606,
+      "stop": 1794185114678
+    },
+    "tests": [
+      {
+        "name": "go.mod is tidy without go.work",
+        "status": "passed",
+        "duration": 0,
+        "labels": {
+          "check": "go.mod is tidy without go.work"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_accepts_every_spelling[P3]",
+        "status": "passed",
+        "duration": 181,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_accepts_every_spelling[p3]",
+        "status": "passed",
+        "duration": 53,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_accepts_every_spelling[3]",
+        "status": "passed",
+        "duration": 55,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_accepts_every_spelling[E-2280.P3]",
+        "status": "passed",
+        "duration": 77,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_refuses_garbage[P0]",
+        "status": "passed",
+        "duration": 61,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_refuses_garbage[Px]",
+        "status": "passed",
+        "duration": 69,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_refuses_garbage[]",
+        "status": "passed",
+        "duration": 57,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_refuses_garbage[P03]",
+        "status": "passed",
+        "duration": 74,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_parse_label_refuses_garbage[-1]",
+        "status": "passed",
+        "duration": 59,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_reads_items_in_order",
+        "status": "passed",
+        "duration": 63,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_reads_the_post_land_mark",
+        "status": "passed",
+        "duration": 63,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[[[item]]\\nstatement = \"x\"\\nowner = \"me\"\\n]",
+        "status": "passed",
+        "duration": 111,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[title = \"x\"\\n[[item]]\\nstatement = \"x\"\\n]",
+        "status": "passed",
+        "duration": 143,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[[[item]]\\nkind = \"wish\"\\nstatement = \"x\"\\n]",
+        "status": "passed",
+        "duration": 112,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[[[item]]\\nstatement = \"\"\\n]",
+        "status": "passed",
+        "duration": 87,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[[[item]]\\nstatement = \"\"\"a\\nb\"\"\"\\n]",
+        "status": "passed",
+        "duration": 99,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[[[item]]\\nid = \"P1\"\\nstatement = \"a\"\\n[[item]]\\nid = \"P1\"\\nstatement = \"b\"\\n]",
+        "status": "passed",
+        "duration": 74,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[[[item]]\\nstatement = 3\\n]",
+        "status": "passed",
+        "duration": 97,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[]",
+        "status": "passed",
+        "duration": 84,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_what_it_does_not_define[not toml []",
+        "status": "passed",
+        "duration": 75,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_diff_adds_edits_withdraws_and_orders",
+        "status": "passed",
+        "duration": 89,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_loading_the_unchanged_set_changes_nothing",
+        "status": "passed",
+        "duration": 89,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_items_file_refuses_unknown_and_withdrawn_ids",
+        "status": "passed",
+        "duration": 82,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_reconcile_file_reads_entries",
+        "status": "passed",
+        "duration": 118,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_reconcile_file_refuses_what_it_does_not_define[[[entry]]\\nitem = \"P1\"\\nverdict = \"kept\"\\nmood = \"fine\"\\n]",
+        "status": "passed",
+        "duration": 213,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_reconcile_file_refuses_what_it_does_not_define[[[entry]]\\nverdict = \"kept\"\\n]",
+        "status": "passed",
+        "duration": 116,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_reconcile_file_refuses_what_it_does_not_define[summary = \"x\"\\n]",
+        "status": "passed",
+        "duration": 104,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_wraps_the_text_within_its_column",
+        "status": "passed",
+        "duration": 86,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_shows_verdict_answer_and_kept_reason_under_the_text",
+        "status": "passed",
+        "duration": 94,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_wraps_a_verdict_line_with_a_hanging_indent",
+        "status": "passed",
+        "duration": 93,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_fills_each_glyph_slot_at_its_fixed_position[over0-\\u2713  ]",
+        "status": "passed",
+        "duration": 104,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_fills_each_glyph_slot_at_its_fixed_position[over1-   ]",
+        "status": "passed",
+        "duration": 86,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_fills_each_glyph_slot_at_its_fixed_position[over2-~  ]",
+        "status": "passed",
+        "duration": 101,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_fills_each_glyph_slot_at_its_fixed_position[over3-\\u2013  ]",
+        "status": "passed",
+        "duration": 73,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_fills_each_glyph_slot_at_its_fixed_position[over4- + ]",
+        "status": "passed",
+        "duration": 71,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_fills_each_glyph_slot_at_its_fixed_position[over5-\\u2713\\u21b7 ]",
+        "status": "passed",
+        "duration": 74,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_fills_each_glyph_slot_at_its_fixed_position[over6-\\u2713\\u21b7 ]",
+        "status": "passed",
+        "duration": 63,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_fills_each_glyph_slot_at_its_fixed_position[over7-\\u2713 \\u2717]",
+        "status": "passed",
+        "duration": 68,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_fills_each_glyph_slot_at_its_fixed_position[over8- +\\u2717]",
+        "status": "passed",
+        "duration": 77,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_widens_the_number_column_to_the_widest_label",
+        "status": "passed",
+        "duration": 98,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_separates_items_with_one_blank_line",
+        "status": "passed",
+        "duration": 78,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_prints_the_legend_dim_under_the_table",
+        "status": "passed",
+        "duration": 82,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_wraps_to_seventy_columns_when_the_terminal_width_is_unknown",
+        "status": "passed",
+        "duration": 75,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_render_words_keeps_the_agent_rendering",
+        "status": "passed",
+        "duration": 92,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_guide_shows_the_glyph_legend",
+        "status": "passed",
+        "duration": 76,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_an_in_tree_sandbox_is_a_sandbox",
+        "status": "passed",
+        "duration": 69,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_plan_add_edit_withdraw_shape_their_ops",
+        "status": "passed",
+        "duration": 78,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_plan_move_rewrites_the_display_order",
+        "status": "passed",
+        "duration": 84,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_an_item_change_on_a_ready_task_drops_its_approval",
+        "status": "passed",
+        "duration": 84,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_an_item_change_underway_keeps_the_status",
+        "status": "passed",
+        "duration": 104,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_reconcile_records_entries_with_the_fingerprint",
+        "status": "passed",
+        "duration": 102,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_the_gate_refusal_lists_every_problem",
+        "status": "passed",
+        "duration": 89,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_the_plan_redirect_is_gone",
+        "status": "passed",
+        "duration": 76,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_update_to_ready_refuses_a_todo_without_items",
+        "status": "passed",
+        "duration": 576,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_update_to_ready_needs_every_item_approved",
+        "status": "passed",
+        "duration": 1507,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_approve_refuses_unapproved_items_and_names_the_route",
+        "status": "passed",
+        "duration": 1976,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_approving_each_item_then_the_task",
+        "status": "passed",
+        "duration": 1908,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_include_plan_items_approves_them_all",
+        "status": "passed",
+        "duration": 2795,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_approving_a_withdrawn_item_accepts_its_withdrawal",
+        "status": "passed",
+        "duration": 2017,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_approving_an_unknown_item_is_refused",
+        "status": "passed",
+        "duration": 1059,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_spawn_refuses_items_the_user_has_not_approved",
+        "status": "passed",
+        "duration": 1360,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_spawn_refuses_items_changed_since_approval",
+        "status": "passed",
+        "duration": 1475,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_a_task_with_no_items_needs_no_approval_to_spawn",
+        "status": "passed",
+        "duration": 611,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "tests/test_plan_items.py::test_hand_in_refuses_items_never_approved",
+        "status": "passed",
+        "duration": 2911,
+        "suite": [
+          "tests/test_plan_items.py"
+        ],
+        "labels": {
+          "check": "plan_items unit tests"
+        }
+      },
+      {
+        "name": "P1/P2/P4: number, glyph slots, then statement, verify: and detail as one block, at one offset for P9 and P100",
+        "status": "passed",
+        "duration": 448,
+        "labels": {
+          "check": "P1/P2/P4: number, glyph slots, then statement, verify: and detail as one block, at one offset for P9 and P100"
+        }
+      },
+      {
+        "name": "P3: with no terminal and no COLUMNS the text wraps to 70 columns",
+        "status": "passed",
+        "duration": 260,
+        "labels": {
+          "check": "P3: with no terminal and no COLUMNS the text wraps to 70 columns"
+        }
+      },
+      {
+        "name": "P7: one glyph map, one legend, printed dim under the table",
+        "status": "passed",
+        "duration": 325,
+        "labels": {
+          "check": "P7: one glyph map, one legend, printed dim under the table"
+        }
+      },
+      {
+        "name": "P9: task plan list, task show, the reconcile context and the post-land state all render through render_items",
+        "status": "passed",
+        "duration": 23,
+        "labels": {
+          "check": "P9: task plan list, task show, the reconcile context and the post-land state all render through render_items"
+        }
+      },
+      {
+        "name": "P10: task show --agent keeps the words rendering",
+        "status": "passed",
+        "duration": 24,
+        "labels": {
+          "check": "P10: task show --agent keeps the words rendering"
+        }
+      },
+      {
+        "name": "P10: the words rendering is the one it was",
+        "status": "passed",
+        "duration": 328,
+        "labels": {
+          "check": "P10: the words rendering is the one it was"
+        }
+      },
+      {
+        "name": "P12: the guide's Plan items section shows the legend",
+        "status": "passed",
+        "duration": 13,
+        "labels": {
+          "check": "P12: the guide's Plan items section shows the legend"
+        }
+      },
+      {
+        "name": "P13/P14: no borders, and tabulate, not rich",
+        "status": "passed",
+        "duration": 17,
+        "labels": {
+          "check": "P13/P14: no borders, and tabulate, not rich"
+        }
+      },
+      {
+        "name": "P15: plan-item data, events and the items.toml mirror are untouched",
+        "status": "passed",
+        "duration": 37,
+        "labels": {
+          "check": "P15: plan-item data, events and the items.toml mirror are untouched"
+        }
+      }
+    ]
+  }
+}
