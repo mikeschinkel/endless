@@ -8013,3 +8013,7 @@ Planning E-2479, I listed 'changes the rule that items freeze from unverified on
 ### [2026-11-08] Decided-without-asking items go in a bullet list
 In the E-2479 needs-plan output I wrote the 'Decided without asking' items as one paragraph joined by semicolons. Mike: 'Please list these as a bullet list, not a run-on paragraph of text.' Each decided item is one bullet, so he can object to one without re-reading the rest.
 - **Project**: endless
+
+### [2026-11-08] No aliases or deprecation paths for renames — Endless has no users but Mike and me
+While planning E-2571 I listed 'needs an alias and a deprecation path' as a con of renaming the user-facing command `endless session task remove` to `session task delete`. Mike: 'NO IT FUCKING DOES NOT NEED AN ALIAS OR DEPRECATION PATH!!! (We have no existing users beyond me and you.)' Endless is pre-release with exactly two users, so backward compatibility for a command name costs nothing to break. Do not weigh migration paths, aliases or deprecation cycles against a rename of a command, flag or output string. This is about USER-FACING names only — the db-ledger is different in kind: an event spelling already written to the ledger must still replay forever, because the ledger is the durable record, not an interface with users to notify.
+- **Project**: endless
