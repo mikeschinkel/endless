@@ -33,7 +33,7 @@
 - Only runs the agent requests through this command after declaring the work
   ready count. An agent's own runs during implementation are not counted.
 - After **3 failed handoff runs**, stop and ask Mike.
-- A handoff run after the task's `verify.sh` changed since the first handoff
+- A handoff run after the task's `verify.toml` changed since the first handoff
   failure **waits for Mike's approval**. (An adversarial agent writing the
   suite is a later task.)
 
@@ -57,7 +57,7 @@ A suite proving: the window is named for the task and runs in a login shell
 the result and CTRF path; a pass closes the window, keeps the log and sets
 `unlanded`; a failure keeps the window; `--show`/`--hide` join and break the
 pane and refuse together; the fourth failed handoff run and a run after a
-`verify.sh` change both stop for approval.
+`verify.toml` change both stop for approval.
 
 
 
@@ -79,3 +79,5 @@ pane and refuse together; the fourth failed handoff run and a run after a
   and request verify again. The user is asked nothing.
 - "The task becomes `unlanded`" above changes with the sibling task that
   derives `unlanded`: a pass is recorded, and whether it stands is computed.
+
+
