@@ -43,7 +43,8 @@ statement = "The glyph map is defined once in plan_items and a static dim legend
 [[item]]
 id = "P8"
 kind = "deliverable"
-statement = "After reconciliation the verdict line, the EQ question line and the kept: line render inside the item's text cell, indented under its text"
+statement = "After reconciliation, labeled lines render in the item's text cell under its text: 'Verdict: <verdict>', with '(post-land #N)' after the verdict when it came from a post-land reconcile; the entry's note indented three spaces under the verdict line; then 'Answer: <answer> (EQ-n)' for an answered question, 'Question: EQ-n open, waiting for the user' or 'Question: EQ-n closed, <reason>' otherwise; and 'Answer holds: <reason>' when an earlier answer was reaffirmed"
+detail = "A fixed label sits left of each colon; variable text sits right of it. The note is the verdict's elaboration, shown whenever the entry has one, As planned included."
 
 [[item]]
 id = "P9"
