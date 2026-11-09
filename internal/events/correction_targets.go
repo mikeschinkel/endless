@@ -44,6 +44,13 @@ type CorrectionTarget struct {
 	// Entity is the entity type a correction of this target is recorded
 	// against.
 	Entity EntityType
+
+	// NoDelete, when set, is why a correcting delete of this target is
+	// refused, in the words the refusal shows. Every other operation on the
+	// target is unaffected. It carries the reason rather than a flag so the
+	// refusal names a rule the user can read about, not a feature the
+	// command lacks.
+	NoDelete string
 }
 
 // taskColumns are the task target's columns: the tasks columns
@@ -61,8 +68,17 @@ var correctionTargets = []CorrectionTarget{
 	{Name: "task_dep", Table: "task_deps", Key: []string{"id"}, Columns: []string{"dep_type"}, Entity: EntityTaskDep},
 	{Name: "project", Table: "projects", Key: []string{"id"},
 		Columns: []string{"label", "group_name", "description", "status", "language"}, Entity: EntityProject},
+	// Sessions are never deleted (ED-1655): fifteen INTEGER columns outside
+	// sessions hold a session id and only four declare a foreign key, while
+	// sessions.id is a rowid alias allocated as max(rowid) + 1, so deleting
+	// the highest session hands its id to the next one created and the
+	// undeclared references then name the wrong session while reading as
+	// correct. Hiding is the reversible way to take one out of a listing.
 	{Name: "session", Table: "sessions", Key: []string{"id"},
-		Columns: []string{"state", "task_id", "focus_task_id", "hidden"}, Entity: EntitySession},
+		Columns: []string{"state", "task_id", "focus_task_id", "hidden"}, Entity: EntitySession,
+		NoDelete: "sessions are never deleted (ED-1655): a freed sessions.id is handed to the next " +
+			"session created, and the rows that still hold the old id then name the wrong session; " +
+			"a session that should not be listed is hidden instead"},
 	{Name: "session_status", Table: "session_statuses", Key: []string{"id"},
 		Columns: []string{"headline", "summary"}, Entity: EntitySessionStatus},
 	{Name: "session_tasks", Table: "session_tasks", Key: []string{"id"},

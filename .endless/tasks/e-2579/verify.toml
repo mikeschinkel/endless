@@ -1,0 +1,51 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2579 and records what was true when E-2579
+# landed. Edit it only if you ARE E-2579. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+schema = 1
+task   = "E-2579"
+
+[[check]]
+name   = "undeclaredRefs is pinned to the live schema; a session delete is refused while update, insert and annotate work"
+runner = "gotest"
+paths  = ["./internal/events/...", "./internal/correctcmd/..."]
+
+[[check]]
+name   = "the CLI relays the session delete refusal naming ED-1655, and --set hidden=1 still succeeds"
+runner = "pytest/uv"
+paths  = ["tests/test_correct_cmd.py"]
+
+[[check]]
+name     = "the pin test states which columns it recognizes as a reference, and that the naming rule is its limit"
+sh       = "grep -c 'THIS IS THE TEST.S LIMIT' internal/events/correction_refs_test.go"
+equals   = "1"
+
+[[check]]
+name     = "the six session entries are present beside session_notices.session_id, grouped by table (seven matches)"
+sh       = "grep -cE '^\t\\{\"(errors|errors_sources|error_triage|session_notices)\", \"(session_id|accepted_session_id|declined_session_id|changed_by_session)\", \"sessions\", \"id\", \"\"\\},' internal/events/correction.go"
+equals   = "7"
+
+[[check]]
+name     = "a comment beside the six records that no current check reads them and the test keeps the list complete"
+sh       = "grep -c 'No current check reads' internal/events/correction.go"
+equals   = "2"
+
+[[check]]
+name     = "the projector's replay comment names temp-database projection, not a routine rebuild of the live database"
+sh       = "grep -A3 'If this path still DELETEd' internal/events/projector.go"
+contains = "temp database"
+
+[[check]]
+name         = "the old wording is gone"
+sh           = "grep -A3 'If this path still DELETEd' internal/events/projector.go"
+not_contains = "a rebuild would re-free"
+
+[[check]]
+name     = "the session target keeps delete as a subcommand: the refusal names a rule, not a missing command"
+sh       = "uv run endless correct session --help"
+contains = "delete"
+
+[[check]]
+name     = "the guide appendix says a session is never deleted"
+sh       = "grep -c 'ED-1655' docs/guide/appendix-a.md"
+equals   = "2"

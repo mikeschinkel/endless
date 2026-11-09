@@ -501,6 +501,13 @@ func prepareDelete(db dbQuerier, t CorrectionTarget, shape *tableShape, req Corr
 		return nil, refusal.NoReport("correct: --delete takes no column=value pairs",
 			"Retry with --delete alone, or --set without --delete")
 	}
+	if t.NoDelete != "" {
+		// Refused before the row is read: the answer is the same for every
+		// row of the target, and it is a rule, not a missing feature.
+		return nil, refusal.NoReport(
+			fmt.Sprintf("correct: %s %s is not deleted; %s", t.Name, req.Key, t.NoDelete),
+			fmt.Sprintf("Retry with --set to correct the %s's columns instead", t.Name))
+	}
 	key, row, err := loadRow(db, t, shape, req.Key)
 	if err != nil {
 		return nil, err
@@ -586,11 +593,24 @@ type undeclaredRef struct {
 	Where                              string // an extra condition on Table, or ""
 }
 
+// undeclaredRefs maps every undeclared reference the schema holds, grouped by
+// referring table. The invariant is completeness, not use: which of the two
+// checks reads a given row is incidental, and a list kept only where it is
+// load-bearing is the list that drifted (E-2579: six session references went
+// missing unnoticed). TestUndeclaredRefs_CoverEverySchemaReference derives the
+// session references from the live schema and fails when the list and the
+// schema disagree, in either direction.
 var undeclaredRefs = []undeclaredRef{
 	{"session_tasks", "task_id", "tasks", "id", ""},
 	{"session_tasks", "session_id", "sessions", "id", ""},
 	{"session_notices", "task_id", "tasks", "id", ""},
 	{"session_notices", "session_id", "sessions", "id", ""},
+	// No current check reads this row: sessions are never deleted (ED-1655),
+	// so the delete refusal never counts referrers of a session, and
+	// changed_by_session is nullable and outside session_notice's correctable
+	// columns, so no correcting write reaches it for the dangling-id check.
+	// It is here because the list maps the schema and the test enforces that.
+	{"session_notices", "changed_by_session", "sessions", "id", ""},
 	{"session_hidden_tasks", "task_id", "tasks", "id", ""},
 	{"session_hidden_tasks", "session_id", "sessions", "id", ""},
 	{"session_pinned_tasks", "task_id", "tasks", "id", ""},
@@ -604,6 +624,18 @@ var undeclaredRefs = []undeclaredRef{
 	{"task_questions", "asked_by_session", "sessions", "id", ""},
 	{"task_reconciliations", "session_id", "sessions", "id", ""},
 	{"task_post_land_entries", "session_id", "sessions", "id", ""},
+	// No current check reads these five either: errors, errors_sources and
+	// error_triage are not correction targets (internal/faults writes them
+	// directly, nothing about them goes through the ledger), so the
+	// dangling-id check never fires on them, and the delete refusal never
+	// reaches a session (ED-1655). They are here because the list maps every
+	// undeclared reference the schema holds and the test enforces
+	// completeness, not because a consumer needs each row.
+	{"errors", "session_id", "sessions", "id", ""},
+	{"errors_sources", "session_id", "sessions", "id", ""},
+	{"error_triage", "session_id", "sessions", "id", ""},
+	{"error_triage", "accepted_session_id", "sessions", "id", ""},
+	{"error_triage", "declined_session_id", "sessions", "id", ""},
 }
 
 // referrers lists the rows that refer to the keyed row: through every declared

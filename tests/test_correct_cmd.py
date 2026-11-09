@@ -115,6 +115,25 @@ def test_a_delete_of_a_task_marks_it_removed(seeded_project_at_cwd):
     assert (row["removed"], row["title"]) == (1, "Filed twice")
 
 
+def test_a_delete_of_a_session_is_refused_and_hiding_still_works(seeded_project_at_cwd):
+    """ED-1655 (E-2579): sessions are never deleted. The subcommand stays, so
+    a person who reaches for it learns the rule from Go's refusal rather than
+    finding the command incomplete; every other operation on a session works."""
+    cur = db.execute(
+        "INSERT INTO sessions (project_id, state) VALUES (1, 'working')")
+    sid = cur.lastrowid
+    r = CliRunner().invoke(
+        main, ["correct", "session", "delete", f"ES-{sid}", "--reason", "a stray session"])
+    assert r.exit_code != 0
+    assert "never deleted" in r.stderr and "ED-1655" in r.stderr, r.stderr
+    assert db.query("SELECT COUNT(*) AS n FROM sessions WHERE id = ?", (sid,))[0]["n"] == 1
+    r = CliRunner().invoke(
+        main, ["correct", "session", "update", f"ES-{sid}", "--set", "hidden=1",
+               "--reason", "should not be listed"])
+    assert r.exit_code == 0, r.stderr
+    assert db.query("SELECT hidden FROM sessions WHERE id = ?", (sid,))[0]["hidden"] == 1
+
+
 def test_the_command_shape_is_one_positional_argument():
     """ED-1647: a command takes at most one positional argument. Target and
     operation are subcommands; the key is the one argument; the rest are

@@ -528,8 +528,10 @@ func replayTaskDeleted(db *sql.DB, evt *Event, result *ProjectResult) error {
 
 	// ED-1547 (E-1929): replay removal exactly as the executor performs it, by
 	// calling the same function. If this path still DELETEd while the executor
-	// marked removed = 1, a rebuild would re-free every removed id and reuse
-	// would return on a path nobody would think to test.
+	// marked removed = 1, projecting the ledger into a temp database — which
+	// verification does — or any future rebuild would re-free every removed id,
+	// and reuse would return on a path nobody would think to test. (Rebuilding
+	// the live database is refused, E-2062; that is not the path at stake.)
 	if _, err := removeTaskTree(db, mustParseInt64(evt.Entity.ID), p.Cascade); err != nil {
 		return err
 	}
