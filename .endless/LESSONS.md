@@ -8045,3 +8045,7 @@ E-2577 brainstorm: Mike asked whether a background verify job could use claude -
 ### [2026-11-08] Do the obvious consequence of a decision instead of asking
 On E-2063, Mike agreed to split Increments 4-5 into a follow-up task (E-2585). I then asked whether to remove those increments from E-2063's plan. Mike: 'Why are you even asking? Of course you should.' Once Mike has made a decision, carry out what it plainly implies (here: the moved work leaves the original plan) without asking. Ask only about choices the decision leaves genuinely open.
 - **Project**: endless
+
+### [2026-11-08] Task suites are verify.toml manifests, not verify.sh
+Writing plan items for E-2263 (user-context verify runner) in the E-2225 session, I carried the plan's 'the task's verify.sh changed' into P18. Mike pointed out verify.sh is obsoleted by verify.toml: a task's suite is now a manifest of [[check]] entries (.endless/tasks/CLAUDE.md, 'Writing one'); verify.sh survives only as legacy suites. Read the current suite format before naming suite files in plans or items, rather than reusing names from an older plan.
+- **Project**: endless
