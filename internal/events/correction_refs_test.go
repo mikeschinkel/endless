@@ -1,16 +1,25 @@
 // The pin that holds undeclaredRefs against the schema (E-2579).
 //
 // undeclaredRefs is a hand-maintained map of the references the schema holds
-// as a bare INTEGER column with no FOREIGN KEY. Nothing in the schema names
-// them, so nothing told anyone when six session references drifted off the
-// list. This test derives the expectation from the live schema, the way
+// as a bare INTEGER column with no FOREIGN KEY, between the tables `endless
+// correct` can touch. Nothing in the schema names them, so nothing told anyone
+// when a session reference drifted off the list. This test derives the
+// expectation from the live schema and the target list, the way
 // TestProjectReferences_CoversEverySchemaReference in internal/monitor does
-// for the projects guard list, and fails in both directions: a schema
-// reference the list lacks, and a list row the schema no longer holds.
+// for the projects guard list, and fails in both directions: a reference the
+// list lacks, and a list row the schema or the target list no longer holds.
 //
-// White-box, like epic_derivation_test.go beside it: undeclaredRefs is
-// unexported, and exporting it for one test would widen the package's surface
-// for nothing.
+// The scope is the ledger's, not the schema's. A machine-local table written
+// outside the ledger (errors, error_triage, rater_claims and the like, per
+// E-2257) is never a correction target, so correct never writes or deletes
+// its rows and none of its task or session ids is a reference this list has
+// any reason to hold. The forward direction therefore looks only at tables a
+// CorrectionTarget names, and the reverse direction fails on a listed row
+// whose table is outside that set.
+//
+// White-box, like epic_derivation_test.go beside it: undeclaredRefs and
+// correctionTargets are unexported, and exporting them for one test would
+// widen the package's surface for nothing.
 package events
 
 import (
@@ -20,30 +29,41 @@ import (
 )
 
 // referenceRules names the columns the test recognizes as a reference: an
-// INTEGER column outside the referenced table whose name contains the word.
+// INTEGER column, in a target table other than the referenced one, whose name
+// contains the word.
 //
 // THIS IS THE TEST'S LIMIT. It is only as good as the naming convention: a
-// column that holds a sessions id without "session" in its name escapes both
-// this test and the list, and neither will say so. Every current reference
-// follows the convention — session_id, changed_by_session, asked_by_session,
-// created_by_session, accepted_session_id — so the rule is sound today, and a
-// column named outside it is a review question, not something this test can
-// catch. The rule is derived from PRAGMA table_info, never from the SQL text:
-// a table altered by ADD COLUMN ends with `, col TYPE);` on its closing line,
-// which defeats a regex anchored on a newline before the paren, and a manual
-// pass over schema.sql got the list wrong in both directions for that reason.
+// column that holds a sessions id without "session" in its name, or a tasks
+// id without "task" in its name, escapes both this test and the list, and
+// neither will say so. Every current reference follows the convention
+// (session_id, changed_by_session, asked_by_session, created_by_session,
+// task_id), so the rule is sound today, and a column named outside it is a
+// review question, not something this test can catch. Rows the list holds
+// under a condition — task_deps.source_id when source_type = 'task',
+// decision_relations.target_id when target_kind = 'decision' — are outside
+// the naming rule too, and are checked only in the reverse direction.
+//
+// The rule reads PRAGMA table_info, never the SQL text: a table altered by
+// ADD COLUMN ends with `, col TYPE);` on its closing line, which defeats a
+// regex anchored on a newline before the paren, and a manual pass over
+// schema.sql got the list wrong in both directions for that reason.
 var referenceRules = []struct {
 	Word, RefTable, RefColumn string
 }{
 	{"session", "sessions", "id"},
+	{"task", "tasks", "id"},
+	{"decision", "decisions", "id"},
+	{"project", "projects", "id"},
 }
 
-// TestUndeclaredRefs_CoverEverySchemaReference fails when undeclaredRefs and
-// the live schema disagree: a column the rule recognizes as a reference that
-// declares no FOREIGN KEY and is missing from the list, or a list row whose
-// table or column no longer exists or now declares a FOREIGN KEY.
-func TestUndeclaredRefs_CoverEverySchemaReference(t *testing.T) {
+// TestUndeclaredRefs_CoverEveryTargetReference fails when undeclaredRefs, the
+// live schema and the target list disagree: a column of a target table the
+// rule recognizes as a reference that declares no FOREIGN KEY and is missing
+// from the list, or a list row whose table or column no longer exists, now
+// declares a FOREIGN KEY, or is not a table any correction target names.
+func TestUndeclaredRefs_CoverEveryTargetReference(t *testing.T) {
 	db := newDerivationDB(t)
+	targets := targetTables()
 
 	listed := map[string]undeclaredRef{}
 	for _, r := range undeclaredRefs {
@@ -53,6 +73,9 @@ func TestUndeclaredRefs_CoverEverySchemaReference(t *testing.T) {
 	found := 0
 	for _, rule := range referenceRules {
 		for _, ref := range schemaReferences(t, db, rule.Word, rule.RefTable) {
+			if !targets[ref.Table] {
+				continue // outside correct's reach: not a reference this list holds
+			}
 			found++
 			key := ref.Table + "." + ref.Column
 			r, ok := listed[key]
@@ -72,11 +95,18 @@ func TestUndeclaredRefs_CoverEverySchemaReference(t *testing.T) {
 		t.Fatal("no undeclared references found — the query is wrong, not the schema")
 	}
 
-	// The other direction: every row of the list names a column that exists
-	// and still declares no FOREIGN KEY. A row that names nothing is a stale
-	// entry; one whose column now declares a key is redundant with
-	// PRAGMA foreign_key_list, which the same checks already read.
+	// The other direction: every row of the list names a column of a target
+	// table that exists and still declares no FOREIGN KEY. A row that names
+	// nothing is a stale entry; one whose column now declares a key is
+	// redundant with PRAGMA foreign_key_list, which the same checks already
+	// read; one in a table no target names is outside correct's reach.
 	for _, r := range undeclaredRefs {
+		if !targets[r.Table] {
+			t.Errorf("undeclaredRefs lists %s.%s, but no correction target names %s: correct "+
+				"never writes or deletes its rows, so the reference is outside its scope — remove it",
+				r.Table, r.Column, r.Table)
+			continue
+		}
 		if !columnExists(t, db, r.Table, r.Column) {
 			t.Errorf("undeclaredRefs lists %s.%s, which the schema no longer holds — remove it",
 				r.Table, r.Column)
@@ -91,6 +121,19 @@ func TestUndeclaredRefs_CoverEverySchemaReference(t *testing.T) {
 				r.Table, r.Column)
 		}
 	}
+}
+
+// targetTables is the set of tables a CorrectionTarget names: the tables
+// `endless correct` can write or delete, and so the only tables whose
+// references concern it.
+func targetTables() map[string]bool {
+	out := map[string]bool{}
+	for _, t := range correctionTargets {
+		if t.Table != "" {
+			out[t.Table] = true
+		}
+	}
+	return out
 }
 
 // schemaRef is one column the naming rule recognizes as an undeclared

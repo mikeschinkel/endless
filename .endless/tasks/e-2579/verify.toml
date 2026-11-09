@@ -6,7 +6,7 @@ schema = 1
 task   = "E-2579"
 
 [[check]]
-name   = "undeclaredRefs is pinned to the live schema; a session delete is refused while update, insert and annotate work"
+name   = "undeclaredRefs is pinned to the live schema within the target tables; a session delete is refused while update, insert and annotate work"
 runner = "gotest"
 paths  = ["./internal/events/...", "./internal/correctcmd/..."]
 
@@ -21,14 +21,24 @@ sh       = "grep -c 'THIS IS THE TEST.S LIMIT' internal/events/correction_refs_t
 equals   = "1"
 
 [[check]]
-name     = "the six session entries are present beside session_notices.session_id, grouped by table (seven matches)"
-sh       = "grep -cE '^\t\\{\"(errors|errors_sources|error_triage|session_notices)\", \"(session_id|accepted_session_id|declined_session_id|changed_by_session)\", \"sessions\", \"id\", \"\"\\},' internal/events/correction.go"
-equals   = "7"
+name     = "the one missing reference inside correct's scope, session_notices.changed_by_session, is on the list"
+sh       = "grep -c 'changed_by_session\", \"sessions\", \"id\"' internal/events/correction.go"
+equals   = "1"
 
 [[check]]
-name     = "a comment beside the six records that no current check reads them and the test keeps the list complete"
+name     = "no machine-local table outside correct's scope is on the list"
+sh       = "grep -cE '^\t\\{\"(errors|errors_sources|error_triage|rater_claims)\",' internal/events/correction.go; true"
+equals   = "0"
+
+[[check]]
+name     = "a comment beside the entry records that no current check reads it and the test keeps the list complete"
 sh       = "grep -c 'No current check reads' internal/events/correction.go"
-equals   = "2"
+equals   = "1"
+
+[[check]]
+name     = "the list's comment states its scope is the ledger's, not the schema's"
+sh       = "grep -c 'Its scope is the ledger' internal/events/correction.go"
+equals   = "1"
 
 [[check]]
 name     = "the projector's replay comment names temp-database projection, not a routine rebuild of the live database"

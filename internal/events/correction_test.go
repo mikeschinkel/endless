@@ -605,20 +605,13 @@ func TestWriter_ConcurrentAppendsStayWholeLines(t *testing.T) {
 }
 
 // Sessions are never deleted (ED-1655, E-2579): a correcting delete is refused
-// naming the decision, while update, insert and annotate on a session still
-// work. Before this, `correct session <id> delete` counted no referrer for an
-// error_triage row naming the session and deleted it, and the freed id went to
-// the next session created.
+// naming the rule, while update, insert and annotate on a session still work.
+// Before this, `correct session <id> delete` deleted a session no listed
+// referrer named, and the freed id went to the next session created.
 func TestCorrection_SessionDeleteIsRefused(t *testing.T) {
 	db := withExecutorDB(t)
 	if _, err := db.Exec(`INSERT INTO sessions (id, project_id, state) VALUES (7, 1, 'working')`); err != nil {
 		t.Fatal(err)
-	}
-	// A referrer the list once lacked: with the delete refused outright it
-	// is never consulted, but the row shows what the old path left dangling.
-	if _, err := db.Exec(`INSERT INTO errors (project_id, session_id, code, severity, source, fingerprint, summary)
-		VALUES (1, 7, 'E1', 'error', 'test', 'fp', 'boom')`); err != nil {
-		t.Fatalf("seed error: %v", err)
 	}
 	_, err := prepare(t, events.CorrectionRequest{Target: "session", Key: "ES-7", Op: events.RowOpDelete,
 		Reason: "a stray session", Project: "test"})
