@@ -7,3 +7,9 @@ id = "P1"
 kind = "deliverable"
 statement = "A user-only endless db recover detects main's schema version being ahead of the installed endless-go, and names both versions"
 verify = "Against a database one version ahead it names both versions; against one at the installed version it says there is nothing to recover and changes nothing"
+
+[[item]]
+id = "P2"
+kind = "deliverable"
+statement = "Recover picks the backup the unwanted migration took just before it applied, by its link to that migration, never the newest"
+verify = "With a newer scheduled backup present, the pre-migration backup is the one chosen"
