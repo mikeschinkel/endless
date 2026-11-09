@@ -28,7 +28,12 @@ a failed land.
 - A pass stays a record: the commit it tested and the main commit verify
   rebased onto (E-2263 adds the rebase).
 - One Go function answers whether the latest pass stands: main has not moved
-  past the recorded main commit, and the measure in section 1 is unchanged.
+  past the recorded main commit in any file outside `.endless/`, and the
+  measure in section 1 is unchanged. Commits on main that touch only
+  `.endless/` (another task's CTRF report, ledger, mirrors, lessons) are
+  Endless's bookkeeping and never void a pass (ED-1657). The pass compares
+  content, never commit ids, so a land's rebase that rewrote the branch's
+  SHAs but left its lines alone leaves the pass standing (absorbs E-2582).
 - `task show`, `task next`, `session status` and the land call it. Nothing
   else stores it.
 - The land refuses when no pass stands and names `verify` as the next command.
@@ -43,7 +48,9 @@ a failed land.
 A suite proving: a clean rebase with context drift leaves the measure equal; a
 change to an added line changes it; a commit touching only `.endless/` leaves it
 equal; the gate accepts a reconciliation across such a rebase; a pass survives a
-rebase onto an unmoved main and an Endless auto-commit; a pass stops standing
+rebase onto an unmoved main, an Endless auto-commit, and a main commit that
+touches only `.endless/`; a pass survives a refused land that rewrote the
+branch's commit ids; a pass stops standing
 when main moves or the branch's own lines change; the land refuses with the
 verify instruction in both cases; a failed land no longer changes the task's
 status; no `unlanded` status remains.
