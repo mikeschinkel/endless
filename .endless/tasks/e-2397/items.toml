@@ -13,3 +13,9 @@ id = "P2"
 kind = "deliverable"
 statement = "Recover picks the backup the unwanted migration took just before it applied, by its link to that migration, never the newest"
 verify = "With a newer scheduled backup present, the pre-migration backup is the one chosen"
+
+[[item]]
+id = "P3"
+kind = "deliverable"
+statement = "A maintenance lock that every Endless opener honors (CLI, hooks, tmux status line, monitors, jobs) by refusing quietly while it is set"
+verify = "Each opener, run while the lock is set, refuses without opening or creating a database"
