@@ -19,3 +19,9 @@ id = "P3"
 kind = "deliverable"
 statement = "A go test process whose package lives in a task worktree refuses the main database"
 verify = "A Go test run from a worktree that resolves main gets the ED-1601 refusal"
+
+[[item]]
+id = "P4"
+kind = "deliverable"
+statement = "Only the installed release and the migration binary that worktree land builds may migrate the main database forward"
+verify = "Any other build pointed at a main database one version behind refuses to migrate it and leaves it unchanged"
