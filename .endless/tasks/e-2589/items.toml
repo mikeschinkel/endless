@@ -18,7 +18,7 @@ kind = "deliverable"
 statement = "A failed git remote operation against github.com asks GitHub's status API, and while Git Operations is degraded opens an outage record instead of raising a fault, an authentication failure included"
 
 [[item]]
-id = "P12"
+id = "P17"
 kind = "deliverable"
 statement = "A stop on a self-clearing API error during an incident on Anthropic's status page opens an Anthropic outage instead of a fault"
 
@@ -28,12 +28,12 @@ kind = "deliverable"
 statement = "When the status API fails or reports no incident, the failure is handled as before the change"
 
 [[item]]
-id = "P13"
+id = "P18"
 kind = "deliverable"
 statement = "One outage-check job polls each provider with an open outage once a minute, makes no request when none is open, and closes the outage when the component reports operational"
 
 [[item]]
-id = "P14"
+id = "P19"
 kind = "deliverable"
 statement = "Closing a GitHub outage makes main-sync due at once"
 
@@ -43,12 +43,12 @@ kind = "deliverable"
 statement = "session status and session monitor show each open outage on its own line in a non-warning colour with no action hint"
 
 [[item]]
-id = "P15"
+id = "P20"
 kind = "deliverable"
 statement = "endless errors list shows open outages under their own heading, and --all adds closed ones"
 
 [[item]]
-id = "P16"
+id = "P21"
 kind = "deliverable"
 statement = "Agents receive open outages through hook context"
 
@@ -81,3 +81,8 @@ statement = "docs/errors.md and the guide describe transient failures and outage
 id = "P11"
 kind = "exclusion"
 statement = "Does not add status providers beyond GitHub and Anthropic"
+
+[[item]]
+id = "P22"
+kind = "deliverable"
+statement = "Each closed run of transient failures records its fingerprint, occurrence count, and time to clear or that it became a fault"
