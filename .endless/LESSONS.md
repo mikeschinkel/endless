@@ -8065,3 +8065,7 @@ Situation: after E-2278 landed, an endless task update run from inside the stale
 ### [2026-11-09] Check a fault's evidence before naming its cause
 While triaging recorded faults after E-2578, I told Mike that WARN-0033 came from tmux servers shutting down and that main-sync failed because his SSH key was unavailable for days. Both were guesses from the message text. Mike's tmux server had run since Oct 16, and 'no server running' is how tmux words any refused connection, including a stalled live server. The SSH failures were two short windows, and the longer one matched a GitHub incident. Mike pushed back on both. Before stating a cause to Mike, check it against the occurrence times, the process and server state, and outside status pages, and say plainly when the cause is unconfirmed.
 - **Project**: endless
+
+### [2026-11-09] Do not raise a landed suite's red check in a handoff; clear everything before the verify command
+Handing off E-2571, I gave Mike the verify command and then added that E-2010's landed verify suite had a check my change breaks and that I had left it alone. Mike said a handoff must have everything cleared before the verify command, and that the paragraph was unclear. Per .endless/tasks/CLAUDE.md a landed suite is a one-time land gate, nothing re-runs it, and its later result says nothing, so there was nothing to clear and nothing to report. Either resolve a leftover before the handoff or, when the project's rules say it is not an issue, leave it out entirely.
+- **Project**: endless
