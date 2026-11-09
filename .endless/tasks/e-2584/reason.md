@@ -1,0 +1,1 @@
+Folded into E-2583: the measure and the pass check share one cause and one plan (ED-1550).
