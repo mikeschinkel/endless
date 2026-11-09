@@ -31,3 +31,9 @@ id = "P5"
 kind = "deliverable"
 statement = "The restore copies the backup beside the database and renames it into place, so the path is never empty; db restore uses the same path"
 verify = "An opener during the restore window never finds an empty path or creates a fresh database, through recover or db restore"
+
+[[item]]
+id = "P6"
+kind = "deliverable"
+statement = "After restoring, recover checks the schema version, PRAGMA integrity_check, and row counts against the backup"
+verify = "A restored copy that differs from its backup is reported as a failure"
