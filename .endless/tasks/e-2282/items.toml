@@ -58,3 +58,8 @@ statement = "Does not change the wording or exit behaviour of record_pass's othe
 id = "P10"
 kind = "exclusion"
 statement = "Does not change where a failing run's report is written"
+
+[[item]]
+id = "P11"
+kind = "deliverable"
+statement = "A global endless running inside a self-dev worktree asks the installed endless-go for the status and session-state vocabularies, and only the worktree's own Python asks the worktree's bin/endless-go"
