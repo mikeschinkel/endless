@@ -8077,3 +8077,7 @@ After E-2571 landed I twice brought up that E-2010's landed verify suite had a c
 ### [2026-11-09] Read a time in a status line as Mike means it before correcting it
 While designing the outage line for E-2589, Mike proposed 'Outage[Github]: Degraded for 09:49'. I assumed 'for' was a slip for 'since' and changed it to a start time. Mike meant a duration: he finds an elapsed time easier to reason about than a clock time he must subtract from the current time. When Mike's wording looks like a slip, ask or take it literally before 'correcting' it, and in status lines prefer elapsed durations over start times.
 - **Project**: endless
+
+### [2026-11-09] A task spawned moments ago is not an orphan yet
+In /whats-left right after Mike spawned E-2397, its board row showed underway with no claim, and I listed it as a possibly failed spawn. Mike: 'You checked too soon.' The spawned session claims the task a little after the spawn returns. When a task was spawned in the last few minutes and shows no claim, re-check before reporting it, rather than putting it on Mike's list.
+- **Project**: endless
