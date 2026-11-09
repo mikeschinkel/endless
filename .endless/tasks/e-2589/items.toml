@@ -91,3 +91,8 @@ statement = "Does not add status providers beyond GitHub and Anthropic"
 id = "P22"
 kind = "deliverable"
 statement = "Each closed run of transient failures records its fingerprint, occurrence count, and time to clear or that it became a fault"
+
+[[item]]
+id = "P24"
+kind = "deliverable"
+statement = "Fix tests/test_plan_items.py's terminal-size stub, which aborted the whole pytest run by breaking pytest's own reporter (landed by E-2353)"
