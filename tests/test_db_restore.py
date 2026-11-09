@@ -418,42 +418,39 @@ def test_restore_does_not_migrate_the_restored_database(target, no_holders):
     assert tables_of(target) == expected
 
 
-def test_failed_verification_names_the_parked_copy(target, no_holders,
-                                                   monkeypatch):
-    """integrity_check != ok must fail loudly, and say how to undo the restore."""
+def test_a_failed_swap_is_relayed_as_go_raised_it(target, no_holders,
+                                                  monkeypatch):
+    """The install and its verification moved to Go (E-2397: `endless-go event
+    swap`, shared with `db recover`). Its failure modes — a copy that fails
+    partway, a restored file that does not match its backup — are tested in
+    internal/dbrecover; here the point is only that Python relays Go's refusal,
+    which names the parked copy, rather than masking it."""
+    from endless import agent_help, event_bridge
     make_db(target, "live")
     make_db(db_restore.backups_dir(target) / "endless-20260810-010000.db", "backup")
-    monkeypatch.setattr(db_restore, "_reestablish_wal",
-                        lambda path: ("wal", "*** in database main ***"))
+
+    def refused(backup, stamp):
+        raise agent_help.relay(
+            "The restore completed but it does not match its backup. "
+            "The pre-restore database is at /parked/endless-x.db", exit_code=1)
+
+    monkeypatch.setattr(event_bridge, "swap_db", refused)
 
     with pytest.raises(click.ClickException) as e:
         db_restore.run_restore(None, dry_run=False, force=False)
 
-    parked = list(db_restore.pre_restore_dir(target).glob("endless-*.db"))
-    assert len(parked) == 1
-    assert str(parked[0]) in str(e.value)
-    assert "integrity_check" in str(e.value)
+    assert "/parked/endless-x.db" in str(e.value)
 
 
-def test_a_failed_copy_names_the_parked_copy_instead_of_raising_oserror(
-        target, no_holders, monkeypatch):
-    """Disk full mid-restore is a plausible 5am outcome; a traceback is not the
-    answer when the parked copy's path is what the user needs."""
+def test_restore_takes_and_releases_the_maintenance_lock(target, no_holders):
+    """The swap runs under the maintenance lock and leaves none behind."""
     make_db(target, "live")
     make_db(db_restore.backups_dir(target) / "endless-20260810-010000.db", "backup")
 
-    def boom(*args, **kwargs):
-        raise OSError(28, "No space left on device")
+    db_restore.run_restore(None, dry_run=False, force=False)
 
-    monkeypatch.setattr(db_restore, "_copy_into_place", boom)
-
-    with pytest.raises(click.ClickException) as e:
-        db_restore.run_restore(None, dry_run=False, force=False)
-
-    parked = list(db_restore.pre_restore_dir(target).glob("endless-*.db"))
-    assert len(parked) == 1
-    assert str(parked[0]) in str(e.value)
-    assert marker_of(parked[0]) == "live"
+    assert marker_of(target) == "backup"
+    assert not Path(f"{target}{db.MAINTENANCE_SUFFIX}").exists()
 
 
 # ---------------------------------------------------------------------------

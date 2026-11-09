@@ -296,6 +296,15 @@ func Loop(cfg LoopConfig) {
 		fireJobs(watch.tick(jobsInFlight.Load()))
 		cols := DetectCols(cfg.ColsOverride, cfg.FallbackCols)
 		rows, err := cfg.Render(&b, cols, cfg.Color)
+		if err != nil && monitor.UnderMaintenance(err) {
+			// E-2397: the database is locked for `db recover` or `db
+			// restore`. The render's DB() call has already let go of this
+			// view's connection; say so in one line and keep ticking, so the
+			// view comes back by itself on the restored file.
+			b.Reset()
+			fmt.Fprintln(&b, Strong("Endless database under maintenance — waiting", cfg.Color))
+			rows, err = 1, nil
+		}
 		if err != nil {
 			exit(err)
 			return false

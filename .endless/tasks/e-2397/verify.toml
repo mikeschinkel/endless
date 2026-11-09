@@ -1,0 +1,53 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2397 and records what was true when E-2397
+# landed. Edit it only if you ARE E-2397. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+schema = 1
+task   = "E-2397"
+
+# The lock, the pre-migration links, and recovery itself against real
+# databases: current changes nothing (P1), the linked backup beats a newer one
+# (P2), a failed install and a held handle both clear the lock (P4), the path is
+# never empty mid-swap (P5), a restored copy that drifts from its backup fails
+# (P6), and a landable branch's land command is named (P7).
+[[check]]
+name   = "lock, links and recovery (Go)"
+runner = "gotest"
+paths  = ["./internal/dbmaint/...", "./internal/dbrecover/..."]
+
+# Every Go opener honors the lock at the connect (P3): it refuses without
+# creating a database, lets go of a long-lived connection and reconnects after,
+# ignores a stale lock; connect-time migrations link a fresh backup; retention
+# keeps a linked backup over a newer one in its hour.
+[[check]]
+name   = "the connect honors the lock and links its backup (Go)"
+runner = "gotest"
+tests  = ["TestDB_UnderTheLockRefusesWithoutCreatingADatabase",
+          "TestDB_LetsGoOfItsConnectionUnderTheLockAndReconnectsAfter",
+          "TestDB_IgnoresALockWhoseHolderHasExited",
+          "TestBackupDB_RefusesUnderTheLock",
+          "TestConnect_BehindLinksAFreshPreMigrationBackup",
+          "TestPruneBackups_KeepsALinkedBackupOverANewerOneInItsHour"]
+paths  = ["./internal/monitor/..."]
+
+# The migration-only executable may link the lock leaf, and nothing else new.
+[[check]]
+name   = "endless-migrate links only migration machinery"
+runner = "gotest"
+tests  = ["TestMigrateExecutable_LinksNothingButTheMigrationMachinery"]
+paths  = ["./cmd/endless-migrate/..."]
+
+# The Python half: get_db honors the lock, `endless db recover` end to end, and
+# `db restore` on the shared Go swap (P5).
+[[check]]
+name   = "db recover and db restore (Python)"
+runner = "pytest/uv"
+paths  = ["tests/test_db_recover.py", "tests/test_db_restore.py"]
+
+# A real recover waiting on a held handle under the lock: every Go opener run in
+# that window refuses quietly and creates nothing, the path is never empty, and
+# the linked backup lands with the lock cleared.
+[[check]]
+name     = "openers during a real recovery window"
+sh       = "bash \"$ENDLESS_VERIFY_DIR/recover_window.sh\" 2>&1"
+contains = "ok: the lock is clear"

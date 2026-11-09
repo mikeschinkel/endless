@@ -54,6 +54,10 @@ func Run(args []string) {
 		runUpgrade()
 	case "backup":
 		runBackup()
+	case "recover":
+		runRecover(args[1:])
+	case "swap":
+		runSwap(args[1:])
 	case "reap-worktrees":
 		runReapWorktrees(args[1:])
 	default:
@@ -78,7 +82,7 @@ func Run(args []string) {
 func usageText() string {
 	return strings.Join([]string{
 		"Usage: endless-go event <command> [flags]",
-		"Commands: emit, void, validate-db, rebuild-db, migrate, upgrade, backup, reap-worktrees, commit-doc, commit-verify-report",
+		"Commands: emit, void, validate-db, rebuild-db, migrate, upgrade, backup, recover, swap, reap-worktrees, commit-doc, commit-verify-report",
 	}, "\n") + "\n"
 }
 
@@ -848,6 +852,11 @@ func runUpgrade() {
 	// upgrade did not happen the database is still at the version nothing can
 	// connect to, and there is no second way for the agent to ask for it.
 	fail := func(err error) {
+		// E-2397: schema.OpenExisting honors the maintenance lock with a
+		// bare dbmaint error; it is a wait, not a fault.
+		if monitor.UnderMaintenance(err) {
+			err = monitor.MaintenanceRefusal(err)
+		}
 		exitRelay("event upgrade", "endless-go event upgrade: ", err)
 	}
 
@@ -855,17 +864,35 @@ func runUpgrade() {
 	if err != nil {
 		fail(err)
 	}
-	backup, err := monitor.BackupDB()
-	if err != nil && backup.Path == "" {
-		fail(fmt.Errorf("backing up before upgrading: %w", err))
-	}
 	db, err := schema.OpenExisting(dt.Filepath(path))
 	if err != nil {
 		fail(err)
 	}
 	defer db.Close()
 
-	res, err := schema.Up(context.Background(), db)
+	// A database that is behind gets the linked pre-migration backup
+	// (E-2397), so `endless db recover` can find its way back from this
+	// step; one with nothing to apply gets the ordinary backup it always did.
+	ctx := context.Background()
+	from, err := schema.DBVersion(ctx, db)
+	if err != nil {
+		fail(err)
+	}
+	latest, err := schema.LatestVersion()
+	if err != nil {
+		fail(err)
+	}
+	var backup monitor.BackupResult
+	if from > 0 && from < latest {
+		backup, err = monitor.BackupBeforeMigrate(ctx, from, latest)
+	} else {
+		backup, err = monitor.BackupDB()
+	}
+	if err != nil && backup.Path == "" {
+		fail(fmt.Errorf("backing up before upgrading: %w", err))
+	}
+
+	res, err := schema.Up(ctx, db)
 	if err != nil {
 		fail(fmt.Errorf("upgrading %s (backup at %s): %w", path, backup.Path, err))
 	}

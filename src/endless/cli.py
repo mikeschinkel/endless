@@ -6149,6 +6149,38 @@ def db_restore(backup, dry_run, force):
     run_restore(backup, dry_run, force)
 
 
+@db_cmd.command("recover")
+@click.option("--backup", default=None,
+              help="Restore this backup (a path, or a file in the backups "
+                   "directory) instead of the one linked to the migration.")
+@click.option("--dry-run", is_flag=True,
+              help="Report the versions, the backup, open handles and the "
+                   "land alternative; change nothing.")
+@click.option("--force", is_flag=True,
+              help="Restore even though processes still hold the database "
+                   "open after the wait.")
+@click.option("--wait", type=float, default=30.0, show_default=True,
+              help="Seconds to wait for open handles to close.")
+def db_recover(backup, dry_run, force, wait):
+    """Undo a migration the database should not have taken.
+
+    For a database whose schema version is ahead of this endless — every
+    command then refuses it. Restores the backup that migration took just
+    before it applied, found by its link to the migration, never the newest.
+    Holds a maintenance lock while it works, which every Endless opener honors
+    by refusing quietly; waits for open handles to close and names any that
+    remain; copies the backup beside the database and renames it into place;
+    then checks the schema version, PRAGMA integrity_check and row counts
+    against the backup. The replaced database is kept under
+    <config dir>/pre-restore/.
+
+    When the branch that migrated the database can land, says so: landing it
+    is the cheaper fix. Run --dry-run first.
+    """
+    from endless.db_recover import run_recover
+    run_recover(backup, dry_run, force, wait)
+
+
 @db_cmd.command("move-section")
 @click.option("--from", "from_name", required=True,
               help="Content holding the sections (e.g. notes)")

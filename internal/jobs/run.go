@@ -101,6 +101,11 @@ func RunDue(ctx context.Context) (result Result) {
 		// E-2020: a schema refusal is the shared "connect" incident, not a
 		// scheduling fault — the remedy is the binary or the database, not
 		// the runner.
+		// E-2397: no job runs under the maintenance lock, and missing a
+		// tick for it is not a scheduling fault.
+		if monitor.UnderMaintenance(err) {
+			goto end
+		}
 		if monitor.RecordSchemaRefusal("jobs", err) {
 			goto end
 		}

@@ -72,6 +72,12 @@ func runStatusLine(args []string) {
 		//
 		// A schema refusal (E-2020) goes to ERR-0020 instead, under the one
 		// "connect" incident every silent surface shares.
+		// E-2397: under the maintenance lock the bar shows the placeholder
+		// and records nothing — the lock is deliberate and clears itself.
+		if monitor.UnderMaintenance(err) {
+			fmt.Print(placeholder())
+			return
+		}
 		if monitor.RecordSchemaRefusal("tmux:status-line", err) {
 			fmt.Print(placeholder())
 			return

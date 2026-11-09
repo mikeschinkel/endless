@@ -18,9 +18,11 @@ import (
 	"github.com/mikeschinkel/go-dt"
 
 	"github.com/mikeschinkel/endless/internal/dbcontext"
+	"github.com/mikeschinkel/endless/internal/dbmaint"
 	"github.com/mikeschinkel/endless/internal/gatekind"
 	"github.com/mikeschinkel/endless/internal/processkind"
 	"github.com/mikeschinkel/endless/internal/rating"
+	"github.com/mikeschinkel/endless/internal/refusal"
 	"github.com/mikeschinkel/endless/internal/sessiontaskrelation"
 	"github.com/mikeschinkel/endless/internal/tasktype"
 )
@@ -730,6 +732,11 @@ func DB() (*sql.DB, error) {
 	if err := guardWorktreeDBContext(); err != nil {
 		return nil, err
 	}
+	dbMu.Lock()
+	defer dbMu.Unlock()
+	if err := honorMaintenance(DBPath()); err != nil {
+		return nil, err
+	}
 	dbOnce.Do(func() {
 		path := DBPath()
 		if refusesMainDB(candidateBuild(), isMainDB(path)) {
@@ -822,6 +829,57 @@ func DB() (*sql.DB, error) {
 	return dbConn, dbErr
 }
 
+// dbMu serializes DB() so the maintenance release below cannot race a
+// goroutine (the monitor's job runner) that is mid-connect.
+var dbMu sync.Mutex
+
+// honorMaintenance is the maintenance lock at the application's connect
+// (E-2397). It runs on EVERY call, not once: a long-lived process — the
+// session-status monitor, which holds its connection for the life of the pane —
+// has to let go when `endless db recover` or `db restore` takes the lock, and
+// its next DB() call is the moment it can. So while the lock is in force this
+// closes the cached connection (and any refused one kept for faults), resets
+// the once, and refuses; when the lock clears, the next call connects afresh
+// and finds the restored file rather than the inode that was replaced.
+//
+// The refusal is NO-REPORT and quiet by design: the silent surfaces (hook,
+// status line, jobs, monitor frame) match dbmaint.ErrMaintenance and render
+// nothing, and an interactive command prints one line saying what it waits
+// for. Nothing is recorded as a fault: maintenance is the user's own act.
+func honorMaintenance(path string) error {
+	err := dbmaint.Check(path)
+	if err == nil {
+		return nil
+	}
+	if dbConn != nil {
+		_ = dbConn.Close()
+		dbConn = nil
+	}
+	if faultConn != nil {
+		_ = faultConn.Close()
+		faultConn = nil
+	}
+	dbErr = nil
+	dbOnce = &sync.Once{}
+	return MaintenanceRefusal(err)
+}
+
+// UnderMaintenance reports whether err is the maintenance lock's refusal. The
+// silent surfaces — the hook, the tmux status line, the job runner, the live
+// monitor — test it first and render nothing: the lock is the user's own act,
+// so it is neither a fault to record nor a line to paint over a TUI.
+func UnderMaintenance(err error) bool {
+	return errors.Is(err, dbmaint.ErrMaintenance)
+}
+
+// MaintenanceRefusal classifies a maintenance-lock error as NO-REPORT: the
+// lock is someone's deliberate act, it clears on its own, and the remedy is to
+// wait. errors.Is(_, dbmaint.ErrMaintenance) still holds through it.
+func MaintenanceRefusal(err error) error {
+	return refusal.NoReport(err.Error(),
+		"Wait for the database maintenance to finish, then re-run").Cause(err)
+}
+
 func hasTable(db *sql.DB, table string) bool {
 	var count int
 	db.QueryRow("SELECT count(*) FROM sqlite_master WHERE type='table' AND name=?", table).Scan(&count)
@@ -879,7 +937,19 @@ func BackupDB() (BackupResult, error) {
 // every job a context carrying its lease deadline precisely so a slow step
 // cannot outrun the claim protecting it from concurrent execution.
 func BackupDBContext(ctx context.Context) (BackupResult, error) {
+	return backupDB(ctx, false)
+}
+
+// backupDB is BackupDBContext, with fresh true for a backup that must capture
+// THIS moment: it ignores the throttle and, if a backup already wears this
+// second's name, waits for the next second rather than reuse it.
+func backupDB(ctx context.Context, fresh bool) (BackupResult, error) {
 	src := DBPath()
+	// The maintenance lock (E-2397): a backup is an opener like any other,
+	// and the scheduled job firing mid-swap would read a file being replaced.
+	if err := dbmaint.Check(src); err != nil {
+		return BackupResult{}, MaintenanceRefusal(err)
+	}
 	if _, err := os.Stat(src); err != nil {
 		return BackupResult{}, fmt.Errorf("no database at %s: %w", src, err)
 	}
@@ -900,7 +970,7 @@ func BackupDBContext(ctx context.Context) (BackupResult, error) {
 	if err != nil {
 		return BackupResult{}, err
 	}
-	if newest, ok := newestBackup(existing); ok && time.Since(newest.Stamp) < backupThrottle {
+	if newest, ok := newestBackup(existing); ok && !fresh && time.Since(newest.Stamp) < backupThrottle {
 		// A recent backup exists. Name it: the caller reports a path either
 		// way, and reporting the one that already covers this moment is
 		// both true and the path a restore would use.
@@ -915,6 +985,13 @@ func BackupDBContext(ctx context.Context) (BackupResult, error) {
 	// Use SQLite VACUUM INTO for a consistent backup
 	ts := time.Now().Format(backupStampLayout)
 	dst := filepath.Join(backupDir, backupPrefix+ts+backupSuffix)
+	if _, err := os.Stat(dst); err == nil && fresh {
+		// A backup already holds this second's name. VACUUM INTO refuses an
+		// existing file, and reusing it would link a copy older than now.
+		time.Sleep(time.Until(time.Now().Truncate(time.Second).Add(time.Second)))
+		ts = time.Now().Format(backupStampLayout)
+		dst = filepath.Join(backupDir, backupPrefix+ts+backupSuffix)
+	}
 
 	backupDB, err := sql.Open("sqlite", src)
 	if err != nil {

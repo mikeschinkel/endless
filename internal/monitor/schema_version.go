@@ -250,7 +250,7 @@ func reconcileSchema(db *sql.DB, path string) error {
 			return mainMigrationRefusal(path, version, latest)
 		}
 		if version > 0 {
-			if _, err := BackupDBContext(ctx); err != nil {
+			if _, err := BackupBeforeMigrate(ctx, version, latest); err != nil {
 				return upgradeFailedRefusal(path, version, latest,
 					fmt.Errorf("backing up before migrating: %w", err))
 			}

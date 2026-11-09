@@ -69,6 +69,12 @@ func Run(args []string) {
 		// into a stream of identical errors for the user to chase. The fault is
 		// fingerprinted on the mismatch, so fifty events are one incident with
 		// a count of fifty.
+		// E-2397: the maintenance lock is quieter still — no fault either,
+		// because `db recover` or `db restore` set it on purpose and it clears
+		// on its own.
+		if monitor.UnderMaintenance(err) {
+			return
+		}
 		if monitor.RecordSchemaRefusal("hook:"+args[0], err) {
 			return
 		}

@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 	"time"
+
+	"github.com/mikeschinkel/endless/internal/dbmaint"
 )
 
 // Backup retention (E-2121).
@@ -164,7 +166,19 @@ func pruneBackups(dir string, now time.Time) (removed int, err error) {
 		return 0, err
 	}
 
+	// A backup a migration is linked to stays for dbmaint.LinkProtection
+	// whatever its tier says (E-2397): the scheduled backup that wins its
+	// hour must not prune the copy a recovery from that migration restores.
+	links, linkErr := dbmaint.ReadLinks(dir)
+	if linkErr != nil {
+		return 0, fmt.Errorf("read pre-migration links in %s: %w", dir, linkErr)
+	}
+	protected := dbmaint.ProtectedBackups(links, now)
+
 	for _, name := range backupsToPrune(files, now) {
+		if protected[name] {
+			continue
+		}
 		rmErr := os.Remove(filepath.Join(dir, name))
 		if rmErr != nil && !os.IsNotExist(rmErr) {
 			if err == nil {

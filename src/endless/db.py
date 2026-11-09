@@ -1,5 +1,6 @@
 """SQLite database helpers."""
 
+import json
 import os
 import re
 import sqlite3
@@ -19,6 +20,11 @@ def get_db() -> sqlite3.Connection:
     # rather than per command because this is the one place a direct read can
     # begin — a command cannot reach SQLite and forget to declare it.
     provenance.mark_touched()
+    # E-2397: the maintenance lock, checked on every call and before the
+    # cached connection is handed back, so a command never opens — or, through
+    # _init_schema, creates — the database while `db recover` or `db restore`
+    # is swapping it.
+    refuse_under_maintenance(config.DB_PATH)
     if _conn is not None:
         return _conn
     ensure_config_dir()
@@ -65,6 +71,55 @@ def get_db() -> sqlite3.Connection:
         _conn = None
         raise _missing_schema_hint()
     return _conn
+
+
+# The lock file beside the database, as Go's internal/dbmaint names it.
+MAINTENANCE_SUFFIX = ".maintenance"
+
+
+def maintenance_holder(db_path) -> dict | None:
+    """The maintenance lock on `db_path`, or None when none is in force.
+
+    Mirrors internal/dbmaint.Active: a lock whose pid has exited is stale and
+    ignored, so a killed recover cannot lock Endless out; this process's own
+    lock does not bind it; and a file that does not parse is honored, since
+    Go writes it whole and only a hand edit garbles it. A plain file read —
+    no SQLite.
+    """
+    path = f"{db_path}{MAINTENANCE_SUFFIX}"
+    try:
+        with open(path, encoding="utf-8") as f:
+            raw = f.read()
+    except OSError:
+        return None
+    try:
+        lock = json.loads(raw)
+        pid = int(lock.get("pid", 0))
+    except (ValueError, TypeError, AttributeError):
+        return {"pid": 0, "command": f"unreadable lock file {path}"}
+    if pid <= 0 or pid == os.getpid():
+        return None
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return None
+    except PermissionError:
+        pass
+    return lock
+
+
+def refuse_under_maintenance(db_path) -> None:
+    """Refuse, NO-REPORT, while the maintenance lock is in force."""
+    lock = maintenance_holder(db_path)
+    if lock is None:
+        return
+    who = lock.get("command") or "maintenance"
+    raise agent_help.no_report(
+        f"The Endless database is under maintenance ({who}, pid "
+        f"{lock.get('pid')}); nothing was opened. It clears when that command "
+        "finishes.",
+        "Wait for the database maintenance to finish, then re-run",
+    )
 
 
 def _init_schema():

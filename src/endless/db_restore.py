@@ -20,6 +20,11 @@ set aside (database *and* its `-wal`/`-shm`/`-journal` sidecars — a stale side
 beside a fresh file is failure 1 in a bottle), and re-establish WAL plus run
 `PRAGMA integrity_check` afterwards, failing loudly on anything but `ok`.
 
+Since E-2397 the install itself is Go's (`endless-go event swap`, shared with
+`endless db recover`): under the maintenance lock it COPIES the database aside
+and renames the backup into place, so the path is never empty — a third failure,
+2026-10-18, was an opener creating a fresh database in the moved-aside gap.
+
 Two deliberate choices worth naming:
 
 - **Nothing here goes through `db.get_db()`.** That connection auto-migrates the
@@ -355,110 +360,30 @@ class RestoreResult:
     integrity: str = ""
 
 
-def _move_aside(db_path: Path, dest_dir: Path, stamp: str) -> list[Path]:
-    """Move the live database and its sidecars into `dest_dir`, names preserved
-    relative to each other so the parked copy is openable as a unit."""
-    moved = []
-    for src in file_set(db_path):
-        if not src.exists():
-            continue
-        suffix = str(src)[len(str(db_path)):]
-        dest = dest_dir / f"endless-{stamp}.db{suffix}"
-        dest_dir.mkdir(parents=True, exist_ok=True)
-        shutil.move(str(src), str(dest))
-        moved.append(dest)
-    return moved
-
-
-def _copy_into_place(backup: Path, db_path: Path, mode: int | None) -> None:
-    """Copy `backup` (and any sidecars it has) to `db_path`, atomically.
-
-    Written to a temp name in the destination directory and renamed, so an
-    interrupted copy can never leave a half-written file where the database goes.
-    """
-    db_path.parent.mkdir(parents=True, exist_ok=True)
-    for suffix in ("",) + SIDECAR_SUFFIXES:
-        src = Path(str(backup) + suffix)
-        if not src.exists():
-            continue
-        dest = Path(str(db_path) + suffix)
-        tmp = dest.with_name(dest.name + ".restore-tmp")
-        shutil.copyfile(src, tmp)
-        if mode is not None:
-            os.chmod(tmp, mode)
-        os.replace(tmp, dest)
-
-
-def _reestablish_wal(db_path: Path) -> tuple[str, str]:
-    """Put the restored database back into WAL and verify it. Returns
-    (journal_mode, integrity_check)."""
-    conn = sqlite3.connect(str(db_path), timeout=10)
-    try:
-        row = conn.execute("PRAGMA journal_mode=WAL").fetchone()
-        mode = str(row[0]).lower() if row else "unknown"
-        rows = conn.execute("PRAGMA integrity_check").fetchall()
-        integrity = "; ".join(str(r[0]) for r in rows) if rows else "no result"
-    finally:
-        conn.close()
-    return mode, integrity
-
-
 def perform_restore(db_path: Path, backup: Path, stamp: str) -> RestoreResult:
-    """Park the current database, copy the backup into place, restore WAL, verify.
+    """Put the backup in place through Go's atomic swap, and verify it (E-2397).
 
-    Raises a REPORT refusal if the restored file is not WAL or does not pass
-    `PRAGMA integrity_check` — naming the parked copy, because at that point
-    rolling back by hand is the user's next move, and it is theirs because it
-    is a choice about their data rather than about this command.
+    `endless-go event swap` takes the maintenance lock — every Endless opener
+    refuses while it is set — copies the database and its sidecars aside,
+    copies the backup BESIDE the database and renames it into place, so the
+    path is never empty, then re-establishes WAL and checks integrity, schema
+    version and row counts against the backup. It is the same install
+    `endless db recover` uses.
+
+    This used to move the database aside and copy the backup in, and in the gap
+    the tmux status line opened the empty path and SQLite created a fresh
+    database there (2026-10-18). A failure arrives as Go's REPORT refusal,
+    naming the parked copy.
     """
-    mode = None
-    if db_path.exists():
-        mode = db_path.stat().st_mode & 0o777
+    from endless.event_bridge import swap_db
 
-    aside = _move_aside(db_path, pre_restore_dir(db_path), stamp)
-    try:
-        _copy_into_place(backup, db_path, mode)
-        journal_mode, integrity = _reestablish_wal(db_path)
-    except (OSError, sqlite3.Error) as e:
-        # The parked copy is intact; whoever is here at 5am needs its path more
-        # than they need a traceback.
-        parked = _aside_db(aside)
-        undo = (f"\nThe pre-restore database is intact at {parked}; "
-                f"copy it back to {db_path} to undo this."
-                if parked is not None else "")
-        raise agent_help.report(
-            f"The restore failed partway ({e}). {db_path} was moved aside and "
-            "the backup was NOT put in place; the pre-restore database is "
-            + (f"intact at {parked}." if parked is not None
-               else "not kept — the target did not exist before this run."),
-            "whether to roll back to the parked database — the live database "
-            "was moved aside mid-restore",
-            text=f"restore failed: {e}{undo}",
-        ) from e
-
-    result = RestoreResult(aside=aside, journal_mode=journal_mode,
-                           integrity=integrity)
-    if journal_mode != "wal" or integrity != "ok":
-        parked = _aside_db(aside)
-        where = (f"The pre-restore database is at {parked}; copy it back to "
-                 f"{db_path} to undo this."
-                 if parked is not None
-                 else "No pre-restore database was kept — the target did not "
-                      "exist before this run.")
-        raise agent_help.report(
-            f"The restore completed but did not verify: journal_mode "
-            f"{journal_mode} (wanted wal), integrity_check {integrity} "
-            f"(wanted ok). {db_path} now holds the restored copy.",
-            "whether to keep the unverified restore or roll back to the "
-            "parked copy",
-            text=(
-                "restore completed but the result did not verify:\n"
-                f"  journal_mode: {journal_mode} (wanted wal)\n"
-                f"  integrity_check: {integrity} (wanted ok)\n"
-                f"{where}"
-            ),
-        )
-    return result
+    result = swap_db(str(backup), stamp)
+    check = result.get("check") or {}
+    return RestoreResult(
+        aside=[Path(p) for p in result.get("parked") or []],
+        journal_mode=check.get("journal_mode", ""),
+        integrity=check.get("integrity", ""),
+    )
 
 
 def _aside_db(aside: list[Path]) -> Path | None:

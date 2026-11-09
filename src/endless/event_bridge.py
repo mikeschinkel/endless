@@ -467,6 +467,50 @@ def upgrade_db() -> dict:
     return json.loads(result.stdout.strip())
 
 
+def recover_db(backup: str | None, dry_run: bool, force: bool,
+               wait: float) -> dict:
+    """Shell out to `endless-go event recover` (E-2397).
+
+    Go does the whole recovery — detect, pick the linked backup, take the
+    maintenance lock, wait for handles, install, verify, release — and prints
+    the plan as JSON for `endless db recover` to render. Its refusals carry the
+    class Go chose, relayed as-is.
+    """
+    config.require_db_context()  # E-1429
+    event_bin = _resolve_endless_go()
+    args = [event_bin, *config.go_db_context_args(), "event", "recover",
+            f"--wait={wait}s"]
+    if backup:
+        args.append(f"--backup={backup}")
+    if dry_run:
+        args.append("--dry-run")
+    if force:
+        args.append("--force")
+    result = subprocess.run(args, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise _child_refusal(result.stderr, result.returncode, "event recover")
+    return json.loads(result.stdout.strip())
+
+
+def swap_db(backup: str, stamp: str) -> dict:
+    """Shell out to `endless-go event swap`: `db restore`'s install (E-2397).
+
+    Under the maintenance lock, copies the backup beside the database and
+    renames it into place — the path is never empty — then verifies it against
+    the backup. Returns {"parked": [...], "check": {...}}.
+    """
+    config.require_db_context()  # E-1429
+    event_bin = _resolve_endless_go()
+    result = subprocess.run(
+        [event_bin, *config.go_db_context_args(), "event", "swap",
+         f"--backup={backup}", f"--stamp={stamp}"],
+        capture_output=True, text=True,
+    )
+    if result.returncode != 0:
+        raise _child_refusal(result.stderr, result.returncode, "event swap")
+    return json.loads(result.stdout.strip())
+
+
 def backup_db(endless_go_bin: str | None = None) -> dict:
     """Shell out to `endless-go event backup` (VACUUM INTO a timestamped copy).
 

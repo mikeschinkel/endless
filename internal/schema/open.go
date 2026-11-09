@@ -6,6 +6,8 @@ import (
 	"fmt"
 
 	"github.com/mikeschinkel/go-dt"
+
+	"github.com/mikeschinkel/endless/internal/dbmaint"
 )
 
 // UpResult is what Up reports: the version the database was at, the version it
@@ -88,6 +90,15 @@ func OpenExisting(path dt.Filepath) (db *sql.DB, err error) {
 				"No --db main, no --db-dir, no XDG_CONFIG_HOME and no home "+
 				"directory resolved, so there is no way to know which ledger "+
 				"was meant.", path)
+		goto end
+	}
+
+	// The maintenance lock (E-2397) binds the recovery openers too: an
+	// upgrade or a land's migration landing mid-swap would migrate the file
+	// being replaced. The process holding the lock is exempt, which is how
+	// `db recover` reads the database it is maintaining.
+	err = dbmaint.Check(string(path))
+	if err != nil {
 		goto end
 	}
 

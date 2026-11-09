@@ -57,6 +57,15 @@ var allowedEndlessDeps = map[string]bool{
 	// cannot smuggle a fourth package in later without failing right here.
 	"github.com/mikeschinkel/endless/internal/refusal":  true,
 	"github.com/mikeschinkel/endless/internal/agentenv": true,
+
+	// E-2397. The maintenance lock binds every opener, this one included: a
+	// land's `up` running while `endless db recover` swaps the file would
+	// migrate the database being replaced. schema.OpenExisting checks it, so
+	// internal/schema now links internal/dbmaint. It is a leaf on the same
+	// terms as the pair above — the standard library and nothing else, no
+	// database handle and no schema — and holds only the lock and the
+	// pre-migration backup links.
+	"github.com/mikeschinkel/endless/internal/dbmaint": true,
 }
 
 // TestMigrateExecutable_LinksNothingButTheMigrationMachinery is the guard on
