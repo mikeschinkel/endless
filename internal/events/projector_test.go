@@ -227,78 +227,102 @@ func allocatorFloor(t *testing.T, db *sql.DB) int64 {
 	return next
 }
 
-// TestProjectToTempDB_TaskDeletedRetainsRowAndIDFloor is the executor/projector
+// TestProjectToTempDB_TaskRemovalRetainsRowAndIDFloor is the executor/projector
 // parity check for ED-1547 (E-1929), the failure that would otherwise ship
 // looking complete.
 //
 // The executor marks a removed task `removed = 1`. If the projector still
-// replayed task.deleted as a real DELETE, then rebuilding the DB from the ledger
+// replayed task removal as a real DELETE, then rebuilding the DB from the ledger
 // would drop the retained row, MAX(id) would fall back, and the next task
 // allocated would REUSE the removed id — re-orphaning every FK-free row that
 // deliberately outlives its task. Nothing in normal use would surface it.
+//
+// Run under BOTH event spellings (E-2571). task.deleted is the retired name of
+// task.removed and the ledger already holds events of it; RenamedKinds is what
+// sends it to the live handler, and without that step it would fall through to
+// the projector's retired-kind no-op, replay would stop removing, and a rebuild
+// would resurrect every task ever removed. The subtest is what notices.
 //
 // Deliberately NOT verified by rebuilding a real DB: `rebuild-db` is not yet
 // reliable, so a test that used it would risk real data and produce failures
 // attributable to the rebuild rather than to this change. A synthetic event
 // stream into a temp DB exercises the same handler in isolation.
-func TestProjectToTempDB_TaskDeletedRetainsRowAndIDFloor(t *testing.T) {
-	dir := t.TempDir()
+func TestProjectToTempDB_TaskRemovalRetainsRowAndIDFloor(t *testing.T) {
+	for _, kind := range []events.Kind{
+		events.KindTaskRemoved,
+		events.KindTaskDeleted, // retired spelling, still in the ledger
+	} {
+		t.Run(string(kind), func(t *testing.T) {
+			dir := t.TempDir()
 
-	w, err := events.NewWriter(dir, "dead")
-	if err != nil {
-		t.Fatalf("NewWriter: %v", err)
-	}
+			w, err := events.NewWriter(dir, "dead")
+			if err != nil {
+				t.Fatalf("NewWriter: %v", err)
+			}
 
-	appendTaskCreated(t, w, "proj-removal", "900", "5WYM00000001", "Survivor")
-	appendTaskCreated(t, w, "proj-removal", "901", "5WYM00000002", "Doomed")
+			appendTaskCreated(t, w, "proj-removal", "900", "5WYM00000001", "Survivor")
+			appendTaskCreated(t, w, "proj-removal", "901", "5WYM00000002", "Doomed")
 
-	deletedPayload, err := json.Marshal(events.TaskDeletedPayload{Title: "Doomed"})
-	if err != nil {
-		t.Fatalf("marshal deleted payload: %v", err)
-	}
-	appendEvent(t, w, events.Event{
-		V:       events.Version,
-		TS:      "5WYM00000003",
-		Kind:    events.KindTaskDeleted,
-		Project: "proj-removal",
-		Entity:  events.EntityRef{Type: events.EntityTask, ID: "901"},
-		Actor:   events.Actor{Kind: events.ActorCLI, ID: "tester"},
-		Payload: deletedPayload,
-	})
+			removedPayload, err := json.Marshal(events.TaskRemovedPayload{Title: "Doomed"})
+			if err != nil {
+				t.Fatalf("marshal %s payload: %v", kind, err)
+			}
+			appendEvent(t, w, events.Event{
+				V:       events.Version,
+				TS:      "5WYM00000003",
+				Kind:    kind,
+				Project: "proj-removal",
+				Entity:  events.EntityRef{Type: events.EntityTask, ID: "901"},
+				Actor:   events.Actor{Kind: events.ActorCLI, ID: "tester"},
+				Payload: removedPayload,
+			})
 
-	tempPath, _, err := events.ProjectToTempDB(dir)
-	if err != nil {
-		t.Fatalf("ProjectToTempDB: %v", err)
-	}
-	t.Cleanup(func() { os.Remove(tempPath) })
+			tempPath, _, err := events.ProjectToTempDB(dir)
+			if err != nil {
+				t.Fatalf("ProjectToTempDB: %v", err)
+			}
+			t.Cleanup(func() { os.Remove(tempPath) })
 
-	db, err := sql.Open("sqlite", tempPath)
-	if err != nil {
-		t.Fatalf("open temp db: %v", err)
-	}
-	defer db.Close()
+			db, err := sql.Open("sqlite", tempPath)
+			if err != nil {
+				t.Fatalf("open temp db: %v", err)
+			}
+			defer db.Close()
 
-	var removed int
-	if err := db.QueryRow("SELECT removed FROM tasks WHERE id = 901").Scan(&removed); err != nil {
-		t.Fatalf("replayed removal deleted the row instead of marking it: %v", err)
-	}
-	if removed != 1 {
-		t.Errorf("tasks.removed = %d for replayed removal, want 1", removed)
-	}
+			var removed int
+			if err := db.QueryRow("SELECT removed FROM tasks WHERE id = 901").Scan(&removed); err != nil {
+				t.Fatalf("replayed removal deleted the row instead of marking it: %v", err)
+			}
+			if removed != 1 {
+				t.Errorf("tasks.removed = %d for replayed removal, want 1 "+
+					"— a retired spelling is a declared no-op unless RenamedKinds "+
+					"sends it to the live handler", removed)
+			}
 
-	var live int
-	if err := db.QueryRow("SELECT count(*) FROM live_tasks WHERE id = 901").Scan(&live); err != nil {
-		t.Fatalf("count live_tasks: %v", err)
-	}
-	if live != 0 {
-		t.Errorf("removed task visible through live_tasks (%d row(s))", live)
-	}
+			var live int
+			if err := db.QueryRow("SELECT count(*) FROM live_tasks WHERE id = 901").Scan(&live); err != nil {
+				t.Fatalf("count live_tasks: %v", err)
+			}
+			if live != 0 {
+				t.Errorf("removed task visible through live_tasks (%d row(s))", live)
+			}
 
-	// The regression this whole change exists to prevent: the next id allocated
-	// against the rebuilt DB must be ABOVE the removed one, never reuse it.
-	if got := allocatorFloor(t, db); got != 902 {
-		t.Errorf("allocator floor after replaying removal of the highest id = %d, want 902 "+
-			"(a value of 901 means the id was re-freed and would be reused)", got)
+			// The survivor is untouched — removal is not a bulk operation.
+			if err := db.QueryRow("SELECT count(*) FROM live_tasks WHERE id = 900").Scan(&live); err != nil {
+				t.Fatalf("count live_tasks for survivor: %v", err)
+			}
+			if live != 1 {
+				t.Errorf("survivor task 900 live rows = %d, want 1", live)
+			}
+
+			// The regression this whole change exists to prevent: the next id
+			// allocated against the rebuilt DB must be ABOVE the removed one,
+			// never reuse it.
+			if got := allocatorFloor(t, db); got != 902 {
+				t.Errorf("allocator floor after replaying removal of the highest id = %d, want 902 "+
+					"(a value of 901 means the id was re-freed and would be reused)", got)
+			}
+		})
 	}
 }
 

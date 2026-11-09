@@ -97,16 +97,16 @@ func taskFieldsUpdatedEvent(t *testing.T, taskID int64, actor Actor) *Event {
 	}
 }
 
-func taskDeletedEvent(t *testing.T, taskID int64, actor Actor) *Event {
+func taskRemovedEvent(t *testing.T, taskID int64, actor Actor) *Event {
 	t.Helper()
-	payload, err := json.Marshal(TaskDeletedPayload{Title: "probe"})
+	payload, err := json.Marshal(TaskRemovedPayload{Title: "probe"})
 	if err != nil {
 		t.Fatalf("marshal payload: %v", err)
 	}
 	return &Event{
 		V:       1,
 		TS:      "2026-05-16T00:00:02",
-		Kind:    KindTaskDeleted,
+		Kind:    KindTaskRemoved,
 		Project: "test",
 		Entity:  EntityRef{Type: EntityTask, ID: strconv.FormatInt(taskID, 10)},
 		Actor:   actor,
@@ -504,8 +504,8 @@ func TestSessionTasks_IdempotentReplay(t *testing.T) {
 	}
 }
 
-// TestSessionTasks_DeletedTaskRetainsRow verifies the no-FK design: a
-// task.deleted records a session_tasks row, and the row survives the removal.
+// TestSessionTasks_RemovedTaskRetainsRow verifies the no-FK design: a
+// task.removed records a session_tasks row, and the row survives the removal.
 // If session_tasks had a FK on task_id with ON DELETE CASCADE, this test would
 // fail.
 //
@@ -514,14 +514,14 @@ func TestSessionTasks_IdempotentReplay(t *testing.T) {
 // is RETAINED and marked, and that it is invisible through live_tasks. That
 // retention is what makes the surviving session_tasks row safe — its task id can
 // never be re-minted, so the row can never reattach to unrelated work.
-func TestSessionTasks_DeletedTaskRetainsRow(t *testing.T) {
+func TestSessionTasks_RemovedTaskRetainsRow(t *testing.T) {
 	db := newSessionTasksTestDB(t)
 
 	actor := Actor{Kind: ActorSession, ID: "s1", SessionID: "42"}
 	if _, err := dispatch(db, taskCreatedEvent(t, 100, actor), nil); err != nil {
 		t.Fatalf("dispatch create: %v", err)
 	}
-	if _, err := dispatch(db, taskDeletedEvent(t, 100, actor), nil); err != nil {
+	if _, err := dispatch(db, taskRemovedEvent(t, 100, actor), nil); err != nil {
 		t.Fatalf("dispatch delete: %v", err)
 	}
 

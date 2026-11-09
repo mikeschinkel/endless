@@ -1,11 +1,11 @@
 """Tests for `session touch` (and its aliases `touch` / `session task add`) and
-`session task remove` (E-1696, E-2173, E-2291).
+`session task delete` (E-1696, E-2173, E-2291; named `remove` until E-2571).
 
 Two verbs and an alias that say explicitly what a session's task list holds.
 Capture is otherwise automatic — the Go executors record a row for every task a
 session claims, files or edits — and these cover what automation cannot reach:
 scope entry with no edit at all (`touch`, and since E-2291 its alias `session
-task add`), and a capture that should not have happened (`remove`).
+task add`), and a capture that should not have happened (`delete`).
 
 These run through the real CLI and the real Go executors, so they pin the
 whole path: id normalization, the upgrade-only relation ladder, the goal
@@ -304,20 +304,20 @@ def test_touch_is_reachable_at_the_top_level():
     assert "touch" not in getattr(main.commands["task"], "commands", {})
 
 
-# --- remove -----------------------------------------------------------------
+# --- delete -----------------------------------------------------------------
 
 
-def test_remove_drops_the_association():
+def test_delete_drops_the_association():
     _seed()
     _run("session", "task", "add", "E-500")
     assert _relation(500) == "touched"
 
-    result = _run("session", "task", "remove", "E-500")
+    result = _run("session", "task", "delete", "E-500")
     assert result.exit_code == 0, result.output
     assert _relation(500) is None
 
 
-def test_remove_clears_a_hide_on_the_same_pair():
+def test_delete_clears_a_hide_on_the_same_pair():
     """The two tables are independent, so the hide would otherwise outlive the
     membership — and a re-captured task would return silently suppressed."""
     _seed()
@@ -328,7 +328,7 @@ def test_remove_clears_a_hide_on_the_same_pair():
         (SESSION_ID,),
     )
 
-    result = _run("session", "task", "remove", "E-500")
+    result = _run("session", "task", "delete", "E-500")
     assert result.exit_code == 0, result.output
     assert db.query(
         "SELECT 1 FROM session_hidden_tasks "
@@ -337,7 +337,7 @@ def test_remove_clears_a_hide_on_the_same_pair():
     ) == []
 
 
-def test_remove_refuses_the_session_claim():
+def test_delete_refuses_the_session_claim():
     """Not a false positive by construction: the session claimed that task."""
     _seed()
     db.execute(
@@ -347,14 +347,14 @@ def test_remove_refuses_the_session_claim():
         (SESSION_ID,),
     )
 
-    result = _run("session", "task", "remove", "E-500")
+    result = _run("session", "task", "delete", "E-500")
     assert result.exit_code != 0
     assert _relation(500) == "claimed"
 
 
-def test_remove_refuses_the_session_bound_task():
+def test_delete_refuses_the_session_bound_task():
     """E-2291 P13: a bound task is the session's own as a claimed one is, so
-    remove refuses it the same way and names `session hide --task`."""
+    delete refuses it the same way and names `session hide --task`."""
     _seed()
     db.execute(
         "INSERT INTO session_tasks "
@@ -363,23 +363,23 @@ def test_remove_refuses_the_session_bound_task():
         (SESSION_ID,),
     )
 
-    result = _run("session", "task", "remove", "E-500")
+    result = _run("session", "task", "delete", "E-500")
     assert result.exit_code != 0
     assert "session hide --task" in result.output
     assert _relation(500) == "bound"
 
 
-def test_remove_of_an_untouched_task_is_a_reported_no_op():
+def test_delete_of_an_untouched_task_is_a_reported_no_op():
     """Matches `session unhide --task`: not an error, but never silent."""
     _seed()
 
-    result = _run("session", "task", "remove", "E-500")
+    result = _run("session", "task", "delete", "E-500")
     assert result.exit_code == 0, result.output
     assert "not in this session" in result.output
 
 
-def test_remove_is_scoped_to_one_session():
-    """The invariant a session-resolution regression would break: removing in
+def test_delete_is_scoped_to_one_session():
+    """The invariant a session-resolution regression would break: deleting in
     one session leaves another session's row for the same task untouched."""
     _seed()
     other = 9102
@@ -397,7 +397,16 @@ def test_remove_is_scoped_to_one_session():
             (session_id,),
         )
 
-    result = _run("session", "task", "remove", "E-500")
+    result = _run("session", "task", "delete", "E-500")
     assert result.exit_code == 0, result.output
     assert _relation(500) is None
     assert _relation(500, session_id=other) == "revisited"
+
+
+def test_remove_is_no_longer_a_subcommand():
+    """E-2571 renamed the verb to `delete`, with no alias and no deprecation
+    path: the row really is gone (ED-1547), so the command says so."""
+    _seed()
+    result = _run("session", "task", "remove", "E-500")
+    assert result.exit_code != 0
+    assert "No such command" in result.output

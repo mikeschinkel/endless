@@ -2223,7 +2223,7 @@ def hide_session_tasks(
     claimed task is refused; hiding its mere focus is not.
 
     The write is the Go executor's (`session_tasks.hidden` /
-    `session_tasks.unhidden`), on the same emit path as `session task remove`:
+    `session_tasks.unhidden`), on the same emit path as `session task delete`:
     it validates the ids as a set before applying any, and reports no-ops
     rather than failing on them.
     """

@@ -87,8 +87,21 @@ func ProjectToTempDB(projectRoot string) (string, *ProjectResult, error) {
 	return tempPath, result, nil
 }
 
+// replayEvent routes one ledger event to its projector.
+//
+// The kind is resolved through RenamedKinds first (E-2571), so an event under
+// a retired spelling reaches the live handler for the kind that replaced it.
+// This is the projector's half of the one place a rename is recorded: the
+// ledger holds events under every spelling a kind ever had, and without this
+// step a renamed kind would fall through to the retired-kind no-op in the
+// default branch, replay would stop removing, and a rebuild would resurrect
+// every row ever removed. evt.Kind itself is left as the ledger spells it.
 func replayEvent(db *sql.DB, evt *Event, result *ProjectResult) error {
-	switch evt.Kind {
+	kind := evt.Kind
+	if live, renamed := RenamedKinds[kind]; renamed {
+		kind = live
+	}
+	switch kind {
 	case KindTaskCreated:
 		return replayTaskCreated(db, evt, result)
 	case KindTaskImported:
@@ -99,8 +112,8 @@ func replayEvent(db *sql.DB, evt *Event, result *ProjectResult) error {
 		return replayTaskFieldsUpdated(db, evt, result)
 	case KindTaskMoved:
 		return replayTaskMoved(db, evt, result)
-	case KindTaskDeleted:
-		return replayTaskDeleted(db, evt, result)
+	case KindTaskRemoved:
+		return replayTaskRemoved(db, evt, result)
 	case KindTaskLanded:
 		return replayTaskLanded(db, evt, result)
 	case KindTaskQuestionsAsked:
@@ -141,10 +154,7 @@ func replayEvent(db *sql.DB, evt *Event, result *ProjectResult) error {
 		return replayDecisionObsoleted(db, evt, result)
 	case KindDecisionReinstated:
 		return replayDecisionReinstated(db, evt, result)
-	// Both spellings, one projector (E-2010). This case MUST stay ahead of the
-	// retired-kind no-op in the default branch below: decision.deleted is in
-	// RetiredKinds to stop new writes, not because replaying it does nothing.
-	case KindDecisionRemoved, KindDecisionDeleted:
+	case KindDecisionRemoved:
 		return replayDecisionRemoved(db, evt, result)
 	case KindDecisionRelationCreated:
 		return replayDecisionRelationCreated(db, evt, result)
@@ -169,7 +179,8 @@ func replayEvent(db *sql.DB, evt *Event, result *ProjectResult) error {
 			// retirement still holds it, and replay has to walk past it rather
 			// than record an error per occurrence. The case is spelled out here
 			// so the next reader sees a decision instead of inferring one from
-			// the silence below.
+			// the silence below. A RENAMED kind never lands here: the
+			// resolution through RenamedKinds above already sent it on.
 			return nil
 		}
 		// Skip non-task events silently (sessions, notes, etc.)
@@ -525,8 +536,8 @@ func replayTaskMoved(db *sql.DB, evt *Event, result *ProjectResult) error {
 	return nil
 }
 
-func replayTaskDeleted(db *sql.DB, evt *Event, result *ProjectResult) error {
-	var p TaskDeletedPayload
+func replayTaskRemoved(db *sql.DB, evt *Event, result *ProjectResult) error {
+	var p TaskRemovedPayload
 	if err := json.Unmarshal(evt.Payload, &p); err != nil {
 		return err
 	}

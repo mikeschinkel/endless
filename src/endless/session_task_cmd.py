@@ -1,6 +1,6 @@
 """CLI implementation for `endless session touch` (E-2173, E-2291), its
 aliases `endless touch` and `endless session task add`, and `endless session
-task remove` (E-1696).
+task delete` (E-1696; named `remove` until E-2571).
 
 Two verbs, and an alias, that say explicitly what a session's task list
 holds.
@@ -15,22 +15,25 @@ automation cannot reach or gets wrong.
                                `touch` and `session task add` are aliases
                                (E-2291): same event, same relation.
 
-    session task remove <ids>  drop the association entirely, for a capture
+    session task delete <ids>  drop the association entirely, for a capture
                                that should not have happened.
 
-`remove` is deliberately NOT the inverse of `session hide --task` (E-1914).
+`delete` is deliberately NOT the inverse of `session hide --task` (E-1914).
 Hide suppresses a row from one session's `session status` listing while
 KEEPING the association, so `task show`'s "Sessions:" still reports the
 touch that really happened — it is for a capture that is real but noisy.
-Remove deletes the row: the touch and its relation. It also clears any hide on
+Delete removes the row: the touch and its relation. It also clears any hide on
 the same pair, so a later re-capture does not come back silently suppressed.
+The verb says "delete" because the row really is gone (ED-1547): a
+session_tasks row is a pure junction whose id nothing stores or types, unlike
+a task, which `task remove` retains.
 
 This module performs no DB access. All three verbs emit an event
-(`session_tasks.touched` / `session_tasks.removed`)
+(`session_tasks.touched` / `session_tasks.deleted`)
 via event_bridge -> endless-go event -> events.Execute, per the "DB access in
 Go" policy. The Go executors own validation: unknown task ids are rejected
 there, the upgrade-only relation ladder decides what `touch` actually stores,
-and `remove` refuses the session's own claimed or bound task.
+and `delete` refuses the session's own claimed or bound task.
 """
 
 import os
@@ -49,7 +52,7 @@ _TASK_ID_RE = re.compile(r"^[Ee]-(\d+)$")
 # verbs share one label: the group is what a reader recognizes, and the
 # complaint is about the ids, which both parse identically.
 _VERB_OF = {
-    "session_tasks.removed": "session task",
+    "session_tasks.deleted": "session task",
     "session_tasks.touched": "touch",
     "session_tasks.hidden": "session hide",
     "session_tasks.unhidden": "session unhide",
@@ -63,10 +66,10 @@ def session_task_add(task_refs: tuple[str, ...],
     touch(task_refs, session_id_override)
 
 
-def session_task_remove(task_refs: tuple[str, ...],
+def session_task_delete(task_refs: tuple[str, ...],
                         session_id_override: int | None) -> None:
-    """Entry point bound by cli.py for `session task remove`."""
-    emit_membership("session_tasks.removed", task_refs, session_id_override)
+    """Entry point bound by cli.py for `session task delete`."""
+    emit_membership("session_tasks.deleted", task_refs, session_id_override)
 
 
 def touch(task_refs: tuple[str, ...],

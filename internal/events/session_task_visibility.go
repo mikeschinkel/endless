@@ -11,7 +11,7 @@ import (
 
 // Session-task visibility verbs (E-2293): `session hide --task` and `session
 // unhide --task`, which until E-2293 wrote session_hidden_tasks straight from
-// Python. They moved here, onto the same emit path as `session task remove`,
+// Python. They moved here, onto the same emit path as `session task delete`,
 // when unhide gained a second meaning that needs a second table.
 //
 // A (session, task) pair is in one of three display states, and the two verbs

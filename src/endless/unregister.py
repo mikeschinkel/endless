@@ -111,7 +111,7 @@ def forget_project(name_or_path: str, with_tasks: bool = False):
     is how an earlier unregister of a mistake is cleaned up.
 
     A project with tasks is refused unless `with_tasks`, which first removes
-    them through task.deleted events tagged with this project, so the removal
+    them through task.removed events tagged with this project, so the removal
     lands in its own ledger beside the tasks it removes. Relations block that,
     as they block `task remove` (E-1915): they are unlinked first, never cut.
     """
@@ -161,7 +161,7 @@ def forget_project(name_or_path: str, with_tasks: bool = False):
             )
         for task in tasks:
             emit_event(
-                kind="task.deleted",
+                kind="task.removed",
                 project=row["name"],
                 entity_type="task",
                 entity_id=str(task["id"]),

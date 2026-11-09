@@ -15,7 +15,7 @@ commands and the `tasks.source_file` column they matched on, so that path and it
 five tests are gone rather than unasserted. `task remove` is now the only way a
 task goes away, which is what makes the single guard below sufficient.
 
-Every test here stops before the `task.deleted` event, so none of them need the
+Every test here stops before the `task.removed` event, so none of them need the
 Go executor. The end-to-end removal path is covered by .endless/tasks/e-1915/verify.sh.
 """
 

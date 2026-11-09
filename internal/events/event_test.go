@@ -261,7 +261,10 @@ func TestValidKinds_Count(t *testing.T) {
 	// + 1 (E-2405 session_tasks.spawned)
 	// + 1 (E-2421 shipped_file.written)
 	// + 2 (E-2486 ledger.row_changed, ledger.corrected)
-	// + 1 (E-2578 ledger.voided) = 59.
+	// + 1 (E-2578 ledger.voided)
+	// + 2 - 2 (E-2571 task.removed and session_tasks.deleted in; task.deleted
+	//          and session_tasks.removed moved to RetiredKinds, mapped back by
+	//          RenamedKinds: see TestRetiredKinds and TestRenamedKinds_KeysRetiredValuesLive) = 59.
 	want := 59
 	got := len(events.ValidKinds)
 	if got != want {
@@ -279,14 +282,19 @@ func TestRetiredKinds(t *testing.T) {
 		events.KindSessionTasksOrdered,
 		events.KindProjectNextRevised,
 		events.KindSessionTasksQueued,
-		// E-2010 retired this one for a different reason than the four above:
-		// it was RENAMED to decision.removed, not abandoned. The invariants
-		// below are the ones that matter either way — unemittable, still
-		// known — but note that it is NOT a replay no-op: the executor and
-		// projector keep an explicit case for it ahead of the retired-kind
-		// branch, which TestProjectToTempDB_DecisionRemovalRetainsRowAndIDFloor
-		// runs under both spellings to pin.
-		events.KindDecisionDeleted,
+		// The three below are retired for a different reason than the four
+		// above: each was RENAMED, not abandoned. The invariants below are the
+		// ones that matter either way — unemittable, still known — but note
+		// that none of them is a replay no-op: RenamedKinds sends each to the
+		// live handler ahead of both dispatch switches, which
+		// TestRenamedKinds_KeysRetiredValuesLive pins structurally and the
+		// parity tests pin behaviourally under both spellings
+		// (TestProjectToTempDB_DecisionRemovalRetainsRowAndIDFloor,
+		// TestProjectToTempDB_TaskRemovalRetainsRowAndIDFloor,
+		// TestSessionTasksDeleted_DropsRowAndHide).
+		events.KindDecisionDeleted,     // E-2010
+		events.KindTaskDeleted,         // E-2571
+		events.KindSessionTasksRemoved, // E-2571
 	}
 	if len(events.RetiredKinds) != len(want) {
 		t.Errorf("RetiredKinds has %d entries, want %d", len(events.RetiredKinds), len(want))
@@ -313,6 +321,56 @@ func TestRetiredKinds(t *testing.T) {
 	}
 }
 
+// TestRenamedKinds_KeysRetiredValuesLive pins the invariant that makes
+// RenamedKinds safe to consult ahead of both dispatch switches (E-2571).
+//
+// A key must be retired and NOT live: ValidKinds gates emission, so a key that
+// is also live could still be written under its old spelling and the rename
+// would have bought nothing. A value must be live: dispatch switches on it, so
+// a value nothing handles would send every replayed event of the old spelling
+// to the "emits an event it cannot apply" branch — or, worse, to the
+// retired-kind no-op — and a rebuild would quietly stop removing.
+//
+// The map is also asserted to hold exactly the renames made so far, so a rename
+// that is recorded only here, or only in RetiredKinds, fails this test and
+// TestRetiredKinds together rather than slipping past both.
+func TestRenamedKinds_KeysRetiredValuesLive(t *testing.T) {
+	want := map[events.Kind]events.Kind{
+		events.KindDecisionDeleted:     events.KindDecisionRemoved,     // E-2010
+		events.KindTaskDeleted:         events.KindTaskRemoved,         // E-2571
+		events.KindSessionTasksRemoved: events.KindSessionTasksDeleted, // E-2571
+	}
+	if len(events.RenamedKinds) != len(want) {
+		t.Errorf("RenamedKinds has %d entries, want %d", len(events.RenamedKinds), len(want))
+	}
+	for old, live := range want {
+		if got, ok := events.RenamedKinds[old]; !ok {
+			t.Errorf("RenamedKinds lacks %q, so a ledger holding one replays it as a no-op", old)
+		} else if got != live {
+			t.Errorf("RenamedKinds[%q] = %q, want %q", old, got, live)
+		}
+	}
+
+	for old, live := range events.RenamedKinds {
+		if !events.RetiredKinds[old] {
+			t.Errorf("RenamedKinds key %q is not in RetiredKinds; a renamed spelling "+
+				"must be retired or it is not a rename", old)
+		}
+		if events.ValidKinds[old] {
+			t.Errorf("RenamedKinds key %q is in ValidKinds; the old spelling can still "+
+				"be emitted, so the rename bought nothing", old)
+		}
+		if !events.ValidKinds[live] {
+			t.Errorf("RenamedKinds[%q] = %q is not in ValidKinds; dispatch would never "+
+				"reach a handler for the replayed event", old, live)
+		}
+		if _, chained := events.RenamedKinds[live]; chained {
+			t.Errorf("RenamedKinds[%q] = %q is itself renamed; dispatch resolves one "+
+				"step, so a chain strands the older spelling", old, live)
+		}
+	}
+}
+
 // TestValidate_RetiredKindsPassAndUndeclaredDoNot asserts the invariants above
 // where they are actually consumed: Event.Validate, the first gate every event a
 // rebuild replays has to pass. A retired kind that satisfied KnownKind but
@@ -336,6 +394,8 @@ func TestValidate_RetiredKindsPassAndUndeclaredDoNot(t *testing.T) {
 		events.KindProjectNextRevised:  events.EntityProjectNext,
 		events.KindSessionTasksQueued:  events.EntitySessionTasks,
 		events.KindDecisionDeleted:     events.EntityDecision,
+		events.KindTaskDeleted:         events.EntityTask,
+		events.KindSessionTasksRemoved: events.EntitySessionTasks,
 	} {
 		evt := base
 		evt.Kind = kind
@@ -378,7 +438,7 @@ func TestPayloadRoundTrips(t *testing.T) {
 			Fields: map[string]any{"title": "New title", "risk": "high"},
 		}},
 		{"TaskMoved", events.TaskMovedPayload{OldParentID: &parentID, NewParentID: nil}},
-		{"TaskDeleted", events.TaskDeletedPayload{Cascade: true, Title: "Removed task"}},
+		{"TaskRemoved", events.TaskRemovedPayload{Cascade: true, Title: "Removed task"}},
 		{"TaskDepCreated", events.TaskDepCreatedPayload{SourceID: 10, TargetID: 20, DepType: "needs"}},
 		{"ProjectRegistered", events.ProjectRegisteredPayload{
 			Name: "endless", Path: "/Users/mike/Projects/endless", Status: "active",

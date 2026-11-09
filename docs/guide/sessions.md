@@ -238,13 +238,13 @@ Two commands cover what automation can't reach:
 
 ```bash
 endless session touch E-101 E-102      # your user's: on the list, nothing about the task changes
-endless session task remove E-101      # a capture that shouldn't have happened
+endless session task delete E-101      # a capture that shouldn't have happened
 ```
 
 - **`session touch`** is the user's command, run from their own shell pane beside the session, for putting a task on this session's `session status` list without changing it. It records relation `touched` and nothing else: no field is written and no other session holding the task is notified. Nothing has happened to the task, so no automatic capture would ever record it. Enrollment is upgrade-only: a task the session filed, edited or read is strengthened to `touched`, and the session's own claimed or bound task stays as it is (reported, not an error). `endless touch` and `endless session task add` are aliases of it. When it is on your list, that is your user's doing — not something to repeat or undo.
-- **`remove`** deletes the association — the touch and its relation — so `task show`'s "Sessions:" stops reporting it, and any hide on the same pair is cleared with it. There is no undo beyond touching the task again. Refused on your own claimed or bound task: ownership cannot be dropped — use `session hide --task` to keep it off your listing.
+- **`session task delete`** deletes the association — the touch and its relation — so `task show`'s "Sessions:" stops reporting it, and any hide on the same pair is cleared with it. There is no undo beyond touching the task again. Refused on your own claimed or bound task: ownership cannot be dropped — use `session hide --task` to keep it off your listing. It is `delete`, not `remove`, because the row really is gone: `task remove` retains a task's row so its id is never reused, while a session's membership row is a pure junction nobody refers to and is deleted outright.
 
-**`remove` is not the inverse of `hide --task`**, and the difference is the whole point: hide suppresses a row while *keeping* the association, so the touch that really happened stays on the record. Hide is for a capture that is real but noisy; remove is for one that was simply wrong.
+**`delete` is not the inverse of `hide --task`**, and the difference is the whole point: hide suppresses a row while *keeping* the association, so the touch that really happened stays on the record. Hide is for a capture that is real but noisy; delete is for one that was simply wrong.
 
 `session status` tiers rows by relation. Decided work (`claimed`, `bound`, `spawned` marked ↗, and `touched` marked ⊕) leads among equally actionable rows; `referenced` rows (marked ·) sink below everything and render dimmed, so reads can never crowd out work. Relation never outranks actionability, though — a `touched` task parked in `later` still sits below the task you're actually working. A `bound` task, like a claimed one, is your session's anchor: it shows once, as the task your view is built around, never as a second row.
 

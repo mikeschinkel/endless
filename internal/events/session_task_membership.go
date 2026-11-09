@@ -13,7 +13,7 @@ import (
 )
 
 // Session-task membership verbs (E-1696, E-2173, E-2291). The top-level
-// `touch`, its alias `session task add`, and `session task remove` — the
+// `touch`, its alias `session task add`, and `session task delete` — the
 // explicit path into and out of a session's scope, alongside the
 // otherwise-automatic session_tasks capture.
 //
@@ -23,9 +23,12 @@ import (
 //   - hide   — display suppression. The session_tasks row survives, so
 //     `task show`'s "Sessions:" still reports the touch that really happened.
 //     For a capture that is real but noisy.
-//   - remove — the association itself. DELETEs the session_tasks row (and its
+//   - delete — the association itself. DELETEs the session_tasks row (and its
 //     relation with it), and clears any hide alongside. For a capture that was
-//     simply wrong.
+//     simply wrong. The verb and its kind say "deleted" because the row really
+//     is gone (ED-1547): a session_tasks row is a pure junction whose surrogate
+//     id nothing stores or types. The sessions row it belonged to is untouched
+//     (ED-1655 governs that row, not this one).
 //
 // Every executor here resolves the session the same way: the payload's
 // `process` field carries either the "__session_id=N" sentinel or a raw tmux
@@ -131,19 +134,20 @@ func enrollSessionTasks(
 	return applied, unchanged, prior, nil
 }
 
-// execSessionTasksRemoved handles KindSessionTasksRemoved: drop each named
-// task's session_tasks row for the emitting session.
+// execSessionTasksDeleted handles KindSessionTasksDeleted — `session task
+// delete`, and by way of RenamedKinds its retired spelling session_tasks.removed
+// (E-2571): drop each named task's session_tasks row for the emitting session.
 //
-// Removing the session's own CLAIMED or BOUND task (an anchor relation) is
+// Deleting the session's own CLAIMED or BOUND task (an anchor relation) is
 // refused outright. That row is not a false positive by construction — the
 // session owns that task, and sessions.task_id stays set either way (E-2291) —
 // and the next task event would recreate it anyway, so accepting the request would be a
 // lie about what happened. Refusing the whole call (rather than skipping the id)
-// keeps `session task remove E-1 E-2` from half-succeeding. There is no escape
+// keeps `session task delete E-1 E-2` from half-succeeding. There is no escape
 // hatch and none to offer: ED-1560 makes sessions.task_id write-once and E-1968
 // disabled `task release`, so a claim is not something a session can undo.
 //
-// Removing a task the session never touched is a NO-OP, not an error, matching
+// Deleting a task the session never touched is a NO-OP, not an error, matching
 // `session unhide --task`. It is reported so a typo still surfaces, but it does
 // not fail the call: "make sure this is not on my list" is a reasonable thing to
 // ask about a task that already is not.
@@ -153,10 +157,10 @@ func enrollSessionTasks(
 // relationship between them, so dropping membership leaves the hide behind on
 // its own. If the task is later re-captured — an edit, or `session task add` —
 // it returns ALREADY hidden, with nothing on screen to explain why. Clearing it
-// here is what makes remove mean "off the record" rather than "off the record
+// here is what makes delete mean "off the record" rather than "off the record
 // but still carrying a suppression you cannot see".
-func execSessionTasksRemoved(db dbQuerier, evt *Event) (*ExecuteResult, error) {
-	sessionID, taskIDs, err := membershipRequest(db, evt, "session_tasks.removed")
+func execSessionTasksDeleted(db dbQuerier, evt *Event) (*ExecuteResult, error) {
+	sessionID, taskIDs, err := membershipRequest(db, evt, string(evt.Kind))
 	if err != nil {
 		return nil, err
 	}
@@ -179,15 +183,15 @@ func execSessionTasksRemoved(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 		// user.
 		return nil, refusal.NoReport(
 			fmt.Sprintf(
-				"events: session_tasks.removed refuses this session's own claimed or bound task(s): %s "+
+				"events: %s refuses this session's own claimed or bound task(s): %s "+
 					"(a claim or bind cannot be dropped; `session hide --task` suppresses it "+
 					"from the listing)",
-				strings.Join(claimed, ", "),
+				evt.Kind, strings.Join(claimed, ", "),
 			),
 			"Drop the claimed or bound id from the request, or use `endless session hide --task` instead, and retry")
 	}
 
-	var removed, absent []int64
+	var deleted, absent []int64
 	for _, taskID := range taskIDs {
 		res, err := db.Exec(
 			`DELETE FROM session_tasks WHERE session_id = ? AND task_id = ?`,
@@ -211,10 +215,10 @@ func execSessionTasksRemoved(db dbQuerier, evt *Event) (*ExecuteResult, error) {
 				"events: clear hide for (%d, %d): %w", sessionID, taskID, err,
 			)
 		}
-		removed = append(removed, taskID)
+		deleted = append(deleted, taskID)
 	}
 
-	return &ExecuteResult{Markdown: renderRemoved(removed, absent)}, nil
+	return &ExecuteResult{Markdown: renderDeleted(deleted, absent)}, nil
 }
 
 // membershipRequest unmarshals a SessionTaskMembershipPayload, resolves the
@@ -348,13 +352,13 @@ func renderSpawned(
 	return b.String()
 }
 
-// renderRemoved formats the `session task remove` result for chat. The absent
+// renderDeleted formats the `session task delete` result for chat. The absent
 // line is not an error, but it is always reported: a silently ignored id is
 // indistinguishable from a typo.
-func renderRemoved(removed, absent []int64) string {
+func renderDeleted(deleted, absent []int64) string {
 	var b strings.Builder
-	if len(removed) > 0 {
-		fmt.Fprintf(&b, "Removed %s from this session.\n", taskList(removed))
+	if len(deleted) > 0 {
+		fmt.Fprintf(&b, "Removed %s from this session.\n", taskList(deleted))
 	}
 	if len(absent) > 0 {
 		fmt.Fprintf(&b, "%s not in this session — nothing to remove.\n", taskList(absent))

@@ -2411,19 +2411,21 @@ def session_task_add(task_refs, session_id_override):
     impl(task_refs, session_id_override)
 
 
-@session_task_cmd.command("remove")
+@session_task_cmd.command("delete")
 @click.argument("task_refs", nargs=-1, metavar="TASK-ID...")
 @_SESSION_ID_OPTION
-def session_task_remove(task_refs, session_id_override):
+def session_task_delete(task_refs, session_id_override):
     """Drop tasks from this session's list entirely.
 
     For a capture that should not have happened. This DELETES the association
     — the touch and its relation — so `task show`'s "Sessions:" stops
-    reporting it, and any hide on the same pair is cleared with it.
+    reporting it, and any hide on the same pair is cleared with it. It is
+    "delete", not "remove", because the row really is gone: a task is removed
+    and its row retained, a session's membership row is deleted outright.
 
     Not the same as `session hide --task`, which suppresses a row from this
     session's listing but KEEPS the association: hide is for a capture that is
-    real but noisy, remove is for one that was simply wrong. There is no undo
+    real but noisy, delete is for one that was simply wrong. There is no undo
     beyond touching the task again.
 
     Refused on this session's own claimed or bound task: ownership cannot be
@@ -2433,9 +2435,9 @@ def session_task_remove(task_refs, session_id_override):
     Example:
 
       \b
-      endless session task remove E-100
+      endless session task delete E-100
     """
-    from endless.session_task_cmd import session_task_remove as impl
+    from endless.session_task_cmd import session_task_delete as impl
     impl(task_refs, session_id_override)
 
 

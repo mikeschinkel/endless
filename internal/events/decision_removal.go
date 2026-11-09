@@ -19,8 +19,9 @@ import "fmt"
 //
 // This file is the single implementation of the removal, called from BOTH the
 // executor (the live write path) and the projector (the ledger-replay rebuild
-// path) — including the projector's legacy route, where a pre-E-1378
-// `task.deleted` event whose row lives in `decisions` is dispatched here.
+// path) — including the projector's legacy route, where a pre-E-1378 task
+// removal event (then spelled `task.deleted`) whose row lives in `decisions` is
+// dispatched here.
 // E-1929 learned this the hard way for tasks: a projector that still DELETEd
 // while the executor marked removed = 1 would re-free every removed id on
 // rebuild, on a path nobody would think to test. Two copies can drift; one

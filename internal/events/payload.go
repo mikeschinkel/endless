@@ -152,7 +152,10 @@ type TaskMovedPayload struct {
 	NewParentID *int64 `json:"new_parent_id"`
 }
 
-type TaskDeletedPayload struct {
+// TaskRemovedPayload is task.removed's payload, and its retired spelling
+// task.deleted's (E-2571): the rename changed the kind's name, not what it
+// carries.
+type TaskRemovedPayload struct {
 	Cascade bool   `json:"cascade"`
 	Title   string `json:"title"`
 }
@@ -468,7 +471,7 @@ type SessionStatusRecordedPayload struct {
 // SessionTaskMembershipPayload carries the task list for the session-task
 // membership verbs (E-1696): `session_tasks.touched` (`touch` / `session task
 // add`), `session_tasks.spawned` (`task spawn`, recorded on the spawner, E-2405)
-// and `session_tasks.removed` (`session task remove`). Process is the session
+// and `session_tasks.deleted` (`session task delete`). Process is the session
 // identifier — the "__session_id=N" sentinel set by the Python command, or a raw
 // tmux pane id — resolved exactly as session_status.recorded's is. TaskIDs are
 // display form ("E-100"); the executors strip the prefix.

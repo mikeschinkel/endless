@@ -15,7 +15,7 @@ Interactive commands on the `session` group:
 - **`endless session search <query>`** — search across all session messages.
 - **`endless session hide <ids...>`** / **`endless session unhide <ids...>`** — hide sessions from (or restore them to) `session list`. With `--task <id>` (repeatable) they switch senses entirely and hide/restore individual TASK rows in one session's `session status` view — see **Quieting a noisy status view** in `endless guide sessions`.
 - **`endless session touch <ids...>`** — put tasks on a session's `session status` list without changing them (relation `touched`); run it from your own shell pane beside the session. `endless touch` and `endless session task add` are aliases.
-- **`endless session task remove <ids...>`** — drop a task's association with a session entirely. Distinct from `session hide --task`, which suppresses a row while keeping the association — see **Saying what your session's list holds** in `endless guide sessions`.
+- **`endless session task delete <ids...>`** — drop a task's association with a session entirely. Distinct from `session hide --task`, which suppresses a row while keeping the association — see **Saying what your session's list holds** in `endless guide sessions`.
 
 ## `project status` and `project monitor`
 

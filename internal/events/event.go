@@ -190,7 +190,7 @@ const (
 	KindTaskStatusChanged Kind = "task.status_changed"
 	KindTaskFieldsUpdated Kind = "task.fields_updated"
 	KindTaskMoved         Kind = "task.moved"
-	KindTaskDeleted       Kind = "task.deleted"
+	KindTaskRemoved       Kind = "task.removed" // E-2571; was task.deleted, see RenamedKinds
 	KindTaskReleased      Kind = "task.released"
 	KindTaskClaimed       Kind = "task.claimed"
 	// KindTaskBound is `task bind` (E-2291): the session owns the task without
@@ -308,10 +308,12 @@ const (
 //     relation `spawned` (E-2405), so the spawner's `session status` follows
 //     the delegated task — in any project — until it settles. Same ladder,
 //     same payload as touched; spawned ranks just above it.
-//   - removed: `session task remove` DELETES the session_tasks row outright.
-//     Distinct from `session hide --task` (E-1914), which suppresses the row
-//     from one session's listing while keeping the association — hide is for a
-//     capture that is real but noisy, remove is for one that was simply wrong.
+//   - deleted: `session task delete` DELETES the session_tasks row outright
+//     (named `removed` until E-2571; ED-1547's word for a row that is gone is
+//     "deleted"). Distinct from `session hide --task` (E-1914), which
+//     suppresses the row from one session's listing while keeping the
+//     association — hide is for a capture that is real but noisy, delete is for
+//     one that was simply wrong.
 //
 // All of these are session-scoped live state, not replayed by rebuild-db, and all
 // are deliberate low-volume acts — so they ride the committed ledger on
@@ -321,7 +323,7 @@ const (
 const (
 	KindSessionTasksTouched Kind = "session_tasks.touched"
 	KindSessionTasksSpawned Kind = "session_tasks.spawned"
-	KindSessionTasksRemoved Kind = "session_tasks.removed"
+	KindSessionTasksDeleted Kind = "session_tasks.deleted" // E-2571; was session_tasks.removed, see RenamedKinds
 	// Session task visibility (E-2293): `session hide --task` / `session
 	// unhide --task`.
 	KindSessionTasksHidden   Kind = "session_tasks.hidden"
@@ -356,13 +358,6 @@ const (
 	KindDecisionObsoleted     Kind = "decision.obsoleted"  // E-1920
 	KindDecisionReinstated    Kind = "decision.reinstated" // E-1920
 	KindDecisionRemoved       Kind = "decision.removed"    // E-2010
-	// KindDecisionDeleted is the retired spelling of KindDecisionRemoved
-	// (E-2010). ED-1547 reserves "removed" for a row that is kept so its id
-	// cannot be re-minted and "deleted" for a row that is really gone, and this
-	// kind has done the former since E-2010 — so the old name promised the
-	// opposite of what the event means. Retired rather than dropped: the
-	// db-ledger is the permanent record and already holds events of it.
-	KindDecisionDeleted Kind = "decision.deleted"
 )
 
 // Decision relation event kinds (E-1378). Source-table mapping: rows where
@@ -431,6 +426,63 @@ const (
 	KindSessionTasksQueued Kind = "session_tasks.queued"
 )
 
+// Renamed event kinds. Unlike the retired kinds above, each of these lost only
+// its NAME: the executor and projector that handle it are alive under the live
+// spelling RenamedKinds maps it to. ED-1547 reserves "removed" for a row that
+// is kept so its id cannot be re-minted and "deleted" for a row that is really
+// gone, and each old spelling promised the opposite of what its event does.
+// Retired rather than dropped: the db-ledger is the permanent record and
+// already holds events of every one.
+//
+//   - decision.deleted      → decision.removed      (E-2010). The row is kept.
+//   - task.deleted          → task.removed          (E-2571). The row is kept:
+//     `task remove` sets tasks.removed = 1 (E-1929), and the old name described
+//     a hard delete that never happened, on the entity whose id retention
+//     ED-1547 exists to guarantee.
+//   - session_tasks.removed → session_tasks.deleted (E-2571). The row is gone:
+//     a session_tasks row is a pure junction with a surrogate id nothing stores
+//     or types, so `session task delete` really DELETEs it.
+const (
+	KindDecisionDeleted     Kind = "decision.deleted"
+	KindTaskDeleted         Kind = "task.deleted"
+	KindSessionTasksRemoved Kind = "session_tasks.removed"
+)
+
+// RenamedKinds maps each retired spelling of a kind to the live kind that
+// replaced it, and is the ONLY place a rename is recorded (E-2571).
+//
+// Both dispatchers — the executor's dispatch and the projector's replayEvent —
+// resolve an event's kind through this map before their switch, so a replay of
+// the old spelling reaches the live handler without either switch naming it.
+// E-2010 recorded the first rename as an explicit dual-spelling case in each
+// switch, and that shape fails silently when half-applied: the spelling the
+// forgotten switch does not list falls through to the retired-kind no-op in
+// its default branch, replay stops removing, and a rebuild resurrects every
+// row ever removed. One map consulted ahead of both switches makes that
+// failure unreachable rather than merely tested for.
+//
+// A renamed kind belongs in BOTH maps, and each buys a different thing:
+//
+//   - RetiredKinds is what makes the old spelling unemittable. ValidKinds gates
+//     `event emit` and the executor, and a retired kind is deliberately not in
+//     it, so nothing can write the old name again.
+//   - RenamedKinds is what keeps replay removing. Without it the old spelling
+//     is a declared no-op like the kinds whose tables are gone, which for a
+//     renamed kind is the resurrection above.
+//
+// Only the dispatch is normalized; evt.Kind is never rewritten. Refusals,
+// errors and anything that renders an event keep naming the spelling that is
+// actually in the ledger rather than one that was never written.
+//
+// Every key is in RetiredKinds and absent from ValidKinds, and every value is in
+// ValidKinds; TestRenamedKinds_KeysRetiredValuesLive pins that. A key that is
+// also live, or a value that is not, is a rename recorded wrong.
+var RenamedKinds = map[Kind]Kind{
+	KindDecisionDeleted:     KindDecisionRemoved,
+	KindTaskDeleted:         KindTaskRemoved,
+	KindSessionTasksRemoved: KindSessionTasksDeleted,
+}
+
 // RetiredKinds is the closed set of kinds a historical ledger may hold and no
 // live code path writes (E-2142).
 //
@@ -459,17 +511,16 @@ var RetiredKinds = map[Kind]bool{
 	KindSessionTasksOrdered: true,
 	KindProjectNextRevised:  true,
 	KindSessionTasksQueued:  true,
-	// decision.deleted is retired for a DIFFERENT reason than the four above,
-	// and it behaves differently (E-2010). Those kinds lost their writer and
-	// their tables, so replay walks past them as declared no-ops. This one was
-	// RENAMED: its executor and projector are alive, under
-	// KindDecisionRemoved, and both switches keep an explicit case for this
-	// spelling that is matched BEFORE the retired-kind no-op below. Membership
-	// here therefore buys exactly one thing — ValidKinds gates emission, so
-	// nothing can write the old name again — while replay of the events already
-	// in the ledger still removes the decision. Drop the explicit cases and the
-	// no-op silently resurrects every decision ever removed.
-	KindDecisionDeleted: true,
+	// The three below are retired for a DIFFERENT reason than the four above,
+	// and behave differently: they were RENAMED, not abandoned, and their
+	// handlers are alive under the spelling RenamedKinds maps each to.
+	// Membership here buys exactly one thing — ValidKinds gates emission, so
+	// nothing can write the old name again — and RenamedKinds is what keeps a
+	// replay of the events already in the ledger reaching the live handler
+	// instead of the retired-kind no-op. See RenamedKinds.
+	KindDecisionDeleted:     true, // E-2010
+	KindTaskDeleted:         true, // E-2571
+	KindSessionTasksRemoved: true, // E-2571
 }
 
 // KnownKind reports whether a kind may appear in a well-formed event: a live
@@ -486,7 +537,7 @@ var ValidKinds = map[Kind]bool{
 	KindTaskStatusChanged: true,
 	KindTaskFieldsUpdated: true,
 	KindTaskMoved:         true,
-	KindTaskDeleted:       true,
+	KindTaskRemoved:       true,
 	KindTaskReleased:      true,
 	KindTaskClaimed:       true,
 	KindTaskBound:         true,
@@ -531,9 +582,9 @@ var ValidKinds = map[Kind]bool{
 	KindNoteResolved: true,
 	// Session status (E-1312)
 	KindSessionStatusRecorded: true,
-	// Session task membership (E-1696, E-2173)
+	// Session task membership (E-1696, E-2173, E-2571)
 	KindSessionTasksTouched: true,
-	KindSessionTasksRemoved: true,
+	KindSessionTasksDeleted: true,
 	// E-2405
 	KindSessionTasksSpawned: true,
 	// Session task visibility (E-2293)

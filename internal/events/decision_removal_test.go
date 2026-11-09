@@ -77,13 +77,13 @@ func appendDecisionRemoval(t *testing.T, w *events.Writer, kind events.Kind, pro
 // says they do now.
 //
 // Run under BOTH event spellings. decision.deleted is in RetiredKinds, whose
-// default handling in the projector is a declared no-op — so a refactor that
-// dropped the explicit case for it would make replay silently stop removing
-// anything, resurrecting every decision ever removed. The subtest is what
-// notices.
+// default handling in the projector is a declared no-op — RenamedKinds is what
+// sends it to the live handler instead (E-2571), so a rename dropped from that
+// map would make replay silently stop removing anything, resurrecting every
+// decision ever removed. The subtest is what notices.
 //
 // Deliberately NOT verified by rebuilding a real DB, for the reasons given on
-// TestProjectToTempDB_TaskDeletedRetainsRowAndIDFloor.
+// TestProjectToTempDB_TaskRemovalRetainsRowAndIDFloor.
 func TestProjectToTempDB_DecisionRemovalRetainsRowAndIDFloor(t *testing.T) {
 	for _, kind := range []events.Kind{
 		events.KindDecisionRemoved,
@@ -143,8 +143,8 @@ func TestProjectToTempDB_DecisionRemovalRetainsRowAndIDFloor(t *testing.T) {
 			}
 			if removed != 1 {
 				t.Errorf("decisions.removed = %d for replayed removal, want 1 "+
-					"— a retired kind is a declared no-op unless the projector "+
-					"keeps an explicit case for it", removed)
+					"— a retired spelling is a declared no-op unless RenamedKinds "+
+					"sends it to the live handler", removed)
 			}
 
 			var live int

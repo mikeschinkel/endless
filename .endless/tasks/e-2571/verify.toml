@@ -1,0 +1,195 @@
+# ── DO NOT EDIT ─────────────────────────────────────────────────────
+# This suite belongs to E-2571 and records what was true when E-2571
+# landed. Edit it only if you ARE E-2571. If your change breaks a check
+# here, leave it alone — see .endless/tasks/CLAUDE.md.
+#
+# E-2571 renames the two event kinds whose names contradicted ED-1547's
+# removed-versus-deleted vocabulary — task.deleted (the row is kept) becomes
+# task.removed, session_tasks.removed (the row is gone) becomes
+# session_tasks.deleted — and records every rename, E-2010's included, in one
+# RenamedKinds map that both dispatchers resolve through before their switch.
+# `session task remove` becomes `session task delete` so command, kind and
+# retention agree. The risk is replay: the ledger already holds task.deleted
+# events, and a dispatch that stopped reaching the removal handler for them
+# would resurrect every removed task on rebuild, silently.
+schema = 1
+task   = "E-2571"
+
+# ── Native tests first, fail-fast ───────────────────────────────────
+# TestRenamedKinds_KeysRetiredValuesLive (P3), TestRetiredKinds and
+# TestValidKinds_Count (P11), TestProjectToTempDB_TaskRemovalRetainsRowAndIDFloor
+# under both spellings (P5), TestSessionTasksDeleted_DropsRowAndHide under both
+# spellings (P6), and TestProjectToTempDB_DecisionRemovalRetainsRowAndIDFloor,
+# which now goes through the map instead of an explicit case (P2).
+
+[[check]]
+name   = "events: the rename map, both dispatchers, and replay parity under both spellings"
+runner = "gotest"
+paths  = ["./internal/events/..."]
+
+# `session task delete` works end to end and `remove` is no such command (P7);
+# `task remove` emits task.removed and retains the row, and `project forget
+# --with-tasks` removes through the same kind (P8).
+
+[[check]]
+name   = "python: session task delete, task remove, and the unregister sweep"
+runner = "pytest"
+paths  = [
+  "tests/test_session_task_membership.py",
+  "tests/test_task_remove_kind.py",
+  "tests/test_task_remove_relations.py",
+  "tests/test_project_forget.py",
+]
+
+# ── One map, read by both dispatchers (P1, P2) ──────────────────────
+
+[[check]]
+name     = "RenamedKinds names all three renames"
+sh       = """
+m=internal/events/event.go
+body=$(awk '/^var RenamedKinds = map\\[Kind\\]Kind\\{/,/^}/' "$m")
+for pair in 'KindDecisionDeleted:.*KindDecisionRemoved' 'KindTaskDeleted:.*KindTaskRemoved' 'KindSessionTasksRemoved:.*KindSessionTasksDeleted'; do
+  printf '%s\n' "$body" | grep -qE "$pair" || { echo "FAIL: RenamedKinds lacks $pair"; exit 1; }
+done
+echo ok
+"""
+contains = "ok"
+
+[[check]]
+name     = "both dispatchers resolve the kind through RenamedKinds before switching"
+sh       = "grep -l 'if live, renamed := RenamedKinds\\[kind\\]; renamed {' internal/events/executor.go internal/events/projector.go | wc -l | tr -d ' '"
+contains = "2"
+
+[[check]]
+name   = "no dual-spelling case remains in either dispatch switch"
+sh     = "! grep -nE 'case Kind[A-Za-z]+(Removed|Deleted), Kind[A-Za-z]+(Removed|Deleted):' internal/events/executor.go internal/events/projector.go 2>/dev/null"
+
+[[check]]
+name   = "the retired-kind no-op in each default branch is untouched"
+sh     = "test \"$(grep -c 'if RetiredKinds\\[evt.Kind\\] {' internal/events/executor.go internal/events/projector.go | grep -c ':1$')\" = 2"
+
+# ── The old spellings are refused at the door and still validate (P4, P6) ──
+# `event emit` gates on ValidKinds before it touches a node id, a ledger or a
+# database, so the refusal is reached with placeholder flags and writes nothing.
+
+[[check]]
+name     = "event emit refuses task.deleted"
+sh       = "go run ./cmd/endless-go event emit --kind task.deleted --project p --entity-type task --entity-id 1 --actor-kind cli --actor-id t --node-id a1b2 --project-root . 2>&1; true"
+contains = "unknown event kind \"task.deleted\""
+
+[[check]]
+name     = "event emit refuses session_tasks.removed"
+sh       = "go run ./cmd/endless-go event emit --kind session_tasks.removed --project p --entity-type session_tasks --entity-id 0 --actor-kind cli --actor-id t --node-id a1b2 --project-root . 2>&1; true"
+contains = "unknown event kind \"session_tasks.removed\""
+
+[[check]]
+name     = "both retired spellings are in RetiredKinds, so a historical ledger still validates"
+sh       = """
+body=$(awk '/^var RetiredKinds = map\\[Kind\\]bool\\{/,/^}/' internal/events/event.go)
+printf '%s\n' "$body" | grep -q 'KindTaskDeleted:' || { echo "FAIL: task.deleted is not retired"; exit 1; }
+printf '%s\n' "$body" | grep -q 'KindSessionTasksRemoved:' || { echo "FAIL: session_tasks.removed is not retired"; exit 1; }
+printf '%s\n' "$body" | grep -q 'KindDecisionDeleted:' || { echo "FAIL: decision.deleted fell out of RetiredKinds"; exit 1; }
+echo ok
+"""
+contains = "ok"
+
+# ── Every live emitter sends the live spelling (P4, P6, P8) ─────────
+
+[[check]]
+name   = "no Python emitter sends task.deleted"
+sh     = "! grep -rn 'task.deleted' src/endless/ 2>/dev/null"
+
+[[check]]
+name     = "both task-removal emitters send task.removed"
+sh       = "grep -l 'kind=\"task.removed\"' src/endless/task_cmd.py src/endless/unregister.py | wc -l | tr -d ' '"
+contains = "2"
+
+[[check]]
+name   = "no Python emitter sends session_tasks.removed"
+sh     = "! grep -rn 'session_tasks.removed' src/endless/ 2>/dev/null"
+
+[[check]]
+name     = "the membership emitter sends session_tasks.deleted"
+sh       = "grep -c 'emit_membership(\"session_tasks.deleted\"' src/endless/session_task_cmd.py"
+contains = "1"
+
+# ── The command (P7, P10) ───────────────────────────────────────────
+
+[[check]]
+name     = "session task delete is registered"
+sh       = "uv run endless session task delete --help 2>&1"
+contains = "Drop tasks from this session's list entirely"
+
+[[check]]
+name     = "session task remove is no such command"
+sh       = "uv run endless session task remove --help 2>&1; true"
+contains = "No such command 'remove'"
+
+[[check]]
+name   = "nothing in docs, src or internal names session task remove"
+sh     = "! grep -rn 'session task remove' docs/ src/ internal/ 2>/dev/null"
+
+[[check]]
+name   = "the guide's command map still resolves"
+sh     = "just guide-check >/dev/null 2>&1"
+
+# ── Symbols are named for the kind they handle (P9) ─────────────────
+
+[[check]]
+name   = "no symbol named for an old spelling remains"
+sh     = "! grep -rnE 'execTaskDeleted|replayTaskDeleted|TaskDeletedPayload|execSessionTasksRemoved|renderRemoved\\(' internal/ 2>/dev/null"
+
+[[check]]
+name     = "the handlers are named for the live kinds"
+sh       = """
+grep -q 'func execTaskRemoved(' internal/events/executor.go || { echo "FAIL: execTaskRemoved"; exit 1; }
+grep -q 'func replayTaskRemoved(' internal/events/projector.go || { echo "FAIL: replayTaskRemoved"; exit 1; }
+grep -q 'type TaskRemovedPayload struct' internal/events/payload.go || { echo "FAIL: TaskRemovedPayload"; exit 1; }
+grep -q 'func execSessionTasksDeleted(' internal/events/session_task_membership.go || { echo "FAIL: execSessionTasksDeleted"; exit 1; }
+echo ok
+"""
+contains = "ok"
+
+# ── Tripwires: the guard tests still exist (P3, P5, P6, P11) ────────
+# The behaviour is proven by the gotest check above; these notice a test that
+# was deleted, which would otherwise go green on silence.
+
+[[check]]
+name     = "the map invariant is pinned by a test"
+sh       = "grep -c 'func TestRenamedKinds_KeysRetiredValuesLive' internal/events/event_test.go"
+contains = "1"
+
+[[check]]
+name     = "task-removal replay parity is pinned under both spellings"
+sh       = "grep -c 'events.KindTaskDeleted, // retired spelling' internal/events/projector_test.go"
+contains = "1"
+
+[[check]]
+name     = "membership-deletion parity is pinned under both spellings"
+sh       = "grep -c 'KindSessionTasksRemoved, // retired spelling' internal/events/session_task_membership_test.go"
+contains = "1"
+
+[[check]]
+name     = "TestRetiredKinds names both newly retired spellings"
+sh       = "awk '/^func TestRetiredKinds\\(/,/^}/' internal/events/event_test.go | grep -cE 'events.KindTaskDeleted,|events.KindSessionTasksRemoved,'"
+contains = "2"
+
+# ── Exclusions hold (P12, P16) ──────────────────────────────────────
+
+[[check]]
+name   = "no schema, view or migration change"
+sh     = "test -z \"$(git diff --name-only main -- internal/schema/)\""
+
+[[check]]
+name   = "the delete executor still refuses an anchor and still clears the hide"
+sh     = "grep -q 'rel.IsAnchor()' internal/events/session_task_membership.go && grep -q 'DELETE FROM session_hidden_tasks WHERE session_id = ? AND task_id = ?' internal/events/session_task_membership.go"
+
+# ── Project-wide regression ─────────────────────────────────────────
+
+[[check]]
+name   = "go build"
+sh     = "go build ./..."
+
+[[check]]
+name   = "go vet"
+sh     = "go vet ./..."

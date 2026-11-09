@@ -3015,7 +3015,7 @@ def _refuse_removal_with_relations(
     and every "harmless" exemption is a second code path that can orphan rows
     again.
 
-    Must run BEFORE the task.deleted event is emitted, or a refusal would
+    Must run BEFORE the task.removed event is emitted, or a refusal would
     publish a removal that never happened.
     """
     found = _relations_referencing(ids)
@@ -3091,7 +3091,7 @@ def remove_item(item_id: int, cascade: bool = False):
 
     _, proj_name = _resolve_project(None)
     emit_event(
-        kind="task.deleted",
+        kind="task.removed",
         project=proj_name,
         entity_type="task",
         entity_id=str(item_id),

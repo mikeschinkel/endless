@@ -38,8 +38,19 @@ type ExecuteResult struct {
 // dispatch routes an event to its executor. emit (E-1541) is threaded to the
 // six task mutations that can change an epic's derived status; the remaining
 // executors ignore derivation.
+//
+// The kind is resolved through RenamedKinds first (E-2571), so a retired
+// spelling reaches the live handler for the kind that replaced it. Only the
+// local is normalized: evt.Kind stays as the ledger spells it, so every
+// refusal and error below names what was actually written. In practice the
+// executor meets a renamed kind only on a hand-fed replay — `event emit`
+// gates on ValidKinds, which no retired spelling is in.
 func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
-	switch evt.Kind {
+	kind := evt.Kind
+	if live, renamed := RenamedKinds[kind]; renamed {
+		kind = live
+	}
+	switch kind {
 	case KindTaskCreated:
 		return execTaskCreated(db, evt, emit)
 	case KindTaskImported:
@@ -50,8 +61,8 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 		return execTaskFieldsUpdated(db, evt, emit)
 	case KindTaskMoved:
 		return execTaskMoved(db, evt, emit)
-	case KindTaskDeleted:
-		return execTaskDeleted(db, evt, emit)
+	case KindTaskRemoved:
+		return execTaskRemoved(db, evt, emit)
 	case KindTaskReleased:
 		return execTaskReleased(db, evt)
 	case KindTaskClaimed:
@@ -84,8 +95,8 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 		return execSessionTasksTouched(db, evt)
 	case KindSessionTasksSpawned:
 		return execSessionTasksSpawned(db, evt)
-	case KindSessionTasksRemoved:
-		return execSessionTasksRemoved(db, evt)
+	case KindSessionTasksDeleted:
+		return execSessionTasksDeleted(db, evt)
 	case KindSessionTasksHidden:
 		return execSessionTasksHidden(db, evt)
 	case KindSessionTasksUnhidden:
@@ -108,10 +119,7 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 		return execDecisionObsoleted(db, evt)
 	case KindDecisionReinstated:
 		return execDecisionReinstated(db, evt)
-	// Both spellings, one executor (E-2010). ValidKinds no longer admits the
-	// retired one at the front door, so this case is reached only by a replay
-	// of an event already in the ledger.
-	case KindDecisionRemoved, KindDecisionDeleted:
+	case KindDecisionRemoved:
 		return execDecisionRemoved(db, evt)
 	case KindDecisionRelationCreated:
 		return execDecisionRelationCreated(db, evt)
@@ -133,7 +141,8 @@ func dispatch(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, er
 			// retired kind is deliberately not in (E-2142). Worth its own message
 			// anyway: "does not handle" reads like an oversight, and the one
 			// thing a caller who typed a retired kind needs to know is that it
-			// was withdrawn, not missed.
+			// was withdrawn, not missed. A RENAMED kind never lands here: the
+			// resolution through RenamedKinds above already sent it on.
 			return nil, fmt.Errorf(
 				"events: kind %q is retired — its command was removed, and it is "+
 					"accepted only when replaying a historical ledger", evt.Kind,
@@ -748,10 +757,10 @@ func execTaskMoved(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResul
 	return &ExecuteResult{}, nil
 }
 
-func execTaskDeleted(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
-	var p TaskDeletedPayload
+func execTaskRemoved(db dbQuerier, evt *Event, emit DerivedEmitter) (*ExecuteResult, error) {
+	var p TaskRemovedPayload
 	if err := json.Unmarshal(evt.Payload, &p); err != nil {
-		return nil, fmt.Errorf("events: unmarshal task.deleted payload: %w", err)
+		return nil, fmt.Errorf("events: unmarshal %s payload: %w", evt.Kind, err)
 	}
 
 	taskID := evt.Entity.ID
