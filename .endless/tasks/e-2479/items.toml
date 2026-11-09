@@ -90,3 +90,8 @@ statement = "task verify's uncommitted-changes refusal lists each file once; it 
 id = "P17"
 kind = "deliverable"
 statement = "task reconcile --file first returns a stale unlanded task to unverified, as every read does, so the re-record lands on the task as it is instead of meeting the unlanded freeze"
+
+[[item]]
+id = "P18"
+kind = "deliverable"
+statement = "The reconcile context shown at unverified says whether recording with --file will be accepted: the code changed since the last reconciliation, or it still matches and the user's verify is next"
