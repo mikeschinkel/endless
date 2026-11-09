@@ -86,3 +86,8 @@ statement = "Does not change plan-item data, events, or the items.toml mirror"
 id = "P16"
 kind = "deliverable"
 statement = "One space separates the number column, the glyph cell and the text column; the blank slots inside the glyph cell are the only other whitespace before the text"
+
+[[item]]
+id = "P17"
+kind = "deliverable"
+statement = "The table proper-cases the verdict words: As planned, Done differently, Not done, Blocked, Deferred to after the land, Kept, NOT KEPT"
