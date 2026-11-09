@@ -5,7 +5,7 @@
 [[item]]
 id = "P1"
 kind = "deliverable"
-statement = "A fault source can mark a failure transient; a transient failure is logged and becomes a fault only when it persists past the source's threshold"
+statement = "Sources outside the job runner (monitor-wake, the stopfailure hook) can mark a failure transient, reusing the runner's transient handling: logged, and a fault only past the source's threshold"
 
 [[item]]
 id = "P2"
@@ -15,17 +15,42 @@ statement = "A success after logged transient failures closes the run without ra
 [[item]]
 id = "P3"
 kind = "deliverable"
-statement = "A failed git remote operation against github.com checks GitHub's status API; while Git Operations is degraded Endless shows a notice naming the incident instead of a fault"
+statement = "A failed git remote operation against github.com asks GitHub's status API, and while Git Operations is degraded opens an outage record instead of raising a fault, an authentication failure included"
 
 [[item]]
-id = "P4"
+id = "P12"
 kind = "deliverable"
-statement = "The outage notice reaches both the user on session status and agents, and clears when the status API reports Git Operations operational"
+statement = "A stop on a self-clearing API error during an incident on Anthropic's status page opens an Anthropic outage instead of a fault"
 
 [[item]]
 id = "P5"
 kind = "deliverable"
-statement = "When the status API fails or reports no incident, a git remote failure falls through to the transient threshold"
+statement = "When the status API fails or reports no incident, the failure is handled as before the change"
+
+[[item]]
+id = "P13"
+kind = "deliverable"
+statement = "One outage-check job polls each provider with an open outage once a minute, makes no request when none is open, and closes the outage when the component reports operational"
+
+[[item]]
+id = "P14"
+kind = "deliverable"
+statement = "Closing a GitHub outage makes main-sync due at once"
+
+[[item]]
+id = "P4"
+kind = "deliverable"
+statement = "session status and session monitor show each open outage on its own line in a non-warning colour with no action hint"
+
+[[item]]
+id = "P15"
+kind = "deliverable"
+statement = "endless errors list shows open outages under their own heading, and --all adds closed ones"
+
+[[item]]
+id = "P16"
+kind = "deliverable"
+statement = "Agents receive open outages through hook context"
 
 [[item]]
 id = "P6"
@@ -40,7 +65,7 @@ statement = "monitor-wake retries a refused tmux connection with jittered backof
 [[item]]
 id = "P8"
 kind = "deliverable"
-statement = "WARN-0033, main-sync's WARN-0001 and WARN-0013 for self-clearing API errors are transient"
+statement = "WARN-0033 and WARN-0013 for self-clearing API errors are transient"
 
 [[item]]
 id = "P9"
@@ -50,9 +75,9 @@ statement = "A stop on max_output_tokens, authentication or billing errors is a 
 [[item]]
 id = "P10"
 kind = "deliverable"
-statement = "docs/errors.md and the guide describe transient faults and the GitHub outage notice"
+statement = "docs/errors.md and the guide describe transient failures and outages"
 
 [[item]]
 id = "P11"
 kind = "exclusion"
-statement = "Does not add status checks for git hosts other than github.com"
+statement = "Does not add status providers beyond GitHub and Anthropic"
