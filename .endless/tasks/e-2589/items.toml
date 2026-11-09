@@ -86,3 +86,8 @@ statement = "Does not add status providers beyond GitHub and Anthropic"
 id = "P22"
 kind = "deliverable"
 statement = "Each closed run of transient failures records its fingerprint, occurrence count, and time to clear or that it became a fault"
+
+[[item]]
+id = "P23"
+kind = "deliverable"
+statement = "A status provider is a Statuspage summary URL plus the component to watch, and GitHub (Git Operations) and Anthropic (Claude API) ship as providers"
