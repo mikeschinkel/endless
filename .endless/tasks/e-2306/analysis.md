@@ -1,0 +1,7 @@
+Decisions taken with Mike while planning (2026-11-09):
+
+- Spawn on a primed task switches to the session and stops (option a). Typing a resume message into the pane, and claiming for the session then typing, were ruled out by ED-1615: Endless never delivers messages by typing into a session's pane. So spawn on a primed task does not start the work by itself; the user's first message does, and it can carry answers to the session's questions.
+- Only a live owner in state `primed` gets the switch. A session still in its read-in is `working` on a pre-work task, which looks the same as any session bound with `task bind`; no marker tells them apart, so those keep the refusal, with its route fixed.
+- The session that ran `task prime` is the "primer". It records a new relation, `primed`, rather than reusing `spawned`: a prime that is never resumed would otherwise sit in the primer's session status as "spawned", as if work had started. Ranking `primed` just below `spawned` lets a later spawn upgrade the row, so the primer's list shows when the work started.
+- The primed indicator goes on the Status line as a suffix, not a new row, because task show output is long enough already.
+- The "Claimed" label for a primed session, listed in this task's context, was fixed by E-2291's auto-bind relation (`recordAutoBindRelation` writes `bound` for a pre-work task). This task only pins it with a test.
