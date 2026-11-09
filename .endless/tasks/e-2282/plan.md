@@ -1,30 +1,68 @@
-Three sites, in the order a run reaches them.
+# Make just verify record its pass in the main database
 
-**The recipe.** The `verify` recipe in `justfile` drops its database argument and
-calls `endless task verify` with just the task id. Nothing replaces it:
-`run_verify` calls `config.default_db_to_main`, which pins main when the caller
-named no database, including inside a self-dev worktree where the no-database
-gate would otherwise refuse the read. The rest of the recipe — deriving the task
-id, locating the worktree, changing into it — is left exactly as it is; removing
-it belongs to the task that deletes the recipe.
+## Why
 
-**The pre-flight.** `run_verify` in `src/endless/verify_cmd.py` gains a check
-between pinning the database and shelling out to the runner, beside the existing
-`plan_items.require_gate` backstop. It asks `unlanded.verify_states` for the
-task. A successful read that returns no row refuses: the task is absent from the
-database this invocation pinned, so a pass could not be recorded whatever the
-suite says. The refusal names the database it looked in and the invocation that
-reaches the right one. A read that raises is swallowed and the run continues, the
-way `reconcile_quietly` already treats a read it cannot complete.
+`just verify` runs `endless --db sandbox task verify <id>`. `--db sandbox` does
+two things at once: it runs the worktree's own code and runner (E-1510), and it
+pins the worktree's sandbox database. The front door records a pass in the
+pinned database, so a pass from `just verify` is recorded in the sandbox, while
+`worktree land` reads main and refuses. Found in E-2278, where it blocked a land
+twice; every self-dev task verified with `just verify` hits it.
 
-**The backstop.** The empty-read branch of `record_pass` in
-`src/endless/unlanded.py` stops returning silently. It states that the pinned
-database does not hold the task and that the pass was therefore not recorded,
-and the command exits non-zero. This is unreachable once the pre-flight is in
-place, which is the point: reaching it means the pre-flight was bypassed, and
-that is worth an exit code rather than a shrug. The sibling branches — the
-agent's run, both status gates, the relayed failure — keep their current wording
-and their current exit behaviour.
+Self-dev only. `just verify` is a dev recipe, and a project that is not
+self-dev has one database, so `endless task verify` records where land reads.
+Nothing here changes product behaviour.
 
-Tests go in `tests/test_verify_cmd.py` for the pre-flight and the recipe's
-routing, and beside the existing `record_pass` tests for the backstop.
+Recording the pass in main while the worktree's code runs is not an option:
+ED-1601 lets only the installed binary write the main database.
+
+## Decision (Q1, answered: A)
+
+`just verify` runs `endless --db main task verify <id>`: main's installed code
+runs the suite and records the pass in main. This is what a plain
+`endless task verify E-<id>` already does (`config.default_db_to_main()` in
+`src/endless/verify_cmd.py`).
+
+What changes: a branch's own runner no longer runs its suite under
+`just verify`. That matters only for a branch that changes the verify
+machinery (`internal/verify`, `internal/verifycmd`, `src/endless/verify_cmd.py`,
+`.endless/tasks/_harness.sh`); its suite runs its own candidate
+`bin/endless-go verify` from inside, against a fixture project, as E-2023,
+E-2243 and E-2278 do (consistent with ED-1596 and ED-1601).
+
+## Changes
+
+1. `justfile`, `verify` recipe: the last line becomes
+   `endless --db main task verify "$tid"`. Rewrite the recipe's comment: it now
+   resolves the id, cds into the task's worktree, and records in main; drop the
+   E-1510 "exercises the CANDIDATE runner" rationale and point a
+   runner-changing branch at the drive-the-candidate pattern.
+2. `docs/guide/orchestration.md`, the self-dev note under "Running one":
+   replace the `--db sandbox` sentence with the above — `just verify` records
+   in main, and a branch that changes the verify machinery drives its own
+   candidate runner from its suite.
+
+## Interaction with E-2583
+
+E-2583 removes `unlanded` as a stored status but keeps a pass as a record.
+This task is about WHERE that record goes, so it holds under either design.
+Whichever lands second adjusts nothing here beyond wording.
+
+## Out of scope (left open on purpose)
+
+Testing a branch that changes how a pass is RECORDED (the front door's own
+recording code) through the land gate. Main's front door records, so such a
+branch's recording code is exercised only by its own tests until it lands.
+Not handled until a task needs it.
+
+## Verification
+
+Suite at `.endless/tasks/e-2282/verify.sh`:
+
+- `just --show verify` ends in `endless --db main task verify "$tid"` and
+  contains no `--db sandbox`.
+- The guide note names `--db main` and the drive-the-candidate pattern, and
+  no longer says `just verify` selects the worktree's `endless-go`.
+
+The behaviour itself (a `just verify` pass lets `just land` proceed) is
+confirmed by the user's own handoff run: `just verify`, then `just land`.
