@@ -1,0 +1,1 @@
+Moot: the four columns are in machine-local tables never written through the ledger (E-2257), so endless correct never writes or deletes their rows and has no reference to pin. Mike retired it on review.
