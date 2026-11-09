@@ -1,0 +1,1 @@
+E-2577 brainstorm: a stored unlanded status needs a sweep to keep it true, and that sweep demoted E-2486 after a failed land, so both land and verify refused. Mike chose deriving it, as the design he would pick starting from scratch.
