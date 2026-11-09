@@ -8029,3 +8029,7 @@ While planning E-2581 (after E-2579 had added rows for errors, errors_sources an
 ### [2026-11-08] Show proposed decision text before filing; most of what a task settles is not a project decision
 During the E-2577 brainstorm I listed decisions I would file (a user-demand rule, 'the code changed means one measure', 'land runs the suite'). Mike: don't file decisions without showing him the proposed text first, because I tend to file as a decision something that is really just what was decided for a task rather than a project's architectural decision. Draft the text, show it, let him say which are decisions; the rest belongs in the task's outcome or plan.
 - **Project**: endless
+
+### [2026-11-08] Plan-item table: one-space gaps, arrow at column 0, proper-case verdicts
+Reviewing the landed E-2353 plan-item table in task show, Mike corrected three layout choices: (1) two spaces between the number, glyph and text columns is wasteful in a borderless table; use one. (2) The verdict arrow was indented under the text, which double-indented the verdict and cost two columns before wrapping; put the arrow at the text column's edge. (3) Verdict words read better proper-cased ('As planned:', 'Kept') where they lead a line in the human table. Reason: in a borderless layout every blank column is width taken from the text, and a line-leading word reads as a label.
+- **Project**: endless
