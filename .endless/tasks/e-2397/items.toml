@@ -19,3 +19,9 @@ id = "P3"
 kind = "deliverable"
 statement = "A maintenance lock that every Endless opener honors (CLI, hooks, tmux status line, monitors, jobs) by refusing quietly while it is set"
 verify = "Each opener, run while the lock is set, refuses without opening or creating a database"
+
+[[item]]
+id = "P4"
+kind = "deliverable"
+statement = "Recover sets the lock, waits for open handles to close, names any that remain, and clears the lock on every exit path"
+verify = "The lock is clear after a restore that fails partway, and a held handle is named"
