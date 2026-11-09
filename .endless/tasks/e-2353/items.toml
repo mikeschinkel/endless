@@ -81,3 +81,8 @@ statement = "Does not replace tabulate with rich; that is E-720"
 id = "P15"
 kind = "exclusion"
 statement = "Does not change plan-item data, events, or the items.toml mirror"
+
+[[item]]
+id = "P16"
+kind = "deliverable"
+statement = "One space separates the number column, the glyph cell and the text column; the blank slots inside the glyph cell are the only other whitespace before the text"
