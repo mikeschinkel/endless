@@ -8093,3 +8093,7 @@ E-2589's land hit a rebase conflict because main (E-2282) had already landed the
 ### [2026-11-10] Plan items: render each stored field on its own labeled line, never merged into the statement
 On E-2353 the planner chose to join a plan item's statement, verify and detail into one wrapped block, and Mike missed it at approval. After the labeled Verdict: line landed, 'verify:' read as part of the sentence. Mike's correction: verify and detail are separate fields and get their own labeled lines (Verify:, Detail:), text on the label's line when it fits, otherwise on the next line indented under the label. Reason: a field that is stored separately should be visibly separate, and a planner's merge of distinct fields is easy to miss in review.
 - **Project**: endless
+
+### [2026-11-10] Brainstorm with Mike instead of funneling to decisions
+During /needs-plan for E-2592 (--base-dir flag), I kept presenting option tables and pressing Mike to pick answers. Mike said I 'continue to focus on me answering questions to finalize decisions rather than brainstorm with me'. When Mike is exploring a question (raising his own intuition, asking whether a concern is real), explore it with him: lay out the mechanics, what his idea would look like, what's unknown, before reducing it to options to choose. Applies to this planning conversation; ask before treating it as a rule for every /needs-plan.
+- **Project**: endless
