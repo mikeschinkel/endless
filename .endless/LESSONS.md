@@ -8085,3 +8085,7 @@ In /whats-left right after Mike spawned E-2397, its board row showed underway wi
 ### [2026-11-09] Don't let CLI performance worries drive design
 While reconciling E-2369 (EQ-59), I recommended checking for a stray .endless/config.json only at $HOME and above, because checking every disallowed directory would add a call into Go on a hot path. Mike said I keep over-indexing on performance concerns that are irrelevant for a CLI. A Go call costs milliseconds; correctness and completeness come first. Raise performance only when it is measured to matter to a user.
 - **Project**: endless
+
+### [2026-11-09] When a land rebase drops a plan item's change, reopen and reconcile again before verify
+E-2589's land hit a rebase conflict because main (E-2282) had already landed the identical tests/test_plan_items.py fix that was grown plan item P24. Taking main's side left the reconciliation claiming P24 'as planned' with a change the branch no longer had, and 'endless task verify' then refused because the code changed since the last reconciliation. Reconcile is refused while the task is unverified, so the path is: endless task update --status revisit, reconcile again (mark the item 'differently' and name the main commit that covers it), answer the filed question, then go revisit -> underway -> unverified, because revisit cannot move straight to unverified.
+- **Project**: endless
