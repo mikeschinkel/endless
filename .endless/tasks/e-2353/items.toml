@@ -12,7 +12,9 @@ detail = "Built with tabulate's borderless format and per-column wrap width, the
 [[item]]
 id = "P2"
 kind = "deliverable"
-statement = "The text cell holds the statement, then verify: and its text, then the detail, wrapped as one block within the column"
+statement = "The text cell holds the statement, then 'Verify: <verify>' and 'Detail: <detail>' each on its own labeled line in bright cyan; a field's text sits on its label's line when label and text fit on one line, otherwise it starts on the next line indented three spaces under the label"
+verify = "tests/test_plan_items.py"
+detail = "Supersedes the merged block the first version rendered, where verify: read as part of the statement."
 
 [[item]]
 id = "P3"
